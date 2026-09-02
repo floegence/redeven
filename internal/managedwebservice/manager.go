@@ -41,7 +41,6 @@ type Manager struct {
 	containers    *containerengine.Adapter
 	downloads     *packageDownloadClient
 	nativeRuntime *nativeDriver
-	docker        deploymentDriver
 	host          deploymentDriver
 	container     deploymentDriver
 	compose       deploymentDriver
@@ -90,7 +89,6 @@ func New(opts ManagerOptions) (*Manager, error) {
 		m.releaseClient = &copy
 	}
 	m.nativeRuntime = &nativeDriver{stateDir: root, client: m.downloads.packageHTTPClient(), packageOrigin: defaultNodePackageOrigin}
-	m.docker = &dockerDriver{adapter: opts.Containers, stateDir: root}
 	m.host = &hostScriptDriver{manager: m, processes: map[string]hostProcess{}}
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
 	m.compose = &composeTemplateDriver{manager: m, adapter: opts.Containers}
@@ -330,7 +328,7 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
 			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
 			deployment := Deployment(service.Deployment)
-			if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentHost || deployment == DeploymentNative) && definition.Revision > service.TemplateRevision {
+			if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentHost) && definition.Revision > service.TemplateRevision {
 				view.UpdateAvailable, view.TargetRevision, view.TargetVersion = true, definition.Revision, definition.Version
 				view.UpdateNotices = append([]TemplateNotice(nil), definition.Notices...)
 			}
@@ -442,7 +440,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, serviceError("WORKSPACE_UNAVAILABLE", "The workspace directory is not writable or is outside this Environment's allowed roots.", 400, false, err)
 	}
-	if template.Deployment == DeploymentDocker || template.Deployment == DeploymentContainer || template.Deployment == DeploymentCompose {
+	if template.Deployment == DeploymentContainer || template.Deployment == DeploymentCompose {
 		if ok, code, reason := m.dockerAvailability(ctx); !ok {
 			return nil, serviceError(code, reason, 409, true, nil)
 		}
@@ -782,7 +780,7 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 			default:
 				err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot select releases in place.", 409, false, nil)
 			}
-		} else if Deployment(service.Deployment) == DeploymentNative || Deployment(service.Deployment) == DeploymentHost {
+		} else if Deployment(service.Deployment) == DeploymentHost {
 			var target *Template
 			target, err = m.serviceUpdateTarget(ctx, service)
 			if err == nil && target == nil {
@@ -871,16 +869,9 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 
 func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
 	m.progress(op, "environment_check", 1)
-	payload := catalogPayload{}
-	switch Deployment(service.Deployment) {
-	case DeploymentNative:
-		payload = auditedNativeCatalog()
-	case DeploymentDocker:
-		payload = auditedDockerCatalog()
-	}
-	stage := map[Deployment]string{DeploymentNative: "downloading", DeploymentDocker: "pulling", DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
+	stage := map[Deployment]string{DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
 	m.progress(op, stage, 2)
-	runtimeID, artifact, err := driver.Install(ctx, service, payload, m.operationProgress(op))
+	runtimeID, artifact, err := driver.Install(ctx, service, m.operationProgress(op))
 	if err != nil {
 		return err
 	}
@@ -993,9 +984,6 @@ func (m *Manager) finishUpdateFailure(service *pfregistry.ManagedService, op *pf
 	}
 	if errors.Is(cause, context.Canceled) {
 		message := "The update was cancelled and the previous runtime was restored."
-		if service.Deployment == string(DeploymentNative) {
-			message = "The metadata update was cancelled before any service or Runtime state changed."
-		}
 		op.State, op.Stage, op.ErrorCode, op.ErrorMessage = "cancelled", "cancelled", "OPERATION_CANCELLED", message
 	} else {
 		op.State, op.Stage = "failed", "failed"
@@ -1049,12 +1037,6 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 		return
 	}
 	if OperationAction(operation.Action) == ActionUpdate {
-		if Deployment(service.Deployment) == DeploymentNative {
-			// Native template updates are one Registry transaction and never touch
-			// the running process. An interruption therefore needs no Runtime work:
-			// the service already contains either the old or the complete new metadata.
-			return
-		}
 		if Deployment(service.Deployment) == DeploymentHost {
 			if strings.TrimSpace(service.RuntimeManifestJSON) == "" || strings.TrimSpace(service.RuntimeManifestJSON) == "{}" {
 				// Host template metadata updates commit atomically and do not write a
@@ -1326,7 +1308,7 @@ func (m *Manager) Logs(ctx context.Context, serviceID string, tail int) (*LogRes
 }
 
 type deploymentDriver interface {
-	Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error)
+	Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error)
 	Start(context.Context, *pfregistry.ManagedService) (string, error)
 	Stop(context.Context, *pfregistry.ManagedService) error
 	Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error
@@ -1336,10 +1318,6 @@ type deploymentDriver interface {
 
 func (m *Manager) driver(deployment Deployment) deploymentDriver {
 	switch deployment {
-	case DeploymentNative:
-		return m.host
-	case DeploymentDocker:
-		return m.docker
 	case DeploymentHost:
 		return m.host
 	case DeploymentContainer:

@@ -67,7 +67,7 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 func TestHostLifecyclePlanUsesRuntimeCommandsWithoutPersistingProjection(t *testing.T) {
 	t.Parallel()
 	spec := deepSeekHostTemplateSpec()
-	plan := hostLifecyclePlan(DeploymentHost, spec)
+	plan := hostLifecyclePlan(spec)
 	if plan == nil || plan.SchemaVersion != hostLifecyclePlanSchemaVersion || plan.Driver != "npm_host" || plan.RuntimeBundle != "node-"+nodeVersion || plan.Package == nil || plan.NPM == nil {
 		t.Fatalf("npm Host lifecycle plan = %+v", plan)
 	}
@@ -103,7 +103,7 @@ func TestHostLifecyclePlanSeparatesManagedWorkFromTemplateHooks(t *testing.T) {
 			UninstallScript: `service clean /Users/alice/private`,
 		},
 	}
-	plan := hostLifecyclePlan(DeploymentHost, spec)
+	plan := hostLifecyclePlan(spec)
 	if plan == nil || plan.Driver != "host_script" || plan.Install.Ownership != "redeven_with_template_hook" || plan.Start.Ownership != "template" {
 		t.Fatalf("host lifecycle plan = %+v", plan)
 	}
@@ -146,7 +146,7 @@ func TestHostLifecyclePlanRedactsArtifactURLQuery(t *testing.T) {
 			StartScript: "exec service",
 		},
 	}
-	plan := hostLifecyclePlan(DeploymentHost, spec)
+	plan := hostLifecyclePlan(spec)
 	if plan == nil || plan.Package == nil || strings.Contains(plan.Package.Reference, "token") || plan.Package.Reference != "service.tar.gz@sha256:"+strings.Repeat("a", 64) {
 		t.Fatalf("artifact lifecycle plan = %+v", plan)
 	}
@@ -160,7 +160,7 @@ func TestHostLifecyclePlanDescribesPureScriptRuntimeOwnership(t *testing.T) {
 		Endpoint:      WebEndpointSpec{Scheme: "http"},
 		Host:          &HostTemplateSpec{StartScript: "exec service"},
 	}
-	plan := hostLifecyclePlan(DeploymentHost, spec)
+	plan := hostLifecyclePlan(spec)
 	if plan == nil || plan.Install.Ownership != lifecycleOwnershipRedeven || len(plan.Install.Steps) != 1 || plan.Install.Steps[0].Kind != "prepare_managed_directories" {
 		t.Fatalf("pure-script install plan = %+v", plan)
 	}

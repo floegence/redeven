@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-09-02
+* **Historical managed-volume recovery**: The generic Container resource loader
+  now imports the exact retired DeepSeek `docker-volume.json` identity into
+  `managed_web_service_resources` only after deterministic-name, creation-time,
+  and live Docker verification. Registry persistence precedes best-effort
+  marker cleanup, so retries are idempotent and failures never alter the legacy
+  container, volume, or user data. The retired DeepSeek Docker lifecycle driver
+  is removed, and stable volume-identity errors now have localized diagnostics.
+
 ## 2026-09-01
 * **Structured tool history and stable lineage**: Redeven now consumes Floret
   v7.0.5. Ask User resumes with one typed Assistant tool call and matching Tool

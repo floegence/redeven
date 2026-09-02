@@ -113,7 +113,7 @@ func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.
 	targetService := serviceFromUpdateRelease(*service, journal.Target)
 	targetService.RuntimeIdentity, targetService.ArtifactReference = "", ""
 	m.progress(op, "downloading", 2)
-	_, artifact, err := driver.Install(ctx, &targetService, catalogPayload{}, m.operationProgress(op))
+	_, artifact, err := driver.Install(ctx, &targetService, m.operationProgress(op))
 	if err != nil {
 		return err
 	}
@@ -237,21 +237,20 @@ func (e *updateExecutionError) Unwrap() error {
 
 func (m *Manager) serviceUpdateTarget(ctx context.Context, service pfregistry.ManagedService) (*Template, error) {
 	deployment := Deployment(service.Deployment)
-	if service.TemplateSource != "builtin" || (deployment != DeploymentContainer && deployment != DeploymentNative && deployment != DeploymentHost) {
+	if service.TemplateSource != "builtin" || (deployment != DeploymentContainer && deployment != DeploymentHost) {
 		return nil, nil
 	}
 	target, err := m.Template(ctx, service.TemplateID)
 	if err != nil {
 		return nil, err
 	}
-	deploymentMatches := target.Deployment == deployment || (deployment == DeploymentNative && target.Deployment == DeploymentHost)
-	if target.Source != "builtin" || !deploymentMatches || target.ServiceFamilyID != service.ServiceFamilyID || target.Revision <= service.TemplateRevision {
+	if target.Source != "builtin" || target.Deployment != deployment || target.ServiceFamilyID != service.ServiceFamilyID || target.Revision <= service.TemplateRevision {
 		return nil, nil
 	}
 	if !target.Available {
 		return nil, serviceError(target.ReasonCode, target.Reason, 409, true, nil)
 	}
-	if deployment == DeploymentNative || deployment == DeploymentHost {
+	if deployment == DeploymentHost {
 		if _, err := hostTemplateUpdatePatch(service, *target); err != nil {
 			return nil, err
 		}
@@ -261,7 +260,7 @@ func (m *Manager) serviceUpdateTarget(ctx context.Context, service pfregistry.Ma
 
 func hostTemplateUpdatePatch(service pfregistry.ManagedService, target Template) (pfregistry.ManagedServicePatch, error) {
 	deployment := Deployment(service.Deployment)
-	if (deployment != DeploymentNative && deployment != DeploymentHost) || target.Deployment != DeploymentHost || target.Spec == nil || target.Spec.Kind != DeploymentHost || target.Spec.Host == nil {
+	if deployment != DeploymentHost || target.Deployment != DeploymentHost || target.Spec == nil || target.Spec.Kind != DeploymentHost || target.Spec.Host == nil {
 		return pfregistry.ManagedServicePatch{}, serviceError("UPDATE_UNSUPPORTED", "This Host update does not have a compatible template.", 409, false, nil)
 	}
 	if (service.DesiredState != "running" || service.ObservedState != "running") && (service.DesiredState != "stopped" || service.ObservedState != "stopped") {

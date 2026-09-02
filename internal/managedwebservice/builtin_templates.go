@@ -10,6 +10,10 @@ import (
 )
 
 const (
+	auditedDockerImage       = "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2"
+	auditedDockerAMD64Digest = "sha256:7ab8875c68f3ecef18b21b8f04f72d914a4b86df9876064bb5af7d45a9224e9c"
+	auditedDockerARM64Digest = "sha256:53e8a997f09252b139b8e46c0c13eeb574074e6f17a732a4b57135ac5a6bc58a"
+
 	webtopImage     = "lscr.io/linuxserver/webtop"
 	webtopSourceURL = "https://github.com/linuxserver/docker-webtop"
 
@@ -18,6 +22,19 @@ const (
 
 	webtopRootNoticeID = "interactive-desktop-root-and-network"
 )
+
+func auditedDockerArtifact(platform string) (dockerArtifact, bool) {
+	digest := ""
+	switch platform {
+	case "linux-amd64":
+		digest = auditedDockerAMD64Digest
+	case "linux-arm64":
+		digest = auditedDockerARM64Digest
+	default:
+		return dockerArtifact{}, false
+	}
+	return dockerArtifact{Image: auditedDockerImage, Digest: digest}, true
+}
 
 type builtInTemplateDefinition struct {
 	TemplateID        string
@@ -218,7 +235,7 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 			Available:     available, ReasonCode: reasonCode, Reason: reason, SortOrder: definition.SortOrder,
 			Deployments:          []DeploymentAvailability{{Deployment: definition.Deployment, Available: available, ReasonCode: reasonCode, Reason: reason}},
 			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
-			HostLifecyclePlan: hostLifecyclePlan(definition.Deployment, spec),
+			HostLifecyclePlan: hostLifecyclePlan(spec),
 			DefaultAccessMode: defaultAccessMode(definition.DefaultAccessMode),
 		})
 	}

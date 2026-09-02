@@ -150,26 +150,6 @@ func TestNativeHostMetadataUpdateRejectsRuntimeChanges(t *testing.T) {
 	}
 }
 
-func TestInterruptedNativeMetadataUpdateDoesNotTouchRuntime(t *testing.T) {
-	t.Parallel()
-	driver := &recoveryDriver{}
-	manager := &Manager{host: driver}
-	service := pfregistry.ManagedService{
-		ServiceID: "mws_native_update_interrupted", Deployment: string(DeploymentNative),
-		DesiredState: "running", ObservedState: "running", RuntimeIdentity: "native:preserved",
-	}
-	operation := pfregistry.ManagedOperation{Action: string(ActionUpdate), State: "interrupted"}
-
-	manager.reconcileInterruptedService(&service, operation)
-
-	if driver.startCalls != 0 || driver.stopCalls != 0 || driver.cleanupCalls != 0 {
-		t.Fatalf("interrupted metadata update touched Runtime: %+v", driver)
-	}
-	if service.DesiredState != "running" || service.ObservedState != "running" || service.RuntimeIdentity != "native:preserved" {
-		t.Fatalf("interrupted metadata update changed service: %+v", service)
-	}
-}
-
 func TestSuccessfulHostReleaseUpdateRemovesOnlyTrustedHistoricalRuntime(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
@@ -410,7 +390,7 @@ type fakeContainerUpdateDriver struct {
 	startErr error
 }
 
-func (d *fakeContainerUpdateDriver) Install(context.Context, *pfregistry.ManagedService, catalogPayload, operationProgress) (string, string, error) {
+func (d *fakeContainerUpdateDriver) Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
 func (d *fakeContainerUpdateDriver) PrepareUpdateArtifact(_ context.Context, spec TemplateSpec, _ operationProgress) (string, error) {

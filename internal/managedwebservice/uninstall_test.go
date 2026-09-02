@@ -200,56 +200,6 @@ func TestContainerTemplateUninstallRejectsUnavailableEngine(t *testing.T) {
 	}
 }
 
-func TestDockerUninstallUsesOwnedRuntimeIdentityAndAcceptsMissingRuntime(t *testing.T) {
-	t.Parallel()
-	service := uninstallDockerService()
-	container := uninstallDockerEngineContainer(service)
-	container.State = containerengine.ContainerStateRunning
-	client := &uninstallContainerEngineClient{container: container}
-	adapter, err := containerengine.NewAdapter(client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	driver := &dockerDriver{adapter: adapter}
-	if err := driver.Uninstall(context.Background(), service, false, discardOperationProgress); err != nil {
-		t.Fatalf("Uninstall() error = %v", err)
-	}
-	if len(client.actions) != 2 || client.actions[0].Method != containerengine.MethodStop || client.actions[1].Method != containerengine.MethodRemove {
-		t.Fatalf("Docker uninstall actions = %+v", client.actions)
-	}
-
-	missingClient := &uninstallContainerEngineClient{inspectErr: containerengine.ErrContainerNotFound}
-	missingAdapter, err := containerengine.NewAdapter(missingClient)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := (&dockerDriver{adapter: missingAdapter}).Uninstall(context.Background(), service, false, discardOperationProgress); err != nil {
-		t.Fatalf("Uninstall() missing Docker runtime error = %v", err)
-	}
-	if len(missingClient.actions) != 0 {
-		t.Fatalf("missing Docker runtime actions = %+v", missingClient.actions)
-	}
-}
-
-func TestDockerUninstallRejectsChangedOwnership(t *testing.T) {
-	t.Parallel()
-	service := uninstallDockerService()
-	container := uninstallDockerEngineContainer(service)
-	container.Runtime.Labels[managedServiceLabel] = "mws_other"
-	client := &uninstallContainerEngineClient{container: container}
-	adapter, err := containerengine.NewAdapter(client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = (&dockerDriver{adapter: adapter}).Uninstall(context.Background(), service, false, discardOperationProgress)
-	if managedErrorCode(err) != "CONTAINER_IDENTITY_MISMATCH" {
-		t.Fatalf("changed Docker ownership error = %v", err)
-	}
-	if len(client.actions) != 0 {
-		t.Fatalf("changed Docker ownership actions = %+v", client.actions)
-	}
-}
-
 func TestComposeTemplateUninstallUsesOwnedProjectIdentityWithoutTemplateExecution(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
@@ -405,29 +355,6 @@ func uninstallEngineContainer(service *pfregistry.ManagedService) containerengin
 		Runtime: containerengine.RuntimeInput{
 			Labels: map[string]string{managedServiceLabel: service.ServiceID},
 		},
-	}
-}
-
-func uninstallDockerService() *pfregistry.ManagedService {
-	const digest = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-	return &pfregistry.ManagedService{
-		ServiceID:         "mws_docker_uninstall",
-		RuntimeIdentity:   "container_docker_uninstall",
-		ArtifactReference: "registry.example/redeven/docker@" + digest,
-	}
-}
-
-func uninstallDockerEngineContainer(service *pfregistry.ManagedService) containerengine.EngineContainer {
-	return containerengine.EngineContainer{
-		Engine:      containerengine.EngineDocker,
-		ContainerID: service.RuntimeIdentity,
-		Name:        dockerContainerName(service.ServiceID),
-		Image: containerengine.ImageInput{
-			Reference: service.ArtifactReference,
-			Digest:    "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-		},
-		State:   containerengine.ContainerStateExited,
-		Runtime: containerengine.RuntimeInput{Labels: map[string]string{managedServiceLabel: service.ServiceID}},
 	}
 }
 

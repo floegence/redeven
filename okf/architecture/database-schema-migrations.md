@@ -76,6 +76,17 @@ Redeven-owned stores use the shared migration engine, while reviewed direct
 openings are limited to the threadstore existing-only, read-only full-schema
 gate and in-memory canonical-schema verification.
 
+Compatibility state that requires a live external system cannot be guessed or
+read inside a SQLite schema transaction. The historical DeepSeek container
+volume marker is therefore imported by the owning generic Container resource
+loader, not by a new Registry schema version: it strictly verifies the exact
+built-in service, deterministic name, saved creation time, and live Docker
+volume identity, commits `managed_web_service_resources`, and only then removes
+the retired marker. Failed verification or Registry persistence leaves both
+the database and marker unchanged; interrupted marker cleanup is retried from
+the committed resource. This narrow import does not authorize heuristic repair
+or a second lifecycle driver.
+
 ## Upstream-owned schemas
 
 Floret v7 owns the canonical Thread journal and its schema lifecycle. Redeven supplies
@@ -113,6 +124,7 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
 - `redeven:internal/portforward/registry/schema.go` - Owns the exact contiguous port-forward Registry v1-to-v9 migration chain and final verifier.
 - `redeven:internal/portforward/registry/registry_test.go` - Covers managed-service v7-to-v9 preservation, recovery intent, rollback, drift, future versions, and idempotent open.
+- `redeven:internal/managedwebservice/container_volume_migration_test.go` - Verifies crash-safe external volume-identity import without inventing a cross-system schema migration.
 - `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
 - `redeven:internal/ai/threadstore/store.go` - Verifies exact supported historical or current product shape before writable open.
 - `redeven:internal/ai/threadstore/schema.go` - Defines current v2 and the atomic reviewed v1-to-v2 migration.

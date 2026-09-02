@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -16,6 +18,10 @@ import (
 	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
+
+const managedServiceLabel = "com.floegence.redeven.managed-web-service"
+
+var dockerDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
 type customContainerVolume struct {
 	ResourceID      string `json:"resource_id,omitempty"`
@@ -27,9 +33,15 @@ type customContainerVolumeSet struct {
 	Volumes []customContainerVolume `json:"volumes"`
 }
 
+type legacyDeepSeekDockerVolume struct {
+	Name            string `json:"name"`
+	CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
+}
+
 type containerTemplateDriver struct {
-	manager *Manager
-	adapter *containerengine.Adapter
+	manager      *Manager
+	adapter      *containerengine.Adapter
+	removeMarker func(string) error
 }
 
 func (d *containerTemplateDriver) RebuildStoppedRuntime(ctx context.Context, service *pfregistry.ManagedService, spec TemplateSpec, artifact string) (string, string, error) {
@@ -41,7 +53,7 @@ func (d *containerTemplateDriver) FindReconfiguredRuntime(ctx context.Context, s
 	return d.FindRuntime(ctx, service.ServiceID)
 }
 
-func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, _ catalogPayload, progress operationProgress) (string, string, error) {
+func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, progress operationProgress) (string, string, error) {
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
@@ -333,7 +345,7 @@ func (d *containerTemplateDriver) markerPath(service *pfregistry.ManagedService)
 }
 
 func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *pfregistry.ManagedService, specs []ContainerMountSpec, createVolumes bool) ([]containerengine.ContainerMount, error) {
-	marker, err := d.loadVolumeSet(service)
+	marker, err := d.loadVolumeSet(ctx, service)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +411,7 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 		}
 	}
 	if changed {
-		if err := d.saveVolumeSet(service, marker); err != nil {
+		if err := d.saveVolumeSet(ctx, service, marker); err != nil {
 			return nil, err
 		}
 	}
@@ -407,7 +419,7 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 }
 
 func (d *containerTemplateDriver) containerMountsForPreflight(ctx context.Context, service *pfregistry.ManagedService, specs []ContainerMountSpec) ([]containerengine.ContainerMount, error) {
-	marker, err := d.loadVolumeSet(service)
+	marker, err := d.loadVolumeSet(ctx, service)
 	if err != nil {
 		return nil, err
 	}
@@ -445,9 +457,9 @@ func (d *containerTemplateDriver) containerMountsForPreflight(ctx context.Contex
 	return result, nil
 }
 
-func (d *containerTemplateDriver) loadVolumeSet(service *pfregistry.ManagedService) (customContainerVolumeSet, error) {
+func (d *containerTemplateDriver) loadVolumeSet(ctx context.Context, service *pfregistry.ManagedService) (customContainerVolumeSet, error) {
 	marker := customContainerVolumeSet{Volumes: []customContainerVolume{}}
-	resources, err := d.manager.registry.ListManagedServiceResources(context.Background(), service.ServiceID)
+	resources, err := d.manager.registry.ListManagedServiceResources(ctx, service.ServiceID)
 	if err != nil {
 		return marker, err
 	}
@@ -457,39 +469,131 @@ func (d *containerTemplateDriver) loadVolumeSet(service *pfregistry.ManagedServi
 		}
 	}
 	if len(marker.Volumes) > 0 {
+		d.removeImportedLegacyDeepSeekMarker(service, marker)
 		return marker, nil
 	}
 	raw, err := os.ReadFile(d.markerPath(service))
-	if errors.Is(err, os.ErrNotExist) {
-		return marker, nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return marker, err
 	}
-	if err := decodeStrictJSON(raw, &marker); err != nil {
-		return marker, serviceError("DATA_IDENTITY_INVALID", "The retained template data identity is invalid.", 409, false, err)
-	}
-	for index := range marker.Volumes {
-		if marker.Volumes[index].ResourceID == "" {
-			marker.Volumes[index].ResourceID = fmt.Sprintf("legacy-volume-%d", index)
+	if err == nil {
+		if err := decodeStrictJSON(raw, &marker); err != nil {
+			return marker, serviceError("DATA_IDENTITY_INVALID", "The retained template data identity is invalid.", 409, false, err)
 		}
-		if err := d.manager.registry.PutManagedServiceResource(context.Background(), pfregistry.ManagedServiceResource{ServiceID: service.ServiceID, ResourceID: marker.Volumes[index].ResourceID, Kind: "volume", EngineIdentity: marker.Volumes[index].Name, CreatedAtUnixMs: marker.Volumes[index].CreatedAtUnixMs}); err != nil {
+		for index := range marker.Volumes {
+			if marker.Volumes[index].ResourceID == "" {
+				marker.Volumes[index].ResourceID = fmt.Sprintf("legacy-volume-%d", index)
+			}
+			if strings.TrimSpace(marker.Volumes[index].Name) == "" || marker.Volumes[index].CreatedAtUnixMs <= 0 {
+				return customContainerVolumeSet{}, serviceError("DATA_IDENTITY_INVALID", "The retained template data identity is invalid.", 409, false, nil)
+			}
+		}
+		if err := d.saveVolumeSet(ctx, service, marker); err != nil {
 			return customContainerVolumeSet{}, err
 		}
+		d.removePersistedMarker(service, d.markerPath(service))
+		return marker, nil
 	}
-	if err := os.Remove(d.markerPath(service)); err != nil && !errors.Is(err, os.ErrNotExist) {
+
+	legacy, imported, err := d.importLegacyDeepSeekVolume(ctx, service)
+	if err != nil {
 		return customContainerVolumeSet{}, err
+	}
+	if imported {
+		marker.Volumes = append(marker.Volumes, legacy)
 	}
 	return marker, nil
 }
 
-func (d *containerTemplateDriver) saveVolumeSet(service *pfregistry.ManagedService, marker customContainerVolumeSet) error {
+func (d *containerTemplateDriver) saveVolumeSet(ctx context.Context, service *pfregistry.ManagedService, marker customContainerVolumeSet) error {
 	for _, volume := range marker.Volumes {
-		if err := d.manager.registry.PutManagedServiceResource(context.Background(), pfregistry.ManagedServiceResource{ServiceID: service.ServiceID, ResourceID: volume.ResourceID, Kind: "volume", EngineIdentity: volume.Name, CreatedAtUnixMs: volume.CreatedAtUnixMs}); err != nil {
+		if err := d.manager.registry.PutManagedServiceResource(ctx, pfregistry.ManagedServiceResource{ServiceID: service.ServiceID, ResourceID: volume.ResourceID, Kind: "volume", EngineIdentity: volume.Name, CreatedAtUnixMs: volume.CreatedAtUnixMs}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (d *containerTemplateDriver) importLegacyDeepSeekVolume(ctx context.Context, service *pfregistry.ManagedService) (customContainerVolume, bool, error) {
+	if !isLegacyDeepSeekContainerService(service) {
+		return customContainerVolume{}, false, nil
+	}
+	path := d.legacyDeepSeekVolumeMarkerPath()
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return customContainerVolume{}, false, nil
+	}
+	if err != nil {
+		return customContainerVolume{}, false, serviceError("DATA_IDENTITY_INVALID", "The retained DeepSeek Harness data identity could not be read.", 409, false, err)
+	}
+	legacy := legacyDeepSeekDockerVolume{}
+	if err := decodeStrictJSON(raw, &legacy); err != nil {
+		return customContainerVolume{}, false, serviceError("DATA_IDENTITY_INVALID", "The retained DeepSeek Harness data identity is invalid.", 409, false, err)
+	}
+	expectedName := "redeven-dsh-data-" + strings.TrimPrefix(service.ServiceID, "mws_")
+	if legacy.Name != expectedName || legacy.CreatedAtUnixMs <= 0 {
+		return customContainerVolume{}, false, serviceError("DATA_IDENTITY_INVALID", "The retained DeepSeek Harness data identity is invalid.", 409, false, nil)
+	}
+	if d.adapter == nil {
+		return customContainerVolume{}, false, serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
+	}
+	volume, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: legacy.Name})
+	if err != nil {
+		return customContainerVolume{}, false, serviceError("DATA_VOLUME_MISSING", "The retained DeepSeek Harness data volume could not be verified.", 409, false, err)
+	}
+	if volume.Name != legacy.Name || volume.CreatedAtUnixMs != legacy.CreatedAtUnixMs {
+		return customContainerVolume{}, false, serviceError("DATA_IDENTITY_MISMATCH", "The retained DeepSeek Harness data volume identity has changed.", 409, false, nil)
+	}
+	identity := customContainerVolume{ResourceID: "data", Name: legacy.Name, CreatedAtUnixMs: legacy.CreatedAtUnixMs}
+	if err := d.manager.registry.PutManagedServiceResource(ctx, pfregistry.ManagedServiceResource{ServiceID: service.ServiceID, ResourceID: identity.ResourceID, Kind: "volume", EngineIdentity: identity.Name, CreatedAtUnixMs: identity.CreatedAtUnixMs}); err != nil {
+		return customContainerVolume{}, false, err
+	}
+	d.removePersistedMarker(service, path)
+	return identity, true, nil
+}
+
+func isLegacyDeepSeekContainerService(service *pfregistry.ManagedService) bool {
+	return service != nil && service.TemplateSource == "builtin" && service.TemplateID == DeepSeekHarnessContainerTemplateID &&
+		service.ServiceFamilyID == DeepSeekHarnessContainerTemplateID && Deployment(service.Deployment) == DeploymentContainer
+}
+
+func (d *containerTemplateDriver) legacyDeepSeekVolumeMarkerPath() string {
+	return filepath.Join(d.manager.stateDir, DeepSeekHarnessProductID, "docker-volume.json")
+}
+
+func (d *containerTemplateDriver) removeImportedLegacyDeepSeekMarker(service *pfregistry.ManagedService, marker customContainerVolumeSet) {
+	if !isLegacyDeepSeekContainerService(service) {
+		return
+	}
+	path := d.legacyDeepSeekVolumeMarkerPath()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	legacy := legacyDeepSeekDockerVolume{}
+	if decodeStrictJSON(raw, &legacy) != nil {
+		return
+	}
+	for _, identity := range marker.Volumes {
+		if identity.ResourceID == "data" && identity.Name == legacy.Name && identity.CreatedAtUnixMs == legacy.CreatedAtUnixMs {
+			d.removePersistedMarker(service, path)
+			return
+		}
+	}
+}
+
+func (d *containerTemplateDriver) removePersistedMarker(service *pfregistry.ManagedService, path string) {
+	remove := d.removeMarker
+	if remove == nil {
+		remove = os.Remove
+	}
+	if err := remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		logger := d.manager.log
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Warn("remove imported managed Web Service volume identity marker", "service_id", service.ServiceID, "cause", safeManagedFailureCause(err))
+	}
 }
 
 func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, service *pfregistry.ManagedService, spec TemplateSpec) error {
@@ -728,7 +832,7 @@ func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregi
 	if !deleteData {
 		return nil
 	}
-	marker, err := d.loadVolumeSet(service)
+	marker, err := d.loadVolumeSet(background, service)
 	if err != nil {
 		return err
 	}
