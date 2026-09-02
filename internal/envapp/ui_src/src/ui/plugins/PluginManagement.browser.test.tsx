@@ -820,14 +820,19 @@ describe('plugin management browser geometry and interaction', () => {
         expect({
           backgroundColor: panelStyle.backgroundColor,
           borderTopColor: panelStyle.borderTopColor,
+          borderRadius: panelStyle.borderRadius,
           boxShadow: panelStyle.boxShadow,
           backdropFilter: panelStyle.backdropFilter,
         }).toEqual({
           backgroundColor: dockStyle.backgroundColor,
           borderTopColor: dockStyle.borderTopColor,
+          borderRadius: dockStyle.borderRadius,
           boxShadow: dockStyle.boxShadow,
           backdropFilter: dockStyle.backdropFilter,
         });
+        expect(panelStyle.borderRadius).toBe('16px');
+        expect(getComputedStyle(panel.querySelector('header')!).borderBottomWidth).toBe('0px');
+        expect(panel.querySelector('footer')).toBeNull();
       }
     }
   });

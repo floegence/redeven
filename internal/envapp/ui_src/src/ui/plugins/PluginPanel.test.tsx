@@ -375,6 +375,10 @@ describe('PluginPanel', () => {
     expect(dialog.className).toContain('workbench-dock-material');
     expect(dialog.className).not.toContain('bg-popover');
     expect(dialog.className).not.toContain('shadow-2xl');
+    expect(dialog.className).not.toContain('rounded-lg');
+    expect(dialog.querySelector('header')?.className).not.toContain('border-b');
+    expect(dialog.querySelector('footer')).toBeNull();
+    expect(dialog.textContent).not.toContain('1 installed · 0 need attention');
     expect(surface.querySelector('.workbench-dock-popover__arrow')).not.toBeNull();
     expect(document.querySelector('[data-plugin-workbench-popover-arrow]')).toBeNull();
     expect(dialog.className).not.toContain('zoom-in');
@@ -574,6 +578,9 @@ describe('PluginPanel', () => {
     expect(dialog.className).not.toContain('backdrop-blur');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.parentElement?.className).toContain('justify-center');
+    expect(dialog.querySelector('header')?.className).toContain('border-b');
+    expect(dialog.querySelector('footer')?.className).toContain('border-t');
+    expect(dialog.querySelector('footer')?.textContent).toContain('1 installed · 0 need attention');
     await Promise.resolve();
     expect(document.activeElement).toBe(document.querySelector('[data-plugin-launcher-search]'));
   });
@@ -720,6 +727,9 @@ describe('PluginPanel', () => {
 
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.querySelector('header')?.className).toContain('border-b');
+    expect(dialog.querySelector('footer')?.className).toContain('border-t');
+    expect(dialog.querySelector('footer')?.textContent).toContain('1 installed · 0 need attention');
     const close = document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement;
     expect(close.className).toContain('h-[44px]');
     expect(close.className).toContain('w-[44px]');

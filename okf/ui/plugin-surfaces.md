@@ -78,9 +78,11 @@ shared drag transaction; the Launcher keeps no second suppression flag.
 The Workbench Launcher is a Dock companion, not a page-level modal. It mounts
 through `WorkbenchDockPopoverSurface` in the owning Workbench surface, delegates
 projection and clamping to the shared floating layer, and inherits the Dock
-background, border, shadow, blur, and theme material. Its own size, radius,
-content layout, search, focus loop, and close behavior remain product-owned.
-Activity placement keeps the existing Shell-root modal behavior.
+background, border, radius, shadow, blur, and theme material. Its product-owned
+content has no header or footer divider and omits the installed and attention
+summary. Size, content layout, search, focus loop, and close behavior remain
+product-owned. Activity placement keeps the existing Shell-root modal behavior,
+including its fixed summary footer and dividers.
 Plugin Center remains a dedicated Activity surface with a separate Launcher
 entry and uses the same category/search projection. Its local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding
