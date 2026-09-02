@@ -118,6 +118,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentPublicPayload(t *testin
 	}
 	for _, forbidden := range []string{
 		`"last_message"`,
+		`"last_message_preview"`,
 		`"waiting_prompt"`,
 		`"can_send_input"`,
 		`"can_interrupt"`,

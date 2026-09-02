@@ -428,7 +428,7 @@ func collectPromptDelegationState(r *run) promptDelegationState {
 			AgentType: strings.TrimSpace(snapshot.AgentType),
 			Status:    status,
 			Title:     strings.TrimSpace(snapshot.TaskName),
-			Objective: strings.TrimSpace(snapshot.LastMessage),
+			Objective: strings.TrimSpace(snapshot.LastMessagePreview),
 		})
 	}
 	return out

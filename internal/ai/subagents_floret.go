@@ -52,36 +52,34 @@ type subagentRuntime interface {
 }
 
 type subagentCapabilityContract struct {
-	VisibleTools          []string
-	HiddenControlTools    []string
-	HiddenToolSet         map[string]struct{}
-	AllowSpawnSubagents   bool
-	AllowUserApproval     bool
-	AllowUserInput        bool
-	FinalHandoffBudget    int
-	ProgressSummaryBudget int
+	VisibleTools        []string
+	HiddenControlTools  []string
+	HiddenToolSet       map[string]struct{}
+	AllowSpawnSubagents bool
+	AllowUserApproval   bool
+	AllowUserInput      bool
 }
 
 type subagentSnapshot struct {
-	ThreadID        string
-	Path            string
-	TaskName        string
-	TaskDescription string
-	ParentThreadID  string
-	ParentTurnID    string
-	AgentType       string
-	ContextMode     string
-	Status          string
-	LatestTurnID    string
-	LastMessage     string
-	WaitingPrompt   string
-	QueuedInputs    int
-	CreatedAtMS     int64
-	UpdatedAtMS     int64
-	Closed          bool
-	CanSendInput    bool
-	CanInterrupt    bool
-	CanClose        bool
+	ThreadID           string
+	Path               string
+	TaskName           string
+	TaskDescription    string
+	ParentThreadID     string
+	ParentTurnID       string
+	AgentType          string
+	ContextMode        string
+	Status             string
+	LatestTurnID       string
+	LastMessagePreview string
+	WaitingPrompt      string
+	QueuedInputs       int
+	CreatedAtMS        int64
+	UpdatedAtMS        int64
+	Closed             bool
+	CanSendInput       bool
+	CanInterrupt       bool
+	CanClose           bool
 }
 
 // floretSubagentRuntime is a product tool adapter over ordinary child Threads.
@@ -199,12 +197,12 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 	}
 	snapshot := subagentSnapshotFromThread(summary, result)
 	item := boundedSubagentItem(subagentSnapshotPayload(snapshot))
-	return trimSubagentToolResult(map[string]any{
+	return map[string]any{
 		"status": "ok", "action": subagentActionSpawn, "accepted": true,
 		"thread_id": snapshot.ThreadID, "agent_type": snapshot.AgentType,
 		"context_mode": snapshot.ContextMode, "task_name": snapshot.TaskName,
 		"task_description": snapshot.TaskDescription, "items": []map[string]any{item},
-	}), nil
+	}, nil
 }
 
 func (runtime *floretSubagentRuntime) childEffectRequest(parent *run, childID, requestKey, text, agentType string) floretEffectRequest {
@@ -323,11 +321,11 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 		return nil, err
 	}
 	snapshot := subagentSnapshotFromThread(summary, result)
-	return trimSubagentToolResult(map[string]any{
+	return map[string]any{
 		"status": "ok", "action": subagentActionSendInput, "target": target,
 		"thread_id": target, "accepted": true,
 		"items": []map[string]any{boundedSubagentItem(subagentSnapshotPayload(snapshot))},
-	}), nil
+	}, nil
 }
 
 func (runtime *floretSubagentRuntime) close(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {
@@ -348,11 +346,11 @@ func (runtime *floretSubagentRuntime) close(ctx context.Context, toolCallID stri
 		return nil, err
 	}
 	snapshot := subagentSnapshotFromThread(summary, result)
-	return trimSubagentToolResult(map[string]any{
+	return map[string]any{
 		"status": "ok", "action": subagentActionClose, "target": target,
 		"thread_id": target, "closed": true, "stopped": true,
 		"items": []map[string]any{boundedSubagentItem(subagentSnapshotPayload(snapshot))},
-	}), nil
+	}, nil
 }
 
 func (runtime *floretSubagentRuntime) closeAll(ctx context.Context, toolCallID string, _ map[string]any) (map[string]any, error) {
@@ -385,7 +383,7 @@ func (runtime *floretSubagentRuntime) closeAll(ctx context.Context, toolCallID s
 	out["closed_count"] = len(affected)
 	out["stopped_count"] = len(affected)
 	out["affected_ids"] = affected
-	return trimSubagentToolResult(out), nil
+	return out, nil
 }
 
 func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (map[string]any, error) {
@@ -428,11 +426,15 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 		}
 	}
 	items := boundedSubagentStatusItems(snapshots)
+	handoffs, err := completedSubagentHandoffs(ctxOrBackground(ctx), threads, snapshots)
+	if err != nil {
+		return nil, err
+	}
 	out := map[string]any{
 		"status": "ok", "action": subagentActionWait, "ids": targets, "target_ids": targets,
 		"requested_timeout_ms": requested, "effective_timeout_ms": effective,
 		"timeout_ms": effective, "timeout_source": source, "timed_out": timedOut,
-		"detail_omitted": true, "detail_strategy": "thread_view", "items": items,
+		"items": items, "handoffs": handoffs,
 		"counts": subagentModelStatusCounts(items), "agent_count": len(items),
 	}
 	if len(targets) > 0 {
@@ -444,7 +446,7 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 		out["found_count"] = len(items)
 		out["missing_count"] = 0
 	}
-	return trimSubagentToolResult(out), nil
+	return out, nil
 }
 
 func selectSubagentSnapshots(items []subagentSnapshot, targets []string) []subagentSnapshot {
@@ -497,10 +499,14 @@ func (runtime *floretSubagentRuntime) list(ctx context.Context, args map[string]
 	out["total"] = len(snapshots)
 	out["running_only"] = runningOnly
 	out["updated_at_unix_ms"] = time.Now().UnixMilli()
-	return trimSubagentToolResult(out), nil
+	return out, nil
 }
 
 func (runtime *floretSubagentRuntime) inspect(ctx context.Context, args map[string]any) (map[string]any, error) {
+	_, _, threads, err := runtime.boundaries()
+	if err != nil {
+		return nil, err
+	}
 	targets := collectInspectTargets(args)
 	snapshots, err := runtime.snapshots(ctx)
 	if err != nil {
@@ -511,7 +517,12 @@ func (runtime *floretSubagentRuntime) inspect(ctx context.Context, args map[stri
 	for _, snapshot := range selected {
 		items = append(items, boundedSubagentItem(subagentSnapshotPayload(snapshot)))
 	}
+	handoffs, err := completedSubagentHandoffs(ctxOrBackground(ctx), threads, selected)
+	if err != nil {
+		return nil, err
+	}
 	out := subagentBoundedResult(subagentActionInspect, items)
+	out["handoffs"] = handoffs
 	out["requested_ids"] = targets
 	out["requested_count"] = len(targets)
 	out["found_count"] = len(items)
@@ -521,7 +532,51 @@ func (runtime *floretSubagentRuntime) inspect(ctx context.Context, args map[stri
 	} else if len(items) != len(targets) {
 		out["status"] = "partial"
 	}
-	return trimSubagentToolResult(out), nil
+	return out, nil
+}
+
+func completedSubagentHandoffs(ctx context.Context, threads flruntime.ThreadService, snapshots []subagentSnapshot) ([]map[string]any, error) {
+	handoffs := make([]map[string]any, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		if strings.TrimSpace(snapshot.Status) != subagentStatusCompleted {
+			continue
+		}
+		threadID := identity.ThreadID(strings.TrimSpace(snapshot.ThreadID))
+		view, err := threads.View(ctxOrBackground(ctx), threadID)
+		if err != nil {
+			return nil, fmt.Errorf("read completed SubAgent %q handoff: %w", threadID, err)
+		}
+		if view.ThreadID != threadID {
+			return nil, fmt.Errorf("completed SubAgent handoff identity mismatch: got %q, want %q", view.ThreadID, threadID)
+		}
+		if view.Activity != flruntime.ThreadActivityIdle || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted {
+			return nil, fmt.Errorf("completed SubAgent %q no longer has a completed current turn", threadID)
+		}
+		item, ok := finalSubagentAssistantItem(view)
+		if !ok {
+			return nil, fmt.Errorf("completed SubAgent %q has no final assistant handoff for turn %q", threadID, view.TurnID)
+		}
+		handoffs = append(handoffs, map[string]any{
+			"thread_id": threadID.String(), "turn_id": item.TurnID.String(), "run_id": item.RunID.String(),
+			"task_name": snapshot.TaskName, "agent_type": snapshot.AgentType,
+			"status": subagentStatusCompleted, "content": item.Text,
+		})
+	}
+	return handoffs, nil
+}
+
+func finalSubagentAssistantItem(view flruntime.ThreadView) (flruntime.ThreadItem, bool) {
+	if view.TurnID == "" {
+		return flruntime.ThreadItem{}, false
+	}
+	for index := len(view.Items) - 1; index >= 0; index-- {
+		item := view.Items[index]
+		if item.Kind != flruntime.ThreadItemAssistant || item.Live || item.TurnID != view.TurnID || item.RunID == "" || strings.TrimSpace(item.Text) == "" {
+			continue
+		}
+		return item, true
+	}
+	return flruntime.ThreadItem{}, false
 }
 
 func (runtime *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagentSnapshot, error) {
@@ -554,7 +609,7 @@ func subagentSnapshotFromSummary(summary flruntime.ThreadSummary) subagentSnapsh
 		TurnID: summary.TurnID, Queue: make([]flruntime.QueuedInput, summary.QueueCount),
 	}
 	snapshot := subagentSnapshotFromThread(summary, view)
-	snapshot.LastMessage = strings.TrimSpace(summary.LastItemPreview)
+	snapshot.LastMessagePreview = strings.TrimSpace(summary.LastItemPreview)
 	if summary.PendingInput != nil {
 		snapshot.WaitingPrompt = strings.TrimSpace(summary.PendingInput.Summary)
 	}
@@ -606,7 +661,7 @@ func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.
 		ThreadID: summary.ID.String(), TaskName: summary.TaskName, TaskDescription: summary.TaskDescription,
 		ParentThreadID: summary.ParentThreadID.String(), ParentTurnID: summary.ParentTurnID.String(),
 		AgentType: normalizeSubagentAgentType(summary.HostProfileRef), ContextMode: normalizeSubagentContextMode(summary.ForkMode),
-		Status: status, LatestTurnID: view.TurnID.String(), LastMessage: lastMessage, WaitingPrompt: waitingPrompt,
+		Status: status, LatestTurnID: view.TurnID.String(), LastMessagePreview: truncateRunes(lastMessage, 160), WaitingPrompt: waitingPrompt,
 		QueuedInputs: len(view.Queue), CreatedAtMS: timeUnixMS(summary.CreatedAt), UpdatedAtMS: timeUnixMS(summary.UpdatedAt),
 		Closed: closed, CanSendInput: !closed, CanInterrupt: view.Activity == flruntime.ThreadActivityActive,
 		CanClose: !closed,
@@ -665,7 +720,7 @@ func flowerSubagentSummaryFromSnapshot(snapshot subagentSnapshot) FlowerSubagent
 		ParentThreadID: snapshot.ParentThreadID, ThreadID: snapshot.ThreadID,
 		TaskName: snapshot.TaskName, TaskDescription: snapshot.TaskDescription,
 		AgentType: snapshot.AgentType, ContextMode: snapshot.ContextMode, Status: snapshot.Status,
-		LastMessage: snapshot.LastMessage, WaitingPrompt: snapshot.WaitingPrompt, QueuedInputs: snapshot.QueuedInputs,
+		LastMessage: snapshot.LastMessagePreview, WaitingPrompt: snapshot.WaitingPrompt, QueuedInputs: snapshot.QueuedInputs,
 		CanSendInput: snapshot.CanSendInput, CanInterrupt: snapshot.CanInterrupt, CanClose: snapshot.CanClose,
 		CreatedAtUnixMs: snapshot.CreatedAtMS, UpdatedAtUnixMs: snapshot.UpdatedAtMS,
 	}
@@ -759,13 +814,11 @@ func boundedSubagentItem(item map[string]any) map[string]any {
 	for key, value := range item {
 		out[key] = value
 	}
-	for _, key := range []string{"last_message", "waiting_prompt", "task_description"} {
+	for _, key := range []string{"last_message_preview", "waiting_prompt", "task_description"} {
 		out[key] = truncateRunes(strings.TrimSpace(anyToString(out[key])), 600)
 	}
 	return out
 }
-
-func trimSubagentToolResult(out map[string]any) map[string]any { return out }
 
 func subagentTimeoutDecision(args map[string]any) (int, int, string) {
 	requested := parseIntArg(args, "timeout_ms", 0)
@@ -814,7 +867,7 @@ func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
 		"id": snapshot.ThreadID, "thread_id": snapshot.ThreadID, "agent_type": snapshot.AgentType,
 		"context_mode": snapshot.ContextMode, "task_name": snapshot.TaskName,
 		"task_description": snapshot.TaskDescription, "status": snapshot.Status,
-		"last_message": snapshot.LastMessage, "waiting_prompt": snapshot.WaitingPrompt,
+		"last_message_preview": snapshot.LastMessagePreview, "waiting_prompt": snapshot.WaitingPrompt,
 		"queued_inputs": snapshot.QueuedInputs, "parent_thread_id": snapshot.ParentThreadID,
 		"parent_turn_id": snapshot.ParentTurnID, "latest_turn_id": snapshot.LatestTurnID,
 		"started_at_ms": snapshot.CreatedAtMS, "created_at_ms": snapshot.CreatedAtMS,
@@ -830,7 +883,7 @@ func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 		"thread_id": payload["thread_id"], "task_name": payload["task_name"],
 		"task_description": payload["task_description"], "agent_type": payload["agent_type"],
 		"context_mode": payload["context_mode"], "status": payload["status"],
-		"updated_at_ms": payload["updated_at_ms"], "last_message": payload["last_message"],
+		"updated_at_ms": payload["updated_at_ms"], "last_message_preview": payload["last_message_preview"],
 		"can_send_input": payload["can_send_input"], "can_interrupt": payload["can_interrupt"],
 		"can_close": payload["can_close"],
 	}

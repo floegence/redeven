@@ -772,7 +772,7 @@ func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 		"started_at_ms", "created_at_ms", "updated_at_ms", "closed",
 		"agent_count", "requested_count", "completed_count", "found_count",
 		"missing_count", "closed_count", "stopped_count", "accepted", "running_only",
-		"total", "timed_out", "truncated", "omitted_count", "error",
+		"total", "timed_out", "error",
 	)
 }
 
