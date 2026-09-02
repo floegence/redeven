@@ -258,13 +258,22 @@ describe('Flower final thread cache and workspace transport', () => {
     const detailSignal = detail.querySelector('.flower-subagent-detail-signal') as HTMLElement;
     const detailOrb = detailSignal.querySelector<HTMLCanvasElement>('[data-thinking-orb-state="composing"]');
     const statusText = detail.querySelector('.flower-subagent-status-text') as HTMLElement;
-    expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')).not.toBeNull();
+    const detailWindow = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]');
+    expect(detailWindow).not.toBeNull();
+    await waitFor(() => detailWindow?.dataset.floatingPresence === 'open');
+    await waitFor(() => getComputedStyle(detailWindow!).opacity === '1');
     expect(detailOrb).not.toBeNull();
     expect(detailSignal.querySelector('svg')).toBeNull();
     expect(getComputedStyle(detailSignal).borderRadius).toBe('9999px');
     expect(statusText.textContent).toBe('Running');
     expect(getComputedStyle(statusText).animationName).toBe('flower-activity-title-sweep');
     expect(rowStatusColor).toBe(getComputedStyle(statusText).color);
+
+    const presenceStates: string[] = [];
+    const presenceObserver = new MutationObserver(() => {
+      presenceStates.push(detailWindow?.dataset.floatingPresence ?? '');
+    });
+    presenceObserver.observe(detailWindow!, { attributes: true, attributeFilter: ['data-floating-presence'] });
 
     expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
     stream.push({
@@ -317,6 +326,12 @@ describe('Flower final thread cache and workspace transport', () => {
     const runningToolTitle = runningToolRow.querySelector('.flower-activity-inline-title') as HTMLElement;
     expect(getComputedStyle(runningToolButton).boxShadow).toBe('none');
     expect(getComputedStyle(runningToolTitle, '::after').animationName).toBe('flower-activity-title-sweep');
+    await wait(25);
+    presenceObserver.disconnect();
+    expect(document.querySelector('[data-floe-geometry-surface="floating-window"]')).toBe(detailWindow);
+    expect(detailWindow?.dataset.floatingPresence).toBe('open');
+    expect(getComputedStyle(detailWindow!).opacity).toBe('1');
+    expect(presenceStates).not.toContain('entering');
 
     firstDetail.resolve(subagentDetail({
       summary: child,

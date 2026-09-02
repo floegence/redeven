@@ -139,12 +139,10 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   };
 });
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  createFloatingPresence: (options: { open: () => boolean }) => ({
-    mounted: () => Boolean(options.open()),
-    exiting: () => false,
-    state: () => (options.open() ? 'entered' : 'exited'),
-  }),
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>();
+  return {
+  createFloatingPresence: actual.createFloatingPresence,
   Button: (props: any) => {
     return (
       <button
@@ -166,6 +164,11 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     );
   },
   FloatingWindow: (props: any) => {
+    const presence = actual.createFloatingPresence({
+      open: () => Boolean(props.open),
+      exitDurationMs: 0,
+      reducedMotionExitDurationMs: 0,
+    });
     createEffect(() => {
       if (!props.open) return;
       const onKeyDown = (event: KeyboardEvent) => {
@@ -177,11 +180,15 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       onCleanup(() => window.removeEventListener('keydown', onKeyDown));
     });
     return (
-      <Show when={props.open}>
+      <Show when={presence.mounted()}>
         <div
           role="dialog"
           data-floe-geometry-surface="floating-window"
-          class={props.class}
+          data-floe-floating-window-surface="true"
+          data-floe-floating-window-state="active"
+          data-floating-presence={presence.state()}
+          aria-hidden={presence.exiting() ? 'true' : undefined}
+          class={`floe-floating-presence ${props.class ?? ''}`}
           style={{
             width: `${props.defaultSize?.width ?? 400}px`,
             height: `${props.defaultSize?.height ?? 300}px`,
@@ -299,7 +306,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     </select>
   ),
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
-}));
+  };
+});
 
 export function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
