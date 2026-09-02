@@ -413,7 +413,7 @@ describe('web service metadata and template validation', () => {
         open
         mode="edit"
         editorKey="pf-local"
-        initialName="DeepSeek Harness"
+        initialName="Example Service"
         initialDescription=""
         initialAccessMode="unified_proxy"
         targetURL="http://127.0.0.1:3080"
@@ -425,7 +425,7 @@ describe('web service metadata and template validation', () => {
     try {
       host.querySelector<HTMLButtonElement>('[data-access-mode="desktop_loopback"]')?.click();
       Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
-      expect(submit).toHaveBeenCalledWith('DeepSeek Harness', '', 'desktop_loopback');
+      expect(submit).toHaveBeenCalledWith('Example Service', '', 'desktop_loopback');
     } finally {
       dispose();
       host.remove();
@@ -480,12 +480,12 @@ describe('web service metadata and template validation', () => {
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
-          service_id: 'mws-one', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'webtop-ubuntu',
-          name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container',
+          service_id: 'mws-one', template_id: 'example-desktop-a', service_family_id: 'example-desktop-family-a',
+          name: 'Example Desktop A', template_source: 'builtin', deployment: 'container',
           workspace_path: '/workspace', version: '1', desired_state: 'running', observed_state: 'running', forward_id: 'pf-one', runtime_port: 3000,
           container_resources: [
             { kind: 'container', engine: 'docker', view: 'containers', identity: 'container-id' },
-            { kind: 'image', engine: 'docker', view: 'images', identity: 'lscr.io/linuxserver/webtop@sha256:abc' },
+            { kind: 'image', engine: 'docker', view: 'images', identity: 'lscr.io/example/desktop@sha256:abc' },
           ],
           update_available: false,
         }}
@@ -504,7 +504,7 @@ describe('web service metadata and template validation', () => {
       Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Containers')?.click();
       Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Images')?.click();
       expect(openResource).toHaveBeenNthCalledWith(1, expect.objectContaining({ view: 'containers', identity: 'container-id' }));
-      expect(openResource).toHaveBeenNthCalledWith(2, expect.objectContaining({ view: 'images', identity: 'lscr.io/linuxserver/webtop@sha256:abc' }));
+      expect(openResource).toHaveBeenNthCalledWith(2, expect.objectContaining({ view: 'images', identity: 'lscr.io/example/desktop@sha256:abc' }));
     } finally {
       dispose();
       host.remove();
@@ -519,10 +519,11 @@ describe('web service metadata and template validation', () => {
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
-          service_id: 'mws-failed', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness',
-          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'container',
+          service_id: 'mws-failed', template_id: 'example-container', service_family_id: 'example-service',
+          name: 'Example Service', template_source: 'builtin', deployment: 'container',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-failed', runtime_port: 3000, update_available: false,
+          actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } },
           last_failure: { action: 'start', stage: 'starting', error_code: 'DATA_IDENTITY_MISSING', message: 'Raw backend message must not be shown.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
         }}
         busy={false}
@@ -569,8 +570,8 @@ describe('web service metadata and template validation', () => {
 
       retryButton?.click();
       restartButton?.click();
-      expect(retry).toHaveBeenNthCalledWith(1, 'start');
-      expect(retry).toHaveBeenNthCalledWith(2, 'start');
+      expect(retry).toHaveBeenNthCalledWith(1, 'retry');
+      expect(retry).toHaveBeenNthCalledWith(2, 'restart');
     } finally {
       dispose();
       host.remove();
@@ -584,12 +585,13 @@ describe('web service metadata and template validation', () => {
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
-          service_id: 'mws-retry', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness',
-          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'docker',
+          service_id: 'mws-retry', template_id: 'example-container', service_family_id: 'example-service',
+          name: 'Example Service', template_source: 'builtin', deployment: 'container',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-retry', runtime_port: 3000, update_available: false,
+          actions: { start: { available: false, reason_code: 'OPERATION_ACTIVE' }, stop: { available: false, reason_code: 'OPERATION_ACTIVE' }, restart: { available: false, reason_code: 'OPERATION_ACTIVE' }, retry: { available: false, reason_code: 'OPERATION_ACTIVE' } },
         }}
-        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1, stage_started_at_unix_ms: Date.now() - 2_000, updated_at_unix_ms: Date.now(), transfer: { phase: 'pulling', artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, downloaded_bytes: 2_000, total_bytes: 5_000, bytes_per_second: 1_000, completed_layers: 2, total_layers: 5 } } }}
+        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1, stage_started_at_unix_ms: Date.now() - 2_000, updated_at_unix_ms: Date.now(), transfer: { phase: 'pulling', artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, downloaded_bytes: 2_000, total_bytes: 5_000, bytes_per_second: 1_000, completed_layers: 2, total_layers: 5 } } }}
         busy={false}
         canOpen
         canManage
@@ -609,12 +611,12 @@ describe('web service metadata and template validation', () => {
       expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
       expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
       expect(row.textContent).not.toContain('Error');
-      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Retry')?.disabled).toBe(true);
+      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Restart')?.disabled).toBe(true);
 
       progress.click();
       const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
       expect(progress.getAttribute('aria-expanded')).toBe('true');
-      expect(details.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      expect(details.textContent).toContain('ghcr.io/runzhliu/example-service');
       expect(details.textContent).toContain('1.00 KB/s');
       expect(details.textContent).toContain('2 / 5');
       expect(details.textContent).toContain('2s');
@@ -635,8 +637,8 @@ describe('web service metadata and template validation', () => {
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
-          service_id: 'mws-native', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host',
-          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'native',
+          service_id: 'mws-native', template_id: 'example-host', service_family_id: 'example-host',
+          name: 'Example Service', template_source: 'builtin', deployment: 'host',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing',
           forward_id: 'pf-native', runtime_port: 3000, update_available: false,
         }}
@@ -695,8 +697,8 @@ describe('web service metadata and template validation', () => {
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
-          service_id: 'mws-native-install', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host',
-          name: 'DeepSeek Harness', template_source: 'builtin', brand_icon: 'deepseek-harness', deployment: 'native',
+          service_id: 'mws-native-install', template_id: 'example-host', service_family_id: 'example-host',
+          name: 'Example Service', template_source: 'builtin', deployment: 'host',
           workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing',
           forward_id: 'pf-native-install', runtime_port: 3000, update_available: false,
         }}
@@ -739,8 +741,8 @@ describe('web service metadata and template validation', () => {
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
-          service_id: 'mws-cached', template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'linuxserver-webtop-debian-xfce',
-          name: 'LinuxServer Webtop · Debian XFCE', template_source: 'builtin', brand_icon: 'debian', deployment: 'docker',
+          service_id: 'mws-cached', template_id: 'example-desktop-b', service_family_id: 'example-desktop-b',
+          name: 'Example Desktop B', template_source: 'builtin', deployment: 'container',
           workspace_path: '/workspace', version: '1', desired_state: 'running', observed_state: 'installing',
           forward_id: 'pf-cached', runtime_port: 3000, update_available: false,
         }}
@@ -752,7 +754,7 @@ describe('web service metadata and template validation', () => {
             updated_at_unix_ms: stageStartedAt,
             transfer: {
               phase: 'cached',
-              artifact_reference: 'lscr.io/linuxserver/webtop@sha256:reviewed',
+              artifact_reference: 'lscr.io/example/desktop@sha256:reviewed',
               artifact_index: 1,
               artifact_total: 1,
               completed_layers: 18,
@@ -1035,15 +1037,15 @@ describe('EnvPortForwardsPage', () => {
     expect(inputShell?.className).toContain('flex-1');
   });
 
-  it('shows a managed DeepSeek Harness card without duplicating its protected forward', async () => {
+  it('shows a managed Example Service card without duplicating its protected forward', async () => {
     envContextMocks.env = Object.assign(
       () => ({ name: 'Build host', permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
       { state: 'ready', loading: false, error: null },
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
-      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'managed-forward', target_url: 'http://127.0.0.1:3080', name: 'DeepSeek Harness', description: 'Managed by Redeven', health: { status: 'healthy', last_checked_at_unix_ms: 1, latency_ms: 2, last_error: '' }, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 0 }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', deployment: 'host', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'managed-forward', target_url: 'http://127.0.0.1:3080', name: 'Example Service', description: 'Managed by Redeven', health: { status: 'healthy', last_checked_at_unix_ms: 1, latency_ms: 2, last_error: '' }, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 0 }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
 
@@ -1052,17 +1054,17 @@ describe('EnvPortForwardsPage', () => {
 
     expect(host.querySelectorAll('[data-testid="managed-service-row"]')).toHaveLength(1);
     expect(host.querySelectorAll('[data-testid="port-forward-row"]')).toHaveLength(0);
-    expect(host.textContent).toContain('DeepSeek Harness');
+    expect(host.textContent).toContain('Example Service');
     expect(host.textContent).toContain('Running');
   });
 
   it('hands a managed image destination to the single Containers navigation channel', async () => {
-    const imageIdentity = 'lscr.io/linuxserver/webtop@sha256:abcdef';
+    const imageIdentity = 'lscr.io/example/desktop@sha256:abcdef';
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{
-        service_id: 'mws-webtop', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde',
-        name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)', deployment: 'container', workspace_path: '/workspace', version: '654ea8e3-ls177',
+        service_id: 'mws-desktop', template_id: 'example-desktop-a', service_family_id: 'example-desktop-a',
+        name: 'Example Desktop A', deployment: 'container', workspace_path: '/workspace', version: '654ea8e3-ls177',
         desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3000,
         container_resources: [{ kind: 'image', engine: 'docker', view: 'images', identity: imageIdentity }],
       }] };
@@ -1085,13 +1087,13 @@ describe('EnvPortForwardsPage', () => {
   it('opens a managed service through a route-safe browser session', async () => {
     const service = {
       service_id: 'mws-legacy',
-      template_id: 'linuxserver-webtop-ubuntu-kde',
-      service_family_id: 'linuxserver-webtop-ubuntu-kde',
-      name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)',
+      template_id: 'example-desktop-a',
+      service_family_id: 'example-desktop-a',
+      name: 'Example Desktop A',
       description: 'Managed desktop',
       template_source: 'builtin',
       deployment: 'container',
-      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde',
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a',
       version: '654ea8e3-ls177',
       desired_state: 'running',
       observed_state: 'running',
@@ -1137,21 +1139,21 @@ describe('EnvPortForwardsPage', () => {
   it('matches installed templates exactly and reuses the managed-service open flow', async () => {
     const templates = [
       {
-        template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host', name: 'DeepSeek Harness · Host', description: 'Host deployment',
-        brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1,
+        template_id: 'example-host', service_family_id: 'example-host', name: 'Example Service · Host', description: 'Host deployment',
+        source: 'builtin', deployment: 'host', revision: 1,
         duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
-        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-host', deployments: [{ deployment: 'native', available: true }], workspace_roots: [],
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-host', deployments: [{ deployment: 'host', available: true }], workspace_roots: [],
       },
       {
-        template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness-container', name: 'DeepSeek Harness · Container', description: 'Container deployment',
-        brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessContainer', source: 'builtin', deployment: 'docker', revision: 1,
+        template_id: 'example-container', service_family_id: 'example-container', name: 'Example Service · Container', description: 'Container deployment',
+        source: 'builtin', deployment: 'container', revision: 1,
         duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
-        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-container', deployments: [{ deployment: 'docker', available: true }], workspace_roots: [],
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-container', deployments: [{ deployment: 'container', available: true }], workspace_roots: [],
       },
     ];
     const service = {
-      service_id: 'mws-container', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness-container',
-      name: 'DeepSeek Harness · Container', template_source: 'builtin', deployment: 'docker', workspace_path: templates[1].default_workspace_path,
+      service_id: 'mws-container', template_id: 'example-container', service_family_id: 'example-container',
+      name: 'Example Service · Container', template_source: 'builtin', deployment: 'container', workspace_path: templates[1].default_workspace_path,
       version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'pf-container', runtime_port: 3080,
       access_mode: 'unified_proxy', update_available: false,
     };
@@ -1171,13 +1173,13 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
 
-    const hostRow = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-host"]');
+    const hostRow = host.querySelector<HTMLElement>('[data-template-id="example-host"]');
     expect(hostRow?.getAttribute('data-template-state')).toBe('available');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(false);
 
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
     await flushPage();
-    const containerRow = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-container"]');
+    const containerRow = host.querySelector<HTMLElement>('[data-template-id="example-container"]');
     expect(containerRow?.getAttribute('data-template-state')).toBe('installed');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
 
@@ -1199,8 +1201,8 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)', description: 'Managed desktop', template_source: 'builtin', brand_icon: 'ubuntu', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls177', desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945, update_available: false }] };
-      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'pf-managed', target_url: 'http://127.0.0.1:54945', name: 'Webtop', description: 'Managed by Redeven' }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'example-desktop-a', service_family_id: 'example-desktop-a', name: 'Example Desktop A', description: 'Managed desktop', template_source: 'builtin', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a', version: '654ea8e3-ls177', desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945, update_available: false }] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'pf-managed', target_url: 'http://127.0.0.1:54945', name: 'Desktop Service', description: 'Managed by Redeven' }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
 
@@ -1229,7 +1231,7 @@ describe('EnvPortForwardsPage', () => {
     expect(workspace?.className).toContain('truncate');
     expect(actions?.className).toContain('grid-cols-[4.75rem_4.75rem_2rem]');
     expect(actions?.querySelector('[data-testid="managed-service-more"]')).toBeTruthy();
-    expect(row?.querySelector('[data-template-brand="ubuntu"]')).toBeTruthy();
+    expect(row?.querySelector('[data-template-kind="container"]')).toBeTruthy();
   });
 
   it('shows managed service status and read actions without lifecycle permission', async () => {
@@ -1239,7 +1241,7 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-readonly', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-readonly', template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', deployment: 'host', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080, actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } } }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
 
@@ -1255,7 +1257,7 @@ describe('EnvPortForwardsPage', () => {
 
   it('disables Docker deployment when the runtime reports it unavailable', async () => {
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
-      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }, { template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Container', description: 'Container deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessContainer', source: 'builtin', deployment: 'docker', revision: 1, duplicateable: true, editable: false, available: false, reason_code: 'DOCKER_UNAVAILABLE', version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'docker', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }, { template_id: 'example-container', service_family_id: 'example-service', name: 'Example Service · Container', description: 'Container deployment', source: 'builtin', deployment: 'container', revision: 1, duplicateable: true, editable: false, available: false, reason_code: 'DOCKER_UNAVAILABLE', version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'container', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
       throw new Error(`Unexpected local API call: ${url}`);
@@ -1268,17 +1270,17 @@ describe('EnvPortForwardsPage', () => {
     const containerTab = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim().startsWith('Container templates'));
     containerTab?.click();
     await flushPage();
-    const containerCard = document.querySelector('[data-template-id="deepseek-harness-container"]');
-    const containerDetails = document.querySelector('[data-testid="service-template-details"][data-template-id="deepseek-harness-container"]');
+    const containerCard = document.querySelector('[data-template-id="example-container"]');
+    const containerDetails = document.querySelector('[data-testid="service-template-details"][data-template-id="example-container"]');
     expect(containerCard).toBeTruthy();
     expect(containerDetails?.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.disabled).toBe(true);
     expect(containerDetails?.textContent).toContain('Docker is unavailable');
-    expect(containerCard?.textContent).toContain('Run the reviewed community DeepSeek Harness image in Docker.');
+    expect(containerCard?.textContent).toContain('Container deployment');
     expect(containerCard?.className).not.toContain('opacity');
   });
 
   it('presents the catalog as grouped service identities without a catalog footer', async () => {
-    const template = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+    const template = { template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
@@ -1294,8 +1296,8 @@ describe('EnvPortForwardsPage', () => {
     const drawer = host.querySelector<HTMLElement>('[data-testid="env-app-drawer-mock"]')!;
     expect(drawer.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(1);
     expect(drawer.textContent).toContain('Redeven built-in');
-    expect(drawer.textContent).toContain('Run DeepSeek Harness directly in the current Environment.');
-    expect(drawer.querySelector('[data-testid="deepseek-harness-logo"]')).toBeTruthy();
+    expect(drawer.textContent).toContain('Host deployment');
+    expect(drawer.querySelector('[data-template-kind="host"]')).toBeTruthy();
     expect(drawer.textContent).toContain('Ready to deploy');
     expect(Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).some((button) => button.textContent?.trim() === 'Cancel')).toBe(false);
 
@@ -1324,10 +1326,10 @@ describe('EnvPortForwardsPage', () => {
 
   it('uses a space-free recommended workspace and preserves a custom path with spaces', async () => {
     const template = {
-      template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment',
-      source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
-      deployments: [{ deployment: 'native', available: true }],
-      default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness',
+      template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment',
+      source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true,
+      deployments: [{ deployment: 'host', available: true }],
+      default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service',
       workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
     };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -1362,50 +1364,50 @@ describe('EnvPortForwardsPage', () => {
     expect(workspace?.dataset.path).toBe(template.default_workspace_path);
   });
 
-  it('presents both Webtop templates and requires the declared risk acknowledgement before install', async () => {
+  it('presents both Desktop Service templates and requires the declared risk acknowledgement before install', async () => {
     const notice = {
       id: 'interactive-desktop-root-and-network',
       revision: 1,
       severity: 'warning',
-      title_key: 'webServices.managed.notices.interactiveDesktopRoot.title',
-      description_key: 'webServices.managed.notices.interactiveDesktopRoot.description',
       acknowledgement_required: true,
     };
     const templates = [
       {
-        template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde', name: 'Unlocalized Ubuntu desktop', description: 'Unlocalized Ubuntu description',
-        brand_icon: 'ubuntu', localization_key: 'linuxserverWebtopUbuntuKDE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        template_id: 'example-desktop-a', service_family_id: 'example-desktop-a', name: 'Unlocalized Ubuntu desktop', description: 'Unlocalized Ubuntu description',
+        localizations: { 'en-US': { name: 'Example Desktop A', description: 'An example managed desktop.', notices: { 'interactive-desktop-root-and-network': { title: 'Container root access and outbound network', description: 'Only share this service with trusted users.' } } } },
+        source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         version: '654ea8e3-ls177', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
-        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
         effective_spec: {
-          schema_version: 1, kind: 'container', endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
-          container: { image: 'lscr.io/linuxserver/webtop@sha256:ubuntu', environment: { PUID: '${REDEVEN_RUNTIME_UID}' }, mounts: [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'config', target: '/config' }], restart_policy: 'no', network_mode: 'bridge', read_only_root: false, pids_limit: 2048, shm_size_bytes: 1073741824, runtime_profile: 'interactive_desktop' },
+          schema_version: 3, kind: 'container', endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
+          container: { image: 'lscr.io/example/desktop@sha256:ubuntu', environment: { PUID: '${REDEVEN_RUNTIME_UID}' }, mounts: [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'config', target: '/config' }], restart_policy: 'no', network_mode: 'bridge', read_only_root: false, pids_limit: 2048, shm_size_bytes: 1073741824, runtime_profile: 'interactive_desktop' },
         },
       },
       {
-        template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'linuxserver-webtop-debian-xfce', name: 'Unlocalized Debian desktop', description: 'Unlocalized Debian description',
-        brand_icon: 'debian', localization_key: 'linuxserverWebtopDebianXFCE', source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        template_id: 'example-desktop-b', service_family_id: 'example-desktop-b', name: 'Unlocalized Debian desktop', description: 'Unlocalized Debian description',
+        localizations: { 'en-US': { name: 'Example Desktop B', description: 'Another example managed desktop.', notices: { 'interactive-desktop-root-and-network': { title: 'Container root access and outbound network', description: 'Only share this service with trusted users.' } } } },
+        source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         version: '7c4ebdc9-ls209', developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
-        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-debian-xfce', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+        default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-b', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
       },
     ];
     let createBody: Record<string, any> | null = null;
     let installed = false;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates };
-      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') return { services: installed ? [{ service_id: 'mws-webtop', service_family_id: templates[0].service_family_id, forward_id: 'managed-webtop' }] : [] };
+      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') return { services: installed ? [{ service_id: 'mws-desktop', service_family_id: templates[0].service_family_id, forward_id: 'managed-desktop' }] : [] };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'POST') {
         createBody = JSON.parse(String(init.body));
         installed = true;
         return {
-          service: { service_id: 'mws-webtop', template_id: templates[0].template_id, service_family_id: templates[0].service_family_id, deployment: 'container', workspace_path: templates[0].default_workspace_path, version: templates[0].version, desired_state: 'running', observed_state: 'installing', forward_id: 'managed-webtop', runtime_port: 32100 },
-          operation: { operation_id: 'mop-webtop-install', service_id: 'mws-webtop', state: 'pending', stage: 'environment_check', progress_current: 0, progress_total: 7 },
+          service: { service_id: 'mws-desktop', template_id: templates[0].template_id, service_family_id: templates[0].service_family_id, deployment: 'container', workspace_path: templates[0].default_workspace_path, version: templates[0].version, desired_state: 'running', observed_state: 'installing', forward_id: 'managed-desktop', runtime_port: 32100 },
+          operation: { operation_id: 'mop-desktop-install', service_id: 'mws-desktop', state: 'pending', stage: 'environment_check', progress_current: 0, progress_total: 7 },
         };
       }
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
-    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-install', service_id: 'mws-webtop', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-desktop-install', service_id: 'mws-desktop', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
     vi.spyOn(window, 'open').mockReturnValue(null);
 
     render(() => <EnvPortForwardsPage />, host);
@@ -1415,12 +1417,12 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
     await flushPage();
 
-    expect(host.querySelector('[data-brand-icon="ubuntu"], [data-template-brand="ubuntu"]')).toBeTruthy();
-    expect(host.querySelector('[data-brand-icon="debian"], [data-template-brand="debian"]')).toBeTruthy();
-    expect(host.querySelector('[data-template-id="linuxserver-webtop-ubuntu-kde"]')?.textContent).toContain('LinuxServer Webtop · Ubuntu (KDE Plasma)');
-    expect(host.querySelector('[data-template-id="linuxserver-webtop-debian-xfce"]')?.textContent).toContain('LinuxServer Webtop · Debian XFCE');
+    expect(host.querySelector('[data-template-id="example-desktop-a"] [data-template-kind="container"]')).toBeTruthy();
+    expect(host.querySelector('[data-template-id="example-desktop-b"] [data-template-kind="container"]')).toBeTruthy();
+    expect(host.querySelector('[data-template-id="example-desktop-a"]')?.textContent).toContain('Example Desktop A');
+    expect(host.querySelector('[data-template-id="example-desktop-b"]')?.textContent).toContain('Example Desktop B');
     const templateDetails = host.querySelector('[data-testid="service-template-details"]')!;
-    expect(templateDetails.textContent).toContain('lscr.io/linuxserver/webtop@sha256:ubuntu');
+    expect(templateDetails.textContent).toContain('lscr.io/example/desktop@sha256:ubuntu');
     expect(templateDetails.textContent).toContain('${WORKSPACE} → /workspace');
     expect(templateDetails.textContent).toContain('1 GiB');
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
@@ -1435,7 +1437,7 @@ describe('EnvPortForwardsPage', () => {
     install?.click();
 
     await waitForAssertion(() => expect(createBody).toMatchObject({
-      template_id: 'linuxserver-webtop-ubuntu-kde',
+      template_id: 'example-desktop-a',
       workspace_path: templates[0].default_workspace_path,
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 1 },
     }));
@@ -1530,16 +1532,17 @@ describe('EnvPortForwardsPage', () => {
     }
   });
 
-  it('uses the same managed operation chain for Webtop updates and sends the notice revision', async () => {
+  it('uses the same managed operation chain for Desktop Service updates and sends the notice revision', async () => {
     const updateNotice = {
       id: 'interactive-desktop-root-and-network', revision: 2, severity: 'warning',
-      title_key: 'webServices.managed.notices.interactiveDesktopRoot.title', description_key: 'webServices.managed.notices.interactiveDesktopRoot.description', acknowledgement_required: true,
+      acknowledgement_required: true,
     };
     const service = {
-      service_id: 'mws-webtop', template_id: 'linuxserver-webtop-ubuntu-kde', service_family_id: 'linuxserver-webtop-ubuntu-kde',
-      name: 'Unlocalized Webtop', description: 'Unlocalized description', localization_key: 'linuxserverWebtopUbuntuKDE', brand_icon: 'ubuntu', deployment: 'container',
-      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde', version: '654ea8e3-ls176', target_version: '654ea8e3-ls177', target_revision: 2,
-      update_available: true, update_notices: [updateNotice], desired_state: 'running', observed_state: 'running', forward_id: 'managed-webtop', runtime_port: 32100,
+      service_id: 'mws-desktop', template_id: 'example-desktop-a', service_family_id: 'example-desktop-a',
+      name: 'Unlocalized Service', description: 'Unlocalized description', deployment: 'container',
+      localizations: { 'en-US': { name: 'Example Desktop', description: 'Managed desktop', notices: { 'interactive-desktop-root-and-network': { title: 'Container root access and outbound network', description: 'Only share this service with trusted users.' } } } },
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a', version: '654ea8e3-ls176', target_version: '654ea8e3-ls177', target_revision: 2,
+      update_available: true, update_notices: [updateNotice], desired_state: 'running', observed_state: 'running', forward_id: 'managed-desktop', runtime_port: 32100,
     };
     let operationBody: Record<string, any> | null = null;
     let updated = false;
@@ -1548,17 +1551,17 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ ...service, update_available: !updated, version: updated ? service.target_version : service.version }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services/mws-webtop/operations' && init?.method === 'POST') {
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/operations' && init?.method === 'POST') {
         operationBody = JSON.parse(String(init.body));
         updated = true;
-        return { operation_id: 'mop-webtop-update', service_id: 'mws-webtop', state: 'pending', stage: 'update_preparing', progress_current: 0, progress_total: 7 };
+        return { operation_id: 'mop-desktop-update', service_id: 'mws-desktop', state: 'pending', stage: 'update_preparing', progress_current: 0, progress_total: 7 };
       }
       throw new Error(`Unexpected local API call: ${url}`);
     });
     localApiMocks.fetchLocalApi.mockResolvedValue(new Response(new ReadableStream({
       start(controller) {
         streamController = controller;
-        controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-update', service_id: 'mws-webtop', action: 'update', state: 'running', stage: 'update_preparing', progress_current: 1, progress_total: 7 })}\n\n`));
+        controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-desktop-update', service_id: 'mws-desktop', action: 'update', state: 'running', stage: 'update_preparing', progress_current: 1, progress_total: 7 })}\n\n`));
       },
     }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
 
@@ -1582,17 +1585,17 @@ describe('EnvPortForwardsPage', () => {
     expect(host.querySelector('[data-testid="managed-service-update-dialog"]')).toBeNull();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Update'));
     expect(host.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
-    streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-update', service_id: 'mws-webtop', action: 'update', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`));
+    streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-desktop-update', service_id: 'mws-desktop', action: 'update', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`));
     streamController?.close();
     await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service updated', expect.any(String)));
   });
 
-  it('explains that native template updates do not stop or replace the runtime', async () => {
+  it('explains the generic managed update rollback contract', async () => {
     const service = {
-      service_id: 'mws-deepseek-host', template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness-host',
-      name: 'DeepSeek Harness', description: 'Native host service', localization_key: 'deepSeekHarnessHost', brand_icon: 'deepseek-harness', deployment: 'native',
-      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-host', version: '0.1.1-rc.2', target_version: '0.1.1-rc.2', target_revision: 2,
-      update_available: true, update_notices: [], desired_state: 'running', observed_state: 'running', forward_id: 'managed-deepseek-host', runtime_port: 32101,
+      service_id: 'mws-host', template_id: 'example-host', service_family_id: 'example-host',
+      name: 'Example Service', description: 'Native host service', deployment: 'host',
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-host', version: '0.1.1-rc.2', target_version: '0.1.1-rc.2', target_revision: 2,
+      update_available: true, update_notices: [], desired_state: 'running', observed_state: 'running', forward_id: 'managed-host', runtime_port: 32101,
     };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -1607,14 +1610,13 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
 
     const dialogText = host.querySelector('[data-testid="managed-service-update-dialog"]')?.textContent ?? '';
-    expect(dialogText).toContain('does not stop or restart the service');
-    expect(dialogText).toContain('runtime, workspace, managed data, and configuration remain unchanged');
-    expect(dialogText).not.toContain('restores the previous image');
+    expect(dialogText).toContain('reuses the existing workspace and managed configuration volume');
+    expect(dialogText).toContain('restores the previous image');
   });
 
   it('searches the catalog using localized built-in identity copy', async () => {
     const templates = [
-      { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'Unlocalized host name', description: 'Unlocalized host description', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [] },
+      { template_id: 'example-host', service_family_id: 'example-service', name: 'Unlocalized host name', description: 'Unlocalized host description', localizations: { 'en-US': { name: 'Example Host', description: 'Run directly in this Environment.' } }, source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] },
       { template_id: 'custom-host', service_family_id: 'custom-host', name: 'Workspace dashboard', description: 'Internal status view', source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '1', developer_preview: false, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] },
     ];
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -1633,18 +1635,18 @@ describe('EnvPortForwardsPage', () => {
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await flushPage();
 
-    expect(host.querySelector('[data-template-id="deepseek-harness-host"]')).toBeTruthy();
+    expect(host.querySelector('[data-template-id="example-host"]')).toBeTruthy();
     expect(host.querySelector('[data-template-id="custom-host"]')).toBeNull();
   });
 
   it('duplicates a built-in service template as an independent custom template', async () => {
-    const source = { template_id: 'deepseek-harness-host', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness · Host', description: 'Host deployment', brand_icon: 'deepseek-harness', localization_key: 'deepSeekHarnessHost', source: 'builtin', deployment: 'native', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'native', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+    const source = { template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, version: '0.1.1-rc.2', developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
     let duplicateBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [source] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
-      if (url === '/_redeven_proxy/api/managed-web-service-templates/deepseek-harness-host/duplicate' && init?.method === 'POST') {
+      if (url === '/_redeven_proxy/api/managed-web-service-templates/example-host/duplicate' && init?.method === 'POST') {
         duplicateBody = JSON.parse(String(init.body));
         return { ...source, template_id: 'tmpl-copy', service_family_id: 'family-copy', source: 'custom', editable: true, name: duplicateBody?.name };
       }
@@ -1660,29 +1662,29 @@ describe('EnvPortForwardsPage', () => {
     const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Duplicate' && !button.title);
     confirm?.click();
 
-    await waitForAssertion(() => expect(duplicateBody).toMatchObject({ name: 'DeepSeek Harness copy' }));
+    await waitForAssertion(() => expect(duplicateBody).toMatchObject({ name: 'Example Service · Host copy' }));
     expect(String((duplicateBody as Record<string, unknown> | null)?.request_id)).toMatch(/^envapp-/u);
   });
 
   it('preserves a duplicated declarative npm Host package when saving template edits', async () => {
     const source = {
-      template_id: 'tmpl-host-copy', service_family_id: 'family-copy', name: 'DeepSeek Harness host copy', description: 'Host deployment',
+      template_id: 'tmpl-host-copy', service_family_id: 'family-copy', name: 'Example Service host copy', description: 'Host deployment',
       source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, version: '0.1.1-rc.2', developer_preview: false,
       deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }],
-      spec: { schema_version: 3, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', environment: { SERVICE_MODE: 'preserved' }, npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' } } },
+      spec: { schema_version: 3, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', environment: { SERVICE_MODE: 'preserved' }, npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' } } },
       host_lifecycle_plan: {
         schema_version: 1,
         driver: 'npm_host',
         runtime_bundle: 'node-24.19.0',
-        npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' },
-        package: { reference: 'deepseek-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 1024 },
+        npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' },
+        package: { reference: 'example-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 1024 },
         install: { ownership: 'redeven', steps: [
           { kind: 'prepare_managed_directories' },
           { kind: 'prepare_verified_node_runtime', reference: 'node-24.19.0' },
-          { kind: 'install_npm_package_without_scripts', command_template: '<managed-node> <managed-npm-cli> install @deepseek-ai/dsh@0.1.1-rc.2 --package-lock=false --ignore-scripts' },
+          { kind: 'install_npm_package_without_scripts', command_template: '<managed-node> <managed-npm-cli> install @example/service-cli@0.1.1-rc.2 --package-lock=false --ignore-scripts' },
           { kind: 'remove_temporary_registry_credentials' },
           { kind: 'run_npm_lifecycle_scripts', command_template: '<managed-node> <managed-npm-cli> rebuild --dangerously-allow-all-scripts' },
-          { kind: 'verify_npm_release_identity', reference: '@deepseek-ai/dsh@0.1.1-rc.2' },
+          { kind: 'verify_npm_release_identity', reference: '@example/service-cli@0.1.1-rc.2' },
         ] },
         start: { ownership: 'template', steps: [{ kind: 'run_template_script', command_template: '<template-start-script>' }] },
         stop: { ownership: 'redeven', steps: [{ kind: 'terminate_managed_process_group' }] },
@@ -1707,7 +1709,7 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Edit template"]')?.click();
     await flushPage();
-    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('<managed-node> <managed-npm-cli> install @deepseek-ai/dsh@0.1.1-rc.2 --package-lock=false --ignore-scripts');
+    expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('<managed-node> <managed-npm-cli> install @example/service-cli@0.1.1-rc.2 --package-lock=false --ignore-scripts');
     expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).toContain('Uses the editable command below.');
     expect(document.querySelector('[data-testid="host-lifecycle-plan"]')?.textContent).not.toContain('<template-start-script>');
     expect(document.querySelector('label[for="template-editor-install-script"]')?.textContent).toContain('After-install hook');
@@ -1716,7 +1718,7 @@ describe('EnvPortForwardsPage', () => {
     const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save template');
     save?.click();
 
-    await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
+    await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
     const submitted = updateBody as Record<string, any> | null;
     expect(submitted?.spec?.schema_version).toBe(3);
     expect(submitted?.spec?.host?.environment).toEqual({ SERVICE_MODE: 'preserved' });
@@ -1724,8 +1726,8 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('restores an active managed operation and exposes cancellation after a page reload', async () => {
-    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
-    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, active_operation: activeOperation };
+    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
+    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'container', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, active_operation: activeOperation };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
@@ -1746,7 +1748,7 @@ describe('EnvPortForwardsPage', () => {
       expect(trigger).toBeTruthy();
       expect(host.textContent).not.toContain('Error');
       trigger.click();
-      expect(host.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/deepseek-harness');
+      expect(host.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('ghcr.io/runzhliu/example-service');
       const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel operation');
       expect(cancel).toBeTruthy();
       cancel?.click();
@@ -1757,11 +1759,11 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('tracks every resumed service operation without a global list footer', async () => {
-    const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:one', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
+    const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:one', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
     const operationTwo = { operation_id: 'mop-two', service_id: 'mws-two', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
     const services = [
-      { service_id: 'mws-one', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', deployment: 'docker', workspace_path: '/one', version: '1', desired_state: 'running', observed_state: 'error', forward_id: 'pf-one', runtime_port: 3001, active_operation: operationOne },
-      { service_id: 'mws-two', template_id: 'linuxserver-webtop-debian-xfce', service_family_id: 'webtop-two', name: 'Debian desktop', deployment: 'container', workspace_path: '/two', version: '1', desired_state: 'running', observed_state: 'stopped', forward_id: 'pf-two', runtime_port: 3002, active_operation: operationTwo },
+      { service_id: 'mws-one', template_id: 'example-container', service_family_id: 'example-service', name: 'Example Service', deployment: 'container', workspace_path: '/one', version: '1', desired_state: 'running', observed_state: 'error', forward_id: 'pf-one', runtime_port: 3001, active_operation: operationOne },
+      { service_id: 'mws-two', template_id: 'example-desktop-b', service_family_id: 'example-desktop-family-b', name: 'Debian desktop', deployment: 'container', workspace_path: '/two', version: '1', desired_state: 'running', observed_state: 'stopped', forward_id: 'pf-two', runtime_port: 3002, active_operation: operationTwo },
       { service_id: 'mws-idle', template_id: 'custom-idle', service_family_id: 'idle', name: 'Idle service', deployment: 'container', workspace_path: '/idle', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-idle', runtime_port: 3003 },
     ];
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -1786,7 +1788,7 @@ describe('EnvPortForwardsPage', () => {
       const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"]'));
       const firstRow = rows.find((row) => row.dataset.managedServiceId === 'mws-one')!;
       firstRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
-      expect(firstRow.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('deepseek-harness');
+      expect(firstRow.querySelector('[data-testid="managed-operation-artifact"]')?.textContent).toContain('example-service');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('data-indeterminate')).toBe('true');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBeNull();
       expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
@@ -1800,8 +1802,8 @@ describe('EnvPortForwardsPage', () => {
 
   it('keeps simultaneous service actions on independent event streams', async () => {
     const baseServices = [
-      { service_id: 'mws-first', template_id: 'custom-first', service_family_id: 'first', name: 'First service', deployment: 'container', workspace_path: '/first', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-first', runtime_port: 3001, update_available: false },
-      { service_id: 'mws-second', template_id: 'custom-second', service_family_id: 'second', name: 'Second service', deployment: 'container', workspace_path: '/second', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-second', runtime_port: 3002, update_available: false },
+      { service_id: 'mws-first', template_id: 'custom-first', service_family_id: 'first', name: 'First service', deployment: 'container', workspace_path: '/first', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-first', runtime_port: 3001, update_available: false, actions: { start: { available: true }, stop: { available: false }, restart: { available: false }, retry: { available: false } } },
+      { service_id: 'mws-second', template_id: 'custom-second', service_family_id: 'second', name: 'Second service', deployment: 'container', workspace_path: '/second', version: '1', desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-second', runtime_port: 3002, update_available: false, actions: { start: { available: true }, stop: { available: false }, restart: { available: false }, retry: { available: false } } },
     ];
     const runningFirst = { operation_id: 'mop-first', service_id: 'mws-first', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
     const runningSecond = { ...runningFirst, operation_id: 'mop-second', service_id: 'mws-second' };
@@ -1865,7 +1867,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('shows retry submission in the owning row before the operation request returns', async () => {
-    const service = { service_id: 'mws-retry', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', template_source: 'builtin', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, update_available: false };
+    const service = { service_id: 'mws-retry', template_id: 'example-container', service_family_id: 'example-service', name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, update_available: false, actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } } };
     const operationRequest = deferred<any>();
     const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -1948,7 +1950,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('reports retry failures with the retry action title', async () => {
-    const service = { service_id: 'mws-retry', template_id: 'deepseek-harness-container', service_family_id: 'deepseek-harness', name: 'DeepSeek Harness', template_source: 'builtin', deployment: 'docker', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, update_available: false };
+    const service = { service_id: 'mws-retry', template_id: 'example-container', service_family_id: 'example-service', name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, update_available: false, actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } } };
     const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
     const failed = { ...running, state: 'failed', stage: 'failed', error_code: 'IMAGE_REGISTRY_UNAVAILABLE', error_message: 'The container image registry is unavailable.' };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -1969,7 +1971,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('uninstalls a managed service while retaining its data by default', async () => {
-    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
     let removed = false;
     let operationBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -2004,7 +2006,7 @@ describe('EnvPortForwardsPage', () => {
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
       { state: 'ready', loading: false, error: null },
     );
-    const service = { service_id: 'mws-1', template_id: 'deepseek-harness', deployment: 'native', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', version: '0.1.1-rc.2', desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
     let operationBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };

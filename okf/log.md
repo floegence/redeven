@@ -18,17 +18,15 @@
   response therefore reach independent authorization checks and handlers while
   preserving provider result order. Missing or tightened authority still fails
   closed, and the fixed tool surface remains the only production path.
-* **Historical managed-volume recovery**: The generic Container resource loader
-  now imports the exact retired DeepSeek `docker-volume.json` identity into
-  `managed_web_service_resources` only after deterministic-name, creation-time,
-  and live Docker verification. Registry persistence precedes best-effort
-  marker cleanup, so retries are idempotent and failures never alter the legacy
-  container, volume, or user data. The retired DeepSeek Docker lifecycle driver
-  is removed, and stable volume-identity errors now have localized diagnostics.
-  An exact latest Start failure now regains its desired-running intent after
-  import and reuses ordinary Start once. Failed-service actions follow their
-  persisted operation, so Start failures no longer invoke reinstall or replace
-  the existing container.
+* **Generic Managed Service baseline**: Redeven now consumes the released
+  `github.com/floegence/redeven-service-templates` v0.1.0 bundle and contains no
+  built-in service identity, presentation asset, package, image, or specialized
+  lifecycle branch. The user-approved pre-release reset establishes
+  `portforward_registry_v1` version 1 with exact configuration, release,
+  RuntimeBinding, resource, progress, and retry-lineage state. Generic Host,
+  Container, and Compose drivers use one binding and capability contract;
+  failures wait for explicit Start, Restart, Retry, release selection, or
+  reconfigure preflight instead of executing automatic repair.
 
 ## 2026-09-01
 * **Structured tool history and stable lineage**: Redeven now consumes Floret
@@ -42,33 +40,17 @@
   `ask_user` whenever another user answer is needed and forbids ending that
   Turn with a prose question. Natural stop remains valid when no answer is
   required.
-* **Managed Service v8 startup recovery**: Advanced the port-forward Registry
-  to v9 and TemplateSpec to v3. Exact built-in DeepSeek Host snapshots regain
-  their historical data environment and automatic recovery intent without
-  moving user paths; migrated Bundle runtimes keep their real install and log
-  layout. Host process ownership now binds boot and process-start identity, and
-  strictly verified legacy processes can be adopted and stopped after a
-  Runtime restart. Exact historical `redeven-dsh-*` containers remain operable
-  without weakening ID, label, digest, image, or configuration checks. Stable
-  error codes drive localized, path-free diagnostics while historical failure
-  operations remain intact.
 * **Friendly Agent startup progress**: Redeven now consumes Floret v7.0.2 and
   forwards its real migration and verification phases. Startup shows neutral
   phase copy, real elapsed time after ten seconds, a calm long-history note
   after thirty seconds, sanitized details, and one non-blocking ready notice.
   Polling countdowns, guessed progress, and obsolete commit or rollback facts
   are removed from the readiness contract.
-* **Transparent managed Host lifecycle**: Host template queries now project the
-  actual Runtime driver, safe package identity, and ordered install, start,
-  stop, and uninstall plan without persisting or hashing that projection.
-  Native installation, DeepSeek startup, the built-in Host template, and its
-  copied definition share one argument source and include `--no-open`.
-  User-authored Hooks stay in their original fields and are represented in the
-  plan only by safe placeholders. DeepSeek Host revision 2 is an opt-in update;
-  its strictly verified update atomically changes only reviewed template
-  metadata without stopping, restarting, or replacing the Native Runtime.
-  Registry remains v7 and historical custom templates, data, and digests are
-  unchanged.
+* **Transparent managed Host lifecycle**: Host template queries project the
+  actual generic Runtime driver, safe package identity, and ordered install,
+  start, stop, and uninstall plan without persisting or hashing that
+  projection. User-authored Hooks remain authoritative fields and appear in the
+  plan only through safe placeholders.
 * **Host package download progress**: Audited host packages now publish their
   safe filename and digest, exact downloaded and total bytes, smoothed rate,
   and elapsed time through the existing persisted operation stream. Host
@@ -81,13 +63,6 @@
   Turn, and removed historical tools use the neutral Activity presentation.
   The known legacy continuation-prompt repair crosses one explicit context
   projection boundary without compaction or stale continuation reuse.
-* **Exact DeepSeek template instances**: Host and container templates now own
-  separate service families and template-specific default workspaces, so both
-  may coexist without misleading installed state. Template Open reuses the
-  main service route only when the exact instance is ready. Registry v7
-  atomically migrates historical built-in DeepSeek family identity while
-  preserving existing workspace paths, user data, snapshots, configuration,
-  secrets, forwards, resources, operations, timestamps, and recovery journals.
 
 ## 2026-08-31
 * **Stable Flower menus and title summaries**: Thread menus now keep only

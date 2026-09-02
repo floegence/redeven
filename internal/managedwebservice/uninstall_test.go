@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -36,94 +35,6 @@ func TestContainerTemplateUninstallUsesOwnedRuntimeIdentityWithoutTemplateExecut
 	}
 	if len(stages) != 2 || stages[0] != "stopping" || stages[1] != "uninstalling" {
 		t.Fatalf("uninstall stages = %v", stages)
-	}
-}
-
-func TestContainerTemplateUninstallAcceptsMigratedDeepSeekContainerName(t *testing.T) {
-	t.Parallel()
-	service := uninstallContainerService()
-	service.TemplateID = DeepSeekHarnessContainerTemplateID
-	service.TemplateSource = "builtin"
-	container := uninstallEngineContainer(service)
-	container.Name = legacyDeepSeekContainerName(service.ServiceID)
-	client := &uninstallContainerEngineClient{container: container}
-	adapter, err := containerengine.NewAdapter(client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := (&containerTemplateDriver{adapter: adapter}).Uninstall(context.Background(), service, false, discardOperationProgress); err != nil {
-		t.Fatalf("Uninstall() migrated DeepSeek container error = %v", err)
-	}
-	if len(client.actions) != 1 || client.actions[0].Method != containerengine.MethodRemove {
-		t.Fatalf("migrated DeepSeek container actions = %+v", client.actions)
-	}
-}
-
-func TestManagerUninstallConvergesMigratedWebtopService(t *testing.T) {
-	t.Parallel()
-	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = registry.Close() })
-	artifact, ok := auditedWebtopArtifact(WebtopUbuntuKDETemplateID, "linux-amd64")
-	if !ok {
-		t.Fatal("reviewed Webtop artifact is unavailable")
-	}
-	spec := webtopTemplateSpec(WebtopUbuntuKDETemplateID, artifact)
-	canonical, _, err := canonicalTemplateSpec(spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var document map[string]any
-	if err := json.Unmarshal([]byte(canonical), &document); err != nil {
-		t.Fatal(err)
-	}
-	persisted, err := json.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	snapshotDigest := sha256.Sum256(persisted)
-	service := uninstallContainerService()
-	service.TemplateID = WebtopUbuntuKDETemplateID
-	service.TemplateSource = "builtin"
-	service.TemplateRevision = 1
-	service.ServiceFamilyID = WebtopUbuntuKDETemplateID
-	service.Deployment = string(DeploymentContainer)
-	service.WorkspacePath = t.TempDir()
-	service.Version = webtopUbuntuKDEVersion
-	service.DesiredState = "stopped"
-	service.ObservedState = "error"
-	service.ForwardID = "pf_uninstall_migrated_webtop"
-	service.RuntimePort = 49152
-	service.TemplateSnapshotJSON = string(persisted)
-	service.TemplateSnapshotSHA256 = hex.EncodeToString(snapshotDigest[:])
-	op := pfregistry.ManagedOperation{
-		OperationID: "mop_uninstall_migrated_webtop", ServiceID: service.ServiceID,
-		RequestID: "request-uninstall-migrated-webtop", RequestFingerprint: "fingerprint-uninstall-migrated-webtop",
-		Action: string(ActionUninstall), State: "running", Stage: "queued", ProgressTotal: operationProgressTotal,
-	}
-	forward := pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:49152"}
-	if err := registry.CreateManagedServiceWithOperation(context.Background(), *service, forward, op); err != nil {
-		t.Fatal(err)
-	}
-	client := &uninstallContainerEngineClient{container: uninstallEngineContainer(service)}
-	adapter, err := containerengine.NewAdapter(client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manager := &Manager{registry: registry, stateDir: t.TempDir(), listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
-	driver := &containerTemplateDriver{manager: manager, adapter: adapter}
-	if err := manager.runUninstall(context.Background(), service, &op, driver, false); err != nil {
-		t.Fatalf("runUninstall() migrated Webtop error = %v", err)
-	}
-	stored, err := registry.GetManagedService(context.Background(), service.ServiceID)
-	if err != nil || stored != nil {
-		t.Fatalf("stored service after uninstall = %+v, err=%v", stored, err)
-	}
-	storedForward, err := registry.GetForward(context.Background(), service.ForwardID)
-	if err != nil || storedForward != nil {
-		t.Fatalf("stored forward after uninstall = %+v, err=%v", storedForward, err)
 	}
 }
 
@@ -207,9 +118,11 @@ func TestComposeTemplateUninstallUsesOwnedProjectIdentityWithoutTemplateExecutio
 	service := &pfregistry.ManagedService{
 		ServiceID:              "mws_compose_uninstall",
 		ServiceFamilyID:        "compose-uninstall",
+		Deployment:             string(DeploymentCompose),
 		TemplateSnapshotJSON:   `{"schema_version":1,"kind":"compose","endpoint":{}}`,
 		TemplateSnapshotSHA256: "intentionally-invalid",
 	}
+	setTestRuntimeBinding(t, service)
 	driver := &composeTemplateDriver{manager: manager}
 	const image = "registry.example/redeven/compose@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	config := []byte("services:\n  app:\n    image: " + image + "\n")
@@ -262,7 +175,8 @@ func TestComposeTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
 	manager := &Manager{stateDir: stateDir}
-	service := &pfregistry.ManagedService{ServiceID: "mws_compose_mismatch", ServiceFamilyID: "compose-mismatch"}
+	service := &pfregistry.ManagedService{ServiceID: "mws_compose_mismatch", ServiceFamilyID: "compose-mismatch", Deployment: string(DeploymentCompose)}
+	setTestRuntimeBinding(t, service)
 	driver := &composeTemplateDriver{manager: manager}
 	const image = "registry.example/redeven/compose@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 	config := []byte("services:\n  app:\n    image: " + image + "\n")
@@ -311,9 +225,11 @@ func TestHostUninstallRejectsInvalidExecutableDefinition(t *testing.T) {
 	service := &pfregistry.ManagedService{
 		ServiceID:              "mws_host_invalid_uninstall",
 		ServiceFamilyID:        "host-invalid-uninstall",
+		Deployment:             string(DeploymentHost),
 		TemplateSnapshotJSON:   `{"schema_version":1,"kind":"host","endpoint":{"scheme":"http"},"host":{"uninstall_script":"touch should-not-run"}}`,
 		TemplateSnapshotSHA256: "invalid",
 	}
+	setTestRuntimeBinding(t, service)
 	instanceRoot := driver.instanceRoot(service)
 	if err := os.MkdirAll(filepath.Join(instanceRoot, "install"), 0o700); err != nil {
 		t.Fatal(err)
@@ -333,13 +249,17 @@ func TestHostUninstallRejectsInvalidExecutableDefinition(t *testing.T) {
 
 func uninstallContainerService() *pfregistry.ManagedService {
 	const digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	return &pfregistry.ManagedService{
+	service := &pfregistry.ManagedService{
 		ServiceID:              "mws_uninstall_identity",
+		ServiceFamilyID:        "family-uninstall-identity",
+		Deployment:             string(DeploymentContainer),
 		RuntimeIdentity:        "container_uninstall_identity",
 		ArtifactReference:      "registry.example/redeven/service@" + digest,
 		TemplateSnapshotJSON:   `{"schema_version":1,"kind":"container","endpoint":{}}`,
 		TemplateSnapshotSHA256: "intentionally-invalid",
 	}
+	service.RuntimeBindingJSON, service.RuntimeBindingSHA256, _ = newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, DeploymentContainer)
+	return service
 }
 
 func uninstallEngineContainer(service *pfregistry.ManagedService) containerengine.EngineContainer {

@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -24,23 +22,16 @@ func hostTestService(t *testing.T, root string, spec TemplateSpec) *pfregistry.M
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &pfregistry.ManagedService{
+	service := &pfregistry.ManagedService{
 		ServiceID: "mws_host_test", TemplateSource: "custom", ServiceFamilyID: "family_host_test", Deployment: string(DeploymentHost), WorkspacePath: root, RuntimePort: 39191,
 		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest, ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
 	}
-}
-
-func setLegacyDeepSeekReleaseIdentity(t *testing.T, service *pfregistry.ManagedService) {
-	t.Helper()
-	service.Version = DeepSeekHarnessVersion
-	raw, digest, err := canonicalReleaseIdentity(ReleaseIdentity{
-		Kind: "npm", Source: "@deepseek-ai/dsh", Version: service.Version,
-		Integrity: "sha512-reviewed", ArtifactReference: service.ArtifactReference, Trust: "redeven_reviewed_legacy",
-	})
+	raw, digest, err := newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, DeploymentHost)
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256 = raw, digest
+	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = raw, digest
+	return service
 }
 
 func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
@@ -67,9 +58,14 @@ func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := &pfregistry.ManagedService{
-		ServiceID: "mws_host_cleanup", ServiceFamilyID: "family_host_cleanup", WorkspacePath: root, RuntimePort: 39191,
+		ServiceID: "mws_host_cleanup", ServiceFamilyID: "family_host_cleanup", Deployment: string(DeploymentHost), WorkspacePath: root, RuntimePort: 39191,
 		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest, ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
 	}
+	binding, bindingDigest, err := newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, DeploymentHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = binding, bindingDigest
 	driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
 	if _, _, err := driver.Install(context.Background(), service, discardOperationProgress); err != nil {
 		t.Fatal(err)
@@ -155,9 +151,9 @@ func TestHostRuntimeRestartRejectsChangedProcessFingerprint(t *testing.T) {
 	if _, err := second.Start(context.Background(), service); managedErrorCode(err) != "HOST_PROCESS_IDENTITY_MISMATCH" {
 		t.Fatalf("changed process service identity error = %v", err)
 	}
-	service.RuntimeIdentity = fmt.Sprintf("native:%s:legacy:%d", service.ServiceID, hostPIDFromIdentity(identity))
+	service.RuntimeIdentity = fmt.Sprintf("host:v1:%s:invalid:%d", service.ServiceID, hostPIDFromIdentity(identity))
 	if err := first.Stop(context.Background(), service); managedErrorCode(err) != "RUNTIME_IDENTITY_MISMATCH" {
-		t.Fatalf("in-memory process accepted a substituted legacy identity: %v", err)
+		t.Fatalf("in-memory process accepted a substituted non-v2 identity: %v", err)
 	}
 	if !managedProcessRunning(hostPIDFromIdentity(identity)) {
 		t.Fatal("identity mismatch stopped the managed Host process")
@@ -209,123 +205,5 @@ func TestHostServiceEnvironmentRemovesInheritedRegistryToken(t *testing.T) {
 		if strings.HasPrefix(item, "HOST_AUTH_TOKEN=") || strings.Contains(item, "must-not-reach-lifecycle-script") {
 			t.Fatalf("registry token reached Host lifecycle environment: %q", item)
 		}
-	}
-}
-
-func TestMigratedDeepSeekHostUsesLegacyDataAndLogLayout(t *testing.T) {
-	t.Parallel()
-	if runtime.GOOS == "windows" {
-		t.Skip("custom host lifecycle is Unix-only")
-	}
-	root := t.TempDir()
-	workspace := t.TempDir()
-	executable := filepath.Join(root, DeepSeekHarnessProductID, "native", "0.1.1-rc.2", currentPlatformKey(), "bin", "dsh")
-	if err := os.MkdirAll(filepath.Dir(executable), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexec sleep 60\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	spec := deepSeekHostTemplateSpec()
-	spec.Host.StartScript = `printf '%s\n%s\n' "$DSH_HOME" "$HOME" > "$REDEVEN_WORKSPACE/runtime-env"; exec "$REDEVEN_INSTALL_EXECUTABLE"`
-	service := hostTestService(t, workspace, spec)
-	service.TemplateID = DeepSeekHarnessHostTemplateID
-	service.TemplateSource = "builtin"
-	service.ServiceFamilyID = DeepSeekHarnessHostTemplateID
-	service.ArtifactReference = executable
-	if driver := (&hostScriptDriver{manager: &Manager{stateDir: root}}); driver.legacyDeepSeekLayout(service) {
-		t.Fatal("legacy layout accepted an unverified release identity")
-	}
-	setLegacyDeepSeekReleaseIdentity(t, service)
-	driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
-	identity, err := driver.Start(context.Background(), service)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service.RuntimeIdentity = identity
-	t.Cleanup(func() { _ = driver.Stop(context.Background(), service) })
-	var values []byte
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		values, err = os.ReadFile(filepath.Join(workspace, "runtime-env"))
-		if err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := filepath.Join(root, DeepSeekHarnessProductID, "data") + "\n" + workspace + "\n"
-	if string(values) != want {
-		t.Fatalf("legacy Host environment = %q, want %q", values, want)
-	}
-	if _, err := os.Stat(filepath.Join(root, DeepSeekHarnessProductID, "logs", "harness.log")); err != nil {
-		t.Fatalf("legacy Host log was not prepared: %v", err)
-	}
-}
-
-func TestMigratedDeepSeekHostAdoptsVerifiedLegacyProcess(t *testing.T) {
-	t.Parallel()
-	if runtime.GOOS == "windows" {
-		t.Skip("custom host lifecycle is Unix-only")
-	}
-	root := t.TempDir()
-	platformRoot := filepath.Join(root, DeepSeekHarnessProductID, "native", "0.1.1-rc.2", currentPlatformKey())
-	executable := filepath.Join(platformRoot, "bin", "dsh")
-	runtimeScript := filepath.Join(platformRoot, "app", "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js")
-	artifact, ok := auditedNativeArtifact(currentPlatformKey())
-	if !ok {
-		t.Skip("managed Node.js runtime is unavailable for this platform")
-	}
-	nodeSource, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node is unavailable for the process recovery test")
-	}
-	nodePath := filepath.Join(platformRoot, filepath.FromSlash(artifact.NodeRelPath))
-	for _, path := range []string{executable, runtimeScript, nodePath} {
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(runtimeScript, []byte("setInterval(() => {}, 1000);\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(nodeSource, nodePath); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(nodePath, runtimeScript, "web", "--host", "127.0.0.1", "--port", "39191")
-	configureManagedProcess(cmd)
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = killManagedProcess(cmd); _, _ = cmd.Process.Wait() })
-	service := hostTestService(t, root, deepSeekHostTemplateSpec())
-	service.TemplateID = DeepSeekHarnessHostTemplateID
-	service.TemplateSource = "builtin"
-	service.ServiceFamilyID = DeepSeekHarnessHostTemplateID
-	service.ArtifactReference = executable
-	setLegacyDeepSeekReleaseIdentity(t, service)
-	if legacyDeepSeekProcessCommandMatches(service, nodePath+" "+runtimeScript+" web --host 127.0.0.1 --port 1") {
-		t.Fatal("legacy process validation accepted a different service port")
-	}
-	if legacyDeepSeekProcessCommandMatches(service, nodePath+" "+runtimeScript+" web --host 0.0.0.0 --port 39191") {
-		t.Fatal("legacy process validation accepted a different service host")
-	}
-	service.RuntimeIdentity = fmt.Sprintf("native:%s:legacy:%d", service.ServiceID, cmd.Process.Pid)
-	driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
-	identity, err := driver.Start(context.Background(), service)
-	if err != nil {
-		t.Fatalf("Start() verified legacy process error = %v", err)
-	}
-	if !strings.HasPrefix(identity, "host:v2:") {
-		t.Fatalf("legacy process identity was not upgraded: %q", identity)
-	}
-	service.RuntimeIdentity = identity
-	if err := driver.Stop(context.Background(), service); err != nil {
-		t.Fatalf("Stop() adopted legacy process error = %v", err)
 	}
 }

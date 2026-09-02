@@ -109,7 +109,7 @@ type SettingsView = {
   name: string;
   description?: string;
   access_mode: AccessMode;
-  deployment: "native" | "docker" | "host" | "container" | "compose";
+  deployment: "host" | "container" | "compose";
   template_source: "builtin" | "custom";
   observed_state: string;
   configuration_revision: number;

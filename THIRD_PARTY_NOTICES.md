@@ -6,10 +6,6 @@ Redeven itself is licensed under the MIT License; see `LICENSE`.
 
 This inventory is intentionally broad: it includes Go modules used by the runtime and JavaScript packages used to build the embedded Env App, Code App, and Desktop shell. Some JavaScript packages are build-time only, but keeping them in one auditable notice file avoids accidental omission when build output changes.
 
-## Service Template Brand Icons
-
-The Ubuntu and Debian marks used to identify their corresponding built-in Webtop templates are derived from Simple Icons revision `1bd24ad0645f18ec68b17a087daa5649644bd303`, published under CC0-1.0. Product names and marks remain the property of their respective owners. Sources: https://github.com/simple-icons/simple-icons/blob/1bd24ad0645f18ec68b17a087daa5649644bd303/icons/ubuntu.svg and https://github.com/simple-icons/simple-icons/blob/1bd24ad0645f18ec68b17a087daa5649644bd303/icons/debian.svg.
-
 ## Bundled Container Service Brand Assets
 
 The Docker and Podman marks identify the corresponding local container service. They are redistributed from pinned theSVG revision `64a0c342e2ca60c3297080a7af41af9b3d2c9869` under MIT. Product names and marks remain the property of their respective owners. The full theSVG MIT license is reproduced in the bundled Agent CLI brand asset section below.
@@ -19,19 +15,13 @@ The Docker and Podman marks identify the corresponding local container service. 
 | Docker | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/docker-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/docker-mono.svg` | Trailing newline only |
 | Podman | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/podman-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/podman-mono.svg` | Trailing newline only |
 
-## On-Demand Managed Web Service Software
+## Managed Host Runtime
 
-Redeven can install the following software only after an authorized user explicitly requests a managed Web Service deployment. These artifacts are not embedded in the Redeven binary.
+Redeven downloads the following generic Host runtime only after an authorized user deploys an npm-based managed service. Service-template packages, images, brand assets, and their notices are owned by the versioned `github.com/floegence/redeven-service-templates` dependency.
 
 | Component | Default reviewed release | License | Source | Distribution note |
 | --- | --- | --- | --- | --- |
-| DeepSeek Harness (`@deepseek-ai/dsh`) | 0.1.1-rc.2 | MIT | https://github.com/deepseek-ai/deepseek-harness | Developer Preview software installed on demand at an exact npm version and Registry integrity. Lifecycle scripts run only after explicit user confirmation. Installed packages retain their upstream licenses and notices. |
 | Node.js | 24.19.0 | MIT | https://github.com/nodejs/node | Official platform runtime downloaded on demand by host deployment using the URL, byte size, and SHA-256 pinned in the Redeven release. The distribution retains its bundled license and dependency notices. |
-| DeepSeek Harness Docker (Community) | 0.1.1-rc.2 | MIT | https://github.com/runzhliu/deepseek-harness-docker | Community packaging, not an official DeepSeek distribution. The built-in default is reviewed and digest-pinned; user-selected Registry tags are resolved to an exact platform digest and require direct-source confirmation. The image retains its own notices. |
-| LinuxServer Webtop · Ubuntu (KDE Plasma) | 654ea8e3-ls177 | GPL-3.0-only | https://github.com/linuxserver/docker-webtop | Official LinuxServer.io image installed on demand. The built-in default is digest-pinned; user-selected Registry tags are resolved to an exact platform digest. Redeven does not redistribute the image, which retains its own notices. |
-| LinuxServer Webtop · Debian XFCE | 7c4ebdc9-ls209 | GPL-3.0-only | https://github.com/linuxserver/docker-webtop | Official LinuxServer.io image installed on demand. The built-in default is digest-pinned; user-selected Registry tags are resolved to an exact platform digest. Redeven does not redistribute the image, which retains its own notices. |
-
-The table records Redeven's reviewed defaults. An authorized user may instead select another exact npm version or OCI tag discovered directly from the configured Registry. Those artifacts are not redistributed or implicitly reviewed by Redeven. Redeven verifies npm integrity, resolves OCI tags to an exact current-platform digest, warns when a tag moves, and never installs an update automatically.
 
 ## Go Modules
 
@@ -46,6 +36,7 @@ The table records Redeven's reviewed defaults. An authorized user may instead se
 | github.com/floegence/floeterm/terminal-go | v0.18.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.18.1 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.1.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v4 | v4.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v4@v4.0.0 | Floegence first-party dependency. |
+| github.com/floegence/redeven-service-templates | v0.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.1.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.21 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.21 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |

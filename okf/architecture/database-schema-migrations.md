@@ -3,133 +3,52 @@ type: Architecture Contract
 title: Database schema migration ownership
 description: Redeven automatically migrates product databases at startup while upstream-owned stores remain opaque.
 tags: [architecture, storage, sqlite, migrations, upgrades]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 # Summary
 
 - Authority: each repository migrates the schemas it owns; Redeven owns product databases, while Floret and ReDevPlugin own their internal stores.
-- Outcome: a Redeven upgrade opens every product SQLite store through the versioned migration engine before dependent services accept requests.
-- Invariants: supported forward migrations are contiguous, atomic, verified, and preserve product data; future, drifted, wrong-kind, and unsupported schemas fail closed.
-- Failure boundary: migration failure stops only the affected service generation with the previous supported database intact; no reset, replacement database, or direct upstream SQL is allowed.
+- Outcome: each Redeven product store opens through an exact versioned schema contract before the dependent service accepts requests.
+- Invariants: released migration lineages are contiguous, atomic, verified, and data-preserving; future, drifted, wrong-kind, and unsupported inputs fail read-only.
+- Failure boundary: a failed migration stops the affected service with the previous supported database intact; Redeven never patches an upstream database or silently replaces an incompatible product database.
 
 # Contract
 
-## Redeven-owned schemas
+## Redeven-owned stores
 
-Redeven product SQLite stores declare a stable database kind, current version,
-supported minimum version, ordered migration steps, and final schema verifier.
-Opening a store serializes migration access, reads the durable version and kind,
-applies each required step, updates version metadata, verifies the exact final
-shape, and commits once. Fresh stores initialize at the current schema; an
-existing supported store advances automatically during application startup
-before the service is returned to callers.
+Each SQLite store declares a stable database kind, current version, supported minimum version, ordered `n -> n+1` migrations, and a final exact verifier. Opening serializes migration access, verifies kind and source shape, applies all required steps, updates metadata, verifies the target, and commits once. A fresh store may initialize at the current version. Writable pragmas and service startup occur only after the read-only preflight accepts an existing file.
 
-The current startup composition opens the Code App registry, port-forward
-registry, thread read state, Notes, Workbench layout, Terminal Group Catalog, and release-trust state
-before returning the product service. The AI product threadstore opens inside
-the isolated AI readiness generation, so its failure blocks Agent surfaces
-without preventing unrelated Code App capabilities from starting. Its current
-`ai_threadstore_product_v1` is currently version 2. The exact reviewed version 1
-shape upgrades automatically through the contiguous v1-to-v2 migration: stable
-queued request ids move into migration-only pending-input staging, retired
-lifecycle tables are removed, product settings are rebuilt in the reviewed v2
-shape, metadata advances, and the whole target is verified before commit. Missing
-or empty storage initializes directly at v2. Unknown, future, unsupported, or
-drifted shapes are rejected read-only. All later versions retain the same kind
-and append contiguous automatic migrations. Other product stores retain their existing supported
-migration histories. Their individual migration tests
-remain responsible for historical shape validation and preservation of their
-domain records. The port-forward registry's contiguous v1-to-v2 migration adds
-managed Web Service and persistent operation records while retaining the exact
-v1 forward table and every user-owned forward; v2-to-v3 adds immutable template
-snapshots and service-family state; v3-to-v4 adds the constrained forward access
-mode; v4-to-v5 versions configuration and typed resources; v5-to-v6 adds
-schema-v1 operation details; and v6-to-v7 separates the historical DeepSeek Host
-and container families. V7-to-v8 upgrades all TemplateSpec documents to v2,
-converts retired DeepSeek deployment names, and adds an exact, hashed release
-identity. It reconstructs only reviewed unambiguous historical npm integrity and
-exact OCI digests; ambiguity rejects the migration. Existing workspaces, data,
-volumes, secrets, forwards, configuration, operations, timestamps, Hooks, and
-journals remain unchanged. V8-to-v9 introduces TemplateSpec v3 and adds managed
-environment only to exact built-in DeepSeek Host definitions. Other built-in
-and custom v2 documents remain byte-for-byte valid until an explicit edit. The
-edge restores the original desired-running intent only for the latest failed
-Runtime-generated recovery Start. A later user operation always wins. The edge
-recomputes affected document digests without moving historical Host directories
-or container volumes and preserves release identity, secrets, forwards,
-configuration, operation history, failure facts, timestamps, Hooks, and
-journals. The v4 edge defaults ordinary forwards to the unified
-proxy and selects Desktop loopback only for an existing managed DeepSeek forward.
-Drifted historical inputs, future versions, and failed migrations remain unchanged;
-managed service, protected forward, and first operation creation is separately atomic at runtime. The
-shared engine rejects incomplete migration chains,
-unsupported old versions, future versions, malformed metadata, wrong database
-kinds, and unversioned non-empty databases. Migration and verification errors
-roll back the transaction; startup must surface the error instead of deleting,
-renaming aside, repairing heuristically, or replacing the database.
+Migration and verification failure rolls back. Wrong kind, unknown or future version, missing migration edge, unversioned non-empty file, document digest mismatch, or exact schema drift is rejected without deletion, rename-aside, heuristic repair, partial write, or replacement. Every new version adds tests for fresh initialization, each new edge, user-record preservation, rollback, drift, future versions, and repeated current opens.
 
-Every schema change must add the next explicit version step and tests for the
-new upgrade edge, rollback, drift, future-version rejection, and user-data
-preservation. The repository-level SQLite opening inventory makes any new
-physical database entrypoint an explicit ownership review: production
-Redeven-owned stores use the shared migration engine, while reviewed direct
-openings are limited to the threadstore existing-only, read-only full-schema
-gate and in-memory canonical-schema verification.
+The current startup composition opens product stores such as Code App, Port Forward, thread read state, Notes, Workbench layout, Terminal Group Catalog, and release trust before returning their owning services. AI readiness may isolate its own product-store failure from unrelated Code App capabilities, but it follows the same ownership and migration rules.
 
-Compatibility state that requires a live external system cannot be guessed or
-read inside a SQLite schema transaction. The historical DeepSeek container
-volume marker is therefore imported by the owning generic Container resource
-loader, not by a new Registry schema version: it strictly verifies the exact
-built-in service, deterministic name, saved creation time, and live Docker
-volume identity, commits `managed_web_service_resources`, and only then removes
-the retired marker. Failed verification or Registry persistence leaves both
-the database and marker unchanged; interrupted marker cleanup is retried from
-the committed resource. Only an exact latest `DATA_IDENTITY_MISSING` Start
-failure may restore its lost desired-running intent after the resource commits;
-a later operation remains authoritative. This narrow import does not authorize
-heuristic repair or a second lifecycle driver.
+`ai_threadstore_product_v1` is the permanent AI product lineage. Its exact version-1 input upgrades through the reviewed version-2 edge; later changes must retain the kind and append every contiguous migration. The one-time discarded pre-launch shapes are not accepted as migration inputs.
 
-## Upstream-owned schemas
+`portforward_registry_v1` version 1 is likewise a user-approved pre-release baseline reset. It initializes Port Forward and Managed Service tables together, including configuration, release identity, RuntimeBinding, resources, operation progress, and retry lineage. It intentionally has no decoder or migration from the discarded pre-release Registry kinds. After this baseline is merged and distributed, the kind is permanent and every later change must append a contiguous automatic migration; another pre-release reset is not allowed.
 
-Floret v7 owns the canonical Thread journal and its schema lifecycle. Redeven supplies
-the configured path to the published runtime startup API and consumes its typed
-readiness result. Floret owns inspection, migration, verification, exact open,
-and conflict classification; Redeven does not query, patch, version, migrate,
-or provide a compatibility fallback for Floret records.
-Redeven migrations may call public Floret maintenance APIs only when moving a
-Redeven-owned field across the ownership boundary, and must complete their
-product preflight before making such an upstream effect.
+State requiring a live external system is not manufactured inside a SQLite migration. Runtime resource identity must already be represented by the current Registry contract and verified by the owning generic driver. No marker import, live-engine guess, or cross-system adoption path supplements the fresh Port Forward Registry.
 
-ReDevPlugin similarly owns the schemas behind its released registry and host
-modules. Redeven may choose the product state root and open released module
-APIs, but it does not inspect or migrate ReDevPlugin tables. Opaque upstream
-identifiers may appear in Redeven coordination records; upstream content and
-lifecycle state must not be copied into product tables as a migration shortcut.
+## Upstream-owned stores
+
+Floret owns canonical thread storage and its schema lifecycle through the published Runtime APIs. Redeven supplies the configured path and consumes typed readiness or maintenance results; it does not query, patch, version, migrate, or implement SQL fallback for Floret tables.
+
+ReDevPlugin similarly owns stores behind its released registry and host modules. Redeven may select a state root and retain opaque upstream identifiers in product coordination records, but it cannot inspect, duplicate, or migrate upstream content.
+
+Cross-owner migration may use only a public upstream maintenance API. It requires a complete read-only product preflight and idempotent upstream behavior before the local product transaction. Cross-database atomicity is never assumed or simulated by copying upstream lifecycle state into Redeven tables.
 
 # Boundaries
 
-Automatic migration is not permission to accept arbitrary historical shapes.
-Only explicitly versioned and exactly verified inputs are supported. Dropping a
-migration requires a deliberate minimum-supported-version decision reflected
-in release compatibility and this OKF corpus.
-
-Cross-database atomicity is not assumed. A migration that must call a public
-upstream maintenance API requires a read-only product preflight and idempotent
-upstream semantics before the local schema transaction begins. Redeven never
-opens an upstream database directly to manufacture a cross-store transaction.
+Automatic migration is not permission to accept arbitrary historical shapes. Removing a supported migration requires an explicit minimum-supported-version release decision and matching contract update. A repository-owned pre-release reset is exceptional, user-approved, and permanently closes once its new baseline is distributed.
 
 # Evidence
 
-- `redeven:internal/persistence/sqliteutil/engine.go:117` - Opens Redeven SQLite stores and runs the validated migration transaction.
-- `redeven:internal/persistence/sqliteutil/engine_test.go:13` - Covers fresh initialization, atomic rollback, unsupported versions, kind checks, malformed metadata, and concurrent opens.
-- `redeven:internal/persistence/sqliteutil/repository_contract_test.go:14` - Locks the reviewed Redeven, direct, and Floret SQLite opening inventories.
-- `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
-- `redeven:internal/portforward/registry/schema.go` - Owns the exact contiguous port-forward Registry v1-to-v9 migration chain and final verifier.
-- `redeven:internal/portforward/registry/registry_test.go` - Covers managed-service v7-to-v9 preservation, recovery intent, rollback, drift, future versions, and idempotent open.
-- `redeven:internal/managedwebservice/container_volume_migration_test.go` - Verifies crash-safe external volume-identity import without inventing a cross-system schema migration.
-- `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
-- `redeven:internal/ai/threadstore/store.go` - Verifies exact supported historical or current product shape before writable open.
-- `redeven:internal/ai/threadstore/schema.go` - Defines current v2 and the atomic reviewed v1-to-v2 migration.
-- `redeven:internal/ai/floret_bootstrap.go` - Opens the published Floret v7 runtime without direct storage access.
-- `redeven:scripts/check_floret_dependency_boundary.sh:118` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.
-- `redeven:okf/ai/flower-storage-ownership-and-migrations.md:1` - Defines the specialized cross-owner Flower product migration.
+- `redeven:internal/persistence/sqliteutil/engine.go` - Runs exact Redeven schema initialization and transactional migrations.
+- `redeven:internal/persistence/sqliteutil/engine_test.go` - Covers initialization, rollback, kind, version, metadata, and concurrency rules.
+- `redeven:internal/persistence/sqliteutil/repository_contract_test.go` - Locks the reviewed Redeven and upstream SQLite opening inventory.
+- `redeven:internal/codeapp/codeapp.go` - Opens product stores before publishing dependent Runtime services.
+- `redeven:internal/portforward/registry/schema.go` - Defines the fresh `portforward_registry_v1` version-1 shape and verifier.
+- `redeven:internal/portforward/registry/registry.go` - Performs read-only Port Forward Registry preflight before writable open.
+- `redeven:internal/portforward/registry/registry_test.go` - Covers fresh initialization plus byte-preserving kind, future, and drift rejection.
+- `redeven:internal/ai/threadstore/schema.go` - Defines the current AI product lineage and its contiguous migration.
+- `redeven:internal/ai/floret_bootstrap.go` - Opens the published Floret Runtime without direct storage access.
+- `redeven:scripts/check_floret_dependency_boundary.sh` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.

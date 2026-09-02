@@ -240,12 +240,20 @@ func writePrivateFile(path string, contents []byte) error {
 }
 
 func (d *composeTemplateDriver) request(service *pfregistry.ManagedService) containerengine.ComposeDeploymentRequest {
-	root := filepath.Join(d.manager.stateDir, "instances", service.ServiceID, "compose")
+	binding, err := decodeRuntimeBinding(service)
+	if err != nil || binding.Compose == nil {
+		return containerengine.ComposeDeploymentRequest{}
+	}
+	root := d.manager.resolveBindingPath(binding.Compose.ConfigRoot)
 	return containerengine.ComposeDeploymentRequest{ConfigPath: filepath.Join(root, "compose.yaml"), EnvFilePath: filepath.Join(root, "template.env"), ProjectName: d.projectName(service)}
 }
 
 func (d *composeTemplateDriver) projectName(service *pfregistry.ManagedService) string {
-	return "redeven_" + resourceNameSuffix(service.ServiceFamilyID)
+	binding, err := decodeRuntimeBinding(service)
+	if err != nil || binding.Compose == nil {
+		return ""
+	}
+	return binding.Compose.ProjectName
 }
 
 func (d *composeTemplateDriver) identity(service *pfregistry.ManagedService, digest string) string {

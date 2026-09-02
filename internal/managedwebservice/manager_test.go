@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +39,27 @@ func newManagedServiceTestScope(t *testing.T) (*filesystemscope.Registry, string
 	return scope, filepath.Join(home, ".redeven", "local-environment", "apps", "managed-web-services")
 }
 
+func setTestRuntimeBinding(t *testing.T, service *pfregistry.ManagedService) {
+	t.Helper()
+	if service.TemplateRevision <= 0 {
+		service.TemplateRevision = 1
+	}
+	if service.TemplateID == "" {
+		service.TemplateID = "template-test"
+	}
+	if service.TemplateSource == "" {
+		service.TemplateSource = "custom"
+	}
+	if service.ServiceFamilyID == "" {
+		service.ServiceFamilyID = "family-test"
+	}
+	raw, digest, err := newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, Deployment(service.Deployment))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = raw, digest
+}
+
 func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
@@ -67,126 +87,127 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostTemplate := templateByID(templates, DeepSeekHarnessHostTemplateID)
-	containerTemplate := templateByID(templates, DeepSeekHarnessContainerTemplateID)
-	if hostTemplate == nil || containerTemplate == nil {
-		t.Fatalf("built-in templates = %+v", templates)
-	}
-	if hostTemplate.Revision != 4 || hostTemplate.HostLifecyclePlan == nil || hostTemplate.HostLifecyclePlan.SchemaVersion != 1 || hostTemplate.HostLifecyclePlan.Driver != "npm_host" {
-		t.Fatalf("DeepSeek host lifecycle projection = %+v", hostTemplate)
-	}
-	if hostTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback || containerTemplate.DefaultAccessMode != pfregistry.AccessModeDesktopLoopback {
-		t.Fatalf("DeepSeek access modes = %q, %q", hostTemplate.DefaultAccessMode, containerTemplate.DefaultAccessMode)
-	}
-	for _, templateID := range []string{WebtopUbuntuKDETemplateID, WebtopDebianXFCETemplateID} {
-		template := templateByID(templates, templateID)
-		if template == nil || template.DefaultAccessMode != pfregistry.AccessModeUnifiedProxy {
-			t.Fatalf("template %q access mode = %+v", templateID, template)
-		}
+	if len(templates) == 0 {
+		t.Fatal("released catalog has no templates")
 	}
 	canonicalHome, err := filepath.EvalSymlinks(home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostWorkspace := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", DeepSeekHarnessHostTemplateID)
-	containerWorkspace := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", DeepSeekHarnessContainerTemplateID)
-	if hostTemplate.ServiceFamilyID != DeepSeekHarnessHostTemplateID || containerTemplate.ServiceFamilyID != DeepSeekHarnessContainerTemplateID {
-		t.Fatalf("DeepSeek service families = %q, %q", hostTemplate.ServiceFamilyID, containerTemplate.ServiceFamilyID)
-	}
-	wantHostDataLocation := filepath.Join(managerStateDir, "apps", "managed-web-services", DeepSeekHarnessProductID, "data")
-	if hostTemplate.DataLocation != wantHostDataLocation || containerTemplate.DataLocation != "" {
-		t.Fatalf("DeepSeek data locations = %q, %q; want %q and no synthetic container path", hostTemplate.DataLocation, containerTemplate.DataLocation, wantHostDataLocation)
-	}
-	if hostTemplate.DefaultWorkspacePath != hostWorkspace || containerTemplate.DefaultWorkspacePath != containerWorkspace || hostWorkspace == containerWorkspace {
-		t.Fatalf("default workspaces = %q, %q; want %q, %q", hostTemplate.DefaultWorkspacePath, containerTemplate.DefaultWorkspacePath, hostWorkspace, containerWorkspace)
-	}
-	if strings.Contains(filepath.Clean(strings.TrimPrefix(hostWorkspace, canonicalHome)), " ") || strings.Contains(filepath.Clean(strings.TrimPrefix(containerWorkspace, canonicalHome)), " ") {
-		t.Fatalf("generated workspace suffix contains spaces: %q, %q", hostWorkspace, containerWorkspace)
-	}
-	if hostTemplate.DefaultWorkspacePath == home {
-		t.Fatal("managed service defaulted to the whole home directory")
-	}
-	for _, workspace := range []string{hostWorkspace, containerWorkspace} {
-		info, err := os.Stat(workspace)
+	seenWorkspaces := map[string]string{}
+	for _, template := range templates {
+		wantWorkspace := filepath.Join(canonicalHome, "Redeven", "workspaces", "managed-services", template.TemplateID)
+		if template.DefaultWorkspacePath != wantWorkspace || template.DefaultWorkspacePath == canonicalHome {
+			t.Fatalf("template %q workspace = %q, want %q", template.TemplateID, template.DefaultWorkspacePath, wantWorkspace)
+		}
+		if previous := seenWorkspaces[template.DefaultWorkspacePath]; previous != "" {
+			t.Fatalf("templates %q and %q share a default workspace", previous, template.TemplateID)
+		}
+		seenWorkspaces[template.DefaultWorkspacePath] = template.TemplateID
+		info, err := os.Stat(template.DefaultWorkspacePath)
 		if err != nil || !info.IsDir() {
-			t.Fatalf("dedicated workspace %q was not prepared: info=%v err=%v", workspace, info, err)
+			t.Fatalf("dedicated workspace %q was not prepared: info=%v err=%v", template.DefaultWorkspacePath, info, err)
+		}
+		if template.Deployment == DeploymentHost && template.HostLifecyclePlan == nil {
+			t.Fatalf("host template %q has no lifecycle plan", template.TemplateID)
+		}
+		if template.Deployment != DeploymentHost && template.DataLocation != "" {
+			t.Fatalf("non-Host template %q exposes a synthetic data path", template.TemplateID)
 		}
 	}
 }
 
-func TestDeepSeekTemplateFamiliesCanCoexistButCannotDuplicate(t *testing.T) {
+func TestTemplateFamiliesCanCoexistButCannotDuplicate(t *testing.T) {
 	t.Parallel()
 	existing := []pfregistry.ManagedService{{
-		ServiceID:       "mws_host",
-		TemplateID:      DeepSeekHarnessHostTemplateID,
-		ServiceFamilyID: DeepSeekHarnessHostTemplateID,
+		ServiceID: "mws_first", TemplateID: "template-one", ServiceFamilyID: "family-one",
 	}}
-	containerTemplate := Template{
-		TemplateID:      DeepSeekHarnessContainerTemplateID,
-		ServiceFamilyID: DeepSeekHarnessContainerTemplateID,
+	if err := validateServiceFamilyAvailability(existing, Template{TemplateID: "template-two", ServiceFamilyID: "family-two"}); err != nil {
+		t.Fatalf("independent template family was rejected: %v", err)
 	}
-	if err := validateServiceFamilyAvailability(existing, containerTemplate); err != nil {
-		t.Fatalf("independent DeepSeek template family was rejected: %v", err)
-	}
-	hostTemplate := Template{
-		TemplateID:      DeepSeekHarnessHostTemplateID,
-		ServiceFamilyID: DeepSeekHarnessHostTemplateID,
-	}
-	err := validateServiceFamilyAvailability(existing, hostTemplate)
+	err := validateServiceFamilyAvailability(existing, Template{TemplateID: "template-one", ServiceFamilyID: "family-one"})
 	var managedErr *Error
 	if !errors.As(err, &managedErr) || managedErr.Code != "INSTANCE_ALREADY_EXISTS" {
-		t.Fatalf("duplicate DeepSeek host family error = %v", err)
+		t.Fatalf("duplicate template family error = %v", err)
 	}
 }
 
-func TestCatalogMakesReleaseLockedHostRuntimeAvailableWithoutOnlineCatalog(t *testing.T) {
+func TestRetryActionForFailureUsesOneGenericPolicy(t *testing.T) {
 	t.Parallel()
-	if (runtime.GOOS != "linux" && runtime.GOOS != "darwin") || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
-		t.Skip("native managed service is intentionally unavailable on this platform")
+	tests := []struct {
+		name     string
+		action   OperationAction
+		want     OperationAction
+		wantCode string
+	}{
+		{name: "install", action: ActionInstall, want: ActionRetryInstall},
+		{name: "retry install", action: ActionRetryInstall, want: ActionRetryInstall},
+		{name: "start", action: ActionStart, want: ActionStart},
+		{name: "stop", action: ActionStop, want: ActionStop},
+		{name: "restart", action: ActionRestart, want: ActionRestart},
+		{name: "uninstall", action: ActionUninstall, want: ActionUninstall},
+		{name: "update", action: ActionUpdate, wantCode: "RESELECT_RELEASE_REQUIRED"},
+		{name: "reconfigure", action: ActionReconfigure, wantCode: "REFLIGHT_REQUIRED"},
 	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := retryActionForFailure(&pfregistry.ManagedOperation{Action: string(test.action)})
+			if test.wantCode != "" {
+				if code := managedErrorCode(err); code != test.wantCode {
+					t.Fatalf("retry error code = %q, want %q", code, test.wantCode)
+				}
+				return
+			}
+			if err != nil || got != test.want {
+				t.Fatalf("retry action = %q, err=%v, want %q", got, err, test.want)
+			}
+		})
+	}
+	if _, err := retryActionForFailure(nil); managedErrorCode(err) != "NO_RETRYABLE_FAILURE" {
+		t.Fatalf("missing failure error = %v", err)
+	}
+}
+
+func TestServiceActionCapabilitiesComeFromRuntimeState(t *testing.T) {
+	t.Parallel()
+	service := pfregistry.ManagedService{
+		ServiceID: "mws_actions", TemplateID: "template-actions", TemplateSource: "custom", ServiceFamilyID: "family-actions",
+		Deployment: string(DeploymentContainer), ObservedState: "error", RuntimeIdentity: "container-current", LastErrorCode: "START_FAILED",
+	}
+	setTestRuntimeBinding(t, &service)
+	failure := &pfregistry.ManagedOperation{Action: string(ActionStart), State: "failed", ErrorCode: "START_FAILED"}
+	actions := serviceActionCapabilities(service, nil, failure)
+	if actions.Start.Available || actions.Stop.Available || !actions.Restart.Available || !actions.Retry.Available {
+		t.Fatalf("error-state actions = %+v", actions)
+	}
+	active := &pfregistry.ManagedOperation{Action: string(ActionRestart), State: "running"}
+	actions = serviceActionCapabilities(service, active, failure)
+	if actions.Start.Available || actions.Stop.Available || actions.Restart.Available || actions.Retry.Available || actions.Retry.ReasonCode != "OPERATION_ACTIVE" {
+		t.Fatalf("busy actions = %+v", actions)
+	}
+}
+
+func TestReleasedCatalogProjectsGenericRuntimeDefinitions(t *testing.T) {
+	t.Parallel()
 	scope, stateDir := newManagedServiceTestScope(t)
-	manager := &Manager{
-		scope:     scope,
-		stateDir:  stateDir,
-		downloads: defaultPackageDownloadClient(),
-	}
-	templates, err := manager.Catalog(context.Background())
-	hostTemplate := templateByID(templates, DeepSeekHarnessHostTemplateID)
-	if err != nil || len(templates) != 4 || hostTemplate == nil || !hostTemplate.Available || hostTemplate.ReasonCode != "" {
-		t.Fatalf("release-locked host availability = %+v, err=%v", templates, err)
-	}
-	if !hostTemplate.Duplicateable || hostTemplate.Spec == nil || hostTemplate.Spec.Host == nil || hostTemplate.Spec.Host.NPM == nil || hostTemplate.Spec.Host.NPM.PackageName != "@deepseek-ai/dsh" || hostTemplate.Spec.Host.NPM.Version != DeepSeekHarnessVersion {
-		t.Fatalf("release-locked host template = %+v", hostTemplate)
-	}
-}
-
-func TestCatalogKeepsPinnedDockerTemplateAvailable(t *testing.T) {
-	t.Parallel()
-	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
-		t.Skip("the built-in Docker template supports amd64 and arm64")
-	}
-	if runningInsideContainer() {
-		t.Skip("nested Docker is intentionally unavailable")
-	}
-	adapter, err := containerengine.NewAdapter(catalogDockerEngineClient{})
+	catalog, err := LoadBuiltinCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope, stateDir := newManagedServiceTestScope(t)
 	manager := &Manager{
-		scope:      scope,
-		stateDir:   stateDir,
-		containers: adapter,
-		downloads:  defaultPackageDownloadClient(),
+		scope: scope, stateDir: stateDir, downloads: defaultPackageDownloadClient(), catalog: catalog,
 	}
-
 	templates, err := manager.Catalog(context.Background())
-	containerTemplate := templateByID(templates, DeepSeekHarnessContainerTemplateID)
-	if err != nil || containerTemplate == nil || !containerTemplate.Available || containerTemplate.ReasonCode != "" {
-		t.Fatalf("pinned Docker template = %+v, err=%v", containerTemplate, err)
+	if err != nil || len(templates) == 0 {
+		t.Fatalf("released catalog = %+v, err=%v", templates, err)
 	}
-	if containerTemplate.Spec == nil || containerTemplate.Spec.Container == nil || !strings.Contains(containerTemplate.Spec.Container.Image, "@sha256:") {
-		t.Fatalf("pinned Docker template spec = %+v", containerTemplate.Spec)
+	for _, template := range templates {
+		if template.Spec == nil || template.Spec.SchemaVersion != templateSpecSchemaVersion || len(template.Localizations) != 10 || template.Icon == nil {
+			t.Fatalf("generic template projection = %+v", template)
+		}
+		if template.Spec.Container != nil && !strings.Contains(template.Spec.Container.Image, "@sha256:") {
+			t.Fatalf("container template %q is not pinned", template.TemplateID)
+		}
 	}
 }
 
@@ -290,7 +311,8 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "running", ForwardID: "pf_one", RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-host", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: "1.0.0", DesiredState: "running", ObservedState: "running", ForwardID: "pf-one", RuntimeIdentity: "host:v2:mws_one:boot:4242:" + strings.Repeat("a", 64), ArtifactReference: "/managed/executable", RuntimePort: 3080}
+	setTestRuntimeBinding(t, &service)
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}); err != nil {
 		t.Fatal(err)
 	}
@@ -367,9 +389,10 @@ func TestRunStopClearsPreviousSnapshotError(t *testing.T) {
 	t.Cleanup(func() { _ = registry.Close() })
 	service := pfregistry.ManagedService{
 		ServiceID: "mws_stop_clears_error", Deployment: string(DeploymentContainer),
-		DesiredState: "running", ObservedState: "error", ForwardID: "pf_stop_clears_error",
+		DesiredState: "running", ObservedState: "error", ForwardID: "pf-stop-clears-error",
 		LastErrorCode: "TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH", LastErrorMessage: "stale snapshot error",
 	}
+	setTestRuntimeBinding(t, &service)
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3000"}); err != nil {
 		t.Fatal(err)
 	}
@@ -395,15 +418,17 @@ func TestListProjectsTheCurrentOperationDetail(t *testing.T) {
 	}
 	defer registry.Close()
 	service := pfregistry.ManagedService{
-		ServiceID: "mws_artifact", TemplateID: DeepSeekHarnessContainerTemplateID, TemplateSource: "builtin",
-		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion,
-		DesiredState: "stopped", ObservedState: "error", ForwardID: "pf_artifact", RuntimePort: 3080,
+		ServiceID: "mws_artifact", TemplateID: "template-container", TemplateSource: "custom", ServiceFamilyID: "family-container",
+		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), Version: "1.0.0",
+		DesiredState: "stopped", ObservedState: "error", ForwardID: "pf-artifact", RuntimePort: 3080,
 	}
+	setTestRuntimeBinding(t, &service)
+	artifact := "registry.example.invalid/project/service:1.0.0@sha256:" + strings.Repeat("a", 64)
 	operation := pfregistry.ManagedOperation{
 		OperationID: "mop_artifact", ServiceID: service.ServiceID, RequestID: "request-artifact",
 		RequestFingerprint: "fingerprint-artifact", Action: "retry_install", State: "running", Stage: "pulling",
 		ProgressCurrent: 2, ProgressTotal: 7,
-		ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, Transfer: &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, Transfer: &pfregistry.ManagedOperationTransferProgress{ArtifactReference: artifact}},
 	}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, operation); err != nil {
 		t.Fatal(err)
@@ -416,7 +441,7 @@ func TestListProjectsTheCurrentOperationDetail(t *testing.T) {
 	if views[0].ActiveOperation == nil || views[0].ActiveOperation.OperationID != operation.OperationID {
 		t.Fatalf("active operation = %+v", views[0].ActiveOperation)
 	}
-	if detail := views[0].ActiveOperation.ProgressDetail; detail == nil || detail.Transfer == nil || !strings.HasPrefix(detail.Transfer.ArtifactReference, "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2@sha256:") {
+	if detail := views[0].ActiveOperation.ProgressDetail; detail == nil || detail.Transfer == nil || detail.Transfer.ArtifactReference != artifact {
 		t.Fatalf("operation detail = %+v", detail)
 	}
 }
@@ -428,7 +453,9 @@ func TestListProjectsStructuredLastFailureFromPersistedOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_failed", TemplateID: "template", TemplateSource: "custom", Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), DesiredState: "stopped", ObservedState: "error", ForwardID: "pf_failed", RuntimePort: 3080, LastErrorCode: "IMAGE_PULL_FAILED", LastErrorMessage: "The container image could not be pulled."}
+	service := pfregistry.ManagedService{ServiceID: "mws_failed", TemplateID: "template", TemplateSource: "custom", Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), DesiredState: "stopped", ObservedState: "error", ForwardID: "pf-failed", RuntimePort: 3080, LastErrorCode: "IMAGE_PULL_FAILED", LastErrorMessage: "The container image could not be pulled."}
+	service.ServiceFamilyID = "family-failed"
+	setTestRuntimeBinding(t, &service)
 	operation := pfregistry.ManagedOperation{OperationID: "mop_failed", ServiceID: service.ServiceID, RequestID: "request-failed", RequestFingerprint: "fingerprint", Action: "install", State: "failed", Stage: "pulling", ProgressCurrent: 2, ProgressTotal: 7, ErrorCode: service.LastErrorCode, ErrorMessage: service.LastErrorMessage, FinishedAtUnixMs: 123, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, Transfer: &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "example.invalid/app:1"}}}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, operation); err != nil {
 		t.Fatal(err)
@@ -476,7 +503,7 @@ func TestServiceFailureViewNeverExposesHostArtifactPath(t *testing.T) {
 		ErrorMessage: service.LastErrorMessage, UpdatedAtUnixMs: service.UpdatedAtUnixMs,
 		ProgressDetail: &pfregistry.ManagedOperationProgressDetail{
 			SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion,
-			Transfer:      &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "/Users/private/managed/bin/dsh"},
+			Transfer:      &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "/Users/private/managed/bin/service"},
 		},
 	}
 	failure := serviceFailureView(service, operation)
@@ -542,7 +569,8 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID, Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: DeepSeekHarnessVersion, DesiredState: "running", ObservedState: "installing", ForwardID: "pf_interrupted", RuntimeIdentity: "native:mws_interrupted:nonce:99", RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-interrupted", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: "1.0.0", DesiredState: "running", ObservedState: "installing", ForwardID: "pf-interrupted", RuntimeIdentity: "host:v2:mws_interrupted:boot:99:" + strings.Repeat("a", 64), RuntimePort: 3080}
+	setTestRuntimeBinding(t, &service)
 	op := pfregistry.ManagedOperation{OperationID: "mop_interrupted", ServiceID: service.ServiceID, RequestID: "request-interrupted", RequestFingerprint: "fingerprint", Action: string(ActionInstall), State: "running", Stage: "downloading"}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, op); err != nil {
 		t.Fatal(err)
@@ -571,12 +599,12 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 	}
 }
 
-func TestHistoricalHostIdentityParsingAndCredentialRedaction(t *testing.T) {
+func TestCurrentHostIdentityParsingAndCredentialRedaction(t *testing.T) {
 	t.Parallel()
-	if got := hostPIDFromIdentity("native:mws_one:proc_nonce:4242"); got != 4242 {
-		t.Fatalf("historical Host PID = %d, want 4242", got)
+	if got := hostPIDFromIdentity("host:v2:mws_one:boot:4242:" + strings.Repeat("a", 64)); got != 4242 {
+		t.Fatalf("Host PID = %d, want 4242", got)
 	}
-	for _, invalid := range []string{"", "native:mws_one:4242", "docker:mws_one:proc_nonce:4242", "native:mws_one:proc_nonce:not-a-pid"} {
+	for _, invalid := range []string{"", "host:v1:mws_one:boot:4242:fingerprint", "container:v2:mws_one:boot:4242:fingerprint", "host:v2:mws_one:boot:not-a-pid:fingerprint"} {
 		if got := hostPIDFromIdentity(invalid); got != 0 {
 			t.Fatalf("hostPIDFromIdentity(%q) = %d, want 0", invalid, got)
 		}

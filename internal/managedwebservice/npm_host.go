@@ -175,11 +175,11 @@ func (d *hostScriptDriver) installNPMRuntime(ctx context.Context, service *pfreg
 	if err := verifyExpectedNPMReleaseIdentity(service, identity); err != nil {
 		return "", ReleaseIdentity{}, err
 	}
-	artifact, ok := auditedNativeArtifact(currentPlatformKey())
-	if !ok || d.manager.nativeRuntime == nil {
+	artifact, ok := auditedNodeRuntimeArtifact(currentPlatformKey())
+	if !ok || d.manager.packageDownloader == nil {
 		return "", ReleaseIdentity{}, serviceError("PLATFORM_UNSUPPORTED", "This Redeven release does not include a managed Node.js Runtime for the Environment platform.", 409, false, nil)
 	}
-	if err := validateNativeArtifact(artifact, d.manager.nativeRuntime.client, defaultNodePackageOrigin); err != nil {
+	if err := validateVerifiedPackageArtifact(artifact, d.manager.packageDownloader.client, defaultNodePackageOrigin); err != nil {
 		return "", ReleaseIdentity{}, err
 	}
 	identityKey := sha256.Sum256([]byte(spec.PackageName + "\x00" + release.Version + "\x00" + release.Integrity + "\x00" + currentPlatformKey()))
@@ -200,11 +200,11 @@ func (d *hostScriptDriver) installNPMRuntime(ctx context.Context, service *pfreg
 	}
 	defer os.RemoveAll(stagingRoot)
 	archivePath := filepath.Join(stagingRoot, "node-runtime.tar.gz")
-	if err := downloadNativeArchive(ctx, d.manager.nativeRuntime.client, artifact, archivePath, progress); err != nil {
+	if err := downloadVerifiedPackageArchive(ctx, d.manager.packageDownloader.client, artifact, archivePath, progress); err != nil {
 		return "", ReleaseIdentity{}, err
 	}
 	progress("verifying", 3)
-	if err := verifyNativeArchive(archivePath, artifact); err != nil {
+	if err := verifyVerifiedPackageArchive(archivePath, artifact); err != nil {
 		return "", ReleaseIdentity{}, err
 	}
 	extractRoot := filepath.Join(stagingRoot, "root")
@@ -391,7 +391,7 @@ func verifyInstalledNPMPackage(appRoot string, spec NPMHostPackageSpec) error {
 	return nil
 }
 
-func npmRuntimeLauncher(artifact nativeArtifact, executable string) []byte {
+func npmRuntimeLauncher(artifact verifiedPackageArtifact, executable string) []byte {
 	return []byte(fmt.Sprintf("#!/bin/sh\nset -eu\nruntime_root=$(CDPATH= cd \"$(dirname \"$0\")/..\" && pwd)\nPATH=\"$runtime_root/%s:$PATH\"\nexport PATH\nexec \"$runtime_root/app/node_modules/.bin/%s\" \"$@\"\n", filepath.ToSlash(filepath.Dir(artifact.NodeRelPath)), executable))
 }
 
@@ -407,7 +407,7 @@ func verifyNPMRuntime(installRoot string, spec NPMHostPackageSpec, identity Rele
 	if manifest.SchemaVersion != 1 || manifest.PackageName != spec.PackageName || manifest.PackageVersion != spec.Version || manifest.PackageIntegrity != identity.Integrity || manifest.Registry != normalizedRegistryURL(spec.RegistryURL) || manifest.Executable != spec.Executable || manifest.Platform != currentPlatformKey() {
 		return errors.New("npm Runtime manifest does not match the selected release")
 	}
-	artifact, ok := auditedNativeArtifact(currentPlatformKey())
+	artifact, ok := auditedNodeRuntimeArtifact(currentPlatformKey())
 	if !ok {
 		return errors.New("managed Node.js Runtime is unavailable")
 	}

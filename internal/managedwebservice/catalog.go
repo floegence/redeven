@@ -14,18 +14,16 @@ import (
 
 const (
 	defaultNodePackageOrigin = "https://nodejs.org"
-	deepSeekRuntimeBundleID  = "deepseek-harness-0.1.1-rc.2-node-24.19.0"
 	nodeVersion              = "24.19.0"
 )
 
-type nativeArtifact struct {
-	DownloadURL       string `json:"download_url"`
-	SHA256            string `json:"sha256"`
-	SizeBytes         int64  `json:"size_bytes"`
-	ArchiveRoot       string `json:"archive_root"`
-	NodeRelPath       string `json:"node_rel_path"`
-	NPMCLIRelPath     string `json:"npm_cli_rel_path"`
-	ExecutableRelPath string `json:"executable_rel_path"`
+type verifiedPackageArtifact struct {
+	DownloadURL   string `json:"download_url"`
+	SHA256        string `json:"sha256"`
+	SizeBytes     int64  `json:"size_bytes"`
+	ArchiveRoot   string `json:"archive_root"`
+	NodeRelPath   string `json:"node_rel_path"`
+	NPMCLIRelPath string `json:"npm_cli_rel_path"`
 }
 
 type dockerArtifact struct {
@@ -78,7 +76,7 @@ func decodeStrictJSON(raw []byte, destination any) error {
 
 func currentPlatformKey() string { return runtime.GOOS + "-" + runtime.GOARCH }
 
-func auditedNativeArtifact(platform string) (nativeArtifact, bool) {
+func auditedNodeRuntimeArtifact(platform string) (verifiedPackageArtifact, bool) {
 	type identity struct {
 		SHA256 string
 		Size   int64
@@ -91,25 +89,24 @@ func auditedNativeArtifact(platform string) (nativeArtifact, bool) {
 	}
 	entry, ok := identities[platform]
 	if !ok {
-		return nativeArtifact{}, false
+		return verifiedPackageArtifact{}, false
 	}
 	parts := strings.Split(platform, "-")
 	if len(parts) != 2 {
-		return nativeArtifact{}, false
+		return verifiedPackageArtifact{}, false
 	}
 	arch := parts[1]
 	if arch == "amd64" {
 		arch = "x64"
 	}
 	archiveRoot := "node-v" + nodeVersion + "-" + parts[0] + "-" + arch
-	return nativeArtifact{
-		DownloadURL:       defaultNodePackageOrigin + "/dist/v" + nodeVersion + "/" + archiveRoot + ".tar.gz",
-		SHA256:            entry.SHA256,
-		SizeBytes:         entry.Size,
-		ArchiveRoot:       archiveRoot,
-		NodeRelPath:       archiveRoot + "/bin/node",
-		NPMCLIRelPath:     archiveRoot + "/lib/node_modules/npm/bin/npm-cli.js",
-		ExecutableRelPath: "bin/dsh",
+	return verifiedPackageArtifact{
+		DownloadURL:   defaultNodePackageOrigin + "/dist/v" + nodeVersion + "/" + archiveRoot + ".tar.gz",
+		SHA256:        entry.SHA256,
+		SizeBytes:     entry.Size,
+		ArchiveRoot:   archiveRoot,
+		NodeRelPath:   archiveRoot + "/bin/node",
+		NPMCLIRelPath: archiveRoot + "/lib/node_modules/npm/bin/npm-cli.js",
 	}, true
 }
 

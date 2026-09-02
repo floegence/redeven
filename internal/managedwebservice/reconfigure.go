@@ -23,11 +23,13 @@ const (
 )
 
 type reconfigureRelease struct {
-	ConfigurationJSON   string `json:"configuration_json"`
-	ConfigurationSHA256 string `json:"configuration_sha256"`
-	Revision            int64  `json:"revision"`
-	RuntimeIdentity     string `json:"runtime_identity,omitempty"`
-	ArtifactReference   string `json:"artifact_reference,omitempty"`
+	ConfigurationJSON    string `json:"configuration_json"`
+	ConfigurationSHA256  string `json:"configuration_sha256"`
+	Revision             int64  `json:"revision"`
+	RuntimeIdentity      string `json:"runtime_identity,omitempty"`
+	ArtifactReference    string `json:"artifact_reference,omitempty"`
+	RuntimeBindingJSON   string `json:"runtime_binding_json"`
+	RuntimeBindingSHA256 string `json:"runtime_binding_sha256"`
 }
 
 type reconfigureJournal struct {
@@ -78,8 +80,8 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 	}
 	journal := reconfigureJournal{
 		Kind: reconfigureJournalKind, OperationID: op.OperationID, Phase: reconfigurePhasePrepared,
-		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference},
-		Target: reconfigureRelease{ConfigurationJSON: candidate.JSON, ConfigurationSHA256: candidate.SHA256, Revision: service.ConfigurationRevision + 1, ArtifactReference: service.ArtifactReference},
+		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
+		Target: reconfigureRelease{ConfigurationJSON: candidate.JSON, ConfigurationSHA256: candidate.SHA256, Revision: service.ConfigurationRevision + 1, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
 	}
 	if err := m.stageReconfigureSecrets(service.ServiceID, op.OperationID, oldSecrets, candidate.Secrets); err != nil {
 		return err
@@ -195,7 +197,8 @@ func decodeReconfigureJournal(raw string) (reconfigureJournal, error) {
 	if err := decodeStrictJSON([]byte(raw), &journal); err != nil {
 		return journal, err
 	}
-	if journal.Kind != reconfigureJournalKind || journal.OperationID == "" || journal.Phase == "" || journal.Old.Revision <= 0 || journal.Target.Revision != journal.Old.Revision+1 {
+	if journal.Kind != reconfigureJournalKind || journal.OperationID == "" || journal.Phase == "" || journal.Old.Revision <= 0 || journal.Target.Revision != journal.Old.Revision+1 ||
+		journal.Old.RuntimeBindingJSON == "" || journal.Old.RuntimeBindingSHA256 == "" || journal.Target.RuntimeBindingJSON == "" || journal.Target.RuntimeBindingSHA256 == "" {
 		return journal, errors.New("invalid managed service reconfigure journal")
 	}
 	return journal, nil
@@ -303,6 +306,8 @@ func serviceFromReconfigureRelease(base pfregistry.ManagedService, release recon
 	base.ConfigurationRevision = release.Revision
 	base.RuntimeIdentity = release.RuntimeIdentity
 	base.ArtifactReference = release.ArtifactReference
+	base.RuntimeBindingJSON = release.RuntimeBindingJSON
+	base.RuntimeBindingSHA256 = release.RuntimeBindingSHA256
 	return base
 }
 

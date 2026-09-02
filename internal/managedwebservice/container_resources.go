@@ -50,7 +50,7 @@ func containerResourceLinks(service pfregistry.ManagedService) []ContainerResour
 }
 
 // ContainerResourceOwner resolves the single Redeven product owner of a
-// Docker resource. Native Containers uses this on both read and write paths so
+// Docker resource. Container drivers uses this on both read and write paths so
 // a caller cannot bypass the managed Web Service lifecycle through another UI.
 func (m *Manager) ContainerResourceOwner(ctx context.Context, engine containerengine.Engine, endpointID containerengine.EndpointID, kind ContainerResourceKind, identity string) (*ContainerResourceOwner, error) {
 	if m == nil || m.registry == nil || m.containers == nil {

@@ -31,20 +31,22 @@ type ManagerOptions struct {
 	Registry   *pfregistry.Registry
 	Scope      *filesystemscope.Registry
 	Containers *containerengine.Adapter
+	Catalog    *BuiltinCatalog
 }
 
 type Manager struct {
-	log           *slog.Logger
-	stateDir      string
-	registry      *pfregistry.Registry
-	scope         *filesystemscope.Registry
-	containers    *containerengine.Adapter
-	downloads     *packageDownloadClient
-	nativeRuntime *nativeDriver
-	host          deploymentDriver
-	container     deploymentDriver
-	compose       deploymentDriver
-	healthCheck   func(context.Context, *pfregistry.ManagedService) error
+	log               *slog.Logger
+	stateDir          string
+	registry          *pfregistry.Registry
+	scope             *filesystemscope.Registry
+	containers        *containerengine.Adapter
+	catalog           *BuiltinCatalog
+	downloads         *packageDownloadClient
+	packageDownloader *verifiedPackageDownloader
+	host              deploymentDriver
+	container         deploymentDriver
+	compose           deploymentDriver
+	healthCheck       func(context.Context, *pfregistry.ManagedService) error
 
 	requestMu     sync.Mutex
 	releaseMu     sync.Mutex
@@ -79,7 +81,15 @@ func New(opts ManagerOptions) (*Manager, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	catalog := opts.Catalog
+	if catalog == nil {
+		var err error
+		catalog, err = LoadBuiltinCatalog()
+		if err != nil {
+			return nil, err
+		}
+	}
+	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: catalog, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 	releaseBase := m.downloads.packageHTTPClient()
 	if releaseBase != nil {
 		copy := *releaseBase
@@ -88,7 +98,7 @@ func New(opts ManagerOptions) (*Manager, error) {
 		copy.CheckRedirect = releaseMetadataRedirectPolicy
 		m.releaseClient = &copy
 	}
-	m.nativeRuntime = &nativeDriver{stateDir: root, client: m.downloads.packageHTTPClient(), packageOrigin: defaultNodePackageOrigin}
+	m.packageDownloader = &verifiedPackageDownloader{client: m.downloads.packageHTTPClient()}
 	m.host = &hostScriptDriver{manager: m, processes: map[string]hostProcess{}}
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
 	m.compose = &composeTemplateDriver{manager: m, adapter: opts.Containers}
@@ -120,17 +130,7 @@ func (m *Manager) Start(ctx context.Context) {
 			m.reconcileInterruptedService(&service, *latest)
 			continue
 		}
-		if latest != nil {
-			if driver, ok := m.container.(*containerTemplateDriver); ok {
-				restored, restoreErr := driver.restoreLegacyDeepSeekStartIntent(ctx, &service, *latest)
-				if restoreErr != nil {
-					m.log.Warn("restore managed Web Service start after legacy volume import", "service_id", service.ServiceID, "operation_id", latest.OperationID, "cause", safeManagedFailureCause(restoreErr))
-				} else if restored {
-					m.log.Info("restore managed Web Service start after legacy volume import", "service_id", service.ServiceID, "operation_id", latest.OperationID)
-				}
-			}
-		}
-		if service.DesiredState != "running" {
+		if service.DesiredState != "running" || service.ObservedState == "error" || service.LastErrorCode != "" {
 			continue
 		}
 		requestID := "runtime-recovery-" + service.ServiceID + "-" + fmt.Sprint(time.Now().UnixMilli())
@@ -313,8 +313,9 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			return nil, err
 		}
 		var lastFailure *ServiceFailure
+		var latestFailure *pfregistry.ManagedOperation
 		if service.ObservedState == "error" {
-			latestFailure, err := m.registry.GetLatestManagedOperationFailure(ctx, service.ServiceID)
+			latestFailure, err = m.registry.GetLatestManagedOperationFailure(ctx, service.ServiceID)
 			if err != nil {
 				return nil, err
 			}
@@ -329,18 +330,22 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			LastFailure:        lastFailure,
 			AccessMode:         forward.AccessMode,
 			ContainerResources: containerResourceLinks(service),
+			Actions:            serviceActionCapabilities(service, active, latestFailure),
 		}
 		if identity, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256); identityErr == nil {
 			view.ReleaseIdentity = identity
 		} else {
 			return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, identityErr)
 		}
-		if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
-			view.BrandIcon, view.LocalizationKey = definition.BrandIcon, definition.LocalizationKey
-			deployment := Deployment(service.Deployment)
-			if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentHost) && definition.Revision > service.TemplateRevision {
-				view.UpdateAvailable, view.TargetRevision, view.TargetVersion = true, definition.Revision, definition.Version
-				view.UpdateNotices = append([]TemplateNotice(nil), definition.Notices...)
+		if m.catalog != nil {
+			if definition, ok := m.catalog.definition(service.TemplateID); ok {
+				icon := definition.Icon
+				view.Icon, view.Localizations = &icon, cloneLocalizations(definition.Localizations)
+				deployment := Deployment(service.Deployment)
+				if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentHost) && definition.Revision > service.TemplateRevision {
+					view.UpdateAvailable, view.TargetRevision, view.TargetVersion = true, definition.Revision, definition.Version
+					view.UpdateNotices = append([]TemplateNotice(nil), definition.Notices...)
+				}
 			}
 		}
 		if releaseView, ok := m.releaseView("service:" + service.ServiceID); ok {
@@ -379,13 +384,55 @@ func releaseCandidateIsNewer(current ReleaseIdentity, candidate ReleaseCandidate
 }
 
 func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry.ManagedService) (string, string) {
-	if definition, ok := builtInTemplateDefinitionByID(service.TemplateID); ok {
-		return definition.Name, definition.Description
+	if m.catalog != nil {
+		if definition, ok := m.catalog.definition(service.TemplateID); ok {
+			if localized, exists := definition.Localizations["en-US"]; exists {
+				return localized.Name, localized.Description
+			}
+		}
 	}
 	if record, err := m.registry.GetManagedTemplate(ctx, service.TemplateID); err == nil && record != nil {
 		return record.Name, record.Description
 	}
 	return service.TemplateID, ""
+}
+
+func serviceActionCapabilities(service pfregistry.ManagedService, active, failure *pfregistry.ManagedOperation) ServiceActions {
+	unavailable := func(code string) ActionCapability { return ActionCapability{ReasonCode: code} }
+	actions := ServiceActions{
+		Start: unavailable("SERVICE_STATE_UNAVAILABLE"), Stop: unavailable("SERVICE_STATE_UNAVAILABLE"),
+		Restart: unavailable("SERVICE_STATE_UNAVAILABLE"), Retry: unavailable("NO_RETRYABLE_FAILURE"),
+	}
+	if active != nil {
+		busy := unavailable("OPERATION_ACTIVE")
+		return ServiceActions{Start: busy, Stop: busy, Restart: busy, Retry: busy}
+	}
+	_, bindingErr := decodeRuntimeBinding(&service)
+	bindingReady := bindingErr == nil
+	runtimeReady := strings.TrimSpace(service.RuntimeIdentity) != ""
+	if Deployment(service.Deployment) == DeploymentHost {
+		runtimeReady = strings.TrimSpace(service.ArtifactReference) != ""
+	}
+	if bindingReady && runtimeReady && service.ObservedState == "stopped" && service.LastErrorCode == "" {
+		actions.Start = ActionCapability{Available: true}
+	}
+	if bindingReady && runtimeReady && service.ObservedState == "running" {
+		actions.Stop = ActionCapability{Available: true}
+	}
+	if bindingReady && runtimeReady && (service.ObservedState == "running" || service.ObservedState == "error" || service.ObservedState == "stopped") {
+		actions.Restart = ActionCapability{Available: true}
+	}
+	if failure != nil {
+		switch OperationAction(failure.Action) {
+		case ActionInstall, ActionRetryInstall, ActionStart, ActionStop, ActionRestart, ActionUninstall:
+			actions.Retry = ActionCapability{Available: true}
+		case ActionUpdate:
+			actions.Retry = unavailable("RESELECT_RELEASE_REQUIRED")
+		case ActionReconfigure:
+			actions.Retry = unavailable("REFLIGHT_REQUIRED")
+		}
+	}
+	return actions
 }
 
 func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult, error) {
@@ -522,7 +569,11 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	bindingJSON, bindingHash, err := newRuntimeBinding(serviceID, template.ServiceFamilyID, template.Deployment)
+	if err != nil {
+		return nil, err
+	}
+	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
@@ -593,6 +644,24 @@ func validateServiceFamilyAvailability(existingServices []pfregistry.ManagedServ
 	return nil
 }
 
+func retryActionForFailure(failure *pfregistry.ManagedOperation) (OperationAction, error) {
+	if failure == nil {
+		return "", serviceError("NO_RETRYABLE_FAILURE", "The managed Web Service has no failed operation to retry.", 409, false, nil)
+	}
+	switch OperationAction(failure.Action) {
+	case ActionInstall, ActionRetryInstall:
+		return ActionRetryInstall, nil
+	case ActionStart, ActionStop, ActionRestart, ActionUninstall:
+		return OperationAction(failure.Action), nil
+	case ActionUpdate:
+		return "", serviceError("RESELECT_RELEASE_REQUIRED", "Select the target release again before updating.", 409, false, nil)
+	case ActionReconfigure:
+		return "", serviceError("REFLIGHT_REQUIRED", "Run configuration preflight again before applying settings.", 409, false, nil)
+	default:
+		return "", serviceError("NO_RETRYABLE_FAILURE", "The latest failed operation cannot be retried.", 409, false, nil)
+	}
+}
+
 func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRequest) (*pfregistry.ManagedOperation, error) {
 	if err := validateRequestID(req.RequestID); err != nil {
 		return nil, err
@@ -617,6 +686,19 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	}
 	if service == nil {
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
+	}
+	retryOfOperationID := ""
+	if req.Action == ActionRetry {
+		failure, failureErr := m.registry.GetLatestManagedOperationFailure(ctx, service.ServiceID)
+		if failureErr != nil {
+			return nil, failureErr
+		}
+		resolved, resolveErr := retryActionForFailure(failure)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		req.Action = resolved
+		retryOfOperationID = failure.OperationID
 	}
 	switch req.Action {
 	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUpdate, ActionReconfigure, ActionUninstall:
@@ -683,7 +765,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 			err = idErr
 		} else {
 			now := time.Now().UnixMilli()
-			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, RetryOfOperationID: retryOfOperationID, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 			if err = m.registry.CreateManagedOperation(ctx, op); err == nil {
 				m.mu.Unlock()
 				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
@@ -762,6 +844,11 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 	driver := m.driver(Deployment(service.Deployment))
 	if driver == nil {
 		m.fail(&service, &op, "DEPLOYMENT_INVALID", "The saved deployment type is invalid.", nil)
+		return
+	}
+	if _, err := decodeRuntimeBinding(&service); err != nil {
+		code, message, _, _ := ErrorDetails(err)
+		m.fail(&service, &op, code, message, err)
 		return
 	}
 	var err error

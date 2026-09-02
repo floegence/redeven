@@ -11,28 +11,12 @@ const (
 	lifecycleOwnershipRedevenWithTemplateHook = "redeven_with_template_hook"
 )
 
-func deepSeekWebArguments(host, port string) []string {
-	return []string{"web", "--host", host, "--port", port, "--no-open"}
-}
-
-func deepSeekHostStartScript() string {
-	return `exec "$REDEVEN_INSTALL_EXECUTABLE" ` + strings.Join(deepSeekWebArguments(`"$REDEVEN_SERVICE_HOST"`, `"$REDEVEN_SERVICE_PORT"`), " ")
-}
-
-func nativePackageInstallArguments() []string {
-	return []string{"ci", "--omit=dev", "--legacy-peer-deps=false", "--no-audit", "--fund=false", "--progress=false", "--strict-allow-scripts"}
-}
-
 func npmPackageInstallArguments(packageName, version string) []string {
 	return []string{"install", strings.TrimSpace(packageName) + "@" + strings.TrimSpace(version), "--omit=dev", "--package-lock=false", "--ignore-scripts", "--legacy-peer-deps=false", "--no-audit", "--fund=false", "--progress=false"}
 }
 
 func npmPackageRebuildArguments() []string {
 	return []string{"rebuild", "--dangerously-allow-all-scripts", "--no-audit", "--fund=false", "--progress=false"}
-}
-
-func nativePackageInstallCommandTemplate() string {
-	return strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, nativePackageInstallArguments()...), " ")
 }
 
 func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
@@ -43,9 +27,8 @@ func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
 	plan := &HostLifecyclePlan{
 		SchemaVersion: hostLifecyclePlanSchemaVersion,
 		Driver:        "host_script",
-		RuntimeBundle: host.RuntimeBundle,
 		Install:       HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{{Kind: "prepare_managed_directories"}}},
-		Start:         HostLifecycleActionPlan{Ownership: lifecycleOwnershipTemplate, Steps: []HostLifecycleStep{{Kind: "run_template_script", CommandTemplate: "<template-start-script>"}}},
+		Start:         HostLifecycleActionPlan{Ownership: lifecycleOwnershipTemplate, Steps: []HostLifecycleStep{{Kind: "run_template_script", CommandTemplate: host.StartScript}}},
 		Stop:          HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{{Kind: "terminate_managed_process_group"}}},
 		Uninstall: HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedeven, Steps: []HostLifecycleStep{
 			{Kind: "terminate_managed_process_group"},
@@ -62,7 +45,7 @@ func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
 		plan.Driver = "npm_host"
 		plan.RuntimeBundle = "node-" + nodeVersion
 		plan.NPM = &copy
-		if artifact, ok := auditedNativeArtifact(currentPlatformKey()); ok {
+		if artifact, ok := auditedNodeRuntimeArtifact(currentPlatformKey()); ok {
 			plan.Package = lifecyclePackage(artifact)
 		}
 		plan.Install.Steps = append(plan.Install.Steps,
@@ -72,27 +55,9 @@ func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
 			HostLifecycleStep{Kind: "run_npm_lifecycle_scripts", CommandTemplate: strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, npmPackageRebuildArguments()...), " ")},
 			HostLifecycleStep{Kind: "verify_npm_release_identity", Reference: copy.PackageName + "@" + copy.Version},
 		)
-		if copy.PackageName == "@deepseek-ai/dsh" && strings.TrimSpace(host.StartScript) == deepSeekHostStartScript() {
-			plan.Start.Steps[0].CommandTemplate = strings.Join(append([]string{"<managed-executable>"}, deepSeekWebArguments("<service-host>", "<service-port>")...), " ")
-		}
-	} else if host.RuntimeBundle != "" {
-		managedInstall = true
-		reference := host.RuntimeBundle
-		if artifact, ok := auditedNativeArtifact(currentPlatformKey()); ok {
-			plan.Package = lifecyclePackage(nativeArtifact{
-				DownloadURL: artifact.DownloadURL,
-				SHA256:      artifact.SHA256,
-				SizeBytes:   artifact.SizeBytes,
-			})
-			reference = plan.Package.Reference
-		}
-		plan.Install.Steps = append(plan.Install.Steps,
-			HostLifecycleStep{Kind: "prepare_verified_package", Reference: reference},
-			HostLifecycleStep{Kind: "run_locked_dependency_install", CommandTemplate: nativePackageInstallCommandTemplate()},
-		)
 	} else if host.Artifact != nil {
 		managedInstall = true
-		plan.Package = lifecyclePackage(nativeArtifact{
+		plan.Package = lifecyclePackage(verifiedPackageArtifact{
 			DownloadURL: host.Artifact.DownloadURL,
 			SHA256:      host.Artifact.SHA256,
 			SizeBytes:   host.Artifact.SizeBytes,
@@ -135,9 +100,9 @@ func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
 	return plan
 }
 
-func lifecyclePackage(artifact nativeArtifact) *HostLifecyclePackage {
+func lifecyclePackage(artifact verifiedPackageArtifact) *HostLifecyclePackage {
 	return &HostLifecyclePackage{
-		Reference: nativeArtifactProgressReference(artifact),
+		Reference: verifiedPackageArtifactProgressReference(artifact),
 		SHA256:    strings.ToLower(strings.TrimSpace(artifact.SHA256)),
 		SizeBytes: artifact.SizeBytes,
 	}

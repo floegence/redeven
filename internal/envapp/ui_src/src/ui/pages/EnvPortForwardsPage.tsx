@@ -37,7 +37,7 @@ import { Tooltip } from '../primitives/Tooltip';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
+import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
@@ -49,6 +49,7 @@ import {
   type HostLifecyclePlan,
   type ServiceTemplateCategory,
   type ServiceTemplateKind,
+  type ServiceTemplateIcon,
   type ServiceTemplatePresentation,
   type ServiceTemplateRuntimeSpec,
 } from './ServiceTemplateCatalog';
@@ -127,8 +128,8 @@ type ManagedService = Readonly<{
     operation_id?: string;
     occurred_at_unix_ms?: number;
   }>;
-  brand_icon?: ManagedBrandIcon;
-  localization_key?: string;
+  localizations?: Readonly<Record<string, ManagedTemplateLocalization>>;
+  icon?: ServiceTemplateIcon;
   update_available: boolean;
   target_revision?: number;
   target_version?: string;
@@ -145,11 +146,12 @@ type ManagedService = Readonly<{
 	release_identity?: ManagedReleaseIdentity;
 	release_checked_at_unix_ms?: number;
 	release_check_error_code?: string;
+  actions?: ManagedServiceActions;
 }>;
 
 type ManagedReleaseIdentity = Readonly<{
 	schema_version: 1;
-	kind: 'none' | 'npm' | 'oci' | 'legacy';
+	kind: 'none' | 'npm' | 'oci';
 	source?: string;
 	registry?: string;
 	version?: string;
@@ -210,15 +212,22 @@ type SelectedTemplateRelease = Readonly<{
 
 type ManagedContainerResource = NonNullable<ManagedService['container_resources']>[number];
 
-type ManagedDeployment = 'native' | 'docker' | 'host' | 'container' | 'compose';
-type ManagedBrandIcon = 'deepseek-harness' | 'ubuntu' | 'debian';
+type ManagedDeployment = 'host' | 'container' | 'compose';
+type ManagedAction = 'start' | 'stop' | 'restart' | 'retry';
+type ManagedActionCapability = Readonly<{ available: boolean; reason_code?: string }>;
+type ManagedServiceActions = Readonly<Record<ManagedAction, ManagedActionCapability>>;
+type ManagedTemplateLocalization = Readonly<{
+  name: string;
+  description: string;
+  notices?: Readonly<Record<string, Readonly<{ title: string; description: string }>>>;
+}>;
 type ManagedTemplateNotice = Readonly<{
   id: string;
   revision: number;
   severity: 'info' | 'warning';
-  title_key: string;
-  description_key: string;
   acknowledgement_required: boolean;
+  title?: string;
+  description?: string;
 }>;
 
 type ManagedTemplateSpec = ServiceTemplateRuntimeSpec;
@@ -233,8 +242,8 @@ type ManagedCatalogTemplate = Readonly<{
   data_location: string;
   source_url: string;
   docker_source_url: string;
-  brand_icon?: ManagedBrandIcon;
-  localization_key?: string;
+  localizations?: Readonly<Record<string, ManagedTemplateLocalization>>;
+  icon?: ServiceTemplateIcon;
   notices?: ReadonlyArray<ManagedTemplateNotice>;
   source: 'builtin' | 'custom';
   deployment: ManagedDeployment;
@@ -371,7 +380,7 @@ function emptyTemplateDraft(kind: 'host' | 'container' | 'compose'): TemplateEdi
 
 function draftFromTemplate(template: ManagedCatalogTemplate): TemplateEditorDraft {
   const spec = template.spec;
-  const kind = spec?.kind ?? (template.deployment === 'native' ? 'host' : template.deployment === 'docker' ? 'container' : template.deployment as 'host' | 'container' | 'compose');
+  const kind = spec?.kind ?? template.deployment;
   const draft = emptyTemplateDraft(kind);
   return {
     ...draft,
@@ -468,7 +477,7 @@ export type WebServiceOpenRoute =
   | Readonly<{ kind: 'e2ee_tunnel'; forward_id: string; label: 'Secure tunnel' }>;
 
 type BrowserLocationLike = Pick<Location, 'hostname' | 'href' | 'origin'>;
-type WebServicesI18n = Pick<I18nHelpers, 'formatDateTime' | 'formatRelativeTime' | 't'>;
+type WebServicesI18n = Pick<ReturnType<typeof useI18n>, 'formatDateTime' | 'formatRelativeTime' | 'locale' | 't'>;
 
 // ============================================================================
 // Utility Functions
@@ -832,6 +841,7 @@ function managedActionLabel(action: ManagedOperation['action'], i18n: WebService
     case 'start': return i18n.t('webServices.managed.start');
     case 'stop': return i18n.t('webServices.managed.stop');
     case 'restart': return i18n.t('webServices.managed.restart');
+    case 'retry': return i18n.t('webServices.managed.retry');
     case 'retry_install': return i18n.t('webServices.managed.retryInstall');
     case 'update': return i18n.t('webServices.managed.update');
     case 'reconfigure': return i18n.t('webServices.managed.reconfigure');
@@ -844,6 +854,7 @@ function managedActionFailureTitle(action: ManagedOperation['action'], i18n: Web
     case 'start': return i18n.t('webServices.managed.startFailed');
     case 'stop': return i18n.t('webServices.managed.stopFailed');
     case 'restart': return i18n.t('webServices.managed.restartFailed');
+    case 'retry': return i18n.t('webServices.managed.retryFailed');
     case 'retry_install': return i18n.t('webServices.managed.retryFailed');
     case 'update': return i18n.t('webServices.managed.updateFailed');
     case 'reconfigure': return i18n.t('webServices.managed.reconfigureFailed');
@@ -910,7 +921,7 @@ function managedOperationStages(operation: ManagedOperation, deployment: Managed
     default:
       return [
         'environment_check',
-        deployment === 'native' || deployment === 'host' ? 'downloading' : 'pulling',
+        deployment === 'host' ? 'downloading' : 'pulling',
         'verifying',
         'installing',
         'starting',
@@ -971,7 +982,7 @@ function ManagedOperationDisclosure(props: Readonly<{
   const elapsedTimer = window.setInterval(() => setCurrentTimeUnixMs(Date.now()), 1_000);
   onCleanup(() => window.clearInterval(elapsedTimer));
   const transfer = () => props.operation.progress_detail?.transfer;
-  const hostTransfer = () => props.deployment === 'native' || props.deployment === 'host';
+  const hostTransfer = () => props.deployment === 'host';
   const terminal = () => ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(props.operation.state);
   const progress = () => managedTransferProgress(props.operation);
   const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().current / progress().total) * 100)) : 0;
@@ -1039,7 +1050,6 @@ function ManagedOperationDisclosure(props: Readonly<{
 
 function managedDeploymentLabel(deployment: ManagedDeployment, i18n: WebServicesI18n): string {
   switch (deployment) {
-    case 'native':
     case 'host': return i18n.t('webServices.managed.hostDeployment');
     case 'compose': return i18n.t('webServices.managed.composeDeployment');
     default: return i18n.t('webServices.managed.containerDeployment');
@@ -1047,37 +1057,35 @@ function managedDeploymentLabel(deployment: ManagedDeployment, i18n: WebServices
 }
 
 function managedTemplateKind(template: ManagedCatalogTemplate): ServiceTemplateKind {
-  if (template.deployment === 'native' || template.deployment === 'host') return 'host';
+  if (template.deployment === 'host') return 'host';
   if (template.deployment === 'compose' || template.container_mode === 'compose') return 'compose';
   return 'container';
 }
 
+function managedLocalization(
+  localizations: Readonly<Record<string, ManagedTemplateLocalization>> | undefined,
+  locale: string,
+): ManagedTemplateLocalization | undefined {
+  return localizations?.[locale] ?? localizations?.[locale.split('-')[0]] ?? localizations?.['en-US'];
+}
+
 function managedTemplateLocalizedIdentity(template: ManagedCatalogTemplate, i18n: WebServicesI18n): Readonly<{ name: string; description: string }> {
-  if (!template.localization_key) return { name: template.name, description: template.description };
-  return {
-    name: localizedManagedCopy(i18n, `webServices.managed.templates.${template.localization_key}.name`, template.name),
-    description: localizedManagedCopy(i18n, `webServices.managed.templates.${template.localization_key}.description`, template.description),
-  };
+  const localized = managedLocalization(template.localizations, i18n.locale());
+  return { name: localized?.name || template.name, description: localized?.description || template.description };
 }
 
 function managedServiceLocalizedIdentity(service: ManagedService, i18n: WebServicesI18n): Readonly<{ name: string; description: string }> {
-  if (!service.localization_key) return { name: service.name || service.template_id, description: service.description ?? '' };
-  return {
-    name: localizedManagedCopy(i18n, `webServices.managed.templates.${service.localization_key}.name`, service.name || service.template_id),
-    description: localizedManagedCopy(i18n, `webServices.managed.templates.${service.localization_key}.description`, service.description ?? ''),
-  };
+  const localized = managedLocalization(service.localizations, i18n.locale());
+  return { name: localized?.name || service.name || service.template_id, description: localized?.description || service.description || '' };
 }
 
-function localizedManagedCopy(i18n: WebServicesI18n, key: string, fallback: string): string {
-  const translated = i18n.t(key as EnvAppTranslationKey);
-  return translated === key ? fallback : translated;
-}
-
-function managedNoticeCopy(notice: ManagedTemplateNotice, i18n: WebServicesI18n): Readonly<{ title: string; description: string }> {
-  return {
-    title: localizedManagedCopy(i18n, notice.title_key, notice.title_key),
-    description: localizedManagedCopy(i18n, notice.description_key, notice.description_key),
-  };
+function localizedManagedNotices(
+  notices: readonly ManagedTemplateNotice[] | undefined,
+  localizations: Readonly<Record<string, ManagedTemplateLocalization>> | undefined,
+  locale: string,
+): ManagedTemplateNotice[] {
+  const localized = managedLocalization(localizations, locale)?.notices ?? {};
+  return (notices ?? []).map((notice) => ({ ...notice, title: localized[notice.id]?.title, description: localized[notice.id]?.description }));
 }
 
 function acceptedNoticeRevisions(notices: readonly ManagedTemplateNotice[] | undefined, accepted: Readonly<Record<string, boolean>>): Record<string, number> {
@@ -1098,7 +1106,6 @@ export function ManagedTemplateNotices(props: {
   return (
     <div class="space-y-2" data-testid="managed-template-notices">
       <For each={props.notices}>{(notice) => {
-        const copy = () => managedNoticeCopy(notice, i18n);
         return (
           <div class={cn('rounded-lg border p-3 text-xs', notice.severity === 'warning' ? 'border-warning/30 bg-warning/[0.07]' : 'border-border bg-muted/25')} data-notice-id={notice.id}>
             <div class="flex items-start gap-2.5">
@@ -1106,8 +1113,8 @@ export function ManagedTemplateNotices(props: {
                 <Show when={notice.severity === 'warning'} fallback={<ShieldCheck class="h-3.5 w-3.5" />}><AlertTriangle class="h-3.5 w-3.5" /></Show>
               </span>
               <div class="min-w-0 flex-1">
-                <div class="font-medium text-foreground">{copy().title}</div>
-                <p class="mt-1 leading-5 text-muted-foreground">{copy().description}</p>
+                <div class="font-medium text-foreground">{notice.title || notice.id}</div>
+                <p class="mt-1 leading-5 text-muted-foreground">{notice.description || '—'}</p>
                 <Show when={notice.acknowledgement_required}>
                   <div class="mt-3 flex items-start border-t border-warning/20 pt-3">
                     <Checkbox
@@ -1143,7 +1150,7 @@ function releaseRiskLabel(id: string, i18n: WebServicesI18n): string {
 }
 
 function releaseTrustLabel(trust: string, i18n: WebServicesI18n): string {
-	const known = new Set(['redeven_reviewed', 'redeven_reviewed_legacy', 'upstream_registry', 'user_configured_registry', 'registry_verified']);
+	const known = new Set(['redeven_reviewed', 'upstream_registry', 'user_configured_registry', 'registry_verified']);
 	return i18n.t(`webServices.managed.releaseTrust.${known.has(trust) ? trust : 'registry'}` as EnvAppTranslationKey);
 }
 
@@ -1220,7 +1227,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 
 function managedServicePresentation(service: ManagedService, i18n: WebServicesI18n): ServiceTemplatePresentation {
   const identity = managedServiceLocalizedIdentity(service, i18n);
-  const kind = service.deployment === 'native' || service.deployment === 'host'
+  const kind = service.deployment === 'host'
     ? 'host'
     : service.deployment === 'compose'
       ? 'compose'
@@ -1231,7 +1238,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
     description: identity.description,
     source: service.template_source === 'custom' ? 'custom' : 'builtin',
     kind,
-    brandIcon: service.brand_icon,
+    icon: service.icon,
     deploymentLabel: managedDeploymentLabel(service.deployment, i18n),
     version: service.version,
     revision: 0,
@@ -1243,7 +1250,14 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
   };
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: 'start' | 'stop' | 'restart' | 'retry_install') => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onUpdate: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
+function managedActionUnavailableReason(capability: ManagedActionCapability, i18n: WebServicesI18n): string {
+  if (capability.available) return '';
+  const known = new Set(['OPERATION_ACTIVE', 'SERVICE_STATE_UNAVAILABLE', 'NO_RETRYABLE_FAILURE', 'RESELECT_RELEASE_REQUIRED', 'REFLIGHT_REQUIRED', 'RUNTIME_BINDING_INVALID', 'RUNTIME_UNAVAILABLE']);
+  const code = capability.reason_code && known.has(capability.reason_code) ? capability.reason_code : 'SERVICE_STATE_UNAVAILABLE';
+  return i18n.t(`webServices.managed.actionUnavailable.${code}` as EnvAppTranslationKey);
+}
+
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onUpdate: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const [operationDetailsOpen, setOperationDetailsOpen] = createSignal(false);
   const [failureDiagnosticCopied, setFailureDiagnosticCopied] = createSignal(false);
@@ -1253,18 +1267,27 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
   const failed = () => props.service.observed_state === 'error';
   const operation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
   const busy = () => props.busy || managedOperationActive(props.operation);
-  const failedRecoveryAction = () => {
-    switch (props.service.last_failure?.action) {
-      case 'install':
-      case 'retry_install': return 'retry_install' as const;
-      case 'stop': return 'stop' as const;
-      case 'start':
-      case 'restart': return 'start' as const;
-      default: return 'retry_install' as const;
+  const actionCapability = (action: ManagedAction): ManagedActionCapability => props.service.actions?.[action] ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' };
+  const primaryAction = (): ManagedAction => {
+    if (actionCapability('stop').available) return 'stop';
+    if (actionCapability('start').available) return 'start';
+    if (actionCapability('retry').available) return 'retry';
+    return 'restart';
+  };
+  const primaryLabel = () => {
+    switch (primaryAction()) {
+      case 'stop': return i18n.t('webServices.managed.stop');
+      case 'start': return i18n.t('webServices.managed.start');
+      case 'retry': return i18n.t('webServices.managed.retry');
+      default: return i18n.t('webServices.managed.restart');
     }
   };
-  const primaryAction = () => failed() ? failedRecoveryAction() : running() ? 'stop' as const : 'start' as const;
-  const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
+  const primaryCapability = () => actionCapability(primaryAction());
+  const actionLabel = (action: ManagedAction): string => {
+    const label = action === 'restart' ? i18n.t('webServices.managed.restart') : i18n.t('webServices.managed.retry');
+    const reason = managedActionUnavailableReason(actionCapability(action), i18n);
+    return reason ? `${label} — ${reason}` : label;
+  };
   const failureOccurredAt = () => {
     const occurredAt = props.service.last_failure?.occurred_at_unix_ms;
     return occurredAt ? i18n.formatDateTime(occurredAt, { dateStyle: 'medium', timeStyle: 'short' }) : '';
@@ -1332,8 +1355,13 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     }] : []),
     {
       id: 'restart',
-      label: i18n.t('webServices.managed.restart'),
-      disabled: busy() || !props.canManage || (!running() && !failed()),
+      label: actionLabel('restart'),
+      disabled: busy() || !props.canManage || !actionCapability('restart').available,
+    },
+    {
+      id: 'retry',
+      label: actionLabel('retry'),
+      disabled: busy() || !props.canManage || !actionCapability('retry').available,
     },
     {
       id: 'logs',
@@ -1354,7 +1382,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     else if (id === 'update') props.onUpdate();
 		else if (id === 'versions') props.onVersions?.();
     else if (id === 'settings') props.onSettings?.();
-    else if (id === 'restart') props.onAction(failed() ? failedRecoveryAction() : 'restart');
+    else if (id === 'restart' || id === 'retry') props.onAction(id);
     else if (id === 'logs') props.onLogs();
     else if (id === 'uninstall') props.onUninstall();
   };
@@ -1428,12 +1456,16 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
           <Tooltip content={props.openUnavailableReason || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="w-full">
             <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || busy() || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
           </Tooltip>
-          <Button size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={() => props.onAction(primaryAction())} disabled={busy() || !props.canManage}>
-            <Show when={running()} fallback={<Show when={!failed()}><Play class="mr-1.5 h-3.5 w-3.5" /></Show>}>
-              <Stop class="mr-1.5 h-3.5 w-3.5" />
-            </Show>
-            {primaryLabel()}
-          </Button>
+          <Tooltip content={managedActionUnavailableReason(primaryCapability(), i18n)} placement="top" anchorClass="w-full" disabled={primaryCapability().available}>
+            <Button size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={() => props.onAction(primaryAction())} disabled={busy() || !props.canManage || !primaryCapability().available}>
+              <Show when={primaryAction() !== 'retry'}>
+                <Show when={primaryAction() === 'stop'} fallback={primaryAction() === 'restart' ? <Refresh class="mr-1.5 h-3.5 w-3.5" /> : <Play class="mr-1.5 h-3.5 w-3.5" />}>
+                  <Stop class="mr-1.5 h-3.5 w-3.5" />
+                </Show>
+              </Show>
+              {primaryLabel()}
+            </Button>
+          </Tooltip>
           <Dropdown
             align="end"
             items={moreItems()}
@@ -2077,7 +2109,7 @@ export function EnvPortForwardsPage() {
     }
   };
 
-	const managedAction = async (serviceID: string, action: 'start' | 'stop' | 'restart' | 'retry_install' | 'update', noticeRevisions: Readonly<Record<string, number>> = {}, release?: Readonly<{ targetReleaseID: string; acceptedRisks: ReadonlyArray<string> }>) => {
+	const managedAction = async (serviceID: string, action: ManagedAction | 'update', noticeRevisions: Readonly<Record<string, number>> = {}, release?: Readonly<{ targetReleaseID: string; acceptedRisks: ReadonlyArray<string> }>) => {
     if (!canManageManagedService()) return;
     let operationID = managedOperations.begin(serviceID, action).operation_id;
     try {
@@ -2207,7 +2239,7 @@ export function EnvPortForwardsPage() {
       description: identity.description,
       source: template.source,
       kind: managedTemplateKind(template),
-      brandIcon: template.brand_icon,
+      icon: template.icon,
       deploymentLabel: managedDeploymentLabel(template.deployment, i18n),
       version: template.version,
       revision: template.revision,
@@ -3192,7 +3224,7 @@ export function EnvPortForwardsPage() {
               </section>
               <Show when={(template.notices?.length ?? 0) > 0}>
                 <ManagedTemplateNotices
-                  notices={template.notices ?? []}
+                  notices={localizedManagedNotices(template.notices, template.localizations, i18n.locale())}
                   accepted={installNoticeAcceptances()}
                   disabled={managedInstallSubmitting()}
                   onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
@@ -3443,14 +3475,12 @@ export function EnvPortForwardsPage() {
               <div class="rounded-lg border bg-muted/25 p-3 text-xs">
                 <div class="font-medium text-foreground">{i18n.t('webServices.managed.updateKeepsData')}</div>
                 <p class="mt-1 leading-5 text-muted-foreground">
-                  {i18n.t(service.deployment === 'native'
-                    ? 'webServices.managed.nativeUpdateKeepsRuntimeDescription'
-                    : 'webServices.managed.updateKeepsDataDescription')}
+                  {i18n.t('webServices.managed.updateKeepsDataDescription')}
                 </p>
               </div>
               <Show when={(service.update_notices?.length ?? 0) > 0}>
                 <ManagedTemplateNotices
-                  notices={service.update_notices ?? []}
+                  notices={localizedManagedNotices(service.update_notices, service.localizations, i18n.locale())}
                   accepted={updateNoticeAcceptances()}
                   disabled={false}
                   onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}

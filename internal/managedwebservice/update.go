@@ -13,12 +13,7 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-const (
-	managedServiceUpdateJournalKind  = "redeven.managed_service_update.v2"
-	legacyContainerUpdateJournalKind = "redeven.managed_container_update.v1"
-	// Retained for legacy recovery fixtures; new operations write v2.
-	containerUpdateJournalKind = legacyContainerUpdateJournalKind
-)
+const managedServiceUpdateJournalKind = "redeven.managed_service_update.v2"
 
 const (
 	updatePhasePreparing      = "preparing"
@@ -44,6 +39,8 @@ type containerUpdateRelease struct {
 	ArtifactReference      string `json:"artifact_reference,omitempty"`
 	ReleaseIdentityJSON    string `json:"release_identity_json,omitempty"`
 	ReleaseIdentitySHA256  string `json:"release_identity_sha256,omitempty"`
+	RuntimeBindingJSON     string `json:"runtime_binding_json"`
+	RuntimeBindingSHA256   string `json:"runtime_binding_sha256"`
 }
 
 type containerUpdateJournal struct {
@@ -89,12 +86,14 @@ func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.
 			ConfigurationJSON: service.ConfigurationJSON, ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
 			Version: service.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState, RuntimeIdentity: service.RuntimeIdentity,
 			ArtifactReference: service.ArtifactReference, ReleaseIdentityJSON: service.ReleaseIdentityJSON, ReleaseIdentitySHA256: service.ReleaseIdentitySHA256,
+			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
 		},
 		Target: containerUpdateRelease{
 			TemplateRevision: service.TemplateRevision, TemplateSnapshotJSON: targetSnapshotJSON, TemplateSnapshotSHA256: targetSnapshotHash,
 			ConfigurationJSON: service.ConfigurationJSON, ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
 			Version: targetReleaseVersion(candidate.Identity), DesiredState: service.DesiredState, ObservedState: service.ObservedState,
 			ReleaseIdentityJSON: targetReleaseJSON, ReleaseIdentitySHA256: targetReleaseHash,
+			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
 		},
 	}
 	journalPersisted, committed := false, false
@@ -204,11 +203,6 @@ func (m *Manager) removeManagedHostRelease(service pfregistry.ManagedService, ar
 	if artifact == "." || artifact == keepArtifact {
 		return nil
 	}
-	historical := service
-	historical.ArtifactReference = artifact
-	if (&hostScriptDriver{manager: m}).legacyDeepSeekLayout(&historical) {
-		return os.RemoveAll(filepath.Join(m.stateDir, DeepSeekHarnessProductID, "native"))
-	}
 	releasesRoot := filepath.Join(m.stateDir, "instances", service.ServiceID, "releases")
 	rel, err := filepath.Rel(releasesRoot, artifact)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -300,12 +294,6 @@ func hostTemplateUpdatePatch(service pfregistry.ManagedService, target Template)
 	}, nil
 }
 
-// Retained only for tests and recovery code that still name the historical
-// deployment. New services use the Host driver and the shared patch path.
-func nativeTemplateUpdatePatch(service pfregistry.ManagedService, target Template) (pfregistry.ManagedServicePatch, error) {
-	return hostTemplateUpdatePatch(service, target)
-}
-
 func (m *Manager) runUpdate(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, accepted map[string]int64, driver containerUpdateDriver) error {
 	target, err := m.serviceUpdateTarget(ctx, *service)
 	if err != nil {
@@ -358,11 +346,13 @@ func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregis
 			Version: service.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
 			RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference,
 			ReleaseIdentityJSON: service.ReleaseIdentityJSON, ReleaseIdentitySHA256: service.ReleaseIdentitySHA256,
+			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
 		},
 		Target: containerUpdateRelease{
 			TemplateRevision: target.Revision, TemplateSnapshotJSON: targetSnapshotJSON, TemplateSnapshotSHA256: targetSnapshotHash,
 			ConfigurationJSON: targetConfiguration, ConfigurationRevision: targetConfigurationRevision, ConfigurationSHA256: targetConfigurationHash,
 			Version: target.Version, DesiredState: service.DesiredState, ObservedState: service.ObservedState,
+			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
 			ReleaseIdentityJSON: targetReleaseJSON, ReleaseIdentitySHA256: targetReleaseHash,
 		},
 	}
@@ -483,7 +473,8 @@ func decodeContainerUpdateJournal(raw string) (containerUpdateJournal, error) {
 	if err := decodeStrictJSON([]byte(raw), &journal); err != nil {
 		return journal, err
 	}
-	if (journal.Kind != managedServiceUpdateJournalKind && journal.Kind != legacyContainerUpdateJournalKind) || journal.Phase == "" || journal.Old.TemplateSnapshotJSON == "" || journal.Target.TemplateSnapshotJSON == "" {
+	if journal.Kind != managedServiceUpdateJournalKind || journal.Phase == "" || journal.Old.TemplateSnapshotJSON == "" || journal.Target.TemplateSnapshotJSON == "" ||
+		journal.Old.RuntimeBindingJSON == "" || journal.Old.RuntimeBindingSHA256 == "" || journal.Target.RuntimeBindingJSON == "" || journal.Target.RuntimeBindingSHA256 == "" {
 		return journal, errors.New("invalid managed container update journal")
 	}
 	return journal, nil
@@ -501,6 +492,8 @@ func serviceFromUpdateRelease(base pfregistry.ManagedService, release containerU
 	base.ObservedState = release.ObservedState
 	base.RuntimeIdentity = release.RuntimeIdentity
 	base.ArtifactReference = release.ArtifactReference
+	base.RuntimeBindingJSON = release.RuntimeBindingJSON
+	base.RuntimeBindingSHA256 = release.RuntimeBindingSHA256
 	if release.ReleaseIdentityJSON != "" {
 		base.ReleaseIdentityJSON = release.ReleaseIdentityJSON
 		base.ReleaseIdentitySHA256 = release.ReleaseIdentitySHA256
@@ -516,6 +509,7 @@ func (m *Manager) commitContainerUpdate(ctx context.Context, service *pfregistry
 		ConfigurationRevision: &release.ConfigurationRevision, ConfigurationSHA256: &release.ConfigurationSHA256,
 		Version: &release.Version, DesiredState: &release.DesiredState, ObservedState: &release.ObservedState,
 		RuntimeIdentity: &release.RuntimeIdentity, ArtifactReference: &release.ArtifactReference,
+		RuntimeBindingJSON: &release.RuntimeBindingJSON, RuntimeBindingSHA256: &release.RuntimeBindingSHA256,
 		RuntimeManifestJSON: &emptyManifest, LastErrorCode: &blank, LastErrorMessage: &blank,
 	}
 	if release.ReleaseIdentityJSON != "" {

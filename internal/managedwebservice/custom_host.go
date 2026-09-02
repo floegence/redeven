@@ -3,7 +3,6 @@ package managedwebservice
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -59,24 +58,9 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 			return "", "", encodeErr
 		}
 		service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256 = releaseJSON, releaseDigest
-	} else if spec.Host.RuntimeBundle != "" {
-		if spec.Host.RuntimeBundle != deepSeekRuntimeBundleID || d.manager.nativeRuntime == nil {
-			return "", "", serviceError("TEMPLATE_RUNTIME_BUNDLE_INVALID", "The saved host runtime bundle is not available in this Redeven release.", 409, false, nil)
-		}
-		artifact, ok := auditedNativeArtifact(currentPlatformKey())
-		if !ok {
-			return "", "", serviceError("PLATFORM_UNSUPPORTED", "This Redeven release does not include a host runtime for the Environment platform.", 409, false, nil)
-		}
-		if err := validateNativeArtifact(artifact, d.manager.nativeRuntime.client, defaultNodePackageOrigin); err != nil {
-			return "", "", err
-		}
-		executable, err = d.manager.nativeRuntime.installRuntimeBundle(ctx, service, artifact, installRoot, progress)
-		if err != nil {
-			return "", "", err
-		}
 	} else if spec.Host.Artifact != nil {
-		artifact := nativeArtifact{DownloadURL: spec.Host.Artifact.DownloadURL, SizeBytes: spec.Host.Artifact.SizeBytes, SHA256: spec.Host.Artifact.SHA256, ExecutableRelPath: spec.Host.Artifact.ExecutableRelPath}
-		if err := validateCustomHostArtifact(artifact); err != nil {
+		artifact := verifiedPackageArtifact{DownloadURL: spec.Host.Artifact.DownloadURL, SizeBytes: spec.Host.Artifact.SizeBytes, SHA256: spec.Host.Artifact.SHA256}
+		if err := validateCustomHostArtifact(artifact, spec.Host.Artifact.ExecutableRelPath); err != nil {
 			return "", "", err
 		}
 		_ = os.RemoveAll(installRoot)
@@ -87,11 +71,11 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 		}
 		defer os.RemoveAll(staging)
 		archive := filepath.Join(staging, "package.tar.gz")
-		if err := downloadNativeArchive(ctx, d.manager.downloads.packageHTTPClient(), artifact, archive, progress); err != nil {
+		if err := downloadVerifiedPackageArchive(ctx, d.manager.downloads.packageHTTPClient(), artifact, archive, progress); err != nil {
 			return "", "", err
 		}
 		progress("verifying", 3)
-		if err := verifyNativeArchive(archive, artifact); err != nil {
+		if err := verifyVerifiedPackageArchive(archive, artifact); err != nil {
 			return "", "", err
 		}
 		extracted := filepath.Join(staging, "root")
@@ -101,7 +85,7 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 		if err := os.Rename(extracted, installRoot); err != nil {
 			return "", "", err
 		}
-		executable = filepath.Join(installRoot, filepath.FromSlash(artifact.ExecutableRelPath))
+		executable = filepath.Join(installRoot, filepath.FromSlash(spec.Host.Artifact.ExecutableRelPath))
 	}
 	progress("installing", 4)
 	if strings.TrimSpace(spec.Host.InstallScript) != "" {
@@ -112,15 +96,15 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 	return "", executable, nil
 }
 
-func validateCustomHostArtifact(artifact nativeArtifact) error {
+func validateCustomHostArtifact(artifact verifiedPackageArtifact, executableRelPath string) error {
 	parsed, err := url.Parse(strings.TrimSpace(artifact.DownloadURL))
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
 		return serviceError("PACKAGE_SOURCE_REJECTED", "Custom host packages must use an absolute public HTTPS URL without credentials.", 400, false, err)
 	}
-	if artifact.SizeBytes <= 0 || artifact.SizeBytes > maxNativeArchiveBytes || !dockerDigestPattern.MatchString("sha256:"+strings.ToLower(strings.TrimSpace(artifact.SHA256))) {
+	if artifact.SizeBytes <= 0 || artifact.SizeBytes > maxVerifiedPackageArchiveBytes || !dockerDigestPattern.MatchString("sha256:"+strings.ToLower(strings.TrimSpace(artifact.SHA256))) {
 		return serviceError("PACKAGE_IDENTITY_INVALID", "Custom host package size or SHA-256 is invalid.", 400, false, nil)
 	}
-	rel := filepath.Clean(filepath.FromSlash(strings.TrimSpace(artifact.ExecutableRelPath)))
+	rel := filepath.Clean(filepath.FromSlash(strings.TrimSpace(executableRelPath)))
 	if rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return serviceError("PACKAGE_IDENTITY_INVALID", "Custom host package executable path is invalid.", 400, false, nil)
 	}
@@ -209,7 +193,6 @@ func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.Managed
 	d.processMu.Lock()
 	current, ok := d.processes[service.ServiceID]
 	d.processMu.Unlock()
-	recoveredLegacy := false
 	if !ok {
 		var err error
 		current, ok, err = d.recoverPersistedProcess(service)
@@ -219,16 +202,12 @@ func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.Managed
 		if !ok {
 			return nil
 		}
-		recoveredLegacy = isLegacyHostIdentity(service.RuntimeIdentity)
 		d.processMu.Lock()
 		d.processes[service.ServiceID] = current
 		d.processMu.Unlock()
 	}
 	if service.RuntimeIdentity != "" && current.identity != service.RuntimeIdentity {
-		parsed := parseHostIdentity(service.RuntimeIdentity)
-		if !recoveredLegacy || parsed.serviceID != service.ServiceID {
-			return serviceError("RUNTIME_IDENTITY_MISMATCH", "Redeven will not stop a custom host process whose identity changed.", 409, false, nil)
-		}
+		return serviceError("RUNTIME_IDENTITY_MISMATCH", "Redeven will not stop a custom host process whose identity changed.", 409, false, nil)
 	}
 	spec, _, err := effectiveSpecFromService(service)
 	if err != nil {
@@ -281,10 +260,6 @@ func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.Ma
 	}
 	root := d.instanceRoot(service)
 	installRoot, logRoot := filepath.Join(root, "install"), filepath.Join(root, "logs")
-	if d.legacyDeepSeekLayout(service) {
-		installRoot = filepath.Join(d.manager.stateDir, DeepSeekHarnessProductID, "native")
-		logRoot = filepath.Join(d.manager.stateDir, DeepSeekHarnessProductID, "logs")
-	}
 	if err := os.RemoveAll(installRoot); err != nil {
 		return err
 	}
@@ -400,35 +375,27 @@ func (d *hostScriptDriver) serviceEnvironment(service *pfregistry.ManagedService
 }
 
 func (d *hostScriptDriver) instanceRoot(service *pfregistry.ManagedService) string {
-	return filepath.Join(d.manager.stateDir, "instances", service.ServiceID)
+	binding, err := decodeRuntimeBinding(service)
+	if err != nil || binding.Host == nil {
+		return ""
+	}
+	return filepath.Dir(d.manager.resolveBindingPath(binding.Host.InstallRoot))
 }
 
 func (d *hostScriptDriver) dataRoot(service *pfregistry.ManagedService) string {
-	if service != nil && service.TemplateSource == "builtin" && service.TemplateID == DeepSeekHarnessHostTemplateID {
-		return filepath.Join(d.manager.stateDir, DeepSeekHarnessProductID, "data")
+	binding, err := decodeRuntimeBinding(service)
+	if err != nil || binding.Host == nil {
+		return ""
 	}
-	return filepath.Join(d.manager.stateDir, "families", service.ServiceFamilyID, "data")
-}
-
-func (d *hostScriptDriver) legacyDeepSeekLayout(service *pfregistry.ManagedService) bool {
-	if d == nil || d.manager == nil || service == nil || service.TemplateSource != "builtin" || service.TemplateID != DeepSeekHarnessHostTemplateID {
-		return false
-	}
-	release, err := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
-	if err != nil || release.Kind != "npm" || release.Source != "@deepseek-ai/dsh" || release.Version == "" || release.Version != service.Version || release.Trust != "redeven_reviewed_legacy" || release.Integrity == "" || release.ArtifactReference != service.ArtifactReference {
-		return false
-	}
-	root := filepath.Join(d.manager.stateDir, DeepSeekHarnessProductID, "native")
-	executable := filepath.Clean(strings.TrimSpace(service.ArtifactReference))
-	rel, err := filepath.Rel(root, executable)
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return d.manager.resolveBindingPath(binding.Host.DataRoot)
 }
 
 func (d *hostScriptDriver) logPath(service *pfregistry.ManagedService) string {
-	if d.legacyDeepSeekLayout(service) {
-		return filepath.Join(d.manager.stateDir, DeepSeekHarnessProductID, "logs", "harness.log")
+	binding, err := decodeRuntimeBinding(service)
+	if err != nil || binding.Host == nil {
+		return ""
 	}
-	return filepath.Join(d.instanceRoot(service), "logs", "service.log")
+	return d.manager.resolveBindingPath(binding.Host.LogPath)
 }
 
 func (d *hostScriptDriver) prepareRuntimeDirectories(service *pfregistry.ManagedService) error {
@@ -453,16 +420,7 @@ func parseHostIdentity(identity string) parsedHostIdentity {
 		pid, _ := strconv.Atoi(parts[4])
 		return parsedHostIdentity{pid: pid, fingerprint: parts[5], serviceID: parts[2], version: "v2"}
 	}
-	if len(parts) == 4 && (parts[0] == "host" || parts[0] == "native") {
-		pid, _ := strconv.Atoi(parts[3])
-		return parsedHostIdentity{pid: pid, serviceID: parts[1], version: parts[0]}
-	}
 	return parsedHostIdentity{}
-}
-
-func isLegacyHostIdentity(identity string) bool {
-	parsed := parseHostIdentity(identity)
-	return parsed.version == "native" || parsed.version == "host"
 }
 
 func (d *hostScriptDriver) recoverPersistedProcess(service *pfregistry.ManagedService) (hostProcess, bool, error) {
@@ -473,56 +431,15 @@ func (d *hostScriptDriver) recoverPersistedProcess(service *pfregistry.ManagedSe
 	if parsed.serviceID != service.ServiceID {
 		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process belongs to another managed service.", 409, false, nil)
 	}
-	fingerprint, processGroup, command, err := managedProcessDetails(parsed.pid)
+	fingerprint, processGroup, _, err := managedProcessDetails(parsed.pid)
 	if err != nil || processGroup != parsed.pid {
 		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process could not be verified after Runtime restart.", 409, false, err)
 	}
 	identity := strings.TrimSpace(service.RuntimeIdentity)
-	if parsed.version == "v2" {
-		if parsed.fingerprint == "" || parsed.fingerprint != fingerprint {
-			return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process start identity no longer matches.", 409, false, nil)
-		}
-	} else {
-		if !d.legacyDeepSeekLayout(service) || !legacyDeepSeekProcessCommandMatches(service, command) {
-			return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "Redeven will not adopt an unverified Host process from an earlier Runtime.", 409, false, nil)
-		}
-		nonce, nonceErr := randomID("proc")
-		if nonceErr != nil {
-			return hostProcess{}, false, nonceErr
-		}
-		identity = fmt.Sprintf("host:v2:%s:%s:%d:%s", service.ServiceID, nonce, parsed.pid, fingerprint)
+	if parsed.version != "v2" || parsed.fingerprint == "" || parsed.fingerprint != fingerprint {
+		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process start identity no longer matches.", 409, false, nil)
 	}
 	return hostProcess{identity: identity, pid: parsed.pid, fingerprint: fingerprint}, true, nil
-}
-
-func legacyDeepSeekProcessCommandMatches(service *pfregistry.ManagedService, command string) bool {
-	artifact, ok := auditedNativeArtifact(currentPlatformKey())
-	if !ok || !regularExecutable(service.ArtifactReference) {
-		return false
-	}
-	installRoot := filepath.Dir(filepath.Dir(filepath.Clean(service.ArtifactReference)))
-	nodePath := filepath.Join(installRoot, filepath.FromSlash(artifact.NodeRelPath))
-	entrypoint := filepath.Join(installRoot, "app", "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js")
-	if !regularExecutable(nodePath) || !regularFile(entrypoint) {
-		return false
-	}
-	prefix := nodePath + " " + entrypoint + " "
-	if !strings.HasPrefix(strings.TrimSpace(command), prefix) {
-		return false
-	}
-	fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(command), prefix))
-	return slices.Contains(fields, "web") &&
-		hostCommandArgumentMatches(fields, "--host", "127.0.0.1") &&
-		hostCommandArgumentMatches(fields, "--port", strconv.Itoa(service.RuntimePort))
-}
-
-func hostCommandArgumentMatches(fields []string, name, value string) bool {
-	for index := 0; index+1 < len(fields); index++ {
-		if fields[index] == name && fields[index+1] == value {
-			return true
-		}
-	}
-	return false
 }
 
 func terminateHostProcess(process hostProcess) error {

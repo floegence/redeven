@@ -8,6 +8,7 @@ require (
 	github.com/floegence/floeterm/terminal-go v0.18.1
 	github.com/floegence/floret/v7 v7.1.0
 	github.com/floegence/flowersec/flowersec-go/v4 v4.0.0
+	github.com/floegence/redeven-service-templates v0.1.0
 	github.com/floegence/redevplugin/v3 v3.0.21
 	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go v1.12.0

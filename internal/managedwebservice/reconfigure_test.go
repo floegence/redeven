@@ -74,8 +74,8 @@ func TestRecoverInterruptedReconfigureRejectsAnotherOperationsJournal(t *testing
 	manager, service, _ := reconfigureManagerForTest(t)
 	journal := reconfigureJournal{
 		Kind: reconfigureJournalKind, OperationID: "mop_other", Phase: reconfigurePhasePrepared,
-		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity},
-		Target: reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision + 1},
+		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
+		Target: reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision + 1, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
 	}
 	raw, err := json.Marshal(journal)
 	if err != nil {
@@ -110,10 +110,11 @@ func reconfigureManagerForTest(t *testing.T) (*Manager, *pfregistry.ManagedServi
 	service.WorkspacePath = t.TempDir()
 	service.DesiredState = "stopped"
 	service.ObservedState = "stopped"
-	service.ForwardID = "pf_reconfigure"
+	service.ForwardID = "pf-reconfigure"
 	service.RuntimeIdentity = "runtime-old"
 	service.ArtifactReference = spec.Container.Image
 	service.RuntimeManifestJSON = "{}"
+	setTestRuntimeBinding(t, service)
 	operation := &pfregistry.ManagedOperation{
 		OperationID: "mop_reconfigure", ServiceID: service.ServiceID, RequestID: "request-reconfigure",
 		RequestFingerprint: "fingerprint", Action: string(ActionReconfigure), State: "running", Stage: "reconfigure_preflight",

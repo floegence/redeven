@@ -5,7 +5,7 @@ import { fetchLocalApi, fetchLocalApiJSON } from '../services/localApi';
 export type ManagedOperation = Readonly<{
   operation_id: string;
   service_id: string;
-  action: 'install' | 'start' | 'stop' | 'restart' | 'retry_install' | 'update' | 'reconfigure' | 'uninstall';
+  action: 'install' | 'start' | 'stop' | 'restart' | 'retry' | 'retry_install' | 'update' | 'reconfigure' | 'uninstall';
   state: string;
   stage: string;
   progress_current: number;

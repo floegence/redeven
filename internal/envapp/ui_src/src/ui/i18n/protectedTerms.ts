@@ -17,7 +17,6 @@ export const PROTECTED_TERMS = [
   'Flowersec',
   'Local UI',
   'ReDevPlugin',
-  'LinuxServer Webtop',
   'Activity',
   'Workbench',
 ] as const;

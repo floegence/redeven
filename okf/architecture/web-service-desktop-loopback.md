@@ -13,7 +13,7 @@ timestamp: 2026-08-30T00:00:00Z
 
 ## Mode and presentation
 
-`port_forwards.access_mode` is the sole decision owner. Runtime accepts `desktop_loopback` only for an HTTP target. Env App exposes the choice when a service is saved, edited, or deployed; a browser-only Env App explains that the service requires Redeven Desktop instead of trying another route. DeepSeek Harness templates select this mode by default because their Models settings require a local browser, while ordinary and custom services default to `unified_proxy`.
+`port_forwards.access_mode` is the sole decision owner. Runtime accepts `desktop_loopback` only for an HTTP target. Env App exposes the choice when a service is saved, edited, or deployed; a browser-only Env App explains that the service requires Redeven Desktop instead of trying another route. An external Managed Service template may declare this mode, while ordinary and custom services default to `unified_proxy`.
 
 When a trusted Desktop Shell opens the service, Electron creates or reuses one gateway keyed by Environment session and forward. Its browser-visible Origin is the gateway's numeric-loopback address; the trusted toolbar continues to show the original target origin and current application path. The target `WebContentsView` keeps its dedicated non-persistent partition and receives no preload, Node access, bridge token, forward identity, or gateway credential in renderer-visible state.
 
@@ -37,7 +37,7 @@ The loopback Origin improves application compatibility; it is not direct network
 
 # Evidence
 
-- `redeven:internal/portforward/registry/schema.go:1` - Registry v4 persists one constrained access mode and migrates existing DeepSeek Harness forwards.
+- `redeven:internal/portforward/registry/schema.go` - The fresh Registry baseline persists one constrained access mode and route-safe forward identity.
 - `redeven:internal/portforward/service.go:1` - Runtime validates mode values and rejects local compatibility for non-HTTP targets.
 - `redeven:desktop/src/main/navigation.ts:256` - Navigation maps only the exact HTTP target scope and supported loopback aliases into the assigned gateway Origin.
 - `redeven:desktop/src/main/webServiceLoopbackGateway.ts:1` - The gateway owns numeric-loopback binding, credential admission, protected HTTP and WebSocket forwarding, response mapping, and connection cleanup.

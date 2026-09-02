@@ -10,7 +10,6 @@ export const REDEVEN_I18N_PROTECTED_TERMS = [
   'Flowersec',
   'Local UI',
   'ReDevPlugin',
-  'LinuxServer Webtop',
   'Activity',
   'Workbench',
 ] as const;

@@ -32,12 +32,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
     dispose = render(() => <ManagedReleaseCandidates
       result={{
         schema_version: 1,
-        current: { schema_version: 1, kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', integrity: 'sha512-current', trust: 'registry_verified' },
+        current: { schema_version: 1, kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', integrity: 'sha512-current', trust: 'registry_verified' },
         checked_at_unix_ms: Date.now(),
         candidates: [
-          { schema_version: 1, candidate_id: 'preview', source_kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview' },
-          { schema_version: 1, candidate_id: 'stable', source_kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable' },
-          { schema_version: 1, candidate_id: 'deprecated', source_kind: 'npm', source: '@deepseek-ai/dsh', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: false, deprecated: true, reason_code: 'RELEASE_DEPRECATED' },
+          { schema_version: 1, candidate_id: 'preview', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview' },
+          { schema_version: 1, candidate_id: 'stable', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable' },
+          { schema_version: 1, candidate_id: 'deprecated', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: false, deprecated: true, reason_code: 'RELEASE_DEPRECATED' },
         ],
       }}
       loading={false}
@@ -77,8 +77,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
       id: 'interactive-desktop-root-and-network',
       revision: 1,
       severity: 'warning' as const,
-      title_key: 'webServices.managed.notices.interactiveDesktopRoot.title',
-      description_key: 'webServices.managed.notices.interactiveDesktopRoot.description',
+      title: 'Container root access and outbound network',
+      description: 'Only share this service with trusted users.',
       acknowledgement_required: true,
     };
     dispose = render(() => (
@@ -125,21 +125,21 @@ describe('EnvPortForwardsPage browser presentation', () => {
       <div>
         <ManagedServiceRow
           service={{
-            service_id: 'mws-webtop',
-            template_id: 'linuxserver-webtop-ubuntu-kde',
-            service_family_id: 'linuxserver-webtop-ubuntu-kde',
-            name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)',
+            service_id: 'mws-desktop',
+            template_id: 'example-desktop-a',
+            service_family_id: 'example-desktop-a',
+            name: 'Example Desktop A',
             description: 'Run an Ubuntu-based KDE Plasma desktop in an isolated Docker container.',
             template_source: 'builtin',
             deployment: 'container',
-            workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-ubuntu-kde/very-long-project-directory',
+            workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a/very-long-project-directory',
             version: '654ea8e3-ls177',
             desired_state: 'running',
             observed_state: 'running',
             forward_id: 'pf-managed',
             runtime_port: 54945,
-            brand_icon: 'ubuntu',
             update_available: false,
+            actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } },
           }}
           busy={false}
           canOpen
@@ -231,21 +231,21 @@ describe('EnvPortForwardsPage browser presentation', () => {
       <ManagedServiceRow
         service={{
           service_id: 'mws-failed',
-          template_id: 'deepseek-harness-container',
-          service_family_id: 'deepseek-harness',
-          name: 'DeepSeek Harness',
-          description: 'Run DeepSeek Harness in an isolated container.',
+          template_id: 'example-container',
+          service_family_id: 'example-service',
+          name: 'Example Service',
+          description: 'Run Example Service in an isolated container.',
           template_source: 'builtin',
           deployment: 'container',
-          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service',
           version: '0.1.1-rc.2',
           desired_state: 'running',
           observed_state: 'error',
           forward_id: 'pf-failed',
           runtime_port: 3000,
-          brand_icon: 'deepseek-harness',
           last_failure: { action: 'start', stage: 'failed', error_code: 'CONTAINER_NAME_MISMATCH', message: 'raw backend identity detail' },
           update_available: false,
+          actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } },
         }}
         busy={false}
         canOpen
@@ -286,21 +286,21 @@ describe('EnvPortForwardsPage browser presentation', () => {
       <ManagedServiceRow
         service={{
           service_id: 'mws-failed',
-          template_id: 'deepseek-harness-container',
-          service_family_id: 'deepseek-harness',
-          name: 'DeepSeek Harness',
-          description: 'Run DeepSeek Harness in an isolated container.',
+          template_id: 'example-container',
+          service_family_id: 'example-service',
+          name: 'Example Service',
+          description: 'Run Example Service in an isolated container.',
           template_source: 'builtin',
           deployment: 'container',
-          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service',
           version: '0.1.1-rc.2',
           desired_state: 'running',
           observed_state: 'error',
           forward_id: 'pf-failed',
           runtime_port: 3000,
-          brand_icon: 'deepseek-harness',
           last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.' },
           update_available: false,
+          actions: { start: { available: false, reason_code: 'OPERATION_ACTIVE' }, stop: { available: false, reason_code: 'OPERATION_ACTIVE' }, restart: { available: false, reason_code: 'OPERATION_ACTIVE' }, retry: { available: false, reason_code: 'OPERATION_ACTIVE' } },
         }}
         operation={{
           operation_id: 'mop-retry',
@@ -316,7 +316,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
             updated_at_unix_ms: Date.now(),
             transfer: {
               phase: 'pulling',
-              artifact_reference: 'ghcr.io/runzhliu/deepseek-harness@sha256:reviewed',
+              artifact_reference: 'ghcr.io/runzhliu/example-service@sha256:reviewed',
               artifact_index: 1,
               artifact_total: 1,
               downloaded_bytes: 2_000,
@@ -354,7 +354,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
 
     const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
     expect(details).toBeTruthy();
-    expect(details.textContent).toContain('ghcr.io/runzhliu/deepseek-harness@sha256:reviewed');
+    expect(details.textContent).toContain('ghcr.io/runzhliu/example-service@sha256:reviewed');
     expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
     expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
     expect(details.closest('[role="dialog"]')).toBeNull();
@@ -379,19 +379,18 @@ describe('EnvPortForwardsPage browser presentation', () => {
       <ManagedServiceRow
         service={{
           service_id: 'mws-native',
-          template_id: 'deepseek-harness-host',
-          service_family_id: 'deepseek-harness-host',
-          name: 'DeepSeek Harness',
+          template_id: 'example-host',
+          service_family_id: 'example-host',
+          name: 'Example Service',
           template_source: 'builtin',
-          deployment: 'native',
-          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/deepseek-harness-host',
+          deployment: 'host',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-host',
           version: '0.1.1-rc.2',
           desired_state: 'running',
           observed_state: 'installing',
           forward_id: 'pf-native',
           runtime_port: 3000,
-          brand_icon: 'deepseek-harness',
-          update_available: false,
+                    update_available: false,
         }}
         operation={{
           operation_id: 'mop-native',
@@ -451,19 +450,18 @@ describe('EnvPortForwardsPage browser presentation', () => {
       <ManagedServiceRow
         service={{
           service_id: 'mws-cached',
-          template_id: 'linuxserver-webtop-debian-xfce',
-          service_family_id: 'linuxserver-webtop-debian-xfce',
-          name: 'LinuxServer Webtop · Debian XFCE',
+          template_id: 'example-desktop-b',
+          service_family_id: 'example-desktop-b',
+          name: 'Example Desktop B',
           template_source: 'builtin',
           deployment: 'container',
-          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/linuxserver-webtop-debian-xfce',
+          workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-b',
           version: 'reviewed',
           desired_state: 'running',
           observed_state: 'installing',
           forward_id: 'pf-cached',
           runtime_port: 3000,
-          brand_icon: 'debian',
-          update_available: false,
+                    update_available: false,
         }}
         operation={{
           operation_id: 'mop-cached',
@@ -479,7 +477,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
             updated_at_unix_ms: Date.now() - 1_000,
             transfer: {
               phase: 'cached',
-              artifact_reference: 'lscr.io/linuxserver/webtop@sha256:reviewed',
+              artifact_reference: 'lscr.io/example/desktop@sha256:reviewed',
               artifact_index: 1,
               artifact_total: 1,
               completed_layers: 17,
