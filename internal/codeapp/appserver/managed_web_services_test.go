@@ -15,7 +15,7 @@ import (
 
 func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T) {
 	t.Parallel()
-	backend := &managedBackendStub{catalog: []managedwebservice.Template{{TemplateID: managedwebservice.DeepSeekHarnessHostTemplateID, Version: managedwebservice.DeepSeekHarnessVersion}}}
+	backend := &managedBackendStub{catalog: []managedwebservice.Template{{TemplateID: "example-host", Version: "1.0.0"}}}
 	channelID := "ch_managed_permissions"
 
 	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
@@ -26,7 +26,7 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 		t.Fatalf("catalog response status = %d body=%s", response.Code, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness-host","deployment":"native","workspace_path":"/workspace"}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	readServer.handleManagedWebServicesAPI(response, request)
@@ -35,7 +35,7 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 	}
 
 	fullServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness-host","deployment":"native","workspace_path":"/workspace"}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	fullServer.handleManagedWebServicesAPI(response, request)
@@ -58,19 +58,19 @@ func TestManagedWebServiceRoutesCarryNoticeRevisionsForInstallAndUpdate(t *testi
 	channelID := "ch_managed_notices"
 	server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
 
-	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"linuxserver-webtop-ubuntu-kde","deployment":"container","workspace_path":"/workspace","accepted_notice_revisions":{"interactive-desktop-root-and-network":1}}`))
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-container","deployment":"container","workspace_path":"/workspace","accepted_notice_revisions":{"runtime-risk":1}}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response := httptest.NewRecorder()
 	server.handleManagedWebServicesAPI(response, request)
-	if response.Code != http.StatusAccepted || backend.lastCreate.AcceptedNoticeRevisions["interactive-desktop-root-and-network"] != 1 {
+	if response.Code != http.StatusAccepted || backend.lastCreate.AcceptedNoticeRevisions["runtime-risk"] != 1 {
 		t.Fatalf("install notice request=%+v status=%d body=%s", backend.lastCreate, response.Code, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-update","action":"update","accepted_notice_revisions":{"interactive-desktop-root-and-network":2}}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-update","action":"update","accepted_notice_revisions":{"runtime-risk":2}}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	server.handleManagedWebServicesAPI(response, request)
-	if response.Code != http.StatusAccepted || backend.lastOperate.Action != managedwebservice.ActionUpdate || backend.lastOperate.AcceptedNoticeRevisions["interactive-desktop-root-and-network"] != 2 {
+	if response.Code != http.StatusAccepted || backend.lastOperate.Action != managedwebservice.ActionUpdate || backend.lastOperate.AcceptedNoticeRevisions["runtime-risk"] != 2 {
 		t.Fatalf("update notice request=%+v status=%d body=%s", backend.lastOperate, response.Code, response.Body.String())
 	}
 }
@@ -138,7 +138,7 @@ func TestManagedWebServiceJSONRejectsUnknownFields(t *testing.T) {
 	backend := &managedBackendStub{}
 	channelID := "ch_managed_json"
 	server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"deepseek-harness-host","deployment":"native","workspace_path":"/workspace","api_key":"must-not-be-accepted"}`))
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace","api_key":"must-not-be-accepted"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response := httptest.NewRecorder()
 	server.handleManagedWebServicesAPI(response, request)

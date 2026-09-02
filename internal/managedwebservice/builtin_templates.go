@@ -1,250 +1,250 @@
 package managedwebservice
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
-	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
+	servicetemplates "github.com/floegence/redeven-service-templates"
 )
 
-const (
-	auditedDockerImage       = "ghcr.io/runzhliu/deepseek-harness:0.1.1-rc.2"
-	auditedDockerAMD64Digest = "sha256:7ab8875c68f3ecef18b21b8f04f72d914a4b86df9876064bb5af7d45a9224e9c"
-	auditedDockerARM64Digest = "sha256:53e8a997f09252b139b8e46c0c13eeb574074e6f17a732a4b57135ac5a6bc58a"
+const catalogArtifactPlaceholder = "${REDEVEN_CATALOG_ARTIFACT}"
 
-	webtopImage     = "lscr.io/linuxserver/webtop"
-	webtopSourceURL = "https://github.com/linuxserver/docker-webtop"
+type BuiltinCatalog struct {
+	version   string
+	templates []catalogTemplate
+	byID      map[string]catalogTemplate
+}
 
-	webtopUbuntuKDEVersion  = "654ea8e3-ls177"
-	webtopDebianXFCEVersion = "7c4ebdc9-ls209"
+type catalogBundle struct {
+	SchemaVersion  int               `json:"schema_version"`
+	CatalogVersion string            `json:"catalog_version"`
+	Locales        []string          `json:"locales"`
+	Templates      []catalogTemplate `json:"templates"`
+}
 
-	webtopRootNoticeID = "interactive-desktop-root-and-network"
-)
+type catalogTemplate struct {
+	SchemaVersion      int                             `json:"schema_version"`
+	TemplateID         string                          `json:"template_id"`
+	ServiceFamilyID    string                          `json:"service_family_id"`
+	Version            string                          `json:"version"`
+	Revision           int64                           `json:"revision"`
+	SortOrder          int                             `json:"sort_order"`
+	DeveloperPreview   bool                            `json:"developer_preview"`
+	DiskBytes          int64                           `json:"disk_bytes"`
+	SourceURL          string                          `json:"source_url"`
+	DockerSourceURL    string                          `json:"docker_source_url,omitempty"`
+	Deployment         Deployment                      `json:"deployment"`
+	ContainerMode      string                          `json:"container_mode,omitempty"`
+	DefaultAccessMode  string                          `json:"default_access_mode"`
+	SupportedPlatforms []string                        `json:"supported_platforms,omitempty"`
+	PlatformArtifacts  map[string]string               `json:"platform_artifacts,omitempty"`
+	ReleaseDiscovery   catalogReleaseDiscovery         `json:"release_discovery"`
+	Notices            []TemplateNotice                `json:"notices"`
+	Spec               json.RawMessage                 `json:"spec"`
+	Localizations      map[string]TemplateLocalization `json:"localizations"`
+	Icon               TemplateIcon                    `json:"icon"`
+}
 
-func auditedDockerArtifact(platform string) (dockerArtifact, bool) {
-	digest := ""
-	switch platform {
-	case "linux-amd64":
-		digest = auditedDockerAMD64Digest
-	case "linux-arm64":
-		digest = auditedDockerARM64Digest
-	default:
-		return dockerArtifact{}, false
+type catalogReleaseDiscovery struct {
+	Source          string `json:"source"`
+	AllowPrerelease bool   `json:"allow_prerelease"`
+	AllowNonSemver  bool   `json:"allow_non_semver"`
+}
+
+func LoadBuiltinCatalog() (*BuiltinCatalog, error) {
+	raw := servicetemplates.Bundle()
+	return loadBuiltinCatalog(raw, servicetemplates.Version, servicetemplates.BundleSHA256())
+}
+
+func loadBuiltinCatalog(raw []byte, expectedVersion, expectedSHA256 string) (*BuiltinCatalog, error) {
+	sum := sha256.Sum256(raw)
+	if hex.EncodeToString(sum[:]) != expectedSHA256 {
+		return nil, errors.New("managed service template bundle digest mismatch")
 	}
-	return dockerArtifact{Image: auditedDockerImage, Digest: digest}, true
-}
-
-type builtInTemplateDefinition struct {
-	TemplateID        string
-	ServiceFamilyID   string
-	Name              string
-	Description       string
-	Version           string
-	LocalizationKey   string
-	BrandIcon         string
-	SourceURL         string
-	DockerSourceURL   string
-	Deployment        Deployment
-	ContainerMode     string
-	Revision          int64
-	SortOrder         int
-	DeveloperPreview  bool
-	DiskBytes         int64
-	Notices           []TemplateNotice
-	DefaultAccessMode string
-	DataDirectory     string
-}
-
-func builtInTemplateDefinitions() []builtInTemplateDefinition {
-	return []builtInTemplateDefinition{
-		{
-			TemplateID: DeepSeekHarnessHostTemplateID, ServiceFamilyID: DeepSeekHarnessHostTemplateID,
-			Name: "DeepSeek Harness · Host", Description: "Run DeepSeek Harness directly in the current Environment.", Version: DeepSeekHarnessVersion,
-			LocalizationKey: "deepSeekHarnessHost", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
-			Deployment: DeploymentHost, Revision: 4, SortOrder: 10, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024,
-			Notices:           deepSeekHarnessNotices(false),
-			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
-			DataDirectory:     DeepSeekHarnessProductID,
-		},
-		{
-			TemplateID: DeepSeekHarnessContainerTemplateID, ServiceFamilyID: DeepSeekHarnessContainerTemplateID,
-			Name: "DeepSeek Harness · Container", Description: "Run the reviewed community DeepSeek Harness image in Docker.", Version: DeepSeekHarnessVersion,
-			LocalizationKey: "deepSeekHarnessContainer", BrandIcon: BrandIconDeepSeekHarness, SourceURL: "https://github.com/deepseek-ai/deepseek-harness",
-			DockerSourceURL: "https://github.com/runzhliu/deepseek-harness-docker", Deployment: DeploymentContainer, ContainerMode: "single",
-			Revision: 2, SortOrder: 20, DeveloperPreview: true, DiskBytes: 2 * 1024 * 1024 * 1024, Notices: deepSeekHarnessNotices(true),
-			DefaultAccessMode: pfregistry.AccessModeDesktopLoopback,
-		},
-		{
-			TemplateID: WebtopUbuntuKDETemplateID, ServiceFamilyID: WebtopUbuntuKDETemplateID,
-			Name: "LinuxServer Webtop · Ubuntu (KDE Plasma)", Description: "Run an Ubuntu-based KDE Plasma desktop in an isolated Docker container; its appearance differs from standard Ubuntu Desktop (GNOME).", Version: webtopUbuntuKDEVersion,
-			LocalizationKey: "linuxserverWebtopUbuntuKDE", BrandIcon: BrandIconUbuntu, SourceURL: webtopSourceURL,
-			Deployment: DeploymentContainer, ContainerMode: "single", Revision: 1, SortOrder: 30, DiskBytes: 6 * 1024 * 1024 * 1024,
-			Notices: webtopNotices(),
-		},
-		{
-			TemplateID: WebtopDebianXFCETemplateID, ServiceFamilyID: WebtopDebianXFCETemplateID,
-			Name: "LinuxServer Webtop · Debian XFCE", Description: "Run a Debian XFCE desktop in an isolated Docker container.", Version: webtopDebianXFCEVersion,
-			LocalizationKey: "linuxserverWebtopDebianXFCE", BrandIcon: BrandIconDebian, SourceURL: webtopSourceURL,
-			Deployment: DeploymentContainer, ContainerMode: "single", Revision: 1, SortOrder: 40, DiskBytes: 6 * 1024 * 1024 * 1024,
-			Notices: webtopNotices(),
-		},
+	var bundle catalogBundle
+	if err := decodeStrictJSON(raw, &bundle); err != nil {
+		return nil, fmt.Errorf("decode managed service template bundle: %w", err)
 	}
+	if bundle.SchemaVersion != 1 || bundle.CatalogVersion != expectedVersion || len(bundle.Templates) == 0 || len(bundle.Locales) == 0 {
+		return nil, errors.New("managed service template bundle identity is unsupported")
+	}
+	if !slices.Contains(bundle.Locales, "en-US") {
+		return nil, errors.New("managed service template bundle is missing en-US")
+	}
+	catalog := &BuiltinCatalog{version: bundle.CatalogVersion, templates: append([]catalogTemplate(nil), bundle.Templates...), byID: make(map[string]catalogTemplate, len(bundle.Templates))}
+	for _, template := range catalog.templates {
+		if err := validateCatalogTemplate(template, bundle.Locales); err != nil {
+			return nil, fmt.Errorf("managed service template %q: %w", template.TemplateID, err)
+		}
+		if _, duplicate := catalog.byID[template.TemplateID]; duplicate {
+			return nil, fmt.Errorf("managed service template %q is duplicated", template.TemplateID)
+		}
+		catalog.byID[template.TemplateID] = template
+	}
+	return catalog, nil
 }
 
-func builtInTemplateDefinitionByID(templateID string) (builtInTemplateDefinition, bool) {
-	templateID = strings.TrimSpace(templateID)
-	for _, definition := range builtInTemplateDefinitions() {
-		if definition.TemplateID == templateID {
-			return definition, true
+func validateCatalogTemplate(template catalogTemplate, locales []string) error {
+	if template.SchemaVersion != 1 || !managedWorkspaceIdentityPattern.MatchString(template.TemplateID) || !managedWorkspaceIdentityPattern.MatchString(template.ServiceFamilyID) || template.Revision < 1 || template.Version == "" || template.DiskBytes < 1 {
+		return errors.New("identity, revision, version, or disk requirement is invalid")
+	}
+	if template.Deployment != DeploymentHost && template.Deployment != DeploymentContainer && template.Deployment != DeploymentCompose {
+		return errors.New("deployment is invalid")
+	}
+	if len(template.Localizations) != len(locales) {
+		return errors.New("localization set is incomplete")
+	}
+	for _, locale := range locales {
+		localized, ok := template.Localizations[locale]
+		if !ok || strings.TrimSpace(localized.Name) == "" || strings.TrimSpace(localized.Description) == "" || len(localized.Notices) != len(template.Notices) {
+			return fmt.Errorf("localization %q is incomplete", locale)
+		}
+		for _, notice := range template.Notices {
+			copy, ok := localized.Notices[notice.ID]
+			if !ok || strings.TrimSpace(copy.Title) == "" || strings.TrimSpace(copy.Description) == "" {
+				return fmt.Errorf("localization %q notice %q is incomplete", locale, notice.ID)
+			}
 		}
 	}
-	return builtInTemplateDefinition{}, false
-}
-
-func deepSeekHarnessNotices(includeCommunityImage bool) []TemplateNotice {
-	notices := []TemplateNotice{{
-		ID: "service-api-credentials", Revision: 1, Severity: "info",
-		TitleKey: "webServices.managed.notices.apiCredentials.title", DescriptionKey: "webServices.managed.notices.apiCredentials.description",
-	}}
-	if includeCommunityImage {
-		notices = append([]TemplateNotice{{
-			ID: "community-container-image", Revision: 1, Severity: "warning",
-			TitleKey: "webServices.managed.notices.communityImage.title", DescriptionKey: "webServices.managed.notices.communityImage.description",
-		}}, notices...)
+	if template.Icon.MediaType != "image/svg+xml" || strings.TrimSpace(template.Icon.Data) == "" || len(template.Icon.Data) > 64*1024 {
+		return errors.New("icon is invalid")
 	}
-	return notices
-}
-
-func webtopNotices() []TemplateNotice {
-	return []TemplateNotice{{
-		ID: webtopRootNoticeID, Revision: 1, Severity: "warning", AcknowledgementRequired: true,
-		TitleKey:       "webServices.managed.notices.interactiveDesktopRoot.title",
-		DescriptionKey: "webServices.managed.notices.interactiveDesktopRoot.description",
-	}}
-}
-
-func auditedWebtopArtifact(templateID, platform string) (dockerArtifact, bool) {
-	digest := ""
-	switch templateID + ":" + platform {
-	case WebtopUbuntuKDETemplateID + ":linux-amd64":
-		digest = "sha256:277ccc2688301ab076b6654ecb031a0061f34199add3d77503073ff3d8da429e"
-	case WebtopUbuntuKDETemplateID + ":linux-arm64":
-		digest = "sha256:3c35983ef7148cd14dd93d57dff9791d6a6b9d6018781e252edcfae0fe7d2f17"
-	case WebtopDebianXFCETemplateID + ":linux-amd64":
-		digest = "sha256:686b8fac99918330a7a897ea8ab9e0aeeb822e7b4f5f5aeb837fa984f21d3c2b"
-	case WebtopDebianXFCETemplateID + ":linux-arm64":
-		digest = "sha256:9092b349d525f765b0be912db1ec5a8d5aa97b0f1a3b57da27a7f72e69c90825"
-	default:
-		return dockerArtifact{}, false
+	iconSum := sha256.Sum256([]byte(template.Icon.Data))
+	if hex.EncodeToString(iconSum[:]) != template.Icon.SHA256 {
+		return errors.New("icon digest mismatch")
 	}
-	return dockerArtifact{Image: webtopImage, Digest: digest}, true
+	var spec TemplateSpec
+	if err := decodeStrictJSON(template.Spec, &spec); err != nil {
+		return fmt.Errorf("decode TemplateSpec: %w", err)
+	}
+	if spec.SchemaVersion != templateSpecSchemaVersion || spec.Kind != template.Deployment {
+		return errors.New("TemplateSpec identity does not match deployment")
+	}
+	if template.Deployment == DeploymentContainer {
+		if template.ContainerMode != "single" || len(template.PlatformArtifacts) == 0 || spec.Container == nil || spec.Container.Image != catalogArtifactPlaceholder {
+			return errors.New("single-container template artifacts are incomplete")
+		}
+		for platform, reference := range template.PlatformArtifacts {
+			if !strings.HasPrefix(platform, "linux-") || imageReferenceDigest(reference) == "" {
+				return fmt.Errorf("platform artifact %q is not an exact image reference", platform)
+			}
+		}
+	}
+	if template.Deployment == DeploymentHost && (len(template.SupportedPlatforms) == 0 || spec.Host == nil || spec.Host.NPM == nil) {
+		return errors.New("host template npm package or platform matrix is incomplete")
+	}
+	return nil
 }
 
-func webtopTemplateSpec(templateID string, artifact dockerArtifact) TemplateSpec {
-	title := "Ubuntu KDE"
-	if templateID == WebtopDebianXFCETemplateID {
-		title = "Debian XFCE"
+func (c *BuiltinCatalog) definition(templateID string) (catalogTemplate, bool) {
+	if c == nil {
+		return catalogTemplate{}, false
 	}
-	return TemplateSpec{
-		SchemaVersion: templateSpecSchemaVersion,
-		Kind:          DeploymentContainer,
-		Endpoint:      WebEndpointSpec{Scheme: "http", ContainerPort: 3000, Path: "/", HealthPath: "/", StartupTimeout: 180},
-		Container: &ContainerTemplateSpec{
-			Image: artifact.Image + "@" + artifact.Digest,
-			Environment: map[string]string{
-				"PUID": "${REDEVEN_RUNTIME_UID}", "PGID": "${REDEVEN_RUNTIME_GID}", "TZ": "${REDEVEN_RUNTIME_TIMEZONE}",
-				"TITLE": title, "START_DOCKER": "false", "FILE_MANAGER_PATH": "/workspace",
-				"SELKIES_USE_CPU":        "true|locked",
-				"SELKIES_ENABLE_SHARING": "false|locked", "SELKIES_ENABLE_COLLAB": "false|locked", "SELKIES_ENABLE_SHARED": "false|locked",
-				"SELKIES_UI_SIDEBAR_SHOW_SHARING": "false|locked",
-			},
-			Mounts:       []ContainerMountSpec{{ResourceID: "config", Type: "volume", Source: "config", Target: "/config"}, {ResourceID: "workspace", Type: "workspace", Target: "/workspace"}},
-			ReadOnlyRoot: false, PIDsLimit: 2048, RuntimeProfile: ContainerRuntimeProfileInteractiveDesktop,
-		},
-	}
-}
-
-func deepSeekHostTemplateSpec() TemplateSpec {
-	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/", HealthPath: "/", StartupTimeout: 45}, Host: &HostTemplateSpec{StartScript: deepSeekHostStartScript(), Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "${REDEVEN_SERVICE_DATA_DIR}", "HOME": "${REDEVEN_WORKSPACE}"}, NPM: &NPMHostPackageSpec{PackageName: "@deepseek-ai/dsh", Version: DeepSeekHarnessVersion, RegistryURL: "https://registry.npmjs.org/", Executable: "dsh"}}}
-}
-
-func deepSeekContainerTemplateSpec(artifact dockerArtifact, available bool) TemplateSpec {
-	image := auditedDockerImage
-	if available {
-		image = artifact.Image + "@" + artifact.Digest
-	}
-	return TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3080, Path: "/", HealthPath: "/", StartupTimeout: 45}, Container: &ContainerTemplateSpec{Image: image, Environment: map[string]string{"DSH_DESKTOP_ENABLED": "0", "DSH_HOME": "/home/node/.dsh", "HOME": "/workspace"}, Mounts: []ContainerMountSpec{{ResourceID: "data", Type: "volume", Source: "data", Target: "/home/node/.dsh"}, {ResourceID: "workspace", Type: "workspace", Target: "/workspace"}, {ResourceID: "tmp", Type: "tmpfs", Target: "/tmp"}}, User: "1000:1000", ReadOnlyRoot: true, PIDsLimit: 512, ReleasePolicy: &OCIReleasePolicySpec{BlockedTagPrefixes: []string{"market"}}}}
+	definition, ok := c.byID[strings.TrimSpace(templateID)]
+	return definition, ok
 }
 
 func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
-	nativeAvailable := (runtime.GOOS == "linux" || runtime.GOOS == "darwin") && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
-	nativeReasonCode, nativeReason := "", ""
-	if !nativeAvailable {
-		nativeReasonCode, nativeReason = "PLATFORM_UNSUPPORTED", "Direct installation supports Linux and macOS on x64 or arm64."
-	} else if artifact, ok := auditedNativeArtifact(currentPlatformKey()); !ok || validateNativeArtifact(artifact, m.downloads.packageHTTPClient(), defaultNodePackageOrigin) != nil {
-		nativeAvailable, nativeReasonCode, nativeReason = false, "NATIVE_RUNTIME_UNAVAILABLE", "This Redeven release does not include a usable host runtime for the Environment platform."
+	if m.catalog == nil {
+		return nil, errors.New("managed service template catalog is unavailable")
 	}
 	dockerAvailable, dockerReasonCode, dockerReason := m.dockerAvailability(ctx)
-
-	items := make([]Template, 0, len(builtInTemplateDefinitions()))
-	for _, definition := range builtInTemplateDefinitions() {
-		available, reasonCode, reason := dockerAvailable, dockerReasonCode, dockerReason
-		var spec TemplateSpec
-		switch definition.TemplateID {
-		case DeepSeekHarnessHostTemplateID:
-			available, reasonCode, reason = nativeAvailable, nativeReasonCode, nativeReason
-			spec = deepSeekHostTemplateSpec()
-		case DeepSeekHarnessContainerTemplateID:
-			artifact, artifactAvailable := auditedDockerArtifact("linux-" + runtime.GOARCH)
-			if available && (!artifactAvailable || artifact.Image != auditedDockerImage || !dockerDigestPattern.MatchString(artifact.Digest)) {
-				available, reasonCode, reason = false, "DOCKER_PLATFORM_UNSUPPORTED", "The reviewed DeepSeek Harness image does not include this CPU architecture."
+	items := make([]Template, 0, len(m.catalog.templates))
+	for _, definition := range m.catalog.templates {
+		available, reasonCode, reason := true, "", ""
+		if definition.Deployment == DeploymentContainer || definition.Deployment == DeploymentCompose {
+			available, reasonCode, reason = dockerAvailable, dockerReasonCode, dockerReason
+		}
+		specRaw := append([]byte(nil), definition.Spec...)
+		if definition.Deployment == DeploymentHost {
+			if !slices.Contains(definition.SupportedPlatforms, currentPlatformKey()) {
+				available, reasonCode, reason = false, "PLATFORM_UNSUPPORTED", "This template does not provide a release for the Environment platform."
+			} else if artifact, ok := auditedNodeRuntimeArtifact(currentPlatformKey()); !ok || validateVerifiedPackageArtifact(artifact, m.downloads.packageHTTPClient(), defaultNodePackageOrigin) != nil {
+				available, reasonCode, reason = false, "HOST_RUNTIME_UNAVAILABLE", "The managed Host runtime is unavailable for the Environment platform."
 			}
-			spec = deepSeekContainerTemplateSpec(artifact, artifactAvailable)
-		case WebtopUbuntuKDETemplateID, WebtopDebianXFCETemplateID:
-			artifact, artifactAvailable := auditedWebtopArtifact(definition.TemplateID, "linux-"+runtime.GOARCH)
-			if available && (!artifactAvailable || artifact.Image != webtopImage || !dockerDigestPattern.MatchString(artifact.Digest)) {
-				available, reasonCode, reason = false, "DOCKER_PLATFORM_UNSUPPORTED", "This LinuxServer Webtop desktop does not include the Environment CPU architecture."
-			}
-			if artifactAvailable {
-				spec = webtopTemplateSpec(definition.TemplateID, artifact)
+		}
+		if definition.Deployment == DeploymentContainer {
+			artifact, ok := definition.PlatformArtifacts["linux-"+runtime.GOARCH]
+			if !ok {
+				available, reasonCode, reason = false, "CONTAINER_PLATFORM_UNSUPPORTED", "This template does not provide a container image for the Environment CPU architecture."
 			} else {
-				spec = webtopTemplateSpec(definition.TemplateID, dockerArtifact{Image: webtopImage, Digest: "sha256:" + strings.Repeat("0", 64)})
+				if bytes.Count(specRaw, []byte(catalogArtifactPlaceholder)) != 1 {
+					return nil, fmt.Errorf("managed service template %q artifact placeholder is invalid", definition.TemplateID)
+				}
+				specRaw = bytes.ReplaceAll(specRaw, []byte(catalogArtifactPlaceholder), []byte(artifact))
 			}
+		}
+		var spec TemplateSpec
+		if err := decodeStrictJSON(specRaw, &spec); err != nil {
+			return nil, fmt.Errorf("decode managed service template %q: %w", definition.TemplateID, err)
+		}
+		if err := validateTemplateSpec(spec); err != nil && available {
+			return nil, fmt.Errorf("validate managed service template %q: %w", definition.TemplateID, err)
 		}
 		workspace, err := m.prepareDefaultWorkspace(definition.TemplateID)
 		if err != nil {
 			return nil, err
 		}
-		effectiveSpec, err := effectiveTemplateSpec(spec)
-		if err != nil {
-			return nil, err
+		var effectiveSpec *TemplateSpec
+		if available {
+			effective, err := effectiveTemplateSpec(spec)
+			if err != nil {
+				return nil, err
+			}
+			effectiveSpec = &effective
 		}
+		name, description := definition.TemplateID, ""
+		if localized, ok := definition.Localizations["en-US"]; ok {
+			name, description = localized.Name, localized.Description
+		}
+		icon := definition.Icon
 		dataLocation := ""
-		if definition.DataDirectory != "" {
-			dataLocation = filepath.Join(m.stateDir, definition.DataDirectory, "data")
+		if definition.Deployment == DeploymentHost {
+			dataLocation = filepath.Join(m.stateDir, "data", definition.ServiceFamilyID)
 		}
 		items = append(items, Template{
-			TemplateID: definition.TemplateID, ServiceFamilyID: definition.ServiceFamilyID, Name: definition.Name, Description: definition.Description,
-			Version: definition.Version, LocalizationKey: definition.LocalizationKey, BrandIcon: definition.BrandIcon, Notices: definition.Notices,
-			DeveloperPreview: definition.DeveloperPreview, DiskBytes: definition.DiskBytes, DataLocation: dataLocation,
-			SourceURL: definition.SourceURL, DockerSourceURL: definition.DockerSourceURL, Source: "builtin", Deployment: definition.Deployment,
-			ContainerMode: definition.ContainerMode, Revision: definition.Revision, Editable: false,
-			Duplicateable: completeBuiltInDuplicateSpec(spec),
-			Available:     available, ReasonCode: reasonCode, Reason: reason, SortOrder: definition.SortOrder,
+			TemplateID: definition.TemplateID, ServiceFamilyID: definition.ServiceFamilyID,
+			Name: name, Description: description, Localizations: cloneLocalizations(definition.Localizations), Icon: &icon,
+			Version: definition.Version, Notices: append([]TemplateNotice(nil), definition.Notices...),
+			DeveloperPreview: definition.DeveloperPreview, DiskBytes: definition.DiskBytes,
+			DataLocation: dataLocation,
+			SourceURL:    definition.SourceURL, DockerSourceURL: definition.DockerSourceURL,
+			Source: "builtin", Deployment: definition.Deployment, ContainerMode: definition.ContainerMode,
+			Revision: definition.Revision, Editable: false, Duplicateable: completeBuiltInDuplicateSpec(spec),
+			Available: available, ReasonCode: reasonCode, Reason: reason, SortOrder: definition.SortOrder,
 			Deployments:          []DeploymentAvailability{{Deployment: definition.Deployment, Available: available, ReasonCode: reasonCode, Reason: reason}},
-			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
-			HostLifecyclePlan: hostLifecyclePlan(spec),
-			DefaultAccessMode: defaultAccessMode(definition.DefaultAccessMode),
+			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: effectiveSpec,
+			HostLifecyclePlan: hostLifecyclePlan(spec), DefaultAccessMode: defaultAccessMode(definition.DefaultAccessMode),
 		})
 	}
 	return items, nil
 }
 
-func defaultAccessMode(value string) string {
-	if strings.TrimSpace(value) == pfregistry.AccessModeDesktopLoopback {
-		return pfregistry.AccessModeDesktopLoopback
+func cloneLocalizations(source map[string]TemplateLocalization) map[string]TemplateLocalization {
+	result := make(map[string]TemplateLocalization, len(source))
+	for locale, localized := range source {
+		copy := localized
+		copy.Notices = make(map[string]LocalizedTemplateNotice, len(localized.Notices))
+		for id, notice := range localized.Notices {
+			copy.Notices[id] = notice
+		}
+		result[locale] = copy
 	}
-	return pfregistry.AccessModeUnifiedProxy
+	return result
+}
+
+func defaultAccessMode(value string) string {
+	if strings.TrimSpace(value) == "desktop_loopback" {
+		return "desktop_loopback"
+	}
+	return "unified_proxy"
 }

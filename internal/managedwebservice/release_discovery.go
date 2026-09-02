@@ -154,8 +154,8 @@ func (m *Manager) discoverNPMCandidates(ctx context.Context, spec TemplateSpec, 
 		return nil, err
 	}
 	trust := "user_configured_registry"
-	if templateSource == "builtin" && npm.PackageName == "@deepseek-ai/dsh" && normalizedRegistryURL(npm.RegistryURL) == "https://registry.npmjs.org/" {
-		trust = "upstream_registry"
+	if templateSource == "builtin" {
+		trust = "catalog_reviewed_source"
 	}
 	result := make([]cachedReleaseCandidate, 0, len(items))
 	for _, item := range items {

@@ -37,37 +37,37 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 const builtIn: ServiceTemplatePresentation = {
-  id: 'deepseek-harness-host',
-  name: 'DeepSeek Harness',
-  description: 'Run DeepSeek Harness directly in the current Environment.',
+  id: 'example-host',
+  name: 'Example Service',
+  description: 'Run Example Service directly in the current Environment.',
   source: 'builtin',
   kind: 'host',
-  brandIcon: 'deepseek-harness',
+  icon: { media_type: 'image/svg+xml', data: '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="8"/></svg>', sha256: 'icon-sha' },
   deploymentLabel: 'Host',
   version: '0.1.1-rc.2',
   revision: 3,
   diskBytes: 536870912,
-  dataLocation: '/srv/redeven/deepseek/data',
-  defaultWorkspacePath: '/workspace/deepseek-harness',
+  dataLocation: '/srv/redeven/example/data',
+  defaultWorkspacePath: '/workspace/example-service',
   defaultAccessMode: 'desktop_loopback',
   runtimeSpec: {
-    schema_version: 2,
+    schema_version: 3,
     kind: 'host',
     endpoint: { scheme: 'http', path: '/', health_path: '/health', startup_timeout_sec: 45 },
-    host: { npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }, start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
+    host: { npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'service-cli' }, start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
   },
   hostLifecyclePlan: {
     schema_version: 1,
     driver: 'npm_host',
     runtime_bundle: 'node-24.19.0',
-    npm: { package_name: '@deepseek-ai/dsh', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' },
-    package: { reference: 'deepseek-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 536870912 },
+    npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'service-cli' },
+    package: { reference: 'example-runtime.tar.gz@sha256:1234', sha256: '1234', size_bytes: 536870912 },
     install: { ownership: 'redeven', steps: [
       { kind: 'prepare_verified_node_runtime', reference: 'node-24.19.0' },
-      { kind: 'install_npm_package_without_scripts', command_template: '<managed-node> <managed-npm-cli> install @deepseek-ai/dsh@0.1.1-rc.2 --package-lock=false --ignore-scripts' },
+      { kind: 'install_npm_package_without_scripts', command_template: '<managed-node> <managed-npm-cli> install @example/service-cli@0.1.1-rc.2 --package-lock=false --ignore-scripts' },
       { kind: 'remove_temporary_registry_credentials' },
       { kind: 'run_npm_lifecycle_scripts', command_template: '<managed-node> <managed-npm-cli> rebuild --dangerously-allow-all-scripts' },
-      { kind: 'verify_npm_release_identity', reference: '@deepseek-ai/dsh@0.1.1-rc.2' },
+      { kind: 'verify_npm_release_identity', reference: '@example/service-cli@0.1.1-rc.2' },
     ] },
     start: { ownership: 'template', steps: [{ kind: 'run_template_script', command_template: '<managed-executable> web --host <service-host> --port <service-port> --no-open' }] },
     stop: { ownership: 'redeven', steps: [{ kind: 'terminate_managed_process_group' }] },
@@ -146,11 +146,11 @@ describe('ServiceTemplateCatalog', () => {
 
     expect(host.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(2);
     expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(2);
-    expect(host.querySelector('[data-testid="deepseek-harness-logo"]')).toBeTruthy();
+    expect(host.querySelector('img[src^="data:image/svg+xml"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="service-template-list"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="service-template-details"]')).toBeTruthy();
-    expect(host.querySelector('[data-template-id="deepseek-harness-host"]')?.getAttribute('aria-selected')).toBe('true');
-    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('DeepSeek Harness');
+    expect(host.querySelector('[data-template-id="example-host"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Example Service');
     expect(host.textContent).toContain('Built-in templates');
     expect(host.textContent).toContain('Custom templates');
     expect(host.textContent).toContain('Host templates 2');
@@ -159,7 +159,7 @@ describe('ServiceTemplateCatalog', () => {
 
   it('keeps primary and secondary actions in the selected template detail pane', () => {
     const actions = mount();
-    const builtInCard = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-host"]')!;
+    const builtInCard = host.querySelector<HTMLElement>('[data-template-id="example-host"]')!;
     const customCard = host.querySelector<HTMLElement>('[data-template-id="custom-host"]')!;
 
     expect(builtInCard.querySelector('[data-testid="service-template-primary"]')).toBeNull();
@@ -173,9 +173,9 @@ describe('ServiceTemplateCatalog', () => {
     customItems.item(1).click();
     customItems.item(2).click();
 
-    expect(actions.onDeploy).toHaveBeenCalledWith('deepseek-harness-host');
+    expect(actions.onDeploy).toHaveBeenCalledWith('example-host');
     expect(actions.onDeploy).toHaveBeenCalledWith('custom-host');
-    expect(actions.onDuplicate).toHaveBeenCalledWith('deepseek-harness-host');
+    expect(actions.onDuplicate).toHaveBeenCalledWith('example-host');
     expect(actions.onEdit).toHaveBeenCalledWith('custom-host');
     expect(actions.onDelete).toHaveBeenCalledWith('custom-host');
     expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('More');
@@ -189,7 +189,7 @@ describe('ServiceTemplateCatalog', () => {
       kind: 'container',
       deploymentLabel: 'Container',
       runtimeSpec: {
-        schema_version: 2,
+        schema_version: 3,
         kind: 'container',
         endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/ready', startup_timeout_sec: 180 },
         container: {
@@ -220,8 +220,8 @@ describe('ServiceTemplateCatalog', () => {
     host.remove();
     mount({ templates: [builtIn] });
     const hostDetails = host.querySelector('[data-testid="service-template-details"]')!;
-    expect(hostDetails.textContent).toContain('deepseek-harness');
-    expect(hostDetails.textContent).toContain('<managed-node> <managed-npm-cli> install @deepseek-ai/dsh@0.1.1-rc.2 --package-lock=false --ignore-scripts');
+    expect(hostDetails.textContent).toContain('example-service');
+    expect(hostDetails.textContent).toContain('<managed-node> <managed-npm-cli> install @example/service-cli@0.1.1-rc.2 --package-lock=false --ignore-scripts');
     expect(hostDetails.textContent).toContain('<managed-executable> web --host <service-host> --port <service-port> --no-open');
     expect(hostDetails.textContent).toContain('Terminate the managed process group');
     expect(hostDetails.textContent).toContain('Remove managed data only when the user requests it');
@@ -243,7 +243,7 @@ describe('ServiceTemplateCatalog', () => {
 
   it('moves selection and the detail pane together with arrow keys', () => {
     mount();
-    const builtInCard = host.querySelector<HTMLButtonElement>('[data-template-id="deepseek-harness-host"]')!;
+    const builtInCard = host.querySelector<HTMLButtonElement>('[data-template-id="example-host"]')!;
     const customCard = host.querySelector<HTMLButtonElement>('[data-template-id="custom-host"]')!;
 
     builtInCard.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
@@ -258,7 +258,7 @@ describe('ServiceTemplateCatalog', () => {
     const installed = { ...custom, installed: true };
     mount({ templates: [unavailable, installed] });
 
-    const unavailableCard = host.querySelector<HTMLElement>('[data-template-id="deepseek-harness-host"]')!;
+    const unavailableCard = host.querySelector<HTMLElement>('[data-template-id="example-host"]')!;
     const installedCard = host.querySelector<HTMLElement>('[data-template-id="custom-host"]')!;
     expect(unavailableCard.className).not.toContain('opacity');
     expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Docker is unavailable.');

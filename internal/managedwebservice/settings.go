@@ -196,7 +196,7 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		secretDocument.Environment = secretValues
 		changed = append(changed, "compose")
 	default:
-		return reconfigureCandidate{}, serviceError("RECONFIGURE_UNSUPPORTED", "This legacy deployment must be duplicated as a custom host or container template before it can be reconfigured.", 409, false, nil)
+		return reconfigureCandidate{}, serviceError("RECONFIGURE_UNSUPPORTED", "This deployment cannot be reconfigured.", 409, false, nil)
 	}
 	encoded, digest, err := canonicalServiceConfiguration(configuration)
 	if err != nil {

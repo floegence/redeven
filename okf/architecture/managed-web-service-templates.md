@@ -1,94 +1,49 @@
 ---
-type: Product Contract
+type: Runtime Contract
 title: Managed Web Service Templates
-description: Discover, define, duplicate, and deploy Environment-local host, container, and Compose service definitions.
-tags: [web-services, templates, ui, containers, permissions]
-timestamp: 2026-08-31T00:00:00Z
-quality_exception: Unified template contract linking catalog interaction, definition identity, Runtime projections, persistence, permissions, and deployment admission.
+description: Consume one signed-off versioned service catalog while keeping template content outside Redeven.
+tags: [architecture, templates, managed-services, localization, supply-chain]
+timestamp: 2026-09-02T00:00:00Z
 ---
 # Summary
 
-- Authority: Redeven owns the Environment-local template catalog and identities; [Managed Web Services](managed-web-services.md) owns deployed snapshots and runtime behavior.
-- Outcome: one right-side drawer supports browsing, editing, duplication, and safe deployment of host and container definitions.
-- Invariants: built-ins are immutable, custom definitions are revisioned, duplication creates a new family, installed state uses exact template identity, deployments use immutable snapshots, and release choice remains separate from template revision.
-- Failure boundary: malformed, unsafe, unavailable, or conflicting definitions fail before lifecycle work; installed definitions cannot be deleted.
+- Authority: `github.com/floegence/redeven-service-templates` owns built-in template identity, specification, releases, localization, icons, and service-specific third-party notices.
+- Outcome: Redeven embeds one immutable, reproducible, digest-verified bundle that works offline and maps into generic Template responses.
+- Invariants: all ten published locales are explicit, assets are passive SVG bytes, platform artifacts are exact, and catalog failure prevents Runtime startup.
+- Failure boundary: missing, malformed, mismatched, unsupported, or future bundle content is rejected without falling back to local definitions.
 
 # Contract
 
-## Interaction
+## Published bundle
 
-The Web Services header provides one **Service templates** action. It opens a large right-side drawer and replaces the separate one-click-deployment strip. The catalog uses one sticky toolbar for a low-contrast category switcher with counts, search, and a permission-aware create menu. Host and container definitions are distinct categories; built-in and custom definitions are separate groups inside each category. Managed and manually registered services remain in one responsive main grid.
+The template repository publishes a versioned Go module. Each template lives at `templates/<template-id>/template.json`, with locale files under `locales/<locale>.json` and passive assets under `assets/`. Its reproducible schema-v1 bundle includes:
 
-The catalog presents each group as one compact list: every row contains identity, one-line summary, deployment metadata, and a concise state. Installation uses only its status glyph and text; it never colors the whole row. A neutral selected-row treatment owns emphasis and opens the adjacent detail pane. That pane shows the Runtime-projected effective definition rather than repeating the row: containers expose the image source, endpoint, process, environment names, mounts, resources, network, and security posture; host definitions expose their endpoint and authoritative managed lifecycle plan; Compose definitions expose their main service and definition summary. The host plan identifies the real driver, managed Node bundle or artifact, safe package identity, integrity, and ordered install, start, stop, and uninstall work. Runtime-owned command templates are exact, while user-authored script steps use safe placeholders and remain editable only through the original template fields. Common revision, workspace, data, source, release entry, availability, and actions remain concise and use flat divided groups. Long technical values wrap inside the pane. With short details, the action row follows the final status without artificial empty space. When details exceed the drawer's actual remaining height, only the detail body scrolls and the action row remains fully visible at the drawer bottom; it never extends beyond the panel. Renderer code never infers omitted Runtime defaults or parses Compose YAML into a competing model.
+- template and service-family identity, revision, deployment kind, and TemplateSpec v3;
+- npm or OCI source, exact reviewed release identity, platform matrix, access mode, resource requirements, and discovery policy;
+- localized name, description, notices, source declaration, and icon metadata for every shipped locale.
 
-This single action owner keeps interactive controls out of selectable rows and makes keyboard arrow navigation deterministic. Host and container category changes keep one stable content stage and present the next surface with one low-amplitude opacity settle from near-full visibility. Content position and size never animate, there is no blank intermediate frame, and reduced-motion preferences remove the settle. At narrow widths the detail pane moves below the list and action targets remain at least 44 px high; once the stacked detail enters the viewport, its action row stays attached to the drawer bottom while long content scrolls.
+The Go package exports only read-only bundle bytes, module version, manifest, and SHA-256. It contains no driver or migration code. Service-specific license and provenance statements remain in that repository; Redeven's root notice declares only the module dependency and generic Host runtime it downloads.
 
-A reviewed built-in uses its official upstream application mark when an attributable asset is available; other definitions fall back to a neutral host, container, or Compose kind icon. Unavailable definitions remain fully readable. Installed state joins a catalog item to its service by exact `template_id`, never by family or deployment inference. An installed template's More menu reuses the main service row's one Open transaction and Forward Session route. Open is enabled only while that exact service is running, has no active operation, is executable by the user, and has an available access-mode capability; otherwise the disabled item gives one concise reason and never starts the service. Catalog menus and child dialogs stay above the drawer and preserve their actions. The catalog has no redundant footer or cancel action and closes through the drawer close action, Escape, or a click on the backdrop outside the drawer. Deployment and editor views keep their fixed operation footer, and the deployment view reuses the selected service identity before workspace, deployment, data, and operation information. Interactive controls use pointer or disabled cursors while text-entry fields retain the text cursor.
+## Redeven mapping
 
-Built-in identity, brand, notices, runtime profile, and immutable artifacts come from one Runtime-owned definition registry; Renderer code never branches on template identifiers. Required notice revisions are enforced by the Runtime, not by a checkbox alone. Changing an acknowledgement updates only consent and action availability; notice height, following content position, and drawer scroll position remain fixed.
+Catalog loading completes before Registry and Manager startup. Validation covers the outer bundle, manifest, module version, canonical digest, unique IDs and families, schema versions, strict TemplateSpec decoding, supported deployment kinds, HTTPS sources, OCI platform digests, locale completeness, notice references, and SVG digest and safety constraints.
 
-Each template exposes one explicit `default_workspace_path`. Redeven prepares `<writable-root>/Redeven/workspaces/managed-services/<template-id>`. The generated suffix has no spaces and uses the validated exact template identity, so the DeepSeek host and container defaults are respectively `deepseek-harness-host` and `deepseek-harness-container`. Deployment selects this directory instead of inferring the first filesystem root. Users may choose another writable directory, including the same directory for two templates, restore the recommended path, and see whether service access is isolated or broader. The whole home directory is never an accidental default. Data location is a separate Runtime projection: the host card may expose its real Redeven-owned directory, while a container whose data is held by a Docker-managed volume does not invent a host filesystem path.
+The mapper does not reinterpret application commands or manufacture service presentation. API responses carry localized bundle content and verified icon resource bytes; they no longer expose `localization_key` or a fixed brand enum. Renderer selects the requested locale with `en-US` fallback inside the already verified bundle and renders SVG only as an image data resource, never as arbitrary HTML.
 
-Container definitions remain discoverable but disabled when Docker is unavailable, the Environment is itself in a container, workspace mounting is unavailable, or Docker Compose is missing. The selected detail explains the exact reason. DeepSeek Harness is represented by separate reviewed host and community-container definitions with exact template and family identities; both may be installed together, while each definition remains limited to one instance. The container definition links its source and is never described as an official DeepSeek image.
+Built-in installed state is matched by exact template ID. Custom templates remain Registry-owned user content, use their entered name and description, and are marked as user-configured sources. Both built-in and custom templates enter the same generic Host, Container, or Compose lifecycle after validation.
 
-Users with read permission can inspect templates. Users with Web Service read, write, and execute permission can create, edit, duplicate, delete, or deploy custom templates. The drawer editor groups metadata, Web endpoint, and runtime settings; HTTP/HTTPS is a semantic segmented choice, numeric ports are constrained controls, required fields carry a visible marker, and optional lifecycle or container-start settings stay in expandable sections. A persisted host definition shows the same read-only Runtime plan as catalog details without creating a second editable command state. The required start script remains the sole start-command input. Lifecycle Hooks label an install script as an after-install Hook when a managed package exists, otherwise as the installation owner; stop and uninstall scripts are explicitly before-stop and before-uninstall Hooks. Empty Hook fields say that no additional command is configured. A new unsaved host definition says that the Runtime plan will be validated and published after save rather than guessing it in Renderer. Every field supplies a concrete example or concise usage guidance. One deployment-aware validator owns client-side errors, keeps guidance geometry stable, focuses the first invalid field, and never replaces the authoritative Runtime validation. Editing updates the same mounted form instead of remounting it on each keystroke. User-visible copy is localized in every published locale.
+## Change contract
 
-## Definition and duplication
-
-A definition contains display metadata, a Web endpoint, optional input parameters, and exactly one kind:
-
-- Host: one required foreground start script; optional installation, before-stop, and before-uninstall Hooks; validated declarative environment that cannot override reserved `REDEVEN_*` variables; and either an optional HTTPS archive with exact size, SHA-256, and safe relative executable path or one declarative npm package. The npm form requires package name, exact SemVer, absolute HTTPS Registry URL, executable, and an optional auth-token parameter bound to a Secret input. When a managed archive or npm package exists, the installation script is an after-install Hook rather than the package installer.
-- Single container: one image, one container Web port, optional entrypoint, arguments, environment, user, resource bounds, and workspace, named-volume, bind, or tmpfs mounts.
-- Compose: one inline document, one entry service, and one container Web port.
-
-Host scripts are trusted executable user content and therefore require execute authority. Redeven never asks for or stores sudo credentials. The template editor validates the initial topology, immutable images, and managed Web endpoint. Installed custom instances may add typed per-service command, environment, storage, resource, network, and security overrides through [Managed Web Services](managed-web-services.md), but cannot add, remove, or rename a Compose service or replace a template-owned image. Every expanded capability is revalidated as a Runtime Resource Plan; no raw Docker or Compose CLI is accepted.
-
-Every custom edit increments its revision. Duplicate creates an editable custom template at revision 1, records source template and revision, and assigns a new service-family identity. It copies no instance, operation, data, runtime identity, configuration, or secret. Original and duplicate can therefore be installed together. A built-in can be duplicated only when its release-locked runtime bundle or exact image digest is present; an incomplete release manifest never creates a broken copy.
-
-The optional container `runtime_profile` defaults to the strict restricted policy. The `interactive_desktop` profile is reserved for the exact audited [LinuxServer Webtop](linuxserver-webtop.md) image digests. A duplicate may retain that profile only while it keeps one of those exact images; it is still a custom definition, loses built-in/audited identity in presentation, and remains subject to instance Resource Plan confirmation.
-
-An installed service retains its canonical definition and SHA-256. Editing its source affects only a future deployment. Deleting a definition is blocked while that definition owns an installed service.
-
-## Persistence and API
-
-Registry schema v3 adds `managed_web_service_templates` and idempotent template request records. A custom record stores metadata, deployment kind, revision, canonical JSON, SHA-256, duplicate lineage, unique service-family identity, and timestamps. Reads verify the SHA-256 of the exact stored JSON bytes before strict typed decoding and policy validation; decoded structures are not reserialized into a competing identity. Secrets are never part of template records.
-
-Template routes are:
-
-- `GET|POST /_redeven_proxy/api/managed-web-service-templates`
-- `POST /_redeven_proxy/api/managed-web-service-templates/validate`
-- `GET|PUT|DELETE /_redeven_proxy/api/managed-web-service-templates/{id}`
-- `POST /_redeven_proxy/api/managed-web-service-templates/{id}/duplicate`
-
-Reads require Web Service read permission; mutations require read, write, and execute. Bodies are strict and bounded. Create and duplicate requests use opaque request identities and fingerprints so matching retries return the original definition and conflicting reuse fails. Audit events record only bounded name, identifier, kind, revision, and action—not definitions or script contents.
-
-Catalog responses include declarative `brand_icon`, `notices`, a read-only `effective_spec`, and schema-v1 `host_lifecycle_plan` for host definitions. The lifecycle plan is derived at query time from the actual driver and validated definition. It is never stored in template JSON, included in a template SHA-256, copied into an installed snapshot, or accepted from Renderer. Its package reference strips URL query data and private directories; user-authored script steps expose only fixed safe placeholders, never script contents, secrets, or private paths. The effective specification is a detached projection of the validated raw `spec` after the same container defaults used by lifecycle execution are applied; the raw specification remains the sole editor, duplication, snapshot, and identity input.
-
-TemplateSpec v3 separates deployment policy from release identity and adds validated Host environment declarations to the v2 npm and OCI model. Host npm and single-container definitions expose an explicit **Versions** action backed by the direct source contract in [Managed Service release discovery and updates](managed-service-release-discovery.md); Compose does not. The result lists all versions or tags and keeps unavailable, deprecated, special, or platform-incompatible candidates visible with a stable disabled reason. Install requests require one exact catalog `template_id` and optionally one opaque `target_release_id`; the shared DeepSeek product identity and deployment kind are not aliases. DeepSeek Host revision 4 uses the generic npm Host declaration, preserves its real managed data root through explicit environment, and keeps `web --host … --port … --no-open` as its single start script. Exact historical v2 custom documents remain readable without byte or digest rewriting; an explicit edit or duplication writes v3 while preserving all user Hooks and existing environment.
+A catalog change is released upstream first, then Redeven upgrades to that published module version without `replace`, `go.work`, local paths, or copied assets. Bundle schema evolution belongs to the template module; Redeven must explicitly adopt and validate a new schema before it can load it. Runtime persistence migration remains a separate Redeven-owned concern and cannot be hidden in catalog decoding.
 
 # Boundaries
 
-Template presentation and defaults do not expand the Environment filesystem scope, grant a service access to the whole home directory, or make a custom path safe by implication. A custom workspace remains an explicit user choice and must pass the same writable-root validation as every deployment. Templates do not manage application credentials or cross-Environment scheduling. Additional listeners, host paths, devices, namespaces, sockets, and container privileges are permitted only after duplication to a custom template and the installed-service Admin-confirmed Resource Plan; built-in identity never survives that duplication.
+Redeven does not keep a compatibility directory, template fingerprints, retired paths, container names, data-volume markers, process rules, service-specific localizations, or application assets. The catalog does not execute services, own Registry records, choose user releases silently, or bypass Redeven permission and resource policies.
 
 # Evidence
 
-- `redeven:internal/managedwebservice/templates.go` - Validates definitions, revisions, hashes, duplicate lineage, independent families, parameters, and availability.
-- `redeven:internal/managedwebservice/configuration.go` - Owns the Runtime container defaults reused by the read-only catalog effective specification.
-- `redeven:internal/managedwebservice/host_lifecycle_plan.go` - Derives the non-persistent host lifecycle plan and safe npm and DeepSeek command templates.
-- `redeven:internal/managedwebservice/release_discovery.go` - Resolves TemplateSpec v3 npm and OCI definitions into scoped direct-source candidates.
-- `redeven:internal/managedwebservice/builtin_templates.go` - Owns the single built-in definition registry, exact template and family identities, default workspaces, pinned artifacts, declarative brands and notices, and reserved runtime profile.
-- `redeven:internal/managedwebservice/types.go` - Defines public TemplateSpec v3, Host environment, npm Host, OCI policy, candidate, endpoint, container, Compose, and duplicate contracts.
-- `redeven:internal/managedwebservice/manager.go` - Prepares one explicit dedicated default workspace per template identity and keeps writable filesystem roots as user-selectable scope only.
-- `redeven:internal/portforward/registry/managed.go` - Persists templates, request fingerprints, lineage, revisions, and in-use deletion protection.
-- `redeven:internal/codeapp/appserver/managed_web_services.go` - Routes template APIs and applies permissions, body limits, stable errors, and bounded audit details.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Owns template data, directory-picker deployment choice, guided editor state, and the unified service grid.
-- `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx` - Owns the catalog selection model, toolbar, compact grouped list, keyboard navigation, selected-template details, and action placement.
-- `redeven:internal/envapp/ui_src/src/ui/icons/DeepSeekHarnessLogo.tsx` - Adapts the official MIT-licensed DeepSeek Harness fish mark for theme-aware catalog identity.
-- `redeven:internal/envapp/ui_src/src/ui/pages/service-template-center.css` - Defines token-based compact rows, neutral selection, focus-compatible controls, responsive details, and reduced-motion behavior.
-- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.tsx` - Owns drawer-local floating surfaces so catalog menus and child dialogs remain interactive above the panel.
-- `redeven:internal/managedwebservice/templates_test.go` - Covers independent duplication, immutable hash identity, Runtime lifecycle projection, script and URL redaction, historical custom definitions, and Compose host-escape rejection.
-- `redeven:internal/codeapp/appserver/managed_web_services_test.go` - Covers template route authority and duplicate API behavior.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx` - Covers discovery, container unavailability, duplication, unified cards, and uninstall interaction.
-- `redeven:internal/managedwebservice/webtop_test.go` - Covers Webtop identity, ordering, independent families, immutable digests, notices, runtime policy, duplication, and exact-image profile admission.
-- `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.test.tsx` - Covers grouping, selection, keyboard movement, counts, state presentation, permissions, search, and selected-template actions.
-- `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.browser.test.tsx` - Verifies list density, installed-state neutrality, selection contrast, short and long detail action placement, drawer-edge containment, narrow layouts, floating layers, and outside-click dismissal in Chromium.
+- `redeven:go.mod` - Pins the released catalog module without local dependency wiring.
+- `redeven:internal/managedwebservice/builtin_templates.go` - Verifies and maps bundle records into generic templates.
+- `redeven:internal/managedwebservice/types.go` - Defines current TemplateSpec, localization, icon, and lifecycle API shapes.
+- `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx` - Presents localized verified content through the common catalog UI.
+- `redeven:scripts/check_managed_service_catalog_boundary.mjs` - Enforces repository ownership of service-specific content.

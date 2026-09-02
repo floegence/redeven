@@ -150,12 +150,8 @@ func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSession
 		if forward.TargetURL != targetURL {
 			continue
 		}
-		// Older managed-service builds persisted underscore-delimited IDs. Those
-		// identities cannot be used in the DNS-based protected route, so keep the
-		// record untouched and open its loopback target through a temporary,
-		// route-safe alias instead.
 		if !IsValidForwardID(forward.ForwardID) {
-			continue
+			return nil, errors.New("saved forward_id is invalid")
 		}
 		if err := s.reg.TouchLastOpened(ctx, forward.ForwardID); err != nil {
 			return nil, err

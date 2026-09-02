@@ -8,19 +8,6 @@ import (
 )
 
 const (
-	DeepSeekHarnessProductID           = "deepseek-harness"
-	DeepSeekHarnessHostTemplateID      = "deepseek-harness-host"
-	DeepSeekHarnessContainerTemplateID = "deepseek-harness-container"
-	DeepSeekHarnessVersion             = "0.1.1-rc.2"
-	WebtopUbuntuKDETemplateID          = "linuxserver-webtop-ubuntu-kde"
-	WebtopDebianXFCETemplateID         = "linuxserver-webtop-debian-xfce"
-)
-
-const (
-	BrandIconDeepSeekHarness = "deepseek-harness"
-	BrandIconUbuntu          = "ubuntu"
-	BrandIconDebian          = "debian"
-
 	ContainerRuntimeProfileRestricted         = "restricted"
 	ContainerRuntimeProfileInteractiveDesktop = "interactive_desktop"
 )
@@ -40,6 +27,7 @@ const (
 	ActionStart        OperationAction = "start"
 	ActionStop         OperationAction = "stop"
 	ActionRestart      OperationAction = "restart"
+	ActionRetry        OperationAction = "retry"
 	ActionRetryInstall OperationAction = "retry_install"
 	ActionUpdate       OperationAction = "update"
 	ActionReconfigure  OperationAction = "reconfigure"
@@ -50,9 +38,24 @@ type TemplateNotice struct {
 	ID                      string `json:"id"`
 	Revision                int64  `json:"revision"`
 	Severity                string `json:"severity"`
-	TitleKey                string `json:"title_key"`
-	DescriptionKey          string `json:"description_key"`
 	AcknowledgementRequired bool   `json:"acknowledgement_required"`
+}
+
+type LocalizedTemplateNotice struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+type TemplateLocalization struct {
+	Name        string                             `json:"name"`
+	Description string                             `json:"description"`
+	Notices     map[string]LocalizedTemplateNotice `json:"notices,omitempty"`
+}
+
+type TemplateIcon struct {
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+	SHA256    string `json:"sha256"`
 }
 
 type DeploymentAvailability struct {
@@ -98,38 +101,38 @@ type HostLifecyclePlan struct {
 }
 
 type Template struct {
-	TemplateID            string                   `json:"template_id"`
-	Name                  string                   `json:"name"`
-	Description           string                   `json:"description"`
-	Version               string                   `json:"version"`
-	DeveloperPreview      bool                     `json:"developer_preview"`
-	DiskBytes             int64                    `json:"disk_bytes"`
-	DataLocation          string                   `json:"data_location"`
-	SourceURL             string                   `json:"source_url"`
-	DockerSourceURL       string                   `json:"docker_source_url"`
-	BrandIcon             string                   `json:"brand_icon,omitempty"`
-	LocalizationKey       string                   `json:"localization_key,omitempty"`
-	Notices               []TemplateNotice         `json:"notices,omitempty"`
-	Deployments           []DeploymentAvailability `json:"deployments"`
-	DefaultWorkspacePath  string                   `json:"default_workspace_path"`
-	DefaultAccessMode     string                   `json:"default_access_mode"`
-	WorkspaceRoots        []WorkspaceRoot          `json:"workspace_roots"`
-	Source                string                   `json:"source"`
-	Deployment            Deployment               `json:"deployment"`
-	ContainerMode         string                   `json:"container_mode,omitempty"`
-	Revision              int64                    `json:"revision"`
-	Editable              bool                     `json:"editable"`
-	Duplicateable         bool                     `json:"duplicateable"`
-	DerivedFromTemplateID string                   `json:"derived_from_template_id,omitempty"`
-	DerivedFromRevision   int64                    `json:"derived_from_revision,omitempty"`
-	ServiceFamilyID       string                   `json:"service_family_id"`
-	Available             bool                     `json:"available"`
-	ReasonCode            string                   `json:"reason_code,omitempty"`
-	Reason                string                   `json:"reason,omitempty"`
-	Spec                  *TemplateSpec            `json:"spec,omitempty"`
-	EffectiveSpec         *TemplateSpec            `json:"effective_spec,omitempty"`
-	HostLifecyclePlan     *HostLifecyclePlan       `json:"host_lifecycle_plan,omitempty"`
-	SortOrder             int                      `json:"-"`
+	TemplateID            string                          `json:"template_id"`
+	Name                  string                          `json:"name"`
+	Description           string                          `json:"description"`
+	Version               string                          `json:"version"`
+	DeveloperPreview      bool                            `json:"developer_preview"`
+	DiskBytes             int64                           `json:"disk_bytes"`
+	DataLocation          string                          `json:"data_location"`
+	SourceURL             string                          `json:"source_url"`
+	DockerSourceURL       string                          `json:"docker_source_url"`
+	Localizations         map[string]TemplateLocalization `json:"localizations,omitempty"`
+	Icon                  *TemplateIcon                   `json:"icon,omitempty"`
+	Notices               []TemplateNotice                `json:"notices,omitempty"`
+	Deployments           []DeploymentAvailability        `json:"deployments"`
+	DefaultWorkspacePath  string                          `json:"default_workspace_path"`
+	DefaultAccessMode     string                          `json:"default_access_mode"`
+	WorkspaceRoots        []WorkspaceRoot                 `json:"workspace_roots"`
+	Source                string                          `json:"source"`
+	Deployment            Deployment                      `json:"deployment"`
+	ContainerMode         string                          `json:"container_mode,omitempty"`
+	Revision              int64                           `json:"revision"`
+	Editable              bool                            `json:"editable"`
+	Duplicateable         bool                            `json:"duplicateable"`
+	DerivedFromTemplateID string                          `json:"derived_from_template_id,omitempty"`
+	DerivedFromRevision   int64                           `json:"derived_from_revision,omitempty"`
+	ServiceFamilyID       string                          `json:"service_family_id"`
+	Available             bool                            `json:"available"`
+	ReasonCode            string                          `json:"reason_code,omitempty"`
+	Reason                string                          `json:"reason,omitempty"`
+	Spec                  *TemplateSpec                   `json:"spec,omitempty"`
+	EffectiveSpec         *TemplateSpec                   `json:"effective_spec,omitempty"`
+	HostLifecyclePlan     *HostLifecyclePlan              `json:"host_lifecycle_plan,omitempty"`
+	SortOrder             int                             `json:"-"`
 }
 
 type TemplateParameter struct {
@@ -174,9 +177,6 @@ type HostTemplateSpec struct {
 	Environment     map[string]string   `json:"environment,omitempty"`
 	Artifact        *HostArtifactSpec   `json:"artifact,omitempty"`
 	NPM             *NPMHostPackageSpec `json:"npm,omitempty"`
-	// RuntimeBundle is decoded only so v7 data can be migrated to the v2 npm
-	// contract. New v2 templates must not use it.
-	RuntimeBundle string `json:"runtime_bundle,omitempty"`
 }
 
 type ContainerMountSpec struct {
@@ -444,21 +444,34 @@ type CreateResult struct {
 
 type ServiceView struct {
 	pfregistry.ManagedService
-	Name               string                       `json:"name"`
-	Description        string                       `json:"description,omitempty"`
-	BrandIcon          string                       `json:"brand_icon,omitempty"`
-	LocalizationKey    string                       `json:"localization_key,omitempty"`
-	UpdateAvailable    bool                         `json:"update_available"`
-	TargetRevision     int64                        `json:"target_revision,omitempty"`
-	TargetVersion      string                       `json:"target_version,omitempty"`
-	UpdateNotices      []TemplateNotice             `json:"update_notices,omitempty"`
-	ActiveOperation    *pfregistry.ManagedOperation `json:"active_operation,omitempty"`
-	LastFailure        *ServiceFailure              `json:"last_failure,omitempty"`
-	AccessMode         string                       `json:"access_mode"`
-	ContainerResources []ContainerResourceLink      `json:"container_resources,omitempty"`
-	ReleaseIdentity    *ReleaseIdentity             `json:"release_identity,omitempty"`
-	ReleaseCheckedAt   int64                        `json:"release_checked_at_unix_ms,omitempty"`
-	ReleaseCheckError  string                       `json:"release_check_error_code,omitempty"`
+	Name               string                          `json:"name"`
+	Description        string                          `json:"description,omitempty"`
+	Localizations      map[string]TemplateLocalization `json:"localizations,omitempty"`
+	Icon               *TemplateIcon                   `json:"icon,omitempty"`
+	UpdateAvailable    bool                            `json:"update_available"`
+	TargetRevision     int64                           `json:"target_revision,omitempty"`
+	TargetVersion      string                          `json:"target_version,omitempty"`
+	UpdateNotices      []TemplateNotice                `json:"update_notices,omitempty"`
+	ActiveOperation    *pfregistry.ManagedOperation    `json:"active_operation,omitempty"`
+	LastFailure        *ServiceFailure                 `json:"last_failure,omitempty"`
+	AccessMode         string                          `json:"access_mode"`
+	ContainerResources []ContainerResourceLink         `json:"container_resources,omitempty"`
+	ReleaseIdentity    *ReleaseIdentity                `json:"release_identity,omitempty"`
+	ReleaseCheckedAt   int64                           `json:"release_checked_at_unix_ms,omitempty"`
+	ReleaseCheckError  string                          `json:"release_check_error_code,omitempty"`
+	Actions            ServiceActions                  `json:"actions"`
+}
+
+type ActionCapability struct {
+	Available  bool   `json:"available"`
+	ReasonCode string `json:"reason_code,omitempty"`
+}
+
+type ServiceActions struct {
+	Start   ActionCapability `json:"start"`
+	Stop    ActionCapability `json:"stop"`
+	Restart ActionCapability `json:"restart"`
+	Retry   ActionCapability `json:"retry"`
 }
 
 type ServiceFailure struct {

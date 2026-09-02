@@ -34,7 +34,7 @@ var (
 
 func (m *Manager) Template(ctx context.Context, templateID string) (*Template, error) {
 	templateID = strings.TrimSpace(templateID)
-	if !isBuiltInTemplateID(templateID) {
+	if !m.isBuiltInTemplateID(templateID) {
 		if m.registry == nil {
 			return nil, serviceError("TEMPLATE_NOT_FOUND", "The managed Web Service template was not found.", 404, false, nil)
 		}
@@ -121,7 +121,7 @@ func (m *Manager) UpdateTemplate(ctx context.Context, templateID string, req Tem
 		return nil, err
 	}
 	if record == nil {
-		if isBuiltInTemplateID(templateID) {
+		if m.isBuiltInTemplateID(templateID) {
 			return nil, serviceError("BUILTIN_TEMPLATE_IMMUTABLE", "Built-in templates cannot be edited. Duplicate the template first.", 409, false, nil)
 		}
 		return nil, serviceError("TEMPLATE_NOT_FOUND", "The managed Web Service template was not found.", 404, false, nil)
@@ -140,7 +140,7 @@ func (m *Manager) UpdateTemplate(ctx context.Context, templateID string, req Tem
 }
 
 func (m *Manager) DeleteTemplate(ctx context.Context, templateID string) error {
-	if isBuiltInTemplateID(templateID) {
+	if m.isBuiltInTemplateID(templateID) {
 		return serviceError("BUILTIN_TEMPLATE_IMMUTABLE", "Built-in templates cannot be deleted.", 409, false, nil)
 	}
 	if err := m.registry.DeleteManagedTemplate(ctx, templateID); err != nil {
@@ -287,23 +287,10 @@ func validateTemplateWriteRequest(req TemplateWriteRequest) error {
 	if len(req.Description) > 1000 || len(req.Version) > 80 {
 		return serviceError("TEMPLATE_METADATA_INVALID", "Template description or version is too long.", 400, false, nil)
 	}
-	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop && !reviewedInteractiveDesktopImage(req.Spec.Container.Image) {
+	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
 		return serviceError("TEMPLATE_RUNTIME_PROFILE_RESERVED", "The interactive desktop runtime profile is reserved for reviewed Redeven templates.", 400, false, nil)
 	}
 	return validateTemplateSpec(req.Spec)
-}
-
-func reviewedInteractiveDesktopImage(reference string) bool {
-	reference = strings.TrimSpace(reference)
-	for _, templateID := range []string{WebtopUbuntuKDETemplateID, WebtopDebianXFCETemplateID} {
-		for _, platform := range []string{"linux-amd64", "linux-arm64"} {
-			artifact, ok := auditedWebtopArtifact(templateID, platform)
-			if ok && reference == artifact.Image+"@"+artifact.Digest {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func validateTemplateSpec(spec TemplateSpec) error {
@@ -365,8 +352,8 @@ func validateTemplateSpec(spec TemplateSpec) error {
 		if spec.Host.NPM != nil {
 			managedInstallers++
 		}
-		if spec.Host.RuntimeBundle != "" || managedInstallers > 1 {
-			return serviceError("TEMPLATE_HOST_PACKAGE_INVALID", "Host templates may declare one artifact or npm package; legacy Runtime Bundles are not accepted by the current schema.", 400, false, nil)
+		if managedInstallers > 1 {
+			return serviceError("TEMPLATE_HOST_PACKAGE_INVALID", "Host templates may declare one artifact or npm package.", 400, false, nil)
 		}
 		if spec.Host.NPM != nil {
 			if err := validateNPMHostPackage(*spec.Host.NPM, spec.Parameters); err != nil {
@@ -390,6 +377,9 @@ func validateTemplateSpec(spec TemplateSpec) error {
 				(mount.Type == "bind" && !filepath.IsAbs(mount.Source)) ||
 				strings.Contains(strings.ToLower(mount.Target), "docker.sock") || strings.Contains(strings.ToLower(mount.Source), "docker.sock") {
 				return serviceError("TEMPLATE_MOUNT_REJECTED", "Container mounts must use absolute targets and cannot expose the container engine socket.", 400, false, nil)
+			}
+			if mount.Type == "volume" && !managedWorkspaceIdentityPattern.MatchString(strings.TrimSpace(mount.ResourceID)) {
+				return serviceError("TEMPLATE_RESOURCE_ID_INVALID", "Managed container volumes require a stable resource identity.", 400, false, nil)
 			}
 		}
 		switch spec.Container.RuntimeProfile {
@@ -599,12 +589,6 @@ func verifiedTemplateSpec(raw, expectedDigest string) (TemplateSpec, error) {
 }
 
 func validatePersistedTemplateSpec(spec TemplateSpec) error {
-	if spec.SchemaVersion == 2 {
-		if spec.Host != nil && len(spec.Host.Environment) != 0 {
-			return serviceError("TEMPLATE_SCHEMA_UNSUPPORTED", "TemplateSpec v2 cannot contain Host environment declarations.", 400, false, nil)
-		}
-		spec.SchemaVersion = templateSpecSchemaVersion
-	}
 	return validateTemplateSpec(spec)
 }
 
@@ -621,8 +605,8 @@ func templateRegistryError(err error) error {
 	}
 }
 
-func isBuiltInTemplateID(templateID string) bool {
-	_, ok := builtInTemplateDefinitionByID(templateID)
+func (m *Manager) isBuiltInTemplateID(templateID string) bool {
+	_, ok := m.catalog.definition(templateID)
 	return ok
 }
 

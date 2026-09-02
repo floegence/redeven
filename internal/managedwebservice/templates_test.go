@@ -11,8 +11,45 @@ import (
 	"strings"
 	"testing"
 
+	servicetemplates "github.com/floegence/redeven-service-templates"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
+
+func TestBuiltinCatalogRejectsUntrustedOrUnsupportedBundle(t *testing.T) {
+	t.Parallel()
+	raw := servicetemplates.Bundle()
+	validDigest := sha256.Sum256(raw)
+	tests := []struct {
+		name    string
+		raw     []byte
+		version string
+		digest  string
+	}{
+		{name: "digest mismatch", raw: raw, version: servicetemplates.Version, digest: strings.Repeat("0", 64)},
+		{name: "future catalog version", raw: raw, version: "v999.0.0", digest: hex.EncodeToString(validDigest[:])},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := loadBuiltinCatalog(test.raw, test.version, test.digest); err == nil {
+				t.Fatal("untrusted catalog was accepted")
+			}
+		})
+	}
+
+	var drifted map[string]any
+	if err := json.Unmarshal(raw, &drifted); err != nil {
+		t.Fatal(err)
+	}
+	drifted["unexpected"] = true
+	driftedRaw, err := json.Marshal(drifted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driftedDigest := sha256.Sum256(driftedRaw)
+	if _, err := loadBuiltinCatalog(driftedRaw, servicetemplates.Version, hex.EncodeToString(driftedDigest[:])); err == nil {
+		t.Fatal("schema-drifted catalog was accepted")
+	}
+}
 
 func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 	t.Parallel()
@@ -66,12 +103,18 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 
 func TestHostLifecyclePlanUsesRuntimeCommandsWithoutPersistingProjection(t *testing.T) {
 	t.Parallel()
-	spec := deepSeekHostTemplateSpec()
+	spec := TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"},
+		Host: &HostTemplateSpec{
+			StartScript: `exec "$REDEVEN_INSTALL_EXECUTABLE" serve --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open`,
+			NPM:         &NPMHostPackageSpec{PackageName: "example-service", Version: "1.2.3", RegistryURL: "https://registry.npmjs.org/", Executable: "example-service"},
+		},
+	}
 	plan := hostLifecyclePlan(spec)
 	if plan == nil || plan.SchemaVersion != hostLifecyclePlanSchemaVersion || plan.Driver != "npm_host" || plan.RuntimeBundle != "node-"+nodeVersion || plan.Package == nil || plan.NPM == nil {
 		t.Fatalf("npm Host lifecycle plan = %+v", plan)
 	}
-	if len(plan.Install.Steps) != 6 || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "install @deepseek-ai/dsh@0.1.1-rc.2") || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "--package-lock=false --ignore-scripts") || !strings.Contains(plan.Install.Steps[4].CommandTemplate, "rebuild --dangerously-allow-all-scripts") {
+	if len(plan.Install.Steps) != 6 || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "install example-service@1.2.3") || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "--package-lock=false --ignore-scripts") || !strings.Contains(plan.Install.Steps[4].CommandTemplate, "rebuild --dangerously-allow-all-scripts") {
 		t.Fatalf("npm Host install plan = %+v", plan.Install)
 	}
 	if !strings.Contains(plan.Start.Steps[0].CommandTemplate, "--no-open") || !strings.Contains(spec.Host.StartScript, "--no-open") {
@@ -96,7 +139,7 @@ func TestHostLifecyclePlanSeparatesManagedWorkFromTemplateHooks(t *testing.T) {
 		Kind:          DeploymentHost,
 		Endpoint:      WebEndpointSpec{Scheme: "http"},
 		Host: &HostTemplateSpec{
-			RuntimeBundle:   deepSeekRuntimeBundleID,
+			Artifact:        &HostArtifactSpec{DownloadURL: "https://downloads.example.invalid/service.tar.gz", SizeBytes: 1024, SHA256: strings.Repeat("a", 64), ExecutableRelPath: "bin/service"},
 			InstallScript:   `curl "https://private.example.invalid/install?token=must-not-leak"`,
 			StartScript:     `exec /Users/alice/private/bin/service`,
 			StopScript:      `service stop --credential must-not-leak`,
@@ -123,7 +166,7 @@ func TestHostLifecyclePlanSeparatesManagedWorkFromTemplateHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, privateValue := range []string{spec.Host.InstallScript, spec.Host.StartScript, spec.Host.StopScript, spec.Host.UninstallScript} {
+	for _, privateValue := range []string{spec.Host.InstallScript, spec.Host.StopScript, spec.Host.UninstallScript} {
 		if strings.Contains(string(encoded), privateValue) {
 			t.Fatalf("lifecycle plan leaked template script %q: %s", privateValue, encoded)
 		}
@@ -169,7 +212,7 @@ func TestHostLifecyclePlanDescribesPureScriptRuntimeOwnership(t *testing.T) {
 	}
 }
 
-func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
+func TestDuplicateBuiltInHostRetainsDeclaredRuntime(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
 	if err != nil {
@@ -177,29 +220,37 @@ func TestDuplicateBuiltInHostRetainsReleaseLockedRuntime(t *testing.T) {
 	}
 	defer registry.Close()
 	scope, stateDir := newManagedServiceTestScope(t)
-	manager := &Manager{registry: registry, scope: scope, stateDir: stateDir, downloads: defaultPackageDownloadClient()}
-	copy, err := manager.DuplicateTemplate(context.Background(), DeepSeekHarnessHostTemplateID, TemplateDuplicateRequest{
+	catalog, err := LoadBuiltinCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{registry: registry, scope: scope, stateDir: stateDir, downloads: defaultPackageDownloadClient(), catalog: catalog}
+	templates, err := manager.Catalog(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source *Template
+	for index := range templates {
+		if templates[index].Deployment == DeploymentHost && templates[index].Spec != nil && templates[index].Spec.Host != nil {
+			source = &templates[index]
+			break
+		}
+	}
+	if source == nil {
+		t.Fatal("released catalog has no Host template")
+	}
+	copy, err := manager.DuplicateTemplate(context.Background(), source.TemplateID, TemplateDuplicateRequest{
 		RequestID: "request-duplicate-builtin-host",
-		Name:      "DeepSeek Harness host copy",
+		Name:      "Catalog Host copy",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if copy.Source != "custom" || copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.NPM == nil || copy.Spec.Host.NPM.PackageName != "@deepseek-ai/dsh" || copy.Spec.Host.NPM.Version != DeepSeekHarnessVersion || copy.Spec.Host.Artifact != nil {
+	if copy.Source != "custom" || copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.StartScript != source.Spec.Host.StartScript {
 		t.Fatalf("duplicated built-in host = %+v", copy)
 	}
-	if copy.HostLifecyclePlan == nil || copy.HostLifecyclePlan.Driver != "npm_host" || !strings.Contains(copy.HostLifecyclePlan.Start.Steps[0].CommandTemplate, "--no-open") || !strings.Contains(copy.HostLifecyclePlan.Install.Steps[2].CommandTemplate, "--package-lock=false --ignore-scripts") || !strings.Contains(copy.HostLifecyclePlan.Install.Steps[4].CommandTemplate, "--dangerously-allow-all-scripts") || !strings.Contains(copy.Spec.Host.StartScript, "--no-open") {
+	if copy.HostLifecyclePlan == nil || copy.HostLifecyclePlan.Start.Steps[0].CommandTemplate != source.Spec.Host.StartScript {
 		t.Fatalf("duplicated built-in host lifecycle plan = %+v", copy.HostLifecyclePlan)
-	}
-}
-
-func TestDeepSeekProductIdentityIsNotAnInstallableTemplate(t *testing.T) {
-	t.Parallel()
-	manager := &Manager{}
-	_, err := manager.Template(context.Background(), DeepSeekHarnessProductID)
-	var managedErr *Error
-	if !errors.As(err, &managedErr) || managedErr.Code != "TEMPLATE_NOT_FOUND" {
-		t.Fatalf("product identity template lookup error = %v", err)
 	}
 }
 
@@ -294,25 +345,12 @@ func TestTemplateSpecFromServiceRejectsSnapshotIdentityDrift(t *testing.T) {
 	}
 }
 
-func TestVerifiedTemplateSpecKeepsHistoricalV2DocumentReadable(t *testing.T) {
+func TestVerifiedTemplateSpecRejectsNonCurrentSchema(t *testing.T) {
 	t.Parallel()
 	raw := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http","health_path":"/health"},"host":{"start_script":"exec preview --port $REDEVEN_SERVICE_PORT","npm":{"package_name":"example-package","version":"1.0.0","registry_url":"https://registry.npmjs.org/","executable":"preview"}}}`
 	digest := sha256.Sum256([]byte(raw))
-	spec, err := verifiedTemplateSpec(raw, hex.EncodeToString(digest[:]))
-	if err != nil {
-		t.Fatalf("historical TemplateSpec v2 error = %v", err)
-	}
-	if spec.SchemaVersion != 2 || spec.Host == nil || spec.Host.StartScript != "exec preview --port $REDEVEN_SERVICE_PORT" {
-		t.Fatalf("historical TemplateSpec v2 = %+v", spec)
-	}
-}
-
-func TestVerifiedTemplateSpecRejectsHostEnvironmentInV2(t *testing.T) {
-	t.Parallel()
-	raw := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":"exec preview","environment":{"HOME":"/unsafe"}}}`
-	digest := sha256.Sum256([]byte(raw))
 	if _, err := verifiedTemplateSpec(raw, hex.EncodeToString(digest[:])); err == nil {
-		t.Fatal("TemplateSpec v2 unexpectedly accepted a Host environment")
+		t.Fatal("non-current TemplateSpec unexpectedly accepted")
 	}
 }
 
@@ -347,41 +385,6 @@ func TestTemplateSpecFromServiceAcceptsPersistedDocumentIdentity(t *testing.T) {
 	}
 	if loaded.Kind != DeploymentHost || loaded.Host == nil || loaded.Host.StartScript != spec.Host.StartScript {
 		t.Fatalf("loaded migrated snapshot = %+v", loaded)
-	}
-}
-
-func TestTemplateSpecFromServiceAcceptsMigratedWebtopSnapshots(t *testing.T) {
-	t.Parallel()
-	for _, templateID := range []string{WebtopUbuntuKDETemplateID, WebtopDebianXFCETemplateID} {
-		templateID := templateID
-		t.Run(templateID, func(t *testing.T) {
-			t.Parallel()
-			artifact, ok := auditedWebtopArtifact(templateID, "linux-amd64")
-			if !ok {
-				t.Fatal("reviewed Webtop artifact is unavailable")
-			}
-			spec := webtopTemplateSpec(templateID, artifact)
-			canonical, _, err := canonicalTemplateSpec(spec)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var document map[string]any
-			if err := json.Unmarshal([]byte(canonical), &document); err != nil {
-				t.Fatal(err)
-			}
-			persisted, err := json.Marshal(document)
-			if err != nil {
-				t.Fatal(err)
-			}
-			sum := sha256.Sum256(persisted)
-			loaded, err := templateSpecFromService(&pfregistry.ManagedService{TemplateSnapshotJSON: string(persisted), TemplateSnapshotSHA256: hex.EncodeToString(sum[:])})
-			if err != nil {
-				t.Fatalf("migrated Webtop snapshot error = %v", err)
-			}
-			if loaded.Container == nil || loaded.Container.Image != spec.Container.Image || loaded.Container.RuntimeProfile != ContainerRuntimeProfileInteractiveDesktop {
-				t.Fatalf("loaded Webtop snapshot = %+v", loaded)
-			}
-		})
 	}
 }
 
@@ -446,8 +449,8 @@ func TestTemplateFromRecordAcceptsPersistedDocumentIdentity(t *testing.T) {
 	if loaded.EffectiveSpec == nil || loaded.EffectiveSpec.Host == nil || loaded.EffectiveSpec.Host.StartScript != spec.Host.StartScript {
 		t.Fatalf("effective migrated custom template = %+v", loaded.EffectiveSpec)
 	}
-	if loaded.HostLifecyclePlan == nil || loaded.HostLifecyclePlan.Start.Steps[0].CommandTemplate != "<template-start-script>" || loaded.Spec.Host.StartScript != spec.Host.StartScript || strings.Contains(loaded.Spec.Host.StartScript, "--no-open") {
-		t.Fatalf("historical custom template lifecycle projection = %+v", loaded.HostLifecyclePlan)
+	if loaded.HostLifecyclePlan == nil || loaded.HostLifecyclePlan.Start.Steps[0].CommandTemplate != spec.Host.StartScript || loaded.Spec.Host.StartScript != spec.Host.StartScript {
+		t.Fatalf("custom template lifecycle projection = %+v", loaded.HostLifecyclePlan)
 	}
 }
 

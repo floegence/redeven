@@ -177,6 +177,10 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = reg.Close()
 		return nil, err
 	}
+	managedCatalog, err := managedwebservice.LoadBuiltinCatalog()
+	if err != nil {
+		return nil, fmt.Errorf("load managed service template catalog: %w", err)
+	}
 	pfRegPath := filepath.Join(pfRoot, "registry.sqlite")
 	pfReg, err := pfregistry.Open(pfRegPath)
 	if err != nil {
@@ -189,7 +193,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfReg.Close()
 		return nil, err
 	}
-	managedSvc, err := managedwebservice.New(managedwebservice.ManagerOptions{Logger: logger, StateDir: stateAbs, Registry: pfReg, Scope: scope, Containers: containerAdapter})
+	managedSvc, err := managedwebservice.New(managedwebservice.ManagerOptions{Logger: logger, StateDir: stateAbs, Registry: pfReg, Scope: scope, Containers: containerAdapter, Catalog: managedCatalog})
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()

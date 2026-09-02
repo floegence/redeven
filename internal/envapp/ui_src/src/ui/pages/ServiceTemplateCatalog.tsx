@@ -14,14 +14,18 @@ import {
 import { Button, Dropdown, Input, Tag, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
-import { DeepSeekHarnessLogo } from '../icons/DeepSeekHarnessLogo';
-import { DebianLogo, UbuntuLogo } from '../icons/DistributionBrandLogos';
 
 export type ServiceTemplateCategory = 'host' | 'container';
 export type ServiceTemplateKind = 'host' | 'container' | 'compose';
 
+export type ServiceTemplateIcon = Readonly<{
+  media_type: 'image/svg+xml';
+  data: string;
+  sha256: string;
+}>;
+
 export type ServiceTemplateRuntimeSpec = Readonly<{
-  schema_version: 2 | 3;
+  schema_version: 3;
   kind: ServiceTemplateKind;
   endpoint: Readonly<{
     scheme: 'http' | 'https';
@@ -84,7 +88,7 @@ export type HostLifecycleActionPlan = Readonly<{
 
 export type HostLifecyclePlan = Readonly<{
   schema_version: 1;
-	driver: 'native' | 'host_script' | 'npm_host';
+	driver: 'host_script' | 'npm_host';
   runtime_bundle?: string;
 	package?: Readonly<{
     reference: string;
@@ -104,7 +108,7 @@ export type ServiceTemplatePresentation = Readonly<{
   description: string;
   source: 'builtin' | 'custom';
   kind: ServiceTemplateKind;
-  brandIcon?: 'deepseek-harness' | 'ubuntu' | 'debian';
+  icon?: ServiceTemplateIcon;
   deploymentLabel: string;
   version?: string;
   revision: number;
@@ -396,17 +400,21 @@ export type ServiceTemplateCatalogProps = Readonly<{
   onDelete: (templateID: string) => void;
 }>;
 
-function TemplateKindIcon(props: { kind: ServiceTemplateKind; brandIcon?: ServiceTemplatePresentation['brandIcon']; class?: string }): JSX.Element {
-  if (props.brandIcon === 'deepseek-harness') return <DeepSeekHarnessLogo class={props.class} />;
-  if (props.brandIcon === 'ubuntu') return <UbuntuLogo class={props.class} />;
-  if (props.brandIcon === 'debian') return <DebianLogo class={props.class} />;
+function templateIconSource(icon: ServiceTemplateIcon | undefined): string | undefined {
+  if (!icon || icon.media_type !== 'image/svg+xml') return undefined;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon.data)}`;
+}
+
+function TemplateKindIcon(props: { kind: ServiceTemplateKind; icon?: ServiceTemplateIcon; class?: string }): JSX.Element {
+  const source = () => templateIconSource(props.icon);
+  if (source()) return <img src={source()} class={props.class} alt="" aria-hidden="true" />;
   if (props.kind === 'host') return <Cpu class={props.class} aria-hidden="true" />;
   if (props.kind === 'compose') return <Layers class={props.class} aria-hidden="true" />;
   return <Package class={props.class} aria-hidden="true" />;
 }
 
-function templateIconClass(brandIcon: ServiceTemplatePresentation['brandIcon'], compact = false): string {
-  if (brandIcon === 'deepseek-harness') return compact ? 'h-auto w-6' : 'h-auto w-7';
+function templateIconClass(icon: ServiceTemplatePresentation['icon'], compact = false): string {
+  if (icon) return compact ? 'h-6 w-6 object-contain' : 'h-7 w-7 object-contain';
   return compact ? 'h-5 w-5' : 'h-6 w-6';
 }
 
@@ -419,11 +427,10 @@ export function ServiceTemplateIdentity(props: {
   return (
     <div class={cn('service-template-identity flex min-w-0 items-start', props.compact ? 'service-template-identity--compact gap-2.5' : 'gap-3.5')}>
       <div
-        class={cn('service-template-identity__icon flex shrink-0 items-center justify-center border', props.compact ? 'h-9 w-9 rounded-lg' : 'h-12 w-12 rounded-xl', props.template.brandIcon && 'service-template-identity__icon--brand')}
+        class={cn('service-template-identity__icon flex shrink-0 items-center justify-center border', props.compact ? 'h-9 w-9 rounded-lg' : 'h-12 w-12 rounded-xl', props.template.icon && 'service-template-identity__icon--brand')}
         data-template-kind={props.template.kind}
-        data-template-brand={props.template.brandIcon}
       >
-        <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={templateIconClass(props.template.brandIcon)} />
+        <TemplateKindIcon kind={props.template.kind} icon={props.template.icon} class={templateIconClass(props.template.icon)} />
       </div>
       <div class={cn('min-w-0 flex-1', !props.compact && 'pt-0.5')}>
         <div class={cn('flex min-w-0 items-center gap-x-2 gap-y-1', props.compact ? 'flex-nowrap' : 'flex-wrap')}>
@@ -525,11 +532,10 @@ export function ServiceTemplateRow(props: {
     >
       <div class="flex min-w-0 items-center gap-3">
         <div
-          class={cn('service-template-identity__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', props.template.brandIcon && 'service-template-identity__icon--brand')}
+          class={cn('service-template-identity__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', props.template.icon && 'service-template-identity__icon--brand')}
           data-template-kind={props.template.kind}
-          data-template-brand={props.template.brandIcon}
         >
-          <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={templateIconClass(props.template.brandIcon, true)} />
+          <TemplateKindIcon kind={props.template.kind} icon={props.template.icon} class={templateIconClass(props.template.icon, true)} />
         </div>
         <div class="min-w-0 flex-1">
           <h3 class="truncate text-sm font-semibold leading-5 text-foreground" dir="auto">{props.template.name}</h3>
@@ -606,11 +612,10 @@ export function ServiceTemplateDetailsPane(props: {
     >
       <div class="service-template-details__header flex min-w-0 items-start gap-3.5">
         <div
-          class={cn('service-template-details__icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', props.template.brandIcon && 'service-template-identity__icon--brand')}
+          class={cn('service-template-details__icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', props.template.icon && 'service-template-identity__icon--brand')}
           data-template-kind={props.template.kind}
-          data-template-brand={props.template.brandIcon}
         >
-          <TemplateKindIcon kind={props.template.kind} brandIcon={props.template.brandIcon} class={props.template.brandIcon ? 'h-auto w-7' : 'h-6 w-6'} />
+          <TemplateKindIcon kind={props.template.kind} icon={props.template.icon} class={templateIconClass(props.template.icon)} />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -662,7 +667,7 @@ export function ServiceTemplateDetailsPane(props: {
               <a href={props.template.sourceURL} target="_blank" rel="noreferrer" class="text-xs font-medium text-primary hover:underline">{i18n.t('webServices.managed.sourceCode')}</a>
             </Show>
             <Show when={props.template.dockerSourceURL}>
-              <a href={props.template.dockerSourceURL} target="_blank" rel="noreferrer" class="text-xs font-medium text-primary hover:underline">{i18n.t('webServices.managed.communityImage')}</a>
+              <a href={props.template.dockerSourceURL} target="_blank" rel="noreferrer" class="text-xs font-medium text-primary hover:underline">{i18n.t('webServices.managed.containerImageSource')}</a>
             </Show>
           </div>
         </Show>

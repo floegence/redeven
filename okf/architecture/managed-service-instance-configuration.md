@@ -48,9 +48,9 @@ This contract does not change template images, Compose topology, the primary Web
 
 # Persistence and API
 
-Registry schema v5 introduced configuration revision and SHA-256 plus the service resource-identity table. The atomic v4-to-v5 migration converts existing non-secret configuration into the current override document, preserves every snapshot as a self-consistent stored document and hash, assigns stable IDs to historical typed resources, and keeps exact-shape and future-version rejection. Runtime readers verify that exact persisted document before typed policy validation, so migration serialization order cannot become a second semantic identity. Historical retained-volume markers are imported once into the Registry and deleted; ordinary lifecycle no longer treats files as a second identity source.
+The fresh `portforward_registry_v1` baseline stores configuration schema v2, revision, SHA-256, stable resource IDs, release identity, RuntimeBinding v1, progress details, and retry lineage from first creation. Runtime verifies each persisted digest before typed policy validation, so serialization cannot become a second semantic identity. `managed_web_service_resources` is the only durable engine-resource source; no file marker or live-engine inference can create an alternate identity.
 
-Registry schema v6 adds only the versioned Managed Operation progress-detail document. Its v5-to-v6 migration deliberately preserves configuration schema v2, its revision and digest, template schema v1, service secrets schema v1, stable resource identities, and reconfigure journals byte-for-byte. Thus an existing instance retains the same effective specification and can still be viewed, started, stopped, retried, updated, and reconfigured after automatic startup migration; there is no manual repair or compatibility decoder path.
+This project-reset baseline has no earlier configuration decoder or migration path. After publication, any configuration or Registry change must append a contiguous transactional migration that preserves user-owned records and validates the final exact shape.
 
 The Local API additions are:
 
@@ -67,10 +67,10 @@ Reads require Web Service read authority. Metadata and Runtime mutation require 
 - `redeven:internal/managedwebservice/reconfigure.go` - Owns journaling, stopped Runtime rebuild, exact verification, commit, rollback, and startup recovery.
 - `redeven:internal/managedwebservice/custom_container.go` - Creates and verifies effective single-container resources and stable volume identities.
 - `redeven:internal/managedwebservice/custom_compose.go` - Generates and verifies effective per-service Compose resources.
-- `redeven:internal/portforward/registry/schema.go` - Defines atomic contiguous migration through v6, including preservation of v5 instance configuration while operation details are backfilled.
+- `redeven:internal/portforward/registry/schema.go` - Defines the fresh exact Registry baseline containing configuration, resources, progress, bindings, and retry lineage.
 - `redeven:internal/portforward/registry/managed.go` - Commits revisioned configuration and resource identities.
 - `redeven:internal/codeapp/appserver/managed_web_services.go` - Enforces the settings, preflight, operation, permission, and bounded-audit boundary.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceSettingsDrawer.tsx` - Owns the deployment-aware settings interaction and draft state.
 - `redeven:internal/managedwebservice/configuration_test.go` - Covers effective merge, normalized Compose, risks, typed resources, stable identity, and secret separation.
-- `redeven:internal/portforward/registry/registry_test.go` - Covers fresh v5, migration preservation, identity import, rollback, drift, and future rejection.
+- `redeven:internal/portforward/registry/registry_test.go` - Covers fresh initialization, exact binding and retry persistence, drift, wrong kind, and future rejection.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx` - Covers the drawer-to-preflight-to-shared-operation flow.

@@ -15,11 +15,10 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
 - [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
-- [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Discover, define, duplicate, and deploy Environment-local host, single-container, and Compose service definitions.
-- [Managed Web Services](architecture/managed-web-services.md) - Operate immutable template snapshots with exact runtime identity, recovery, loopback-only access, and protected forwarding.
+- [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.
+- [Managed Web Services](architecture/managed-web-services.md) - Operate generic Host, Container, and Compose snapshots with exact bindings and explicit failure recovery.
 - [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md) - Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
 - [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine immutable templates with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
-- [LinuxServer Webtop](architecture/linuxserver-webtop.md) - Install and safely update two digest-pinned interactive desktop containers without granting host authority.
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
