@@ -289,6 +289,34 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
     await waitFor(() => document.body.textContent?.includes('Live child content.') === true);
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: parent.thread_id,
+      subagent_current: {
+        thread_id: child.thread_id, view_version: 9, activity: 'active', turn_id: 'child-turn', run_id: 'child-run',
+        items: [
+          {
+            id: 'child-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
+            kind: 'assistant', text: 'Live child content.',
+          },
+          {
+            id: 'child-tool-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 2,
+            kind: 'tool', activity: {
+              item_id: 'child-tool-live', tool_id: 'child-tool-live', tool_name: 'terminal.exec', kind: 'tool',
+              status: 'running', severity: 'normal', needs_attention: false, requires_approval: false,
+              presentation: { label: 'Run command' },
+            },
+          },
+        ],
+      },
+    });
+    await waitFor(() => Boolean(detail.querySelector('[data-flower-activity-item-id="child-tool-live"]')));
+    const runningToolRow = detail.querySelector('[data-flower-activity-item-id="child-tool-live"]') as HTMLElement;
+    const runningToolButton = runningToolRow.querySelector('.flower-activity-inline-button') as HTMLElement;
+    const runningToolTitle = runningToolRow.querySelector('.flower-activity-inline-title') as HTMLElement;
+    expect(getComputedStyle(runningToolButton).boxShadow).toBe('none');
+    expect(getComputedStyle(runningToolTitle, '::after').animationName).toBe('flower-activity-title-sweep');
 
     firstDetail.resolve(subagentDetail({
       summary: child,
