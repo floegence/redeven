@@ -59,10 +59,14 @@ describe('Flower restrained selection and focus treatments', () => {
     expect(textareaFocusRule).toContain('box-shadow: none');
   });
 
-  it('removes the disclosure guide only from Shell terminal details', () => {
+  it('keeps one disclosure guide without nested SubAgent rails', () => {
+    const subagentItemRule = lastCssRule('.flower-activity-subagents-item {');
+
     expect(surface).toContain("terminalDisclosure() && 'flower-activity-inline-details-content-terminal'");
     expect(cssRule('.flower-activity-inline-details-content {')).toContain('border-left: 1px solid');
     expect(cssRule('.flower-activity-inline-details-content-terminal {')).toContain('border-left: 0');
+    expect(subagentItemRule).not.toContain('border-left:');
+    expect(subagentItemRule).not.toContain('padding-left:');
   });
 
   it('keeps the collapsed bottom-bar thread title compact and secondary to the composer', () => {
