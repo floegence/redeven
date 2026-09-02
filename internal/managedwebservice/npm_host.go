@@ -42,6 +42,7 @@ type npmVersionDocument struct {
 type npmReleaseMetadata struct {
 	Version            string
 	Integrity          string
+	IntegrityVerified  bool
 	PublishedAtUnixMs  int64
 	Deprecated         bool
 	DeprecationMessage string
@@ -56,7 +57,11 @@ func fetchNPMReleases(ctx context.Context, client *http.Client, spec NPMHostPack
 	if err != nil {
 		return nil, serviceError("NPM_REGISTRY_INVALID", "The npm Registry URL is invalid.", 400, false, err)
 	}
-	base.Path = strings.TrimRight(base.Path, "/") + "/" + url.PathEscape(strings.TrimSpace(spec.PackageName))
+	packageName := strings.TrimSpace(spec.PackageName)
+	pathPrefix := strings.TrimRight(base.Path, "/")
+	escapedPrefix := strings.TrimRight(base.EscapedPath(), "/")
+	base.Path = pathPrefix + "/" + packageName
+	base.RawPath = escapedPrefix + "/" + url.PathEscape(packageName)
 	base.RawQuery, base.Fragment = "", ""
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base.String(), nil)
 	if err != nil {
@@ -101,7 +106,7 @@ func fetchNPMReleases(ctx context.Context, client *http.Client, spec NPMHostPack
 		if version == "" {
 			version = strings.TrimSpace(key)
 		}
-		if _, validVersion := parseSemanticVersion(version); !exactSemverPattern.MatchString(version) || !validVersion || !validNPMIntegrity(document.Dist.Integrity) {
+		if _, validVersion := parseSemanticVersion(version); !exactSemverPattern.MatchString(version) || !validVersion {
 			continue
 		}
 		published := int64(0)
@@ -113,7 +118,7 @@ func fetchNPMReleases(ctx context.Context, client *http.Client, spec NPMHostPack
 			deprecatedMessage = ""
 		}
 		items = append(items, npmReleaseMetadata{
-			Version: version, Integrity: strings.TrimSpace(document.Dist.Integrity), PublishedAtUnixMs: published,
+			Version: version, Integrity: strings.TrimSpace(document.Dist.Integrity), IntegrityVerified: validNPMIntegrity(document.Dist.Integrity), PublishedAtUnixMs: published,
 			Deprecated: deprecatedMessage != "", DeprecationMessage: deprecatedMessage, NodeRange: strings.TrimSpace(document.Engines["node"]),
 		})
 	}
@@ -170,6 +175,9 @@ func (d *hostScriptDriver) installNPMRuntime(ctx context.Context, service *pfreg
 	release, ok := npmReleaseByVersion(releases, spec.Version)
 	if !ok {
 		return "", ReleaseIdentity{}, serviceError("RELEASE_NOT_FOUND", "The exact npm package version is no longer available from its Registry.", 409, false, nil)
+	}
+	if !release.IntegrityVerified {
+		return "", ReleaseIdentity{}, serviceError("RELEASE_IDENTITY_UNVERIFIABLE", "The npm Registry did not provide a verifiable SHA-512 integrity for this exact package version.", 409, false, nil)
 	}
 	identity := ReleaseIdentity{SchemaVersion: 1, Kind: "npm", Source: spec.PackageName, Registry: normalizedRegistryURL(spec.RegistryURL), Version: release.Version, Integrity: release.Integrity, Platform: currentPlatformKey(), Trust: "registry_verified"}
 	if err := verifyExpectedNPMReleaseIdentity(service, identity); err != nil {
@@ -366,7 +374,7 @@ func npmAuthConfigKey(registry string) string {
 }
 
 func verifyInstalledNPMPackage(appRoot string, spec NPMHostPackageSpec) error {
-	parts := strings.Split(strings.TrimPrefix(spec.PackageName, "@"), "/")
+	parts := strings.Split(spec.PackageName, "/")
 	packageRoot := filepath.Join(append([]string{appRoot, "node_modules"}, parts...)...)
 	raw, err := os.ReadFile(filepath.Join(packageRoot, "package.json"))
 	if err != nil {

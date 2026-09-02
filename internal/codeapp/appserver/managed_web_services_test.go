@@ -15,7 +15,7 @@ import (
 
 func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T) {
 	t.Parallel()
-	backend := &managedBackendStub{catalog: []managedwebservice.Template{{TemplateID: "example-host", Version: "1.0.0"}}}
+	backend := &managedBackendStub{catalog: []managedwebservice.Template{{TemplateID: "example-host"}}}
 	channelID := "ch_managed_permissions"
 
 	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
@@ -66,7 +66,7 @@ func TestManagedWebServiceRoutesCarryNoticeRevisionsForInstallAndUpdate(t *testi
 		t.Fatalf("install notice request=%+v status=%d body=%s", backend.lastCreate, response.Code, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-update","action":"update","accepted_notice_revisions":{"runtime-risk":2}}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-update","action":"update","update_plan_id":"upl_one","accepted_notice_revisions":{"runtime-risk":2}}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	server.handleManagedWebServicesAPI(response, request)
@@ -208,21 +208,23 @@ func TestManagedTemplateDuplicateRequiresLifecyclePermission(t *testing.T) {
 }
 
 type managedBackendStub struct {
-	catalog              []managedwebservice.Template
-	createCalls          int
-	operateCalls         int
-	lastCreate           managedwebservice.CreateRequest
-	lastOperate          managedwebservice.OperationRequest
-	duplicateCalls       int
-	lastDuplicate        managedwebservice.TemplateDuplicateRequest
-	subscribeOperation   pfregistry.ManagedOperation
-	settingsCalls        int
-	preflightCalls       int
-	lastMetadata         managedwebservice.ServiceMetadataPatch
-	lastDraft            managedwebservice.ReconfigureDraft
-	templateReleaseCalls int
-	serviceReleaseCalls  int
-	lastReleaseRequest   managedwebservice.ReleaseCandidateRequest
+	catalog               []managedwebservice.Template
+	createCalls           int
+	operateCalls          int
+	lastCreate            managedwebservice.CreateRequest
+	lastOperate           managedwebservice.OperationRequest
+	duplicateCalls        int
+	lastDuplicate         managedwebservice.TemplateDuplicateRequest
+	subscribeOperation    pfregistry.ManagedOperation
+	settingsCalls         int
+	preflightCalls        int
+	lastMetadata          managedwebservice.ServiceMetadataPatch
+	lastDraft             managedwebservice.ReconfigureDraft
+	templateReleaseCalls  int
+	serviceReleaseCalls   int
+	updatePlanCalls       int
+	lastReleaseRequest    managedwebservice.ReleaseCandidateRequest
+	lastUpdatePlanRequest managedwebservice.UpdatePlanRequest
 }
 
 func (b *managedBackendStub) Catalog(context.Context) ([]managedwebservice.Template, error) {
@@ -264,6 +266,11 @@ func (b *managedBackendStub) ServiceReleaseCandidates(_ context.Context, _ strin
 	b.serviceReleaseCalls++
 	b.lastReleaseRequest = request
 	return &managedwebservice.ReleaseCandidateResult{SchemaVersion: 1, Candidates: []managedwebservice.ReleaseCandidate{}}, nil
+}
+func (b *managedBackendStub) CreateUpdatePlan(_ context.Context, _ string, request managedwebservice.UpdatePlanRequest) (*managedwebservice.UpdatePlan, error) {
+	b.updatePlanCalls++
+	b.lastUpdatePlanRequest = request
+	return &managedwebservice.UpdatePlan{SchemaVersion: 1, UpdatePlanID: "upl_one", ExpiresAtUnixMs: 1}, nil
 }
 func (b *managedBackendStub) Settings(_ context.Context, serviceID string) (*managedwebservice.ServiceSettingsView, error) {
 	b.settingsCalls++

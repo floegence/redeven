@@ -52,6 +52,7 @@ type Manager struct {
 	releaseMu     sync.Mutex
 	releaseItems  map[string]cachedReleaseCandidate
 	releaseViews  map[string]ReleaseCandidateResult
+	updatePlans   map[string]cachedUpdatePlan
 	releaseCancel context.CancelFunc
 	releaseClient *http.Client
 	mu            sync.Mutex
@@ -89,7 +90,7 @@ func New(opts ManagerOptions) (*Manager, error) {
 			return nil, err
 		}
 	}
-	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: catalog, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: catalog, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, updatePlans: map[string]cachedUpdatePlan{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 	releaseBase := m.downloads.packageHTTPClient()
 	if releaseBase != nil {
 		copy := *releaseBase
@@ -332,34 +333,60 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			ContainerResources: containerResourceLinks(service),
 			Actions:            serviceActionCapabilities(service, active, latestFailure),
 		}
-		if identity, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256); identityErr == nil {
-			view.ReleaseIdentity = identity
-		} else {
+		identity, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
+		if identityErr != nil {
 			return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, identityErr)
 		}
+		view.ReleaseStatus = ReleaseStatus{SchemaVersion: 1, CurrentRelease: identity, CurrentTemplateRevision: service.TemplateRevision, CheckStatus: "pending"}
 		if m.catalog != nil {
 			if definition, ok := m.catalog.definition(service.TemplateID); ok {
 				icon := definition.Icon
 				view.Icon, view.Localizations = &icon, cloneLocalizations(definition.Localizations)
-				deployment := Deployment(service.Deployment)
-				if service.TemplateSource == "builtin" && (deployment == DeploymentContainer || deployment == DeploymentHost) && definition.Revision > service.TemplateRevision {
-					view.UpdateAvailable, view.TargetRevision, view.TargetVersion = true, definition.Revision, definition.Version
-					view.UpdateNotices = append([]TemplateNotice(nil), definition.Notices...)
-				}
+			}
+		}
+		if template, templateErr := m.Template(ctx, service.TemplateID); templateErr == nil {
+			view.ReleaseStatus.RecommendedRelease = template.RecommendedRelease
+			if template.Revision > service.TemplateRevision {
+				view.ReleaseStatus.AvailableTemplateRevision = template.Revision
 			}
 		}
 		if releaseView, ok := m.releaseView("service:" + service.ServiceID); ok {
-			view.ReleaseCheckedAt, view.ReleaseCheckError = releaseView.CheckedAtUnixMs, releaseView.LastErrorCode
-			for _, candidate := range releaseView.Candidates {
-				if candidate.Selectable && view.ReleaseIdentity != nil && releaseCandidateIsNewer(*view.ReleaseIdentity, candidate) {
-					view.UpdateAvailable = true
-					if candidate.Version != "" {
-						view.TargetVersion = candidate.Version
-					} else {
-						view.TargetVersion = candidate.Tag
-					}
-					break
-				}
+			view.ReleaseStatus.CheckStatus = releaseView.CheckStatus
+			view.ReleaseStatus.CheckedAtUnixMs = releaseView.CheckedAtUnixMs
+			view.ReleaseStatus.NextCheckAtUnixMs = releaseView.NextCheckAtUnixMs
+			view.ReleaseStatus.LastErrorCode = releaseView.LastErrorCode
+			if releaseView.LatestStableRelease != nil {
+				value := releaseIdentityFromCandidate(*releaseView.LatestStableRelease)
+				view.ReleaseStatus.LatestStableRelease = &value
+				view.ReleaseStatus.LatestStableRelation = releaseRelation(identity, value)
+			}
+			if releaseView.LatestPreviewRelease != nil {
+				value := releaseIdentityFromCandidate(*releaseView.LatestPreviewRelease)
+				view.ReleaseStatus.LatestPreviewRelease = &value
+				view.ReleaseStatus.LatestPreviewRelation = releaseRelation(identity, value)
+			}
+		} else if persisted, persistedErr := m.registry.GetManagedReleaseCheck(ctx, service.ServiceID); persistedErr != nil {
+			return nil, persistedErr
+		} else if persisted != nil {
+			summary, summaryErr := decodeReleaseCheckSummary(persisted)
+			if summaryErr != nil {
+				return nil, serviceError("RELEASE_CHECK_INVALID", "The saved release check summary is invalid.", 409, false, summaryErr)
+			}
+			view.ReleaseStatus.LatestStableRelease = summary.LatestStableRelease
+			view.ReleaseStatus.LatestPreviewRelease = summary.LatestPreviewRelease
+			if summary.LatestStableRelease != nil {
+				view.ReleaseStatus.LatestStableRelation = releaseRelation(identity, *summary.LatestStableRelease)
+			}
+			if summary.LatestPreviewRelease != nil {
+				view.ReleaseStatus.LatestPreviewRelation = releaseRelation(identity, *summary.LatestPreviewRelease)
+			}
+			view.ReleaseStatus.CheckedAtUnixMs = persisted.CheckedAtUnixMs
+			view.ReleaseStatus.NextCheckAtUnixMs = persisted.NextCheckAtUnixMs
+			view.ReleaseStatus.LastErrorCode = persisted.LastErrorCode
+			if persisted.Stale {
+				view.ReleaseStatus.CheckStatus = "stale"
+			} else {
+				view.ReleaseStatus.CheckStatus = "fresh"
 			}
 		}
 		out = append(out, view)
@@ -367,20 +394,8 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 	return out, nil
 }
 
-func releaseCandidateIsNewer(current ReleaseIdentity, candidate ReleaseCandidate) bool {
-	if candidate.TagMoved && current.Kind == "oci" && current.Tag == candidate.Tag {
-		return true
-	}
-	if current.Kind == "npm" && candidate.SourceKind == "npm" && current.Source == candidate.Source && current.Registry == candidate.Registry {
-		return compareReleaseVersions(candidate.Version, current.Version) > 0
-	}
-	if current.Kind == "oci" && candidate.SourceKind == "oci" && current.Source == candidate.Source {
-		currentTag, candidateTag := strings.TrimPrefix(current.Tag, "v"), strings.TrimPrefix(candidate.Tag, "v")
-		_, currentOK := parseSemanticVersion(currentTag)
-		_, candidateOK := parseSemanticVersion(candidateTag)
-		return currentOK && candidateOK && exactSemverPattern.MatchString(currentTag) && exactSemverPattern.MatchString(candidateTag) && compareReleaseVersions(candidateTag, currentTag) > 0
-	}
-	return false
+func releaseIdentityFromCandidate(candidate ReleaseCandidate) ReleaseIdentity {
+	return ReleaseIdentity{SchemaVersion: 1, Kind: candidate.SourceKind, Source: candidate.Source, Registry: candidate.Registry, Version: candidate.Version, Tag: candidate.Tag, Digest: candidate.Digest, Integrity: candidate.Integrity, Platform: candidate.Platform, Trust: candidate.Trust}
 }
 
 func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry.ManagedService) (string, string) {
@@ -512,25 +527,29 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		if err != nil {
 			return nil, err
 		}
-		if err := validateReleaseRisks(selectedRelease, nil, req.AcceptedReleaseRisks, selectedRelease.Spec.Host != nil && selectedRelease.Spec.Host.NPM != nil); err != nil {
+		if err := validateInstallReleaseRisks(*template, selectedRelease, req.AcceptedReleaseRisks); err != nil {
 			return nil, err
 		}
 		updated := releaseCandidateTemplate(*template, *selectedRelease)
 		template = &updated
-	} else if template.Spec.Host != nil && template.Spec.Host.NPM != nil {
-		trust := "user_configured_registry"
-		if template.Source == "builtin" {
-			trust = "redeven_reviewed"
-		}
-		declared := cachedReleaseCandidate{
-			Candidate: ReleaseCandidate{SourceKind: "npm", Source: template.Spec.Host.NPM.PackageName, Version: template.Spec.Host.NPM.Version, Channel: "stable", Trust: trust},
-			Identity:  defaultReleaseIdentity(*template),
-		}
-		if strings.Contains(template.Spec.Host.NPM.Version, "-") {
-			declared.Candidate.Channel = "preview"
-		}
-		if err := validateReleaseRisks(&declared, nil, req.AcceptedReleaseRisks, true); err != nil {
-			return nil, err
+	} else {
+		identity := defaultReleaseIdentity(*template)
+		if identity.Kind != "none" {
+			channel := "stable"
+			value := identity.Version
+			if identity.Kind == "oci" {
+				value = identity.Tag
+			}
+			trimmed := strings.TrimPrefix(value, "v")
+			if _, semantic := parseSemanticVersion(trimmed); !semantic || !exactSemverPattern.MatchString(trimmed) {
+				channel = "special"
+			} else if strings.Contains(trimmed, "-") {
+				channel = "preview"
+			}
+			declared := cachedReleaseCandidate{Candidate: ReleaseCandidate{SourceKind: identity.Kind, Source: identity.Source, Registry: identity.Registry, Version: identity.Version, Tag: identity.Tag, Channel: channel, Trust: identity.Trust}, Identity: identity}
+			if err := validateInstallReleaseRisks(*template, &declared, req.AcceptedReleaseRisks); err != nil {
+				return nil, err
+			}
 		}
 	}
 	configurationJSON, configurationHash, err := canonicalServiceConfiguration(configuration)
@@ -573,7 +592,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, Version: template.Version, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
@@ -590,9 +609,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 func defaultReleaseIdentity(template Template) ReleaseIdentity {
 	trust := "template_declared"
 	if template.Source == "builtin" {
-		trust = "redeven_reviewed"
+		trust = "catalog_reviewed_source"
 	}
-	identity := ReleaseIdentity{SchemaVersion: 1, Kind: "none", Version: template.Version, Trust: trust}
+	identity := ReleaseIdentity{SchemaVersion: 1, Kind: "none", Trust: trust}
 	if template.Spec == nil {
 		return identity
 	}
@@ -613,6 +632,14 @@ func defaultReleaseIdentity(template Template) ReleaseIdentity {
 		}
 	}
 	return identity
+}
+
+func recommendedReleaseForTemplate(template Template) *ReleaseIdentity {
+	identity := defaultReleaseIdentity(template)
+	if identity.Kind == "none" {
+		return nil
+	}
+	return &identity
 }
 
 func releaseImageRepository(reference string) string {
@@ -671,7 +698,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
 	reconfigureJSON, _ := json.Marshal(req.Reconfigure)
 	releaseRiskJSON, _ := json.Marshal(req.AcceptedReleaseRisks)
-	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), strings.TrimSpace(req.TargetReleaseID), string(noticeJSON), string(reconfigureJSON), string(releaseRiskJSON))
+	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), strings.TrimSpace(req.UpdatePlanID), string(noticeJSON), string(reconfigureJSON), string(releaseRiskJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -726,36 +753,16 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		reconfigure = &candidate
 	}
 	var releaseCandidate *cachedReleaseCandidate
-	if req.Action == ActionUpdate && strings.TrimSpace(req.TargetReleaseID) != "" {
-		parameters, parameterErr := m.serviceParameters(service)
-		if parameterErr != nil {
-			return nil, parameterErr
-		}
-		current, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
-		if identityErr != nil {
-			return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, identityErr)
-		}
-		releaseCandidate, err = m.resolveReleaseCandidate(ctx, "service:"+service.ServiceID, req.TargetReleaseID, parameters, current, service.TemplateSource)
+	var updatePlan *cachedUpdatePlan
+	if req.Action == ActionUpdate {
+		updatePlan, err = m.resolveUpdatePlan(ctx, service, req.UpdatePlanID, req.AcceptedReleaseRisks)
 		if err != nil {
 			return nil, err
 		}
-		if releaseIsDowngrade(*current, releaseCandidate.Identity) && (service.DesiredState != "stopped" || service.ObservedState != "stopped") {
-			return nil, serviceError("DOWNGRADE_REQUIRES_STOPPED", "Stop the service before selecting an older release.", 409, false, nil)
-		}
-		if err := validateReleaseRisks(releaseCandidate, current, req.AcceptedReleaseRisks, releaseCandidate.Spec.Host != nil && releaseCandidate.Spec.Host.NPM != nil); err != nil {
+		if err := validateAcceptedNotices(Template{Notices: updatePlan.Release.Notices}, req.AcceptedNoticeRevisions); err != nil {
 			return nil, err
 		}
-	} else if req.Action == ActionUpdate {
-		target, err := m.serviceUpdateTarget(ctx, *service)
-		if err != nil {
-			return nil, err
-		}
-		if target == nil {
-			return nil, serviceError("UPDATE_NOT_AVAILABLE", "No newer reviewed template revision is available for this service.", 409, false, nil)
-		}
-		if err := validateAcceptedNotices(*target, req.AcceptedNoticeRevisions); err != nil {
-			return nil, err
-		}
+		releaseCandidate = &updatePlan.Release
 	}
 	m.mu.Lock()
 	active, err := m.registry.HasActiveManagedOperation(ctx, service.ServiceID)
@@ -767,6 +774,9 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 			now := time.Now().UnixMilli()
 			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, RetryOfOperationID: retryOfOperationID, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 			if err = m.registry.CreateManagedOperation(ctx, op); err == nil {
+				if updatePlan != nil {
+					m.consumeUpdatePlan(req.UpdatePlanID)
+				}
 				m.mu.Unlock()
 				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
 				return &op, nil
@@ -864,43 +874,22 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 			err = m.runStart(ctx, &service, &op, driver)
 		}
 	case ActionUpdate:
-		if inputs.Release != nil {
-			switch Deployment(service.Deployment) {
-			case DeploymentHost:
-				err = m.runHostReleaseUpdate(ctx, &service, &op, *inputs.Release, driver)
-			case DeploymentContainer:
-				if updateDriver, ok := driver.(containerUpdateDriver); ok {
-					err = m.runContainerReleaseUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, *inputs.Release, updateDriver)
-				} else {
-					err = serviceError("UPDATE_UNSUPPORTED", "This single-container service does not support transactional release replacement.", 409, false, nil)
-				}
-			default:
-				err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot select releases in place.", 409, false, nil)
+		if inputs.Release == nil {
+			err = serviceError("UPDATE_PLAN_REQUIRED", "Create and review an update plan before updating this managed Web Service.", 409, false, nil)
+			break
+		}
+		switch Deployment(service.Deployment) {
+		case DeploymentHost:
+			err = m.runHostReleaseUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, *inputs.Release, driver)
+		case DeploymentContainer:
+			if updateDriver, ok := driver.(containerUpdateDriver); ok {
+				err = m.runContainerReleaseUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, *inputs.Release, updateDriver)
+			} else {
+				err = serviceError("UPDATE_UNSUPPORTED", "This single-container service does not support transactional release replacement.", 409, false, nil)
 			}
-		} else if Deployment(service.Deployment) == DeploymentHost {
-			var target *Template
-			target, err = m.serviceUpdateTarget(ctx, service)
-			if err == nil && target == nil {
-				err = serviceError("UPDATE_NOT_AVAILABLE", "No newer reviewed template revision is available for this service.", 409, false, nil)
-			}
-			var patch pfregistry.ManagedServicePatch
-			if err == nil {
-				m.progress(&op, "update_preparing", 1)
-				if err = ctx.Err(); err == nil {
-					patch, err = hostTemplateUpdatePatch(service, *target)
-				}
-			}
-			if err == nil {
-				op.State, op.Stage, op.ProgressCurrent = "succeeded", "completed", operationProgressTotal
-				op.FinishedAtUnixMs = time.Now().UnixMilli()
-				blank := ""
-				patch.LastErrorCode, patch.LastErrorMessage = &blank, &blank
-				m.finalizeAndPublish(&op, patch)
-				return
-			}
-		} else if updateDriver, ok := driver.(containerUpdateDriver); ok {
-			err = m.runUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, updateDriver)
-		} else {
+		case DeploymentCompose:
+			err = m.runComposeTemplateUpdate(ctx, &service, &op, *inputs.Release, driver)
+		default:
 			err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot be updated in place.", 409, false, nil)
 		}
 	case ActionReconfigure:
@@ -962,6 +951,9 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
 	blank := ""
 	m.finalizeAndPublish(&op, pfregistry.ManagedServicePatch{LastErrorCode: &blank, LastErrorMessage: &blank})
+	if OperationAction(op.Action) == ActionInstall || OperationAction(op.Action) == ActionRetryInstall || OperationAction(op.Action) == ActionUpdate {
+		m.scheduleReleaseCheck(service.ServiceID)
+	}
 }
 
 func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {

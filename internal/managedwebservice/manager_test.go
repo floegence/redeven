@@ -311,7 +311,7 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-host", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: "1.0.0", DesiredState: "running", ObservedState: "running", ForwardID: "pf-one", RuntimeIdentity: "host:v2:mws_one:boot:4242:" + strings.Repeat("a", 64), ArtifactReference: "/managed/executable", RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-host", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), DesiredState: "running", ObservedState: "running", ForwardID: "pf-one", RuntimeIdentity: "host:v2:mws_one:boot:4242:" + strings.Repeat("a", 64), ArtifactReference: "/managed/executable", RuntimePort: 3080}
 	setTestRuntimeBinding(t, &service)
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}); err != nil {
 		t.Fatal(err)
@@ -419,7 +419,7 @@ func TestListProjectsTheCurrentOperationDetail(t *testing.T) {
 	defer registry.Close()
 	service := pfregistry.ManagedService{
 		ServiceID: "mws_artifact", TemplateID: "template-container", TemplateSource: "custom", ServiceFamilyID: "family-container",
-		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), Version: "1.0.0",
+		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(),
 		DesiredState: "stopped", ObservedState: "error", ForwardID: "pf-artifact", RuntimePort: 3080,
 	}
 	setTestRuntimeBinding(t, &service)
@@ -569,7 +569,7 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-interrupted", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), Version: "1.0.0", DesiredState: "running", ObservedState: "installing", ForwardID: "pf-interrupted", RuntimeIdentity: "host:v2:mws_interrupted:boot:99:" + strings.Repeat("a", 64), RuntimePort: 3080}
+	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-interrupted", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), DesiredState: "running", ObservedState: "installing", ForwardID: "pf-interrupted", RuntimeIdentity: "host:v2:mws_interrupted:boot:99:" + strings.Repeat("a", 64), RuntimePort: 3080}
 	setTestRuntimeBinding(t, &service)
 	op := pfregistry.ManagedOperation{OperationID: "mop_interrupted", ServiceID: service.ServiceID, RequestID: "request-interrupted", RequestFingerprint: "fingerprint", Action: string(ActionInstall), State: "running", Stage: "downloading"}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, op); err != nil {

@@ -48,9 +48,9 @@ This contract does not change template images, Compose topology, the primary Web
 
 # Persistence and API
 
-The fresh `portforward_registry_v1` baseline stores configuration schema v2, revision, SHA-256, stable resource IDs, release identity, RuntimeBinding v1, progress details, and retry lineage from first creation. Runtime verifies each persisted digest before typed policy validation, so serialization cannot become a second semantic identity. `managed_web_service_resources` is the only durable engine-resource source; no file marker or live-engine inference can create an alternate identity.
+`portforward_registry_v1` version 2 stores configuration schema v2, revision, SHA-256, stable resource IDs, exact release identity, RuntimeBinding v1, progress details, retry lineage, and release-check summaries. Runtime verifies each persisted digest before typed policy validation, so serialization cannot become a second semantic identity. `managed_web_service_resources` is the only durable engine-resource source; no file marker or live-engine inference can create an alternate identity.
 
-This project-reset baseline has no earlier configuration decoder or migration path. After publication, any configuration or Registry change must append a contiguous transactional migration that preserves user-owned records and validates the final exact shape.
+Discarded pre-baseline kinds have no decoder. The permanent current kind keeps its baseline `0 -> 1` edge and continuous `1 -> 2` migration; every later configuration or Registry change must append another transactional edge that preserves user-owned records and validates the final exact shape.
 
 The Local API additions are:
 

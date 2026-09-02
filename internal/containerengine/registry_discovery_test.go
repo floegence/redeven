@@ -98,6 +98,39 @@ func TestOCIReleaseDiscoveryUsesBearerChallengeAndVerifiesSingleManifestPlatform
 	}
 }
 
+func TestOCIReleaseDiscoveryKeepsUnverifiableTagVisibleButDisabled(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v2/team/app/tags/list":
+			_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"bad", "good"}})
+		case "/v2/team/app/manifests/bad":
+			response.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+			_, _ = response.Write([]byte(`{"schemaVersion":2,"config":{"digest":"invalid"}}`))
+		case "/v2/team/app/manifests/good":
+			response.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
+			_ = json.NewEncoder(response).Encode(map[string]any{"schemaVersion": 2, "manifests": []map[string]any{{"digest": testAMD64Digest, "platform": map[string]string{"os": "linux", "architecture": "amd64"}}}})
+		default:
+			t.Fatalf("unexpected request %s", request.URL)
+		}
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	items, err := (OCIReleaseDiscovery{Client: server.Client()}).Discover(context.Background(), OCIReleaseDiscoveryRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("releases = %#v", items)
+	}
+	byTag := map[string]OCIRelease{items[0].Tag: items[0], items[1].Tag: items[1]}
+	if bad := byTag["bad"]; bad.Compatible || bad.ReasonCode != "RELEASE_IDENTITY_UNVERIFIABLE" {
+		t.Fatalf("unverifiable tag = %#v", bad)
+	}
+	if !byTag["good"].Compatible {
+		t.Fatalf("valid tag was lost: %#v", byTag["good"])
+	}
+}
+
 func TestRegistryNextLinkRejectsCrossRegistryPagination(t *testing.T) {
 	requestURL := mustParseURLForTest(t, "https://registry.example/v2/team/app/tags/list")
 	if got := registryNextLink(requestURL, `<https://attacker.example/tags?page=2>; rel="next"`, "registry.example"); got != "" {

@@ -35,7 +35,7 @@ type catalogTemplate struct {
 	SchemaVersion      int                             `json:"schema_version"`
 	TemplateID         string                          `json:"template_id"`
 	ServiceFamilyID    string                          `json:"service_family_id"`
-	Version            string                          `json:"version"`
+	RecommendedVersion string                          `json:"recommended_version"`
 	Revision           int64                           `json:"revision"`
 	SortOrder          int                             `json:"sort_order"`
 	DeveloperPreview   bool                            `json:"developer_preview"`
@@ -47,7 +47,7 @@ type catalogTemplate struct {
 	DefaultAccessMode  string                          `json:"default_access_mode"`
 	SupportedPlatforms []string                        `json:"supported_platforms,omitempty"`
 	PlatformArtifacts  map[string]string               `json:"platform_artifacts,omitempty"`
-	ReleaseDiscovery   catalogReleaseDiscovery         `json:"release_discovery"`
+	ReleaseDiscovery   *catalogReleaseDiscovery        `json:"release_discovery,omitempty"`
 	Notices            []TemplateNotice                `json:"notices"`
 	Spec               json.RawMessage                 `json:"spec"`
 	Localizations      map[string]TemplateLocalization `json:"localizations"`
@@ -55,9 +55,7 @@ type catalogTemplate struct {
 }
 
 type catalogReleaseDiscovery struct {
-	Source          string `json:"source"`
-	AllowPrerelease bool   `json:"allow_prerelease"`
-	AllowNonSemver  bool   `json:"allow_non_semver"`
+	Source string `json:"source"`
 }
 
 func LoadBuiltinCatalog() (*BuiltinCatalog, error) {
@@ -74,7 +72,7 @@ func loadBuiltinCatalog(raw []byte, expectedVersion, expectedSHA256 string) (*Bu
 	if err := decodeStrictJSON(raw, &bundle); err != nil {
 		return nil, fmt.Errorf("decode managed service template bundle: %w", err)
 	}
-	if bundle.SchemaVersion != 1 || bundle.CatalogVersion != expectedVersion || len(bundle.Templates) == 0 || len(bundle.Locales) == 0 {
+	if bundle.SchemaVersion != 2 || bundle.CatalogVersion != expectedVersion || len(bundle.Templates) == 0 || len(bundle.Locales) == 0 {
 		return nil, errors.New("managed service template bundle identity is unsupported")
 	}
 	if !slices.Contains(bundle.Locales, "en-US") {
@@ -94,8 +92,8 @@ func loadBuiltinCatalog(raw []byte, expectedVersion, expectedSHA256 string) (*Bu
 }
 
 func validateCatalogTemplate(template catalogTemplate, locales []string) error {
-	if template.SchemaVersion != 1 || !managedWorkspaceIdentityPattern.MatchString(template.TemplateID) || !managedWorkspaceIdentityPattern.MatchString(template.ServiceFamilyID) || template.Revision < 1 || template.Version == "" || template.DiskBytes < 1 {
-		return errors.New("identity, revision, version, or disk requirement is invalid")
+	if template.SchemaVersion != 2 || !managedWorkspaceIdentityPattern.MatchString(template.TemplateID) || !managedWorkspaceIdentityPattern.MatchString(template.ServiceFamilyID) || template.Revision < 1 || template.RecommendedVersion == "" || template.DiskBytes < 1 {
+		return errors.New("identity, revision, recommended version, or disk requirement is invalid")
 	}
 	if template.Deployment != DeploymentHost && template.Deployment != DeploymentContainer && template.Deployment != DeploymentCompose {
 		return errors.New("deployment is invalid")
@@ -130,17 +128,28 @@ func validateCatalogTemplate(template catalogTemplate, locales []string) error {
 		return errors.New("TemplateSpec identity does not match deployment")
 	}
 	if template.Deployment == DeploymentContainer {
-		if template.ContainerMode != "single" || len(template.PlatformArtifacts) == 0 || spec.Container == nil || spec.Container.Image != catalogArtifactPlaceholder {
+		if template.ReleaseDiscovery == nil || template.ReleaseDiscovery.Source != "oci" || template.ContainerMode != "single" || len(template.PlatformArtifacts) == 0 || spec.Container == nil || spec.Container.Image != catalogArtifactPlaceholder {
 			return errors.New("single-container template artifacts are incomplete")
 		}
 		for platform, reference := range template.PlatformArtifacts {
 			if !strings.HasPrefix(platform, "linux-") || imageReferenceDigest(reference) == "" {
 				return fmt.Errorf("platform artifact %q is not an exact image reference", platform)
 			}
+			if releaseImageTag(strings.SplitN(reference, "@", 2)[0]) != template.RecommendedVersion {
+				return fmt.Errorf("platform artifact %q does not match the recommended version", platform)
+			}
 		}
 	}
-	if template.Deployment == DeploymentHost && (len(template.SupportedPlatforms) == 0 || spec.Host == nil || spec.Host.NPM == nil) {
-		return errors.New("host template npm package or platform matrix is incomplete")
+	if template.Deployment == DeploymentHost {
+		if template.ReleaseDiscovery == nil || template.ReleaseDiscovery.Source != "npm" || len(template.SupportedPlatforms) == 0 || spec.Host == nil || spec.Host.NPM == nil {
+			return errors.New("host template npm package or platform matrix is incomplete")
+		}
+		if spec.Host.NPM.Version != template.RecommendedVersion {
+			return errors.New("host template npm package does not match the recommended version")
+		}
+	}
+	if template.Deployment == DeploymentCompose && template.ReleaseDiscovery != nil {
+		return errors.New("Compose templates cannot declare single-release discovery")
 	}
 	return nil
 }
@@ -211,10 +220,10 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 		if definition.Deployment == DeploymentHost {
 			dataLocation = filepath.Join(m.stateDir, "data", definition.ServiceFamilyID)
 		}
-		items = append(items, Template{
+		item := Template{
 			TemplateID: definition.TemplateID, ServiceFamilyID: definition.ServiceFamilyID,
 			Name: name, Description: description, Localizations: cloneLocalizations(definition.Localizations), Icon: &icon,
-			Version: definition.Version, Notices: append([]TemplateNotice(nil), definition.Notices...),
+			Notices:          append([]TemplateNotice(nil), definition.Notices...),
 			DeveloperPreview: definition.DeveloperPreview, DiskBytes: definition.DiskBytes,
 			DataLocation: dataLocation,
 			SourceURL:    definition.SourceURL, DockerSourceURL: definition.DockerSourceURL,
@@ -224,7 +233,12 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 			Deployments:          []DeploymentAvailability{{Deployment: definition.Deployment, Available: available, ReasonCode: reasonCode, Reason: reason}},
 			DefaultWorkspacePath: workspace, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: effectiveSpec,
 			HostLifecyclePlan: hostLifecyclePlan(spec), DefaultAccessMode: defaultAccessMode(definition.DefaultAccessMode),
-		})
+		}
+		if definition.ReleaseDiscovery != nil {
+			item.ReleaseSource = definition.ReleaseDiscovery.Source
+		}
+		item.RecommendedRelease = recommendedReleaseForTemplate(item)
+		items = append(items, item)
 	}
 	return items, nil
 }

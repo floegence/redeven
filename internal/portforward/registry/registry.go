@@ -92,11 +92,17 @@ func preflightExistingRegistry(path string) error {
 	if version > registryCurrentSchemaVersion {
 		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: registryCurrentSchemaVersion}
 	}
-	if version < registryCurrentSchemaVersion {
-		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: registryCurrentSchemaVersion}
+	var verifyErr error
+	switch version {
+	case 1:
+		verifyErr = verifyRegistryV1(tx)
+	case registryCurrentSchemaVersion:
+		verifyErr = verifyRegistryV2(tx)
+	default:
+		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
 	}
-	if err := verifyRegistryV1(tx); err != nil {
-		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: err}
+	if verifyErr != nil {
+		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: verifyErr}
 	}
 	return nil
 }

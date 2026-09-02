@@ -29,13 +29,14 @@ func TestFetchNPMReleasesReturnsAllExactVersionsInSemverOrder(t *testing.T) {
 			"1.0.0":          map[string]any{"version": "1.0.0", "dist": map[string]string{"integrity": testNPMIntegrity("stable")}, "engines": map[string]string{"node": ">=24 <27"}},
 			"1.1.0-alpha.10": map[string]any{"version": "1.1.0-alpha.10", "dist": map[string]string{"integrity": testNPMIntegrity("alpha10")}, "deprecated": "use the stable channel"},
 			"1.1.0-alpha.2":  map[string]any{"version": "1.1.0-alpha.2", "dist": map[string]string{"integrity": testNPMIntegrity("alpha2")}},
+			"0.9.0":          map[string]any{"version": "0.9.0", "dist": map[string]string{"integrity": "sha1-unverifiable"}},
 			"invalid":        map[string]any{"version": "latest", "dist": map[string]string{"integrity": "sha1-invalid"}},
 		},
 		"time": map[string]string{"1.0.0": "2026-08-31T12:00:00.000Z"},
 	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/%40scope%2Fpackage" && request.URL.Path != "/@scope%2Fpackage" && request.URL.Path != "/@scope/package" {
-			t.Fatalf("unexpected package path %q", request.URL.Path)
+		if request.RequestURI != "/@scope%2Fpackage" {
+			t.Fatalf("unexpected package request URI %q", request.RequestURI)
 		}
 		_ = json.NewEncoder(response).Encode(documents)
 	}))
@@ -45,11 +46,11 @@ func TestFetchNPMReleasesReturnsAllExactVersionsInSemverOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 3 {
-		t.Fatalf("got %d releases, want 3", len(items))
+	if len(items) != 4 {
+		t.Fatalf("got %d releases, want 4", len(items))
 	}
-	got := []string{items[0].Version, items[1].Version, items[2].Version}
-	want := []string{"1.1.0-alpha.10", "1.1.0-alpha.2", "1.0.0"}
+	got := []string{items[0].Version, items[1].Version, items[2].Version, items[3].Version}
+	want := []string{"1.1.0-alpha.10", "1.1.0-alpha.2", "1.0.0", "0.9.0"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("versions = %v, want %v", got, want)
 	}
@@ -58,6 +59,9 @@ func TestFetchNPMReleasesReturnsAllExactVersionsInSemverOrder(t *testing.T) {
 	}
 	if items[2].PublishedAtUnixMs != time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC).UnixMilli() {
 		t.Fatal("published timestamp was not preserved")
+	}
+	if items[3].IntegrityVerified {
+		t.Fatal("unverifiable integrity was treated as verified")
 	}
 }
 
@@ -122,17 +126,17 @@ func TestNodeRangeCompatibilityFailsClosed(t *testing.T) {
 	}
 }
 
-func TestReleaseCandidateIsNewerDoesNotTreatDowngradeAsUpdate(t *testing.T) {
-	current := ReleaseIdentity{Kind: "npm", Source: "@scope/package", Version: "2.0.0"}
-	if releaseCandidateIsNewer(current, ReleaseCandidate{SourceKind: "npm", Source: "@scope/package", Version: "1.9.0"}) {
-		t.Fatal("older npm release was reported as an available update")
+func TestReleaseRelationKeepsOlderAndOpaqueVersionsSelectable(t *testing.T) {
+	current := &ReleaseIdentity{Kind: "npm", Source: "@scope/package", Registry: "https://registry.example/", Version: "2.0.0"}
+	if got := releaseRelation(current, ReleaseIdentity{Kind: "npm", Source: current.Source, Registry: current.Registry, Version: "1.9.0"}); got != "older" {
+		t.Fatalf("older relation = %q", got)
 	}
-	if !releaseCandidateIsNewer(current, ReleaseCandidate{SourceKind: "npm", Source: "@scope/package", Version: "2.1.0"}) {
-		t.Fatal("newer npm release was not reported as an available update")
+	if got := releaseRelation(current, ReleaseIdentity{Kind: "npm", Source: current.Source, Registry: current.Registry, Version: "2.1.0"}); got != "newer" {
+		t.Fatalf("newer relation = %q", got)
 	}
-	container := ReleaseIdentity{Kind: "oci", Source: "registry.example/team/app", Tag: "1.0.0", Digest: testReleaseDigest("a")}
-	if !releaseCandidateIsNewer(container, ReleaseCandidate{SourceKind: "oci", Source: container.Source, Tag: "1.0.0", Digest: testReleaseDigest("b"), TagMoved: true}) {
-		t.Fatal("moved OCI tag was not reported")
+	container := &ReleaseIdentity{Kind: "oci", Source: "registry.example/team/app", Tag: "nightly", Digest: testReleaseDigest("a")}
+	if got := releaseRelation(container, ReleaseIdentity{Kind: "oci", Source: container.Source, Tag: "market", Digest: testReleaseDigest("b")}); got != "unknown" {
+		t.Fatalf("opaque relation = %q", got)
 	}
 }
 
