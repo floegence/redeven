@@ -1383,14 +1383,14 @@ func (s *Service) buildThreadEffectAgent(ctx context.Context, effect *threadEffe
 		return nil, err
 	}
 	effect.req.Model = model
-	preparedAgent, err := r.prepareFloretHostedAgent(ctx, RunRequest{
+	agent, err := r.prepareFloretHostedAgent(ctx, RunRequest{
 		Model: model, Input: effect.req.Input, Options: effect.req.Options,
 		ModelCapability: modelCapability, Retry: effect.req.Retry,
 	}, gateway.provider, gateway.apiKey, gateway.adapterOverride)
 	if err != nil {
 		return nil, err
 	}
-	return preparedAgent.agent, nil
+	return agent, nil
 }
 
 func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, requestedModel string, threadModelID string, r *run) (resolvedRunModel, error) {

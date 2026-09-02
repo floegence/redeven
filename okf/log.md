@@ -1,6 +1,15 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Stable hosted effect authorization**: Redeven now consumes Floret v7.1.0
+  and binds one defensive copy of correlation and permission-snapshot labels to
+  every production Agent. Fresh runs, retries, Ask User continuations, and
+  restored execution share the upstream provider-host injection point. The
+  admitted snapshot ID is frozen once; provider admission and current-policy
+  refresh no longer rebind or overwrite it. Two effects from one provider
+  response therefore reach independent authorization checks and handlers while
+  preserving provider result order. Missing or tightened authority still fails
+  closed, and the fixed tool surface remains the only production path.
 * **Historical managed-volume recovery**: The generic Container resource loader
   now imports the exact retired DeepSeek `docker-volume.json` identity into
   `managed_web_service_resources` only after deterministic-name, creation-time,

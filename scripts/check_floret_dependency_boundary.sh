@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.0\.5$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.0.5"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.1\.0$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.1.0"
 if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v7\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
@@ -45,7 +45,7 @@ if rg -n --glob '*.go' --glob '!**/*_test.go' \
   fail "Redeven must not import Floret internals"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
-  'WithAgentDynamicToolSurface|dynamicToolSurfaceProvider|buildDynamicToolSurfaceConfig' internal/ai; then
+  'WithAgentDynamicToolSurface|dynamicToolSurfaceProvider|buildDynamicToolSurfaceConfig|floretHostedPreparation' internal/ai; then
   fail "Flower production must keep one fixed provider tool surface per hosted Agent"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
@@ -62,9 +62,10 @@ require_source internal/ai/approval_command.go '.Respond('
 require_source internal/ai/retry_thread_continuation.go '.Retry('
 require_source internal/ai/service.go 's.threadRuntime.Subscribe'
 require_source internal/ai/floret_runtime.go 'floretEffectAuthorizationGateForRun'
+require_source internal/ai/floret_runtime.go 'flruntime.WithAgentRunLabels(labels)'
 require_source internal/ai/subagents_floret.go 'ThreadScope{ParentID:'
 
-legacy_pattern='TurnAdmissionReceipt|ExecuteAdmission|AdmitTurn|authority.?barrier|RecoveryHandle|ProjectionDelta|PendingToolRecovery|approval.?generation|admission.?handoff|receipt.?observation'
+legacy_pattern='TurnAdmissionReceipt|ExecuteAdmission|AdmitTurn|authority.?barrier|RecoveryHandle|ProjectionDelta|PendingToolRecovery|approval.?generation|admission.?handoff|receipt.?observation|ensureCanonicalPermissionSnapshotPersisted|pendingCommandID'
 if rg -n -i --pcre2 --glob '*.go' --glob '!**/*_test.go' "$legacy_pattern" internal/ai; then
   fail "Redeven production retains a removed Floret lifecycle path"
 fi

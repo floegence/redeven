@@ -528,7 +528,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.0.5"
+		floretVersion = "v7.1.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -616,7 +616,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v7 v7.0.5",
+			"github.com/floegence/floret/v7 v7.1.0",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v4.0.0 plus Floe Webapp v0.47.1",
@@ -851,6 +851,7 @@ func TestFloretGatewayBoundaryUsesStableAgentIdentity(t *testing.T) {
 	for _, marker := range []string{
 		"flruntime.NewAgent",
 		"flruntime.WithAgentTools(surface.FloretToolItems...)",
+		"flruntime.WithAgentRunLabels(labels)",
 		"flruntime.WithAgentThreadTitleMode",
 		"flruntime.ThreadTitleModeProvider",
 	} {
@@ -858,7 +859,7 @@ func TestFloretGatewayBoundaryUsesStableAgentIdentity(t *testing.T) {
 			t.Fatalf("floret_runtime.go must construct the immutable hosted Agent with %q", marker)
 		}
 	}
-	for _, marker := range []string{"flruntime.WithAgentDynamicToolSurface", "flconfig." + "ProviderFake", "Fake" + "Response", "TurnExecutionHostOptions", "RunTurnRequest"} {
+	for _, marker := range []string{"flruntime.WithAgentDynamicToolSurface", "floretHostedPreparation", "ensureCanonicalPermissionSnapshotPersisted", "flconfig." + "ProviderFake", "Fake" + "Response", "TurnExecutionHostOptions", "RunTurnRequest"} {
 		if strings.Contains(content, marker) {
 			t.Fatalf("floret_runtime.go retained removed hosted-Agent marker %q", marker)
 		}
