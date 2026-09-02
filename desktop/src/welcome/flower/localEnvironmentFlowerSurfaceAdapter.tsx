@@ -38,6 +38,7 @@ import type {
   FlowerAttachmentStagingScope,
   FlowerStagedAttachment,
   FlowerStagedLongTextReadResult,
+  FlowerSubagentDetail,
   FlowerLiveStreamConnectInput,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
@@ -789,11 +790,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           bridge.cancelRuntimeFlowerStream(streamID);
         }
       },
-      loadSubagentDetail: (parentThreadID, childThreadID, afterOrdinal, limit) => runtimeJSON(
-        bridge,
-        'GET',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail?after_ordinal=${afterOrdinal}&limit=${limit}`,
-      ),
+	      loadSubagentDetail: (parentThreadID, childThreadID) => runtimeJSON<Readonly<{ detail?: FlowerSubagentDetail }>>(
+	        bridge,
+	        'GET',
+	        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
+	      ),
       readTerminalProcess: (runID, processID, input) => {
         const params = new URLSearchParams();
         params.set('after_seq', String(input.after_seq));

@@ -65,7 +65,6 @@ type RuntimeSession struct {
 	AppLabel          string
 	CodeSpaceID       string
 	SessionKind       string
-	TunnelURL         string
 	CreatedAtUnixMs   int64
 	ConnectedAtUnixMs int64
 	CanRead           bool

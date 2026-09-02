@@ -11,7 +11,7 @@ import (
 	"errors"
 	"sync"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 )
 
 // Error is a bounded Redeven application error returned to a peer.

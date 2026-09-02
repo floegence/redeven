@@ -3672,9 +3672,6 @@ export const redevenWireSchemas = {
             "session_kind": {
               "kind": "string"
             },
-            "tunnel_url": {
-              "kind": "string"
-            },
             "created_at_unix_ms": {
               "kind": "number"
             },
@@ -3699,7 +3696,6 @@ export const redevenWireSchemas = {
             "connected_at_unix_ms",
             "created_at_unix_ms",
             "floe_app",
-            "tunnel_url",
             "user_email",
             "user_public_id"
           ]

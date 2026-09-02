@@ -90,17 +90,6 @@ function formatAppLabel(floeApp: string, i18n: ReturnType<typeof useI18n>): stri
   return v || '-';
 }
 
-function formatTunnelHost(tunnelURL: string, i18n: ReturnType<typeof useI18n>): string {
-  const v = String(tunnelURL ?? '').trim();
-  if (!v) return i18n.t('runtimeMonitor.directNoTunnel');
-  try {
-    const u = new URL(v);
-    return String(u.host || u.origin || v).trim() || i18n.t('runtimeMonitor.directNoTunnel');
-  } catch {
-    return v;
-  }
-}
-
 function normalizeProcessPid(value: unknown): number | null {
   const pid = Math.trunc(Number(value ?? 0));
   return Number.isFinite(pid) && pid > 0 ? pid : null;
@@ -722,7 +711,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.user')}</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.app')}</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.codeSpace')}</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.transport')}</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.connected')}</th>
                       <th class="text-center py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.permissionShort')}</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.channel')}</th>
@@ -731,7 +719,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                   <tbody>
                     <Show when={visibleSessions().length > 0} fallback={
                       <tr>
-                        <td colSpan={7} class="py-6 px-2 text-[11px] text-muted-foreground text-center">
+                        <td colSpan={6} class="py-6 px-2 text-[11px] text-muted-foreground text-center">
                           {loading() ? i18n.t('runtimeMonitor.loading') : i18n.t('runtimeMonitor.noActiveSessions')}
                         </td>
                       </tr>
@@ -743,8 +731,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                           const userLabel = email || uid || '-';
                           const appLabel = formatAppLabel(sess.floeApp, i18n);
                           const codeSpace = String(sess.codeSpaceID ?? '').trim();
-                          const tunnelURL = String(sess.tunnelUrl ?? '').trim();
-                          const tunnelLabel = formatTunnelHost(tunnelURL, i18n);
                           const connected = formatDateTime(sess.connectedAtUnixMs, i18n.formatDateTime);
                           return (
                             <tr class="border-b border-border/40 hover:bg-muted/30 transition-colors">
@@ -758,13 +744,6 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                               </td>
                               <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={sess.floeApp}>{appLabel}</td>
                               <td class="py-2 px-2 font-mono truncate max-w-[160px]" title={codeSpace}>{codeSpace || '-'}</td>
-                              <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={tunnelURL}>
-                                <Show when={tunnelURL} fallback={<span>{tunnelLabel}</span>}>
-                                  <button type="button" class="hover:underline" onClick={() => void copy(i18n.t('runtimeMonitor.tunnelEndpointUrlLabel'), tunnelURL)}>
-                                    {tunnelLabel}
-                                  </button>
-                                </Show>
-                              </td>
                               <td class="py-2 px-2 whitespace-nowrap tabular-nums">{connected || '-'}</td>
                               <td class="py-2 px-2 text-center font-mono tabular-nums">{formatSessionPerm(sess)}</td>
                               <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={sess.channelId}>

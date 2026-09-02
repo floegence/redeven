@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
 )

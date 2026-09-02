@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/config"
 )
 

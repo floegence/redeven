@@ -101,9 +101,6 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreVersionIsUnsupported(t *testin
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
 		},
-		ResolveSessionTunnelURL: func(string) (string, bool) {
-			return "", false
-		},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -182,9 +179,6 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreSchemaDrifts(t *testing.T) {
 		Shell:                  "/bin/sh",
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
-		},
-		ResolveSessionTunnelURL: func(string) (string, bool) {
-			return "", false
 		},
 	})
 	if err != nil {
@@ -266,9 +260,6 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 		Terminal:               term,
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
-		},
-		ResolveSessionTunnelURL: func(string) (string, bool) {
-			return "", false
 		},
 	})
 	if err != nil {

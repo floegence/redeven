@@ -72,7 +72,6 @@ type Options struct {
 	// code-server reconnection grace and local app-server routing.
 	LocalUIEnabled           bool
 	ResolveSessionMeta       func(channelID string) (*session.Meta, bool)
-	ResolveSessionTunnelURL  func(channelID string) (string, bool)
 	ResolvePluginSessionMeta func(channelID string) (*session.Meta, bool)
 	AcquirePluginSession     func(channelID string) (*session.Meta, func(), bool)
 	EndPluginSession         func(channelID string)
@@ -369,32 +368,31 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	appSrv, err := appserver.New(appserver.Options{
-		Logger:                  logger,
-		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
-		Backend:                 svc,
-		PortForward:             pfSvc,
-		ManagedWebServices:      managedSvc,
-		ContainerResources:      containerResourceSvc,
-		AIServiceProvider:       aiReady,
-		Notes:                   notesSvc,
-		WorkbenchLayout:         workbenchLayoutSvc,
-		Terminal:                opts.Terminal,
-		Audit:                   opts.Audit,
-		Diagnostics:             opts.Diagnostics,
-		ResolveSessionMeta:      opts.ResolveSessionMeta,
-		ResolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
-		AcquirePluginSession:    opts.AcquirePluginSession,
-		EndPluginSession:        opts.EndPluginSession,
-		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
-		SecretsStore:            secrets,
-		ThreadReadStateStore:    threadReadStateStore,
-		PluginPlatform:          pluginIntegration.Handler(),
-		PluginMarketSnapshot:    pluginIntegration.MarketSnapshot,
-		PluginMarketDetail:      pluginIntegration.MarketDetail,
-		PluginMarketIcon:        pluginIntegration.MarketIcon,
-		AgentHomeDir:            agentHomeDir,
-		FilesystemScope:         scope,
-		ListenAddr:              "127.0.0.1:0",
+		Logger:               logger,
+		DistFS:               mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
+		Backend:              svc,
+		PortForward:          pfSvc,
+		ManagedWebServices:   managedSvc,
+		ContainerResources:   containerResourceSvc,
+		AIServiceProvider:    aiReady,
+		Notes:                notesSvc,
+		WorkbenchLayout:      workbenchLayoutSvc,
+		Terminal:             opts.Terminal,
+		Audit:                opts.Audit,
+		Diagnostics:          opts.Diagnostics,
+		ResolveSessionMeta:   opts.ResolveSessionMeta,
+		AcquirePluginSession: opts.AcquirePluginSession,
+		EndPluginSession:     opts.EndPluginSession,
+		ConfigPath:           strings.TrimSpace(opts.ConfigPath),
+		SecretsStore:         secrets,
+		ThreadReadStateStore: threadReadStateStore,
+		PluginPlatform:       pluginIntegration.Handler(),
+		PluginMarketSnapshot: pluginIntegration.MarketSnapshot,
+		PluginMarketDetail:   pluginIntegration.MarketDetail,
+		PluginMarketIcon:     pluginIntegration.MarketIcon,
+		AgentHomeDir:         agentHomeDir,
+		FilesystemScope:      scope,
+		ListenAddr:           "127.0.0.1:0",
 	})
 	if err != nil {
 		_ = pluginIntegration.Close()

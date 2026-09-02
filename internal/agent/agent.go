@@ -22,7 +22,7 @@ import (
 	"time"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
@@ -204,7 +204,6 @@ type Agent struct {
 type activeSession struct {
 	cancel            context.CancelFunc
 	meta              session.Meta
-	tunnelURL         string // grant_server.tunnel_url (for UI/auditing only)
 	grantDigest       [sha256.Size]byte
 	grantExpiresAt    int64
 	connectedAtUnixMs int64 // set after ConnectTunnel succeeds
@@ -407,26 +406,6 @@ func New(opts Options) (*Agent, error) {
 				return nil, false
 			}
 			return &meta, true
-		},
-		ResolveSessionTunnelURL: func(channelID string) (string, bool) {
-			if a == nil {
-				return "", false
-			}
-			channelID = strings.TrimSpace(channelID)
-			if channelID == "" {
-				return "", false
-			}
-			a.mu.Lock()
-			s := a.sessions[channelID]
-			var tunnelURL string
-			if s != nil {
-				tunnelURL = s.tunnelURL
-			}
-			a.mu.Unlock()
-			if s == nil {
-				return "", false
-			}
-			return strings.TrimSpace(tunnelURL), true
 		},
 		ResolvePluginSessionMeta: a.ResolvePluginSession,
 		AcquirePluginSession:     a.AcquirePluginSession,
@@ -1082,7 +1061,6 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	a.sessions[channelID] = &activeSession{
 		cancel:         cancel,
 		meta:           metaCopy,
-		tunnelURL:      "",
 		grantDigest:    grantDigest,
 		grantExpiresAt: n.GrantServer.ArtifactExpiresAtUnixS,
 		runtimeLease:   runtimeLease,
@@ -1121,7 +1099,6 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	codeSpaceID := strings.TrimSpace(meta.CodeSpaceID)
 	userPublicID := strings.TrimSpace(meta.UserPublicID)
 	userEmail := strings.TrimSpace(meta.UserEmail)
-	tunnelURL := ""
 	defer func() {
 		reason := "eof"
 		if !opened {
@@ -1193,7 +1170,6 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 				FloeApp:           floeApp,
 				SessionKind:       strings.TrimSpace(meta.SessionKind),
 				CodeSpaceID:       codeSpaceID,
-				TunnelURL:         tunnelURL,
 				CanRead:           meta.CanRead,
 				CanWrite:          meta.CanWrite,
 				CanExecute:        meta.CanExecute,
@@ -1276,7 +1252,6 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 			FloeApp:           floeApp,
 			SessionKind:       strings.TrimSpace(meta.SessionKind),
 			CodeSpaceID:       codeSpaceID,
-			TunnelURL:         tunnelURL,
 			CanRead:           meta.CanRead,
 			CanWrite:          meta.CanWrite,
 			CanExecute:        meta.CanExecute,

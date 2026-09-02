@@ -20,7 +20,6 @@ func TestRuntimePresentationSessionsExposeConnectedSessionSummary(t *testing.T) 
 					CanExecute:      true,
 					CreatedAtUnixMs: 10,
 				},
-				tunnelURL:         "https://tunnel.example.test/ch_code",
 				connectedAtUnixMs: 200,
 			},
 			"ch_pf": {
@@ -50,7 +49,7 @@ func TestRuntimePresentationSessionsExposeConnectedSessionSummary(t *testing.T) 
 	if sessions[0].ChannelID != "ch_pf" || sessions[1].ChannelID != "ch_code" {
 		t.Fatalf("sessions sorted by connected_at desc = %#v", sessions)
 	}
-	if sessions[1].TunnelURL != "https://tunnel.example.test/ch_code" || !sessions[1].CanWrite {
+	if !sessions[1].CanWrite {
 		t.Fatalf("code session summary = %#v", sessions[1])
 	}
 

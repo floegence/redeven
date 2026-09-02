@@ -17,7 +17,6 @@ export type AgentAuditEntry = {
   floe_app?: string;
   session_kind?: string;
   code_space_id?: string;
-  tunnel_url?: string;
 
   can_read: boolean;
   can_write: boolean;

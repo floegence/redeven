@@ -42,7 +42,6 @@ type Entry struct {
 	FloeApp     string `json:"floe_app,omitempty"`
 	SessionKind string `json:"session_kind,omitempty"`
 	CodeSpaceID string `json:"code_space_id,omitempty"`
-	TunnelURL   string `json:"tunnel_url,omitempty"`
 	CanRead     bool   `json:"can_read"`
 	CanWrite    bool   `json:"can_write"`
 	CanExecute  bool   `json:"can_execute"`

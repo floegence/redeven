@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-const { installWebSocketPatchMock, registerProxyAppWindowMock } = vi.hoisted(() => ({
+const { installWebSocketPatchMock, registerProxyAppWindowWithServiceWorkerRuntimeMock } = vi.hoisted(() => ({
   installWebSocketPatchMock: vi.fn(),
-  registerProxyAppWindowMock: vi.fn(),
+  registerProxyAppWindowWithServiceWorkerRuntimeMock: vi.fn(),
 }));
 
 vi.mock("@floegence/flowersec-core/proxy", () => ({
   installWebSocketPatch: installWebSocketPatchMock,
-  registerProxyAppWindow: registerProxyAppWindowMock,
+  registerProxyAppWindowWithServiceWorkerRuntime: registerProxyAppWindowWithServiceWorkerRuntimeMock,
 }));
 
 class FakeElement {
@@ -49,7 +49,7 @@ describe("Code App injection entry", () => {
   beforeEach(() => {
     vi.resetModules();
     installWebSocketPatchMock.mockReset();
-    registerProxyAppWindowMock.mockReset();
+    registerProxyAppWindowWithServiceWorkerRuntimeMock.mockReset();
   });
 
   afterEach(() => {
@@ -91,7 +91,7 @@ describe("Code App injection entry", () => {
       "REDEVEN_CODE_APP_PROXY_BOOTSTRAP_FAILED: invalid proxy bridge capability nonce",
     );
 
-    expect(registerProxyAppWindowMock).not.toHaveBeenCalled();
+    expect(registerProxyAppWindowWithServiceWorkerRuntimeMock).not.toHaveBeenCalled();
     expect(installWebSocketPatchMock).not.toHaveBeenCalled();
     expect(stop).toHaveBeenCalledOnce();
     expect(document.title).toBe("REDEVEN_CODE_APP_PROXY_BOOTSTRAP_FAILED");
@@ -144,7 +144,7 @@ describe("Code App injection entry", () => {
       }),
     } as unknown as Window;
 
-    registerProxyAppWindowMock.mockReturnValue({ runtime, dispose });
+    registerProxyAppWindowWithServiceWorkerRuntimeMock.mockReturnValue({ runtime, dispose });
     installWebSocketPatchMock.mockReturnValue({ uninstall });
     vi.stubGlobal("window", targetWindow);
     vi.stubGlobal("document", document);
@@ -160,7 +160,6 @@ describe("Code App injection entry", () => {
 
     pageHideListener?.({ persisted: false } as PageTransitionEvent);
     expect(dispose).toHaveBeenCalledOnce();
-    expect(serviceWorker.removeEventListener).toHaveBeenCalledWith("message", expect.any(Function));
     expect(uninstall).not.toHaveBeenCalled();
   });
 });

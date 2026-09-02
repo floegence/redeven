@@ -150,7 +150,6 @@ func (c *runtimePresentationController) RuntimeSessions() []runtimepresentation.
 			AppLabel:          runtimePresentationAppLabel(session.FloeApp),
 			CodeSpaceID:       session.CodeSpaceID,
 			SessionKind:       session.SessionKind,
-			TunnelURL:         session.TunnelURL,
 			CreatedAtUnixMs:   session.CreatedAtUnixMs,
 			ConnectedAtUnixMs: session.ConnectedAtUnixMs,
 			CanRead:           session.CanRead,

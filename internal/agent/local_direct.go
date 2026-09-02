@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/diagnostics"
@@ -107,7 +107,6 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	a.sessions[channelID] = &activeSession{
 		cancel:            cancel,
 		meta:              metaCopy,
-		tunnelURL:         "", // no tunnel in direct mode
 		connectedAtUnixMs: connectedAtUnixMs,
 		runtimeLease:      runtimeLease,
 	}
@@ -192,7 +191,6 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 				FloeApp:           strings.TrimSpace(meta.FloeApp),
 				SessionKind:       strings.TrimSpace(meta.SessionKind),
 				CodeSpaceID:       strings.TrimSpace(meta.CodeSpaceID),
-				TunnelURL:         "",
 				CanRead:           meta.CanRead,
 				CanWrite:          meta.CanWrite,
 				CanExecute:        meta.CanExecute,
@@ -246,7 +244,6 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 			FloeApp:           strings.TrimSpace(meta.FloeApp),
 			SessionKind:       strings.TrimSpace(meta.SessionKind),
 			CodeSpaceID:       strings.TrimSpace(meta.CodeSpaceID),
-			TunnelURL:         "",
 			CanRead:           meta.CanRead,
 			CanWrite:          meta.CanWrite,
 			CanExecute:        meta.CanExecute,

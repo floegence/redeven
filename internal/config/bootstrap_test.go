@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	flowercontrol "github.com/floegence/flowersec/flowersec-go/v4/controlplane"
+	flowercontrol "github.com/floegence/flowersec/flowersec-go/v5/controlplane"
 )
 
 func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {

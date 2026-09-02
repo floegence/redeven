@@ -3,7 +3,7 @@ package runtimeproxy
 import (
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 )
 
 const (
@@ -53,21 +53,8 @@ func New(opts Options) (*flowersec.ProxyServer, error) {
 	})
 }
 
-func Register(handlers *flowersec.SessionHandlers, opts Options) (*flowersec.ProxyServer, error) {
-	proxy, err := New(opts)
-	if err != nil {
-		return nil, err
-	}
-	if err := proxy.Register(handlers); err != nil {
-		_ = proxy.Close()
-		return nil, err
-	}
-	return proxy, nil
-}
-
 // RegisterStreamHandlers binds the product proxy to Flowersec's role-neutral
-// application stream registry. Remote Connector sessions must use this
-// boundary; Register remains for accepted Local UI sessions.
+// application stream registry.
 func RegisterStreamHandlers(handlers flowersec.StreamHandlerRegistrar, opts Options) (*flowersec.ProxyServer, error) {
 	proxy, err := New(opts)
 	if err != nil {
