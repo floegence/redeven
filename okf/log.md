@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Stable SubAgent window presence**: Window visibility is now one
+  boolean-equality projection of the active detail selection. Live current,
+  summary, request, and error updates change content without restarting the
+  floating-window enter transition; explicit close and parent navigation remain
+  the only visibility mutations.
 * **Stable live SubAgent detail**: The parent workspace stream now forwards
   every safely projected child `ThreadView` as `subagent_current`, independently
   from lifecycle-driven membership replacement. One stable floating-window

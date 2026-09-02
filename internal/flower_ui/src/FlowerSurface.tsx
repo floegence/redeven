@@ -881,6 +881,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [pendingPermissionPatch, setPendingPermissionPatch] = createSignal<PendingPermissionPatch | null>(null);
   const [pendingModelPatch, setPendingModelPatch] = createSignal<PendingModelPatch | null>(null);
   const [activeSubagentDetail, setActiveSubagentDetail] = createSignal<ActiveSubagentDetail | null>(null);
+  const subagentDetailOpen = createMemo(() => activeSubagentDetail() !== null);
   const activeSubagentID = () => activeSubagentDetail()?.childThreadID ?? '';
   const subagentDetail = () => activeSubagentDetail()?.detail ?? null;
   const subagentDetailLoading = () => {
@@ -9561,7 +9562,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const subagentDetailDialog = () => (
     <SubagentDetailWindow
-      open={Boolean(activeSubagentDetail())}
+      open={subagentDetailOpen()}
       onOpenChange={(open) => {
         if (!open) closeSubagentOverlays();
       }}
