@@ -5430,10 +5430,6 @@ html.dark .flower-component-shell {
   line-height: 1.4;
 }
 
-.flower-activity-subagents-item {
-  min-width: 0;
-}
-
 .flower-activity-subagents-item-task,
 .flower-activity-subagents-item-agent {
   min-width: 0;
@@ -5457,10 +5453,9 @@ html.dark .flower-component-shell {
 
 .flower-activity-subagents-item {
   display: grid;
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  border-left: 1px solid color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
-  padding-left: 0.5625rem;
 }
 
 .flower-activity-subagents-item-main {

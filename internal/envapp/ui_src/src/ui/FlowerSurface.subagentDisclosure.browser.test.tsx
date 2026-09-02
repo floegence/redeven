@@ -148,6 +148,22 @@ afterEach(async () => {
 });
 
 describe('Flower Subagent disclosure motion', () => {
+  it('uses one disclosure guide without adding a rail to every subagent', async () => {
+    await page.viewport(1100, 720);
+    const { runtime } = await mountFixture();
+    const row = runtime.querySelector('[data-flower-activity-item-id="wait-three"]') as HTMLDivElement;
+    const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
+    button.click();
+    await waitFor(() => Boolean(row.querySelector('.flower-activity-inline-details-content')));
+
+    const content = row.querySelector('.flower-activity-inline-details-content') as HTMLDivElement;
+    const items = [...row.querySelectorAll<HTMLElement>('.flower-activity-subagents-item')];
+    expect(getComputedStyle(content).borderLeftWidth).toBe('1px');
+    expect(items).toHaveLength(3);
+    expect(items.every((item) => getComputedStyle(item).borderLeftWidth === '0px')).toBe(true);
+    expect(items.every((item) => getComputedStyle(item).paddingLeft === '0px')).toBe(true);
+  });
+
   it('keeps one and three-target titles anchored through continuous open and close motion', async () => {
     await page.viewport(1100, 720);
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
