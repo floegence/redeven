@@ -133,6 +133,37 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentPublicPayload(t *testin
 	}
 }
 
+func TestSanitizeActivityTimelineMessageJSONKeepsCanonicalTodoPayload(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"id":"msg_todos","role":"assistant","status":"complete","timestamp":1700000000000,
+		"blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_todos","thread_id":"thread_1","turn_id":"turn_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{
+			"item_id":"tool_todos","tool_id":"tool_todos","tool_name":"write_todos","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,
+			"presentation":{"label":"Update todos","renderer":"todos","payload":{"operation":"write","items":[{"text":"Inspect the public payload","status":"completed","note":"private"},{"text":"Verify current work","status":"in_progress","id":"private-id"}],"todos":[{"content":"legacy","status":"pending"}],"summary":"legacy"}}
+		}]}]
+	}`
+
+	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
+	if err != nil {
+		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
+	}
+	body := string(sanitized)
+	for _, required := range []string{
+		`"operation":"write"`,
+		`"items":[{"status":"completed","text":"Inspect the public payload"},{"status":"in_progress","text":"Verify current work"}]`,
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("sanitized todo payload missing %q: %s", required, body)
+		}
+	}
+	for _, forbidden := range []string{`"todos":[`, `"summary":"legacy"`, `"note"`, `"id":"private-id"`, `"content":"legacy"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("sanitized todo payload contains %q: %s", forbidden, body)
+		}
+	}
+}
+
 func TestSanitizeActivityTimelineMessageJSONKeepsPreviewAndDropsPageIcon(t *testing.T) {
 	t.Parallel()
 

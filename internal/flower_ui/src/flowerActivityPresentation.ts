@@ -25,10 +25,8 @@ export type FlowerActivityStructuredRow = Readonly<{
 export type FlowerActivityTodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 
 export type FlowerActivityTodoItem = Readonly<{
-  id?: string;
   content: string;
   status: FlowerActivityTodoStatus;
-  note?: string;
 }>;
 
 export type FlowerActivityTitle =
@@ -380,27 +378,14 @@ function normalizeTodoStatus(value: unknown): FlowerActivityTodoStatus {
 
 function todoItemsFromPayload(payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityTodoItem[] {
   if (!payload) return [];
-  const result = asRecord(payload.result);
-  const args = asRecord(payload.args);
-  const source = [
-    payload.items,
-    payload.todos,
-    result.items,
-    result.todos,
-    args.items,
-    args.todos,
-  ].map(asArray).find((items) => items.length > 0) ?? [];
+  const source = asArray(payload.items);
   return source.map((entry) => {
     const record = asRecord(entry);
-    const content = payloadValue(record, 'text', 'content', 'title', 'task', 'description');
+    const content = payloadValue(record, 'text');
     if (!content) return null;
-    const id = payloadValue(record, 'id');
-    const note = payloadValue(record, 'note');
     return {
-      ...(id ? { id } : {}),
       content,
-      status: normalizeTodoStatus(record.after_status ?? record.status),
-      ...(note ? { note } : {}),
+      status: normalizeTodoStatus(record.status),
     };
   }).filter((todo): todo is FlowerActivityTodoItem => todo !== null);
 }

@@ -883,3 +883,61 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicActivityTimelinePreservesTodoItems(t *testing.T) {
+	t.Parallel()
+
+	block := newActivityTimelineBlock(observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_todos",
+		ThreadID:      "thread_todos",
+		TurnID:        "turn_todos",
+		TraceID:       "trace_todos",
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusSuccess,
+			Severity:   observation.ActivitySeverityQuiet,
+			TotalItems: 1,
+			Counts:     observation.ActivityCounts{Success: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:   "tool:write_todos",
+			ToolID:   "write_todos",
+			ToolName: "write_todos",
+			Kind:     observation.ActivityKindTool,
+			Status:   observation.ActivityStatusSuccess,
+			Severity: observation.ActivitySeverityQuiet,
+			Presentation: &fltools.ActivityPresentation{
+				Label:    "Update todos",
+				Renderer: fltools.ActivityRendererTodos,
+				Payload: fltools.TodosActivityPayload{
+					Operation: "write",
+					Items: []fltools.TodoActivityItem{
+						{Text: "Locate the payload loss", Status: "completed"},
+						{Text: "Verify the expandable list", Status: "in_progress"},
+					},
+				},
+			},
+		}},
+	}, nil)
+
+	if len(block.Items) != 1 || block.Items[0].Presentation == nil {
+		t.Fatalf("public activity item=%+v", block.Items)
+	}
+	payload, ok := block.Items[0].Presentation.Payload.(fltools.TodosActivityPayload)
+	if !ok {
+		t.Fatalf("todo payload type=%T, want tools.TodosActivityPayload", block.Items[0].Presentation.Payload)
+	}
+	if len(payload.Items) != 2 || payload.Items[1].Text != "Verify the expandable list" || payload.Items[1].Status != "in_progress" {
+		t.Fatalf("todo payload=%+v", payload)
+	}
+
+	raw, err := json.Marshal(block)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	for _, required := range []string{`"items":[`, `"text":"Locate the payload loss"`, `"status":"in_progress"`} {
+		if !strings.Contains(string(raw), required) {
+			t.Fatalf("public todo activity missing %q: %s", required, raw)
+		}
+	}
+}

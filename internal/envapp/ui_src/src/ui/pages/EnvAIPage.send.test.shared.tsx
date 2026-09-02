@@ -699,9 +699,8 @@ export function registerEnvAIPageSendTests() {
           presentation: {
             label: 'Update todos', renderer: 'todos',
             payload: {
-              status: 'success', summary: 'todos.updated', details: 'tool execution completed',
-              version: 2, updated_at_unix_ms: 1781519615687,
-              todos: [{ id: '1', content: 'Review AI Agent progress', status: 'completed' }],
+              operation: 'write',
+              items: [{ text: 'Review AI Agent progress', status: 'completed' }],
             },
           },
         },

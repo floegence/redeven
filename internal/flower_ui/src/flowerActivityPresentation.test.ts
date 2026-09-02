@@ -947,38 +947,7 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation)).not.toContain('secret-value');
   });
 
-  it('renders todo details from structured payload', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'write_todos',
-      renderer: 'todos',
-      label: 'Update todos',
-      payload: {
-        todos: [
-          { content: 'Inspect thread ordering', status: 'completed' },
-          { content: 'Verify detail rows', status: 'in_progress' },
-        ],
-        counts: { completed: 1, in_progress: 1 },
-      },
-      chips: [
-        { kind: 'completed', label: 'completed', value: '1' },
-        { kind: 'in_progress', label: 'in_progress', value: '1' },
-      ],
-    }));
-
-    expect(presentation.label).toBe('Update todos');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Update todos' });
-    expect(presentation.meta).toContain('1/2 completed');
-    expect(presentation.detailLines).toHaveLength(0);
-    expect(presentation.detailBlocks).toContainEqual({
-      kind: 'todos',
-      items: [
-        { content: 'Inspect thread ordering', status: 'completed' },
-        { content: 'Verify detail rows', status: 'in_progress' },
-      ],
-    });
-  });
-
-  it('renders the published Floret v6 todo items payload', () => {
+  it('renders the published Floret v7 todo items payload', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'write_todos',
       renderer: 'todos',
@@ -998,85 +967,6 @@ describe('presentFlowerActivityItem', () => {
       items: [
         { content: 'Inspect the live timeline', status: 'completed' },
         { content: 'Verify the expanded details', status: 'in_progress' },
-      ],
-    });
-  });
-
-  it('renders todo failure reason without raw tool fields while keeping the todo block', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'write_todos',
-      renderer: 'todos',
-      status: 'error',
-      label: 'Update todos',
-      payload: {
-        status: 'error',
-        todos: [
-          { content: 'Keep final review open', status: 'in_progress' },
-        ],
-        error: {
-          code: 'UNKNOWN',
-          message: 'Todo update failed',
-          retryable: false,
-        },
-      },
-    }));
-
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'todos']);
-    expect(presentation.detailBlocks[0]).toEqual({
-      kind: 'error',
-      error: { message: 'Todo update failed' },
-    });
-    expect(presentation.detailLines).toHaveLength(0);
-    const rendered = JSON.stringify(presentation.detailBlocks);
-    expect(rendered).not.toContain('result status');
-    expect(rendered).not.toContain('error code');
-    expect(rendered).not.toContain('UNKNOWN');
-    expect(rendered).not.toContain('tool');
-    expect(rendered).not.toContain('item_id');
-  });
-
-  it('reads todo details from result payloads without exposing JSON', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'write_todos',
-      renderer: 'todos',
-      payload: {
-        result: {
-          todos: [
-            { id: 'todo-1', content: 'Recheck empty activity blocks', status: 'done', note: 'verified locally' },
-          ],
-        },
-      },
-    }));
-
-    expect(presentation.detailLines).toHaveLength(0);
-    expect(presentation.detailLines.some((line) => line.value.includes('"todos"'))).toBe(false);
-    expect(presentation.detailBlocks).toContainEqual({
-      kind: 'todos',
-      items: [
-        { id: 'todo-1', content: 'Recheck empty activity blocks', status: 'completed', note: 'verified locally' },
-      ],
-    });
-  });
-
-  it('reads todo details from args payloads without exposing JSON', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'write_todos',
-      renderer: 'todos',
-      payload: {
-        args: {
-          todos: [
-            { content: 'Validate args todo rendering', status: 'active' },
-          ],
-        },
-      },
-    }));
-
-    expect(presentation.detailLines).toHaveLength(0);
-    expect(presentation.detailLines.some((line) => line.value.includes('"todos"'))).toBe(false);
-    expect(presentation.detailBlocks).toContainEqual({
-      kind: 'todos',
-      items: [
-        { content: 'Validate args todo rendering', status: 'in_progress' },
       ],
     });
   });

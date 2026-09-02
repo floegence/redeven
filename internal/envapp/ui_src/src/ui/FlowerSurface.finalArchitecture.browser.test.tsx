@@ -1070,6 +1070,64 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(okfToggle.getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('expands Todo activity into the full list and current progress', async () => {
+    const threadID = 'thread-todo-activity-disclosure';
+    const activityThread = thread({
+      thread_id: threadID,
+      title: 'Todo activity disclosure',
+      status: 'success',
+      messages: [{
+        id: 'todo-activity-message',
+        turn_id: 'todo-activity-turn',
+        role: 'assistant',
+        content: '',
+        status: 'complete',
+        created_at_ms: 10,
+        blocks: [activityTimeline({
+          thread_id: threadID,
+          run_id: 'todo-activity-turn',
+          turn_id: 'todo-activity-turn',
+          items: [activityItem({
+            item_id: 'todo-update',
+            tool_id: 'todo-update',
+            tool_name: 'write_todos',
+            renderer: 'todos',
+            label: 'Update todos',
+            payload: {
+              operation: 'write',
+              items: [
+                { text: 'Locate the payload loss', status: 'completed' },
+                { text: 'Verify current work', status: 'in_progress' },
+              ],
+            },
+          })],
+        })],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [activityThread]),
+      loadThread: vi.fn(async () => liveBootstrap(activityThread, 10)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="todo-update"]')));
+
+    const todoRow = runtime.querySelector('[data-flower-activity-item-id="todo-update"]') as HTMLElement;
+    const toggle = todoRow.querySelector('button.flower-activity-inline-button') as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(todoRow.textContent).toContain('1/2 completed');
+    expect(todoRow.querySelector('.flower-activity-inline-chevron')).toBeTruthy();
+
+    toggle.click();
+    await waitFor(() => todoRow.querySelectorAll('.flower-activity-todo-item').length === 2);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(todoRow.querySelector('[data-status="completed"]')?.textContent).toContain('Locate the payload loss');
+    expect(todoRow.querySelector('[data-status="in_progress"]')?.textContent).toContain('Verify current work');
+  });
+
   it('uses one Web Fetch indicator and animates only the running title', async () => {
     const threadID = 'thread-web-fetch-searching-orb';
     const turnID = 'turn-web-fetch-searching-orb';

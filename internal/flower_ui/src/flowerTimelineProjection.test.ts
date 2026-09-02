@@ -478,7 +478,7 @@ describe('buildFlowerTimelineEntries', () => {
                 tool_name: 'write_todos',
                 renderer: 'todos',
                 label: 'Update plan',
-                payload: { todos: [{ content: 'Inspect projection', status: 'completed' }] },
+                payload: { items: [{ text: 'Inspect projection', status: 'completed' }] },
               })],
             }),
             activityTimeline({

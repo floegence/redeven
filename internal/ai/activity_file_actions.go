@@ -477,6 +477,12 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 			}
 			continue
 		}
+		if renderer == fltools.ActivityRendererTodos && key == "items" {
+			if items := sanitizeTodoActivityItems(item); len(items) > 0 {
+				out[key] = items
+			}
+			continue
+		}
 		if renderer == fltools.ActivityRendererWebFetch {
 			switch key {
 			case "content_preview":
@@ -530,6 +536,27 @@ func sanitizeStructuredActivityRows(value any) []any {
 		if len(row) > 1 {
 			out = append(out, row)
 		}
+	}
+	return out
+}
+
+func sanitizeTodoActivityItems(value any) []any {
+	items, _ := value.([]any)
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		text := activityMapString(record, "text")
+		status := activityMapString(record, "status")
+		if text == "" || status == "" {
+			continue
+		}
+		out = append(out, map[string]any{"text": text, "status": status})
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
@@ -722,7 +749,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 	case fltools.ActivityRendererPatch:
 		return stringSet("operation", "files_changed", "hunks", "additions", "deletions", "input_format", "normalized_format", "mutations", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererTodos:
-		return stringSet("todos", "counts", "result", "args", "expected_version", "explanation", "truncated", "summary", "details", "status", "error", "content_ref")
+		return stringSet("operation", "items")
 	case fltools.ActivityRendererWebSearch:
 		return stringSet("query", "provider", "count", "sources", "results", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererWebFetch:
