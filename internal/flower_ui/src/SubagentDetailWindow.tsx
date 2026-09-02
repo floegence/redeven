@@ -1,4 +1,4 @@
-import type { JSX } from 'solid-js';
+import type { Accessor, JSX } from 'solid-js';
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Bot, ChevronDown, Clock, Refresh } from '@floegence/floe-webapp-core/icons';
@@ -10,6 +10,7 @@ import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import {
   projectSubagentLedgerItems,
   type SubagentLedgerActivityBatch,
+  type SubagentLedgerEntryItem,
   type SubagentLedgerItem,
 } from './subagentLedgerProjection';
 import type { FlowerSubagentPanelStatus } from './flowerSubagentProjection';
@@ -24,6 +25,7 @@ type ActivityEntrySummary = Readonly<{
 export type SubagentDetailWindowProps = Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  threadID: string;
   title: string;
   status: FlowerSubagentPanelStatus;
   statusLabel: string;
@@ -35,9 +37,12 @@ export type SubagentDetailWindowProps = Readonly<{
   error: string;
   detailAvailable: boolean;
   entries: readonly FlowerTimelineEntry[];
-  renderEntry: (entry: FlowerTimelineEntry) => JSX.Element;
+  renderEntry: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   bindScroll: (node: HTMLDivElement) => void;
   onScroll: () => void;
+  onWheel: (event: WheelEvent) => void;
+  onPointerDown: () => void;
+  onTouchMove: () => void;
   showScrollToLatest: boolean;
   onScrollToLatest: () => void;
   onRetryLoad: () => void;
@@ -120,116 +125,137 @@ function entryLabel(kind: SubagentLedgerKind, copy: FlowerSubagentsCopy, activit
 }
 
 function ledgerEntry(
-  entry: FlowerTimelineEntry,
-  last: boolean,
+  entry: Accessor<FlowerTimelineEntry>,
+  last: Accessor<boolean>,
   props: SubagentDetailWindowProps,
 ): JSX.Element {
-  const summary = entryActivitySummary(entry);
-  const kind = entryKind(entry, terminalStatus(props.status), last);
-  const timestamp = formatTime(entryTimestamp(entry));
-  const label = entryLabel(kind, props.copy, summary.count);
-  const disclosure = kind === 'instruction' || kind === 'constraints' || kind === 'activity';
-  const defaultOpen = kind === 'activity' && !(summary.count > 6 && summary.allSucceeded);
+  const summary = createMemo(() => entryActivitySummary(entry()));
+  const kind = createMemo(() => entryKind(entry(), terminalStatus(props.status), last()));
+  const timestamp = createMemo(() => formatTime(entryTimestamp(entry())));
+  const label = createMemo(() => entryLabel(kind(), props.copy, summary().count));
+  const disclosure = createMemo(() => kind() === 'instruction' || kind() === 'constraints' || kind() === 'activity');
+  const initialOpen = kind() === 'activity' && !(summary().count > 6 && summary().allSucceeded);
+  const [open, setOpen] = createSignal(initialOpen);
 
-  const header = (
+  const header = () => (
     <div class="flower-subagent-ledger-entry-header">
-      <span class="flower-subagent-ledger-entry-label">{label}</span>
-      <Show when={timestamp}>
-        <time class="flower-subagent-ledger-entry-time" datetime={new Date(entryTimestamp(entry)).toISOString()}>{timestamp}</time>
+      <span class="flower-subagent-ledger-entry-label">{label()}</span>
+      <Show when={timestamp()}>
+        {(value) => (
+          <time class="flower-subagent-ledger-entry-time" datetime={new Date(entryTimestamp(entry())).toISOString()}>{value()}</time>
+        )}
       </Show>
-      <Show when={disclosure}>
+      <Show when={disclosure()}>
         <ChevronDown class="flower-subagent-ledger-entry-chevron h-3.5 w-3.5" aria-hidden="true" />
       </Show>
     </div>
   );
 
-  if (disclosure) {
-    return (
+  return (
+    <Show
+      when={disclosure()}
+      fallback={(
+        <section
+          class={cn('flower-subagent-ledger-entry', `flower-subagent-ledger-entry-${kind()}`)}
+          data-flower-subagent-ledger-kind={kind()}
+          role="listitem"
+        >
+          {header()}
+          <div class="flower-subagent-ledger-entry-body">{props.renderEntry(entry)}</div>
+        </section>
+      )}
+    >
       <details
-        class={cn('flower-subagent-ledger-entry', `flower-subagent-ledger-entry-${kind}`)}
-        data-flower-subagent-ledger-kind={kind}
-        data-default-collapsed={defaultOpen ? undefined : 'true'}
-        open={defaultOpen}
+        class={cn('flower-subagent-ledger-entry', `flower-subagent-ledger-entry-${kind()}`)}
+        data-flower-subagent-ledger-kind={kind()}
+        data-default-collapsed={initialOpen ? undefined : 'true'}
+        open={open()}
         role="listitem"
+        onToggle={(event) => setOpen(event.currentTarget.open)}
       >
-        <summary>{header}</summary>
+        <summary>{header()}</summary>
         <div class="flower-subagent-ledger-entry-body">{props.renderEntry(entry)}</div>
       </details>
-    );
-  }
-
-  return (
-    <section
-      class={cn('flower-subagent-ledger-entry', `flower-subagent-ledger-entry-${kind}`)}
-      data-flower-subagent-ledger-kind={kind}
-      role="listitem"
-    >
-      {header}
-      <div class="flower-subagent-ledger-entry-body">{props.renderEntry(entry)}</div>
-    </section>
+    </Show>
   );
 }
 
-function activityBatchBody(batch: SubagentLedgerActivityBatch, props: SubagentDetailWindowProps): JSX.Element {
+function activityBatchBody(batch: Accessor<SubagentLedgerActivityBatch>, props: SubagentDetailWindowProps): JSX.Element {
+  const entryKeys = createMemo(() => batch().entries.map((entry) => entry.key));
+  const entriesByKey = createMemo(() => new Map(batch().entries.map((entry) => [entry.key, entry] as const)));
   return (
     <div class="flower-subagent-ledger-activity-list">
-      <For each={batch.entries}>{(entry) => props.renderEntry(entry)}</For>
+      <For each={entryKeys()}>
+        {(entryKey) => {
+          const entry = createMemo(() => entriesByKey().get(entryKey) ?? null);
+          return (
+            <Show when={entry()}>
+              {(value) => props.renderEntry(value)}
+            </Show>
+          );
+        }}
+      </For>
     </div>
   );
 }
 
 export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Element {
   const ledgerItems = createMemo(() => projectSubagentLedgerItems(props.entries));
-  const initialBatchOpen = new Map<string, boolean>();
-  const [batchOpenState, setBatchOpenState] = createSignal<Readonly<Record<string, boolean>>>({});
+  const ledgerItemKey = (item: SubagentLedgerItem): string => `${props.threadID}:${item.type}:${item.key}`;
+  const ledgerItemKeys = createMemo(() => ledgerItems().map(ledgerItemKey));
+  const ledgerItemsByKey = createMemo(() => new Map<string, SubagentLedgerItem>(
+    ledgerItems().map((item) => [ledgerItemKey(item), item] as const),
+  ));
   const batchDefaultOpen = (batch: SubagentLedgerActivityBatch): boolean => !(batch.itemCount > 6 && batch.allSucceeded);
-  const batchOpen = (batch: SubagentLedgerActivityBatch): boolean => {
-    if (!initialBatchOpen.has(batch.key)) initialBatchOpen.set(batch.key, batchDefaultOpen(batch));
-    return batchOpenState()[batch.key] ?? initialBatchOpen.get(batch.key) ?? true;
-  };
-  const rememberBatchOpen = (key: string, open: boolean) => {
-    setBatchOpenState((current) => current[key] === open ? current : { ...current, [key]: open });
-  };
-  const ledgerItem = (item: SubagentLedgerItem, index: number, items: readonly SubagentLedgerItem[]): JSX.Element => {
-    if (item.type === 'entry') return ledgerEntry(item.entry, index === items.length - 1, props);
-    if (item.itemCount === 1) {
-      return (
-        <section
-          class="flower-subagent-ledger-entry flower-subagent-ledger-entry-activity flower-subagent-ledger-entry-single-activity"
-          data-flower-subagent-ledger-kind="activity"
-          data-flower-subagent-single-operation
-          data-flower-subagent-activity-status={item.status}
-          role="listitem"
-        >
-          <div class="flower-subagent-ledger-entry-body flower-subagent-ledger-single-activity-body">
-            {activityBatchBody(item, props)}
-            <span class="flower-subagent-ledger-entry-time flower-subagent-ledger-single-activity-time">
-              {timestampView(item.firstTimestamp)}
-            </span>
-          </div>
-        </section>
-      );
+  const ledgerItem = (item: Accessor<SubagentLedgerItem>, last: Accessor<boolean>): JSX.Element => {
+    if (item().type === 'entry') {
+      return ledgerEntry(() => (item() as SubagentLedgerEntryItem).entry, last, props);
     }
+    const batch = (): SubagentLedgerActivityBatch => item() as SubagentLedgerActivityBatch;
+    const initialOpen = batchDefaultOpen(batch());
+    const [open, setOpen] = createSignal(initialOpen);
+    const singleOperation = createMemo(() => batch().itemCount === 1);
     return (
       <details
-        class="flower-subagent-ledger-entry flower-subagent-ledger-entry-activity"
+        class={cn(
+          'flower-subagent-ledger-entry flower-subagent-ledger-entry-activity',
+          singleOperation() && 'flower-subagent-ledger-entry-single-activity',
+        )}
         data-flower-subagent-ledger-kind="activity"
-        data-flower-subagent-activity-status={item.status}
-        data-default-collapsed={batchDefaultOpen(item) ? undefined : 'true'}
-        open={batchOpen(item)}
+        data-flower-subagent-single-operation={singleOperation() ? '' : undefined}
+        data-flower-subagent-activity-status={batch().status}
+        data-default-collapsed={initialOpen ? undefined : 'true'}
+        open={singleOperation() || open()}
         role="listitem"
-        onToggle={(event) => rememberBatchOpen(item.key, event.currentTarget.open)}
+        onToggle={(event) => {
+          if (!singleOperation()) setOpen(event.currentTarget.open);
+        }}
       >
-        <summary>
-          <div class="flower-subagent-ledger-entry-header">
-            <span class="flower-subagent-ledger-entry-label">{props.copy.detailActivityLabel(item.itemCount)}</span>
-            <span class="flower-subagent-ledger-entry-time flower-subagent-ledger-batch-time">
-              {activityBatchTimestampView(item)}
-            </span>
-            <ChevronDown class="flower-subagent-ledger-entry-chevron h-3.5 w-3.5" aria-hidden="true" />
-          </div>
+        <summary
+          class={singleOperation() ? 'flower-subagent-ledger-single-activity-summary' : undefined}
+          aria-hidden={singleOperation() ? 'true' : undefined}
+        >
+          <Show when={!singleOperation()}>
+            <div class="flower-subagent-ledger-entry-header">
+              <span class="flower-subagent-ledger-entry-label">{props.copy.detailActivityLabel(batch().itemCount)}</span>
+              <span class="flower-subagent-ledger-entry-time flower-subagent-ledger-batch-time">
+                {activityBatchTimestampView(batch())}
+              </span>
+              <ChevronDown class="flower-subagent-ledger-entry-chevron h-3.5 w-3.5" aria-hidden="true" />
+            </div>
+          </Show>
         </summary>
-        <div class="flower-subagent-ledger-entry-body">{activityBatchBody(item, props)}</div>
+        <div class={cn(
+          'flower-subagent-ledger-entry-body',
+          singleOperation() && 'flower-subagent-ledger-single-activity-body',
+        )}>
+          {activityBatchBody(batch, props)}
+          <Show when={singleOperation()}>
+            <span class="flower-subagent-ledger-entry-time flower-subagent-ledger-single-activity-time">
+              {timestampView(batch().firstTimestamp)}
+            </span>
+          </Show>
+        </div>
       </details>
     );
   };
@@ -321,14 +347,25 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             role="list"
             aria-label={props.copy.detailTimelineLabel}
             onScroll={props.onScroll}
+            onWheel={props.onWheel}
+            onPointerDown={props.onPointerDown}
+            onTouchMove={props.onTouchMove}
           >
             <div class="flower-subagent-ledger">
               <Show
                 when={ledgerItems().length > 0}
                 fallback={<div class="flower-subagent-detail-empty">{props.copy.emptyDescription}</div>}
               >
-                <For each={ledgerItems()}>
-                  {(item, index) => ledgerItem(item, index(), ledgerItems())}
+                <For each={ledgerItemKeys()}>
+                  {(itemKey) => {
+                    const item = createMemo(() => ledgerItemsByKey().get(itemKey) ?? null);
+                    const last = createMemo(() => ledgerItemKeys().at(-1) === itemKey);
+                    return (
+                      <Show when={item()}>
+                        {(value) => ledgerItem(value, last)}
+                      </Show>
+                    );
+                  }}
                 </For>
               </Show>
             </div>

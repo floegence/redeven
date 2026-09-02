@@ -26,7 +26,9 @@ The detail GET returns exactly `{ summary, current }` and accepts no paging quer
 
 HTTP and SSE pass through the same safe current projection and the same selection receiver. The receiver accepts only the selected parent-child identity and a strictly greater `view_version`, so a late HTTP response cannot replace newer live content. A reconnecting `ready` performs one deduplicated HTTP refresh for the open child to recover a missed terminal view; no timer or polling loop exists. The window follows updates only while the user is near the bottom, otherwise preserving scroll position and offering the existing return-to-latest control. Live updates add no syncing message, pulse animation, or bottom status lane, so the content boundary remains fixed.
 
-The detail window maps canonical child messages, interactions, and Activity into the shared renderers with disclosure-preserving operation groups. The selection and its current view are bounded human UI state; neither is injected into the parent model context or persisted as another transcript.
+The detail window maps canonical child messages, interactions, and Activity into the shared renderers with one keyed reconciliation path. Ledger groups and their nested entries render from stable semantic keys and read changing content through accessors; object identity, status, payload, position, and `view_version` never own component lifetime. An activity phase keeps one root and body owner while it grows from one operation to many: the single-operation form hides only the group summary, so an already-open tool row, disclosure controller, and terminal viewport remain mounted. Every ledger disclosure stores its first default and later user choice in that keyed owner; there is no batch-only state map or parallel open authority.
+
+The parent transcript and child detail each provide an explicit activity viewport scope to the shared renderer. Opening a child tool pauses and anchors only the child viewport; parent scroll state cannot be read or changed through that path. Scroll events produced while that anchor is active cannot change follow intent. Later child currents request one layout measurement from the existing child scroll controller, which preserves its current follow intent instead of inferring and re-enabling follow from physical proximity. The return-to-latest control or manually scrolling back to the bottom resumes child following after an explicit disclosure interaction. The selection and its current view are bounded human UI state; neither is injected into the parent model context or persisted as another transcript.
 
 # Boundaries
 
@@ -42,7 +44,7 @@ Flower must not recover a missing child identity from activity sidecars, a title
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts:744` - Wire mapping accepts only canonical child thread identity.
 - `redeven:internal/flower_ui/src/flowerSubagentProjection.ts:128` - Header rows derive directly from canonical summaries.
 - `redeven:internal/flower_ui/src/flowerSubagentDetailThread.ts:304` - Child detail requires canonical summary identity and task name.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Owns the stable detail selection and monotonic HTTP/SSE receiver.
-- `redeven:internal/flower_ui/src/SubagentDetailWindow.tsx` - Renders stable loading, error, retry, transcript, and scroll states without a sync footer.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Proves live current updates preserve window DOM, open presence, and opacity.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Owns the stable detail selection, monotonic HTTP/SSE receiver, and explicit parent and child activity viewport scopes.
+- `redeven:internal/flower_ui/src/SubagentDetailWindow.tsx` - Reconciles ledger groups and nested entries by stable semantic key without a second open-state or sync path.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Proves streamed current replacement preserves the window, activity row, terminal viewport, disclosure motion, and parent scroll isolation.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Formats localized operation titles and exact ordered target summaries.

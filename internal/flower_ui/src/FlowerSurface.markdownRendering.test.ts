@@ -207,7 +207,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('transcriptScroll.startFollowing();');
     expect(src).toContain('scrollTranscriptToBottom({ smooth: true });');
     expect(scrollTail).toContain('FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS');
-    expect(scrollTail).toContain('captureWasNearBottom');
+    expect(scrollTail).not.toContain('captureWasNearBottom');
   });
 
   it('keeps selected thread tail reveal hidden without collapsing transcript layout', () => {

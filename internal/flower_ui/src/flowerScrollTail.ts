@@ -10,7 +10,6 @@ export type FlowerScrollTailController = Readonly<{
   startFollowing: () => void;
   stopFollowing: () => void;
   markNearBottom: () => void;
-  captureWasNearBottom: () => boolean;
   onScroll: () => void;
   onWheel: (event: WheelEvent) => void;
   measureAfterLayout: () => void;
@@ -159,12 +158,6 @@ export function createFlowerScrollTailController(
     startFollowing,
     stopFollowing,
     markNearBottom: startFollowing,
-    captureWasNearBottom: () => {
-      const value = isNearBottom();
-      followingLatest = value;
-      setValue(value);
-      return value;
-    },
     onScroll: () => {
       if (scrollToBottomInProgress) {
         setValue(true);

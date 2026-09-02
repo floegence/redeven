@@ -68,6 +68,7 @@ function windowProps(open: boolean, onOpenChange: (open: boolean) => void): Suba
   return {
     open,
     onOpenChange,
+    threadID: 'thread-child-boundary',
     title: 'Inspect source evidence',
     status: 'running',
     statusLabel: 'Running',
@@ -82,6 +83,9 @@ function windowProps(open: boolean, onOpenChange: (open: boolean) => void): Suba
     renderEntry: () => null,
     bindScroll: () => undefined,
     onScroll: () => undefined,
+    onWheel: () => undefined,
+    onPointerDown: () => undefined,
+    onTouchMove: () => undefined,
     showScrollToLatest: false,
     onScrollToLatest: () => undefined,
     onRetryLoad: () => undefined,

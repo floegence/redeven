@@ -1,6 +1,15 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Stable streamed SubAgent disclosures**: Child ledger groups and entries now
+  reconcile only by canonical semantic keys, retain one activity owner while a
+  single operation becomes a batch, and update content through accessors. Main
+  and child timelines pass separate explicit viewport scopes, so opening a
+  streamed child tool preserves its row, terminal output, disclosure motion,
+  and child scroll anchor without changing parent scrolling. Removed the
+  object-reference render paths, batch-only disclosure state, global anchor
+  revision, parent-scroll fallback, and proximity capture that re-enabled child
+  tail following after an explicit interaction.
 * **Fork context identity**: Redeven now consumes Floret v7.1.1. Canonical
   context snapshots for direct and nested forks use the destination ThreadID,
   preserve historical Turn and Run identity plus cumulative usage, and remain
