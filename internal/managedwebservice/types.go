@@ -104,7 +104,8 @@ type Template struct {
 	TemplateID            string                          `json:"template_id"`
 	Name                  string                          `json:"name"`
 	Description           string                          `json:"description"`
-	Version               string                          `json:"version"`
+	RecommendedRelease    *ReleaseIdentity                `json:"recommended_release,omitempty"`
+	ReleaseSource         string                          `json:"release_source,omitempty"`
 	DeveloperPreview      bool                            `json:"developer_preview"`
 	DiskBytes             int64                           `json:"disk_bytes"`
 	DataLocation          string                          `json:"data_location"`
@@ -227,11 +228,6 @@ type ContainerTemplateSpec struct {
 	PIDsLimit      int64                 `json:"pids_limit,omitempty"`
 	ShmSizeBytes   int64                 `json:"shm_size_bytes,omitempty"`
 	RuntimeProfile string                `json:"runtime_profile,omitempty"`
-	ReleasePolicy  *OCIReleasePolicySpec `json:"release_policy,omitempty"`
-}
-
-type OCIReleasePolicySpec struct {
-	BlockedTagPrefixes []string `json:"blocked_tag_prefixes,omitempty"`
 }
 
 type ComposeTemplateSpec struct {
@@ -265,7 +261,6 @@ type TemplateWriteRequest struct {
 	RequestID   string       `json:"request_id"`
 	Name        string       `json:"name"`
 	Description string       `json:"description,omitempty"`
-	Version     string       `json:"version,omitempty"`
 	Spec        TemplateSpec `json:"spec"`
 }
 
@@ -280,7 +275,7 @@ type OperationRequest struct {
 	DeleteData              bool                `json:"delete_data,omitempty"`
 	AcceptedNoticeRevisions map[string]int64    `json:"accepted_notice_revisions,omitempty"`
 	Reconfigure             *ReconfigureRequest `json:"reconfigure,omitempty"`
-	TargetReleaseID         string              `json:"target_release_id,omitempty"`
+	UpdatePlanID            string              `json:"update_plan_id,omitempty"`
 	AcceptedReleaseRisks    []string            `json:"accepted_release_risks,omitempty"`
 }
 
@@ -319,7 +314,11 @@ type ReleaseCandidate struct {
 	Digest             string `json:"digest,omitempty"`
 	Integrity          string `json:"integrity,omitempty"`
 	TagMoved           bool   `json:"tag_moved,omitempty"`
-	Downgrade          bool   `json:"downgrade,omitempty"`
+	IsCurrent          bool   `json:"is_current,omitempty"`
+	IsRecommended      bool   `json:"is_recommended,omitempty"`
+	IsLatestStable     bool   `json:"is_latest_stable,omitempty"`
+	IsLatestPreview    bool   `json:"is_latest_preview,omitempty"`
+	Relation           string `json:"relation"`
 }
 
 type ReleaseCandidateRequest struct {
@@ -328,13 +327,50 @@ type ReleaseCandidateRequest struct {
 }
 
 type ReleaseCandidateResult struct {
-	SchemaVersion     int                `json:"schema_version"`
-	Current           *ReleaseIdentity   `json:"current,omitempty"`
-	Candidates        []ReleaseCandidate `json:"candidates"`
-	CheckedAtUnixMs   int64              `json:"checked_at_unix_ms"`
-	NextCheckAtUnixMs int64              `json:"next_check_at_unix_ms,omitempty"`
-	LastErrorCode     string             `json:"last_error_code,omitempty"`
-	LastErrorMessage  string             `json:"last_error_message,omitempty"`
+	SchemaVersion        int                `json:"schema_version"`
+	CurrentRelease       *ReleaseIdentity   `json:"current_release,omitempty"`
+	RecommendedRelease   *ReleaseIdentity   `json:"recommended_release,omitempty"`
+	LatestStableRelease  *ReleaseCandidate  `json:"latest_stable_release,omitempty"`
+	LatestPreviewRelease *ReleaseCandidate  `json:"latest_preview_release,omitempty"`
+	Candidates           []ReleaseCandidate `json:"candidates"`
+	CheckStatus          string             `json:"check_status"`
+	CheckedAtUnixMs      int64              `json:"checked_at_unix_ms"`
+	NextCheckAtUnixMs    int64              `json:"next_check_at_unix_ms,omitempty"`
+	LastErrorCode        string             `json:"last_error_code,omitempty"`
+	LastErrorMessage     string             `json:"last_error_message,omitempty"`
+}
+
+type ReleaseStatus struct {
+	SchemaVersion             int              `json:"schema_version"`
+	CurrentRelease            *ReleaseIdentity `json:"current_release,omitempty"`
+	RecommendedRelease        *ReleaseIdentity `json:"recommended_release,omitempty"`
+	LatestStableRelease       *ReleaseIdentity `json:"latest_stable_release,omitempty"`
+	LatestPreviewRelease      *ReleaseIdentity `json:"latest_preview_release,omitempty"`
+	LatestStableRelation      string           `json:"latest_stable_relation,omitempty"`
+	LatestPreviewRelation     string           `json:"latest_preview_relation,omitempty"`
+	CheckStatus               string           `json:"check_status"`
+	CheckedAtUnixMs           int64            `json:"checked_at_unix_ms,omitempty"`
+	NextCheckAtUnixMs         int64            `json:"next_check_at_unix_ms,omitempty"`
+	LastErrorCode             string           `json:"last_error_code,omitempty"`
+	CurrentTemplateRevision   int64            `json:"current_template_revision"`
+	AvailableTemplateRevision int64            `json:"available_template_revision,omitempty"`
+}
+
+type UpdatePlanRequest struct {
+	TargetCandidateID string `json:"target_candidate_id,omitempty"`
+}
+
+type UpdatePlan struct {
+	SchemaVersion           int              `json:"schema_version"`
+	UpdatePlanID            string           `json:"update_plan_id"`
+	CurrentRelease          ReleaseIdentity  `json:"current_release"`
+	TargetRelease           ReleaseIdentity  `json:"target_release"`
+	CurrentTemplateRevision int64            `json:"current_template_revision"`
+	TargetTemplateRevision  int64            `json:"target_template_revision"`
+	Notices                 []TemplateNotice `json:"notices,omitempty"`
+	RequiredRiskIDs         []string         `json:"required_risk_ids,omitempty"`
+	RequiresStopped         bool             `json:"requires_stopped,omitempty"`
+	ExpiresAtUnixMs         int64            `json:"expires_at_unix_ms"`
 }
 
 type ServiceMetadataPatch struct {
@@ -448,17 +484,11 @@ type ServiceView struct {
 	Description        string                          `json:"description,omitempty"`
 	Localizations      map[string]TemplateLocalization `json:"localizations,omitempty"`
 	Icon               *TemplateIcon                   `json:"icon,omitempty"`
-	UpdateAvailable    bool                            `json:"update_available"`
-	TargetRevision     int64                           `json:"target_revision,omitempty"`
-	TargetVersion      string                          `json:"target_version,omitempty"`
-	UpdateNotices      []TemplateNotice                `json:"update_notices,omitempty"`
+	ReleaseStatus      ReleaseStatus                   `json:"release_status"`
 	ActiveOperation    *pfregistry.ManagedOperation    `json:"active_operation,omitempty"`
 	LastFailure        *ServiceFailure                 `json:"last_failure,omitempty"`
 	AccessMode         string                          `json:"access_mode"`
 	ContainerResources []ContainerResourceLink         `json:"container_resources,omitempty"`
-	ReleaseIdentity    *ReleaseIdentity                `json:"release_identity,omitempty"`
-	ReleaseCheckedAt   int64                           `json:"release_checked_at_unix_ms,omitempty"`
-	ReleaseCheckError  string                          `json:"release_check_error_code,omitempty"`
 	Actions            ServiceActions                  `json:"actions"`
 }
 
@@ -543,6 +573,7 @@ type Backend interface {
 	TemplateReleaseCandidates(context.Context, string, ReleaseCandidateRequest) (*ReleaseCandidateResult, error)
 	List(context.Context) ([]ServiceView, error)
 	ServiceReleaseCandidates(context.Context, string, ReleaseCandidateRequest) (*ReleaseCandidateResult, error)
+	CreateUpdatePlan(context.Context, string, UpdatePlanRequest) (*UpdatePlan, error)
 	Settings(context.Context, string) (*ServiceSettingsView, error)
 	UpdateSettings(context.Context, string, ServiceMetadataPatch) (*ServiceSettingsView, error)
 	PreflightReconfigure(context.Context, string, ReconfigureDraft) (*ReconfigurePlan, error)

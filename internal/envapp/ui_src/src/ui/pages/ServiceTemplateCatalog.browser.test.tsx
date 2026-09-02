@@ -24,10 +24,10 @@ const template: ServiceTemplatePresentation = {
   kind: 'host',
   icon: { media_type: 'image/svg+xml', data: '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="8"/></svg>', sha256: 'icon-sha' },
   deploymentLabel: 'Host',
-  version: '0.1.1-rc.2',
+  defaultReleaseLabel: '0.1.1-rc.2',
   revision: 3,
   runtimeSpec: {
-    schema_version: 3,
+    schema_version: 4,
     kind: 'host',
     endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 },
     host: { npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'service-cli' }, start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
@@ -62,7 +62,7 @@ const longContainerTemplate: ServiceTemplatePresentation = {
   kind: 'container',
   deploymentLabel: 'Container',
   runtimeSpec: {
-    schema_version: 3,
+    schema_version: 4,
     kind: 'container',
     endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/', startup_timeout_sec: 180 },
     container: {

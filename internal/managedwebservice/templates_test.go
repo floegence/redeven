@@ -68,7 +68,6 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 	source, err := manager.CreateTemplate(context.Background(), TemplateWriteRequest{
 		RequestID: "request-template-source",
 		Name:      "Local preview",
-		Version:   "1",
 		Spec: TemplateSpec{
 			SchemaVersion: templateSpecSchemaVersion,
 			Kind:          DeploymentHost,

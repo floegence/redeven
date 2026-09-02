@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const templateSpecSchemaVersion = 3
+const templateSpecSchemaVersion = 4
 
 var (
 	templateNamePattern             = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
@@ -76,7 +76,7 @@ func (m *Manager) CreateTemplate(ctx context.Context, req TemplateWriteRequest) 
 	if err != nil {
 		return nil, err
 	}
-	fingerprint := requestFingerprint("template-create", strings.TrimSpace(req.Name), strings.TrimSpace(req.Description), strings.TrimSpace(req.Version), specHash)
+	fingerprint := requestFingerprint("template-create", strings.TrimSpace(req.Name), strings.TrimSpace(req.Description), specHash)
 	if existing, err := m.registry.GetManagedTemplateRequest(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -98,7 +98,7 @@ func (m *Manager) CreateTemplate(ctx context.Context, req TemplateWriteRequest) 
 	}
 	record := pfregistry.ManagedTemplate{
 		TemplateID: templateID, Name: strings.TrimSpace(req.Name), Description: strings.TrimSpace(req.Description), Source: "custom",
-		Deployment: string(req.Spec.Kind), Version: strings.TrimSpace(req.Version), Revision: 1, SpecJSON: specJSON, SpecSHA256: specHash, ServiceFamilyID: familyID,
+		Deployment: string(req.Spec.Kind), Revision: 1, SpecJSON: specJSON, SpecSHA256: specHash, ServiceFamilyID: familyID,
 	}
 	request := pfregistry.ManagedTemplateRequest{RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, TemplateID: templateID, Action: "create"}
 	if err := m.registry.CreateManagedTemplateWithRequest(ctx, record, request); err != nil {
@@ -130,7 +130,7 @@ func (m *Manager) UpdateTemplate(ctx context.Context, templateID string, req Tem
 	if err != nil {
 		return nil, err
 	}
-	record.Name, record.Description, record.Version = strings.TrimSpace(req.Name), strings.TrimSpace(req.Description), strings.TrimSpace(req.Version)
+	record.Name, record.Description = strings.TrimSpace(req.Name), strings.TrimSpace(req.Description)
 	record.Deployment, record.SpecJSON, record.SpecSHA256 = string(req.Spec.Kind), specJSON, specHash
 	record.Revision++
 	if err := m.registry.UpdateManagedTemplate(ctx, *record); err != nil {
@@ -200,7 +200,7 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 		return nil, err
 	}
 	record := pfregistry.ManagedTemplate{
-		TemplateID: copyID, Name: name, Description: source.Description, Source: "custom", Deployment: string(spec.Kind), Version: source.Version,
+		TemplateID: copyID, Name: name, Description: source.Description, Source: "custom", Deployment: string(spec.Kind),
 		Revision: 1, SpecJSON: specJSON, SpecSHA256: specHash, DerivedFromTemplateID: source.TemplateID, DerivedFromRevision: source.Revision, ServiceFamilyID: familyID,
 	}
 	request := pfregistry.ManagedTemplateRequest{RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, TemplateID: copyID, Action: "duplicate"}
@@ -238,14 +238,19 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 	if err != nil {
 		return nil, err
 	}
-	return &Template{
-		TemplateID: record.TemplateID, Name: record.Name, Description: record.Description, Version: record.Version, Source: "custom", Deployment: spec.Kind,
+	result := &Template{
+		TemplateID: record.TemplateID, Name: record.Name, Description: record.Description, Source: "custom", Deployment: spec.Kind,
 		ContainerMode: containerMode(spec.Kind), Revision: record.Revision, Editable: true, Duplicateable: true, DerivedFromTemplateID: record.DerivedFromTemplateID,
 		DerivedFromRevision: record.DerivedFromRevision, ServiceFamilyID: record.ServiceFamilyID, Available: available, ReasonCode: code, Reason: reason,
 		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
 		HostLifecyclePlan: hostLifecyclePlan(spec),
 		DefaultAccessMode: pfregistry.AccessModeUnifiedProxy,
-	}, nil
+	}
+	result.RecommendedRelease = recommendedReleaseForTemplate(*result)
+	if result.RecommendedRelease != nil {
+		result.ReleaseSource = result.RecommendedRelease.Kind
+	}
+	return result, nil
 }
 
 func (m *Manager) customTemplateAvailability(ctx context.Context, kind Deployment) (bool, string, string) {
@@ -284,8 +289,8 @@ func validateTemplateWriteRequest(req TemplateWriteRequest) error {
 	if !templateNamePattern.MatchString(strings.TrimSpace(req.Name)) {
 		return serviceError("TEMPLATE_NAME_INVALID", "Template name must contain 1 to 80 printable characters.", 400, false, nil)
 	}
-	if len(req.Description) > 1000 || len(req.Version) > 80 {
-		return serviceError("TEMPLATE_METADATA_INVALID", "Template description or version is too long.", 400, false, nil)
+	if len(req.Description) > 1000 {
+		return serviceError("TEMPLATE_METADATA_INVALID", "Template description is too long.", 400, false, nil)
 	}
 	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
 		return serviceError("TEMPLATE_RUNTIME_PROFILE_RESERVED", "The interactive desktop runtime profile is reserved for reviewed Redeven templates.", 400, false, nil)

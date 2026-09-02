@@ -25,7 +25,7 @@ export type ServiceTemplateIcon = Readonly<{
 }>;
 
 export type ServiceTemplateRuntimeSpec = Readonly<{
-  schema_version: 3;
+  schema_version: 4;
   kind: ServiceTemplateKind;
   endpoint: Readonly<{
     scheme: 'http' | 'https';
@@ -70,7 +70,6 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
     pids_limit?: number;
     shm_size_bytes?: number;
     runtime_profile?: 'restricted' | 'interactive_desktop';
-		release_policy?: Readonly<{ blocked_tag_prefixes?: ReadonlyArray<string> }>;
   }>;
   compose?: Readonly<{ yaml: string; main_service: string }>;
 }>;
@@ -110,7 +109,7 @@ export type ServiceTemplatePresentation = Readonly<{
   kind: ServiceTemplateKind;
   icon?: ServiceTemplateIcon;
   deploymentLabel: string;
-  version?: string;
+  defaultReleaseLabel?: string;
   revision: number;
   diskBytes?: number;
   dataLocation?: string;
@@ -450,9 +449,9 @@ export function ServiceTemplateIdentity(props: {
             <span aria-hidden="true">·</span>
           </Show>
           <span>{props.template.deploymentLabel}</span>
-          <Show when={props.template.version}>
+          <Show when={props.template.defaultReleaseLabel}>
             <span aria-hidden="true">·</span>
-            <span class="font-mono">v{props.template.version}</span>
+            <span class="font-mono">v{props.template.defaultReleaseLabel}</span>
           </Show>
           <Show when={props.template.developerPreview}>
             <span aria-hidden="true">·</span>
@@ -547,9 +546,9 @@ export function ServiceTemplateRow(props: {
               </span>
               <span aria-hidden="true">·</span>
               <span class="shrink-0">{props.template.deploymentLabel}</span>
-              <Show when={props.template.version}>
+              <Show when={props.template.defaultReleaseLabel}>
                 <span aria-hidden="true">·</span>
-                <span class="shrink-0 font-mono">v{props.template.version}</span>
+                <span class="shrink-0 font-mono">v{props.template.defaultReleaseLabel}</span>
               </Show>
             </div>
             <ServiceTemplateStatus template={props.template} compact />
@@ -634,7 +633,11 @@ export function ServiceTemplateDetailsPane(props: {
       <div class="service-template-details__body">
         <DetailSection title={i18n.t('webServices.managed.deploymentInformation')}>
           <DetailField label={i18n.t('webServices.managed.deployment')} value={props.template.deploymentLabel} />
-          <DetailField label={i18n.t('webServices.managed.version')} value={props.template.version ? `v${props.template.version}` : i18n.t('webServices.managed.customVersion')} mono />
+          <DetailField
+            label={i18n.t(props.template.source === 'builtin' ? 'webServices.managed.recommendedVersion' : 'webServices.managed.defaultVersion')}
+            value={props.template.defaultReleaseLabel ? `v${props.template.defaultReleaseLabel}` : i18n.t('webServices.managed.customVersion')}
+            mono
+          />
           <DetailField label={i18n.t('webServices.managed.details.templateRevision')} value={props.template.revision} />
           <DetailField label={i18n.t('webServices.managed.settings.accessMode')} value={props.template.defaultAccessMode || '—'} mono />
           <Show when={(props.template.runtimeSpec?.parameters?.length ?? 0) > 0}>

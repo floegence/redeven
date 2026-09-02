@@ -5,6 +5,15 @@
   v8-to-v9 migration follows canonical Run changes after interaction resumes
   within one Turn. Valid Agent data opens through the existing single runtime
   path; Redeven adds no schema inspection, repair, or fallback.
+* **Recommended release and free version choice**: The external template catalog
+  advances to v0.2.0 and defines its release only as Redeven's recommendation
+  and no-choice default. ReleaseIdentity remains the installed authority;
+  direct npm and OCI checks persist source summaries, and one expiring update
+  plan composes an explicit candidate with the latest compatible TemplateSpec
+  v4 revision. Registry v2 removes duplicate version columns and migrates v1
+  atomically. The version drawer defaults an installed service to its current
+  release, permits preview, deprecated, special, and older verified releases
+  with explicit risks, and never silently returns it to recommendation.
 * **Stable streamed SubAgent disclosures**: Child ledger groups and entries now
   reconcile only by canonical semantic keys, retain one activity owner while a
   single operation becomes a batch, and update content through accessors. Main

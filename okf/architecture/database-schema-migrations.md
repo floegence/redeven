@@ -24,7 +24,7 @@ The current startup composition opens product stores such as Code App, Port Forw
 
 `ai_threadstore_product_v1` is the permanent AI product lineage. Its exact version-1 input upgrades through the reviewed version-2 edge; later changes must retain the kind and append every contiguous migration. The one-time discarded pre-launch shapes are not accepted as migration inputs.
 
-`portforward_registry_v1` version 1 is likewise a user-approved pre-release baseline reset. It initializes Port Forward and Managed Service tables together, including configuration, release identity, RuntimeBinding, resources, operation progress, and retry lineage. It intentionally has no decoder or migration from the discarded pre-release Registry kinds. After this baseline is merged and distributed, the kind is permanent and every later change must append a contiguous automatic migration; another pre-release reset is not allowed.
+`portforward_registry_v1` version 1 is likewise a user-approved pre-release baseline reset. It initializes Port Forward and Managed Service tables together, including configuration, release identity, RuntimeBinding, resources, operation progress, and retry lineage. Version 2 is its first permanent forward edge: it upgrades TemplateSpec v3 documents to v4, removes duplicated version columns, and adds digest-verified release-check summaries in the same transaction. The kind intentionally has no decoder from discarded pre-release Registry kinds. It is permanent and every later change must append a contiguous automatic migration; another pre-release reset is not allowed.
 
 State requiring a live external system is not manufactured inside a SQLite migration. Runtime resource identity must already be represented by the current Registry contract and verified by the owning generic driver. No marker import, live-engine guess, or cross-system adoption path supplements the fresh Port Forward Registry.
 
@@ -46,9 +46,9 @@ Automatic migration is not permission to accept arbitrary historical shapes. Rem
 - `redeven:internal/persistence/sqliteutil/engine_test.go` - Covers initialization, rollback, kind, version, metadata, and concurrency rules.
 - `redeven:internal/persistence/sqliteutil/repository_contract_test.go` - Locks the reviewed Redeven and upstream SQLite opening inventory.
 - `redeven:internal/codeapp/codeapp.go` - Opens product stores before publishing dependent Runtime services.
-- `redeven:internal/portforward/registry/schema.go` - Defines the fresh `portforward_registry_v1` version-1 shape and verifier.
+- `redeven:internal/portforward/registry/schema.go` - Defines exact v1 and v2 shapes plus the atomic v1-to-v2 edge.
 - `redeven:internal/portforward/registry/registry.go` - Performs read-only Port Forward Registry preflight before writable open.
-- `redeven:internal/portforward/registry/registry_test.go` - Covers fresh initialization plus byte-preserving kind, future, and drift rejection.
+- `redeven:internal/portforward/registry/registry_test.go` - Covers fresh initialization, v1-to-v2 data preservation, and byte-preserving kind, future, and drift rejection.
 - `redeven:internal/ai/threadstore/schema.go` - Defines the current AI product lineage and its contiguous migration.
 - `redeven:internal/ai/floret_bootstrap.go` - Opens the published Floret Runtime without direct storage access.
 - `redeven:scripts/check_floret_dependency_boundary.sh` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.

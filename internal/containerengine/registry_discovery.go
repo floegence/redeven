@@ -57,6 +57,30 @@ type OCIReleaseDiscovery struct {
 	Client *http.Client
 }
 
+type ociReleaseVerificationError struct {
+	cause error
+}
+
+func (e *ociReleaseVerificationError) Error() string {
+	return "OCI release identity is unverifiable"
+}
+
+func (e *ociReleaseVerificationError) Unwrap() error {
+	return e.cause
+}
+
+func unverifiableOCIRelease(tag, platformOS, platformArch string, err error) (OCIRelease, bool) {
+	var verificationError *ociReleaseVerificationError
+	if !errors.As(err, &verificationError) {
+		return OCIRelease{}, false
+	}
+	return OCIRelease{
+		Tag: tag, PlatformOS: platformOS, PlatformArch: platformArch,
+		ReasonCode: "RELEASE_IDENTITY_UNVERIFIABLE",
+		Reason:     "The Registry did not provide a verifiable manifest identity for this exact tag.",
+	}, true
+}
+
 func (d OCIReleaseDiscovery) Discover(ctx context.Context, request OCIReleaseDiscoveryRequest) ([]OCIRelease, error) {
 	client := d.Client
 	if client == nil {
@@ -80,11 +104,12 @@ func (d OCIReleaseDiscovery) Discover(ctx context.Context, request OCIReleaseDis
 	if refreshed != "" {
 		token = refreshed
 	}
-	if err != nil && !errors.Is(err, ErrImageNotFound) {
-		return nil, err
-	}
 	if err == nil {
 		resolved[0], present[0] = first, true
+	} else if item, ok := unverifiableOCIRelease(tags[0], request.PlatformOS, request.PlatformArch, err); ok {
+		resolved[0], present[0] = item, true
+	} else if !errors.Is(err, ErrImageNotFound) {
+		return nil, err
 	}
 	workerContext, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -99,6 +124,10 @@ func (d OCIReleaseDiscovery) Discover(ctx context.Context, request OCIReleaseDis
 			for index := range indexes {
 				item, _, discoverErr := d.resolveTag(workerContext, client, reference, tags[index], request.PlatformOS, request.PlatformArch, request.Credential, token)
 				if discoverErr != nil {
+					if unavailable, ok := unverifiableOCIRelease(tags[index], request.PlatformOS, request.PlatformArch, discoverErr); ok {
+						resolved[index], present[index] = unavailable, true
+						continue
+					}
 					if errors.Is(discoverErr, ErrImageNotFound) {
 						continue
 					}
@@ -242,11 +271,11 @@ func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client
 	}
 	raw, err := readRegistryBody(response, maxRegistryManifestBytes)
 	if err != nil {
-		return OCIRelease{}, refreshed, err
+		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: err}
 	}
 	digest, err := registryContentDigest(response.Header.Get("Docker-Content-Digest"), raw)
 	if err != nil {
-		return OCIRelease{}, refreshed, err
+		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: err}
 	}
 	mediaType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	item := OCIRelease{Tag: tag, IndexDigest: digest, PlatformOS: platformOS, PlatformArch: platformArch}
@@ -258,7 +287,7 @@ func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client
 			} `json:"manifests"`
 		}
 		if err := json.Unmarshal(raw, &index); err != nil {
-			return OCIRelease{}, refreshed, fmt.Errorf("invalid OCI image index")
+			return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: fmt.Errorf("invalid OCI image index")}
 		}
 		for _, manifest := range index.Manifests {
 			if manifest.Platform.OS == platformOS && manifest.Platform.Architecture == platformArch && registryDigestPattern.MatchString(manifest.Digest) {
@@ -275,22 +304,25 @@ func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client
 		} `json:"config"`
 	}
 	if err := json.Unmarshal(raw, &manifest); err != nil || !registryDigestPattern.MatchString(manifest.Config.Digest) {
-		return OCIRelease{}, refreshed, fmt.Errorf("invalid OCI image manifest")
+		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: fmt.Errorf("invalid OCI image manifest")}
 	}
 	configResponse, refreshedConfig, err := registryRequest(ctx, client, http.MethodGet, reference.APIBase+"/blobs/"+manifest.Config.Digest, reference.Repository, credential, refreshed, "application/octet-stream")
 	if refreshedConfig != "" {
 		refreshed = refreshedConfig
 	}
 	if err != nil {
+		if errors.Is(err, ErrImageNotFound) {
+			return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: err}
+		}
 		return OCIRelease{}, refreshed, err
 	}
 	configRaw, err := readRegistryBody(configResponse, maxRegistryManifestBytes)
 	if err != nil {
-		return OCIRelease{}, refreshed, err
+		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: err}
 	}
 	var config struct{ OS, Architecture string }
 	if err := json.Unmarshal(configRaw, &config); err != nil {
-		return OCIRelease{}, refreshed, fmt.Errorf("invalid OCI image configuration")
+		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: fmt.Errorf("invalid OCI image configuration")}
 	}
 	item.PlatformDigest = digest
 	item.Compatible = config.OS == platformOS && config.Architecture == platformArch

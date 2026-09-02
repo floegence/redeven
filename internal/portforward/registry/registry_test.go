@@ -9,12 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpenCreatesFreshRegistryV1(t *testing.T) {
+func TestOpenCreatesFreshRegistryV2(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	registry, err := Open(path)
 	if err != nil {
@@ -98,7 +99,7 @@ func TestOpenRejectsOldKindWithoutChangingDatabase(t *testing.T) {
 func TestOpenRejectsFutureVersionWithoutChangingDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	db, err := sqliteutil.Open(path, sqliteutil.Spec{
-		Kind: registrySchemaKind, CurrentVersion: 2, MinimumVersion: 2,
+		Kind: registrySchemaKind, CurrentVersion: 3, MinimumVersion: 3,
 		Initialize: func(tx *sql.Tx) error {
 			_, err := tx.Exec(`CREATE TABLE future_registry_record(id TEXT PRIMARY KEY)`)
 			return err
@@ -158,7 +159,7 @@ func TestManagedServicePersistsBindingAndRetryLineage(t *testing.T) {
 	}
 	defer registry.Close()
 
-	snapshot := `{"schema_version":3,"kind":"container","endpoint":{"scheme":"http"},"container":{"image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true}}`
+	snapshot := `{"schema_version":4,"kind":"container","endpoint":{"scheme":"http"},"container":{"image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true}}`
 	configuration := `{"schema_version":2}`
 	release := `{"schema_version":1,"kind":"oci"}`
 	binding := `{"schema_version":1,"deployment":"container","container":{"name":"redeven-mws-test"}}`
@@ -167,7 +168,7 @@ func TestManagedServicePersistsBindingAndRetryLineage(t *testing.T) {
 		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest(snapshot), ServiceFamilyID: "fictional-family",
 		Deployment: "container", WorkspacePath: "/workspace", ConfigurationJSON: configuration, ConfigurationSHA256: digest(configuration),
 		ReleaseIdentityJSON: release, ReleaseIdentitySHA256: digest(release), RuntimeBindingJSON: binding, RuntimeBindingSHA256: digest(binding),
-		Version: "1.0.0", DesiredState: "stopped", ObservedState: "installing", ForwardID: "pf-test",
+		DesiredState: "stopped", ObservedState: "installing", ForwardID: "pf-test",
 	}
 	operation := ManagedOperation{
 		OperationID: "mop_install", ServiceID: service.ServiceID, RequestID: "req_install", RequestFingerprint: "install",
@@ -197,6 +198,62 @@ func TestManagedServicePersistsBindingAndRetryLineage(t *testing.T) {
 	}
 	if gotRetry == nil || gotRetry.RetryOfOperationID != operation.OperationID || gotRetry.Action != "retry_install" {
 		t.Fatalf("retry operation = %#v", gotRetry)
+	}
+}
+
+func TestOpenMigratesRegistryV1ToV2WithoutChangingServiceIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	legacy, err := sqliteutil.Open(path, sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 1,
+		Migrations: []sqliteutil.Migration{{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1}},
+		Verify:     verifyRegistryV1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := `{"schema_version":3,"kind":"container","endpoint":{"scheme":"http","container_port":3000},"container":{"image":"example.invalid/app:1.0.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true,"release_policy":{"blocked_tag_prefixes":["private"]}}}`
+	configuration := `{"schema_version":2}`
+	release := `{"schema_version":1,"kind":"oci","source":"example.invalid/app","tag":"1.0.0","digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	binding := `{"schema_version":1,"deployment":"container","container":{"name":"redeven-mws-one"}}`
+	if _, err := legacy.Exec(`INSERT INTO port_forwards(forward_id,target_url,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms) VALUES('pf-one','http://127.0.0.1:3000',1,1,0)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`INSERT INTO managed_web_service_templates(template_id,name,source,deployment,version,revision,spec_json,spec_sha256,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, "custom-one", "Custom", "custom", "container", "1.0.0", 1, spec, digest(spec), "family-one", 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,version,desired_state,observed_state,forward_id,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"mws-one", "custom-one", "custom", 1, spec, digest(spec), "family-one", "container", "/workspace", configuration, 1, digest(configuration), release, digest(release), binding, digest(binding), "1.0.0", "stopped", "stopped", "pf-one", 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	service, err := registry.GetManagedService(context.Background(), "mws-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if service == nil || service.ReleaseIdentityJSON != release || service.RuntimeBindingJSON != binding || service.ConfigurationJSON != configuration {
+		t.Fatalf("migrated service = %#v", service)
+	}
+	var migratedSpec string
+	if err := registry.db.QueryRow(`SELECT template_snapshot_json FROM managed_web_services WHERE service_id='mws-one'`).Scan(&migratedSpec); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(migratedSpec, `"schema_version":4`) || strings.Contains(migratedSpec, "release_policy") {
+		t.Fatalf("migrated TemplateSpec = %s", migratedSpec)
+	}
+	columns, err := sqliteutil.TableColumnNamesTx(mustBegin(t, registry.db), "managed_web_services")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(columns, "version") {
+		t.Fatalf("legacy version column remains: %v", columns)
 	}
 }
 

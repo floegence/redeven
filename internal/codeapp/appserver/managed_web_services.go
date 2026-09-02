@@ -259,6 +259,23 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: plan})
 		return true
 	}
+	if len(parts) == 2 && strings.TrimSpace(parts[0]) != "" && parts[1] == "update-plans" && r.Method == http.MethodPost {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		var req managedwebservice.UpdatePlanRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		plan, err := g.managed.CreateUpdatePlan(r.Context(), strings.TrimSpace(parts[0]), req)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: plan})
+		return true
+	}
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return true

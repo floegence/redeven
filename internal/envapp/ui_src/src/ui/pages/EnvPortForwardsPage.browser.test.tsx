@@ -13,6 +13,15 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function releaseStatus(kind: 'npm' | 'oci', version: string) {
+  return {
+    schema_version: 1 as const,
+    current_release: { schema_version: 1 as const, kind, source: 'example/source', ...(kind === 'npm' ? { version } : { tag: version, digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }) },
+    check_status: 'pending' as const,
+    current_template_revision: 1,
+  };
+}
+
 describe('EnvPortForwardsPage browser presentation', () => {
   let dispose: (() => void) | undefined;
 
@@ -32,12 +41,13 @@ describe('EnvPortForwardsPage browser presentation', () => {
     dispose = render(() => <ManagedReleaseCandidates
       result={{
         schema_version: 1,
-        current: { schema_version: 1, kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', integrity: 'sha512-current', trust: 'registry_verified' },
+        current_release: { schema_version: 1, kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', integrity: 'sha512-current', trust: 'registry_verified' },
+        check_status: 'fresh',
         checked_at_unix_ms: Date.now(),
         candidates: [
-          { schema_version: 1, candidate_id: 'preview', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview' },
-          { schema_version: 1, candidate_id: 'stable', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable' },
-          { schema_version: 1, candidate_id: 'deprecated', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: false, deprecated: true, reason_code: 'RELEASE_DEPRECATED' },
+          { schema_version: 1, candidate_id: 'preview', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview', relation: 'newer', is_latest_preview: true },
+          { schema_version: 1, candidate_id: 'stable', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable', relation: 'same', is_current: true, is_recommended: true, is_latest_stable: true },
+          { schema_version: 1, candidate_id: 'deprecated', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: true, deprecated: true, relation: 'older' },
         ],
       }}
       loading={false}
@@ -57,8 +67,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(surface.textContent).toContain('Current installed release');
     expect(surface.textContent).toContain('sha512-current');
     expect(surface.textContent).toContain('0.1.2-alpha.3');
-    expect(surface.textContent).toContain('The npm Registry marks this release as deprecated.');
-    expect(document.querySelector<HTMLButtonElement>('[data-release-id="deprecated"]')?.disabled).toBe(true);
+    expect(surface.textContent).toContain('Deprecated');
+    expect(document.querySelector<HTMLButtonElement>('[data-release-id="deprecated"]')?.disabled).toBe(false);
     await userEvent.click(Array.from(surface.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Preview')!);
     await settle();
     expect(surface.textContent).toContain('0.1.2-alpha.3');
@@ -133,12 +143,11 @@ describe('EnvPortForwardsPage browser presentation', () => {
             template_source: 'builtin',
             deployment: 'container',
             workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a/very-long-project-directory',
-            version: '654ea8e3-ls177',
+            release_status: releaseStatus('oci', '654ea8e3-ls177'),
             desired_state: 'running',
             observed_state: 'running',
             forward_id: 'pf-managed',
             runtime_port: 54945,
-            update_available: false,
             actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } },
           }}
           busy={false}
@@ -147,7 +156,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           onOpen={() => undefined}
           onOpenResource={() => undefined}
           onAction={() => undefined}
-          onUpdate={() => undefined}
+          onVersions={() => undefined}
           onLogs={() => undefined}
           onUninstall={() => undefined}
         />
@@ -238,13 +247,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
           template_source: 'builtin',
           deployment: 'container',
           workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service',
-          version: '0.1.1-rc.2',
+          release_status: releaseStatus('oci', '0.1.1-rc.2'),
           desired_state: 'running',
           observed_state: 'error',
           forward_id: 'pf-failed',
           runtime_port: 3000,
           last_failure: { action: 'start', stage: 'failed', error_code: 'CONTAINER_NAME_MISMATCH', message: 'raw backend identity detail' },
-          update_available: false,
           actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } },
         }}
         busy={false}
@@ -253,7 +261,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={() => undefined}
-        onUpdate={() => undefined}
+        onVersions={() => undefined}
         onLogs={() => undefined}
         onUninstall={() => undefined}
       />
@@ -293,13 +301,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
           template_source: 'builtin',
           deployment: 'container',
           workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service',
-          version: '0.1.1-rc.2',
+          release_status: releaseStatus('oci', '0.1.1-rc.2'),
           desired_state: 'running',
           observed_state: 'error',
           forward_id: 'pf-failed',
           runtime_port: 3000,
           last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.' },
-          update_available: false,
           actions: { start: { available: false, reason_code: 'OPERATION_ACTIVE' }, stop: { available: false, reason_code: 'OPERATION_ACTIVE' }, restart: { available: false, reason_code: 'OPERATION_ACTIVE' }, retry: { available: false, reason_code: 'OPERATION_ACTIVE' } },
         }}
         operation={{
@@ -333,7 +340,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={() => undefined}
-        onUpdate={() => undefined}
+        onVersions={() => undefined}
         onLogs={() => undefined}
         onUninstall={() => undefined}
         onCancelOperation={() => undefined}
@@ -385,12 +392,11 @@ describe('EnvPortForwardsPage browser presentation', () => {
           template_source: 'builtin',
           deployment: 'host',
           workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-host',
-          version: '0.1.1-rc.2',
+          release_status: releaseStatus('npm', '0.1.1-rc.2'),
           desired_state: 'running',
           observed_state: 'installing',
           forward_id: 'pf-native',
           runtime_port: 3000,
-                    update_available: false,
         }}
         operation={{
           operation_id: 'mop-native',
@@ -421,7 +427,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={() => undefined}
-        onUpdate={() => undefined}
+        onVersions={() => undefined}
         onLogs={() => undefined}
         onUninstall={() => undefined}
         onCancelOperation={() => undefined}
@@ -456,12 +462,11 @@ describe('EnvPortForwardsPage browser presentation', () => {
           template_source: 'builtin',
           deployment: 'container',
           workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-b',
-          version: 'reviewed',
+          release_status: releaseStatus('npm', 'reviewed'),
           desired_state: 'running',
           observed_state: 'installing',
           forward_id: 'pf-cached',
           runtime_port: 3000,
-                    update_available: false,
         }}
         operation={{
           operation_id: 'mop-cached',
@@ -491,7 +496,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={() => undefined}
-        onUpdate={() => undefined}
+        onVersions={() => undefined}
         onLogs={() => undefined}
         onUninstall={() => undefined}
         onCancelOperation={() => undefined}
