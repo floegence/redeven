@@ -125,6 +125,10 @@ describe('Flower progress indicator', () => {
     const css = flowerStyles();
     const src = surfaceSource();
     const actionsRule = cssRule(css, '.flower-composer-actions');
+    const alignedActionsRule = cssRule(
+      css,
+      ".flower-composer:not([data-flower-companion-compact='true']) .flower-composer-actions",
+    );
     const toolClusterRule = cssRule(css, '.flower-composer-tool-cluster');
     const attachmentButtonRule = cssRule(css, '.flower-composer-attachment-button');
     const moreAnchorRule = cssRule(css, '.flower-composer-more-anchor');
@@ -135,6 +139,7 @@ describe('Flower progress indicator', () => {
 
     expect(actionsRule).toContain('display: inline-flex');
     expect(actionsRule).toContain('justify-content: flex-end');
+    expect(alignedActionsRule).toContain('transform: translateY(0.625rem)');
     expect(toolClusterRule).toContain('gap: 0');
     expect(attachmentButtonRule).toContain('width: 2.75rem');
     expect(attachmentButtonRule).toContain('height: 2.75rem');

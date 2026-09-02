@@ -960,6 +960,11 @@ html.dark .flower-component-shell {
   gap: 0.5rem;
 }
 
+/* Align action glyphs with the compact controls while preserving full-size hit targets. */
+.flower-composer:not([data-flower-companion-compact='true']) .flower-composer-actions {
+  transform: translateY(0.625rem);
+}
+
 .flower-composer-tool-cluster {
   display: inline-flex;
   flex: 0 0 auto;
