@@ -3,6 +3,8 @@ package managedwebservice
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -163,6 +165,107 @@ func TestLegacyDeepSeekVolumeMarkerCleanupRetriesAfterCommittedImport(t *testing
 	if _, err := os.Stat(markerPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("cleanup retry left marker: %v", err)
 	}
+}
+
+func TestLegacyDeepSeekVolumeImportRestoresFailedStartIntent(t *testing.T) {
+	t.Parallel()
+	for _, preimport := range []bool{false, true} {
+		name := "imports during recovery"
+		if preimport {
+			name = "uses already imported resource"
+		}
+		t.Run(name, func(t *testing.T) {
+			driver, registry, service, _, markerPath := legacyDeepSeekVolumeMigrationFixture(t)
+			if preimport {
+				if _, err := driver.loadVolumeSet(context.Background(), service); err != nil {
+					t.Fatal(err)
+				}
+			}
+			code, message := "DATA_IDENTITY_MISSING", "The saved data identity was unavailable."
+			desired, observed := "stopped", "error"
+			if err := registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message}); err != nil {
+				t.Fatal(err)
+			}
+			service.DesiredState, service.ObservedState = desired, observed
+			service.LastErrorCode, service.LastErrorMessage = code, message
+			latest := pfregistry.ManagedOperation{
+				OperationID: "mop_failed_volume_start", ServiceID: service.ServiceID, RequestID: "request-failed-volume-start",
+				RequestFingerprint: "fingerprint", Action: string(ActionStart), State: "failed", Stage: "failed",
+				ErrorCode: code, ErrorMessage: message, CreatedAtUnixMs: 10, UpdatedAtUnixMs: 11, FinishedAtUnixMs: 11,
+			}
+
+			restored, err := driver.restoreLegacyDeepSeekStartIntent(context.Background(), service, latest)
+			if err != nil || !restored {
+				t.Fatalf("restoreLegacyDeepSeekStartIntent() = %t, %v", restored, err)
+			}
+			stored, err := registry.GetManagedService(context.Background(), service.ServiceID)
+			if err != nil || stored == nil {
+				t.Fatalf("stored service = %+v, %v", stored, err)
+			}
+			if stored.DesiredState != "running" || stored.ObservedState != "error" || stored.LastErrorCode != code {
+				t.Fatalf("restored service state = %+v", stored)
+			}
+			assertLegacyVolumeResource(t, registry, service.ServiceID)
+			if _, err := os.Stat(markerPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("restored start left legacy marker: %v", err)
+			}
+		})
+	}
+}
+
+func TestLegacyDeepSeekVolumeImportDoesNotRestoreUnrelatedFailure(t *testing.T) {
+	t.Parallel()
+	driver, registry, service, _, markerPath := legacyDeepSeekVolumeMigrationFixture(t)
+	service.DesiredState, service.ObservedState = "stopped", "error"
+	service.LastErrorCode = "DATA_IDENTITY_MISSING"
+	latest := pfregistry.ManagedOperation{Action: string(ActionRetryInstall), State: "failed", ErrorCode: "DATA_IDENTITY_MISSING"}
+
+	restored, err := driver.restoreLegacyDeepSeekStartIntent(context.Background(), service, latest)
+	if err != nil || restored {
+		t.Fatalf("restore unrelated failure = %t, %v", restored, err)
+	}
+	resources, listErr := registry.ListManagedServiceResources(context.Background(), service.ServiceID)
+	if listErr != nil || len(resources) != 0 {
+		t.Fatalf("resources after unrelated failure = %+v, %v", resources, listErr)
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("unrelated failure changed marker: %v", err)
+	}
+}
+
+func TestManagerStartRestoresLegacyDeepSeekVolumeFailure(t *testing.T) {
+	t.Parallel()
+	driver, registry, service, _, _ := legacyDeepSeekVolumeMigrationFixture(t)
+	code, message := "DATA_IDENTITY_MISSING", "The saved data identity was unavailable."
+	desired, observed := "stopped", "error"
+	if err := registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message}); err != nil {
+		t.Fatal(err)
+	}
+	latest := pfregistry.ManagedOperation{
+		OperationID: "mop_latest_failed_volume_start", ServiceID: service.ServiceID, RequestID: "request-latest-failed-volume-start",
+		RequestFingerprint: "fingerprint", Action: string(ActionStart), State: "failed", Stage: "failed",
+		ErrorCode: code, ErrorMessage: message, CreatedAtUnixMs: 20, UpdatedAtUnixMs: 21, FinishedAtUnixMs: 21,
+	}
+	if err := registry.CreateManagedOperation(context.Background(), latest); err != nil {
+		t.Fatal(err)
+	}
+	manager := driver.manager
+	manager.container = driver
+	manager.log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	manager.closed = true
+
+	manager.Start(context.Background())
+	if err := manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := registry.GetManagedService(context.Background(), service.ServiceID)
+	if err != nil || stored == nil {
+		t.Fatalf("stored service = %+v, %v", stored, err)
+	}
+	if stored.DesiredState != "running" || stored.ObservedState != "error" || stored.LastErrorCode != code {
+		t.Fatalf("manager recovery state = %+v", stored)
+	}
+	assertLegacyVolumeResource(t, registry, service.ServiceID)
 }
 
 func legacyDeepSeekVolumeMigrationFixture(t *testing.T) (*containerTemplateDriver, *pfregistry.Registry, *pfregistry.ManagedService, *legacyVolumeEngineClient, string) {
