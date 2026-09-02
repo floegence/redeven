@@ -149,7 +149,7 @@ const npmCoordinateLicenseOverrides = new Map([
 
 const goLicenseOverrides = new Map([
   ['github.com/floegence/floeterm/terminal-go', { license: 'MIT', note: 'Floegence first-party dependency.' }],
-  ['github.com/floegence/flowersec/flowersec-go/v4', { license: 'MIT', note: 'Floegence first-party dependency.' }],
+  ['github.com/floegence/flowersec/flowersec-go/v5', { license: 'MIT', note: 'Floegence first-party dependency.' }],
   ['github.com/floegence/redevplugin/v3', { license: 'MIT', note: 'Floegence first-party dependency.' }],
   ['github.com/floegence/redeven-service-templates', { license: 'MIT', note: 'Floegence first-party versioned Managed Service template catalog.' }],
   ['github.com/coder/websocket', { license: 'BSD-style', note: 'coder/websocket is distributed under a BSD-style license.' }],

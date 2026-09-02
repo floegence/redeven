@@ -267,7 +267,7 @@ describe('RuntimeMonitorPanel', () => {
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
   });
 
-  it('renders direct transport for sessions without tunnel endpoint URL', async () => {
+  it('renders sessions without exposing transport internals', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
     rpcMocks.sessions.listActiveSessions.mockResolvedValue({
       sessions: [{
@@ -277,7 +277,6 @@ describe('RuntimeMonitorPanel', () => {
         floeApp: 'com.floegence.redeven.agent',
         codeSpaceID: '',
         sessionKind: 'local_access_resume',
-        tunnelUrl: '',
         createdAtUnixMs: 1,
         connectedAtUnixMs: 2,
         canRead: true,
@@ -289,8 +288,8 @@ describe('RuntimeMonitorPanel', () => {
     render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
-    expect(host.textContent).toContain('Transport');
-    expect(host.textContent).toContain('Direct (no tunnel)');
+    expect(host.textContent).not.toContain('Transport');
+    expect(host.textContent).not.toContain('tunnel');
   });
 
   it('hides current env app RPC and legacy proxy sessions by default', async () => {
@@ -304,7 +303,6 @@ describe('RuntimeMonitorPanel', () => {
           floeApp: 'com.floegence.redeven.agent',
           codeSpaceID: 'env-ui',
           sessionKind: 'envapp_rpc',
-          tunnelUrl: '',
           createdAtUnixMs: 1,
           connectedAtUnixMs: 3,
           canRead: true,
@@ -318,7 +316,6 @@ describe('RuntimeMonitorPanel', () => {
           floeApp: 'com.floegence.redeven.agent',
           codeSpaceID: 'env-ui',
           sessionKind: 'envapp_proxy',
-          tunnelUrl: '',
           createdAtUnixMs: 1,
           connectedAtUnixMs: 2,
           canRead: true,
@@ -332,7 +329,6 @@ describe('RuntimeMonitorPanel', () => {
           floeApp: 'com.floegence.redeven.code',
           codeSpaceID: 'code-1',
           sessionKind: 'codeapp',
-          tunnelUrl: '',
           createdAtUnixMs: 1,
           connectedAtUnixMs: 1,
           canRead: true,
@@ -346,7 +342,6 @@ describe('RuntimeMonitorPanel', () => {
           floeApp: 'com.example.custom',
           codeSpaceID: 'custom-target',
           sessionKind: 'custom_rpc',
-          tunnelUrl: '',
           createdAtUnixMs: 1,
           connectedAtUnixMs: 4,
           canRead: true,

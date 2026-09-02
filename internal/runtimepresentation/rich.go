@@ -751,7 +751,6 @@ func (r *Renderer) filteredRuntimeSessions() []RuntimeSession {
 			session.AppLabel,
 			session.CodeSpaceID,
 			session.SessionKind,
-			session.TunnelURL,
 		}, " "))
 		if strings.Contains(haystack, filter) {
 			out = append(out, session)

@@ -24,7 +24,6 @@ export function fromWireActiveSession(s: wire_sessions_active_session): ActiveSe
     floeApp: str((s as any)?.floe_app),
     codeSpaceID: codeSpaceID || undefined,
     sessionKind: sessionKind || undefined,
-    tunnelUrl: str((s as any)?.tunnel_url),
     createdAtUnixMs: num((s as any)?.created_at_unix_ms),
     connectedAtUnixMs: num((s as any)?.connected_at_unix_ms),
     canRead: bool((s as any)?.can_read),

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 )
 
 func TestBindPreservesJSONResponseShape(t *testing.T) {

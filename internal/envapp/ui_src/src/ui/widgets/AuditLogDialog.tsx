@@ -177,16 +177,6 @@ function formatUserPrimary(e: AgentAuditEntry): string {
   return String(e.user_public_id ?? '').trim();
 }
 
-function formatTunnelHost(tunnelURL: string): string {
-  const raw = String(tunnelURL ?? '').trim();
-  if (!raw) return '';
-  try {
-    return new URL(raw).host;
-  } catch {
-    return raw;
-  }
-}
-
 function shortError(s: string): string {
   const v = String(s ?? '').trim();
   if (!v) return '';
@@ -323,13 +313,6 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
                                   {e.channel_id || '-'}
                                 </button>
                               </div>
-                              <Show when={String(e.tunnel_url ?? '').trim()}>
-                                <div class="text-muted-foreground truncate" title={e.tunnel_url}>
-                                  <button type="button" class="hover:underline" onClick={() => void copy(i18n.t('uiCopy.audit.tunnelEndpointUrl'), e.tunnel_url ?? '')}>
-                                    {i18n.t('uiCopy.audit.tunnelEndpoint', { host: formatTunnelHost(e.tunnel_url ?? '') })}
-                                  </button>
-                                </div>
-                              </Show>
                               <Show when={String(e.session_kind ?? '').trim()}>
                                 <div class="text-muted-foreground truncate" title={e.session_kind}>
                                   {i18n.t('uiCopy.audit.session', { kind: kindLabel(e.session_kind ?? '') })}

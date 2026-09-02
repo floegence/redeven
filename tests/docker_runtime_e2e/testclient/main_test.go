@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 )
 
 func TestConnectorTrustRootsMatchLocalUITransport(t *testing.T) {

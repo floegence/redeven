@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v4"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 )
 
 func (s *Server) prepareSecureNetwork(listeners []net.Listener) error {

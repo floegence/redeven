@@ -52,23 +52,22 @@ import (
 )
 
 type Options struct {
-	Logger                  *slog.Logger
-	ListenAddr              string
-	DistFS                  stdfs.FS
-	Backend                 Backend
-	PortForward             PortForwardBackend
-	ManagedWebServices      managedwebservice.Backend
-	ContainerResources      *containerresource.Service
-	AIServiceProvider       AIServiceProvider
-	Notes                   *notes.Service
-	WorkbenchLayout         *workbenchlayout.Service
-	Terminal                *terminal.Manager
-	Audit                   *auditlog.Store
-	Diagnostics             *diagnostics.Store
-	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
-	ResolveSessionTunnelURL func(channelID string) (string, bool)
-	AcquirePluginSession    func(channelID string) (*session.Meta, func(), bool)
-	EndPluginSession        func(channelID string)
+	Logger               *slog.Logger
+	ListenAddr           string
+	DistFS               stdfs.FS
+	Backend              Backend
+	PortForward          PortForwardBackend
+	ManagedWebServices   managedwebservice.Backend
+	ContainerResources   *containerresource.Service
+	AIServiceProvider    AIServiceProvider
+	Notes                *notes.Service
+	WorkbenchLayout      *workbenchlayout.Service
+	Terminal             *terminal.Manager
+	Audit                *auditlog.Store
+	Diagnostics          *diagnostics.Store
+	ResolveSessionMeta   func(channelID string) (*session.Meta, bool)
+	AcquirePluginSession func(channelID string) (*session.Meta, func(), bool)
+	EndPluginSession     func(channelID string)
 	// ConfigPath is the absolute path to the runtime config file.
 	// It is used to read and persist settings updates initiated from the Env App UI.
 	ConfigPath string
@@ -230,10 +229,9 @@ type Server struct {
 	audit      *auditlog.Store
 	diag       *diagnostics.Store
 
-	resolveSessionMeta      func(channelID string) (*session.Meta, bool)
-	resolveSessionTunnelURL func(channelID string) (string, bool)
-	acquirePluginSession    func(channelID string) (*session.Meta, func(), bool)
-	endPluginSession        func(channelID string)
+	resolveSessionMeta   func(channelID string) (*session.Meta, bool)
+	acquirePluginSession func(channelID string) (*session.Meta, func(), bool)
+	endPluginSession     func(channelID string)
 
 	configPath            string
 	stateDir              string
@@ -412,36 +410,35 @@ func New(opts Options) (*Server, error) {
 		}
 	}
 	return &Server{
-		log:                     logger,
-		agentHomeDir:            scope.HomePathAbs(),
-		scope:                   scope,
-		fs:                      runtimefs.NewServiceWithScope(scope),
-		backend:                 opts.Backend,
-		pf:                      opts.PortForward,
-		managed:                 opts.ManagedWebServices,
-		containers:              opts.ContainerResources,
-		aiProvider:              opts.AIServiceProvider,
-		notes:                   opts.Notes,
-		layouts:                 opts.WorkbenchLayout,
-		term:                    opts.Terminal,
-		audit:                   opts.Audit,
-		diag:                    opts.Diagnostics,
-		resolveSessionMeta:      opts.ResolveSessionMeta,
-		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
-		acquirePluginSession:    opts.AcquirePluginSession,
-		endPluginSession:        opts.EndPluginSession,
-		configPath:              strings.TrimSpace(opts.ConfigPath),
-		stateDir:                stateDir,
-		localPermissionPolicy:   localPermissionPolicy,
-		secrets:                 secrets,
-		threadReadState:         opts.ThreadReadStateStore,
-		pluginPlatform:          opts.PluginPlatform,
-		pluginMarketSnapshot:    opts.PluginMarketSnapshot,
-		pluginMarketDetail:      opts.PluginMarketDetail,
-		pluginMarketIcon:        opts.PluginMarketIcon,
-		pluginConns:             make(map[*pluginAdmissionConn]struct{}),
-		distFS:                  opts.DistFS,
-		addr:                    addr,
+		log:                   logger,
+		agentHomeDir:          scope.HomePathAbs(),
+		scope:                 scope,
+		fs:                    runtimefs.NewServiceWithScope(scope),
+		backend:               opts.Backend,
+		pf:                    opts.PortForward,
+		managed:               opts.ManagedWebServices,
+		containers:            opts.ContainerResources,
+		aiProvider:            opts.AIServiceProvider,
+		notes:                 opts.Notes,
+		layouts:               opts.WorkbenchLayout,
+		term:                  opts.Terminal,
+		audit:                 opts.Audit,
+		diag:                  opts.Diagnostics,
+		resolveSessionMeta:    opts.ResolveSessionMeta,
+		acquirePluginSession:  opts.AcquirePluginSession,
+		endPluginSession:      opts.EndPluginSession,
+		configPath:            strings.TrimSpace(opts.ConfigPath),
+		stateDir:              stateDir,
+		localPermissionPolicy: localPermissionPolicy,
+		secrets:               secrets,
+		threadReadState:       opts.ThreadReadStateStore,
+		pluginPlatform:        opts.PluginPlatform,
+		pluginMarketSnapshot:  opts.PluginMarketSnapshot,
+		pluginMarketDetail:    opts.PluginMarketDetail,
+		pluginMarketIcon:      opts.PluginMarketIcon,
+		pluginConns:           make(map[*pluginAdmissionConn]struct{}),
+		distFS:                opts.DistFS,
+		addr:                  addr,
 	}, nil
 }
 
@@ -2284,13 +2281,6 @@ func (g *Server) appendAudit(meta *session.Meta, action string, status string, d
 		st = "success"
 	}
 
-	tunnelURL := ""
-	if g.resolveSessionTunnelURL != nil {
-		if v, ok := g.resolveSessionTunnelURL(strings.TrimSpace(meta.ChannelID)); ok {
-			tunnelURL = strings.TrimSpace(v)
-		}
-	}
-
 	g.audit.Append(auditlog.Entry{
 		Action:    a,
 		Status:    st,
@@ -2306,7 +2296,6 @@ func (g *Server) appendAudit(meta *session.Meta, action string, status string, d
 		FloeApp:     strings.TrimSpace(meta.FloeApp),
 		SessionKind: strings.TrimSpace(meta.SessionKind),
 		CodeSpaceID: strings.TrimSpace(meta.CodeSpaceID),
-		TunnelURL:   tunnelURL,
 		CanRead:     meta.CanRead,
 		CanWrite:    meta.CanWrite,
 		CanExecute:  meta.CanExecute,

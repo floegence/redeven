@@ -21,12 +21,21 @@ import (
 )
 
 const (
-	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v4"
-	flowersecGoVersion   = "v4.0.0"
+	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v5"
+	flowersecGoVersion   = "v5.0.0"
 	flowersecCorePackage = "@floegence/flowersec-core"
-	flowersecCoreVersion = "4.0.0"
-	floeWebappVersion    = "0.47.1"
+	flowersecCoreVersion = "5.0.0"
+	floeWebappVersion    = "0.48.0"
 )
+
+var flowersecNPMPackages = []string{
+	flowersecCorePackage,
+	"@floegence/flowersec-node-native",
+	"@floegence/flowersec-node-native-darwin-arm64",
+	"@floegence/flowersec-node-native-darwin-x64",
+	"@floegence/flowersec-node-native-linux-arm64-gnu",
+	"@floegence/flowersec-node-native-linux-x64-gnu",
+}
 
 func TestDesktopPnpmPeerInstallSettingMatchesLockfile(t *testing.T) {
 	t.Parallel()
@@ -142,6 +151,7 @@ func TestFlowersecGoImportPolicyRejectsRetiredModulePaths(t *testing.T) {
 		{name: "v1", path: "github.com/floegence/flowersec/flowersec-go/v1", flowersec: true, current: false},
 		{name: "v2", path: "github.com/floegence/flowersec/flowersec-go/" + "v2", flowersec: true, current: false},
 		{name: "v3", path: "github.com/floegence/flowersec/flowersec-go/" + "v3", flowersec: true, current: false},
+		{name: "v4", path: "github.com/floegence/flowersec/flowersec-go/" + "v4", flowersec: true, current: false},
 		{name: "nearby module", path: "github.com/floegence/flowersec-tools", flowersec: false, current: false},
 	}
 	for _, test := range tests {
@@ -382,61 +392,61 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.47.1\"",
-			"\"@floegence/floe-webapp-core\": \"0.47.1\"",
+			"\"@floegence/floe-webapp-boot\": \"0.48.0\"",
+			"\"@floegence/floe-webapp-core\": \"0.48.0\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-boot-0.47.1.tgz",
-			"floe-webapp-core-0.47.1.tgz",
+			"floe-webapp-boot-0.48.0.tgz",
+			"floe-webapp-core-0.48.0.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.47.1",
-			"@floegence/floe-webapp-core@0.47.1",
+			"@floegence/floe-webapp-boot@0.48.0",
+			"@floegence/floe-webapp-core@0.48.0",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.47.1\"",
-			"\"@floegence/floe-webapp-core\": \"0.47.1\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.47.1\"",
+			"\"@floegence/floe-webapp-boot\": \"0.48.0\"",
+			"\"@floegence/floe-webapp-core\": \"0.48.0\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.48.0\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.18.1\"",
-			"\"@floegence/flowersec-core\": \"4.0.0\"",
+			"\"@floegence/flowersec-core\": \"5.0.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.47.1.tgz",
-			"floe-webapp-core-0.47.1.tgz",
-			"floe-webapp-protocol-0.47.1.tgz",
+			"floe-webapp-boot-0.48.0.tgz",
+			"floe-webapp-core-0.48.0.tgz",
+			"floe-webapp-protocol-0.48.0.tgz",
 			"floeterm-terminal-web-0.18.1.tgz",
-			"flowersec-core-4.0.0.tgz",
+			"flowersec-core-5.0.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.47.1",
-			"@floegence/floe-webapp-core@0.47.1",
-			"@floegence/floe-webapp-protocol@0.47.1",
+			"@floegence/floe-webapp-boot@0.48.0",
+			"@floegence/floe-webapp-core@0.48.0",
+			"@floegence/floe-webapp-protocol@0.48.0",
 			"@floegence/floeterm-terminal-web@0.18.1",
-			"@floegence/flowersec-core@4.0.0",
+			"@floegence/flowersec-core@5.0.0",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"4.0.0\"",
+			"\"@floegence/flowersec-core\": \"5.0.0\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-4.0.0.tgz",
+			"flowersec-core-5.0.0.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.47.1",
-			"@floegence/floe-webapp-core | 0.47.1",
-			"@floegence/floe-webapp-protocol | 0.47.1",
+			"@floegence/floe-webapp-boot | 0.48.0",
+			"@floegence/floe-webapp-core | 0.48.0",
+			"@floegence/floe-webapp-protocol | 0.48.0",
 			"@floegence/floeterm-terminal-web | 0.18.1",
-			"@floegence/flowersec-core | 4.0.0",
+			"@floegence/flowersec-core | 5.0.0",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.18.1",
-			"Flowersec Go v4.0.0",
-			"Flowersec Core v4.0.0",
+			"Flowersec Go v5.0.0",
+			"Flowersec Core v5.0.0",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.18.1",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v0.47.1",
-			"Flowersec Core v4.0.0",
+			"Floe Webapp Boot, Core, and Protocol v0.48.0",
+			"Flowersec Core v5.0.0",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -509,6 +519,12 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 				flowersecCorePackage + "/" + "endpoint",
 				flowersecCorePackage + "/" + "origin",
 				flowersecCorePackage + "/" + "gen",
+				"parseAppProxyFetchMessage",
+				"registerAppProxyServiceWorkerBridge",
+				"flowersec-proxy:" + "fetch",
+				"flowersec-proxy:" + "response_error",
+				"response_" + "flow_control",
+				"response" + "FlowControl",
 			} {
 				if strings.Contains(string(content), marker) {
 					rel, _ := filepath.Rel(root, path)
@@ -519,6 +535,23 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("scan %s: %v", relDir, err)
+		}
+	}
+
+	codeAppBridge := readRepoFile(t, root, "internal", "codeapp", "ui_src", "src", "runtimeBridge.ts")
+	if !strings.Contains(codeAppBridge, "registerProxyAppWindowWithServiceWorkerRuntime") {
+		t.Fatal("Code App must delegate Service Worker lifecycle composition to Flowersec")
+	}
+	for _, marker := range []string{
+		"parseAppProxyFetchMessage",
+		"registerAppProxyServiceWorkerBridge",
+		"flowersec-proxy:" + "fetch",
+		"flowersec-proxy:" + "response_error",
+		"response_" + "flow_control",
+		"response" + "FlowControl",
+	} {
+		if strings.Contains(codeAppBridge, marker) {
+			t.Fatalf("Code App must not reimplement Flowersec's private Service Worker protocol marker %q", marker)
 		}
 	}
 }
@@ -619,7 +652,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"github.com/floegence/floret/v7 v7.1.0",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go and Core v4.0.0 plus Floe Webapp v0.47.1",
+			"published Flowersec Go and Core v5.0.0 plus Floe Webapp v0.48.0",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
@@ -1574,7 +1607,7 @@ func assertOnlyCurrentFlowersecGoImports(t *testing.T, root string) {
 }
 
 func classifyFlowersecGoImport(importPath string) (flowersec bool, current bool) {
-	moduleRoot, versionSuffix, found := strings.Cut(flowersecGoModule, "/v4")
+	moduleRoot, versionSuffix, found := strings.Cut(flowersecGoModule, "/v5")
 	if !found || versionSuffix != "" || moduleRoot == "" {
 		return false, false
 	}
@@ -1586,7 +1619,13 @@ func classifyFlowersecGoImport(importPath string) (flowersec bool, current bool)
 
 func assertOnlyCurrentFlowersecNPMDependency(t *testing.T, root string, file string) {
 	t.Helper()
-	assertOnlyCurrentNPMDependency(t, root, file, flowersecCorePackage, flowersecCoreVersion)
+	packages := flowersecNPMPackages
+	if filepath.Base(file) == "package.json" {
+		packages = []string{flowersecCorePackage}
+	}
+	for _, packageName := range packages {
+		assertOnlyCurrentNPMDependency(t, root, file, packageName, flowersecCoreVersion)
+	}
 }
 
 func assertOnlyCurrentNPMDependency(t *testing.T, root string, file string, packageName string, packageVersion string) {
@@ -1644,9 +1683,11 @@ func validateExactNPMNode(t *testing.T, file string, packageName string, package
 		}
 	case string:
 		archiveName := packageName[strings.LastIndex(packageName, "/")+1:]
-		if strings.Contains(typed, archiveName+"-") && strings.Contains(typed, ".tgz") {
+		filename := typed[strings.LastIndex(typed, "/")+1:]
+		versionedArchive := strings.TrimPrefix(filename, archiveName+"-")
+		if versionedArchive != filename && len(versionedArchive) > 0 && versionedArchive[0] >= '0' && versionedArchive[0] <= '9' && strings.HasSuffix(filename, ".tgz") {
 			*found++
-			if !strings.Contains(typed, archiveName+"-"+packageVersion+".tgz") {
+			if filename != archiveName+"-"+packageVersion+".tgz" {
 				t.Fatalf("%s contains unexpected %s package artifact %q", file, packageName, typed)
 			}
 		}
