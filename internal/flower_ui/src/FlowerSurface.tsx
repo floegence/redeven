@@ -33,6 +33,7 @@ import {
   createFlowerClientRequestID,
 } from './flowerRequestIdentity';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
+import { FlowerThinkingOrb } from './FlowerThinkingOrb';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
@@ -9527,11 +9528,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'queued':
         return <Clock class="flower-subagent-status-indicator flower-subagent-status-indicator-queued h-3.5 w-3.5" aria-hidden="true" />;
       case 'running':
-        return (
-          <span class="flower-subagent-status-indicator flower-subagent-status-indicator-running" aria-hidden="true">
-            {activityInlineLoader('flower-subagent-status-loader')}
-          </span>
-        );
+        return <FlowerThinkingOrb class="flower-subagent-thinking-orb" running />;
       case 'waiting_input':
         return <AlertCircle class="flower-subagent-status-indicator flower-subagent-status-indicator-waiting h-3.5 w-3.5" aria-hidden="true" />;
       case 'completed':
