@@ -367,7 +367,7 @@ func validateToolResultStatus(status string) (string, error) {
 	}
 }
 
-func contractSafeToolResultPayload(result ToolResult) (map[string]any, error) {
+func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 	status := strings.TrimSpace(result.Status)
 	if result.Pending != nil {
 		if status == "" {
@@ -390,13 +390,18 @@ func contractSafeToolResultPayload(result ToolResult) (map[string]any, error) {
 		"truncated":   result.Truncated,
 		"content_ref": strings.TrimSpace(result.ContentRef),
 	}
-	if result.Data != nil {
+	preserveSubagentData := strings.TrimSpace(result.ToolName) == "subagents" && result.Data != nil
+	if result.Data != nil && !preserveSubagentData {
 		raw["data"] = result.Data
 	}
 	if result.Error != nil {
 		raw["error"] = activityToolErrorPayload(result.Error)
 	}
 	payload, truncated := contractSafePayloadMap(raw, 0)
+	if preserveSubagentData {
+		normalized, _ := normalizeJSONCompatibleToolPayload(result.Data)
+		payload["data"] = normalized
+	}
 	if truncated || result.Truncated {
 		payload["truncated"] = true
 	}
@@ -710,7 +715,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 }
 
 func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, error) {
-	structured, err := contractSafeToolResultPayload(result)
+	structured, err := modelToolResultPayload(result)
 	if err != nil {
 		return fltools.Result{}, err
 	}
@@ -1136,7 +1141,15 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	}
 	spec, hasSpec := aitools.PresentationSpec(toolName)
 	renderer := activityRendererFromSpec(spec, hasSpec)
-	rawPayload, dataTruncated := activityPayloadFromResultDataForTool(toolName, result.Data)
+	var rawPayload map[string]any
+	dataTruncated := false
+	if renderer == fltools.ActivityRendererSubAgentOperation {
+		normalized, _ := normalizeJSONCompatibleToolPayload(result.Data)
+		rawPayload, _ = normalized.(map[string]any)
+		rawPayload = cloneAnyMap(rawPayload)
+	} else {
+		rawPayload, dataTruncated = activityPayloadFromResultDataForTool(toolName, result.Data)
+	}
 	if renderer == fltools.ActivityRendererSubAgentOperation {
 		rawPayload = subAgentOperationResultActivitySource(result.activityInput, rawPayload)
 	}
@@ -1582,7 +1595,7 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 			TaskName: strings.TrimSpace(anyToString(record["task_name"])), TaskDescription: strings.TrimSpace(anyToString(record["task_description"])),
 			Title: strings.TrimSpace(anyToString(record["title"])), HostProfileRef: strings.TrimSpace(anyToString(record["host_profile_ref"])),
 			ForkMode: strings.TrimSpace(anyToString(record["fork_mode"])), Status: strings.TrimSpace(anyToString(record["status"])),
-			LastMessage: strings.TrimSpace(anyToString(record["last_message"])), WaitingPrompt: strings.TrimSpace(anyToString(record["waiting_prompt"])),
+			LastMessage: strings.TrimSpace(anyToString(record["last_message_preview"])), WaitingPrompt: strings.TrimSpace(anyToString(record["waiting_prompt"])),
 			QueuedInputs: readIntField(record, "queued_inputs"), ParentThreadID: identity.ThreadID(strings.TrimSpace(anyToString(record["parent_thread_id"]))),
 			ParentTurnID: identity.TurnID(strings.TrimSpace(anyToString(record["parent_turn_id"]))), LatestTurnID: identity.TurnID(strings.TrimSpace(anyToString(record["latest_turn_id"]))),
 			CreatedAtUnixMS: firstNonZeroInt64(readInt64Field(record, "created_at_unix_ms"), readInt64Field(record, "created_at_ms"), readInt64Field(record, "started_at_ms")),

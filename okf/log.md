@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-09-02
+* **Complete SubAgent handoffs**: Wait and inspect now prove parent membership
+  from bounded summaries, then read each completed child's exact current-Turn
+  Assistant result from the canonical Floret View. Model results use one
+  `handoffs` contract; previews remain status-only, Activity never copies report
+  content, and the stale dual summary, local budget, and fallback fields are
+  removed.
 * **Stable SubAgent window presence**: Window visibility is now one
   boolean-equality projection of the active detail selection. Live current,
   summary, request, and error updates change content without restarting the

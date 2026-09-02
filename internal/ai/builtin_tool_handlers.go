@@ -283,39 +283,7 @@ func normalizeTodosPayload(payload any) (any, bool) {
 }
 
 func normalizeSubagentsPayload(payload any) (any, bool) {
-	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
-	record, ok := normalized.(map[string]any)
-	if !ok || record == nil {
-		return normalized, false
-	}
-	truncated := truncateSubagentsPayloadRecord(record)
-	if truncated {
-		record["truncated"] = true
-	}
-	return record, truncated
-}
-
-func truncateSubagentsPayloadRecord(record map[string]any) bool {
-	truncated := false
-	for _, field := range []string{"last_message", "result", "objective", "waiting_prompt", "message", "details"} {
-		value, ok := record[field].(string)
-		if !ok {
-			continue
-		}
-		trimmed, hit := truncateByRunes(value, 3000)
-		record[field] = trimmed
-		truncated = truncated || hit
-	}
-	for _, field := range []string{"items"} {
-		for _, raw := range toAnySlice(record[field]) {
-			nested, ok := raw.(map[string]any)
-			if !ok || nested == nil {
-				continue
-			}
-			truncated = truncateSubagentsPayloadRecord(nested) || truncated
-		}
-	}
-	return truncated
+	return normalizeJSONCompatibleToolPayload(payload)
 }
 
 func truncateTodoActivityItems(items []any) bool {

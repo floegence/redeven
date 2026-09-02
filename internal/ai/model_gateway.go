@@ -2651,7 +2651,7 @@ func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 				callID = strings.TrimSpace(call.ID)
 			}
 		}
-		payload, err := contractSafeToolResultPayload(result)
+		payload, err := modelToolResultPayload(result)
 		if err != nil {
 			panic(fmt.Sprintf("invalid tool result message: %v", err))
 		}
