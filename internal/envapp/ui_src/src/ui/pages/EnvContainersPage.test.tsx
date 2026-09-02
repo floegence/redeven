@@ -1830,6 +1830,47 @@ describe('native Containers page', () => {
       .toContain('containers.views.containers');
   });
 
+  it('keeps a newly selected container open when the return refresh finishes', async () => {
+    const refreshedContainers = deferred<any[]>();
+    const containers = [
+      { container_id: 'container-1', name: 'API', state: 'running', image_id: 'sha256:abcdef', image: { reference: 'example/api:latest' }, management: { managed: false } },
+      { container_id: 'container-2', name: 'Worker', state: 'running', image_id: 'sha256:fedcba', image: { reference: 'example/worker:latest' }, management: { managed: false } },
+    ];
+    let containerRequests = 0;
+    harness.listResources.mockImplementation((nextView: string) => {
+      if (nextView === 'images') {
+        return Promise.resolve([{ id: 'sha256:abcdef', reference: 'example/api:latest', tags: ['example/api:latest'] }]);
+      }
+      containerRequests += 1;
+      return containerRequests === 1 ? Promise.resolve(containers) : refreshedContainers.promise;
+    });
+    harness.resourceDetails.mockImplementation((nextView: string, identity: string) => Promise.resolve(nextView === 'images'
+      ? { id: 'sha256:abcdef', reference: 'example/api:latest' }
+      : { container_id: identity, name: identity === 'container-2' ? 'Worker' : 'API', state: 'running' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    host.querySelector<HTMLButtonElement>('.container-secondary-cell .container-resource-link')?.click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('example/api:latest');
+
+    host.querySelector<HTMLButtonElement>('[data-container-detail-page] button[aria-label="containers.detail.back"]')?.click();
+    await Promise.resolve();
+    expect(host.querySelector('[data-container-detail-page]')).toBeNull();
+
+    host.querySelectorAll<HTMLTableRowElement>('tbody tr')[1]?.click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('Worker');
+
+    refreshedContainers.resolve(containers);
+    await settle();
+
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('Worker');
+    expect(harness.listResources.mock.calls.filter(([nextView]) => nextView === 'containers')).toHaveLength(2);
+  });
+
   it('opens a Compose member as a container detail and restores the Compose detail on back', async () => {
     harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects'
       ? [{ project_id: 'project-1', name: 'Stack', status: 'running', container_count: 1, running_count: 1, management: { managed: false } }]

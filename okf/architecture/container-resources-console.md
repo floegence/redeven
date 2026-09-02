@@ -36,6 +36,14 @@ otherwise the `navigating` state renders a detail-shaped skeleton until the
 single target inventory request resolves. Cached data provides continuity only
 and cannot authorize a mutation without a current server preflight.
 
+Selection is current user intent, not inventory-request output. A background
+refresh may replace inventory, but it must retain any selection made after that
+request began. It clears selection only when the completed inventory proves the
+exact resource no longer exists, then reports one concise inventory-change
+notice. Back restores its saved console snapshot, detail tab, and scroll position
+synchronously before starting that non-blocking refresh; the refresh cannot
+replay the empty list selection captured by Back over a newly opened detail.
+
 Containers, Images, and Volumes aggregate every ready runtime. Compose Projects
 appears only for Docker and Pods only for Podman. With no ready runtime, the
 stable page names each concise detection result and offers retry. Partial failure
@@ -99,7 +107,8 @@ Successful related navigation pushes the source selection, detail tab, list
 controls, and scroll position onto the component-local history. Back restores
 that snapshot, including across chains such as Compose to Container to Image. A
 newer navigation generation still cancels the old request and prevents its
-response from committing across targets.
+response from committing across targets. A newer selection revision also owns
+the selected resource while an in-scope inventory refresh finishes.
 
 Container detail provides Overview, live logs, redacted Inspect, mounts,
 capability-gated Exec, and bounded statistics. A running, unmanaged container

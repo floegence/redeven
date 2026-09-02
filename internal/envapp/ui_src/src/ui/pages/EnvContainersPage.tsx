@@ -967,6 +967,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     return current ? pruneReviewModel(current.preflight) : null;
   });
   let consoleLoadGeneration = 0;
+  let consoleSelectionRevision = 0;
   let consoleLoadAbort: AbortController | null = null;
   let waitingForEnvironment = false;
   const inventoryCache = new Map<string, readonly ContainerResourceInventoryItem[]>();
@@ -1369,6 +1370,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const restoreRelatedNavigation = (origin: RelatedNavigationOrigin, reason: 'missing' | 'ambiguous' = 'missing') => {
     if (relatedNavigationHistory.at(-1) === origin) relatedNavigationHistory.pop();
+    consoleSelectionRevision += 1;
     setConsoleState(origin.state);
     setDetailTab(origin.detailTab);
     queueMicrotask(() => {
@@ -1398,7 +1400,15 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     const controller = new AbortController();
     consoleLoadAbort = controller;
     const generation = ++consoleLoadGeneration;
+    const selectionRevision = consoleSelectionRevision;
     const current = () => generation === consoleLoadGeneration && !controller.signal.aborted;
+    const targetWithCurrentSelection = (candidate: ContainerConsoleTarget): ContainerConsoleTarget => {
+      if (consoleSelectionRevision === selectionRevision) return candidate;
+      const currentTarget = consoleState().target;
+      return currentTarget.view === candidate.view
+        ? { ...candidate, selectedResourceKey: currentTarget.selectedResourceKey }
+        : candidate;
+    };
 
     const cachedEntries = (runtimeSet: readonly ContainerRuntime[], candidate: ContainerConsoleTarget): ContainerResourceEntry[] | null => {
       const targets = readyRuntimesForView(runtimeSet, candidate.view);
@@ -1431,17 +1441,17 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         if (entries && matches.length === 1) {
           return {
             phase: 'ready',
-            target: { ...target, selectedResourceKey: matches[0].key },
+            target: targetWithCurrentSelection({ ...target, selectedResourceKey: matches[0].key }),
             runtimes: runtimeSet,
             inventory: entries,
             refreshing: true,
           };
         }
-        return { phase: 'navigating', target, runtimes: runtimeSet };
+        return { phase: 'navigating', target: targetWithCurrentSelection(target), runtimes: runtimeSet };
       }
       return entries
-        ? { phase: 'ready', target, runtimes: runtimeSet, inventory: entries, refreshing: true }
-        : { phase: 'loading', target, runtimes: runtimeSet };
+        ? { phase: 'ready', target: targetWithCurrentSelection(target), runtimes: runtimeSet, inventory: entries, refreshing: true }
+        : { phase: 'loading', target: targetWithCurrentSelection(target), runtimes: runtimeSet };
     };
     const initialCached = cachedEntries(nextRuntimes, target);
     setConsoleState(pendingConsoleState(nextRuntimes, initialCached));
@@ -1540,6 +1550,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         navigationSelectionMissing = matches.length === 0;
         navigationSelectionAmbiguous = matches.length > 1;
       }
+      if (consoleSelectionRevision !== selectionRevision) {
+        const currentTarget = consoleState().target;
+        if (currentTarget.view === target.view) nextSelectedResourceKey = currentTarget.selectedResourceKey;
+      }
       const selectedStillExists = options.navigation
         ? Boolean(nextSelectedResourceKey && entries.some((entry) => entry.key === nextSelectedResourceKey))
         : !nextSelectedResourceKey || entries.some((entry) => entry.key === nextSelectedResourceKey);
@@ -1577,6 +1591,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   );
 
   const setSelectedResourceKey = (key: string) => {
+    consoleSelectionRevision += 1;
     setConsoleState((state) => ({ ...state, target: { ...state.target, selectedResourceKey: compact(key) } }));
   };
 
@@ -1998,12 +2013,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     void closeExecSession(true);
     const origin = relatedNavigationHistory.pop();
     if (origin) {
-      void loadConsole(origin.state.target).then(() => {
-        setDetailTab(origin.detailTab);
-        queueMicrotask(() => {
-          if (inventoryScrollElement) inventoryScrollElement.scrollTop = origin.scrollTop;
-        });
+      resetResourceContext();
+      consoleSelectionRevision += 1;
+      setConsoleState(origin.state);
+      setDetailTab(origin.detailTab);
+      queueMicrotask(() => {
+        if (inventoryScrollElement) inventoryScrollElement.scrollTop = origin.scrollTop;
       });
+      void loadConsole(origin.state.target, { notifyIfSelectionMissing: true });
       return;
     }
     setSelectedResourceKey('');
