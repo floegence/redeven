@@ -541,8 +541,13 @@ describe('web service metadata and template validation', () => {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
       const retryButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent?.trim() === 'Retry');
+      const restartButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Restart');
 
       expect(retryButton).toBeTruthy();
+      expect(restartButton).toBeTruthy();
+      expect(retryButton?.disabled).toBe(false);
+      expect(restartButton?.disabled).toBe(false);
       expect(retryButton?.className).toContain('whitespace-nowrap');
       expect(retryButton?.querySelector('[data-testid="restart-icon"]')).toBeNull();
       expect(row.textContent).not.toContain('Failed');
@@ -563,7 +568,9 @@ describe('web service metadata and template validation', () => {
       expect(copyFailure).toHaveBeenCalledWith('Clipboard denied');
 
       retryButton?.click();
-      expect(retry).toHaveBeenCalledWith('retry_install');
+      restartButton?.click();
+      expect(retry).toHaveBeenNthCalledWith(1, 'start');
+      expect(retry).toHaveBeenNthCalledWith(2, 'start');
     } finally {
       dispose();
       host.remove();

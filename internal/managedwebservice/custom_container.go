@@ -552,6 +552,29 @@ func (d *containerTemplateDriver) importLegacyDeepSeekVolume(ctx context.Context
 	return identity, true, nil
 }
 
+func (d *containerTemplateDriver) restoreLegacyDeepSeekStartIntent(ctx context.Context, service *pfregistry.ManagedService, latest pfregistry.ManagedOperation) (bool, error) {
+	if !isLegacyDeepSeekContainerService(service) || service.DesiredState != "stopped" || service.ObservedState != "error" ||
+		service.LastErrorCode != "DATA_IDENTITY_MISSING" || strings.TrimSpace(latest.OperationID) == "" ||
+		OperationAction(latest.Action) != ActionStart || latest.State != "failed" || latest.ErrorCode != "DATA_IDENTITY_MISSING" {
+		return false, nil
+	}
+	marker, err := d.loadVolumeSet(ctx, service)
+	if err != nil {
+		return false, err
+	}
+	if !slices.ContainsFunc(marker.Volumes, func(volume customContainerVolume) bool {
+		return volume.ResourceID == "data" && strings.TrimSpace(volume.Name) != "" && volume.CreatedAtUnixMs > 0
+	}) {
+		return false, nil
+	}
+	running := "running"
+	if err := d.manager.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running}); err != nil {
+		return false, err
+	}
+	service.DesiredState = running
+	return true, nil
+}
+
 func isLegacyDeepSeekContainerService(service *pfregistry.ManagedService) bool {
 	return service != nil && service.TemplateSource == "builtin" && service.TemplateID == DeepSeekHarnessContainerTemplateID &&
 		service.ServiceFamilyID == DeepSeekHarnessContainerTemplateID && Deployment(service.Deployment) == DeploymentContainer

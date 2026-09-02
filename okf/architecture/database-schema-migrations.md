@@ -84,8 +84,10 @@ built-in service, deterministic name, saved creation time, and live Docker
 volume identity, commits `managed_web_service_resources`, and only then removes
 the retired marker. Failed verification or Registry persistence leaves both
 the database and marker unchanged; interrupted marker cleanup is retried from
-the committed resource. This narrow import does not authorize heuristic repair
-or a second lifecycle driver.
+the committed resource. Only an exact latest `DATA_IDENTITY_MISSING` Start
+failure may restore its lost desired-running intent after the resource commits;
+a later operation remains authoritative. This narrow import does not authorize
+heuristic repair or a second lifecycle driver.
 
 ## Upstream-owned schemas
 

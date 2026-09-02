@@ -17,6 +17,10 @@
   marker cleanup, so retries are idempotent and failures never alter the legacy
   container, volume, or user data. The retired DeepSeek Docker lifecycle driver
   is removed, and stable volume-identity errors now have localized diagnostics.
+  An exact latest Start failure now regains its desired-running intent after
+  import and reuses ordinary Start once. Failed-service actions follow their
+  persisted operation, so Start failures no longer invoke reinstall or replace
+  the existing container.
 
 ## 2026-09-01
 * **Structured tool history and stable lineage**: Redeven now consumes Floret

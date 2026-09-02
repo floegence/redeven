@@ -120,6 +120,16 @@ func (m *Manager) Start(ctx context.Context) {
 			m.reconcileInterruptedService(&service, *latest)
 			continue
 		}
+		if latest != nil {
+			if driver, ok := m.container.(*containerTemplateDriver); ok {
+				restored, restoreErr := driver.restoreLegacyDeepSeekStartIntent(ctx, &service, *latest)
+				if restoreErr != nil {
+					m.log.Warn("restore managed Web Service start after legacy volume import", "service_id", service.ServiceID, "operation_id", latest.OperationID, "cause", safeManagedFailureCause(restoreErr))
+				} else if restored {
+					m.log.Info("restore managed Web Service start after legacy volume import", "service_id", service.ServiceID, "operation_id", latest.OperationID)
+				}
+			}
+		}
 		if service.DesiredState != "running" {
 			continue
 		}

@@ -1253,7 +1253,17 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
   const failed = () => props.service.observed_state === 'error';
   const operation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
   const busy = () => props.busy || managedOperationActive(props.operation);
-  const primaryAction = () => failed() ? 'retry_install' as const : running() ? 'stop' as const : 'start' as const;
+  const failedRecoveryAction = () => {
+    switch (props.service.last_failure?.action) {
+      case 'install':
+      case 'retry_install': return 'retry_install' as const;
+      case 'stop': return 'stop' as const;
+      case 'start':
+      case 'restart': return 'start' as const;
+      default: return 'retry_install' as const;
+    }
+  };
+  const primaryAction = () => failed() ? failedRecoveryAction() : running() ? 'stop' as const : 'start' as const;
   const primaryLabel = () => failed() ? i18n.t('webServices.managed.retryInstall') : running() ? i18n.t('webServices.managed.stop') : i18n.t('webServices.managed.start');
   const failureOccurredAt = () => {
     const occurredAt = props.service.last_failure?.occurred_at_unix_ms;
@@ -1323,7 +1333,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     {
       id: 'restart',
       label: i18n.t('webServices.managed.restart'),
-      disabled: busy() || !props.canManage || !running(),
+      disabled: busy() || !props.canManage || (!running() && !failed()),
     },
     {
       id: 'logs',
@@ -1344,7 +1354,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     else if (id === 'update') props.onUpdate();
 		else if (id === 'versions') props.onVersions?.();
     else if (id === 'settings') props.onSettings?.();
-    else if (id === 'restart') props.onAction('restart');
+    else if (id === 'restart') props.onAction(failed() ? failedRecoveryAction() : 'restart');
     else if (id === 'logs') props.onLogs();
     else if (id === 'uninstall') props.onUninstall();
   };
