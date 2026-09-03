@@ -531,10 +531,49 @@ func TestTopologyMutationBlocksRepositoryResolve(t *testing.T) {
 	}
 }
 
+func TestLocalizedHostDoesNotBlockNonRepositoryFilesystemMutation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fake git fixture")
+	}
+	bin := t.TempDir()
+	gitPath := filepath.Join(bin, "git")
+	gitScript := `#!/bin/sh
+if [ "${LC_ALL:-}" = "C" ]; then
+  echo "fatal: not a git repository (or any of the parent directories): .git" >&2
+else
+  echo "fatal: 不是 Git 仓库（或者任何父目录）：.git" >&2
+fi
+exit 128
+`
+	if err := os.WriteFile(gitPath, []byte(gitScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("LANG", "zh_CN.UTF-8")
+	t.Setenv("LC_ALL", "zh_CN.UTF-8")
+
+	called := false
+	target := filepath.Join(t.TempDir(), "x64?format=deb")
+	err := New().CoordinateFilesystemMutation(context.Background(), FilesystemEffect{
+		Paths:           []string{target},
+		ChangesTopology: true,
+	}, func() error {
+		called = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("CoordinateFilesystemMutation() error = %v", err)
+	}
+	if !called {
+		t.Fatal("filesystem mutation callback was not called")
+	}
+}
+
 func TestCommandEnvironmentMergesOverridesAndFiltersSecrets(t *testing.T) {
 	t.Setenv("REDEVEN_LOCAL_UI_PASSWORD", "secret")
 	t.Setenv("GIT_EDITOR", "from-parent")
-	environment := commandEnvironment([]string{"GIT_EDITOR=:", "REDEVEN_BOOTSTRAP_TICKET=secret"})
+	t.Setenv("LC_ALL", "zh_CN.UTF-8")
+	environment := commandEnvironment([]string{"GIT_EDITOR=:", "LC_ALL=ja_JP.UTF-8", "REDEVEN_BOOTSTRAP_TICKET=secret"})
 	joined := strings.Join(environment, "\n")
 	for _, forbidden := range []string{"REDEVEN_LOCAL_UI_PASSWORD=", "REDEVEN_BOOTSTRAP_TICKET="} {
 		if strings.Contains(joined, forbidden) {
@@ -546,5 +585,8 @@ func TestCommandEnvironmentMergesOverridesAndFiltersSecrets(t *testing.T) {
 	}
 	if !strings.Contains(joined, "GIT_TERMINAL_PROMPT=0") || !strings.Contains(joined, "GCM_INTERACTIVE=never") {
 		t.Fatal("command environment omitted non-interactive guards")
+	}
+	if !strings.Contains(joined, "LC_ALL=C") || strings.Contains(joined, "LC_ALL=zh_CN.UTF-8") || strings.Contains(joined, "LC_ALL=ja_JP.UTF-8") {
+		t.Fatalf("command environment did not enforce the stable Git locale: %s", joined)
 	}
 }

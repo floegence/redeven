@@ -485,7 +485,9 @@ func commandEnvironment(overrides []string) []string {
 			environment = append(environment, item)
 		}
 	}
-	for _, fixed := range []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"} {
+	// Repository discovery classifies Git diagnostics, so the host locale must
+	// not change their language.
+	for _, fixed := range []string{"LC_ALL=C", "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"} {
 		name, _, _ := strings.Cut(fixed, "=")
 		key := strings.ToUpper(name)
 		if i, exists := index[key]; exists {
