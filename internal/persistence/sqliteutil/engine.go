@@ -33,10 +33,12 @@ type LegacyKindMigration struct {
 }
 
 type Spec struct {
-	Kind                 string
-	CurrentVersion       int
-	MinimumVersion       int
-	Pragmas              []string
+	Kind           string
+	CurrentVersion int
+	MinimumVersion int
+	Pragmas        []string
+	// ValidateExisting runs only for a non-empty existing file, before any writable connection.
+	ValidateExisting     func(tx *sql.Tx) error
 	Initialize           func(tx *sql.Tx) error
 	Migrations           []Migration
 	LegacyKindMigrations []LegacyKindMigration
@@ -123,9 +125,16 @@ func (e *SchemaVerifyError) Unwrap() error {
 }
 
 func Open(path string, spec Spec) (*sql.DB, error) {
-	p := filepath.Clean(strings.TrimSpace(path))
-	if p == "" {
+	path = strings.TrimSpace(path)
+	if path == "" {
 		return nil, errors.New("missing sqlite path")
+	}
+	if err := validateSpec(spec); err != nil {
+		return nil, err
+	}
+	p := filepath.Clean(path)
+	if err := preflightExisting(p, spec.ValidateExisting); err != nil {
+		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return nil, err
@@ -147,9 +156,6 @@ func Open(path string, spec Spec) (*sql.DB, error) {
 func ensureSchema(db *sql.DB, spec Spec) error {
 	if db == nil {
 		return errors.New("nil db")
-	}
-	if err := validateSpec(spec); err != nil {
-		return err
 	}
 	for _, pragma := range spec.Pragmas {
 		stmt := strings.TrimSpace(pragma)
@@ -272,6 +278,101 @@ func ensureSchema(db *sql.DB, spec Spec) error {
 	return tx.Commit()
 }
 
+func preflightExisting(path string, validate func(tx *sql.Tx) error) error {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect sqlite file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("sqlite path is not a regular file")
+	}
+	if info.Size() == 0 || validate == nil {
+		return nil
+	}
+
+	walPath := path + "-wal"
+	walExisted, err := fileExists(walPath)
+	if err != nil {
+		return fmt.Errorf("inspect sqlite write-ahead log: %w", err)
+	}
+	shmPath := path + "-shm"
+	shmExisted, err := fileExists(shmPath)
+	if err != nil {
+		return fmt.Errorf("inspect sqlite shared-memory file: %w", err)
+	}
+	var shmBefore []byte
+	var shmMode os.FileMode
+	if shmExisted {
+		// Read-only WAL transactions still update reader marks in shared memory.
+		shmBefore, err = os.ReadFile(shmPath)
+		if err != nil {
+			return fmt.Errorf("read sqlite shared-memory file: %w", err)
+		}
+		shmInfo, statErr := os.Stat(shmPath)
+		if statErr != nil {
+			return fmt.Errorf("inspect sqlite shared-memory file mode: %w", statErr)
+		}
+		shmMode = shmInfo.Mode().Perm()
+	}
+
+	db, err := sql.Open("sqlite", readOnlyDSN(path))
+	if err != nil {
+		return fmt.Errorf("open sqlite preflight: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	tx, err := db.Begin()
+	if err == nil {
+		err = validate(tx)
+		rollbackErr := tx.Rollback()
+		if err == nil && rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			err = rollbackErr
+		}
+	}
+	if closeErr := db.Close(); err == nil && closeErr != nil {
+		err = closeErr
+	}
+	for _, sidecar := range []struct {
+		path    string
+		existed bool
+		name    string
+	}{
+		{path: walPath, existed: walExisted, name: "write-ahead log"},
+		{path: shmPath, existed: shmExisted, name: "shared-memory file"},
+	} {
+		if sidecar.existed {
+			continue
+		}
+		if removeErr := os.Remove(sidecar.path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			err = errors.Join(err, fmt.Errorf("remove sqlite preflight %s: %w", sidecar.name, removeErr))
+		}
+	}
+	if err != nil && shmExisted {
+		if restoreErr := os.WriteFile(shmPath, shmBefore, shmMode); restoreErr != nil {
+			err = errors.Join(err, fmt.Errorf("restore sqlite preflight shared-memory file: %w", restoreErr))
+		}
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
 func validateSpec(spec Spec) error {
 	kind := strings.TrimSpace(spec.Kind)
 	if kind == "" {
@@ -389,6 +490,14 @@ func immediateDSN(path string) string {
 	u := url.URL{Scheme: "file", Path: path}
 	query := u.Query()
 	query.Set("_txlock", "immediate")
+	u.RawQuery = query.Encode()
+	return u.String()
+}
+
+func readOnlyDSN(path string) string {
+	u := url.URL{Scheme: "file", Path: path}
+	query := u.Query()
+	query.Set("mode", "ro")
 	u.RawQuery = query.Encode()
 	return u.String()
 }

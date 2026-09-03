@@ -6,15 +6,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
-	_ "modernc.org/sqlite"
 )
 
 // Store is a local SQLite-backed persistence layer for Redeven product data.
@@ -44,14 +40,7 @@ func OpenWithPendingInputMigration(ctx context.Context, path string, migrate Pen
 }
 
 func open(ctx context.Context, path string, migrate PendingInputMigrationHandler) (*Store, error) {
-	p := filepath.Clean(strings.TrimSpace(path))
-	if p == "" {
-		return nil, errors.New("missing db path")
-	}
-	if err := preflightCurrentThreadstore(p); err != nil {
-		return nil, err
-	}
-	db, err := sqliteutil.Open(p, threadstoreSchemaSpecWithPendingInputMigration(ctx, migrate))
+	db, err := sqliteutil.Open(path, threadstoreSchemaSpecWithPendingInputMigration(ctx, migrate))
 	if err != nil {
 		return nil, err
 	}
@@ -96,77 +85,6 @@ func removeRetiredSQLiteSequence(db *sql.DB) error {
 	}
 	return nil
 }
-
-func preflightCurrentThreadstore(path string) error {
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("inspect threadstore file: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return errors.New("threadstore path is not a regular file")
-	}
-	if info.Size() == 0 {
-		return nil
-	}
-	u := url.URL{Scheme: "file", Path: path}
-	query := u.Query()
-	query.Set("mode", "ro")
-	query.Set("immutable", "1")
-	u.RawQuery = query.Encode()
-	db, err := sql.Open("sqlite", u.String())
-	if err != nil {
-		return fmt.Errorf("open threadstore preflight: %w", err)
-	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	defer db.Close()
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin threadstore preflight: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	var version int
-	if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
-		return fmt.Errorf("read threadstore preflight version: %w", err)
-	}
-	var metaTableCount int
-	if err := tx.QueryRow("SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = '__redeven_db_meta'").Scan(&metaTableCount); err != nil {
-		return fmt.Errorf("inspect threadstore metadata table: %w", err)
-	}
-	if metaTableCount != 1 {
-		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: threadstoreSchemaKind}
-	}
-	var kind string
-	if err := tx.QueryRow("SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1").Scan(&kind); err != nil {
-		return fmt.Errorf("read threadstore database kind: %w", err)
-	}
-	kind = strings.TrimSpace(kind)
-	if kind != threadstoreSchemaKind {
-		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: threadstoreSchemaKind, ActualKind: kind}
-	}
-	if version > threadstoreCurrentSchemaVersion {
-		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: threadstoreCurrentSchemaVersion}
-	}
-	if version < threadstoreSchemaSpec().MinimumVersion {
-		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: threadstoreSchemaSpec().MinimumVersion}
-	}
-	expected, err := reviewedProductSchemaContract(version)
-	if err != nil {
-		return err
-	}
-	actual, err := inspectReviewedSchemaTx(tx)
-	if err != nil {
-		return fmt.Errorf("inspect threadstore reviewed schema: %w", err)
-	}
-	if err := compareReviewedSchemas(actual, expected); err != nil {
-		return &sqliteutil.SchemaVerifyError{Kind: threadstoreSchemaKind, Err: err}
-	}
-	return nil
-}
-
 func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil

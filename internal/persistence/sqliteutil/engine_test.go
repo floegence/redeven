@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -90,6 +91,94 @@ func TestOpen_RejectsWrongDatabaseKind(t *testing.T) {
 	var wrongKind *WrongDatabaseKindError
 	if !errors.As(err, &wrongKind) {
 		t.Fatalf("error=%v, want WrongDatabaseKindError", err)
+	}
+}
+
+func TestOpenPreflightsOnlyNonEmptyExistingDatabase(t *testing.T) {
+	t.Parallel()
+
+	var validations atomic.Int32
+	spec := toySpec("toy_a")
+	spec.ValidateExisting = func(tx *sql.Tx) error {
+		validations.Add(1)
+		var kind string
+		return tx.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1`).Scan(&kind)
+	}
+
+	dir := t.TempDir()
+	missingPath := filepath.Join(dir, "missing", "toy.sqlite")
+	db, err := Open(missingPath, spec)
+	if err != nil {
+		t.Fatalf("Open missing: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := validations.Load(); got != 0 {
+		t.Fatalf("missing database validations=%d, want 0", got)
+	}
+
+	db, err = Open(missingPath, spec)
+	if err != nil {
+		t.Fatalf("Open existing: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := validations.Load(); got != 1 {
+		t.Fatalf("existing database validations=%d, want 1", got)
+	}
+
+	zeroPath := filepath.Join(dir, "zero.sqlite")
+	if err := os.WriteFile(zeroPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err = Open(zeroPath, spec)
+	if err != nil {
+		t.Fatalf("Open zero-length: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := validations.Load(); got != 1 {
+		t.Fatalf("zero-length database validations=%d, want 1", got)
+	}
+}
+
+func TestOpenRunsExistingValidationBeforeWritablePragmas(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "toy.sqlite")
+	db, err := Open(dbPath, toySpec("toy_a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	rejected := errors.New("reject existing database")
+	spec := toySpec("toy_a")
+	spec.ValidateExisting = func(*sql.Tx) error { return rejected }
+	spec.Pragmas = append([]string{`PRAGMA application_id=42;`}, spec.Pragmas...)
+	if opened, err := Open(dbPath, spec); opened != nil || !errors.Is(err, rejected) {
+		if opened != nil {
+			_ = opened.Close()
+		}
+		t.Fatalf("Open result=(%v, %v), want preflight rejection", opened, err)
+	}
+
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var applicationID int
+	if err := raw.QueryRow(`PRAGMA application_id`).Scan(&applicationID); err != nil {
+		t.Fatal(err)
+	}
+	if applicationID != 0 {
+		t.Fatalf("application_id=%d, want 0", applicationID)
 	}
 }
 
