@@ -66,6 +66,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  ArrowLeft: (props: any) => <span class={props.class} data-testid="arrow-left-icon" />,
   AlertTriangle: (props: any) => <span class={props.class} data-testid="alert-triangle-icon" />,
   ExternalLink: (props: any) => <span class={props.class} data-testid="external-link-icon" />,
   Globe: (props: any) => <span class={props.class} data-testid="globe-icon" />,
@@ -1599,11 +1600,23 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-version"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
     await flushPage();
+    const releaseDrawerBody = host.querySelector<HTMLElement>('[data-testid="managed-release-drawer-body"]')!;
+    expect(releaseDrawerBody.className).toContain('overflow-hidden');
+    expect(releaseDrawerBody.getAttribute('data-redeven-workbench-wheel-role')).toBeNull();
+    expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
     host.querySelector<HTMLButtonElement>('[data-release-id="candidate-new"]')?.click();
     await flushPage();
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review update plan')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy());
     expect(updatePlanBody).toEqual({ target_candidate_id: 'candidate-new' });
+    expect(host.querySelector('[data-testid="managed-release-drawer-body"]')?.getAttribute('data-view')).toBe('plan');
+    expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeNull();
+    expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Back to versions')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy());
+    expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeNull();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review update plan')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy());
     const update = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Update');
     expect(update?.disabled).toBe(true);
     const planChecks = host.querySelectorAll<HTMLInputElement>('[data-testid="managed-update-plan"] input[type="checkbox"]');
@@ -1680,10 +1693,10 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-version"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
     await flushPage();
-    expect(host.querySelector('[data-testid="managed-release-keep-current"]')?.className).toContain('border-primary');
+    expect(host.querySelector('[data-testid="managed-release-keep-current"]')?.getAttribute('aria-pressed')).toBe('true');
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review update plan')?.click();
+    await waitForAssertion(() => expect(planBody).toEqual({}));
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy());
-    expect(planBody).toEqual({});
     expect(host.querySelector('[data-testid="managed-update-plan"]')?.textContent).toContain('1 → 2');
     expect(host.querySelector('[data-testid="managed-update-plan"]')?.textContent).toContain('1.0.0');
   });

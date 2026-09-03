@@ -3342,6 +3342,7 @@
       "keepCurrentVersion": "Manter a versão atual do aplicativo",
       "keepCurrentVersionDescription": "Aplica apenas uma revisão mais recente do modelo. O Redeven não voltará o aplicativo para a versão recomendada.",
       "reviewUpdatePlan": "Revisar plano de atualização",
+      "backToReleaseList": "Voltar à lista de versões",
       "preparingUpdatePlan": "Preparando o plano…",
       "updateNotRequired": "A versão do aplicativo e a revisão do modelo selecionadas já estão instaladas.",
       "updatePlanTitle": "Plano de atualização",

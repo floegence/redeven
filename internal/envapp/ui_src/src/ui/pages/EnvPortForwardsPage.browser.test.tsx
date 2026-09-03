@@ -3,9 +3,17 @@ import '../../index.css';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 
 import { ManagedReleaseCandidates, ManagedServiceRow, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
+
+const browserCommands = commands as unknown as Readonly<{
+  wheelScrollRegion: (request: Readonly<{
+    regionSelector: string;
+    targetSelector?: string;
+    deltaY: number;
+  }>) => Promise<Readonly<{ before: number; after: number }>>;
+}>;
 
 async function settle(): Promise<void> {
   await Promise.resolve();
@@ -35,6 +43,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
   it('shows exact direct releases, current identity, filters, and disabled reasons at narrow width', async () => {
     await page.viewport(390, 760);
     const host = document.createElement('div');
+    Object.assign(host.style, { width: '390px', height: '640px' });
     document.body.appendChild(host);
     const [filter, setFilter] = createSignal<'all' | 'stable' | 'preview'>('all');
     const [selected, setSelected] = createSignal('');
@@ -73,6 +82,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(scrollViewport.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
     expect(scrollViewport.tabIndex).toBe(0);
     expect(getComputedStyle(scrollViewport).overflowY).toBe('auto');
+    expect(scrollViewport.scrollWidth).toBeLessThanOrEqual(scrollViewport.clientWidth);
+    expect(scrollViewport.querySelector<HTMLElement>('[data-release-id="preview"]')!.getBoundingClientRect().height).toBeLessThanOrEqual(88);
     await userEvent.click(Array.from(surface.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Preview')!);
     await settle();
     expect(surface.textContent).toContain('0.1.2-alpha.3');
@@ -82,6 +93,81 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(surface.querySelector('[data-testid="managed-release-risk-hints"]')?.textContent).toContain('preview release');
     expect(surface.querySelector('[data-testid="managed-release-risk-hints"] input[type="checkbox"]')).toBeNull();
     expect(surface.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+  });
+
+  it('fills the available drawer body with compact releases and scrolls from row content', async () => {
+    await page.viewport(1440, 960);
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '992px', height: '720px' });
+    document.body.appendChild(host);
+    const [selected, setSelected] = createSignal('release-1');
+    const candidates = Array.from({ length: 12 }, (_, index) => ({
+      schema_version: 1 as const,
+      candidate_id: `release-${index + 1}`,
+      source_kind: 'oci' as const,
+      source: 'registry.example/managed/example-service',
+      registry: 'https://registry.example/',
+      tag: `1.0.${12 - index}`,
+      digest: `sha256:${String(index + 1).repeat(64)}`,
+      channel: 'stable' as const,
+      trust: 'registry_verified',
+      selectable: true,
+      platform: 'linux/arm64',
+      relation: 'newer' as const,
+      is_latest_stable: index === 0,
+    }));
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{
+        schema_version: 1,
+        recommended_release: { schema_version: 1, kind: 'oci', source: candidates[0]!.source, tag: '1.0.12', digest: candidates[0]!.digest },
+        latest_stable_release: candidates[0],
+        check_status: 'fresh',
+        checked_at_unix_ms: Date.now(),
+        candidates,
+      }}
+      loading={false}
+      error=""
+      query=""
+      filter="all"
+      selectedID={selected()}
+      onQueryChange={() => undefined}
+      onFilterChange={() => undefined}
+      onSelect={setSelected}
+    />, host);
+    await settle();
+
+    const surface = document.querySelector<HTMLElement>('[data-testid="managed-release-candidates"]')!;
+    const scrollViewport = document.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
+    const firstRow = scrollViewport.querySelector<HTMLElement>('[data-release-id="release-1"]')!;
+    expect(surface.getBoundingClientRect().height).toBeCloseTo(720, 0);
+    expect(scrollViewport.clientHeight).toBeGreaterThanOrEqual(500);
+    expect(firstRow.getBoundingClientRect().height).toBeLessThanOrEqual(76);
+    expect(scrollViewport.scrollHeight).toBeGreaterThan(scrollViewport.clientHeight);
+
+    scrollViewport.scrollTop = 0;
+    const down = await browserCommands.wheelScrollRegion({
+      regionSelector: '[data-testid="managed-release-candidate-scroll"]',
+      targetSelector: '[data-release-id="release-1"] [data-testid="managed-release-version-label"]',
+      deltaY: 260,
+    });
+    expect(down.before).toBe(0);
+    expect(down.after).toBeGreaterThan(0);
+
+    scrollViewport.scrollTop = 0;
+    const downFromViewport = await browserCommands.wheelScrollRegion({
+      regionSelector: '[data-testid="managed-release-candidate-scroll"]',
+      deltaY: 260,
+    });
+    expect(downFromViewport.before).toBe(0);
+    expect(downFromViewport.after).toBeGreaterThan(0);
+
+    scrollViewport.scrollTop = scrollViewport.scrollHeight;
+    const up = await browserCommands.wheelScrollRegion({
+      regionSelector: '[data-testid="managed-release-candidate-scroll"]',
+      targetSelector: '[data-release-id="release-12"]',
+      deltaY: -260,
+    });
+    expect(up.after).toBeLessThan(up.before);
   });
 
   it('keeps notice geometry and scroll position fixed when acknowledgement changes', async () => {

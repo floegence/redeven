@@ -3342,6 +3342,7 @@
       "keepCurrentVersion": "Aktuelle Anwendungsversion beibehalten",
       "keepCurrentVersionDescription": "Wendet nur eine neuere Vorlagenrevision an. Redeven setzt die Anwendung nicht auf die empfohlene Version zurück.",
       "reviewUpdatePlan": "Updateplan prüfen",
+      "backToReleaseList": "Zur Versionsliste",
       "preparingUpdatePlan": "Plan wird vorbereitet…",
       "updateNotRequired": "Die ausgewählte Anwendungsversion und Vorlagenrevision sind bereits installiert.",
       "updatePlanTitle": "Updateplan",

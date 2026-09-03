@@ -23,6 +23,13 @@ async function terminalPanelFrame(page: Page): Promise<Frame> {
   throw new Error('Terminal panel test frame is unavailable');
 }
 
+async function frameForSelector(page: Page, selector: string): Promise<Frame> {
+  for (const frame of page.frames()) {
+    if (await frame.locator(selector).count() > 0) return frame;
+  }
+  throw new Error(`Browser test frame is unavailable for selector: ${selector}`);
+}
+
 function hashPngRegion(
   image: ReturnType<typeof PNG.sync.read>,
   region: Readonly<{ x: number; y: number; width: number; height: number }>,
@@ -90,6 +97,26 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        wheelScrollRegion: async (
+          { page },
+          request: Readonly<{
+            regionSelector: string;
+            targetSelector?: string;
+            deltaY: number;
+          }>,
+        ) => {
+          const frame = await frameForSelector(page, request.regionSelector);
+          const region = frame.locator(request.regionSelector).first();
+          const target = request.targetSelector
+            ? frame.locator(request.targetSelector).first()
+            : region;
+          const before = await region.evaluate((element) => element.scrollTop);
+          await target.hover();
+          await page.mouse.wheel(0, request.deltaY);
+          await page.waitForTimeout(50);
+          const after = await region.evaluate((element) => element.scrollTop);
+          return { before, after };
+        },
         installTerminalAgentIconRoutes: async ({ page }) => {
           await page.route('**/_redeven_proxy/env/agent-cli-icons/*.svg', async (route) => {
             const fileName = new URL(route.request().url()).pathname.split('/').at(-1) ?? '';

@@ -3311,6 +3311,7 @@ export const enUS = defineDictionary({
 	  keepCurrentVersion: 'Keep current application version',
 	  keepCurrentVersionDescription: 'Apply only a newer template revision, if one is available. Redeven will not switch the application back to the recommended version.',
 	  reviewUpdatePlan: 'Review update plan',
+	  backToReleaseList: 'Back to versions',
 	  preparingUpdatePlan: 'Preparing plan…',
 	  updateNotRequired: 'The selected application version and template revision are already installed.',
 	  updatePlanTitle: 'Update plan',
