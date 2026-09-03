@@ -154,7 +154,7 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     '',
     'go 1.24.0',
     '',
-    'require github.com/floegence/redevplugin/v3 v3.0.21',
+    'require github.com/floegence/redevplugin/v3 v3.0.22',
     '',
   ].join('\n'));
   await fs.writeFile(path.join(root, 'cmd', 'redeven', 'main.go'), [
@@ -219,7 +219,7 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
   ].join('\n'), { mode: 0o755 });
 
   const manifest = {
-    platform_version: '3.0.21',
+    platform_version: '3.0.22',
     plugin_api: 1,
     internal_wire: 1,
     artifacts: [
@@ -231,9 +231,9 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
       { name: 'npm:@floegence/redevplugin-ui', sha256: '6'.repeat(64) },
     ],
   };
-  await fs.mkdir(path.join(runtimePackageCacheRoot(tempRoot), 'redevplugin-manifests', 'v3.0.21'), { recursive: true });
+  await fs.mkdir(path.join(runtimePackageCacheRoot(tempRoot), 'redevplugin-manifests', 'v3.0.22'), { recursive: true });
   await fs.writeFile(
-    path.join(runtimePackageCacheRoot(tempRoot), 'redevplugin-manifests', 'v3.0.21', 'platform-release-manifest.json'),
+    path.join(runtimePackageCacheRoot(tempRoot), 'redevplugin-manifests', 'v3.0.22', 'platform-release-manifest.json'),
     `${JSON.stringify(manifest)}\n`,
   );
 
@@ -405,7 +405,7 @@ describe('runtimePackageCache', () => {
         'utf8',
       )) as Record<string, string>;
       expect(metadata.source_commit).toBe('unknown');
-      expect(metadata.redevplugin_release_tag).toBe('v3.0.21');
+      expect(metadata.redevplugin_release_tag).toBe('v3.0.22');
       expect(metadata.rust_toolchain).toBe('1.88.0');
       expect(metadata.archive_sha256).toMatch(/^[a-f0-9]{64}$/u);
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
