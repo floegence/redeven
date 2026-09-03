@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/managedwebservice"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/session"
@@ -199,6 +200,52 @@ func TestManagedReleaseCandidateRoutesRequireLifecyclePermissionAndForwardSecret
 	}
 }
 
+func TestManagedOpenSessionRequiresExecutionAndKeepsPrivatePathOutOfAudit(t *testing.T) {
+	t.Parallel()
+	backend := &managedBackendStub{}
+	channelID := "ch_managed_open"
+	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_private/open-session", nil)
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response := httptest.NewRecorder()
+	readServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusForbidden || backend.openSessionCalls != 0 {
+		t.Fatalf("read-only open status=%d calls=%d", response.Code, backend.openSessionCalls)
+	}
+
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullServer := &Server{managed: backend, audit: auditStore, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_private/open-session", nil)
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	fullServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || backend.openSessionCalls != 1 {
+		t.Fatalf("open response status=%d cache=%q calls=%d body=%s", response.Code, response.Header().Get("Cache-Control"), backend.openSessionCalls, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"app_path":"/session?token=secret"`) {
+		t.Fatalf("open response omitted the private app path: %s", response.Body.String())
+	}
+	entries, err := auditStore.List(10)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("open audit entries=%+v err=%v", entries, err)
+	}
+	rawAudit, err := json.Marshal(entries[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"token=secret", "/session", "127.0.0.1"} {
+		if strings.Contains(string(rawAudit), forbidden) {
+			t.Fatalf("open audit leaked %q: %s", forbidden, rawAudit)
+		}
+	}
+	if entries[0].Action != "managed_web_service_open" || entries[0].Detail["service_id"] != "mws_private" || entries[0].Detail["forward_id"] != "pf_mws_private" {
+		t.Fatalf("open audit = %+v", entries[0])
+	}
+}
+
 func TestManagedTemplateDuplicateRequiresLifecyclePermission(t *testing.T) {
 	t.Parallel()
 	backend := &managedBackendStub{}
@@ -242,6 +289,7 @@ type managedBackendStub struct {
 	updatePlanCalls       int
 	lastReleaseRequest    managedwebservice.ReleaseCandidateRequest
 	lastUpdatePlanRequest managedwebservice.UpdatePlanRequest
+	openSessionCalls      int
 }
 
 func (b *managedBackendStub) Catalog(context.Context) ([]managedwebservice.Template, error) {
@@ -326,6 +374,10 @@ func (b *managedBackendStub) Subscribe(string) (<-chan pfregistry.ManagedOperati
 }
 func (b *managedBackendStub) Logs(context.Context, string, int) (*managedwebservice.LogResult, error) {
 	return &managedwebservice.LogResult{}, nil
+}
+func (b *managedBackendStub) OpenSession(_ context.Context, serviceID string) (*managedwebservice.OpenSession, error) {
+	b.openSessionCalls++
+	return &managedwebservice.OpenSession{Forward: pfregistry.Forward{ForwardID: "pf_" + serviceID}, AppPath: "/session?token=secret"}, nil
 }
 
 func managedwebserviceTestError(code string, status int) error {

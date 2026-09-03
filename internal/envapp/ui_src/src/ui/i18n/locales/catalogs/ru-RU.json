@@ -3501,6 +3501,9 @@
       "hostRuntimePrepareFailed": "Redeven не удалось подготовить среду службы Host. Повторите попытку.",
       "dependencyLayoutInvalid": "Redeven не удалось проверить структуру установленного npm-пакета. Повторите установку. Если ошибка возникает снова, обновите список версий и выберите другую версию.",
       "hostProcessIdentityChanged": "Не удалось проверить сохранённый процесс Host после перезапуска среды выполнения.",
+      "hostOpenTargetInvalid": "Служба Host вернула небезопасный или недопустимый адрес открытия. Перезапустите службу и повторите попытку.",
+      "hostOpenTargetMissing": "Служба Host не предоставила адрес открытия до завершения запуска. Проверьте вывод команды и повторите попытку.",
+      "hostOpenTargetUnavailable": "Адрес открытия службы Host недоступен. Перезапустите службу, чтобы получить новый сеанс.",
       "operationFailed": "Операция управляемой службы завершилась ошибкой. Скопируйте диагностику и повторите попытку.",
       "updateAvailable": "Доступно обновление",
       "update": "Обновить",
@@ -3525,6 +3528,20 @@
       "operationLayers": "Слои",
       "operationLayersValue": "{current}/{total} слоёв",
       "operationElapsed": "Прошло времени",
+      "operationCommandOutput": "Команды и вывод",
+      "operationOutput": "Вывод команды",
+      "operationNoOutput": "Вывода пока нет.",
+      "operationOutputTruncated": "Более ранний вывод удалён.",
+      "operationCommandState": {
+        "running": "Выполняется",
+        "succeeded": "Завершено",
+        "failed": "Ошибка",
+        "cancelled": "Отменено"
+      },
+      "operationStream": {
+        "stdout": "Стандартный вывод",
+        "stderr": "Вывод ошибок"
+      },
       "operationStreamFailed": "Поток прогресса операции недоступен.",
       "operationTimedOut": "Операция управляемого сервиса не завершилась вовремя. Проверьте состояние и повторите попытку.",
       "cancelOperation": "Отменить операцию",

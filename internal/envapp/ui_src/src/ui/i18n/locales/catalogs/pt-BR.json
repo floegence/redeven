@@ -3411,6 +3411,9 @@
       "hostRuntimePrepareFailed": "O Redeven não conseguiu preparar o ambiente do serviço Host. Tente novamente.",
       "dependencyLayoutInvalid": "O Redeven não conseguiu verificar a estrutura do pacote npm instalado. Tente instalar novamente. Se a falha persistir, atualize a lista de versões e escolha outra versão.",
       "hostProcessIdentityChanged": "Não foi possível verificar o processo Host salvo após a reinicialização do ambiente de execução.",
+      "hostOpenTargetInvalid": "O serviço Host retornou um endereço de abertura inseguro ou inválido. Reinicie o serviço e tente novamente.",
+      "hostOpenTargetMissing": "O serviço Host não forneceu seu endereço de abertura antes de concluir a inicialização. Consulte a saída do comando e tente novamente.",
+      "hostOpenTargetUnavailable": "O endereço de abertura do serviço Host não está disponível. Reinicie o serviço para capturar uma nova sessão.",
       "operationFailed": "A operação do serviço gerenciado falhou. Copie o diagnóstico e tente novamente.",
       "updateAvailable": "Atualização disponível",
       "update": "Atualizar",
@@ -3435,6 +3438,20 @@
       "operationLayers": "Camadas",
       "operationLayersValue": "{current}/{total} camadas",
       "operationElapsed": "Tempo decorrido",
+      "operationCommandOutput": "Comandos e saída",
+      "operationOutput": "Saída do comando",
+      "operationNoOutput": "Ainda não há saída.",
+      "operationOutputTruncated": "A saída mais antiga foi removida.",
+      "operationCommandState": {
+        "running": "Em execução",
+        "succeeded": "Concluído",
+        "failed": "Falhou",
+        "cancelled": "Cancelado"
+      },
+      "operationStream": {
+        "stdout": "Saída padrão",
+        "stderr": "Saída de erro"
+      },
       "operationStreamFailed": "O fluxo de progresso da operação não está disponível.",
       "operationTimedOut": "A operação do serviço gerenciado não terminou a tempo. Verifique o status e tente novamente.",
       "cancelOperation": "Cancelar operação",

@@ -3411,6 +3411,9 @@
       "hostRuntimePrepareFailed": "Redeven n’a pas pu préparer l’environnement du service Host. Réessayez.",
       "dependencyLayoutInvalid": "Redeven n’a pas pu vérifier la structure du paquet npm installé. Relancez l’installation. Si elle échoue encore, actualisez la liste des versions et choisissez une autre version.",
       "hostProcessIdentityChanged": "Le processus Host enregistré n’a pas pu être vérifié après le redémarrage de l’environnement d’exécution.",
+      "hostOpenTargetInvalid": "Le service Host a renvoyé une adresse d’ouverture non sûre ou non valide. Redémarrez le service et réessayez.",
+      "hostOpenTargetMissing": "Le service Host n’a pas fourni son adresse d’ouverture avant la fin du démarrage. Consultez la sortie de commande et réessayez.",
+      "hostOpenTargetUnavailable": "L’adresse d’ouverture du service Host est indisponible. Redémarrez le service pour capturer une nouvelle session.",
       "operationFailed": "L’opération du service géré a échoué. Copiez le diagnostic, puis réessayez.",
       "updateAvailable": "Mise à jour disponible",
       "update": "Mettre à jour",
@@ -3435,6 +3438,20 @@
       "operationLayers": "Couches",
       "operationLayersValue": "{current}/{total} couches",
       "operationElapsed": "Durée",
+      "operationCommandOutput": "Commandes et sortie",
+      "operationOutput": "Sortie de commande",
+      "operationNoOutput": "Aucune sortie pour le moment.",
+      "operationOutputTruncated": "La sortie la plus ancienne a été supprimée.",
+      "operationCommandState": {
+        "running": "En cours",
+        "succeeded": "Terminé",
+        "failed": "Échec",
+        "cancelled": "Annulé"
+      },
+      "operationStream": {
+        "stdout": "Sortie standard",
+        "stderr": "Sortie d’erreur"
+      },
       "operationStreamFailed": "Le flux de progression de l’opération est indisponible.",
       "operationTimedOut": "L’opération du service géré ne s’est pas terminée à temps. Vérifiez son état et réessayez.",
       "cancelOperation": "Annuler l’opération",

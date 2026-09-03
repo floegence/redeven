@@ -3425,6 +3425,9 @@
       "hostRuntimePrepareFailed": "Redeven 无法准备主机服务运行环境，请重试。",
       "dependencyLayoutInvalid": "Redeven 无法验证已安装 npm 软件包的目录结构。请重试安装；如果仍失败，请刷新版本列表并选择其它版本。",
       "hostProcessIdentityChanged": "运行环境重启后无法验证已保存的主机进程。",
+      "hostOpenTargetInvalid": "主机服务返回了不安全或无效的打开地址。请重启服务后重试。",
+      "hostOpenTargetMissing": "主机服务未在启动完成前提供打开地址。请查看命令输出后重试。",
+      "hostOpenTargetUnavailable": "主机服务的打开地址不可用。请重启服务以重新获取。",
       "operationFailed": "托管服务操作失败。请复制诊断信息后重试。",
       "updateAvailable": "有可用更新",
       "update": "更新",
@@ -3449,6 +3452,20 @@
       "operationLayers": "镜像层",
       "operationLayersValue": "{current}/{total} 层",
       "operationElapsed": "耗时",
+      "operationCommandOutput": "命令与输出",
+      "operationOutput": "命令输出",
+      "operationNoOutput": "暂无输出。",
+      "operationOutputTruncated": "较早的输出已移除。",
+      "operationCommandState": {
+        "running": "执行中",
+        "succeeded": "已完成",
+        "failed": "失败",
+        "cancelled": "已取消"
+      },
+      "operationStream": {
+        "stdout": "标准输出",
+        "stderr": "错误输出"
+      },
       "operationStreamFailed": "操作进度流不可用。",
       "operationTimedOut": "受管服务操作未能及时完成。请检查状态后重试。",
       "cancelOperation": "取消操作",

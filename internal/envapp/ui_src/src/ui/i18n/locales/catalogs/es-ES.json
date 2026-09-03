@@ -3411,6 +3411,9 @@
       "hostRuntimePrepareFailed": "Redeven no pudo preparar el entorno del servicio Host. Inténtalo de nuevo.",
       "dependencyLayoutInvalid": "Redeven no pudo verificar la estructura del paquete npm instalado. Reintenta la instalación. Si vuelve a fallar, actualiza la lista de versiones y elige otra versión.",
       "hostProcessIdentityChanged": "No se pudo verificar el proceso Host guardado después de reiniciar el entorno de ejecución.",
+      "hostOpenTargetInvalid": "El servicio Host devolvió una dirección de apertura no segura o no válida. Reinicia el servicio e inténtalo de nuevo.",
+      "hostOpenTargetMissing": "El servicio Host no proporcionó su dirección de apertura antes de finalizar el inicio. Revisa la salida del comando y vuelve a intentarlo.",
+      "hostOpenTargetUnavailable": "La dirección de apertura del servicio Host no está disponible. Reinicia el servicio para obtener una sesión nueva.",
       "operationFailed": "La operación del servicio administrado falló. Copia el diagnóstico e inténtalo de nuevo.",
       "updateAvailable": "Actualización disponible",
       "update": "Actualizar",
@@ -3435,6 +3438,20 @@
       "operationLayers": "Capas",
       "operationLayersValue": "{current}/{total} capas",
       "operationElapsed": "Tiempo transcurrido",
+      "operationCommandOutput": "Comandos y salida",
+      "operationOutput": "Salida del comando",
+      "operationNoOutput": "Aún no hay salida.",
+      "operationOutputTruncated": "Se eliminó la salida anterior.",
+      "operationCommandState": {
+        "running": "En ejecución",
+        "succeeded": "Completado",
+        "failed": "Fallido",
+        "cancelled": "Cancelado"
+      },
+      "operationStream": {
+        "stdout": "Salida estándar",
+        "stderr": "Salida de error"
+      },
       "operationStreamFailed": "No está disponible el flujo de progreso de la operación.",
       "operationTimedOut": "La operación del servicio administrado no terminó a tiempo. Comprueba su estado e inténtalo de nuevo.",
       "cancelOperation": "Cancelar operación",

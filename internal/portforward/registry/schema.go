@@ -16,7 +16,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v1"
-	registryCurrentSchemaVersion = 4
+	registryCurrentSchemaVersion = 5
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -30,8 +30,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryV3ToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryV4ToV5},
 		},
-		Verify: verifyRegistryV4,
+		Verify: verifyRegistryV5,
 	}
 }
 
@@ -60,8 +61,10 @@ func validateExistingRegistry(tx *sql.Tx) error {
 		verifyErr = verifyRegistryV2(tx)
 	case 3:
 		verifyErr = verifyRegistryV3(tx)
-	case registryCurrentSchemaVersion:
+	case 4:
 		verifyErr = verifyRegistryV4(tx)
+	case registryCurrentSchemaVersion:
+		verifyErr = verifyRegistryV5(tx)
 	default:
 		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
 	}
@@ -332,6 +335,111 @@ func migrateRegistryV3ToV4(tx *sql.Tx) error {
 	return verifyRegistryV4(tx)
 }
 
+func migrateRegistryV4ToV5(tx *sql.Tx) error {
+	if err := verifyRegistryV4(tx); err != nil {
+		return fmt.Errorf("verify port forward registry v4 before migration: %w", err)
+	}
+	for _, document := range []struct {
+		table, idColumn, jsonColumn, digestColumn string
+	}{
+		{"managed_web_service_templates", "template_id", "spec_json", "spec_sha256"},
+		{"managed_web_services", "service_id", "template_snapshot_json", "template_snapshot_sha256"},
+	} {
+		rows, err := tx.Query(`SELECT ` + document.idColumn + `,` + document.jsonColumn + ` FROM ` + document.table + ` ORDER BY ` + document.idColumn)
+		if err != nil {
+			return err
+		}
+		updates := [][3]string{}
+		for rows.Next() {
+			var id, raw string
+			if err := rows.Scan(&id, &raw); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			migrated, digest, err := migrateTemplateSpecV4ToV5(raw)
+			if err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("migrate TemplateSpec %s: %w", id, err)
+			}
+			updates = append(updates, [3]string{id, migrated, digest})
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, update := range updates {
+			if _, err := tx.Exec(`UPDATE `+document.table+` SET `+document.jsonColumn+`=?,`+document.digestColumn+`=? WHERE `+document.idColumn+`=?`, update[1], update[2], update[0]); err != nil {
+				return err
+			}
+		}
+	}
+
+	type progressDetailV1 struct {
+		SchemaVersion        int                               `json:"schema_version"`
+		StageStartedAtUnixMs int64                             `json:"stage_started_at_unix_ms,omitempty"`
+		UpdatedAtUnixMs      int64                             `json:"updated_at_unix_ms,omitempty"`
+		Transfer             *ManagedOperationTransferProgress `json:"transfer,omitempty"`
+	}
+	rows, err := tx.Query(`SELECT operation_id,progress_detail_json FROM managed_web_service_operations ORDER BY operation_id`)
+	if err != nil {
+		return err
+	}
+	updates := [][2]string{}
+	for rows.Next() {
+		var operationID, raw string
+		if err := rows.Scan(&operationID, &raw); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		var legacy progressDetailV1
+		if err := decodeStrictRegistryJSON(raw, &legacy); err != nil || legacy.SchemaVersion != 1 {
+			_ = rows.Close()
+			return fmt.Errorf("operation %s progress detail is not schema v1", operationID)
+		}
+		migrated, err := json.Marshal(ManagedOperationProgressDetail{
+			SchemaVersion: 2, StageStartedAtUnixMs: legacy.StageStartedAtUnixMs,
+			UpdatedAtUnixMs: legacy.UpdatedAtUnixMs, Transfer: legacy.Transfer,
+		})
+		if err != nil {
+			_ = rows.Close()
+			return err
+		}
+		updates = append(updates, [2]string{operationID, string(migrated)})
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, update := range updates {
+		if _, err := tx.Exec(`UPDATE managed_web_service_operations SET progress_detail_json=? WHERE operation_id=?`, update[1], update[0]); err != nil {
+			return err
+		}
+	}
+	return verifyRegistryV5(tx)
+}
+
+func migrateTemplateSpecV4ToV5(raw string) (string, string, error) {
+	var document map[string]any
+	if err := decodeStrictRegistryJSON(raw, &document); err != nil {
+		return "", "", err
+	}
+	version, ok := document["schema_version"].(float64)
+	if !ok || version != 4 {
+		return "", "", fmt.Errorf("expected schema_version 4")
+	}
+	document["schema_version"] = 5
+	migrated, err := json.Marshal(document)
+	if err != nil {
+		return "", "", err
+	}
+	sum := sha256.Sum256(migrated)
+	return string(migrated), hex.EncodeToString(sum[:]), nil
+}
+
 func verifyRegistryV1(tx *sql.Tx) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
@@ -394,7 +502,7 @@ func verifyRegistryV1(tx *sql.Tx) error {
 	if len(indexes) != 0 {
 		return fmt.Errorf("port forward registry v1 has unexpected indexes %v", indexes)
 	}
-	if err := verifyRegistryDocuments(tx); err != nil {
+	if err := verifyRegistryDocuments(tx, 1); err != nil {
 		return err
 	}
 	if err := verifyTemplateSpecDocuments(tx, 3); err != nil {
@@ -426,6 +534,10 @@ func verifyRegistryV3(tx *sql.Tx) error {
 
 func verifyRegistryV4(tx *sql.Tx) error {
 	return verifyRegistryVersion(tx, 4)
+}
+
+func verifyRegistryV5(tx *sql.Tx) error {
+	return verifyRegistryVersion(tx, 5)
 }
 
 type registryReleaseIdentityV1 struct {
@@ -551,10 +663,18 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	if len(indexes) != 0 {
 		return fmt.Errorf("port forward registry v%d has unexpected indexes %v", version, indexes)
 	}
-	if err := verifyRegistryDocuments(tx); err != nil {
+	progressSchemaVersion := 1
+	if version >= 5 {
+		progressSchemaVersion = 2
+	}
+	if err := verifyRegistryDocuments(tx, progressSchemaVersion); err != nil {
 		return err
 	}
-	if err := verifyTemplateSpecDocuments(tx, 4); err != nil {
+	templateSpecVersion := 4
+	if version >= 5 {
+		templateSpecVersion = 5
+	}
+	if err := verifyTemplateSpecDocuments(tx, templateSpecVersion); err != nil {
 		return err
 	}
 	var invalid int
@@ -668,7 +788,7 @@ func verifyTemplateSpecDocuments(tx *sql.Tx, schemaVersion int) error {
 	return nil
 }
 
-func verifyRegistryDocuments(tx *sql.Tx) error {
+func verifyRegistryDocuments(tx *sql.Tx, progressSchemaVersion int) error {
 	templateRows, err := tx.Query(`SELECT template_id,spec_json,spec_sha256 FROM managed_web_service_templates ORDER BY template_id`)
 	if err != nil {
 		return err
@@ -748,7 +868,7 @@ FROM managed_web_services ORDER BY service_id`)
 		if err := operationRows.Scan(&operationID, &raw); err != nil {
 			return err
 		}
-		if _, _, err := decodeManagedOperationProgressDetail(raw); err != nil {
+		if _, _, err := decodeManagedOperationProgressDetailVersion(raw, progressSchemaVersion); err != nil {
 			return fmt.Errorf("operation %s progress detail: %w", operationID, err)
 		}
 	}

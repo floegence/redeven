@@ -1,19 +1,24 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import { Show } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CreateForwardDialog,
   EnvPortForwardsPage,
   ForwardMetadataDialog,
-  ManagedServiceRow,
+  ManagedServiceRow as ManagedServiceRowComponent,
   isSupportedWebServiceTarget,
   resolveWebServiceOpenRoute,
   validateTemplateDraft,
 } from './EnvPortForwardsPage';
 import { LocalApiError } from '../services/localApi';
+
+function ManagedServiceRow(props: Omit<Parameters<typeof ManagedServiceRowComponent>[0], 'operationExpanded' | 'onOperationExpandedChange'>) {
+  const [expanded, setExpanded] = createSignal(false);
+  return <ManagedServiceRowComponent {...props} operationExpanded={expanded()} onOperationExpandedChange={(_operationID, value) => setExpanded(value)} />;
+}
 
 const notificationMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -651,7 +656,7 @@ describe('web service metadata and template validation', () => {
           forward_id: 'pf-retry', runtime_port: 3000,
           actions: { start: { available: false, reason_code: 'OPERATION_ACTIVE' }, stop: { available: false, reason_code: 'OPERATION_ACTIVE' }, restart: { available: false, reason_code: 'OPERATION_ACTIVE' }, retry: { available: false, reason_code: 'OPERATION_ACTIVE' } },
         }}
-        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1, stage_started_at_unix_ms: Date.now() - 2_000, updated_at_unix_ms: Date.now(), transfer: { phase: 'pulling', artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, downloaded_bytes: 2_000, total_bytes: 5_000, bytes_per_second: 1_000, completed_layers: 2, total_layers: 5 } } }}
+        operation={{ operation_id: 'mop-retry', service_id: 'mws-retry', action: 'retry_install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 2, stage_started_at_unix_ms: Date.now() - 2_000, updated_at_unix_ms: Date.now(), transfer: { phase: 'pulling', artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, downloaded_bytes: 2_000, total_bytes: 5_000, bytes_per_second: 1_000, completed_layers: 2, total_layers: 5 } } }}
         busy={false}
         canOpen
         canManage
@@ -704,7 +709,7 @@ describe('web service metadata and template validation', () => {
         operation={{
           operation_id: 'mop-native', service_id: 'mws-native', action: 'install', state: 'running', stage: 'downloading', progress_current: 2, progress_total: 7,
           progress_detail: {
-            schema_version: 1,
+            schema_version: 2,
             stage_started_at_unix_ms: Date.now() - 2_000,
             updated_at_unix_ms: Date.now(),
             transfer: {
@@ -762,7 +767,7 @@ describe('web service metadata and template validation', () => {
         }}
         operation={{
           operation_id: 'mop-native-install', service_id: 'mws-native-install', action: 'install', state: 'running', stage: 'installing', progress_current: 4, progress_total: 7,
-          progress_detail: { schema_version: 1, stage_started_at_unix_ms: stageStartedAt, updated_at_unix_ms: stageStartedAt },
+          progress_detail: { schema_version: 2, stage_started_at_unix_ms: stageStartedAt, updated_at_unix_ms: stageStartedAt },
         }}
         busy
         canOpen
@@ -806,7 +811,7 @@ describe('web service metadata and template validation', () => {
         operation={{
           operation_id: 'mop-cached', service_id: 'mws-cached', action: 'install', state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7,
           progress_detail: {
-            schema_version: 1,
+            schema_version: 2,
             stage_started_at_unix_ms: stageStartedAt,
             updated_at_unix_ms: stageStartedAt,
             transfer: {
@@ -1164,11 +1169,10 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/forwards') {
         return { forwards: [{ forward_id: service.forward_id, target_url: 'http://127.0.0.1:54945', name: service.name, description: 'Managed by Redeven' }] };
       }
-      if (url === '/_redeven_proxy/api/forward-sessions' && init?.method === 'POST') {
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-legacy/open-session' && init?.method === 'POST') {
         return {
           forward: { forward_id: 'pf-route-safe-alias', target_url: 'http://127.0.0.1:54945' },
-          app_path: '/',
-          ephemeral: true,
+          app_path: '/session?token=private-value',
         };
       }
       if (url === '/_redeven_proxy/api/forwards/pf-route-safe-alias/touch') return { forward_id: 'pf-route-safe-alias' };
@@ -1182,12 +1186,9 @@ describe('EnvPortForwardsPage', () => {
     openButton?.click();
 
     await waitForAssertion(() => {
-      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forward-sessions', {
-        method: 'POST',
-        body: JSON.stringify({ target: 'http://127.0.0.1:54945' }),
-      });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services/mws-legacy/open-session', { method: 'POST' });
       expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/pf-route-safe-alias/touch', { method: 'POST' });
-      expect(assign).toHaveBeenCalledWith('https://localhost/pf/pf-route-safe-alias/');
+      expect(assign).toHaveBeenCalledWith('https://localhost/pf/pf-route-safe-alias/session?token=private-value');
     });
   });
 
@@ -1218,7 +1219,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: service.forward_id, target_url: 'http://127.0.0.1:3080', access_mode: 'unified_proxy' }] };
-      if (url === '/_redeven_proxy/api/forward-sessions' && init?.method === 'POST') return { forward: { forward_id: service.forward_id, target_url: 'http://127.0.0.1:3080' }, app_path: '/', ephemeral: false };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-container/open-session' && init?.method === 'POST') return { forward: { forward_id: service.forward_id, target_url: 'http://127.0.0.1:3080' }, app_path: '/' };
       if (url === '/_redeven_proxy/api/forwards/pf-container/touch') return { forward_id: service.forward_id };
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -1243,9 +1244,7 @@ describe('EnvPortForwardsPage', () => {
     expect(openFromTemplate?.disabled).toBe(false);
     openFromTemplate?.click();
 
-    await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forward-sessions', {
-      method: 'POST', body: JSON.stringify({ target: 'http://127.0.0.1:3080' }),
-    }));
+    await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services/mws-container/open-session', { method: 'POST' }));
     await waitForAssertion(() => expect(assign).toHaveBeenCalledWith('https://localhost/pf/pf-container/'));
   });
 
@@ -1513,7 +1512,7 @@ describe('EnvPortForwardsPage', () => {
     const operation = {
       operation_id: 'mop-background-install', service_id: 'mws-background-install', action: 'install' as const,
       state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7,
-      progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: template.spec.container.image, artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } },
+      progress_detail: { schema_version: 2 as const, transfer: { artifact_reference: template.spec.container.image, artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } },
     };
     const service = {
       service_id: operation.service_id, template_id: template.template_id, service_family_id: template.service_family_id,
@@ -1879,7 +1878,7 @@ describe('EnvPortForwardsPage', () => {
       deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }],
       spec: { schema_version: 4, kind: 'host', endpoint: { scheme: 'http', path: '/', health_path: '/', startup_timeout_sec: 45 }, host: { start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open', environment: { SERVICE_MODE: 'preserved' }, npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' } } },
       host_lifecycle_plan: {
-        schema_version: 1,
+		schema_version: 1,
         driver: 'npm_host',
         runtime_bundle: 'node-24.19.0',
         npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' },
@@ -1926,13 +1925,13 @@ describe('EnvPortForwardsPage', () => {
 
     await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
     const submitted = updateBody as Record<string, any> | null;
-    expect(submitted?.spec?.schema_version).toBe(4);
+    expect(submitted?.spec?.schema_version).toBe(5);
     expect(submitted?.spec?.host?.environment).toEqual({ SERVICE_MODE: 'preserved' });
     expect(updateBody).not.toHaveProperty('host_lifecycle_plan');
   });
 
   it('restores an active managed operation and exposes cancellation after a page reload', async () => {
-    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
+    const activeOperation = { operation_id: 'mop-active', service_id: 'mws-1', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 2 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:reviewed', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
     const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'container', workspace_path: '/workspace', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'installing', forward_id: 'managed-forward', runtime_port: 3080, active_operation: activeOperation };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -1964,8 +1963,92 @@ describe('EnvPortForwardsPage', () => {
     }
   });
 
+  it('keeps operation details stable across submission, SSE updates, and service refreshes', async () => {
+    const acceptedOperation = {
+      operation_id: 'mop-stable-details', service_id: 'mws-stable-details', action: 'start' as const,
+      state: 'running', stage: 'starting', progress_current: 1, progress_total: 3,
+      progress_detail: {
+        schema_version: 2 as const,
+        commands: [{ command_id: 'host-start', display: '<managed-executable> serve', state: 'running' as const }],
+        output: [{ sequence: 1, command_id: 'host-start', stream: 'stdout' as const, text: 'server preparation started' }],
+      },
+    };
+    let listedOperation: typeof acceptedOperation | null = null;
+    const operationRequest = deferred<typeof acceptedOperation>();
+    const streamControllers = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+    const service = () => ({
+      service_id: 'mws-stable-details', template_id: 'example-host', service_family_id: 'example-host',
+      name: 'Example Service', template_source: 'custom', deployment: 'host', workspace_path: '/workspace',
+      workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'stopped',
+      observed_state: listedOperation ? 'starting' : 'stopped', forward_id: 'pf-stable-details', runtime_port: 3000,
+      actions: { start: { available: !listedOperation }, stop: { available: false }, restart: { available: false }, retry: { available: false } },
+      ...(listedOperation ? { active_operation: { ...listedOperation } } : {}),
+    });
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ ...service() }] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url.endsWith('/mws-stable-details/operations') && init?.method === 'POST') return operationRequest.promise;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockImplementation(async (url: string) => {
+      const operationID = url.includes('mop-next-details') ? 'mop-next-details' : 'mop-stable-details';
+      return new Response(new ReadableStream({
+        start(controller) {
+          streamControllers.set(operationID, controller);
+          if (operationID === acceptedOperation.operation_id) {
+            controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(acceptedOperation)}\n\n`));
+          }
+        },
+      }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    });
+
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-stable-details"]')).toBeTruthy());
+      const start = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Start')!;
+      start.click();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeTruthy());
+      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!.click();
+      expect(host.querySelector('[data-testid="managed-service-operation-details"]')).toBeTruthy();
+
+      listedOperation = acceptedOperation;
+      operationRequest.resolve(acceptedOperation);
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-operation-output"]')?.textContent).toContain('server preparation started'));
+      expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
+      expect(host.querySelector('[data-testid="managed-operation-command-output"]')?.textContent).toContain('<managed-executable> serve');
+
+      host.querySelector<HTMLButtonElement>('[data-testid="web-services-refresh"]')!.click();
+      await flushPage();
+      expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
+
+      const secondSnapshot = {
+        ...acceptedOperation,
+        progress_detail: {
+          ...acceptedOperation.progress_detail,
+          output: [...acceptedOperation.progress_detail.output, { sequence: 2, command_id: 'host-start', stream: 'stderr' as const, text: 'waiting for health check' }],
+        },
+      };
+      streamControllers.get(acceptedOperation.operation_id)!.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify(secondSnapshot)}\n\n`));
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-operation-output"]')?.textContent).toContain('waiting for health check'));
+      expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
+
+      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!.click();
+      expect(host.querySelector('[data-testid="managed-service-operation-details"]')).toBeNull();
+      streamControllers.get(acceptedOperation.operation_id)!.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ ...secondSnapshot, progress_current: 2 })}\n\n`));
+      await flushPage();
+      expect(host.querySelector('[data-testid="managed-service-operation-details"]')).toBeNull();
+
+      listedOperation = { ...acceptedOperation, operation_id: 'mop-next-details' };
+      host.querySelector<HTMLButtonElement>('[data-testid="web-services-refresh"]')!.click();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('false'));
+    } finally {
+      dispose();
+    }
+  });
+
   it('tracks every resumed service operation without a global list footer', async () => {
-    const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 1 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:one', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
+    const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 2 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:one', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
     const operationTwo = { operation_id: 'mop-two', service_id: 'mws-two', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
     const services = [
       { service_id: 'mws-one', template_id: 'example-container', service_family_id: 'example-service', name: 'Example Service', deployment: 'container', workspace_path: '/one', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'error', forward_id: 'pf-one', runtime_port: 3001, active_operation: operationOne },

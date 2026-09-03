@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -327,7 +328,8 @@ func runNPMReleaseInstall(ctx context.Context, nodePath, npmCLIPath, appRoot, ta
 	}
 	env := npmCommandEnvironment(nodePath, homeRoot, cacheRoot, userConfig, globalConfig, spec.RegistryURL)
 	installArgs := append([]string{npmCLIPath}, npmPackageInstallArguments(spec.PackageName, spec.Version, appRoot)...)
-	if err := runManagedNPMCommand(ctx, nodePath, installArgs, appRoot, env); err != nil {
+	installDisplay := managedNPMCommandDisplay(npmPackageInstallArguments(spec.PackageName, spec.Version, "<managed-app-root>"))
+	if err := runManagedNPMCommand(ctx, "npm-install", installDisplay, nodePath, installArgs, appRoot, env); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -341,7 +343,8 @@ func runNPMReleaseInstall(ctx context.Context, nodePath, npmCLIPath, appRoot, ta
 		return err
 	}
 	rebuildArgs := append([]string{npmCLIPath}, npmPackageRebuildArguments(appRoot)...)
-	if err := runManagedNPMCommand(ctx, nodePath, rebuildArgs, appRoot, env); err != nil {
+	rebuildDisplay := managedNPMCommandDisplay(npmPackageRebuildArguments("<managed-app-root>"))
+	if err := runManagedNPMCommand(ctx, "npm-rebuild", rebuildDisplay, nodePath, rebuildArgs, appRoot, env); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -362,11 +365,58 @@ func writeNPMApplicationManifest(appRoot string, spec NPMHostPackageSpec) error 
 	return os.WriteFile(filepath.Join(appRoot, "package.json"), raw, 0o600)
 }
 
-func runManagedNPMCommand(ctx context.Context, nodePath string, args []string, dir string, env []string) error {
+func managedNPMCommandDisplay(args []string) string {
+	return strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, args...), " ")
+}
+
+func runManagedNPMCommand(ctx context.Context, commandID, display, nodePath string, args []string, dir string, env []string) error {
+	reporter := reporterFromContext(ctx)
+	commandID = reporter.StartCommand(commandID, display)
 	cmd := exec.CommandContext(ctx, nodePath, args...)
 	cmd.Dir, cmd.Env = dir, env
-	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-	return cmd.Run()
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		reporter.FinishCommand(commandID, "failed")
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		reporter.FinishCommand(commandID, "failed")
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		reporter.FinishCommand(commandID, "failed")
+		return err
+	}
+	var readers sync.WaitGroup
+	readers.Add(2)
+	var outputErr error
+	var outputErrMu sync.Mutex
+	read := func(stream string, source io.Reader) {
+		defer readers.Done()
+		if err := readOperationOutputLines(source, func(line string) { reporter.Output(commandID, stream, line) }); err != nil {
+			outputErrMu.Lock()
+			if outputErr == nil {
+				outputErr = err
+			}
+			outputErrMu.Unlock()
+		}
+	}
+	go read("stdout", stdout)
+	go read("stderr", stderr)
+	runErr := cmd.Wait()
+	readers.Wait()
+	if runErr == nil {
+		runErr = outputErr
+	}
+	state := "succeeded"
+	if errors.Is(ctx.Err(), context.Canceled) {
+		state = "cancelled"
+	} else if runErr != nil {
+		state = "failed"
+	}
+	reporter.FinishCommand(commandID, state)
+	return runErr
 }
 
 func npmCommandEnvironment(nodePath, home, cache, userConfig, globalConfig, registry string) []string {

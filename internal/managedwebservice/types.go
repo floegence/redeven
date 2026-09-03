@@ -170,6 +170,11 @@ type NPMHostPackageSpec struct {
 	Executable         string `json:"executable"`
 }
 
+type HostOpenTargetSpec struct {
+	Mode       string `json:"mode"`
+	LinePrefix string `json:"line_prefix"`
+}
+
 type HostTemplateSpec struct {
 	InstallScript   string              `json:"install_script,omitempty"`
 	StartScript     string              `json:"start_script"`
@@ -178,6 +183,7 @@ type HostTemplateSpec struct {
 	Environment     map[string]string   `json:"environment,omitempty"`
 	Artifact        *HostArtifactSpec   `json:"artifact,omitempty"`
 	NPM             *NPMHostPackageSpec `json:"npm,omitempty"`
+	OpenTarget      *HostOpenTargetSpec `json:"open_target,omitempty"`
 }
 
 type ContainerMountSpec struct {
@@ -533,6 +539,11 @@ type LogResult struct {
 	Lines []string `json:"lines"`
 }
 
+type OpenSession struct {
+	Forward pfregistry.Forward `json:"forward"`
+	AppPath string             `json:"app_path"`
+}
+
 type Error struct {
 	Code       string
 	Message    string
@@ -590,4 +601,5 @@ type Backend interface {
 	Operation(context.Context, string) (*pfregistry.ManagedOperation, error)
 	Subscribe(string) (<-chan pfregistry.ManagedOperation, func(), error)
 	Logs(context.Context, string, int) (*LogResult, error)
+	OpenSession(context.Context, string) (*OpenSession, error)
 }

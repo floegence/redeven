@@ -25,7 +25,7 @@ export type ServiceTemplateIcon = Readonly<{
 }>;
 
 export type ServiceTemplateRuntimeSpec = Readonly<{
-  schema_version: 4;
+  schema_version: 5;
   kind: ServiceTemplateKind;
   endpoint: Readonly<{
     scheme: 'http' | 'https';
@@ -38,6 +38,7 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
   }>;
   parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
   host?: Readonly<{
+    open_target?: Readonly<{ mode: 'startup_output_url'; line_prefix: string }>;
     install_script?: string;
     start_script: string;
     stop_script?: string;

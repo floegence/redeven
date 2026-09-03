@@ -18,7 +18,7 @@ timestamp: 2026-09-02T00:00:00Z
 
 The template repository publishes a versioned Go module. Each template lives at `templates/<template-id>/template.json`, with locale files under `locales/<locale>.json` and passive assets under `assets/`. Its reproducible schema-v2 bundle includes:
 
-- template and service-family identity, revision, deployment kind, and TemplateSpec v4;
+- template and service-family identity, revision, deployment kind, and TemplateSpec v5;
 - `recommended_version`, npm or OCI source, exact default platform artifact, platform matrix, access mode, and resource requirements;
 - localized name, description, notices, source declaration, and icon metadata for every shipped locale.
 
@@ -32,6 +32,8 @@ Catalog loading completes before Registry and Manager startup. Validation covers
 
 The mapper does not reinterpret application commands or manufacture service presentation. API responses carry localized bundle content and verified icon resource bytes; they no longer expose `localization_key` or a fixed brand enum. Renderer selects the requested locale with `en-US` fallback inside the already verified bundle and renders SVG only as an image data resource, never as arbitrary HTML.
 
+TemplateSpec v5 lets a Host choose exactly one opening contract: the existing static endpoint path, or a declared `startup_output_url` identified by a strict line prefix. The template owns only that declaration. Redeven owns process output capture, URL validation, private storage, Forward resolution, and opening authorization; it does not infer an application from its output or provide a fallback when the declared contract is not met.
+
 Built-in installed state is matched by exact template ID. Template responses expose `recommended_release`, `release_source`, and the exact default artifact, never an ambiguous `version`. The default workspace path is presentation-only and is not created while browsing, saving, copying, or checking versions. Custom templates remain Registry-owned user content, use their entered name and description, derive their default release from the exact npm or image reference, and are marked as user-configured sources. Both built-in and custom templates enter the same generic Host, Container, or Compose lifecycle after validation.
 
 ## Change contract
@@ -44,7 +46,7 @@ Redeven does not keep a compatibility directory, template fingerprints, retired 
 
 # Evidence
 
-- `redeven:go.mod` - Pins catalog module v0.2.0 without local dependency wiring.
+- `redeven:go.mod` - Pins catalog module v0.3.0 without local dependency wiring.
 - `redeven:internal/managedwebservice/builtin_templates.go` - Verifies and maps bundle records into generic templates.
 - `redeven:internal/managedwebservice/types.go` - Defines current TemplateSpec, localization, icon, and lifecycle API shapes.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx` - Presents localized verified content through the common catalog UI.

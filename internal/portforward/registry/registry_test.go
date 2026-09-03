@@ -213,7 +213,7 @@ func TestManagedServicePersistsBindingAndRetryLineage(t *testing.T) {
 	}
 }
 
-func TestOpenMigratesRegistryV1ToV4WithoutChangingServiceIdentity(t *testing.T) {
+func TestOpenMigratesRegistryV1ToV5WithoutChangingServiceIdentity(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	legacy, err := sqliteutil.Open(path, sqliteutil.Spec{
 		Kind: registrySchemaKind, CurrentVersion: 1,
@@ -290,8 +290,11 @@ func TestOpenMigratesRegistryV1ToV4WithoutChangingServiceIdentity(t *testing.T) 
 	if err := registry.db.QueryRow(`SELECT template_snapshot_json FROM managed_web_services WHERE service_id='mws-one'`).Scan(&migratedSpec); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(migratedSpec, `"schema_version":4`) || strings.Contains(migratedSpec, "release_policy") {
+	if !strings.Contains(migratedSpec, `"schema_version":5`) || strings.Contains(migratedSpec, "release_policy") {
 		t.Fatalf("migrated TemplateSpec = %s", migratedSpec)
+	}
+	if operation.ProgressDetail == nil || operation.ProgressDetail.SchemaVersion != 2 {
+		t.Fatalf("migrated operation progress = %#v", operation.ProgressDetail)
 	}
 	tx := mustBegin(t, registry.db)
 	columns, err := sqliteutil.TableColumnNamesTx(tx, "managed_web_services")
@@ -421,7 +424,115 @@ func TestRegistryV3ToV4MigrationRollsBackAnInvalidReleaseSummary(t *testing.T) {
 	}
 }
 
-func TestOpenRejectsV4ReleaseSummaryDriftWithoutChangingDatabase(t *testing.T) {
+func TestOpenMigratesRegistryV4ToV5WithOperationProgressAndIdentityPreserved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	registry, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedReleaseCheckService(t, registry)
+	if err := registry.Close(); err != nil {
+		t.Fatal(err)
+	}
+	progressV1 := `{"schema_version":1,"stage_started_at_unix_ms":11,"updated_at_unix_ms":12,"transfer":{"phase":"pulling","artifact_reference":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","artifact_index":1,"artifact_total":1,"completed_layers":2,"total_layers":3}}`
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`UPDATE managed_web_service_operations SET progress_detail_json=? WHERE operation_id='mop-release-check'; PRAGMA user_version=4;`, progressV1); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	service, err := registry.GetManagedService(context.Background(), "mws-release-check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if service == nil || !strings.Contains(service.TemplateSnapshotJSON, `"schema_version":5`) || service.TemplateID != "fictional-release-check" || service.RuntimeBindingJSON == "" {
+		t.Fatalf("migrated service = %#v", service)
+	}
+	if got := digest(service.TemplateSnapshotJSON); got != service.TemplateSnapshotSHA256 {
+		t.Fatalf("migrated template digest = %q, want %q", service.TemplateSnapshotSHA256, got)
+	}
+	operation, err := registry.GetManagedOperation(context.Background(), "mop-release-check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation == nil || operation.ProgressDetail == nil || operation.ProgressDetail.SchemaVersion != 2 || operation.ProgressDetail.StageStartedAtUnixMs != 11 || operation.ProgressDetail.Transfer == nil || operation.ProgressDetail.Transfer.CompletedLayers != 2 {
+		t.Fatalf("migrated operation = %#v", operation)
+	}
+}
+
+func TestRegistryV4ToV5MigrationRollsBackInvalidDocuments(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		template       string
+		progressDetail string
+	}{
+		{name: "template", template: `{"schema_version":99}`, progressDetail: `{"schema_version":1}`},
+		{name: "progress detail", template: `{"schema_version":4,"kind":"container","endpoint":{"scheme":"http"},"container":{"image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true}}`, progressDetail: `{"schema_version":99}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "registry.sqlite")
+			registry, err := Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seedReleaseCheckService(t, registry)
+			if err := registry.Close(); err != nil {
+				t.Fatal(err)
+			}
+			raw, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := raw.Exec(`UPDATE managed_web_services SET template_snapshot_json=?,template_snapshot_sha256=? WHERE service_id='mws-release-check'`, test.template, digest(test.template)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := raw.Exec(`UPDATE managed_web_service_operations SET progress_detail_json=? WHERE operation_id='mop-release-check'`, test.progressDetail); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := raw.Exec(`PRAGMA user_version=4`); err != nil {
+				t.Fatal(err)
+			}
+			if err := raw.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := Open(path); err == nil {
+				t.Fatal("invalid v4 document was migrated")
+			}
+			raw, err = sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer raw.Close()
+			var version int
+			var template, progress string
+			if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+				t.Fatal(err)
+			}
+			if err := raw.QueryRow(`SELECT template_snapshot_json FROM managed_web_services WHERE service_id='mws-release-check'`).Scan(&template); err != nil {
+				t.Fatal(err)
+			}
+			if err := raw.QueryRow(`SELECT progress_detail_json FROM managed_web_service_operations WHERE operation_id='mop-release-check'`).Scan(&progress); err != nil {
+				t.Fatal(err)
+			}
+			if version != 4 || template != test.template || progress != test.progressDetail {
+				t.Fatalf("failed migration changed registry: version=%d template=%s progress=%s", version, template, progress)
+			}
+		})
+	}
+}
+
+func TestOpenRejectsV5ReleaseSummaryDriftWithoutChangingDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	registry, err := Open(path)
 	if err != nil {
@@ -453,7 +564,7 @@ func TestOpenRejectsV4ReleaseSummaryDriftWithoutChangingDatabase(t *testing.T) {
 	}
 }
 
-func TestOpenRejectsV4NestedReleaseCandidateDriftWithoutChangingDatabase(t *testing.T) {
+func TestOpenRejectsV5NestedReleaseCandidateDriftWithoutChangingDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	registry, err := Open(path)
 	if err != nil {
