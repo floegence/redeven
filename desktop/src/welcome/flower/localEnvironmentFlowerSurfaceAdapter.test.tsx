@@ -92,6 +92,7 @@ function currentView(overrides: Record<string, unknown> = {}) {
     thread_id: 'thread-1',
     view_version: 1,
     activity: 'idle',
+    run_id: 'run-1',
     items: [],
     queue: [],
     interactions: [],
@@ -778,7 +779,7 @@ describe('Local Environment Flower surface adapter', () => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/retry') return { ok: true };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1') {
-        return detailView({ run_status: 'running' }, { view_version: 5, activity: 'active', turn_id: 'turn-retry' });
+        return detailView({ run_status: 'running', active_run_id: 'run-retry' }, { view_version: 5, activity: 'active', turn_id: 'turn-retry' });
       }
       throw new Error(`unexpected path: ${request.path}`);
     });
@@ -864,13 +865,14 @@ describe('Local Environment Flower surface adapter', () => {
   it('loads a typed current view from the canonical thread detail endpoint', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1') {
-        return detailView({ run_status: 'running' }, {
+        return detailView({ run_status: 'running', active_run_id: 'run-1' }, {
           view_version: 9,
           activity: 'active',
           turn_id: 'turn-1',
           items: [{
             id: 'assistant-live',
             turn_id: 'turn-1',
+            run_id: 'run-1',
             kind: 'assistant',
             text: 'working live',
             live: true,
@@ -894,7 +896,7 @@ describe('Local Environment Flower surface adapter', () => {
     expect(snapshot.current).toEqual(currentView({
       view_version: 9, activity: 'active', turn_id: 'turn-1',
       items: [{
-        id: 'assistant-live', turn_id: 'turn-1', kind: 'assistant',
+        id: 'assistant-live', turn_id: 'turn-1', run_id: 'run-1', kind: 'assistant',
         text: 'working live', live: true, created_at: '2026-08-12T00:00:42Z',
       }],
     }));
