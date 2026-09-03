@@ -50,6 +50,7 @@ import type {
 import {
   createFlowerClientRequestID,
 } from '../../../../internal/flower_ui/src/flowerRequestIdentity';
+import { normalizeFlowerTurnLaunchReceipt } from '../../../../internal/flower_ui/src/turnLaunchReceipt';
 import type {
   AgentSettingsResponse,
   AIConfig,
@@ -710,41 +711,25 @@ export async function launchLocalEnvironmentFlowerTurn(
       createBody.working_dir = trim(input.working_dir);
     }
   }
-  try {
-    const endpoint = existingThreadID
-      ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
-      : '/_redeven_proxy/api/ai/turns';
-    const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', endpoint, {
-      ...(existingThreadID ? { thread_id: existingThreadID } : {}),
-      ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
-      ...(modelID ? { model: modelID } : {}),
-      input: {
-        text: prompt,
-        attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
-        ...(contextAction ? { context_action: contextAction } : {}),
-      },
-      options: {
-        ...(permissionType ? { permission_type: permissionType } : {}),
-        ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
-      },
-      ...(createBody ? { create: createBody } : {}),
-    }, stagingScope);
-    const responseClientRequestID = trim(response.client_request_id);
-    const responseThreadID = trim(response.thread_id) || existingThreadID;
-    const clientIdentityValid = existingThreadID
-      ? !responseClientRequestID || responseClientRequestID === clientRequestID
-      : responseClientRequestID === clientRequestID;
-    if (!responseThreadID || !clientIdentityValid || !response.current || trim(response.current.thread_id) !== responseThreadID) {
-      throw new Error('Flower send returned an invalid current view.');
-    }
-    return { client_request_id: clientRequestID, thread_id: responseThreadID, current: response.current };
-  } catch (error) {
-    if (error instanceof RuntimeFlowerResponseError && error.failureKind !== 'transport_unknown'
-      && error.code !== 'runtime_flower_invalid_json') {
-      throw error;
-    }
-    throw error;
-  }
+  const endpoint = existingThreadID
+    ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
+    : '/_redeven_proxy/api/ai/turns';
+  const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', endpoint, {
+    ...(existingThreadID ? { thread_id: existingThreadID } : {}),
+    ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
+    ...(modelID ? { model: modelID } : {}),
+    input: {
+      text: prompt,
+      attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
+      ...(contextAction ? { context_action: contextAction } : {}),
+    },
+    options: {
+      ...(permissionType ? { permission_type: permissionType } : {}),
+      ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
+    },
+    ...(createBody ? { create: createBody } : {}),
+  }, stagingScope);
+  return normalizeFlowerTurnLaunchReceipt(response, { clientRequestID, existingThreadID });
 }
 
 export function createLocalEnvironmentFlowerSurfaceAdapter(

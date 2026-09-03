@@ -425,7 +425,7 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.environmentCenter.gatewaySummaryMany).toBe('已同步 {count} 个环境');
     expect(zhCN.environmentStatus.pairingRequired).toBe('需要配对');
     expect('askFlowerCardReadyHint' in zhCN.environmentCenter).toBe(false);
-    expect(zhCN.toast.flowerPromptQueued).toBe('已发送给 Flower。');
+    expect('flowerPromptQueued' in zhCN.toast).toBe(false);
     expect(zhCN.connectionDialog.sshHost).toBe('SSH主机');
     expect(zhCN.connectionDialog.sshContainer).toBe('SSH主机容器');
     expect(zhCN.runtimeMessage.sshContainerRuntime).toBe('SSH 容器运行时');

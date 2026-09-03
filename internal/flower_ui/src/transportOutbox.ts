@@ -24,6 +24,7 @@ export type TransportOutboxReconciliationOptions = Readonly<{
 export type TransportOutbox = Readonly<{
   entries: ReadonlyMap<string, TransportOutboxEntry>;
   put(entry: TransportOutboxEntry): TransportOutbox;
+  bindAcceptedThread(requestId: string, threadId: string): TransportOutbox;
   dropThread(threadId: string): TransportOutbox;
   drop(requestId: string): TransportOutbox;
   pruneExpired(nowMs?: number): TransportOutbox;
@@ -178,6 +179,22 @@ function create(
         terminalError: entry.terminalError === 'attachments_unavailable_after_restart'
           ? entry.terminalError
           : undefined,
+      });
+      return replace(next);
+    },
+    bindAcceptedThread(requestId, threadId) {
+      const id = clean(requestId);
+      const acceptedThreadId = clean(threadId);
+      const entry = currentEntries.get(id);
+      if (!id || !acceptedThreadId || !entry) return this;
+      const requestedThreadId = clean(entry.input.thread_id);
+      if (requestedThreadId && requestedThreadId !== acceptedThreadId) return this;
+      if (entry.threadId === acceptedThreadId && requestedThreadId === acceptedThreadId) return this;
+      const next = new Map(currentEntries);
+      next.set(id, {
+        ...entry,
+        threadId: acceptedThreadId,
+        input: { ...entry.input, thread_id: acceptedThreadId },
       });
       return replace(next);
     },

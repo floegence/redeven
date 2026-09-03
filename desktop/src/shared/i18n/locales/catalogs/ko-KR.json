@@ -1753,8 +1753,7 @@
     "providerSyncInProgress": "Desktop는 이미 최신 Redeven Cloud 상태를 확인하고 있습니다.",
     "providerAuthorizationExpiredTitle": "Redeven Cloud 인증이 만료됨",
     "providerAuthorizationRequired": "이 Redeven Cloud 환경을 열거나 연결하려면 Desktop에 새로운 Redeven Cloud 인증이 필요합니다.",
-    "providerAuthorizationExpired": "이 Redeven Cloud에 대한 Desktop 인증이 만료되었습니다. Redeven Cloud를 다시 연결한 후 작업을 다시 시도하세요.",
-    "flowerPromptQueued": "Flower에 보냈습니다."
+    "providerAuthorizationExpired": "이 Redeven Cloud에 대한 Desktop 인증이 만료되었습니다. Redeven Cloud를 다시 연결한 후 작업을 다시 시도하세요."
   },
   "progress": {
     "connectionRemoved": "연결 제거됨",

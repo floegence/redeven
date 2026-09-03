@@ -1091,6 +1091,154 @@ describe('FlowerSurface navigation', () => {
     expect(loadThread).not.toHaveBeenCalled();
   });
 
+  it('recovers a newly accepted thread when its receipt has no current view', async () => {
+    clearFlowerSurfaceNotifications();
+    const threadID = 'thread-new-without-current';
+    let acceptedRequestID = '';
+    const loadThread = vi.fn(async () => {
+      const accepted = thread({
+        thread_id: threadID,
+        title: 'New accepted thread',
+        status: 'running',
+        active_run_id: 'run-new-without-current',
+        messages: [{
+          id: `user:${acceptedRequestID}`,
+          turn_id: 'turn-new-without-current',
+          run_id: 'run-new-without-current',
+          role: 'user',
+          content: 'start a new thread',
+          status: 'complete',
+          created_at_ms: 10,
+        }],
+      });
+      return {
+        thread: accepted,
+        current: {
+          ...runtimeCurrentView(accepted, 1),
+          activity: 'active' as const,
+          turn_id: 'turn-new-without-current',
+          run_id: 'run-new-without-current',
+          items: [{
+            id: `user:${acceptedRequestID}`,
+            turn_id: 'turn-new-without-current',
+            run_id: 'run-new-without-current',
+            ordinal: 1,
+            kind: 'user' as const,
+            text: 'start a new thread',
+          }],
+        },
+      };
+    });
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => {
+      acceptedRequestID = input.client_request_id;
+      return {
+        client_request_id: input.client_request_id,
+        thread_id: threadID,
+      };
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'start a new thread';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const submit = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(submit && !submit.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => loadThread.mock.calls.length === 1);
+    expect(loadThread).toHaveBeenCalledWith(threadID);
+    await waitFor(() => runtime.querySelector(`[data-flower-message-id="user:${acceptedRequestID}"]`) !== null);
+    expect(runtime.querySelector(`[data-thread-id="${threadID}"]`)).not.toBeNull();
+    expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(flowerSurfaceNotifications().filter((notification) => notification.tone === 'error')).toEqual([]);
+  });
+
+  it('recovers canonical detail without reporting an accepted send as failed', async () => {
+    clearFlowerSurfaceNotifications();
+    const threadID = 'thread-accepted-without-current';
+    const initial = thread({
+      thread_id: threadID,
+      title: 'Accepted without current',
+      status: 'idle',
+      messages: [],
+    });
+    let acceptedRequestID = '';
+    const loadThread = vi.fn(async () => {
+      if (!acceptedRequestID) return liveBootstrap(initial, 1);
+      const accepted = thread({
+        ...initial,
+        status: 'running',
+        active_run_id: 'run-accepted-without-current',
+        messages: [{
+          id: `user:${acceptedRequestID}`,
+          turn_id: 'turn-accepted-without-current',
+          run_id: 'run-accepted-without-current',
+          role: 'user',
+          content: 'send once',
+          status: 'complete',
+          created_at_ms: 10,
+        }],
+      });
+      return {
+        thread: accepted,
+        current: {
+          ...runtimeCurrentView(accepted, 2),
+          activity: 'active' as const,
+          turn_id: 'turn-accepted-without-current',
+          run_id: 'run-accepted-without-current',
+          items: [{
+            id: `user:${acceptedRequestID}`,
+            turn_id: 'turn-accepted-without-current',
+            run_id: 'run-accepted-without-current',
+            ordinal: 1,
+            kind: 'user' as const,
+            text: 'send once',
+          }],
+        },
+      };
+    });
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => {
+      acceptedRequestID = input.client_request_id;
+      return {
+        client_request_id: input.client_request_id,
+        thread_id: threadID,
+      };
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [initial]),
+      loadThread,
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'send once';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const submit = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(submit && !submit.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    await waitFor(() => runtime.querySelector(`[data-flower-message-id="user:${acceptedRequestID}"]`) !== null);
+    expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(flowerSurfaceNotifications().filter((notification) => notification.tone === 'error')).toEqual([]);
+  });
+
   it('preserves the draft, restores Stop, and deduplicates active-turn admission errors', async () => {
     clearFlowerSurfaceNotifications();
     const idleThread = thread({

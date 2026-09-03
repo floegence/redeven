@@ -1413,7 +1413,7 @@ describe('Env local Flower surface adapter', () => {
     });
 
     expect(receipt.thread_id).toBe('thread_reasoning');
-    expect(receipt.current.turn_id).toBe('turn_reasoning');
+    expect(receipt.current?.turn_id).toBe('turn_reasoning');
     expect(turnBodies[0]).toMatchObject({
       staging_scope_id: 'staging_client_reasoning',
       create: {
@@ -1433,7 +1433,7 @@ describe('Env local Flower surface adapter', () => {
     expect(subscribeThread).not.toHaveBeenCalled();
   });
 
-  it('rejects a current view that changes the echoed client request identity', async () => {
+  it('rejects an acceptance receipt that changes the echoed client request identity', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return jsonResponse({
@@ -1470,11 +1470,42 @@ describe('Env local Flower surface adapter', () => {
       thread_id: 'thread_existing',
       prompt: 'send once',
     })).rejects.toMatchObject({
-      message: 'Flower send returned an invalid current view.',
+      message: 'Flower send returned an invalid acceptance receipt.',
     });
   });
 
-  it('reports command rejection, transport failure, and invalid current views directly', async () => {
+  it('accepts matching identities and discards an unusable current view', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
+        const response = typedCommandResponse('client_existing', 'thread_existing', 'turn_existing', 'send once');
+        return jsonResponse({
+          ...response,
+          current: { ...response.current, thread_id: 'thread_other' },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          subscribeThread: vi.fn(async () => ({ runId: '' })),
+        },
+      } as any,
+    });
+
+    await expect(adapter.launchTurn({
+      client_request_id: 'client_existing',
+      thread_id: 'thread_existing',
+      prompt: 'send once',
+    })).resolves.toEqual({
+      client_request_id: 'client_existing',
+      thread_id: 'thread_existing',
+    });
+  });
+
+  it('reports command and transport failures while recovering a missing current view', async () => {
     let turnOutcome: 'definite' | 'transport' | 'malformed' | 'invalid_json' = 'definite';
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
@@ -1534,8 +1565,9 @@ describe('Env local Flower surface adapter', () => {
       client_request_id: 'client_malformed',
       thread_id: 'thread_existing',
       prompt: 'send once',
-    })).rejects.toMatchObject({
-      message: 'Flower send returned an invalid current view.',
+    })).resolves.toEqual({
+      client_request_id: 'client_malformed',
+      thread_id: 'thread_existing',
     });
 
     turnOutcome = 'invalid_json';

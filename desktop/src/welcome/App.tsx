@@ -6233,7 +6233,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     closeFlowerTurnLauncher();
     await openFlowerSurface();
-    showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
   }
 
   async function openEnvironmentCenterSurface(): Promise<void> {

@@ -1779,8 +1779,7 @@
     "providerSyncInProgress": "Desktop уже проверяет последний статус Redeven Cloud.",
     "providerAuthorizationExpiredTitle": "Срок действия авторизации Redeven Cloud истек.",
     "providerAuthorizationRequired": "Desktop требуется новая авторизация Redeven Cloud, прежде чем он сможет открыть или подключить эту среду Redeven Cloud.",
-    "providerAuthorizationExpired": "Срок действия авторизации Desktop для Redeven Cloud истёк. Переподключите Redeven Cloud и повторите попытку.",
-    "flowerPromptQueued": "Отправлено Flower."
+    "providerAuthorizationExpired": "Срок действия авторизации Desktop для Redeven Cloud истёк. Переподключите Redeven Cloud и повторите попытку."
   },
   "progress": {
     "connectionRemoved": "Подключение удалено",

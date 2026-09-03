@@ -843,7 +843,8 @@ export type FlowerTurnLaunchInput = Readonly<{
 export type FlowerTurnLaunchReceipt = Readonly<{
   client_request_id: string;
   thread_id: string;
-  current: FlowerRuntimeCurrentView;
+  /** Immediate canonical detail when available; acceptance does not depend on this projection. */
+  current?: FlowerRuntimeCurrentView;
 }>;
 
 export type FlowerTurnLaunchFailure = Error & Readonly<{

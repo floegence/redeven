@@ -425,7 +425,7 @@ export function launchReceipt(
   canonicalID: string,
   kind: 'start' | 'queued' = 'start',
   clientRequestID = TEST_CLIENT_REQUEST_ID,
-): FlowerTurnLaunchReceipt {
+): FlowerTurnLaunchReceipt & Readonly<{ current: FlowerRuntimeCurrentView }> {
   return {
     client_request_id: clientRequestID,
     thread_id: threadID,

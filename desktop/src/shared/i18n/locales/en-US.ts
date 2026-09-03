@@ -949,7 +949,6 @@ export const enUS = {
     providerAuthorizationExpiredTitle: 'Redeven Cloud Authorization Expired',
     providerAuthorizationRequired: 'Desktop needs fresh Redeven Cloud authorization before it can open or connect this Redeven Cloud Environment.',
     providerAuthorizationExpired: 'Desktop authorization for Redeven Cloud expired. Reconnect Redeven Cloud, then try the action again.',
-    flowerPromptQueued: 'Sent to Flower.',
   },
   progress: {
     connectionRemoved: 'Connection removed',
