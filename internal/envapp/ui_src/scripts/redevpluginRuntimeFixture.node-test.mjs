@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { verifyELF } from '../../../../scripts/redevplugin_release_contract.mjs';
+import { verifyELF, verifyMachO } from '../../../../scripts/redevplugin_release_contract.mjs';
 import {
   createLinuxReDevPluginRuntimeFixture,
   installReDevPluginRuntimeFixture,
@@ -32,7 +32,7 @@ test('creates admission-compatible Linux runtime fixtures for supported architec
   }
 });
 
-test('installs the fixture only for Linux and preserves executable-only permissions', async () => {
+test('installs platform fixtures with executable-only permissions', async () => {
   const linuxRoot = await mkdtemp(path.join(os.tmpdir(), 'redeven-redevplugin-linux-'));
   const darwinRoot = await mkdtemp(path.join(os.tmpdir(), 'redeven-redevplugin-darwin-'));
   try {
@@ -45,11 +45,14 @@ test('installs the fixture only for Linux and preserves executable-only permissi
     assert.equal((await stat(runtimePath)).mode & 0o777, 0o500);
     verifyELF(runtimePath, 'linux/amd64');
 
-    assert.equal(await installReDevPluginRuntimeFixture(darwinRoot, {
+    const darwinRuntimePath = await installReDevPluginRuntimeFixture(darwinRoot, {
       platform: 'darwin',
       arch: 'arm64',
-    }), null);
-    await assert.rejects(stat(path.join(darwinRoot, 'redevplugin-runtime')), { code: 'ENOENT' });
+    });
+    assert.equal(darwinRuntimePath, path.join(darwinRoot, 'redevplugin-runtime'));
+    assert.equal((await readFile(darwinRuntimePath)).length, 32);
+    assert.equal((await stat(darwinRuntimePath)).mode & 0o777, 0o500);
+    verifyMachO(darwinRuntimePath, 'darwin/arm64');
   } finally {
     await rm(linuxRoot, { recursive: true, force: true });
     await rm(darwinRoot, { recursive: true, force: true });
