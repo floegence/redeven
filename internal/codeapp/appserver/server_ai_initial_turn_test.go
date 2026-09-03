@@ -102,6 +102,31 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		t.Fatalf("second status=%d receipt=%#v body=%s, want %#v", secondStatus, second, secondBody, first)
 	}
 
+	welcomeClientRequestID := "create_welcome_ssh_http_223456789012345678901234"
+	welcomePayload := `{
+  "model":"openai/gpt-5-mini",
+  "input":{
+    "text":"is this host reachable",
+    "attachments":[],
+    "context_action":{
+      "schema_version":2,
+      "action_id":"assistant.ask.flower",
+      "provider":"flower",
+      "target":{"target_id":"ssh:orange","locality":"auto"},
+      "source":{"surface":"desktop_welcome_environment_card","surface_id":"saved:ssh:orange"},
+      "execution_context":{"current_target_id":"ssh:orange","source_env_public_id":"env_orange","runtime_hint":"auto","session_source":"ssh_environment"},
+      "context":[{"kind":"text_snapshot","title":"orange","detail":"SSH host · Unchecked","content":"Environment: orange\nKind: ssh_environment"}],
+      "presentation":{"label":"Ask Flower","priority":100}
+    }
+  },
+  "options":{"permission_type":"approval_required"},
+  "create":{"client_request_id":"` + welcomeClientRequestID + `","title":"","model_id":"openai/gpt-5-mini","permission_type":"approval_required"}
+}`
+	welcomeStatus, welcomeReceipt, welcomeBody := post(welcomePayload, "", "")
+	if welcomeStatus != http.StatusAccepted || welcomeReceipt.ClientRequestID != welcomeClientRequestID || welcomeReceipt.ThreadID == "" || welcomeReceipt.TurnID == "" {
+		t.Fatalf("welcome SSH status=%d receipt=%#v body=%s", welcomeStatus, welcomeReceipt, welcomeBody)
+	}
+
 	readRequest := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+first.ThreadID+"/messages", nil)
 	readRequest.Header.Set("Origin", origin)
 	readResponse := httptest.NewRecorder()
@@ -118,6 +143,24 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 	}
 	if readResponse.Code != http.StatusOK || !strings.Contains(readResponse.Body.String(), "create through the Flower HTTP boundary") {
 		t.Fatalf("canonical read status=%d body=%s", readResponse.Code, readResponse.Body.String())
+	}
+
+	welcomeReadRequest := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+welcomeReceipt.ThreadID+"/messages", nil)
+	welcomeReadRequest.Header.Set("Origin", origin)
+	welcomeReadResponse := httptest.NewRecorder()
+	server.serveHTTP(welcomeReadResponse, welcomeReadRequest)
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) &&
+		(welcomeReadResponse.Code != http.StatusOK ||
+			!strings.Contains(welcomeReadResponse.Body.String(), "is this host reachable") ||
+			!strings.Contains(welcomeReadResponse.Body.String(), "orange")); {
+		time.Sleep(20 * time.Millisecond)
+		welcomeReadResponse = httptest.NewRecorder()
+		server.serveHTTP(welcomeReadResponse, welcomeReadRequest)
+	}
+	if welcomeReadResponse.Code != http.StatusOK ||
+		!strings.Contains(welcomeReadResponse.Body.String(), "is this host reachable") ||
+		!strings.Contains(welcomeReadResponse.Body.String(), "orange") {
+		t.Fatalf("welcome canonical read status=%d body=%s", welcomeReadResponse.Code, welcomeReadResponse.Body.String())
 	}
 
 	unknownPayload := `{"thread_id":"th_223456789012345678901235","model":"openai/gpt-5-mini","input":{"text":"must not create","attachments":[]},"options":{}}`

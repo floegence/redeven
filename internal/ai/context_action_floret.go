@@ -391,6 +391,20 @@ func contextActionBaseMetadata(action *ContextActionEnvelope) map[string]string 
 	}
 	metadata["target_id"] = strings.TrimSpace(action.Target.TargetID)
 	metadata["target_locality"] = strings.TrimSpace(action.Target.Locality)
+	if action.ExecutionContext != nil {
+		if targetID := strings.TrimSpace(action.ExecutionContext.CurrentTargetID); targetID != "" {
+			metadata["current_target_id"] = targetID
+		}
+		if envPublicID := strings.TrimSpace(action.ExecutionContext.SourceEnvPublicID); envPublicID != "" {
+			metadata["source_env_public_id"] = envPublicID
+		}
+		if runtimeHint := strings.TrimSpace(action.ExecutionContext.RuntimeHint); runtimeHint != "" {
+			metadata["runtime_hint"] = runtimeHint
+		}
+		if sessionSource := strings.TrimSpace(action.ExecutionContext.SessionSource); sessionSource != "" {
+			metadata["session_source"] = sessionSource
+		}
+	}
 	if dir := strings.TrimSpace(action.SuggestedWorkingDir); dir != "" {
 		metadata["suggested_working_dir_abs"] = dir
 	}

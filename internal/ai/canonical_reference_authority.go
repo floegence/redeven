@@ -14,6 +14,18 @@ type flowerCanonicalReferenceTargetAuthority struct {
 	SourceEnvPublicID string
 }
 
+func flowerContextActionRequiresCanonicalReferenceAuthority(action *ContextActionEnvelope) bool {
+	if action == nil {
+		return false
+	}
+	for _, item := range action.Context {
+		if strings.TrimSpace(item.Kind) == contextActionKindFilePath {
+			return true
+		}
+	}
+	return false
+}
+
 func resolveFlowerCanonicalReferenceTargetAuthority(endpointID string, policy ToolTargetPolicy, routing *threadstore.FlowerThreadRouting) (flowerCanonicalReferenceTargetAuthority, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	if endpointID == "" {

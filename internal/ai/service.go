@@ -1300,7 +1300,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		toolTargetPolicy = normalizeToolTargetPolicy(toolTargetPolicyForRun(metaRef, *settings, routing))
 	}
 	var referenceAuthority *flowerCanonicalReferenceTargetAuthority
-	if req.Input.ContextAction != nil {
+	if flowerContextActionRequiresCanonicalReferenceAuthority(req.Input.ContextAction) {
 		resolved, resolveErr := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, toolTargetPolicy, routing)
 		if resolveErr != nil {
 			return nil, resolveErr

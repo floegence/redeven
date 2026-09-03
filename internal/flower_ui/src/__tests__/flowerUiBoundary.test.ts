@@ -171,6 +171,23 @@ describe('shared Flower UI boundary', () => {
     expect(launcherSrc).not.toContain('onSend');
   });
 
+  it('keeps Welcome launch failures owned by one inline semantic error alert', () => {
+    const appSrc = readText(path.join(repoRoot, 'desktop', 'src', 'welcome', 'App.tsx'));
+    const launcherSrc = readText(path.join(flowerRoot, 'FlowerTurnLauncherWindow.tsx'));
+    const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
+    const submitStart = appSrc.indexOf('async function submitFlowerTurnLauncher');
+    const submitEnd = appSrc.indexOf('async function openEnvironmentCenterSurface', submitStart);
+    const submitSource = appSrc.slice(submitStart, submitEnd);
+    const errorRule = cssSrc.match(/\.flower-turn-launcher-error\s*\{[^}]+\}/u)?.[0] ?? '';
+
+    expect(submitStart).toBeGreaterThanOrEqual(0);
+    expect(submitEnd).toBeGreaterThan(submitStart);
+    expect(submitSource).not.toContain("showActionToast(getErrorMessage(error), 'error')");
+    expect(launcherSrc).toContain('<div role="alert" class="flower-turn-launcher-error">');
+    expect(errorRule).toContain('color: var(--error);');
+    expect(errorRule).not.toContain('var(--destructive)');
+  });
+
 	it('persists thread reasoning while initializing new thread drafts through launch input', () => {
 		const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
 		const contractsSrc = readText(path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'));
