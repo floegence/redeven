@@ -1320,6 +1320,10 @@ describe('sshRuntime integration', () => {
           text: expect.stringContaining('failure code: runtime_state_incompatible'),
         }),
       ]));
+      const diagnostics = (error as DesktopOperationFailureError).presentation.diagnostics ?? [];
+      expect(diagnostics.filter((diagnostic) => diagnostic.channel === 'runtime_startup_report')).toHaveLength(1);
+      expect(diagnostics.find((diagnostic) => diagnostic.channel === 'control_stdout')?.text)
+        .not.toContain('runtime_state_incompatible');
     } finally {
       await removeFakeSSHFixture(fixture);
     }
@@ -1338,6 +1342,14 @@ describe('sshRuntime integration', () => {
         title_key: 'progress.sshRuntimeStartupReportInvalidTitle',
         summary_key: 'progress.sshRuntimeStartupReportInvalidSummary',
       });
+      const diagnostics = (error as DesktopOperationFailureError).presentation.diagnostics ?? [];
+      expect(diagnostics.filter((diagnostic) => diagnostic.channel === 'runtime_startup_report')).toEqual([
+        expect.objectContaining({
+          channel: 'runtime_startup_report',
+        }),
+      ]);
+      expect(diagnostics.find((diagnostic) => diagnostic.channel === 'control_stdout')?.text)
+        .not.toContain('{invalid');
     } finally {
       await removeFakeSSHFixture(fixture);
     }

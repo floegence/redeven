@@ -521,7 +521,7 @@ export class ReinstallTargetCoordinator {
     // the destructive action before Desktop connects to a host/container or
     // reads any old Redeven state.
     const rawRoot = compact(descriptor.placement.runtime_root);
-    const targetRoot = rawRoot === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT ? rawRoot : rawRoot;
+    const targetRoot = rawRoot === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT ? '~/.redeven' : rawRoot;
     const resolvedDescriptor: ReinstallTargetDescriptor = {
       ...descriptor,
       affected_environment_ids: (await this.dependencies.resolve_candidates())
@@ -665,6 +665,7 @@ export class ReinstallTargetCoordinator {
     let activeTargetRoot = cached.preview.target_root;
     let currentJournal: ReinstallTargetJournal | null = persistedJournal;
     if (!journalPhaseAtLeast(persistedPhase, 'direct_channel_open')) {
+      await this.dependencies.mark_in_progress(current, cached.preview.preflight_id);
       currentJournal = {
         ...persistedJournal,
         phase: 'direct_channel_open',
@@ -774,7 +775,6 @@ export class ReinstallTargetCoordinator {
         }
         processSession = null;
       }
-      await this.dependencies.mark_in_progress(currentResolved, cached.preview.preflight_id).catch(() => undefined);
       await this.dependencies.close_sessions(currentResolved).catch(() => undefined);
 
       let inventory: ReinstallTargetProcessInventory | null = null;

@@ -25,7 +25,6 @@ import {
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
 import {
-  formatBlockedLaunchDiagnostics,
   parseAvailableLaunchReport,
   parseLaunchReport,
   type LaunchBlockedReport,
@@ -34,8 +33,8 @@ import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
   diagnosticsFromRecentLogs,
-  runtimeStateIncompatibleFailure,
 } from './desktopOperationFailure';
+import { desktopOperationFailureFromBlockedLaunchReport } from './runtimeBlockedLaunchFailure';
 import {
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   desktopSSHAuthority,
@@ -55,6 +54,7 @@ import {
   type DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
 import type {
+  DesktopFailureDiagnostic,
   DesktopOperationFailurePresentation,
 } from '../shared/desktopOperationFailure';
 import type { DesktopTranslationKey } from '../shared/i18n';
@@ -334,6 +334,7 @@ function readinessFailure(
     recoveryHint?: string;
     recoveryHintKey?: DesktopTranslationKey;
     targetLabel?: string;
+    diagnostics?: readonly DesktopFailureDiagnostic[];
   }> = {},
 ): Error {
   return new DesktopOperationFailureError(desktopOperationFailurePresentation({
@@ -347,7 +348,10 @@ function readinessFailure(
     recoveryHint: options.recoveryHint,
     recoveryHintKey: options.recoveryHintKey,
     targetLabel: options.targetLabel,
-    diagnostics: diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
+    diagnostics: [
+      ...(options.diagnostics ?? []),
+      ...diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
+    ],
   }));
 }
 
@@ -358,6 +362,7 @@ function readinessTimeoutFailure(
     title: string;
     detail: string;
     targetLabel: string;
+    diagnostics?: readonly DesktopFailureDiagnostic[];
   }>,
 ): Error {
   return new DesktopSSHRuntimeReadinessTimeoutError(desktopOperationFailurePresentation({
@@ -366,7 +371,10 @@ function readinessTimeoutFailure(
     summary: message,
     detail: options.detail,
     targetLabel: options.targetLabel,
-    diagnostics: diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
+    diagnostics: [
+      ...(options.diagnostics ?? []),
+      ...diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
+    ],
   }));
 }
 
@@ -1280,16 +1288,21 @@ async function runSSHControlCommand(
   session: SSHControlSessionContext,
   remoteCommand: string,
   stdinData?: Buffer,
-  timeoutMs = DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  options: Readonly<{
+    timeout_ms?: number;
+    record_stdout?: boolean;
+  }> = {},
 ): Promise<SSHCommandResult> {
   try {
     const result = await session.lease.run(remoteCommand, {
       stdinData,
       signal: session.signal,
       onStderr: (chunk) => appendSSHRuntimeLog(session.logs, 'control_stderr', chunk, session.onLog),
-      timeout_ms: timeoutMs,
+      timeout_ms: options.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
     });
-    appendSSHRuntimeLog(session.logs, 'control_stdout', result.stdout, session.onLog);
+    if (options.record_stdout !== false) {
+      appendSSHRuntimeLog(session.logs, 'control_stdout', result.stdout, session.onLog);
+    }
     return result;
   } catch (error) {
     if (error instanceof DesktopSSHTransportInterruptedError) {
@@ -1524,7 +1537,7 @@ async function prepareRemoteRuntimeViaRemoteInstall(args: Readonly<{
       args.installScriptURL,
     ]),
     undefined,
-    DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+    { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
   );
   if (result.exit_code !== 0) {
     throw readinessFailure('Desktop could not install Redeven on the remote host using the remote installer.', args.session.logs, {
@@ -1633,7 +1646,7 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
         remoteArchivePath,
       ]),
       args.archiveData,
-      DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+      { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
     );
     if (uploadResult.exit_code !== 0) {
       throw readinessFailure(
@@ -1664,7 +1677,7 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
         remoteTempDir,
       ]),
       undefined,
-      DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+      { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
     );
     if (installResult.exit_code !== 0) {
       throw readinessFailure(
@@ -1809,7 +1822,16 @@ async function waitForRemoteStartupReport(args: Readonly<{
         args.runtimeStateRoot ?? args.session.target.runtime_root,
         args.sessionToken,
       ]),
+      undefined,
+      { record_stdout: false },
     );
+    const reportDiagnostic: DesktopFailureDiagnostic | undefined = compact(result.stdout) === ''
+      ? undefined
+      : {
+          channel: 'runtime_startup_report',
+          label: 'Runtime startup report',
+          text: result.stdout,
+        };
     if (result.exit_code !== 0) {
       throw readinessFailure(
         `Desktop could not read the Runtime startup report from the SSH host (exit code ${result.exit_code ?? 'unknown'}).`,
@@ -1820,6 +1842,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
           titleKey: 'progress.runtimeHostCommandFailedTitle',
           summaryKey: 'progress.runtimeHostCommandFailedSummary',
           targetLabel: desktopSSHAuthority(args.session.target),
+          diagnostics: reportDiagnostic ? [reportDiagnostic] : [],
         },
       );
     }
@@ -1837,6 +1860,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
           summaryKey: 'progress.sshRuntimeStartupReportInvalidSummary',
           detail: 'Redeven started on the SSH host but wrote a startup report Desktop could not use.',
           targetLabel: desktopSSHAuthority(args.session.target),
+          diagnostics: reportDiagnostic ? [reportDiagnostic] : [],
         },
       );
     }
@@ -1879,25 +1903,21 @@ async function waitForRemoteStartupReport(args: Readonly<{
               title: 'SSH Runtime Launch Timed Out',
               detail: 'Redeven is running on the SSH host, but Desktop could not verify the management socket before the timeout.',
               targetLabel: desktopSSHAuthority(args.session.target),
+              diagnostics: reportDiagnostic ? [reportDiagnostic] : [],
             },
           );
         }
         await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
         continue;
       }
-      if (classification.kind === 'reinstall_required') {
-        throw new DesktopOperationFailureError(runtimeStateIncompatibleFailure({
-          message: launchReport.message,
-          targetLabel: desktopSSHAuthority(args.session.target),
-          diagnostics: [
-            {
-              channel: 'runtime_startup_report',
-              label: 'Runtime startup report',
-              text: formatBlockedLaunchDiagnostics(launchReport),
-            },
-            ...diagnosticsFromRecentLogs(args.session.logs, SSH_RECENT_LOG_LABELS),
-          ],
-        }));
+      const failure = desktopOperationFailureFromBlockedLaunchReport({
+        report: launchReport,
+        classification,
+        targetLabel: desktopSSHAuthority(args.session.target),
+        diagnostics: diagnosticsFromRecentLogs(args.session.logs, SSH_RECENT_LOG_LABELS),
+      });
+      if (failure) {
+        throw failure;
       }
       throw readinessFailure(
         launchReport.message,
@@ -1909,6 +1929,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
           detail: launchReport.message,
           detailKey: 'progress.sshRuntimeReportedStartupFailureDetail',
           targetLabel: desktopSSHAuthority(args.session.target),
+          diagnostics: reportDiagnostic ? [reportDiagnostic] : [],
         },
       );
     }

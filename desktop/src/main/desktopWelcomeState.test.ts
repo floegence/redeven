@@ -1674,6 +1674,37 @@ describe('desktopWelcomeState', () => {
     });
   });
 
+  it('projects reinstall-required presence without degrading it to unverified', () => {
+    const presence = localRuntimePresence({
+      running: false,
+      openable: false,
+      local_ui_url: '',
+      runtime_service: undefined,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'reinstall_required',
+        message: 'This Runtime has incompatible state.',
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': presence,
+      },
+    });
+
+    expect(snapshot.environments.find((environment) => environment.kind === 'local_environment'))
+      .toMatchObject({
+        runtime_health: {
+          status: 'offline',
+          offline_reason_code: 'reinstall_required',
+          offline_reason: 'This Runtime has incompatible state.',
+        },
+      });
+  });
+
   it('projects running container compatibility update blocks without open maintenance', () => {
     const targetID = 'local:container:docker:redeven-dev-mysql-db-dev-1:63ce185e';
     const placement = {

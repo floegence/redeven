@@ -19,6 +19,7 @@ export type DesktopRuntimeControlStatus =
         | 'not_started'
         | 'auth_required'
         | 'unverified'
+        | 'reinstall_required'
         | 'container_not_running'
         | 'container_engine_unavailable'
         | 'not_reported'

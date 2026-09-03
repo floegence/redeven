@@ -9,11 +9,8 @@ import {
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
-import { formatBlockedLaunchDiagnostics, parseAvailableLaunchReport } from './launchReport';
-import {
-  DesktopOperationFailureError,
-  runtimeStateIncompatibleFailure,
-} from './desktopOperationFailure';
+import { parseAvailableLaunchReport } from './launchReport';
+import { desktopOperationFailureFromBlockedLaunchReport } from './runtimeBlockedLaunchFailure';
 import { classifyDesktopRuntimeBlockedLaunchReport } from '../shared/desktopRuntimeHealth';
 import {
   buildManagedSSHActivatePreparedRuntimeScript,
@@ -318,16 +315,13 @@ async function waitForStartupReport(args: EnsureManagedLinuxRuntimeArgs, session
       const classification = classifyDesktopRuntimeBlockedLaunchReport(launch, {
         target_runtime_version: args.runtime_release_tag,
       });
-      if (classification.kind === 'reinstall_required') {
-        throw new DesktopOperationFailureError(runtimeStateIncompatibleFailure({
-          message: launch.message,
-          targetLabel: args.runtime_root,
-          diagnostics: [{
-            channel: 'runtime_startup_report',
-            label: 'Runtime startup report',
-            text: formatBlockedLaunchDiagnostics(launch),
-          }],
-        }));
+      const failure = desktopOperationFailureFromBlockedLaunchReport({
+        report: launch,
+        classification,
+        targetLabel: args.runtime_root,
+      });
+      if (failure) {
+        throw failure;
       }
       throw new Error(`Managed Linux Runtime startup was blocked (${launch.code}): ${launch.message}`);
     }
@@ -375,6 +369,16 @@ export async function ensureManagedLinuxRuntimeReady(
     });
     const instance = before.instances[0];
     if (status.status !== 'ready') {
+      if (status.status === 'blocked') {
+        const failure = desktopOperationFailureFromBlockedLaunchReport({
+          report: status.report,
+          targetLabel: args.runtime_root,
+          targetRuntimeVersion: args.runtime_release_tag,
+        });
+        if (failure) {
+          throw failure;
+        }
+      }
       throw new Error(
         (status.status === 'blocked' ? status.report.message : status.message)
         || 'Desktop could not attach to the verified managed Linux Runtime process.',

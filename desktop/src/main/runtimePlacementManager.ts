@@ -25,11 +25,8 @@ import {
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
 } from './containerRuntime';
-import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
-import {
-  DesktopOperationFailureError,
-  runtimeStateIncompatibleFailure,
-} from './desktopOperationFailure';
+import { parseLaunchReport } from './launchReport';
+import { desktopOperationFailureFromBlockedLaunchReport } from './runtimeBlockedLaunchFailure';
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
@@ -379,16 +376,13 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
           classification.maintenance,
         );
       }
-      if (classification.kind === 'reinstall_required') {
-        throw new DesktopOperationFailureError(runtimeStateIncompatibleFailure({
-          message: report.message,
-          targetLabel: args.placement.runtime_root,
-          diagnostics: [{
-            channel: 'runtime_startup_report',
-            label: 'Runtime startup report',
-            text: formatBlockedLaunchDiagnostics(report),
-          }],
-        }));
+      const failure = desktopOperationFailureFromBlockedLaunchReport({
+        report,
+        classification,
+        targetLabel: args.placement.runtime_root,
+      });
+      if (failure) {
+        throw failure;
       }
       if (classification.kind === 'unverified') {
         throw new Error(classification.message);

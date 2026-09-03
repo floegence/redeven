@@ -13,13 +13,13 @@ Wipe-data reinstall is Desktop's final recovery path for a broken managed Redeve
 
 ## Confirmation and prerequisites
 
-Preview is local and non-destructive. It shows one short risk statement, with host, container, root, affected registrations, and process details collapsed. Confirmation binds the saved host/user/port, exact container engine/id when present, normalized Runtime root, mode, and operation identity.
+Preview is local and non-destructive. It shows one short risk statement, with host, container, root, affected registrations, and process details collapsed. A saved `remote_default` root is shown as the user-facing `~/.redeven`; Desktop does not connect merely to expand the remote home directory. Confirmation binds the saved host/user/port, exact container engine/id when present, registered Runtime root identity, mode, preflight, and operation identity. Execution resolves the physical absolute root through the confirmed direct channel and rejects any mismatch before target mutation.
 
 One Reinstall selection owns one current-process disclosure from preflight through execution. It opens before preview and binds the first matching new operation or the exact existing identity returned by Desktop; unrelated old progress cannot replace it. A later selection transfers ownership, user closure survives snapshot refreshes, and conflict or recovery focus uses the same state.
 
 Execution has four prerequisites only: the confirmed direct channel opens, the target resolves to the confirmed exact root, the current Desktop can prepare and verify a Runtime package for the target platform, and the filesystem permits the required exact-root operations. Gateway availability, Runtime protocol, schema, trust, token, old process identity, or old directory contents are not prerequisites.
 
-After confirmation, Desktop commits `direct_channel_open` to the journal before opening the executor or issuing a target command. Direct host commands are bounded (30 seconds for checks and filesystem actions, 10 minutes for package transfer), and the whole reinstall has a 15-minute deadline. Timeout and cancellation preserve the journal and command diagnostics for retry.
+After confirmation, Desktop first persists the reinstall-required marker. Only then does it commit `direct_channel_open`, open the executor, or issue a target command. If marker persistence fails, the journal remains at confirmation and the target is untouched. Direct host commands are bounded (30 seconds for checks and filesystem actions, 10 minutes for package transfer), and the whole reinstall has a 15-minute deadline. Timeout and cancellation preserve the journal and command diagnostics for retry.
 
 ## Runtime-only sequence
 
@@ -50,7 +50,7 @@ Old Gateway directories under the confirmed Runtime root are historical residue.
 
 ## Recovery journal
 
-Desktop writes one minimal journal outside the target root. It records the confirmed target, mode, normalized physical root, operation quarantine, and last committed phase. Each committed phase is repeatable. After Desktop or transport interruption, a current Desktop request resumes an already confirmed journal directly without asking the user to confirm the same destructive target again and without consulting an old Gateway API, Runtime database, target-side lock, checkpoint service, or shell state machine. The journal intentionally stores no package identity; the current Desktop package cache and validation contract are authoritative on every incomplete recovery.
+Desktop writes one minimal journal outside the target root. It records the confirmed target, mode, registered or resolved root, operation quarantine, and last committed phase. Each committed phase is repeatable. After Desktop or transport interruption, a current Desktop request resumes an already confirmed journal directly without asking the user to confirm the same destructive target again and without consulting the marker, an old Gateway API, Runtime database, target-side lock, checkpoint service, or shell state machine. The journal intentionally stores no package identity; the current Desktop package cache and validation contract are authoritative on every incomplete recovery.
 
 Launcher progress belongs only to the current Desktop process. Startup never restores a journal as an automatically opened popup. Unstarted confirmation journals are discarded; a post-confirmation journal remains internal recovery authority and contributes to the Environment's current `reinstall_required` state while the Runtime is unhealthy. When the user opens that recovery action, Desktop creates one current-process progress owner at the journal's committed phase with a direct Continue action.
 
@@ -59,6 +59,8 @@ An Environment that requires recovery exposes one standard **Reinstall Redeven**
 After verification, journal affected IDs drive convergence. Desktop keeps current success, removes older reinstall and terminal Runtime/Open records for all affected Environments through shared cleanup, resets the Launcher issue, then forces one manual health refresh before the final snapshot. Reinstall has no generic refresh; projection errors cannot rewrite success or revive old errors.
 
 A successful current Runtime health probe clears the recovery marker and retires matching Desktop journals when no reinstall is live. It never deletes target-side quarantine data during status refresh. An old journal or quarantine is input to a later exact-root reinstall or cleanup, not a reason to revive historical progress or block a newly confirmed wipe. A genuine target-coordinate change still requires new confirmation because continuing against another host, container, user, or explicit root could delete unrelated data.
+
+Execution accepts only a request whose Environment, mode, preflight, and operation key exactly match the stored preview. That check happens before lifecycle locking or success/in-progress shortcuts. The stored preview and journal then supply the descriptor lookup, lifecycle fingerprint, progress, retry, and coordinator inputs, so Desktop cannot lock one target while executing another.
 
 `manual_recovery_required` is reserved for cases where the direct channel or filesystem prevents retry and, for preserve mode, also prevents safe rollback. Wipe failures retain the journal and present the standard Reinstall action with the original command, exit status, stderr, and filesystem reason in technical details during the current process.
 
