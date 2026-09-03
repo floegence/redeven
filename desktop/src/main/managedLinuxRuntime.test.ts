@@ -87,6 +87,67 @@ describe('managed Linux Runtime', () => {
     expect(run.mock.calls.some(([argv]) => (argv[2] ?? '').includes('setsid "$binary"'))).toBe(false);
   });
 
+  it('preserves the reinstall contract while attaching to one current process', async () => {
+    const run = vi.fn<RuntimeHostAccessExecutor['run']>(async (argv) => {
+      const script = argv[2] ?? '';
+      if (script.includes('runtime_is_compatible')) {
+        return {
+          stdout: [
+            'status=ready',
+            'slot_release_tag=v1.2.3',
+            'reported_release_tag=v1.2.3',
+            'target_release_tag=v1.2.3',
+            'binary_path=/home/dev/.redeven/runtime/managed/bin/redeven',
+            'stamp_path=/home/dev/.redeven/runtime/managed/.redeven-managed-runtime',
+            'reason=ready',
+          ].join('\n'),
+          stderr: '',
+        };
+      }
+      if (script.includes('desktop-runtime-inventory')) {
+        return { stdout: JSON.stringify(inventory), stderr: '' };
+      }
+      if (script.includes('desktop-runtime-status')) {
+        return {
+          stdout: JSON.stringify({
+            status: 'blocked',
+            code: 'startup_failed',
+            message: 'wrong database kind: expected portforward_registry_v1, got portforward_registry',
+            diagnostics: { failure_code: 'runtime_state_incompatible' },
+          }),
+          stderr: '',
+        };
+      }
+      throw new Error(`Unexpected managed Linux command: ${argv.join(' ')}`);
+    });
+    const executor: RuntimeHostAccessExecutor = {
+      host_access: { kind: 'wsl_host', distribution_name: 'Ubuntu-24.04', linux_user: 'dev' },
+      run,
+      release: async () => undefined,
+    };
+
+    await expect(ensureManagedLinuxRuntimeReady({
+      executor,
+      runtime_root: '/home/dev/.redeven',
+      runtime_state_root: '/home/dev/.redeven',
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://invalid.example',
+      asset_cache_root: '/unused',
+      runtime_process_intent: 'start',
+    })).rejects.toMatchObject({
+      name: 'DesktopOperationFailureError',
+      presentation: {
+        code: 'reinstall_required',
+        target_label: '/home/dev/.redeven',
+        diagnostics: [{
+          channel: 'runtime_startup_report',
+          text: expect.stringContaining('runtime_state_incompatible'),
+        }],
+      },
+    });
+    expect(run.mock.calls.some(([argv]) => (argv[2] ?? '').includes('setsid "$binary"'))).toBe(false);
+  });
+
   it('returns the reinstall recovery contract when managed Linux Runtime state is incompatible', async () => {
     const run = vi.fn<RuntimeHostAccessExecutor['run']>(async (argv) => {
       const script = argv[2] ?? '';

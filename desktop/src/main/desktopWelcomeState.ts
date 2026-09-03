@@ -1042,6 +1042,7 @@ function runtimeHealthFromPresence(
         runtimeControlMissing?.reason_code === 'not_started'
         || runtimeControlMissing?.reason_code === 'auth_required'
         || runtimeControlMissing?.reason_code === 'unverified'
+        || runtimeControlMissing?.reason_code === 'reinstall_required'
         || runtimeControlMissing?.reason_code === 'container_not_running'
         || runtimeControlMissing?.reason_code === 'container_engine_unavailable'
           ? runtimeControlMissing.reason_code

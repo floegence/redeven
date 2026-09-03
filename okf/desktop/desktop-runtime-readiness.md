@@ -46,6 +46,8 @@ One Launcher Operation owns Open and any nested direct Runtime recovery. Runtime
 
 `runtime_state_incompatible` is a typed reinstall-required result. Every managed-Linux transport classifies the blocked startup report before generic failure handling and preserves that report in technical diagnostics. Desktop persists the existing reinstall-required marker and offers the standard wipe-reinstall review; Update and ordinary Retry are not valid alternatives. Toasts remain concise, while the card failure panel owns the original launch report, logs, and recovery action.
 
+One blocked-report conversion owns the `runtime_state_incompatible` failure presentation for Local, SSH, WSL, and container startup. SSH keeps the raw startup report once under `runtime_startup_report`; it does not duplicate the same payload in generic command stdout. Status refresh preserves `reinstall_required` from runtime-control presence through Runtime health and the Welcome card. The card remains reinstall-required when any one authoritative source requires recovery: the persisted marker, the current post-confirmation reinstall journal, or cached typed health. Local Auto Start attempts Update only for an explicit `runtime_update_required`; other failures retain their first diagnosis and recovery action.
+
 All operation labels, details, errors, recovery actions, tooltips, and accessibility text use structured keys and localized catalogs. Raw command stderr remains literal only inside technical diagnostics.
 
 # Boundaries
@@ -59,6 +61,7 @@ Read-only health probes do not start, stop, repair, or reconnect Runtime. Access
 - `redeven:desktop/src/main/runtimeProcess.ts:1` - Local inventory and status lookup path contract.
 - `redeven:desktop/src/main/runtimePlacementManager.ts:1` - Container process replacement, startup waiting, and ready Runtime snapshots.
 - `redeven:desktop/src/main/managedLinuxRuntime.ts:1` - Managed-Linux startup report classification and process readiness.
+- `redeven:desktop/src/main/runtimeBlockedLaunchFailure.ts:1` - Shared incompatible-state failure and startup-report diagnostic.
 - `redeven:desktop/src/main/reinstallRuntimePackage.ts:1` - Reinstall startup, single-process inventory, and Runtime Service terminal verification.
 - `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - One probe/decide/lifecycle/re-probe/open flow.
 - `redeven:desktop/src/main/runtimeOpenPreflight.ts:1` - Fresh status reuse requires exact process and Runtime Service identity.

@@ -163,8 +163,8 @@ describe('ReinstallTargetCoordinator', () => {
 
     const journal = await coordinator.execute(preview.preflight_id);
     expect(events).toEqual([
-      'prepare_runtime_package',
       'mark_in_progress',
+      'prepare_runtime_package',
       'close_sessions',
       'inventory',
       'clear_desktop_state',
@@ -210,6 +210,38 @@ describe('ReinstallTargetCoordinator', () => {
       'old_data_cleaned',
       'completed',
     ]);
+  });
+
+  it('keeps confirmation durable and never connects when the required marker cannot be written', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const journalRoot = path.join(parent, 'journal');
+    await fs.mkdir(targetRoot);
+    await fs.writeFile(path.join(targetRoot, 'old-data'), 'opaque');
+    const current = descriptor(targetRoot);
+    const events: string[] = [];
+    const dependencies = coordinatorDependencies(journalRoot, () => current, events);
+    let executorCreated = false;
+    const coordinator = new ReinstallTargetCoordinator({
+      ...dependencies,
+      mark_in_progress: async () => {
+        events.push('mark_failed');
+        throw new Error('marker unavailable');
+      },
+      create_executor: (target) => {
+        executorCreated = true;
+        return dependencies.create_executor(target);
+      },
+    });
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+
+    await expect(coordinator.execute(preview.preflight_id)).rejects.toThrow('marker unavailable');
+    await expect(coordinator.readPersistedJournals()).resolves.toEqual([
+      expect.objectContaining({ preflight_id: preview.preflight_id, phase: 'confirmation' }),
+    ]);
+    expect(executorCreated).toBe(false);
+    expect(events).toEqual(['mark_failed']);
+    await expect(fs.readFile(path.join(targetRoot, 'old-data'), 'utf8')).resolves.toBe('opaque');
   });
 
   it('commits the package-ready journal phase only after every preparation task finishes', async () => {
@@ -281,8 +313,15 @@ describe('ReinstallTargetCoordinator', () => {
     const current = descriptor(targetRoot);
     let installAttempts = 0;
     let startAttempts = 0;
+    let markerAttempts = 0;
     const dependencies: ReinstallTargetCoordinatorDependencies = {
       ...coordinatorDependencies(journalRoot, () => current, []),
+      mark_in_progress: async () => {
+        markerAttempts++;
+        if (markerAttempts > 1) {
+          throw new Error('post-confirmation recovery must not depend on the marker');
+        }
+      },
       install_runtime: async (_descriptor, freshRoot) => {
         installAttempts++;
         await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
@@ -310,6 +349,7 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
     expect(installAttempts).toBe(2);
     expect(startAttempts).toBe(2);
+    expect(markerAttempts).toBe(1);
   });
 
   it('replaces a runtime_started recovery with the current Desktop package', async () => {
@@ -987,6 +1027,9 @@ describe('ReinstallTargetCoordinator', () => {
         environment_id: target.environment_id,
       });
       expect(preview.target_kind).toBe(expectedKinds[variantIndex]);
+      if (target.placement.runtime_root === 'remote_default') {
+        expect(preview.target_root).toBe('~/.redeven');
+      }
       variantIndex++;
       expect(commands.has(target.environment_id)).toBe(false);
     }
@@ -1024,6 +1067,7 @@ describe('ReinstallTargetCoordinator', () => {
     const preview = await coordinator.preview({
       environment_id: current.environment_id,
     });
+    expect(preview.target_root).toBe('~/.redeven');
     await expect(coordinator.execute(preview.preflight_id)).resolves.toMatchObject({
       target_root: '/home/ops/.redeven',
     });

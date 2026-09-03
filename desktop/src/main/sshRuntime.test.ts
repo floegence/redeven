@@ -484,7 +484,7 @@ describe('sshRuntime', () => {
     expect(source).toContain('const result = await runSSHControlCommand(');
     expect(source).toContain("code: 'ssh_connection_interrupted'");
     expect(source).toContain('recordSSHControlCheckFailure(session, error);');
-    expect(source).not.toContain('formatBlockedLaunchDiagnostics(launchReport)');
+    expect(source).toContain('desktopOperationFailureFromBlockedLaunchReport({');
     expect(source).toContain('const replacementInventory = await processSession.inspect();');
     expect(source).toContain('await processSession.stop(replacementInventory, stopTimeoutMs);');
     expect(source).not.toContain('[preparedRuntimePackage, processSession] = await Promise.all([');

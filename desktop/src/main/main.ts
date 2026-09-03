@@ -203,8 +203,8 @@ import {
   desktopOperationFailurePresentation,
   isDesktopOperationFailureError,
   operationFailureFromUnknown,
-  runtimeStateIncompatibleFailure,
 } from './desktopOperationFailure';
+import { desktopOperationFailureFromBlockedLaunchReport } from './runtimeBlockedLaunchFailure';
 import {
   RuntimeLifecycleStepFailureError,
   RuntimeLifecycleWorkflow,
@@ -311,7 +311,7 @@ import {
   type DesktopRuntimeContainerResolution,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
-import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
+import { parseLaunchReport } from './launchReport';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
@@ -653,6 +653,7 @@ import {
   buildDesktopRuntimeMaintenanceRequirement,
   classifyDesktopRuntimeBlockedLaunchReport,
   desktopRuntimeMaintenanceForRuntimeService,
+  type DesktopRuntimeBlockedClassification,
   type DesktopRuntimeHealth,
   type DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
@@ -1370,14 +1371,26 @@ async function convergeLauncherStateAfterSuccessfulReinstall(
   });
 }
 
-async function reinstallRequiredTargetFingerprints(
+async function reinstallRecoveryRequiredTargetFingerprints(
   descriptors: readonly ReinstallTargetDescriptor[],
 ): Promise<ReadonlySet<string>> {
-  return new Set((await Promise.all(descriptors.map(async (descriptor) => (
-    await fs.lstat(reinstallTargetRequiredMarkerPath(descriptor))
-      .then(() => reinstallTargetDescriptorFingerprint(descriptor))
-      .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? '' : Promise.reject(error))
-  )))).filter(Boolean));
+  const health = welcomeRuntimeHealthStore.snapshot();
+  const journals = await reinstallTargetCoordinator().readPersistedJournals();
+  return new Set((await Promise.all(descriptors.map(async (descriptor) => {
+    const fingerprint = reinstallTargetDescriptorFingerprint(descriptor);
+    const markerRequired = await fs.lstat(reinstallTargetRequiredMarkerPath(descriptor))
+      .then(() => true)
+      .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? false : Promise.reject(error));
+    const currentJournal = currentReinstallTargetJournalForEnvironment(journals, descriptor.environment_id);
+    const healthState = health.localRuntimeHealth[descriptor.environment_id]
+      ?? health.savedRuntimeTargetHealth[descriptor.environment_id]
+      ?? health.savedExternalRuntimeHealth[descriptor.environment_id];
+    return markerRequired
+      || (currentJournal !== null && currentJournal.phase !== 'confirmation')
+      || healthState?.offline_reason_code === 'reinstall_required'
+      ? fingerprint
+      : '';
+  }))).filter(Boolean));
 }
 
 async function reinstallRecoveryRequiredForEnvironment(environmentID: string): Promise<boolean> {
@@ -1386,9 +1399,8 @@ async function reinstallRecoveryRequiredForEnvironment(environmentID: string): P
   if (!descriptor) {
     return false;
   }
-  return fs.lstat(reinstallTargetRequiredMarkerPath(descriptor))
-    .then(() => true)
-    .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? false : Promise.reject(error));
+  const required = await reinstallRecoveryRequiredTargetFingerprints([descriptor]);
+  return required.has(reinstallTargetDescriptorFingerprint(descriptor));
 }
 
 async function reinstallRecoveryBlockForEnvironment(
@@ -2262,6 +2274,18 @@ async function inspectSavedRuntimeTargetState(
   return inspection;
 }
 
+function runtimeControlMissingReasonFromBlockedClassification(
+  classification: DesktopRuntimeBlockedClassification,
+): Extract<DesktopRuntimeControlStatus, Readonly<{ state: 'missing' }>>['reason_code'] {
+  if (classification.kind === 'stopped') {
+    return 'not_started';
+  }
+  if (classification.kind === 'reinstall_required') {
+    return 'reinstall_required';
+  }
+  return 'unverified';
+}
+
 async function inspectRuntimePlacementTargetState(
   target: Readonly<{
     targetID: DesktopRuntimeTargetID;
@@ -2380,7 +2404,7 @@ async function inspectRuntimePlacementTargetState(
           running: false,
           local_ui_url: '',
           runtime_control_status: desktopRuntimeControlStatusMissing(
-            classification.kind === 'stopped' ? 'not_started' : 'unverified',
+            runtimeControlMissingReasonFromBlockedClassification(classification),
             classification.message,
           ),
           placement: target.placement,
@@ -2481,7 +2505,7 @@ async function inspectRuntimePlacementTargetState(
           running: false,
           local_ui_url: '',
           runtime_control_status: desktopRuntimeControlStatusMissing(
-            classification.kind === 'stopped' ? 'not_started' : 'unverified',
+            runtimeControlMissingReasonFromBlockedClassification(classification),
             classification.message,
           ),
           placement: target.placement,
@@ -2582,7 +2606,7 @@ async function inspectRuntimePlacementTargetState(
               running: false,
               local_ui_url: '',
               runtime_control_status: desktopRuntimeControlStatusMissing(
-                'unverified',
+                runtimeControlMissingReasonFromBlockedClassification(classification),
                 classification.message,
               ),
               placement: resolution.placement,
@@ -4574,6 +4598,7 @@ function runtimeTargetOfflineReasonCode(
     case 'not_started':
     case 'auth_required':
     case 'unverified':
+    case 'reinstall_required':
     case 'container_not_running':
       return state.runtime_control_status.reason_code;
     default:
@@ -4973,7 +4998,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   const preferences = await loadDesktopPreferencesCached();
   const openSessions = openSessionSummaries();
   const reinstallDescriptors = directReinstallTargetDescriptors(preferences);
-  const requiredFingerprints = await reinstallRequiredTargetFingerprints(reinstallDescriptors);
+  const requiredFingerprints = await reinstallRecoveryRequiredTargetFingerprints(reinstallDescriptors);
   const welcomeHealthTargets = buildWelcomeRuntimeHealthTargets(preferences, openSessions);
   welcomeRuntimeHealthStore.prime(welcomeHealthTargets, { pruneMissing: true });
   const healthSnapshot = welcomeRuntimeHealthStore.snapshot();
@@ -7221,8 +7246,27 @@ async function reinstallTargetFromLauncher(
 ): Promise<DesktopLauncherActionResult> {
   const operationKey = compact(request.operation_key) || `reinstall-target:${request.preflight_id}`;
   const existing = launcherOperations.get(operationKey);
+  const candidatePreview = existing?.reinstall_preview;
+  const requestedMode = request.mode ?? 'wipe_data';
+  const matchingPreview =
+    candidatePreview?.preflight_id === request.preflight_id
+    && candidatePreview.operation_key === operationKey
+    && candidatePreview.environment_id === request.environment_id
+    && candidatePreview.mode === requestedMode;
+  if (!existing || existing.action !== 'reinstall_target' || !candidatePreview || !matchingPreview) {
+    return launcherActionFailure(
+      'operation_missing',
+      'environment',
+      'The reinstall operation is no longer available or does not match the confirmed target.',
+      {
+        environmentID: request.environment_id,
+        operationKey,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  const preview = candidatePreview;
   if (
-    existing?.action === 'reinstall_target' &&
     (existing.status === 'running' || existing.status === 'canceling' || existing.status === 'cleanup_running')
   ) {
     return launcherActionSuccess('reinstall_target_in_progress', {
@@ -7230,24 +7274,19 @@ async function reinstallTargetFromLauncher(
       operationStartedAtUnixMS: existing.started_at_unix_ms,
     });
   }
-  if (existing?.action === 'reinstall_target' && existing.status === 'succeeded') {
+  if (existing.status === 'succeeded') {
     return launcherActionSuccess('reinstalled_target', { operationKey });
   }
-  const matchingPreview =
-    existing?.reinstall_preview?.preflight_id === request.preflight_id &&
-    existing.reinstall_preview.operation_key === operationKey;
-  const resumableRecovery = existing?.status === 'failed' && matchingPreview;
+  const resumableRecovery = existing.status === 'failed';
   if (
-    !existing ||
-    existing.action !== 'reinstall_target' ||
-    ((existing.status !== 'needs_confirmation' || !matchingPreview) && !resumableRecovery)
+    existing.status !== 'needs_confirmation' && !resumableRecovery
   ) {
     return launcherActionFailure(
       'operation_missing',
       'environment',
       'The reinstall operation is no longer available.',
       {
-        environmentID: request.environment_id,
+        environmentID: preview.environment_id,
         operationKey,
         shouldRefreshSnapshot: true,
       },
@@ -7257,15 +7296,15 @@ async function reinstallTargetFromLauncher(
     action: existing.action,
     started_at_unix_ms: existing.started_at_unix_ms,
   };
-  let activePhase: ReinstallTargetProgressPhase = 'direct_channel_open';
+  let activePhase: ReinstallTargetProgressPhase = 'confirmation';
   const finishReinstallFailure = (error: unknown): DesktopLauncherActionResult => {
     const message = error instanceof Error ? error.message : String(error);
     const retryablePreparation =
       error instanceof ReinstallTargetCoordinatorError && error.code === 'reinstall_retryable';
     const failureSource = structuredDesktopFailureSource(error);
-    const failure = reinstallFailureForPhase(failureSource, activePhase, request.environment_id);
+    const failure = reinstallFailureForPhase(failureSource, activePhase, preview.environment_id);
     const recommendedMode = error instanceof ReinstallTargetCoordinatorError ? error.recommended_mode : undefined;
-    const recommendedModeChange = recommendedMode && recommendedMode !== request.mode ? recommendedMode : undefined;
+    const recommendedModeChange = recommendedMode && recommendedMode !== preview.mode ? recommendedMode : undefined;
     const targetReviewRequired =
       error instanceof ReinstallTargetCoordinatorError &&
       (error.code === 'preflight_expired' || error.code === 'target_changed' || recommendedModeChange !== undefined);
@@ -7294,19 +7333,19 @@ async function reinstallTargetFromLauncher(
                 label_key: 'environmentAction.reinstallRedevenWipeData' as const,
                 retry_action: {
                   kind: 'preview_reinstall_target' as const,
-                  environment_id: request.environment_id,
+                  environment_id: preview.environment_id,
                   mode: recommendedModeChange,
                 },
               }
             : retryablePreparation
               ? {
                   kind: 'reinstall_target' as const,
-                  environment_id: request.environment_id,
-                  preflight_id: request.preflight_id,
+                  environment_id: preview.environment_id,
+                  preflight_id: preview.preflight_id,
                   operation_key: operationKey,
                   label: 'Reinstall Redeven',
                   label_key: 'environmentAction.reinstallRedeven' as const,
-                  mode: request.mode,
+                  mode: preview.mode,
                 }
               : targetReviewRequired
                 ? {
@@ -7316,18 +7355,18 @@ async function reinstallTargetFromLauncher(
                     label_key: 'common.retry' as const,
                     retry_action: {
                       kind: 'preview_reinstall_target',
-                      environment_id: request.environment_id,
-                      mode: request.mode,
+                      environment_id: preview.environment_id,
+                      mode: preview.mode,
                     },
                   }
                 : {
                     kind: 'reinstall_target' as const,
-                    environment_id: request.environment_id,
-                    preflight_id: request.preflight_id,
+                    environment_id: preview.environment_id,
+                    preflight_id: preview.preflight_id,
                     operation_key: operationKey,
                     label: 'Reinstall Redeven',
                     label_key: 'environmentAction.reinstallRedeven' as const,
-                    mode: request.mode,
+                    mode: preview.mode,
                   }),
         },
         {
@@ -7339,14 +7378,14 @@ async function reinstallTargetFromLauncher(
       ],
     });
     return launcherActionFailure(reinstallTargetFailureCode(error), 'environment', message, {
-      environmentID: request.environment_id,
+      environmentID: preview.environment_id,
       operationKey,
       shouldRefreshSnapshot: true,
       failure,
     });
   };
   try {
-    const descriptor = await resolveDirectReinstallTarget(request.environment_id);
+    const descriptor = await resolveDirectReinstallTarget(preview.environment_id);
     const targetKey = runtimeLifecycleTargetKey(descriptor.host_access, descriptor.placement);
     return await runtimeLifecycleCoordinator.run({
       target_key: targetKey,
@@ -7354,8 +7393,8 @@ async function reinstallTargetFromLauncher(
       fingerprint: runtimeLifecycleFingerprint({
         host_access: descriptor.host_access,
         placement: descriptor.placement,
-        mode: request.mode,
-        preflight_id: request.preflight_id,
+        mode: preview.mode,
+        preflight_id: preview.preflight_id,
       }),
       operation_key: operationKey,
       timeout_ms: REINSTALL_OPERATION_TIMEOUT_MS,
@@ -7363,12 +7402,12 @@ async function reinstallTargetFromLauncher(
         try {
           const operation = launcherOperations.update(operationKey, {
             status: 'running',
-            phase: 'direct_channel_open',
+            phase: 'confirmation',
             title: 'Reinstall Redeven',
             title_key: 'environmentAction.reinstallRedeven',
             detail: 'Desktop is connecting to the confirmed target and preparing the Runtime package.',
             detail_key: 'progress.reinstallCheckingDetail',
-            step_progress: reinstallTargetStepProgress('direct_channel_open'),
+            step_progress: reinstallTargetStepProgress('confirmation'),
             cancelable: false,
             failure: undefined,
             next_actions: undefined,
@@ -7377,7 +7416,7 @@ async function reinstallTargetFromLauncher(
             throw new Error('The reinstall operation is no longer available.');
           }
           const completedJournal = await reinstallTargetCoordinator().execute(
-            request.preflight_id,
+            preview.preflight_id,
             operationKey,
             (phase, detailKey, tasks) => {
               activePhase = phase;
@@ -7419,7 +7458,7 @@ async function reinstallTargetFromLauncher(
   } catch (error) {
     const conflict = launcherActionFailureFromRuntimeLifecycleError(error, {
       scope: 'environment',
-      environmentID: request.environment_id,
+      environmentID: preview.environment_id,
     });
     if (conflict) {
       removeLauncherOperation(operationKey);
@@ -9543,16 +9582,18 @@ async function autoStartLocalRuntimeOnDesktopLaunch(loadedPreferences?: DesktopP
       placement,
       operation_key: `${environment.id}:auto_start`,
     });
-    const repaired = result.ok ? result : await runEnvironmentRuntimeLifecycleFromLauncher({
-      kind: 'update_environment_runtime',
-      environment_id: environment.id,
-      label: environment.label,
-      runtime_target_id: desktopRuntimeTargetID({ kind: 'local_host' }, placement, environment.id),
-      host_access: { kind: 'local_host' },
-      placement,
-      force_runtime_update: true,
-      operation_key: `${environment.id}:auto_repair`,
-    });
+    const repaired = result.ok || result.failure?.code !== 'runtime_update_required'
+      ? result
+      : await runEnvironmentRuntimeLifecycleFromLauncher({
+          kind: 'update_environment_runtime',
+          environment_id: environment.id,
+          label: environment.label,
+          runtime_target_id: desktopRuntimeTargetID({ kind: 'local_host' }, placement, environment.id),
+          host_access: { kind: 'local_host' },
+          placement,
+          force_runtime_update: true,
+          operation_key: `${environment.id}:auto_repair`,
+        });
     if (!repaired.ok) {
       throw new DesktopOperationFailureError(repaired.failure ?? desktopOperationFailurePresentation({
           code: 'local_runtime_launch_failed',
@@ -9749,17 +9790,12 @@ async function prepareManagedEnvironmentRuntime(input: Readonly<{
     },
   });
   if (launch.kind === 'blocked') {
-    const classification = classifyDesktopRuntimeBlockedLaunchReport(launch.blocked);
-    if (classification.kind === 'reinstall_required') {
-      throw new DesktopOperationFailureError(runtimeStateIncompatibleFailure({
-        message: launch.blocked.message,
-        targetLabel: input.environment.label,
-        diagnostics: [{
-          channel: 'runtime_startup_report',
-          label: 'Runtime startup report',
-          text: formatBlockedLaunchDiagnostics(launch.blocked),
-        }],
-      }));
+    const failure = desktopOperationFailureFromBlockedLaunchReport({
+      report: launch.blocked,
+      targetLabel: input.environment.label,
+    });
+    if (failure) {
+      throw failure;
     }
     return {
       ok: false,
