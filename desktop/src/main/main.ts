@@ -10265,7 +10265,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     return {
       ok: false,
       error: invalidJSONError,
-      failureKind: 'response',
+      failureKind: 'transport_unknown',
     };
   }
   const dataRecord = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;

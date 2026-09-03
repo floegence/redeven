@@ -27,6 +27,11 @@ func newProductRequestID(prefix string) (string, error) {
 	return strings.TrimSpace(prefix) + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+func validClientRequestID(clientRequestID string) bool {
+	clientRequestID = strings.TrimSpace(clientRequestID)
+	return clientRequestID != "" && len(clientRequestID) <= 200 && !strings.ContainsAny(clientRequestID, "\r\n\x00")
+}
+
 func threadPermissionType(th *threadstore.ThreadSettings) (FlowerPermissionType, error) {
 	if th == nil {
 		return "", errors.New("thread permission settings are missing")
@@ -622,7 +627,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	}
 
 	clientRequestID := strings.TrimSpace(req.ClientRequestID)
-	if !validUploadStagingTargetID(clientRequestID) {
+	if !validClientRequestID(clientRequestID) {
 		return nil, errors.New("invalid client_request_id")
 	}
 	t, err := s.buildThreadCreateSettings(ctxOrBackground(ctx), meta, req)
@@ -833,7 +838,7 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 		return nil, errors.New("invalid request")
 	}
 	clientRequestID := strings.TrimSpace(req.ClientRequestID)
-	if !validUploadStagingTargetID(clientRequestID) {
+	if !validClientRequestID(clientRequestID) {
 		return nil, errors.New("invalid client_request_id")
 	}
 	if err := s.requireEndpointThreadAuthority(ctx, endpointID, sourceThreadID); err != nil {

@@ -1271,6 +1271,7 @@
     "askFlowerCardSending": "전송 중...",
     "askFlowerWorkingDirectoryUnavailable": "선택한 작업 디렉터리가 없습니다.",
     "askFlowerCardLaunchFailedTitle": "Flower가 이 턴을 시작하지 못했습니다.",
+    "askFlowerCardAdmissionUnknownTitle": "전송 결과를 확인 중입니다. 다시 시도하면 동일한 요청을 확인합니다.",
     "addConnectionLauncherPrompt": "connection을 추가하려면 launcher를 여세요.",
     "addProviderLauncherPrompt": "런처를 열어 Redeven Cloud를 추가하세요.",
     "addGatewayLauncherPrompt": "런처를 열어 게이트웨이를 추가하세요.",

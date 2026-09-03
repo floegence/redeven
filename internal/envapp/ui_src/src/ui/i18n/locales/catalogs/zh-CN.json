@@ -745,6 +745,7 @@
     "youLabel": "你",
     "replyToFlowerLabel": "回复 Flower",
     "launchTurn": "发送消息",
+    "admissionUnknownTitle": "发送结果仍在确认中。重试将核对同一条请求。",
     "contextPreviewTitle": "上下文预览",
     "contextFallback": "上下文",
     "terminalFallback": "终端",

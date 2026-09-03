@@ -7,7 +7,9 @@ import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type {
   FlowerTurnLauncherIntent,
 } from './contracts/flowerSurfaceContracts';
+import { createFlowerClientRequestID } from './flowerRequestIdentity';
 import { FlowerIcon } from './icons/FlowerIcon';
+import { flowerTurnAdmissionFailureKind } from './flowerTurnAdmission';
 import {
   DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY,
   buildFlowerTurnLauncherCopy,
@@ -36,6 +38,7 @@ export type FlowerTurnLauncherAnchor = Readonly<{
 }>;
 
 export type FlowerTurnLauncherSubmitInput = Readonly<{
+  client_request_id: string;
   prompt: string;
   intent: FlowerTurnLauncherIntent;
 }>;
@@ -220,24 +223,32 @@ function createFlowerTurnLauncherPanelController(
   const [internalUserPrompt, setInternalUserPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
   const [launchError, setLaunchError] = createSignal('');
+  const [launchErrorKind, setLaunchErrorKind] = createSignal<'failure' | 'unknown'>('failure');
   const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
+  const [clientRequestID, setClientRequestID] = createSignal('');
+  const [pendingRequestPrompt, setPendingRequestPrompt] = createSignal('');
   let textareaEl: HTMLTextAreaElement | undefined;
 
   const projected = createMemo(() => (props.intent ? buildFlowerTurnLauncherCopy(props.intent, props.copy) : null));
   const userPrompt = () => props.draft ?? internalUserPrompt();
+  const admissionUnknown = () => launchErrorKind() === 'unknown' && Boolean(launchError());
+  const visiblePrompt = () => admissionUnknown() ? pendingRequestPrompt() : userPrompt();
   const setUserPrompt = (value: string) => {
     setInternalUserPrompt(value);
     props.onDraftChange?.(value);
   };
-  const canSubmit = createMemo(() => !sending() && compact(userPrompt()).length > 0);
+  const canSubmit = createMemo(() => !sending() && compact(visiblePrompt()).length > 0);
   const suggestedWorkingDir = createMemo(() => compact(props.intent?.suggested_working_dir));
 
   const resetLauncherState = (intent: FlowerTurnLauncherIntent | null) => {
     setValidationError('');
     setLaunchError('');
+    setLaunchErrorKind('failure');
     setIsComposing(false);
     setSending(false);
+    setClientRequestID(intent ? createFlowerClientRequestID() : '');
+    setPendingRequestPrompt('');
     setInternalUserPrompt(untrack(() => props.draft) ?? compact(intent?.initial_prompt));
     if (props.autoFocus === false) return;
     requestAnimationFrame(() => {
@@ -261,8 +272,12 @@ function createFlowerTurnLauncherPanelController(
   const submit = async () => {
     if (sending()) return;
     const intent = props.intent;
-    const prompt = compact(textareaEl?.value ?? userPrompt());
-    if (!intent) return;
+    const requestID = clientRequestID();
+    const retryingUnknownAdmission = admissionUnknown();
+    const prompt = compact(retryingUnknownAdmission
+      ? pendingRequestPrompt()
+      : textareaEl?.value ?? userPrompt());
+    if (!intent || !requestID) return;
     if (!prompt) {
       setValidationError(copyValue(props.copy, 'empty_message'));
       requestAnimationFrame(() => textareaEl?.focus());
@@ -272,11 +287,18 @@ function createFlowerTurnLauncherPanelController(
     setSending(true);
     setValidationError('');
     setLaunchError('');
+    setLaunchErrorKind('failure');
+    if (!retryingUnknownAdmission) setPendingRequestPrompt(prompt);
     try {
-      await props.onSubmit({ prompt, intent });
+      await props.onSubmit({ client_request_id: requestID, prompt, intent });
     } catch (error) {
+      const admissionKind = flowerTurnAdmissionFailureKind(error);
+      setLaunchErrorKind(admissionKind === 'unknown' ? 'unknown' : 'failure');
       setLaunchError(error instanceof Error ? error.message : String(error));
-      requestAnimationFrame(() => textareaEl?.focus());
+      if (admissionKind !== 'unknown') {
+        setPendingRequestPrompt('');
+        requestAnimationFrame(() => textareaEl?.focus());
+      }
     } finally {
       setSending(false);
     }
@@ -289,12 +311,15 @@ function createFlowerTurnLauncherPanelController(
 
   return {
     footerPlacement,
-    userPrompt,
+    visiblePrompt,
+    admissionUnknown,
     setUserPrompt,
     validationError,
     setValidationError,
     launchError,
     setLaunchError,
+    launchErrorKind,
+    setLaunchErrorKind,
     isComposing,
     setIsComposing,
     sending,
@@ -304,7 +329,7 @@ function createFlowerTurnLauncherPanelController(
     setTextareaEl: (element: HTMLTextAreaElement) => {
       textareaEl = element;
     },
-    textareaValue: () => textareaEl?.value ?? userPrompt(),
+    textareaValue: () => textareaEl?.value ?? visiblePrompt(),
     submit,
     runContextAction,
   };
@@ -357,12 +382,15 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
   const controller = useContext(FlowerTurnLauncherPanelControllerContext)
     ?? createFlowerTurnLauncherPanelController(props);
   const {
-    userPrompt,
+    visiblePrompt,
+    admissionUnknown,
     setUserPrompt,
     validationError,
     setValidationError,
     launchError,
     setLaunchError,
+    launchErrorKind,
+    setLaunchErrorKind,
     isComposing,
     setIsComposing,
     sending,
@@ -484,13 +512,16 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                             ref={setTextareaEl}
                             id={`flower-turn-launcher-prompt-${intent.id}`}
                             class="chat-input-textarea flower-chat-input-textarea flower-turn-launcher-textarea focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none"
-                            value={userPrompt()}
+                            value={visiblePrompt()}
                             placeholder={projected()?.placeholder}
-                            disabled={sending()}
+                            disabled={sending() || admissionUnknown()}
                             onInput={(event) => {
                               setUserPrompt(event.currentTarget.value);
                               if (validationError()) setValidationError('');
-                              if (launchError()) setLaunchError('');
+                              if (launchError()) {
+                                setLaunchError('');
+                                setLaunchErrorKind('failure');
+                              }
                             }}
                             onCompositionStart={() => setIsComposing(true)}
                             onCompositionUpdate={() => {
@@ -530,9 +561,19 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                         </div>
 
                         <Show when={launchError()}>
-                          <div role="alert" class="flower-turn-launcher-error">
+                          <div
+                            role={launchErrorKind() === 'unknown' ? 'status' : 'alert'}
+                            class={launchErrorKind() === 'unknown'
+                              ? 'flower-turn-launcher-unknown'
+                              : 'flower-turn-launcher-error'}
+                          >
                             <AlertTriangle class="size-3.5 shrink-0" />
-                            <span class="min-w-0">{copyValue(props.copy, 'launch_failed_title')} {launchError()}</span>
+                            <span class="min-w-0">
+                              {copyValue(
+                                props.copy,
+                                launchErrorKind() === 'unknown' ? 'launch_unknown_title' : 'launch_failed_title',
+                              )} {launchError()}
+                            </span>
                           </div>
                         </Show>
                       </div>

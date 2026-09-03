@@ -69,6 +69,7 @@ export type FlowerTurnLauncherWindowChromeCopy = Readonly<{
   send_turn: string;
   empty_message: string;
   launch_failed_title: string;
+  launch_unknown_title: string;
 }>;
 
 export type FlowerTurnLauncherContextCopy = Readonly<{
@@ -147,6 +148,7 @@ export const DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY: FlowerTurnLauncherWindowC
   send_turn: 'Launch turn',
   empty_message: 'Enter a question before sending.',
   launch_failed_title: 'Flower could not start this turn.',
+  launch_unknown_title: 'Delivery is still being confirmed. Retry to check the same request.',
   context: {
     environment_fallback: 'Environment',
     context_fallback: 'Context',

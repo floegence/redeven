@@ -32,6 +32,10 @@ import { parseChatContextAction, parseChatMessageReferences } from './chat/flowe
 import {
   createFlowerClientRequestID,
 } from './flowerRequestIdentity';
+import {
+  flowerTurnAdmissionError,
+  flowerTurnAdmissionFailureKind,
+} from './flowerTurnAdmission';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerThinkingOrb } from './FlowerThinkingOrb';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
@@ -4187,14 +4191,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const requestID = trimString(receipt.client_request_id);
     const threadID = trimString(receipt.thread_id);
     if (!requestID || !threadID) {
-      throw new Error('Flower send returned an invalid acceptance receipt.');
+      throw flowerTurnAdmissionError(
+        'unknown',
+        new Error('Flower send returned an invalid acceptance receipt.'),
+      );
     }
     const currentOutbox = transportOutbox();
     const entry = currentOutbox.entries.get(requestID);
     if (!entry) return false;
     const requestedThreadID = trimString(entry.input.thread_id);
     if (requestedThreadID && requestedThreadID !== threadID) {
-      throw new Error('Flower send returned a different thread identity.');
+      throw flowerTurnAdmissionError(
+        'unknown',
+        new Error('Flower send returned a different thread identity.'),
+      );
     }
     const handoff = pendingAdmissionHandoffs.get(requestID);
     const transferDraftScope = Boolean(
@@ -4254,7 +4264,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 				if (retryTimer !== undefined) clearTimeout(retryTimer);
 				outboxRetryTimers.delete(entry.requestId);
 				applyAcceptedTurnLaunchReceipt(receipt);
-			}).catch(() => {
+			}).catch((error) => {
+				if (flowerTurnAdmissionFailureKind(error) !== 'unknown') {
+					pendingAdmissionHandoffs.delete(entry.requestId);
+					setTransportOutbox((outbox) => outbox.drop(entry.requestId));
+					const sessionKey = entry.threadId === PENDING_NEW_THREAD_ID
+						? PENDING_NEW_THREAD_ID
+						: entry.threadId;
+					updateComposerSessionDraft(sessionKey, (draft) => ({
+						...draft,
+						chatDraft: draft.chatDraft || entry.input.prompt,
+					}));
+					notifyComposerError(getErrorMessage(error));
+					return;
+				}
 				const attempt = (outboxRetryAttempts.get(entry.requestId) ?? 0) + 1;
 				outboxRetryAttempts.set(entry.requestId, attempt);
 				if (outboxRetryTimers.has(entry.requestId)) return;
@@ -4961,7 +4984,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         // duplicate send before this command has returned its current view.
         const returnedReceipt = await props.adapter.launchTurn(launchInput);
         if (trimString(returnedReceipt.client_request_id) !== clientRequestID) {
-          throw new Error('Flower send returned a different client request identity.');
+          throw flowerTurnAdmissionError(
+            'unknown',
+            new Error('Flower send returned a different client request identity.'),
+          );
         }
         applyAcceptedTurnLaunchReceipt(returnedReceipt);
       } catch (error) {
@@ -4973,15 +4999,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (failure.fresh_decision) {
           setHandlerState(handlerStateFromDecision(failure.fresh_decision));
         }
-        const failureKind = error && typeof error === 'object'
-          ? (error as { failureKind?: unknown }).failureKind
-          : undefined;
-        const transportFailure = typeof failureKind === 'string' && trimString(failureKind) === 'transport_unknown';
-        if (transportFailure) {
+        if (flowerTurnAdmissionFailureKind(error) === 'unknown') {
           preserveClientRequestID = true;
           setOutboxRetryTick((tick) => tick + 1);
           if (composerSessionStillCurrent(launchSessionKey)) {
-            notifyComposerError(getErrorMessage(error));
             operation.session.mutate((value) => value.client_request_id === clientRequestID
               ? { ...value, mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary' }
               : value);

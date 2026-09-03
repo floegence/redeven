@@ -29,7 +29,6 @@ import type {
   FlowerSubmitInputReceipt,
   FlowerTurnLaunchInput,
   FlowerTurnLaunchReceipt,
-  FlowerRuntimeCurrentView,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
@@ -50,7 +49,11 @@ import type {
 import {
   createFlowerClientRequestID,
 } from '../../../../internal/flower_ui/src/flowerRequestIdentity';
-import { normalizeFlowerTurnLaunchReceipt } from '../../../../internal/flower_ui/src/turnLaunchReceipt';
+import {
+  buildFlowerTurnHTTPBody,
+  normalizeFlowerTurnLaunchReceipt,
+  type FlowerTurnHTTPResponse,
+} from '../../../../internal/flower_ui/src/flowerTurnAdmission';
 import type {
   AgentSettingsResponse,
   AIConfig,
@@ -111,12 +114,6 @@ type ThreadView = Readonly<{
   thread_id?: string;
   read_status: ThreadReadStatus;
 } & Record<string, unknown>>;
-
-type SendTurnResponse = Readonly<{
-  client_request_id?: string;
-  thread_id?: string;
-  current?: FlowerRuntimeCurrentView;
-}>;
 
 type SubmitInputResponse = Readonly<{
 	  kind?: string;
@@ -697,38 +694,23 @@ export async function launchLocalEnvironmentFlowerTurn(
   if (attachmentIDs.length > 0 && !stagingScope) {
     throw new Error('Flower attachments require a staging scope.');
   }
-  let createBody: Record<string, unknown> | undefined;
-  if (!existingThreadID) {
-    createBody = {
-      client_request_id: clientRequestID,
-      title: '',
-      model_id: modelID,
-      ...(permissionType ? { permission_type: permissionType } : {}),
-    };
-    const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
-    if (reasoningSelection) createBody.reasoning_selection = reasoningSelection;
-    if (trim(input.working_dir)) {
-      createBody.working_dir = trim(input.working_dir);
-    }
-  }
-  const endpoint = existingThreadID
-    ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
-    : '/_redeven_proxy/api/ai/turns';
-  const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', endpoint, {
-    ...(existingThreadID ? { client_request_id: clientRequestID, thread_id: existingThreadID } : {}),
-    ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
-    ...(modelID ? { model: modelID } : {}),
-    input: {
-      text: prompt,
-      attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
-      ...(contextAction ? { context_action: contextAction } : {}),
-    },
-    options: {
-      ...(permissionType ? { permission_type: permissionType } : {}),
-      ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
-    },
-    ...(createBody ? { create: createBody } : {}),
-  }, stagingScope);
+  const requestBody = buildFlowerTurnHTTPBody({
+    launch: input,
+    modelID,
+    permissionType,
+    contextAction,
+    attachmentIDs,
+    reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection),
+  });
+  const response = await runtimeJSON<FlowerTurnHTTPResponse>(
+    bridge,
+    'POST',
+    existingThreadID
+      ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
+      : '/_redeven_proxy/api/ai/turns',
+    requestBody,
+    stagingScope,
+  );
   return normalizeFlowerTurnLaunchReceipt(response, { clientRequestID, existingThreadID });
 }
 

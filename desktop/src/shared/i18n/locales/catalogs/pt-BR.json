@@ -1271,6 +1271,7 @@
     "askFlowerCardSending": "Enviando...",
     "askFlowerWorkingDirectoryUnavailable": "Nenhum diretório de trabalho selecionado.",
     "askFlowerCardLaunchFailedTitle": "O Flower não pôde iniciar este turno.",
+    "askFlowerCardAdmissionUnknownTitle": "A entrega ainda está sendo confirmada. Tentar novamente verificará a mesma solicitação.",
     "addConnectionLauncherPrompt": "Abra o launcher para adicionar uma conexão.",
     "addProviderLauncherPrompt": "Abra o inicializador para adicionar um Redeven Cloud.",
     "addGatewayLauncherPrompt": "Abra o inicializador para adicionar um gateway de rede.",

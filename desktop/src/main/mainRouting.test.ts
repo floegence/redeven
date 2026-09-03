@@ -1600,6 +1600,7 @@ describe('main routing', () => {
       'let accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));',
     );
     expect(requestSrc).toContain('runtimeFlowerInvalidJSONError(response, parsed)');
+    expect(requestSrc).toContain("failureKind: 'transport_unknown'");
     expect(requestSrc).not.toContain('error.body');
     expect(requestSrc).toContain(
       'accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));',

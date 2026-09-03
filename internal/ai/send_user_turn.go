@@ -46,8 +46,8 @@ type SendUserTurnRequest struct {
 }
 
 type SendUserTurnResponse struct {
-	ClientRequestID       string               `json:"client_request_id,omitempty"`
-	ThreadID              string               `json:"thread_id,omitempty"`
+	ClientRequestID       string               `json:"client_request_id"`
+	ThreadID              string               `json:"thread_id"`
 	RunID                 string               `json:"run_id"`
 	TurnID                string               `json:"turn_id"`
 	Kind                  string               `json:"kind"` // "start" | "queued"
@@ -94,10 +94,13 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
 	if req.Create != nil {
-		if threadID != "" {
-			return SendUserTurnResponse{}, errors.New("thread_id must be omitted for thread creation")
+		if threadID != "" || strings.TrimSpace(req.ClientRequestID) != "" {
+			return SendUserTurnResponse{}, errors.New("top-level thread_id and client_request_id must be omitted for thread creation")
 		}
 		requestID := strings.TrimSpace(req.Create.ClientRequestID)
+		if !validClientRequestID(requestID) {
+			return SendUserTurnResponse{}, errors.New("invalid client_request_id")
+		}
 		leaseKey, newlyAdmitted, err := s.admitAIUserTurn(endpointID, "", requestID)
 		if err != nil {
 			return SendUserTurnResponse{}, err
@@ -117,7 +120,7 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 		return SendUserTurnResponse{}, err
 	}
 	req.ClientRequestID = strings.TrimSpace(req.ClientRequestID)
-	if req.ClientRequestID == "" {
+	if !validClientRequestID(req.ClientRequestID) {
 		return SendUserTurnResponse{}, errors.New("invalid client_request_id")
 	}
 	leaseKey, newlyAdmitted, err := s.admitAIUserTurn(endpointID, threadID, req.ClientRequestID)

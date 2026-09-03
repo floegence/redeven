@@ -752,6 +752,7 @@ export const enUS = {
     askFlowerCardSending: 'Sending...',
     askFlowerWorkingDirectoryUnavailable: 'No working directory selected.',
     askFlowerCardLaunchFailedTitle: 'Flower could not start this turn.',
+    askFlowerCardAdmissionUnknownTitle: 'Delivery is still being confirmed. Retry to check the same request.',
   },
   providerRuntimeLink: {
     localRuntime: 'Local Runtime',

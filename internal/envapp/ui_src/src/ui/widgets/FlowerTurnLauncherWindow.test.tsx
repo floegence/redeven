@@ -4,6 +4,8 @@ import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setFlowerTurnLauncherAttachmentSourcePath } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
+import { flowerTurnAdmissionError } from '../../../../../flower_ui/src/flowerTurnAdmission';
+import type { FlowerTurnLauncherSubmitInput } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 
 import { FlowerTurnLauncherWindow } from './FlowerTurnLauncherWindow';
 import { I18nProvider } from '../i18n';
@@ -203,6 +205,9 @@ function composePrompt(host: HTMLElement, value: string): HTMLTextAreaElement {
 }
 
 beforeEach(() => {
+  vi.stubGlobal('crypto', {
+    randomUUID: vi.fn(() => '00000000-0000-4000-8000-000000000001'),
+  });
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
   window.localStorage.clear();
@@ -535,6 +540,43 @@ describe('FlowerTurnLauncherWindow', () => {
     sendButton.click();
     await flushAsync();
     expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect(onSubmit.mock.calls[0]?.[0].client_request_id).toBe(
+      onSubmit.mock.calls[1]?.[0].client_request_id,
+    );
+  });
+
+  it('presents an unresolved admission as status instead of a failed-send alert', async () => {
+    let attempts = 0;
+    const onSubmit = vi.fn(async (_input: FlowerTurnLauncherSubmitInput) => {
+      attempts += 1;
+      if (attempts === 1) throw flowerTurnAdmissionError('unknown', new Error('response lost'));
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FlowerTurnLauncherWindow
+        open
+        intent={{ ...baseIntent, initial_prompt: 'Send this once' }}
+        onClose={() => undefined}
+        onSubmit={onSubmit}
+      />
+    ), host);
+
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    sendButton.click();
+    await flushAsync();
+
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    const admissionStatus = host.querySelector('.flower-turn-launcher-unknown[role="status"]');
+    expect(admissionStatus).toBeTruthy();
+    expect(admissionStatus?.textContent).toContain('Delivery is still being confirmed.');
+    expect((host.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+
+    sendButton.click();
+    await flushAsync();
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect(onSubmit.mock.calls[1]?.[0]).toEqual(onSubmit.mock.calls[0]?.[0]);
   });
 
   it('submits the visible composed prompt through the send button', async () => {
@@ -558,7 +600,11 @@ describe('FlowerTurnLauncherWindow', () => {
     await flushAsync();
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith({ prompt: '你好，Flower', intent: baseIntent });
+    expect(onSubmit).toHaveBeenCalledWith({
+      client_request_id: 'client_00000000-0000-4000-8000-000000000001',
+      prompt: '你好，Flower',
+      intent: baseIntent,
+    });
   });
 
   it('submits the composed prompt with Enter after composition ends', async () => {
@@ -585,7 +631,11 @@ describe('FlowerTurnLauncherWindow', () => {
     await flushAsync();
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith({ prompt: 'deploy this change', intent: baseIntent });
+    expect(onSubmit).toHaveBeenCalledWith({
+      client_request_id: 'client_00000000-0000-4000-8000-000000000001',
+      prompt: 'deploy this change',
+      intent: baseIntent,
+    });
   });
 
   it('keeps Shift+Enter available for a newline instead of sending', async () => {

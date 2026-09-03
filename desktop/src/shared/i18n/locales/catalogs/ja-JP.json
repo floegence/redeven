@@ -1271,6 +1271,7 @@
     "askFlowerCardSending": "送信中...",
     "askFlowerWorkingDirectoryUnavailable": "作業ディレクトリが選択されていません。",
     "askFlowerCardLaunchFailedTitle": "Flower はこのターンを開始できませんでした。",
+    "askFlowerCardAdmissionUnknownTitle": "送信結果を確認中です。再試行すると同じリクエストを確認します。",
     "addConnectionLauncherPrompt": "connection を追加するには launcher を開いてください。",
     "addProviderLauncherPrompt": "ランチャーを開いてRedeven Cloudを追加します。",
     "addGatewayLauncherPrompt": "ランチャーを開いてゲートウェイを追加します。",

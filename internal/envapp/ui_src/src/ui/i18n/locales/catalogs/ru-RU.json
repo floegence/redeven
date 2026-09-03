@@ -761,6 +761,7 @@
     "youLabel": "Вы",
     "replyToFlowerLabel": "Ответить Flower",
     "launchTurn": "Отправить сообщение",
+    "admissionUnknownTitle": "Доставка ещё подтверждается. Повторная попытка проверит тот же запрос.",
     "contextPreviewTitle": "Предпросмотр контекста",
     "contextFallback": "Контекст",
     "terminalFallback": "Терминал",

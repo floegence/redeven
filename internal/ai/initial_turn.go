@@ -30,7 +30,7 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	if req.Create == nil {
 		return fail(initialTurnPhaseLookupFrozenState, errors.New("thread create snapshot is missing"))
 	}
-	if !validUploadStagingTargetID(clientRequestID) {
+	if !validClientRequestID(clientRequestID) {
 		return fail(initialTurnPhaseLookupFrozenState, errors.New("invalid client_request_id"))
 	}
 	create := *req.Create

@@ -69,7 +69,6 @@ import {
   type FlowerTurnLauncherSubmitInput,
   createFlowerComposerDraftCoordinator,
 } from '../../../../flower_ui/src';
-import { createFlowerClientRequestID } from '../../../../flower_ui/src/flowerRequestIdentity';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
@@ -1029,7 +1028,6 @@ export function EnvAppShell() {
 
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
-  const [flowerTurnLauncherClientRequestID, setFlowerTurnLauncherClientRequestID] = createSignal('');
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerTurnLauncherHandoff, setFlowerTurnLauncherHandoff] = createSignal<EnvFlowerTurnHandoffContext | null>(null);
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
@@ -2397,7 +2395,6 @@ export function EnvAppShell() {
     }
     const contextualIntent = withFlowerTurnExecutionContext(intent);
     setFlowerTurnLauncherIntent(contextualIntent);
-    setFlowerTurnLauncherClientRequestID(createFlowerClientRequestID());
     setFlowerTurnLauncherAnchor(anchor ?? null);
     setFlowerTurnLauncherHandoff({
       mode: capturedMode,
@@ -2594,7 +2591,6 @@ export function EnvAppShell() {
     }
     setFlowerTurnLauncherOpen(false);
     setFlowerTurnLauncherIntent(null);
-    setFlowerTurnLauncherClientRequestID('');
     setFlowerTurnLauncherAnchor(null);
     setFlowerTurnLauncherHandoff(null);
   };
@@ -2643,29 +2639,25 @@ export function EnvAppShell() {
   const submitFlowerTurnLauncher = async (input: FlowerTurnLauncherSubmitInput): Promise<void> => {
     if (protocol.status() !== 'connected') {
       const message = i18n.t('shell.notifications.connectingToRuntime');
-      notify.error(i18n.t('shell.notifications.notConnectedTitle'), message);
       throw new Error(message);
     }
     if (!canUseFlower()) {
       const message = i18n.t('shell.notifications.rwxPermissionRequired');
-      notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), message);
       throw new Error(message);
     }
 
     const trimmedPrompt = trimString(input.prompt);
     if (!trimmedPrompt) {
       const message = i18n.t('shell.notifications.enterQuestionBeforeSending');
-      notify.error(i18n.t('shell.notifications.missingMessageTitle'), message);
       throw new Error(message);
     }
 
     const handoffContext = flowerTurnLauncherHandoff();
-    const clientRequestID = trimString(flowerTurnLauncherClientRequestID());
+    const clientRequestID = trimString(input.client_request_id);
     if (!clientRequestID) {
       throw new Error('Missing Flower launcher request identity.');
     }
-    try {
-      const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
+    const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
       const adapter = createEnvLocalFlowerSurfaceAdapter({
         envPublicID: trimString(envId()),
         envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
@@ -2727,12 +2719,7 @@ export function EnvAppShell() {
         throw new Error(i18n.t('shell.notifications.failedToSendToFlowerTitle'));
       }
       closeFlowerTurnLauncher(false);
-      handoffFlowerTurn(handoffContext, threadId);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notify.error(i18n.t('shell.notifications.failedToSendToFlowerTitle'), msg || i18n.t('shell.notifications.requestFailed'));
-      throw e;
-    }
+    handoffFlowerTurn(handoffContext, threadId);
   };
 
   const RECENT_AGENT_RX_MS = 10_000;

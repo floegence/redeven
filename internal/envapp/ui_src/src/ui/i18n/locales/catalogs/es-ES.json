@@ -745,6 +745,7 @@
     "youLabel": "Tú",
     "replyToFlowerLabel": "Responder a Flower",
     "launchTurn": "Enviar mensaje",
+    "admissionUnknownTitle": "La entrega aún se está confirmando. Reintentar comprobará la misma solicitud.",
     "contextPreviewTitle": "Vista previa del contexto",
     "contextFallback": "Contexto",
     "terminalFallback": "Terminal",

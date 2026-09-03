@@ -4167,7 +4167,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		body, err := decodeAIUserTurnRequest(r.Body)
-		if err != nil || body.Create == nil || strings.TrimSpace(body.ThreadID) != "" {
+		if err != nil || body.Create == nil || strings.TrimSpace(body.ThreadID) != "" || strings.TrimSpace(body.ClientRequestID) != "" {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
@@ -4496,9 +4496,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "create must use the initial turn endpoint"})
 				return
 			}
-			bodyThreadID := strings.TrimSpace(body.ThreadID)
-			if bodyThreadID != "" && bodyThreadID != threadID {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "thread id mismatch"})
+			if strings.TrimSpace(body.ThreadID) != "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "thread_id must be omitted from the request body"})
 				return
 			}
 			body.ThreadID = threadID

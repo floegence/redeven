@@ -1271,6 +1271,7 @@
     "askFlowerCardSending": "正在发送...",
     "askFlowerWorkingDirectoryUnavailable": "未选择工作目录。",
     "askFlowerCardLaunchFailedTitle": "Flower 无法发起这次对话。",
+    "askFlowerCardAdmissionUnknownTitle": "发送结果仍在确认中。重试将核对同一条请求。",
     "addConnectionLauncherPrompt": "打开 launcher 以添加 connection。",
     "addProviderLauncherPrompt": "打开启动器添加 Redeven Cloud。",
     "addGatewayLauncherPrompt": "打开启动器添加网关。",
