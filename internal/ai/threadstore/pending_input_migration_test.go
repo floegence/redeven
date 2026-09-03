@@ -76,7 +76,7 @@ func TestPendingInputMigrationFailureRollsBackWithoutStaging(t *testing.T) {
 	}
 }
 
-func TestThreadstoreV4ToV5PreservesUploadRefsAndReopensCleanly(t *testing.T) {
+func TestThreadstoreV4ToV6PreservesUploadRefsAndReopensCleanly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	createReviewedVersionDatabaseForTest(t, path, 4)
 	db, err := sql.Open("sqlite", path)
@@ -164,15 +164,14 @@ func TestPendingInputMigrationAuthorityConflictRollsBackRetiredSource(t *testing
 
 func assertMigratedUploadRefForTest(t *testing.T, db *sql.DB) {
 	t.Helper()
-	var endpointID, uploadID, threadID, refKind, refID string
-	var createdAtUnixMs int64
-	if err := db.QueryRow(`SELECT endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms FROM ai_upload_refs`).Scan(
-		&endpointID, &uploadID, &threadID, &refKind, &refID, &createdAtUnixMs,
+	var endpointID, uploadID, targetID, refKind, refID string
+	if err := db.QueryRow(`SELECT endpoint_id, upload_id, target_id, ref_kind, ref_id FROM ai_upload_refs`).Scan(
+		&endpointID, &uploadID, &targetID, &refKind, &refID,
 	); err != nil {
 		t.Fatal(err)
 	}
-	if endpointID != "env_ref_migration" || uploadID != "upload_ref_migration" || threadID != "thread_ref_migration" || refKind != "thread" || refID != "message_ref_migration" || createdAtUnixMs != 1234 {
-		t.Fatalf("migrated upload ref=(%q, %q, %q, %q, %q, %d)", endpointID, uploadID, threadID, refKind, refID, createdAtUnixMs)
+	if endpointID != "env_ref_migration" || uploadID != "upload_ref_migration" || targetID != "thread_ref_migration" || refKind != "thread" || refID != "message_ref_migration" {
+		t.Fatalf("migrated upload ref=(%q, %q, %q, %q, %q)", endpointID, uploadID, targetID, refKind, refID)
 	}
 }
 

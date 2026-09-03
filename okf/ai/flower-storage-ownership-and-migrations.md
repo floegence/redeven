@@ -7,13 +7,19 @@ timestamp: 2026-08-14T00:00:00Z
 ---
 # Summary
 
-Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 5 and whose contiguous migrations import retired queue data, add execution and delete authority, and remove obsolete physical storage. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.
+Floret owns its opaque two-table backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 6. Its contiguous migrations import retired queue data, retain only durable product facts, and remove obsolete physical storage. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.
 
 # Contract
 
-Fresh product databases initialize directly at version 5 with ten physical tables including shared schema metadata. They contain thread settings, uploads, upload staging scopes, provider capabilities, Flower routing, execution authority, and delete authority, but no product queue or migration-staging table. Version 1 upgrades atomically to version 2: queued inputs are copied to `ai_pending_input_imports` using their stable request IDs, retired lifecycle tables are dropped, `queue_revision` is removed, and the exact target shape is verified. Version 2 to 3 adds the minimum submitting-user authority needed for restart redispatch. Version 3 to 4 adds endpoint-scoped delete authority.
+Fresh product databases initialize directly at version 6 with exactly seven tables: schema metadata, thread settings, execution authority, uploads, upload attempts, upload references, and upload staging scopes. There is no product queue, migration staging, provider-capability cache, thread-routing record, or delete tombstone. Version 1 upgrades atomically to version 2: queued inputs are copied to `ai_pending_input_imports` using their stable request IDs, retired lifecycle tables are dropped, `queue_revision` is removed, and the exact target shape is verified. Version 2 to 3 adds the minimum submitting-user authority needed for restart redispatch. Version 3 to 4 historically adds endpoint-scoped delete authority.
 
 Version 4 to 5 is the removal edge. While the product migration transaction still owns the exact retired source, a migration-only callback converts every pending row into typed Floret queue input through the public idempotent import API. The same product transaction records restart authority, rebuilds `ai_upload_refs` around its natural `(endpoint_id, upload_id, ref_kind, ref_id)` identity, preserves every live reference field, and drops `ai_pending_input_imports`. This removes the unused surrogate `id`, its redundant indexes, and the resulting SQLite sequence metadata. A verified post-migration vacuum removes SQLite's otherwise-retained internal sequence table; repeated current-version startup is clean and idempotent.
+
+Version 5 to 6 rebuilds the affected tables and copies only current facts. It drops `provider_capabilities`, `ai_flower_thread_routing`, and `ai_thread_delete_authority`; removes unused user-audit, upload-declaration, claim-time, reference-time, and scope-release columns; and renames upload-reference `thread_id` to `target_id`. Released and expired staging scopes and their exact claims are deleted during migration. The old names and columns remain readable only inside the closed migration functions. Fresh and migrated databases end in the same exact seven-table schema.
+
+Provider capability is pure current computation. Canonical resource target authority comes only from the current `ToolTargetPolicy`; no database row or callback can override it. Upload `complete` and `failed` request identities provide a seven-day idempotency window. Ordinary execution authority also expires after seven days, while the active or waiting Turn, every queued RequestKey, and the latest failed Turn remain protected. Maintenance reads public Floret `ThreadView`; not-found or deleted threads release their authority immediately, while any other read failure skips deletion.
+
+Startup and 15-minute maintenance use bounded keyset pages with process-local cursors. Released or expired upload scopes are physically deleted instead of retained as tombstones. After each pass Redeven checks SQLite free pages and schedules background incremental vacuum only when at least 4 MiB, 256 pages, and 10 percent of the file are free.
 
 The historical version 1 to 2 edge remains immutable, so a direct version 1 upgrade may create `ai_pending_input_imports` temporarily inside the single contiguous migration transaction. Version 4 to 5 removes it before that transaction commits. Canonical import failure rolls back to the exact source schema and records. If a later product write fails after Floret accepted the input, restart repeats the same stable request key and Floret deduplicates it. Legacy codecs and old-table reads exist only in the closed migration path; production handlers cannot create, read, reorder, settle, or recover a Redeven queue row.
 
@@ -27,12 +33,14 @@ Every future product schema change appends a contiguous automatic migration and 
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/schema.go` - Version 5 initializer and the complete contiguous migration registration.
+- `redeven:internal/ai/threadstore/schema.go` - Version 6 initializer and the complete contiguous migration registration.
 - `redeven:internal/ai/threadstore/pending_input_migration.go` - Closed v4-to-v5 conversion, authority persistence, retired-table removal, and upload-reference rebuild.
 - `redeven:internal/ai/pending_input_migration.go` - Migration-only decoding and typed public Floret import.
 - `redeven:internal/ai/service.go` - Supplies the migration callback before subscriptions and maintenance.
 - `redeven:internal/ai/pending_input_migration_startup_test.go` - Covers canonical import, stable ordering, source rollback, and retired-storage removal.
-- `redeven:internal/ai/threadstore/pending_input_migration_test.go` - Covers the full v1-to-v5 chain, v4 data preservation, clean reopen, and failure rollback.
+- `redeven:internal/ai/threadstore/schema_v6_test.go` - Covers every supported version, v5 data preservation, retired-state removal, clean reopen, and failure rollback.
+- `redeven:internal/ai/threadstore/uploads_test.go` - Covers seven-day pruning, scope deletion, shared references, and physical SQLite compaction.
+- `redeven:internal/ai/execution_authority_maintenance_test.go` - Covers canonical retention, missing threads, read failures, and keyset paging.
 - `redeven:internal/ai/threadstore/reviewed_schema_manifest.json` - Reviewed product schema source.
 - `redeven:internal/boundarycontract/threadstore_sql.go` - Closed product SQL ownership inventory.
 - `redeven:go.mod` - Pins the released Floret v7.1.2 module without local source wiring.

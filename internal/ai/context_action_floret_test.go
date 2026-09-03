@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestResolveFlowerCanonicalReferenceTargetAuthorityUsesOnlyServerState(t *testing.T) {
@@ -19,7 +18,6 @@ func TestResolveFlowerCanonicalReferenceTargetAuthorityUsesOnlyServerState(t *te
 		authority, err := resolveFlowerCanonicalReferenceTargetAuthority(
 			"env_local",
 			ToolTargetPolicy{Mode: ToolTargetModeLocalRuntime},
-			&threadstore.FlowerThreadRouting{PrimaryTargetID: "client-irrelevant"},
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -35,9 +33,8 @@ func TestResolveFlowerCanonicalReferenceTargetAuthorityUsesOnlyServerState(t *te
 			ToolTargetPolicy{
 				Mode:             ToolTargetModeExplicitTarget,
 				DefaultTargetID:  "target_policy",
-				AllowedTargetIDs: []string{"target_policy", "target_routing"},
+				AllowedTargetIDs: []string{"target_policy"},
 			},
-			&threadstore.FlowerThreadRouting{PrimaryTargetID: "target_routing"},
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -47,30 +44,15 @@ func TestResolveFlowerCanonicalReferenceTargetAuthorityUsesOnlyServerState(t *te
 		}
 	})
 
-	t.Run("explicit policy uses current routing when default is absent", func(t *testing.T) {
-		authority, err := resolveFlowerCanonicalReferenceTargetAuthority(
-			"env_routed",
-			ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, AllowedTargetIDs: []string{"target_routing"}},
-			&threadstore.FlowerThreadRouting{PrimaryTargetID: "target_routing"},
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if authority.TargetID != "target_routing" {
-			t.Fatalf("authority=%#v", authority)
-		}
-	})
-
 	for _, testCase := range []struct {
-		name    string
-		policy  ToolTargetPolicy
-		routing *threadstore.FlowerThreadRouting
+		name   string
+		policy ToolTargetPolicy
 	}{
 		{name: "missing explicit target", policy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget}},
-		{name: "routing target outside policy", policy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, AllowedTargetIDs: []string{"target_allowed"}}, routing: &threadstore.FlowerThreadRouting{PrimaryTargetID: "target_denied"}},
+		{name: "default target outside policy", policy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "target_denied", AllowedTargetIDs: []string{"target_allowed"}}},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			if _, err := resolveFlowerCanonicalReferenceTargetAuthority("env_invalid", testCase.policy, testCase.routing); !errors.Is(err, ErrInvalidContextAction) {
+			if _, err := resolveFlowerCanonicalReferenceTargetAuthority("env_invalid", testCase.policy); !errors.Is(err, ErrInvalidContextAction) {
 				t.Fatalf("error=%v, want invalid context action", err)
 			}
 		})

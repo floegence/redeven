@@ -15,14 +15,11 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 	wantTables := []string{
 		"__redeven_db_meta",
 		"ai_flower_execution_authority",
-		"ai_flower_thread_routing",
-		"ai_thread_delete_authority",
 		"ai_thread_settings",
 		"ai_upload_attempts",
 		"ai_upload_refs",
 		"ai_upload_staging_scopes",
 		"ai_uploads",
-		"provider_capabilities",
 	}
 	gotTables := schemaNamesForTest(t, store.db, `
 SELECT name
@@ -35,8 +32,6 @@ ORDER BY name
 	}
 
 	wantThreadSettingsColumns := []string{
-		"created_by_user_email",
-		"created_by_user_public_id",
 		"endpoint_id",
 		"model_id",
 		"namespace_public_id",
@@ -47,8 +42,6 @@ ORDER BY name
 		"settings_created_at_unix_ms",
 		"settings_updated_at_unix_ms",
 		"thread_id",
-		"updated_by_user_email",
-		"updated_by_user_public_id",
 		"working_dir",
 	}
 	gotThreadSettingsColumns := schemaNamesForTest(t, store.db, `
@@ -156,7 +149,7 @@ func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	if err := store.UpdateThreadPermissionType(ctx, "env_1", "th_1", "full_access"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetThreadPinned(ctx, "env_1", "th_1", true, "user_1", "user@example.com"); err != nil {
+	if _, err := store.SetThreadPinned(ctx, "env_1", "th_1", true); err != nil {
 		t.Fatal(err)
 	}
 	thread, err := store.GetThreadSettings(ctx, "env_1", "th_1")
@@ -207,7 +200,7 @@ func TestStoreThreadSettingsRevisionAdvancesForEveryMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	previous = assertRevision(previous)
-	if _, err := store.SetThreadPinned(ctx, "env_1", "th_revision", true, "user_1", "user@example.com"); err != nil {
+	if _, err := store.SetThreadPinned(ctx, "env_1", "th_revision", true); err != nil {
 		t.Fatal(err)
 	}
 	_ = assertRevision(previous)

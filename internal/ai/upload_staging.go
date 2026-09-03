@@ -60,7 +60,7 @@ func (s *Service) CreateUploadStagingScope(ctx context.Context, owner UploadOwne
 	record := threadstore.UploadStagingScope{
 		StagingScopeID: scopeID, EndpointID: owner.EndpointID, OwnerUserHash: owner.OwnerUserHash,
 		TargetID: targetID, CapabilityHash: uploadStagingCapabilityHash(capability),
-		CreatedAtUnixMs: now, ExpiresAtUnixMs: now + uploadStagingScopeTTL.Milliseconds(),
+		ExpiresAtUnixMs: now + uploadStagingScopeTTL.Milliseconds(),
 	}
 	s.mu.Lock()
 	db := s.threadsDB

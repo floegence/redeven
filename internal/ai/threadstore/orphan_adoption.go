@@ -40,16 +40,12 @@ func (s *Store) AdoptCanonicalRootSettings(ctx context.Context, settings ThreadS
 	settings.ReasoningSelectionJSON = strings.TrimSpace(settings.ReasoningSelectionJSON)
 	settings.PermissionType = strings.TrimSpace(settings.PermissionType)
 	settings.WorkingDir = strings.TrimSpace(settings.WorkingDir)
-	settings.CreatedByUserPublicID = strings.TrimSpace(settings.CreatedByUserPublicID)
-	settings.CreatedByUserEmail = strings.TrimSpace(settings.CreatedByUserEmail)
-	settings.UpdatedByUserPublicID = strings.TrimSpace(settings.UpdatedByUserPublicID)
-	settings.UpdatedByUserEmail = strings.TrimSpace(settings.UpdatedByUserEmail)
 	permissionType, err := canonicalPermissionType(settings.PermissionType)
 	if err != nil {
 		return err
 	}
 	settings.PermissionType = permissionType
-	if settings.ThreadID == "" || settings.EndpointID == "" || settings.NamespacePublicID == "" || settings.ModelID == "" || settings.WorkingDir == "" || settings.CreatedByUserPublicID == "" {
+	if settings.ThreadID == "" || settings.EndpointID == "" || settings.NamespacePublicID == "" || settings.ModelID == "" || settings.WorkingDir == "" {
 		return errors.New("canonical root adoption settings are incomplete")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -73,12 +69,10 @@ func (s *Store) AdoptCanonicalRootSettings(ctx context.Context, settings ThreadS
 	now := time.Now().UnixMilli()
 	_, err = tx.ExecContext(ctx, `INSERT INTO ai_thread_settings(
 		thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
-		pinned_at_unix_ms, created_by_user_public_id, created_by_user_email,
-		updated_by_user_public_id, updated_by_user_email, settings_created_at_unix_ms, settings_updated_at_unix_ms
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`, settings.ThreadID, settings.ParentThreadID, settings.EndpointID,
+		pinned_at_unix_ms, settings_created_at_unix_ms, settings_updated_at_unix_ms
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`, settings.ThreadID, settings.ParentThreadID, settings.EndpointID,
 		settings.NamespacePublicID, settings.ModelID, settings.ReasoningSelectionJSON, settings.PermissionType, settings.WorkingDir,
-		settings.CreatedByUserPublicID, settings.CreatedByUserEmail, settings.UpdatedByUserPublicID,
-		settings.UpdatedByUserEmail, now, now)
+		now, now)
 	if err != nil {
 		return err
 	}

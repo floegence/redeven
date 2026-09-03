@@ -14,7 +14,7 @@ Redeven persists product model and reasoning preferences, provider credentials, 
 
 ## Mechanism
 
-OpenAI-compatible Chat reasoning is capability-driven. Redeven reads only response fields named by the resolved model capability, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text. Assistant reasoning is replayed through provider-specific history fields only when the same capability declares that requirement; unsupported models receive no synthetic reasoning field.
+OpenAI-compatible Chat reasoning is capability-driven. Redeven computes model capability from the current provider type, model metadata, and curated catalog on each resolution; it does not persist a capability cache. Redeven reads only response fields named by that result, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text. Assistant reasoning is replayed through provider-specific history fields only when the same capability declares that requirement; unsupported models receive no synthetic reasoning field.
 
 Flower configuration has three independent states. The default `permission_type` is valid without model configuration and initializes only future threads. An environment `AIModelProfile` requires a provider registry plus a valid `current_model_id`. A Desktop source is a separate runtime catalog exposed only for the exact `remote_desktop` route. Its strict status union distinguishes ready, empty, missing-key, binding, unsupported, and error states; only `desktop_model_source` entries with opaque `desktop:model_<64 lowercase hex>` ids enter the ready catalog. The environment profile remains the persisted new-chat default. Desktop selection changes only the mounted new-chat draft or selected thread, so remount restores the environment default. `AIConfig.HasModelProfile()` is the sole environment-profile predicate. Permission and provider updates merge under the service lock, preserving unrelated settings, and generic settings updates do not accept `ai`.
 
@@ -84,6 +84,7 @@ Redeven owns model preferences, credentials, gateway selection, and the one-shot
 - `redeven:internal/ai/desktop_model_source.go:1168` - Desktop model-source capabilities are sanitized to the opaque Desktop provider and model identity.
 - `redeven:internal/ai/model_gateway.go:171` - Request serialization emits `parallel_tool_calls:true` only for enabled wire modes.
 - `redeven:internal/ai/model_gateway.go:2358` - One resolver owns the provider and endpoint allowlist for that wire mode.
+- `redeven:internal/ai/context/adapter/capability.go` - Pure capability resolution from current provider and model metadata.
 - `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:288` - The stable Desktop session route gates whether Env App loads and exposes Desktop models.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:1656` - Composer model changes branch on model-source ownership before persisting defaults.
 - `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:97` - Desktop model-source readiness and failure modes are represented as one strict discriminated union.

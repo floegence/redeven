@@ -127,7 +127,12 @@ func TestForeignEndpointCannotMutateCanonicalThread(t *testing.T) {
 
 	for _, mutation := range mutations {
 		t.Run(mutation.name, func(t *testing.T) {
-			if err := mutation.call(); !errorsIsNoRows(err) {
+			err := mutation.call()
+			if mutation.name == "delete" {
+				if err != nil {
+					t.Fatalf("foreign DELETE error=%v, want idempotent success", err)
+				}
+			} else if !errorsIsNoRows(err) {
 				t.Fatalf("foreign mutation error=%v, want endpoint-scoped not found", err)
 			}
 			after, err := svc.readCanonicalThreadState(context.Background(), thread.ThreadID)

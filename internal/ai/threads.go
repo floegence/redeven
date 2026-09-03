@@ -603,8 +603,6 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	return threadstore.ThreadSettings{
 		EndpointID: strings.TrimSpace(meta.EndpointID), NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
 		ModelID: modelID, ReasoningSelectionJSON: reasoningSelectionJSON, PermissionType: permissionTypeString(permissionType), WorkingDir: workingDir,
-		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
-		UpdatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), UpdatedByUserEmail: strings.TrimSpace(meta.UserEmail),
 		SettingsCreatedAtUnixMs: now, SettingsUpdatedAtUnixMs: now,
 	}, nil
 }
@@ -793,7 +791,7 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
 		return nil, err
 	}
-	pinnedAt, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned, meta.UserPublicID, meta.UserEmail)
+	pinnedAt, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned)
 	if err != nil {
 		return nil, err
 	}
@@ -863,10 +861,6 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	forked := *source
 	forked.ThreadID = current.ThreadID.String()
 	forked.PinnedAtUnixMs = 0
-	forked.CreatedByUserPublicID = strings.TrimSpace(meta.UserPublicID)
-	forked.CreatedByUserEmail = strings.TrimSpace(meta.UserEmail)
-	forked.UpdatedByUserPublicID = strings.TrimSpace(meta.UserPublicID)
-	forked.UpdatedByUserEmail = strings.TrimSpace(meta.UserEmail)
 	forked.SettingsCreatedAtUnixMs = now
 	forked.SettingsUpdatedAtUnixMs = now
 	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), forked); err != nil {
@@ -1163,15 +1157,12 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	if err := db.RequireThreadDeleteAuthority(ctxOrBackground(ctx), endpointID, threadID); err != nil {
-		return err
-	}
 	settings, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
 	if err != nil {
 		return err
 	}
-	// An endpoint-scoped tombstone is the durable idempotency authority for a
-	// completed delete. It must not be confused with a foreign ownership miss.
+	// Absence is an idempotent product result. It also prevents a foreign
+	// endpoint from probing or deleting the process-wide canonical thread.
 	if settings == nil {
 		return nil
 	}

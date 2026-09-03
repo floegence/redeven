@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
-	threadstoreCurrentSchemaVersion = 5
+	threadstoreCurrentSchemaVersion = 6
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -36,6 +37,7 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 			{FromVersion: 4, ToVersion: 5, Apply: func(tx *sql.Tx) error {
 				return migrateThreadstoreV4ToV5(ctx, tx, migrate)
 			}},
+			{FromVersion: 5, ToVersion: 6, Apply: migrateThreadstoreV5ToV6},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -53,10 +55,6 @@ CREATE TABLE ai_thread_settings (
   permission_type TEXT NOT NULL DEFAULT 'approval_required',
   working_dir TEXT NOT NULL DEFAULT '',
   pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  created_by_user_public_id TEXT NOT NULL DEFAULT '',
-  created_by_user_email TEXT NOT NULL DEFAULT '',
-  updated_by_user_public_id TEXT NOT NULL DEFAULT '',
-  updated_by_user_email TEXT NOT NULL DEFAULT '',
   settings_created_at_unix_ms INTEGER NOT NULL,
   settings_updated_at_unix_ms INTEGER NOT NULL
 );
@@ -66,12 +64,9 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		return err
 	}
 	builders := []func(*sql.Tx) error{
-		createProviderCapabilitiesTableTx,
 		createUploadTablesTx,
 		createUploadStagingScopesTableTx,
-		createFlowerThreadRoutingTableTx,
 		createFlowerExecutionAuthorityTableTx,
-		createThreadDeleteAuthorityTableTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {
@@ -203,19 +198,6 @@ DROP TABLE ai_permission_snapshots;
 	return verifyProductSchemaVersion(tx, 2)
 }
 
-func createProviderCapabilitiesTableTx(tx *sql.Tx) error {
-	_, err := tx.Exec(`
-CREATE TABLE provider_capabilities (
-  provider_id TEXT NOT NULL,
-  model_name TEXT NOT NULL,
-  capability_json TEXT NOT NULL DEFAULT '{}',
-  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY(provider_id, model_name)
-);
-`)
-	return err
-}
-
 func createUploadTablesTx(tx *sql.Tx) error {
 	if err := createUploadResourcesTx(tx); err != nil {
 		return err
@@ -224,13 +206,12 @@ func createUploadTablesTx(tx *sql.Tx) error {
 CREATE TABLE ai_upload_refs (
   endpoint_id TEXT NOT NULL,
   upload_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
   ref_kind TEXT NOT NULL,
   ref_id TEXT NOT NULL,
-  created_at_unix_ms INTEGER NOT NULL,
   PRIMARY KEY(endpoint_id, upload_id, ref_kind, ref_id)
 ) WITHOUT ROWID;
-CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id);
+CREATE INDEX idx_ai_upload_refs_target_upload ON ai_upload_refs(endpoint_id, target_id, upload_id);
 `)
 	return err
 }
@@ -243,9 +224,7 @@ CREATE TABLE ai_upload_staging_scopes (
   owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),
   target_id TEXT NOT NULL,
   capability_hash TEXT NOT NULL CHECK(length(capability_hash) = 64),
-  created_at_unix_ms INTEGER NOT NULL,
-  expires_at_unix_ms INTEGER NOT NULL,
-  released_at_unix_ms INTEGER NOT NULL DEFAULT 0
+  expires_at_unix_ms INTEGER NOT NULL
 );
 CREATE INDEX idx_ai_upload_staging_scopes_expiry ON ai_upload_staging_scopes(expires_at_unix_ms, staging_scope_id);
 CREATE UNIQUE INDEX idx_ai_upload_staging_scopes_capability ON ai_upload_staging_scopes(capability_hash);
@@ -258,11 +237,9 @@ func createUploadResourcesTx(tx *sql.Tx) error {
 CREATE TABLE ai_uploads (
   upload_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
-  owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind = 'user'),
   owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),
   storage_relpath TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT '',
-  declared_media_type TEXT NOT NULL DEFAULT '',
   detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream',
   size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes >= 0),
   content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64),
@@ -271,7 +248,6 @@ CREATE TABLE ai_uploads (
   source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')),
   state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')),
   created_at_unix_ms INTEGER NOT NULL,
-  claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   delete_after_unix_ms INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_ai_uploads_endpoint_owner_created ON ai_uploads(endpoint_id, owner_user_hash, created_at_unix_ms DESC, upload_id DESC);
@@ -294,21 +270,144 @@ CREATE INDEX idx_ai_upload_attempts_status_updated ON ai_upload_attempts(status,
 	return err
 }
 
-func createFlowerThreadRoutingTableTx(tx *sql.Tx) error {
-	_, err := tx.Exec(`
-CREATE TABLE ai_flower_thread_routing (
+func migrateThreadstoreV5ToV6(tx *sql.Tx) error {
+	if tx == nil {
+		return fmt.Errorf("threadstore v5 to v6 migration transaction is unavailable")
+	}
+	nowUnixMs := time.Now().UnixMilli()
+	rows, err := tx.Query(`
+SELECT endpoint_id, owner_user_hash, staging_scope_id
+FROM ai_upload_staging_scopes
+WHERE released_at_unix_ms <> 0 OR expires_at_unix_ms <= ?
+`, nowUnixMs)
+	if err != nil {
+		return err
+	}
+	type retiredScope struct {
+		endpointID    string
+		ownerUserHash string
+		scopeID       string
+	}
+	var retired []retiredScope
+	for rows.Next() {
+		var scope retiredScope
+		if err := rows.Scan(&scope.endpointID, &scope.ownerUserHash, &scope.scopeID); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		retired = append(retired, scope)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, scope := range retired {
+		refID := stagingUploadRefID(scope.ownerUserHash, scope.scopeID)
+		if refID == "" {
+			return fmt.Errorf("threadstore v5 contains malformed upload staging scope %q", scope.scopeID)
+		}
+		if _, err := tx.Exec(`DELETE FROM ai_upload_refs WHERE endpoint_id = ? AND ref_kind = ? AND ref_id = ?`, scope.endpointID, UploadRefKindStaging, refID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`
+ALTER TABLE ai_thread_settings RENAME TO ai_thread_settings_v5;
+CREATE TABLE ai_thread_settings (
+  thread_id TEXT PRIMARY KEY,
+  parent_thread_id TEXT NOT NULL DEFAULT '',
   endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  home_runtime_id TEXT NOT NULL DEFAULT '',
-  home_runtime_kind TEXT NOT NULL DEFAULT '',
-  origin_env_public_id TEXT NOT NULL DEFAULT '',
-  primary_target_id TEXT NOT NULL DEFAULT '',
-  active_target_ids_json TEXT NOT NULL DEFAULT '[]',
-  PRIMARY KEY(endpoint_id, thread_id)
+  namespace_public_id TEXT NOT NULL DEFAULT '',
+  model_id TEXT NOT NULL DEFAULT '',
+  reasoning_selection_json TEXT NOT NULL DEFAULT '',
+  permission_type TEXT NOT NULL DEFAULT 'approval_required',
+  working_dir TEXT NOT NULL DEFAULT '',
+  pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  settings_created_at_unix_ms INTEGER NOT NULL,
+  settings_updated_at_unix_ms INTEGER NOT NULL
 );
-`)
-	return err
+INSERT INTO ai_thread_settings(
+  thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id,
+  reasoning_selection_json, permission_type, working_dir, pinned_at_unix_ms,
+  settings_created_at_unix_ms, settings_updated_at_unix_ms
+)
+SELECT thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id,
+       reasoning_selection_json, permission_type, working_dir, pinned_at_unix_ms,
+       settings_created_at_unix_ms, settings_updated_at_unix_ms
+FROM ai_thread_settings_v5;
+DROP TABLE ai_thread_settings_v5;
+CREATE INDEX idx_ai_thread_settings_endpoint_updated ON ai_thread_settings(endpoint_id, settings_updated_at_unix_ms DESC, thread_id DESC);
+CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_settings(endpoint_id, pinned_at_unix_ms DESC, settings_created_at_unix_ms DESC, thread_id ASC);
+
+ALTER TABLE ai_uploads RENAME TO ai_uploads_v5;
+CREATE TABLE ai_uploads (
+  upload_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),
+  storage_relpath TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes >= 0),
+  content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64),
+  unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points >= 0),
+  logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count >= 0),
+  source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')),
+  state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')),
+  created_at_unix_ms INTEGER NOT NULL,
+  delete_after_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO ai_uploads(
+  upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+  detected_media_type, size_bytes, content_sha256, unicode_code_points,
+  logical_line_count, source, state, created_at_unix_ms, delete_after_unix_ms
+)
+SELECT upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+       detected_media_type, size_bytes, content_sha256, unicode_code_points,
+       logical_line_count, source, state, created_at_unix_ms, delete_after_unix_ms
+FROM ai_uploads_v5;
+DROP TABLE ai_uploads_v5;
+CREATE INDEX idx_ai_uploads_endpoint_owner_created ON ai_uploads(endpoint_id, owner_user_hash, created_at_unix_ms DESC, upload_id DESC);
+CREATE INDEX idx_ai_uploads_state_delete_after ON ai_uploads(endpoint_id, state, delete_after_unix_ms, created_at_unix_ms);
+
+ALTER TABLE ai_upload_refs RENAME TO ai_upload_refs_v5;
+CREATE TABLE ai_upload_refs (
+  endpoint_id TEXT NOT NULL,
+  upload_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  ref_kind TEXT NOT NULL,
+  ref_id TEXT NOT NULL,
+  PRIMARY KEY(endpoint_id, upload_id, ref_kind, ref_id)
+) WITHOUT ROWID;
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, target_id, ref_kind, ref_id)
+SELECT endpoint_id, upload_id, thread_id, ref_kind, ref_id
+FROM ai_upload_refs_v5;
+DROP TABLE ai_upload_refs_v5;
+CREATE INDEX idx_ai_upload_refs_target_upload ON ai_upload_refs(endpoint_id, target_id, upload_id);
+
+ALTER TABLE ai_upload_staging_scopes RENAME TO ai_upload_staging_scopes_v5;
+CREATE TABLE ai_upload_staging_scopes (
+  staging_scope_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),
+  target_id TEXT NOT NULL,
+  capability_hash TEXT NOT NULL CHECK(length(capability_hash) = 64),
+  expires_at_unix_ms INTEGER NOT NULL
+);
+INSERT INTO ai_upload_staging_scopes(
+  staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash, expires_at_unix_ms
+)
+SELECT staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash, expires_at_unix_ms
+FROM ai_upload_staging_scopes_v5
+WHERE released_at_unix_ms = 0 AND expires_at_unix_ms > ?;
+DROP TABLE ai_upload_staging_scopes_v5;
+CREATE INDEX idx_ai_upload_staging_scopes_expiry ON ai_upload_staging_scopes(expires_at_unix_ms, staging_scope_id);
+CREATE UNIQUE INDEX idx_ai_upload_staging_scopes_capability ON ai_upload_staging_scopes(capability_hash);
+
+DROP TABLE provider_capabilities;
+DROP TABLE ai_flower_thread_routing;
+DROP TABLE ai_thread_delete_authority;
+`, nowUnixMs); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 6)
 }
 
 func verifyThreadstoreSchema(tx *sql.Tx) error {

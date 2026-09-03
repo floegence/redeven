@@ -25,6 +25,11 @@ type ExecutionAuthority struct {
 	CreatedAtUnixMs   int64
 }
 
+type ExecutionAuthorityCursor struct {
+	ThreadID   string
+	RequestKey string
+}
+
 func (s *Store) PutExecutionAuthority(ctx context.Context, authority ExecutionAuthority) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -125,4 +130,74 @@ func (s *Store) GetExecutionAuthorityByTurn(ctx context.Context, threadID, turnI
 		return nil, nil
 	}
 	return &authority, err
+}
+
+func (s *Store) ListExecutionAuthoritiesPage(ctx context.Context, cursor ExecutionAuthorityCursor, limit int) ([]ExecutionAuthority, ExecutionAuthorityCursor, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, cursor, false, errors.New("store not initialized")
+	}
+	if limit <= 0 || limit > 500 {
+		return nil, cursor, false, errors.New("invalid execution authority page size")
+	}
+	rows, err := s.db.QueryContext(ctxOrBackground(ctx), `
+SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id,
+       user_public_id, user_email, created_at_unix_ms
+FROM ai_flower_execution_authority
+WHERE thread_id > ? OR (thread_id = ? AND request_key > ?)
+ORDER BY thread_id, request_key
+LIMIT ?
+`, cursor.ThreadID, cursor.ThreadID, cursor.RequestKey, limit)
+	if err != nil {
+		return nil, cursor, false, err
+	}
+	defer rows.Close()
+	authorities := make([]ExecutionAuthority, 0, limit)
+	for rows.Next() {
+		var authority ExecutionAuthority
+		if err := scanExecutionAuthority(rows, &authority); err != nil {
+			return nil, cursor, false, err
+		}
+		authorities = append(authorities, authority)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, cursor, false, err
+	}
+	complete := len(authorities) < limit
+	if len(authorities) == 0 || complete {
+		return authorities, ExecutionAuthorityCursor{}, true, nil
+	}
+	last := authorities[len(authorities)-1]
+	return authorities, ExecutionAuthorityCursor{ThreadID: last.ThreadID, RequestKey: last.RequestKey}, false, nil
+}
+
+func (s *Store) DeleteExecutionAuthorities(ctx context.Context, requestKeys []string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("store not initialized")
+	}
+	requestKeys = dedupeNonEmptyStrings(requestKeys)
+	if len(requestKeys) == 0 {
+		return 0, nil
+	}
+	ctx = ctxOrBackground(ctx)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var removed int64
+	for _, requestKey := range requestKeys {
+		result, err := tx.ExecContext(ctx, `DELETE FROM ai_flower_execution_authority WHERE request_key = ?`, requestKey)
+		if err != nil {
+			return removed, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return removed, err
+		}
+		removed += count
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return removed, nil
 }

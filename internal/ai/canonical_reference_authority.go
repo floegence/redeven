@@ -2,8 +2,6 @@ package ai
 
 import (
 	"strings"
-
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 // flowerCanonicalReferenceTargetAuthority is derived per admission/open from
@@ -26,7 +24,7 @@ func flowerContextActionRequiresCanonicalReferenceAuthority(action *ContextActio
 	return false
 }
 
-func resolveFlowerCanonicalReferenceTargetAuthority(endpointID string, policy ToolTargetPolicy, routing *threadstore.FlowerThreadRouting) (flowerCanonicalReferenceTargetAuthority, error) {
+func resolveFlowerCanonicalReferenceTargetAuthority(endpointID string, policy ToolTargetPolicy) (flowerCanonicalReferenceTargetAuthority, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	if endpointID == "" {
 		return flowerCanonicalReferenceTargetAuthority{}, ErrInvalidContextAction
@@ -36,9 +34,6 @@ func resolveFlowerCanonicalReferenceTargetAuthority(endpointID string, policy To
 	locality := contextActionLocalityCurrent
 	if policy.requiresExplicitTarget() {
 		targetID = strings.TrimSpace(policy.DefaultTargetID)
-		if targetID == "" && routing != nil {
-			targetID = strings.TrimSpace(routing.PrimaryTargetID)
-		}
 		if targetID == "" || !targetAllowedByPolicy(policy, targetID) {
 			return flowerCanonicalReferenceTargetAuthority{}, ErrInvalidContextAction
 		}
