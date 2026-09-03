@@ -119,7 +119,7 @@ func TestHostLifecyclePlanUsesRuntimeCommandsWithoutPersistingProjection(t *test
 	if plan == nil || plan.SchemaVersion != hostLifecyclePlanSchemaVersion || plan.Driver != "npm_host" || plan.RuntimeBundle != "node-"+nodeVersion || plan.Package == nil || plan.NPM == nil {
 		t.Fatalf("npm Host lifecycle plan = %+v", plan)
 	}
-	if len(plan.Install.Steps) != 6 || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "install example-service@1.2.3") || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "--package-lock=false --ignore-scripts") || !strings.Contains(plan.Install.Steps[4].CommandTemplate, "rebuild --dangerously-allow-all-scripts") {
+	if len(plan.Install.Steps) != 6 || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "install example-service@1.2.3") || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "--prefix=<managed-app-root>") || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "--package-lock=false") || !strings.Contains(plan.Install.Steps[2].CommandTemplate, "--save-exact --install-strategy=hoisted --ignore-scripts") || !strings.Contains(plan.Install.Steps[4].CommandTemplate, "rebuild --prefix=<managed-app-root> --dangerously-allow-all-scripts") {
 		t.Fatalf("npm Host install plan = %+v", plan.Install)
 	}
 	if !strings.Contains(plan.Start.Steps[0].CommandTemplate, "--no-open") || !strings.Contains(spec.Host.StartScript, "--no-open") {

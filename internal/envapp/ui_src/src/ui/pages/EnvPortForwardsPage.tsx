@@ -933,6 +933,7 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
     case 'WORKSPACE_IN_USE': return i18n.t('webServices.managed.workspaceInUse');
     case 'HOST_RUNTIME_PREPARE_FAILED':
     case 'HOST_LOG_PREPARE_FAILED': return i18n.t('webServices.managed.hostRuntimePrepareFailed');
+    case 'DEPENDENCY_LAYOUT_INVALID': return i18n.t('webServices.managed.dependencyLayoutInvalid');
     case 'HOST_PROCESS_IDENTITY_MISMATCH':
     case 'HOST_PROCESS_IDENTITY_UNAVAILABLE': return i18n.t('webServices.managed.hostProcessIdentityChanged');
     case 'MANAGED_WEB_SERVICE_INTERNAL': return i18n.t('webServices.managed.operationFailed');

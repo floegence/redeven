@@ -11,12 +11,17 @@ const (
 	lifecycleOwnershipRedevenWithTemplateHook = "redeven_with_template_hook"
 )
 
-func npmPackageInstallArguments(packageName, version string) []string {
-	return []string{"install", strings.TrimSpace(packageName) + "@" + strings.TrimSpace(version), "--omit=dev", "--package-lock=false", "--ignore-scripts", "--legacy-peer-deps=false", "--no-audit", "--fund=false", "--progress=false"}
+func npmPackageInstallArguments(packageName, version, appRoot string) []string {
+	return []string{
+		"install", strings.TrimSpace(packageName) + "@" + strings.TrimSpace(version),
+		"--prefix=" + strings.TrimSpace(appRoot), "--omit=dev", "--package-lock=false",
+		"--save-exact", "--install-strategy=hoisted", "--ignore-scripts",
+		"--legacy-peer-deps=false", "--no-audit", "--fund=false", "--progress=false",
+	}
 }
 
-func npmPackageRebuildArguments() []string {
-	return []string{"rebuild", "--dangerously-allow-all-scripts", "--no-audit", "--fund=false", "--progress=false"}
+func npmPackageRebuildArguments(appRoot string) []string {
+	return []string{"rebuild", "--prefix=" + strings.TrimSpace(appRoot), "--dangerously-allow-all-scripts", "--no-audit", "--fund=false", "--progress=false"}
 }
 
 func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
@@ -50,9 +55,9 @@ func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
 		}
 		plan.Install.Steps = append(plan.Install.Steps,
 			HostLifecycleStep{Kind: "prepare_verified_node_runtime", Reference: plan.RuntimeBundle},
-			HostLifecycleStep{Kind: "install_npm_package_without_scripts", Reference: copy.PackageName + "@" + copy.Version, CommandTemplate: strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, npmPackageInstallArguments(copy.PackageName, copy.Version)...), " ")},
+			HostLifecycleStep{Kind: "install_npm_package_without_scripts", Reference: copy.PackageName + "@" + copy.Version, CommandTemplate: strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, npmPackageInstallArguments(copy.PackageName, copy.Version, "<managed-app-root>")...), " ")},
 			HostLifecycleStep{Kind: "remove_temporary_registry_credentials"},
-			HostLifecycleStep{Kind: "run_npm_lifecycle_scripts", CommandTemplate: strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, npmPackageRebuildArguments()...), " ")},
+			HostLifecycleStep{Kind: "run_npm_lifecycle_scripts", CommandTemplate: strings.Join(append([]string{"<managed-node>", "<managed-npm-cli>"}, npmPackageRebuildArguments("<managed-app-root>")...), " ")},
 			HostLifecycleStep{Kind: "verify_npm_release_identity", Reference: copy.PackageName + "@" + copy.Version},
 		)
 	} else if host.Artifact != nil {

@@ -3409,6 +3409,7 @@
       "dataIdentityUnavailable": "Docker からサービスデータボリュームの安定した ID を取得できませんでした。Docker を確認して再試行してください。",
       "dataVolumeCreateFailed": "Redeven はサービスデータボリュームを作成できませんでした。Docker とストレージを確認して再試行してください。",
       "hostRuntimePrepareFailed": "Redeven は Host サービスの実行環境を準備できませんでした。再試行してください。",
+      "dependencyLayoutInvalid": "Redeven はインストールされた npm パッケージの構成を検証できませんでした。インストールを再試行し、再度失敗する場合はバージョン一覧を更新して別のリリースを選択してください。",
       "hostProcessIdentityChanged": "実行環境の再起動後、保存された Host プロセスを検証できませんでした。",
       "operationFailed": "マネージドサービスの操作に失敗しました。診断情報をコピーして再試行してください。",
       "updateAvailable": "更新があります",

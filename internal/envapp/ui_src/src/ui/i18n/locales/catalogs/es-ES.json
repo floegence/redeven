@@ -3409,6 +3409,7 @@
       "dataIdentityUnavailable": "Docker no proporcionó una identidad estable para el volumen de datos del servicio. Comprueba Docker y vuelve a intentarlo.",
       "dataVolumeCreateFailed": "Redeven no pudo crear el volumen de datos del servicio. Comprueba Docker y el almacenamiento y vuelve a intentarlo.",
       "hostRuntimePrepareFailed": "Redeven no pudo preparar el entorno del servicio Host. Inténtalo de nuevo.",
+      "dependencyLayoutInvalid": "Redeven no pudo verificar la estructura del paquete npm instalado. Reintenta la instalación. Si vuelve a fallar, actualiza la lista de versiones y elige otra versión.",
       "hostProcessIdentityChanged": "No se pudo verificar el proceso Host guardado después de reiniciar el entorno de ejecución.",
       "operationFailed": "La operación del servicio administrado falló. Copia el diagnóstico e inténtalo de nuevo.",
       "updateAvailable": "Actualización disponible",
