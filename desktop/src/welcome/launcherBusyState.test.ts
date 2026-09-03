@@ -63,6 +63,7 @@ function providerRuntimeTarget(
     },
     provider_connection_state: 'connected',
     provider_link_state: 'linked',
+    provider_origin_supported: true,
     can_connect_provider: false,
     can_disconnect_provider: true,
   };

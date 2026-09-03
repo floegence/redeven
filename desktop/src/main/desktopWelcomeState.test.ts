@@ -7,6 +7,10 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import {
+  REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
+  REDEVEN_CLOUD_ORIGIN,
+} from '../shared/redevenCloud';
+import {
   testDesktopPreferences,
   testLocalAccess,
   testProviderBoundLocalEnvironment,
@@ -128,12 +132,46 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
   };
 }
 
-function providerRuntimeState(envPublicID = 'env_demo') {
+function providerRuntimeState(
+  envPublicID = 'env_demo',
+  providerOrigin = 'https://provider.example.invalid',
+) {
   return {
-    provider_origin: 'https://provider.example.invalid',
+    provider_origin: providerOrigin,
     controlplane_base_url: testAccessPoint.access_point_origin,
     controlplane_provider_id: 'example_control_plane',
     env_public_id: envPublicID,
+  };
+}
+
+function linkedRuntimeService(providerOrigin: string) {
+  return {
+    protocol_version: 'redeven-runtime-v2' as const,
+    effective_run_mode: 'desktop' as const,
+    remote_enabled: true,
+    compatibility: 'compatible' as const,
+    open_readiness: { state: 'openable' as const },
+    active_workload: {
+      terminal_count: 0,
+      session_count: 0,
+      task_count: 0,
+      port_forward_count: 0,
+    },
+    capabilities: {
+      desktop_model_source: { supported: false },
+      provider_link: { supported: true, bind_method: 'runtime_control_v2' as const },
+    },
+    bindings: {
+      desktop_model_source: { state: 'unsupported' as const },
+      provider_link: {
+        state: 'linked' as const,
+        provider_origin: providerOrigin,
+        provider_id: 'redeven',
+        env_public_id: 'env_demo',
+        access_point_origin: 'https://dev.redeven.test',
+        remote_enabled: true,
+      },
+    },
   };
 }
 
@@ -2833,6 +2871,37 @@ describe('desktopWelcomeState', () => {
     expect(issue.title_key).toBe('issue.providerTlsUntrustedTitle');
     expect(issue.diagnostics_copy).toContain('provider origin: https://dev.redeven.test');
     expect(issue.diagnostics_copy).toContain('http status: 502');
+  });
+
+  it('projects the main-process Redeven Cloud origin policy into renderer state', () => {
+    const managedControlPlane = testProviderBoundLocalEnvironment(
+      REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
+      'env_demo',
+      {
+        currentRuntime: {
+          local_ui_url: 'http://127.0.0.1:23998/',
+          runtime_service: linkedRuntimeService(REDEVEN_CLOUD_DEVELOPMENT_ORIGIN),
+        },
+      },
+    );
+    const productionSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: managedControlPlane }),
+      redevenCloudOriginPolicy: { allow_development: false },
+    });
+    const developmentSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: managedControlPlane }),
+      redevenCloudOriginPolicy: { allow_development: true },
+    });
+
+    expect(productionSnapshot.redeven_cloud_origins).toEqual([REDEVEN_CLOUD_ORIGIN]);
+    expect(developmentSnapshot.redeven_cloud_origins).toEqual([
+      REDEVEN_CLOUD_ORIGIN,
+      REDEVEN_CLOUD_DEVELOPMENT_ORIGIN,
+    ]);
+    expect(productionSnapshot.environments.find((entry) => entry.kind === 'local_environment')
+      ?.provider_runtime_link_target?.provider_origin_supported).toBe(false);
+    expect(developmentSnapshot.environments.find((entry) => entry.kind === 'local_environment')
+      ?.provider_runtime_link_target?.provider_origin_supported).toBe(true);
   });
 
 

@@ -146,7 +146,7 @@ Redeven делает акцент на возможностях, однако с
 
 Redeven хранит поддерживаемые знания репозитория в [OKF v0.1](okf/index.md). Корпус OKF формируется из актуального поведения исходного кода и встраивается в среду выполнения для `okf.search`.
 
-Машиночитаемый интерфейс интеграции RCPP Provider находится в [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). За пределами OKF поддерживаемые файлы Markdown намеренно ограничены `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, каноническим `README.md` и поддерживаемыми переводами `README.<locale>.md`, объявленными в `assets/readme/locales.json`.
+Машиночитаемый интерфейс интеграции RCPP Provider находится в [spec/openapi/rcpp-v3.yaml](spec/openapi/rcpp-v3.yaml). За пределами OKF поддерживаемые файлы Markdown намеренно ограничены `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, каноническим `README.md` и поддерживаемыми переводами `README.<locale>.md`, объявленными в `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

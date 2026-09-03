@@ -5020,6 +5020,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
     flowerSettingsFocusRevision: state.flowerSettingsFocusRevision,
     platformCapabilities: desktopPlatformCapabilities,
     wslDiscovery: desktopWSLDiscoverySnapshot,
+    redevenCloudOriginPolicy: desktopRedevenCloudOriginPolicy(),
   });
   return {
     ...snapshot,

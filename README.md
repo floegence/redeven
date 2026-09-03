@@ -146,7 +146,7 @@ Redeven leads with capability, but the runtime is still the trust boundary becau
 
 Redeven keeps maintained repository knowledge in [OKF v0.1](okf/index.md). The OKF corpus is generated from current source-level behavior and is embedded into the runtime for `okf.search`.
 
-The machine-readable RCPP Provider integration surface lives in [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Outside OKF, maintained Markdown is intentionally limited to `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, the canonical `README.md`, and the supported `README.<locale>.md` translations declared in `assets/readme/locales.json`.
+The machine-readable RCPP Provider integration surface lives in [spec/openapi/rcpp-v3.yaml](spec/openapi/rcpp-v3.yaml). Outside OKF, maintained Markdown is intentionally limited to `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, the canonical `README.md`, and the supported `README.<locale>.md` translations declared in `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

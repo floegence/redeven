@@ -146,7 +146,7 @@ Redeven은 기능을 앞세우지만, 런타임이 실제 호스트를 제어하
 
 Redeven은 관리되는 저장소 지식을 [OKF v0.1](okf/index.md)에 보관합니다. OKF 코퍼스는 현재 소스 수준 동작에서 생성되며 `okf.search`를 위해 런타임에 포함됩니다.
 
-기계 판독 가능한 RCPP Provider 통합 인터페이스는 [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml)에 정의되어 있습니다. OKF 외부에서 관리하는 Markdown은 `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, 기준 `README.md`, `assets/readme/locales.json`에 선언된 지원 `README.<locale>.md` 번역으로 제한됩니다.
+기계 판독 가능한 RCPP Provider 통합 인터페이스는 [spec/openapi/rcpp-v3.yaml](spec/openapi/rcpp-v3.yaml)에 정의되어 있습니다. OKF 외부에서 관리하는 Markdown은 `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, 기준 `README.md`, `assets/readme/locales.json`에 선언된 지원 `README.<locale>.md` 번역으로 제한됩니다.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>
