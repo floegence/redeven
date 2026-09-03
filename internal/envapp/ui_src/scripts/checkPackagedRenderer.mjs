@@ -1081,8 +1081,8 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       return { ...request, payload };
     });
     const requiredPluginRequests = [
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/runtime/recover-enabled', payload: {} },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       {
         method: 'POST',
         path: '/_redevplugin/api/plugins/executions/query',
