@@ -52,6 +52,7 @@ describe('runtimePlacementManager', () => {
     daemonPidSequencePath: string;
     orphanPath: string;
     notRunningPath: string;
+    incompatibleStatePath: string;
     eventsPath: string;
   }>> {
     const dockerPath = path.join(tempDir, 'docker');
@@ -61,6 +62,7 @@ describe('runtimePlacementManager', () => {
     const daemonPidSequencePath = path.join(tempDir, 'daemon-pid-sequence');
     const orphanPath = path.join(tempDir, 'orphan');
     const notRunningPath = path.join(tempDir, 'not-running-status');
+    const incompatibleStatePath = path.join(tempDir, 'incompatible-state');
     const eventsPath = path.join(tempDir, 'events');
     await fs.writeFile(dockerPath, [
       '#!/usr/bin/env node',
@@ -71,6 +73,7 @@ describe('runtimePlacementManager', () => {
       `const daemonPidSequence = ${JSON.stringify(daemonPidSequencePath)};`,
       `const orphan = ${JSON.stringify(orphanPath)};`,
       `const notRunning = ${JSON.stringify(notRunningPath)};`,
+      `const incompatibleState = ${JSON.stringify(incompatibleStatePath)};`,
       `const events = ${JSON.stringify(eventsPath)};`,
       `const managedBinary = ${JSON.stringify(MANAGED_RUNTIME_BINARY_PATH)};`,
       `const managedStamp = ${JSON.stringify(MANAGED_RUNTIME_STAMP_PATH)};`,
@@ -130,6 +133,7 @@ describe('runtimePlacementManager', () => {
         '  if (execMarker === "redeven-container-runtime-process-helper-cleanup") { process.exit(0); }',
       '  if (execMarker === "redeven-container-runtime-start" || (args.includes("run") && args.includes("--mode") && args.includes("desktop"))) { event("run"); fs.writeFileSync(daemon, "running"); process.exit(0); }',
       '  if (execMarker === "redeven-container-runtime-status" || args.includes("desktop-runtime-status")) {',
+      '    if (fs.existsSync(incompatibleState)) { process.stdout.write(JSON.stringify({ status: "blocked", code: "startup_failed", message: "failed to init runtime: wrong database kind: expected portforward_registry_v1, got portforward_registry", diagnostics: { failure_code: "runtime_state_incompatible" } })); process.exit(0); }',
       '    if (fs.existsSync(orphan)) { event("orphan_status"); fs.unlinkSync(orphan); process.stdout.write(JSON.stringify({ status: "blocked", code: "live_process_without_management_socket", message: "A Redeven runtime process is alive, but its management socket is not reachable.", lock_owner: { pid: 4242 }, diagnostics: { lock_pid: 4242, pid_alive: true, attach_state: "live_process_without_management_socket", failure_code: "management_socket_unreachable", socket_reachable: false } })); process.exit(0); }',
       '    if (fs.existsSync(notRunning)) { event("not_running_status"); fs.unlinkSync(notRunning); process.stdout.write(JSON.stringify({ status: "blocked", code: "not_running", message: "Runtime daemon is not running.", diagnostics: { attach_state: "not_running" } })); process.exit(0); }',
       '    if (!fs.existsSync(daemon)) { process.stderr.write("runtime daemon is not running\\n"); process.exit(1); }',
@@ -165,7 +169,16 @@ describe('runtimePlacementManager', () => {
       'process.exit(1);',
     ].join('\n'), { mode: 0o755 });
     process.env.PATH = `${tempDir}${path.delimiter}${originalPath}`;
-    return { markerPath, uploadedArchivePath, daemonPath, daemonPidSequencePath, orphanPath, notRunningPath, eventsPath };
+    return {
+      markerPath,
+      uploadedArchivePath,
+      daemonPath,
+      daemonPidSequencePath,
+      orphanPath,
+      notRunningPath,
+      incompatibleStatePath,
+      eventsPath,
+    };
   }
 
   async function installFakeSSH(tempDir: string): Promise<void> {
@@ -508,6 +521,41 @@ describe('runtimePlacementManager', () => {
     expect(ready.probe.reported_release_tag).toBe('v0.6.10');
     expect(await fs.readFile(eventsPath, 'utf8')).toBe('run\nnot_running_status\n');
     expect(progressPhases).toContain('waiting_runtime_daemon');
+  });
+
+  it('returns the reinstall recovery contract when container runtime state is incompatible', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const { markerPath, incompatibleStatePath } = await installFakeDocker(tempDir);
+    await fs.writeFile(markerPath, 'v1.2.3');
+    await fs.writeFile(incompatibleStatePath, 'wrong-database-kind');
+
+    await expect(ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      asset_cache_root: tempDir,
+    })).rejects.toMatchObject({
+      name: 'DesktopOperationFailureError',
+      presentation: {
+        code: 'reinstall_required',
+        detail: expect.stringContaining('wrong database kind'),
+        target_label: '/root/.redeven',
+        diagnostics: [{
+          channel: 'runtime_startup_report',
+          label: 'Runtime startup report',
+          text: expect.stringContaining('failure code: runtime_state_incompatible'),
+        }],
+      },
+    });
   });
 
   it('waits past the previous daemon pid during replacement and accepts the new daemon pid', async () => {

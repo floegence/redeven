@@ -40,6 +40,7 @@ type FakeSSHScenario =
   | 'delayed_report'
   | 'quick_exit_report'
   | 'blocked_report'
+  | 'incompatible_state_report'
   | 'invalid_report'
   | 'transient_blocked_report'
   | 'status_blocked_without_socket'
@@ -544,7 +545,7 @@ if (args.includes('-M') && args.includes('-N')) {
           startup_session_token: remoteStartSessionToken(),
         });
       }
-      if (scenario === 'blocked_report') {
+      if (scenario === 'blocked_report' || scenario === 'incompatible_state_report') {
         setTimeout(() => process.exit(1), 250);
         setInterval(() => {}, 1000);
         break;
@@ -585,6 +586,18 @@ if (args.includes('-M') && args.includes('-N')) {
           diagnostics: {
             lock_path: '/remote/redeven/state/agent.lock',
             state_dir: '/remote/redeven/state',
+          },
+        }));
+        process.exit(0);
+      }
+      if (scenario === 'incompatible_state_report') {
+        process.stdout.write(JSON.stringify({
+          status: 'blocked',
+          code: 'startup_failed',
+          message: 'failed to init runtime: init codeapp: wrong database kind: expected "portforward_registry_v1", got "portforward_registry"',
+          diagnostics: {
+            state_dir: '/remote/redeven/state',
+            failure_code: 'runtime_state_incompatible',
           },
         }));
         process.exit(0);
@@ -1286,6 +1299,30 @@ describe('sshRuntime integration', () => {
     ]));
     expect(eventNames).not.toContain('stop_runtime');
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('maps incompatible Runtime state to the existing wipe-reinstall recovery contract', async () => {
+    const fixture = await createFakeSSHFixture('incompatible_state_report');
+    try {
+      await startWithFakeSSH(fixture, 'auto');
+      throw new Error('Expected incompatible SSH Runtime state to fail.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      expect((error as DesktopOperationFailureError).presentation).toMatchObject({
+        code: 'reinstall_required',
+        title_key: 'confirm.reinstallFailedTitle',
+        summary_key: 'confirm.reinstallRequiredDescription',
+        detail: expect.stringContaining('portforward_registry_v1'),
+      });
+      expect((error as DesktopOperationFailureError).presentation.diagnostics).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          channel: 'runtime_startup_report',
+          text: expect.stringContaining('failure code: runtime_state_incompatible'),
+        }),
+      ]));
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('reserves the invalid-report failure for malformed SSH startup reports', async () => {

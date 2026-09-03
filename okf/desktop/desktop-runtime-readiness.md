@@ -42,7 +42,9 @@ Runtime process health, Runtime Service compatibility, Local UI availability, Wo
 
 Local and registered SSH/container targets are direct managed Environments and retain all direct lifecycle actions in every diagnosis state. Gateway, Provider, and URL entries without a direct management registration are access-only and expose no Runtime lifecycle action.
 
-One Launcher Operation owns Open and any nested direct Runtime recovery. Runtime recovery temporarily selects the Runtime lifecycle progress surface, then returns to Open without completing or deleting the parent operation. Renderer binds the exact operation key and start identity; it does not select an older operation, infer progress from card state, or synthesize long-lived steps.
+One Launcher Operation owns Open and any nested direct Runtime recovery. Runtime recovery temporarily selects the Runtime lifecycle progress surface, then returns to Open without completing or deleting the parent operation. When a new Environment operation is accepted, older terminal Open, Runtime, and reinstall operations leave that card. Renderer selects the newest accepted attempt deterministically; multiple retained failures never remove the failure button or details entry.
+
+`runtime_state_incompatible` is a typed reinstall-required result. Desktop persists the existing reinstall-required marker and offers the standard wipe-reinstall review; Update and ordinary Retry are not valid alternatives. Toasts remain concise, while the card failure panel owns the original launch report, logs, and recovery action.
 
 All operation labels, details, errors, recovery actions, tooltips, and accessibility text use structured keys and localized catalogs. Raw command stderr remains literal only inside technical diagnostics.
 

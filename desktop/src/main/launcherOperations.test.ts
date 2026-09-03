@@ -3,9 +3,45 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import { reinstallTargetStepProgress } from '../shared/desktopReinstallProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
-import { LauncherOperationConflictError, LauncherOperationRegistry } from './launcherOperations';
+import {
+  LauncherOperationConflictError,
+  LauncherOperationRegistry,
+  supersededEnvironmentOperationKeys,
+} from './launcherOperations';
 
 describe('LauncherOperationRegistry', () => {
+  it('retires old terminal owners when a new Environment operation is accepted', () => {
+    const registry = new LauncherOperationRegistry();
+    const create = (
+      operationKey: string,
+      environmentID: string,
+      surface: 'open' | 'runtime_lifecycle',
+    ) => registry.create({
+      operation_key: operationKey,
+      action: surface === 'open' ? 'open_local_environment' : 'start_environment_runtime',
+      active_progress_surface: surface,
+      subject_kind: 'runtime_target',
+      subject_id: environmentID,
+      environment_id: environmentID,
+      phase: 'starting',
+      title: 'Starting',
+      detail: 'Starting runtime.',
+    });
+    const oldOpen = create('orange:open', 'orange', 'open');
+    registry.finish(oldOpen.operation_key, 'failed');
+    const oldStart = create('orange:start:old', 'orange', 'runtime_lifecycle');
+    registry.finish(oldStart.operation_key, 'failed');
+    const unrelated = create('blue:start', 'blue', 'runtime_lifecycle');
+    registry.finish(unrelated.operation_key, 'failed');
+    create('orange:start:current', 'orange', 'runtime_lifecycle');
+
+    expect(supersededEnvironmentOperationKeys(
+      registry.operations(),
+      ['orange'],
+      'orange:start:current',
+    )).toEqual(['orange:open', 'orange:start:old']);
+  });
+
   it('refuses to overwrite an active operation attempt', () => {
     const registry = new LauncherOperationRegistry();
     registry.create({

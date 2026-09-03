@@ -5,6 +5,7 @@ import {
   desktopOperationFailurePresentation,
   diagnosticsFromRecentLogs,
   operationFailureFromUnknown,
+  runtimeStateIncompatibleFailure,
 } from './desktopOperationFailure';
 
 describe('desktopOperationFailure main helpers', () => {
@@ -41,6 +42,32 @@ describe('desktopOperationFailure main helpers', () => {
         severity: 'warning',
       }));
     }
+  });
+
+  it('maps incompatible runtime state to one reinstall recovery contract', () => {
+    expect(runtimeStateIncompatibleFailure({
+      message: 'wrong database kind: expected "portforward_registry_v1", got "portforward_registry"',
+      targetLabel: 'orange',
+      diagnostics: [{
+        channel: 'runtime_startup_report',
+        label: 'Runtime startup report',
+        text: 'failure code: runtime_state_incompatible',
+      }],
+    })).toEqual({
+      code: 'reinstall_required',
+      severity: 'error',
+      title: 'Reinstall requires attention',
+      title_key: 'confirm.reinstallFailedTitle',
+      summary: 'This environment has incompatible state. Reinstall is the only safe recovery.',
+      summary_key: 'confirm.reinstallRequiredDescription',
+      detail: 'wrong database kind: expected "portforward_registry_v1", got "portforward_registry"',
+      target_label: 'orange',
+      diagnostics: [{
+        channel: 'runtime_startup_report',
+        label: 'Runtime startup report',
+        text: 'failure code: runtime_state_incompatible',
+      }],
+    });
   });
 
   it('converts recent logs into diagnostics without creating visible copy', () => {

@@ -9125,6 +9125,9 @@ function EnvironmentProgressPanel(props: Readonly<{
         actions: group.actions.filter((action) => (
           !(primaryIntent === 'update_runtime' && action.kind === 'update_runtime')
           && !(primaryIntent === 'refresh_runtime' && action.kind === 'refresh_status')
+          && !(primaryIntent === 'reinstall_target'
+            && action.kind === 'retry'
+            && action.retry_action?.kind === 'preview_reinstall_target')
         )),
       }))
       .filter((group) => group.actions.length > 0);
@@ -9484,10 +9487,17 @@ function EnvironmentProgressPanel(props: Readonly<{
                   onClick={() => props.runPrimaryAction?.(action().action)}
                 >
                   <Show
-                    when={action().icon === 'refresh'}
-                    fallback={<ExternalLink class="h-3.5 w-3.5" />}
+                    when={action().icon === 'alert_triangle'}
+                    fallback={(
+                      <Show
+                        when={action().icon === 'refresh'}
+                        fallback={<ExternalLink class="h-3.5 w-3.5" />}
+                      >
+                        <Refresh class="h-3.5 w-3.5" />
+                      </Show>
+                    )}
                   >
-                    <Refresh class="h-3.5 w-3.5" />
+                    <AlertTriangle class="h-3.5 w-3.5" />
                   </Show>
                   {action().label}
                 </Button>

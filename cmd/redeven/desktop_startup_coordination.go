@@ -26,6 +26,7 @@ func writeDesktopBlockedLaunchReport(
 	code string,
 	message string,
 	stateLayout config.StateLayout,
+	failureCode string,
 ) error {
 	return writeDesktopLaunchReport(reportPath, desktopLaunchReport{
 		Status:  desktopLaunchStatusBlocked,
@@ -36,6 +37,7 @@ func writeDesktopBlockedLaunchReport(
 			ConfigPath:               stateLayout.ConfigPath,
 			RuntimeControlSocketPath: stateLayout.RuntimeControlSocketPath,
 			Command:                  "redeven run",
+			FailureCode:              failureCode,
 		},
 	})
 }

@@ -203,6 +203,7 @@ import {
   desktopOperationFailurePresentation,
   isDesktopOperationFailureError,
   operationFailureFromUnknown,
+  runtimeStateIncompatibleFailure,
 } from './desktopOperationFailure';
 import {
   RuntimeLifecycleStepFailureError,
@@ -223,7 +224,12 @@ import {
   type RuntimeLifecycleIntent,
   type RuntimeLifecycleOperationSnapshot,
 } from './runtimeLifecycleCoordinator';
-import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
+import {
+  LauncherOperationRegistry,
+  launcherOperationProgress,
+  supersededEnvironmentOperationKeys,
+  type LauncherOperationAttemptIdentity,
+} from './launcherOperations';
 import {
 	invalidateRuntimeFlowerAccessOnStatus,
 	parseRuntimeFlowerJSON,
@@ -305,7 +311,7 @@ import {
   type DesktopRuntimeContainerResolution,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
-import { parseLaunchReport } from './launchReport';
+import { formatBlockedLaunchDiagnostics, parseLaunchReport } from './launchReport';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
@@ -1347,31 +1353,12 @@ async function clearReinstallTargetRequiredForEnvironment(environmentID: string)
   }
 }
 
-function removeOtherReinstallOperationsForAffectedEnvironments(
-  currentOperationKey: string,
-  affectedEnvironmentIDs: readonly string[],
-): void {
-  const affected = new Set(affectedEnvironmentIDs.map(compact).filter(Boolean));
-  for (const operation of launcherOperations.operations()) {
-    if (operation.operation_key === currentOperationKey || operation.action !== 'reinstall_target') {
-      continue;
-    }
-    if (
-      affected.has(compact(operation.environment_id))
-      || operation.reinstall_preview?.affected_environment_ids.some((environmentID) => affected.has(compact(environmentID)))
-    ) {
-      removeLauncherOperation(operation.operation_key);
-    }
-  }
-}
-
 async function convergeLauncherStateAfterSuccessfulReinstall(
   currentOperationKey: string,
   affectedEnvironmentIDs: readonly string[],
 ): Promise<void> {
   const affected = [...new Set(affectedEnvironmentIDs.map(compact).filter(Boolean))];
-  clearSupersededRuntimeFailuresForEnvironments(affected, currentOperationKey);
-  removeOtherReinstallOperationsForAffectedEnvironments(currentOperationKey, affected);
+  retireSupersededEnvironmentOperations(affected, currentOperationKey);
   resetLauncherIssueState();
   await refreshWelcomeRuntimeHealth({
     force: true,
@@ -2383,7 +2370,11 @@ async function inspectRuntimePlacementTargetState(
       });
       clearSSHRuntimeReadyState(runtimeKey);
       runtimePlacementReadyByTargetID.delete(target.targetID);
-      if (classification.kind === 'stopped' || classification.kind === 'unverified') {
+      if (
+        classification.kind === 'stopped'
+        || classification.kind === 'unverified'
+        || classification.kind === 'reinstall_required'
+      ) {
         runtimePlacementMaintenanceByTargetID.delete(target.targetID);
         return {
           running: false,
@@ -2471,7 +2462,11 @@ async function inspectRuntimePlacementTargetState(
         const classification = classifyDesktopRuntimeBlockedLaunchReport(status.report, {
           target_runtime_version: resolveSSHRuntimeReleaseTag(),
         });
-        if (classification.kind !== 'stopped' && classification.kind !== 'unverified') {
+        if (
+          classification.kind !== 'stopped'
+          && classification.kind !== 'unverified'
+          && classification.kind !== 'reinstall_required'
+        ) {
           runtimePlacementMaintenanceByTargetID.set(target.targetID, classification.maintenance);
           return {
             running: classification.kind === 'restart_required',
@@ -2581,7 +2576,7 @@ async function inspectRuntimePlacementTargetState(
               runtime_target_available: true,
             };
           }
-          if (classification.kind === 'unverified') {
+          if (classification.kind === 'unverified' || classification.kind === 'reinstall_required') {
             await clearRuntimePlacementTargetRecords(target.targetID);
             return {
               running: false,
@@ -7059,10 +7054,7 @@ function createReinstallOperationForCurrentRequest(
           label_key: 'environmentAction.continue',
         }],
   });
-  removeOtherReinstallOperationsForAffectedEnvironments(
-    operation.operation_key,
-    preview.affected_environment_ids,
-  );
+  retireSupersededEnvironmentOperations(preview.affected_environment_ids, operation.operation_key);
   return operation;
 }
 
@@ -7131,10 +7123,7 @@ async function previewReinstallTargetFromLauncher(
       operation_key: operation.operation_key,
       mode: request.mode ?? 'wipe_data',
     });
-    removeOtherReinstallOperationsForAffectedEnvironments(
-      operation.operation_key,
-      preview.affected_environment_ids,
-    );
+    retireSupersededEnvironmentOperations(preview.affected_environment_ids, operation.operation_key);
     launcherOperations.finish(operation.operation_key, 'needs_confirmation', {
       environment_label: preview.label,
       phase: 'confirmation',
@@ -9760,6 +9749,18 @@ async function prepareManagedEnvironmentRuntime(input: Readonly<{
     },
   });
   if (launch.kind === 'blocked') {
+    const classification = classifyDesktopRuntimeBlockedLaunchReport(launch.blocked);
+    if (classification.kind === 'reinstall_required') {
+      throw new DesktopOperationFailureError(runtimeStateIncompatibleFailure({
+        message: launch.blocked.message,
+        targetLabel: input.environment.label,
+        diagnostics: [{
+          channel: 'runtime_startup_report',
+          label: 'Runtime startup report',
+          text: formatBlockedLaunchDiagnostics(launch.blocked),
+        }],
+      }));
+    }
     return {
       ok: false,
       issue: {
@@ -11378,6 +11379,37 @@ function runtimeLifecycleFailureSummary(
   }
 }
 
+function runtimeStateIncompatibleNextActions(
+  operationKey: string,
+  environmentID: string,
+): readonly DesktopLauncherOperationNextAction[] {
+  return [
+    {
+      kind: 'retry',
+      operation_key: operationKey,
+      label: 'Review reinstall target',
+      label_key: 'environmentAction.reinstallRedeven',
+      retry_action: {
+        kind: 'preview_reinstall_target',
+        environment_id: environmentID,
+        mode: 'wipe_data',
+      },
+    },
+    {
+      kind: 'copy_diagnostics',
+      operation_key: operationKey,
+      label: 'Copy log',
+      label_key: 'progress.copyLog',
+    },
+    {
+      kind: 'dismiss',
+      operation_key: operationKey,
+      label: 'Dismiss',
+      label_key: 'progress.dismiss',
+    },
+  ];
+}
+
 function openConnectionFailureNextActions(
   operationKey: string,
   environmentID: string,
@@ -11386,8 +11418,12 @@ function openConnectionFailureNextActions(
     includeDesktopUpdate?: boolean;
     desktopUpdateAvailable?: boolean;
     retryAction?: DesktopLauncherActionRequest;
+    failureCode?: DesktopOperationFailurePresentation['code'];
   }> = {},
 ): readonly DesktopLauncherOperationNextAction[] {
+  if (options.failureCode === 'reinstall_required') {
+    return runtimeStateIncompatibleNextActions(operationKey, environmentID);
+  }
   return [
     ...(options.includeUpdateRuntime && compact(environmentID) !== '' ? [{
       kind: 'update_runtime' as const,
@@ -12824,6 +12860,7 @@ function finishLocalHostOpenFailure(
         failure: result.failure,
         launcherFailure: result,
       }),
+      failureCode: result.failure?.code,
       desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, target.environmentID),
       retryAction: {
         kind: 'open_local_environment',
@@ -12948,6 +12985,7 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
           active_progress_surface: 'open',
           ...checkingOpenPresentation,
         });
+  retireSupersededEnvironmentOperations([environment.id], operation.operation_key);
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
   const failureContext = localEnvironmentFailureContext(environment);
   let runtimeRecord: LocalEnvironmentRuntimeRecord | null = null;
@@ -13317,6 +13355,7 @@ async function openProviderRemoteEnvironmentRecord(
       detail: signal?.aborted ? 'Desktop canceled this open request.' : failure.summary,
       ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environment.id, {
         ...runtimeOpenFailureRecoveryActions({ failure }),
+        failureCode: failure.code,
         desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environment.id),
       }) }),
       ...(signal?.aborted ? {} : { failure }),
@@ -13526,6 +13565,7 @@ async function openRemoteEnvironmentFromLauncher(
           failure: result.failure,
           launcherFailure: result,
         }),
+        failureCode: result.failure?.code,
         desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, failureEnvironmentID),
       }) }),
       ...(canceled || !result.failure ? {} : { failure: result.failure }),
@@ -14120,6 +14160,7 @@ async function openRuntimePlacementBridgeFromLauncher(
             active_progress_surface: 'open',
             ...checkingOpenPresentation,
           });
+    retireSupersededEnvironmentOperations([environmentID], operation.operation_key);
     const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
     const preferences = await loadDesktopPreferencesCached();
     let bridgeSession: RuntimePlacementBridgeSession | null = null;
@@ -14161,6 +14202,7 @@ async function openRuntimePlacementBridgeFromLauncher(
                 detail: failure.summary,
                 next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
                   includeUpdateRuntime: true,
+                  failureCode: failure.code,
                   desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environmentID),
                   retryAction: request,
                 }),
@@ -14231,6 +14273,7 @@ async function openRuntimePlacementBridgeFromLauncher(
                   : {
                       next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
                         includeUpdateRuntime: true,
+                        failureCode: failure.code,
                         desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environmentID),
                         retryAction: request,
                       }),
@@ -14717,6 +14760,7 @@ async function openRuntimePlacementBridgeFromLauncher(
           : {
               next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
                 ...runtimeOpenFailureRecoveryActions({ error, failure }),
+                failureCode: failure.code,
                 desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environmentID),
                 retryAction: request,
               }),
@@ -14828,28 +14872,16 @@ function markRuntimeLifecyclePresentationContext(
   );
 }
 
-function clearSupersededRuntimeFailuresForEnvironments(
+function retireSupersededEnvironmentOperations(
   affectedEnvironmentIDs: readonly string[],
   currentOperationKey: string,
 ): void {
-  const affected = new Set(affectedEnvironmentIDs.map(compact).filter(Boolean));
-  for (const snapshot of launcherOperations.operations()) {
-    if (
-      snapshot.operation_key !== currentOperationKey
-      && snapshot.subject_kind === 'runtime_target'
-      && affected.has(compact(snapshot.environment_id))
-      && (
-        snapshot.active_progress_surface === 'runtime_lifecycle'
-        || snapshot.active_progress_surface === 'open'
-      )
-      && (
-        snapshot.status === 'failed'
-        || snapshot.status === 'cleanup_failed'
-        || snapshot.status === 'canceled'
-      )
-    ) {
-      removeLauncherOperation(snapshot.operation_key);
-    }
+  for (const operationKey of supersededEnvironmentOperationKeys(
+    launcherOperations.operations(),
+    affectedEnvironmentIDs,
+    currentOperationKey,
+  )) {
+    removeLauncherOperation(operationKey);
   }
 }
 
@@ -15339,7 +15371,7 @@ async function executeDirectManagedEnvironmentLifecycle(
         status: 'running',
       });
     }
-    clearSupersededRuntimeFailuresForEnvironments([input.environment_id], input.operation_key);
+    retireSupersededEnvironmentOperations([input.environment_id], input.operation_key);
     await clearReinstallTargetRequiredForEnvironment(input.environment_id).catch(() => undefined);
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
@@ -15359,6 +15391,16 @@ async function executeDirectManagedEnvironmentLifecycle(
       summary: error instanceof Error ? error.message : String(error),
       targetLabel: input.label,
     });
+    if (failure.code === 'reinstall_required') {
+      await markReinstallTargetRequired(input.environment_id, {
+        gatewayID: '',
+        reason: failure.detail ?? failure.summary,
+      }).catch((markerError) => {
+        console.warn(
+          `[redeven:runtime-lifecycle] Could not persist reinstall-required state: ${markerError instanceof Error ? markerError.message : String(markerError)}`,
+        );
+      });
+    }
     const failurePresentation = {
       phase: lifecycleSignal.aborted ? 'canceled' : 'failed',
       title: lifecycleSignal.aborted ? 'Runtime action canceled' : failure.title,
@@ -15378,6 +15420,9 @@ async function executeDirectManagedEnvironmentLifecycle(
             }).lifecycle_progress,
           }),
       ...(lifecycleSignal.aborted ? {} : { failure }),
+      ...(lifecycleSignal.aborted || failure.code !== 'reinstall_required'
+        ? {}
+        : { next_actions: runtimeStateIncompatibleNextActions(input.operation_key, input.environment_id) }),
     } as const;
     if (input.operation_owner === 'runtime_lifecycle') {
       launcherOperations.finishCurrentAttempt(
@@ -15477,6 +15522,7 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       cancelable: requestedOperation !== 'stop',
       started_at_unix_ms: request.operation_started_at_unix_ms,
     });
+    retireSupersededEnvironmentOperations([environmentID], operationKey);
     return executeDirectManagedEnvironmentLifecycle({
       request,
       environment_id: environmentID,
@@ -15953,6 +15999,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
       cancelable: false,
       started_at_unix_ms: request.operation_started_at_unix_ms,
     });
+    retireSupersededEnvironmentOperations([environmentID], operationKey);
     const owner = _initializeRuntimeLifecycleOperation(operationKey, operation, {
       hostAccess,
       placement,
@@ -16052,7 +16099,7 @@ async function refreshEnvironmentRuntimeFromLauncher(
         lifecycle_progress: lifecycleProgress,
       });
       scheduleCurrentLauncherOperationRemoval(operationKey, owner);
-      clearSupersededRuntimeFailuresForEnvironments([environmentID], operationKey);
+      retireSupersededEnvironmentOperations([environmentID], operationKey);
       resetLauncherIssueState();
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess('refreshed_environment_runtime', {

@@ -295,6 +295,13 @@ export type DesktopRuntimeBlockedClassification =
       maintenance: DesktopRuntimeMaintenanceRequirement;
     }>
   | Readonly<{
+      kind: 'reinstall_required';
+      message: string;
+      attach_state?: string;
+      failure_code: 'runtime_state_incompatible';
+      lock_pid?: number;
+    }>
+  | Readonly<{
       kind: 'unverified';
       message: string;
       attach_state?: string;
@@ -395,6 +402,15 @@ export function classifyDesktopRuntimeBlockedLaunchReport(
     ...(failureCode ? { failure_code: failureCode } : {}),
     ...(lockPID > 0 ? { lock_pid: lockPID } : {}),
   };
+
+  if (failureCode === 'runtime_state_incompatible') {
+    return {
+      kind: 'reinstall_required',
+      message: message || 'Runtime data is incompatible with this version of Redeven.',
+      ...diagnostics,
+      failure_code: 'runtime_state_incompatible',
+    };
+  }
 
   if (desktopRuntimeBlockedReportIsNotRunning(report)) {
     return {

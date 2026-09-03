@@ -2,15 +2,31 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 const testLocalUIBridgeToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+func TestDesktopLaunchDiagnosticFailureCode(t *testing.T) {
+	wrongKind := &sqliteutil.WrongDatabaseKindError{
+		ExpectedKind: "portforward_registry_v1",
+		ActualKind:   "portforward_registry",
+	}
+	if got := desktopLaunchDiagnosticFailureCode(fmt.Errorf("init codeapp: %w", wrongKind)); got != desktopLaunchFailureCodeRuntimeStateIncompatible {
+		t.Fatalf("desktopLaunchDiagnosticFailureCode() = %q", got)
+	}
+	if got := desktopLaunchDiagnosticFailureCode(fmt.Errorf("network unavailable")); got != "" {
+		t.Fatalf("generic failure code = %q, want empty", got)
+	}
+}
 
 func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	reportPath := filepath.Join(t.TempDir(), "startup", "report.json")
@@ -124,6 +140,36 @@ func TestWriteDesktopLaunchReportBlocked(t *testing.T) {
 	}
 	if report.LockOwner == nil || report.LockOwner.Mode != "remote" {
 		t.Fatalf("unexpected lock owner: %#v", report.LockOwner)
+	}
+}
+
+func TestWriteDesktopBlockedLaunchReportIncludesStableFailureCode(t *testing.T) {
+	root := t.TempDir()
+	reportPath := filepath.Join(root, "startup", "blocked.json")
+	layout := config.StateLayout{
+		StateDir:                 filepath.Join(root, "state"),
+		ConfigPath:               filepath.Join(root, "state", "config.json"),
+		RuntimeControlSocketPath: filepath.Join(root, "state", "runtime.sock"),
+	}
+	if err := writeDesktopBlockedLaunchReport(
+		reportPath,
+		desktopLaunchCodeStartupFailed,
+		"failed to init runtime",
+		layout,
+		desktopLaunchFailureCodeRuntimeStateIncompatible,
+	); err != nil {
+		t.Fatalf("writeDesktopBlockedLaunchReport() error = %v", err)
+	}
+	body, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	var report desktopLaunchReport
+	if err := json.Unmarshal(body, &report); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if report.Diagnostics == nil || report.Diagnostics.FailureCode != desktopLaunchFailureCodeRuntimeStateIncompatible {
+		t.Fatalf("Diagnostics = %#v", report.Diagnostics)
 	}
 }
 

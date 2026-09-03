@@ -617,6 +617,19 @@ function launcherProgressActivity(
   }
 }
 
+function launcherProgressActivityPriority(progress: DesktopLauncherActionProgress): number {
+  switch (launcherProgressActivity(progress)) {
+    case 'active':
+      return 3;
+    case 'attention':
+      return 2;
+    case 'released':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 function launcherProgressIdentity(progress: DesktopLauncherActionProgress): string {
   const startedAt = launcherProgressStartedAt(progress);
   const attemptKey = startedAt > 0 ? `:started:${startedAt}` : '';
@@ -665,20 +678,22 @@ function selectLauncherProgress(
     const identity = launcherProgressIdentity(progress);
     byAttempt.set(identity, [...(byAttempt.get(identity) ?? []), progress]);
   }
-  const attempts = [...byAttempt.values()].map(
-    (items) =>
-      items.find((progress) => launcherProgressActivity(progress) === 'attention') ??
-      items.find((progress) => launcherProgressActivity(progress) === 'released') ??
-      items.find((progress) => launcherProgressActivity(progress) === 'active') ??
-      items[0]!,
-  );
-  const visible = attempts.filter((progress) => launcherProgressActivity(progress) !== 'released');
-  const active = visible.filter((progress) => launcherProgressActivity(progress) === 'active');
-  if (active.length === 1) return active[0];
-  if (active.length > 1) return null;
-  if (visible.length === 1) return visible[0];
-  if (visible.length > 1) return null;
-  return attempts.length === 1 ? attempts[0] : null;
+  const attempts = [...byAttempt.values()]
+    .map((items) => [...items].sort(
+      (left, right) =>
+        launcherProgressTimestamp(right) - launcherProgressTimestamp(left)
+        || String(right.status ?? '').localeCompare(String(left.status ?? '')),
+    )[0]!)
+    .sort(
+      (left, right) =>
+        launcherProgressStartedAt(right) - launcherProgressStartedAt(left)
+        || launcherProgressActivityPriority(right) - launcherProgressActivityPriority(left)
+        || launcherProgressTimestamp(right) - launcherProgressTimestamp(left)
+        || String(right.operation_key ?? '').localeCompare(String(left.operation_key ?? '')),
+    );
+  return attempts.find((progress) => launcherProgressActivity(progress) !== 'released')
+    ?? attempts[0]
+    ?? null;
 }
 
 export function busyStateMatchesAction(state: DesktopLauncherBusyState, action: BusyAction): boolean {

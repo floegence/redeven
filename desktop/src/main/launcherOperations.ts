@@ -82,6 +82,29 @@ function operationIsActive(snapshot: DesktopLauncherOperationSnapshot): boolean 
     || snapshot.status === 'cleanup_running';
 }
 
+export function supersededEnvironmentOperationKeys(
+  operations: readonly DesktopLauncherOperationSnapshot[],
+  affectedEnvironmentIDs: readonly string[],
+  currentOperationKey: string,
+): readonly string[] {
+  const affected = new Set(affectedEnvironmentIDs.map(compact).filter(Boolean));
+  return operations
+    .filter((operation) => operation.operation_key !== compact(currentOperationKey))
+    .filter((operation) => (
+      affected.has(compact(operation.environment_id))
+      || operation.reinstall_preview?.affected_environment_ids.some(
+        (environmentID) => affected.has(compact(environmentID)),
+      )
+    ))
+    .filter((operation) => (
+      operation.active_progress_surface === 'runtime_lifecycle'
+      || operation.active_progress_surface === 'open'
+      || operation.active_progress_surface === 'reinstall'
+    ))
+    .filter((operation) => !operationIsActive(operation))
+    .map((operation) => operation.operation_key);
+}
+
 function stepProgressWithAuthoritativeTiming(
   next: NonNullable<DesktopLauncherOperationSnapshot['step_progress']>,
   previous: DesktopLauncherOperationSnapshot['step_progress'],

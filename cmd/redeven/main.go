@@ -243,7 +243,7 @@ func (c *cli) runCmd(args []string) int {
 	startupSecretsStdin := fs.Bool("startup-secrets-stdin", false, "Read the Desktop startup secrets envelope from stdin")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
 	presentationRaw := fs.String("presentation", string(runtimepresentation.ModeAuto), "Startup presentation: auto|rich|plain|machine")
-	var desktopLaunchFailure func(string, string, config.StateLayout, int) int
+	var desktopLaunchFailure func(string, string, config.StateLayout, int, string) int
 
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -404,8 +404,8 @@ func (c *cli) runCmd(args []string) int {
 		Title: fmt.Sprintf("local state: %s", stateLayout.StateDir),
 	})
 	if desktopLaunchReportEnabled(mode, *startupReportFile) {
-		desktopLaunchFailure = func(code string, message string, layout config.StateLayout, exitCode int) int {
-			if reportErr := writeDesktopBlockedLaunchReport(*startupReportFile, code, message, layout); reportErr != nil {
+		desktopLaunchFailure = func(code string, message string, layout config.StateLayout, exitCode int, failureCode string) int {
+			if reportErr := writeDesktopBlockedLaunchReport(*startupReportFile, code, message, layout, failureCode); reportErr != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", reportErr)
 				return 1
 			}
@@ -413,7 +413,7 @@ func (c *cli) runCmd(args []string) int {
 			return exitCode
 		}
 	}
-	failRuntimeLaunch := func(code string, message string, exitCode int, remediation string) int {
+	failRuntimeLaunch := func(code string, message string, exitCode int, remediation string, failureCode string) int {
 		if remediation == "" {
 			remediation = remediationForStartupFailure(code)
 		}
@@ -429,7 +429,7 @@ func (c *cli) runCmd(args []string) int {
 			_ = startupReporter.Close(runtimepresentation.Result{Success: false, Error: errors.New(message)})
 		}
 		if desktopLaunchFailure != nil {
-			return desktopLaunchFailure(code, message, stateLayout, exitCode)
+			return desktopLaunchFailure(code, message, stateLayout, exitCode, failureCode)
 		}
 		if presentationConfig.Effective == runtimepresentation.ModeMachine {
 			fmt.Fprintf(c.stderr, "%s\n", message)
@@ -437,7 +437,7 @@ func (c *cli) runCmd(args []string) int {
 		return exitCode
 	}
 	failDesktopLaunch := func(code string, message string) int {
-		return failRuntimeLaunch(code, message, 1, "")
+		return failRuntimeLaunch(code, message, 1, "", "")
 	}
 
 	bootstrapViaFlags := strings.TrimSpace(*providerOrigin) != "" ||
@@ -467,7 +467,7 @@ func (c *cli) runCmd(args []string) int {
 				runHelpText(),
 			)
 			if desktopLaunchFailure != nil {
-				return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 2)
+				return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 2, "")
 			}
 			return 2
 		}
@@ -608,7 +608,7 @@ func (c *cli) runCmd(args []string) int {
 	if controlChannelEnabled && !remoteEnabled {
 		message := fmt.Sprintf("runtime is not bootstrapped for remote or hybrid mode: %v", remoteErr)
 		if desktopLaunchFailure != nil {
-			return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 1)
+			return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 1, "")
 		}
 		return c.printNotBootstrappedGuidance(remoteErr)
 	}
@@ -697,7 +697,13 @@ func (c *cli) runCmd(args []string) int {
 		PluginRuntimeAuthority: pluginRuntimeAuthority,
 	})
 	if err != nil {
-		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init runtime: %v", err))
+		return failRuntimeLaunch(
+			desktopLaunchCodeStartupFailed,
+			fmt.Sprintf("failed to init runtime: %v", err),
+			1,
+			"",
+			desktopLaunchDiagnosticFailureCode(err),
+		)
 	}
 	presentationRenderer.SetController(&runtimePresentationController{agent: a})
 
@@ -757,6 +763,7 @@ func (c *cli) runCmd(args []string) int {
 				fmt.Sprintf("failed to start local ui: %v", err),
 				1,
 				remediation,
+				"",
 			)
 		}
 		localUIBindLabel = srv.ListenLabel()
