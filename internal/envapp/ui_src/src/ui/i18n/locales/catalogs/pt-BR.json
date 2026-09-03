@@ -2901,6 +2901,7 @@
     },
     "fields": {
       "target": "Destino",
+      "url": "URL",
       "name": "Nome",
       "description": "Descrição",
       "lastOpened": "Última abertura",

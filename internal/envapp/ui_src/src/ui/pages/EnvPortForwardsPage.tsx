@@ -572,6 +572,14 @@ export function isSupportedWebServiceTarget(raw: string): boolean {
   return parseSupportedWebServiceTarget(raw) !== null;
 }
 
+function isSupportedWebServiceOrigin(raw: string): boolean {
+  const parsed = parseSupportedWebServiceTarget(raw);
+  return parsed !== null
+    && (parsed.pathname === '' || parsed.pathname === '/')
+    && parsed.search === ''
+    && parsed.hash === '';
+}
+
 function normalizedHostname(hostname: string): string {
   return compact(hostname).toLowerCase().replace(/^\[/u, '').replace(/\]$/u, '');
 }
@@ -1789,20 +1797,20 @@ export function CreateForwardDialog(props: {
 
   const handleCreate = () => {
     const targetVal = target().trim();
-    if (!targetVal || !isSupportedWebServiceTarget(targetVal) || !name().trim()) return;
+    if (!targetVal || !isSupportedWebServiceOrigin(targetVal) || !name().trim()) return;
     props.onCreate(targetVal, name().trim(), description().trim(), accessMode());
   };
 
   const isValid = () => {
     const val = target().trim();
     return val.length > 0
-      && isSupportedWebServiceTarget(val)
+      && isSupportedWebServiceOrigin(val)
       && name().trim().length > 0
       && Array.from(name().trim()).length <= 64
       && Array.from(description().trim()).length <= 256;
   };
 
-  const showScopeRestriction = () => target().trim().length > 0 && !isSupportedWebServiceTarget(target());
+  const showScopeRestriction = () => target().trim().length > 0 && !isSupportedWebServiceOrigin(target());
 
   return (
     <Dialog
@@ -1897,12 +1905,13 @@ export function ForwardMetadataDialog(props: Readonly<{
   initialName: string;
   initialDescription: string;
   initialAccessMode?: WebServiceAccessMode;
-  targetURL?: string;
+  targetURL: string;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string, description: string, accessMode: WebServiceAccessMode) => void;
+  onSubmit: (target: string, name: string, description: string, accessMode: WebServiceAccessMode) => void;
 }>) {
   const i18n = useI18n();
+  const [target, setTarget] = createSignal('');
   const [name, setName] = createSignal('');
   const [description, setDescription] = createSignal('');
   const [accessMode, setAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
@@ -1917,12 +1926,16 @@ export function ForwardMetadataDialog(props: Readonly<{
     const nextKey = `${props.mode}:${props.editorKey}`;
     if (loadedKey === nextKey) return;
     loadedKey = nextKey;
+    setTarget(props.targetURL);
     setName(props.initialName);
     setDescription(props.initialDescription);
     setAccessMode(props.initialAccessMode || 'unified_proxy');
     setValidationVisible(false);
   });
 
+  const targetError = () => isSupportedWebServiceOrigin(target())
+    ? ''
+    : i18n.t('webServices.dialog.targetError');
   const nameError = () => {
     const value = name().trim();
     if (!value) return i18n.t('webServices.dialog.nameRequired');
@@ -1934,9 +1947,11 @@ export function ForwardMetadataDialog(props: Readonly<{
     : '';
   const submit = () => {
     setValidationVisible(true);
-    if (nameError() || descriptionError()) return;
-    props.onSubmit(name().trim(), description().trim(), accessMode());
+    if (targetError() || nameError() || descriptionError()) return;
+    props.onSubmit(target().trim(), name().trim(), description().trim(), accessMode());
   };
+  const showScopeRestriction = () => target().trim().length > 0 && Boolean(targetError());
+  const showMissingTarget = () => validationVisible() && target().trim().length === 0;
 
   return (
     <Dialog
@@ -1954,6 +1969,45 @@ export function ForwardMetadataDialog(props: Readonly<{
       )}
     >
       <div class="space-y-4" data-testid="web-service-metadata-dialog">
+        <div>
+          <label class="mb-1 block text-xs font-medium" for="web-service-metadata-target">{i18n.t('webServices.fields.url')} <span class="text-destructive">*</span></label>
+          <Input
+            id="web-service-metadata-target"
+            value={target()}
+            onInput={(event) => setTarget(event.currentTarget.value)}
+            placeholder={i18n.t('webServices.dialog.targetPlaceholder')}
+            aria-invalid={showScopeRestriction() || showMissingTarget() ? 'true' : undefined}
+            aria-describedby="web-service-metadata-target-guidance"
+            class={cn(
+              'w-full font-mono',
+              showScopeRestriction() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
+            )}
+          />
+          <div
+            id="web-service-metadata-target-guidance"
+            class={cn(
+              'mt-1.5 min-h-4 text-[11px]',
+              showScopeRestriction()
+                ? 'flex items-start gap-2 rounded-md border border-warning/25 bg-warning/[0.06] px-2.5 py-2 text-foreground'
+                : showMissingTarget() ? 'text-destructive' : 'leading-4 text-muted-foreground',
+            )}
+            role={showScopeRestriction() ? 'alert' : undefined}
+          >
+            <Show
+              when={showScopeRestriction()}
+              fallback={showMissingTarget() ? i18n.t('webServices.dialog.targetError') : i18n.t('webServices.dialog.targetHelp')}
+            >
+              <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-warning/12 text-warning" aria-hidden="true">
+                <AlertTriangle class="h-3 w-3" />
+              </span>
+              <span class="min-w-0">
+                <span class="block font-medium leading-4">{i18n.t('webServices.address.invalidTitle')}</span>
+                <span class="block leading-4 text-muted-foreground">{i18n.t('webServices.address.invalid')}</span>
+                <span class="mt-0.5 block font-mono text-[10px] leading-4 text-foreground/80">{i18n.t('webServices.address.examples')}</span>
+              </span>
+            </Show>
+          </div>
+        </div>
         <div>
           <label class="mb-1 block text-xs font-medium" for="web-service-metadata-name">{i18n.t('webServices.fields.name')} <span class="text-destructive">*</span></label>
           <Input
@@ -1986,7 +2040,7 @@ export function ForwardMetadataDialog(props: Readonly<{
             {validationVisible() && descriptionError() ? descriptionError() : i18n.t('webServices.dialog.descriptionHelp')}
           </p>
         </div>
-        <AccessModePicker value={accessMode()} targetURL={props.targetURL || ''} disabled={props.loading} onChange={setAccessMode} />
+        <AccessModePicker value={accessMode()} targetURL={target()} disabled={props.loading} onChange={setAccessMode} />
       </div>
     </Dialog>
   );
@@ -3061,13 +3115,13 @@ export function EnvPortForwardsPage() {
     );
   };
 
-  const doSaveRecentSession = async (session: ForwardSession, name: string, description: string, accessMode: WebServiceAccessMode) => {
+  const doSaveRecentSession = async (session: ForwardSession, target: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
     if (!session.ephemeral || forwardMetadataSaving()) return;
     setForwardMetadataSaving(true);
     try {
       const forward = await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forward-sessions/${encodeURIComponent(session.forward.forward_id)}/save`, {
         method: 'POST',
-        body: JSON.stringify({ name, description, access_mode: accessMode }),
+        body: JSON.stringify({ target, name, description, access_mode: accessMode }),
       });
       setRecentSession({ ...session, forward, ephemeral: false });
       setForwardMetadataTarget(null);
@@ -3080,13 +3134,13 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const doUpdateForwardMetadata = async (forward: PortForward, name: string, description: string, accessMode: WebServiceAccessMode) => {
+  const doUpdateForwardMetadata = async (forward: PortForward, target: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
     if (forwardMetadataSaving()) return;
     setForwardMetadataSaving(true);
     try {
       await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forwards/${encodeURIComponent(forward.forward_id)}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name, description, access_mode: accessMode }),
+        body: JSON.stringify({ target, name, description, access_mode: accessMode }),
       });
       setForwardMetadataTarget(null);
       bumpRefresh();
@@ -3098,11 +3152,11 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  const submitForwardMetadata = (name: string, description: string, accessMode: WebServiceAccessMode) => {
+  const submitForwardMetadata = (targetURL: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
     const target = forwardMetadataTarget();
     if (!target) return;
-    if (target.mode === 'save') void doSaveRecentSession(target.session, name, description, accessMode);
-    else void doUpdateForwardMetadata(target.forward, name, description, accessMode);
+    if (target.mode === 'save') void doSaveRecentSession(target.session, targetURL, name, description, accessMode);
+    else void doUpdateForwardMetadata(target.forward, targetURL, name, description, accessMode);
   };
 
   // Find the service being deleted for the confirmation dialog

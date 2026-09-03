@@ -2991,6 +2991,7 @@
     },
     "fields": {
       "target": "Цель",
+      "url": "URL",
       "name": "Имя",
       "description": "Описание",
       "lastOpened": "Последнее открытие",

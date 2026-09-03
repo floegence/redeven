@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { ManagedReleaseCandidates, ManagedServiceRow as ManagedServiceRowComponent, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
+import { ForwardMetadataDialog, ManagedReleaseCandidates, ManagedServiceRow as ManagedServiceRowComponent, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
 import type { ManagedOperation } from './managedServiceOperationController';
 
 function ManagedServiceRow(props: Omit<Parameters<typeof ManagedServiceRowComponent>[0], 'operationExpanded' | 'onOperationExpandedChange'>) {
@@ -44,6 +44,45 @@ describe('EnvPortForwardsPage browser presentation', () => {
     dispose = undefined;
     document.body.replaceChildren();
     document.documentElement.classList.remove('dark');
+  });
+
+  it('keeps the editable service URL and save action usable at narrow width', async () => {
+    await page.viewport(390, 760);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const submissions: unknown[][] = [];
+    dispose = render(() => (
+      <ForwardMetadataDialog
+        open
+        mode="edit"
+        editorKey="pf-editable-url"
+        targetURL="http://localhost:3000"
+        initialName="Local dashboard"
+        initialDescription="Development status"
+        initialAccessMode="unified_proxy"
+        loading={false}
+        onOpenChange={() => undefined}
+        onSubmit={(...args) => submissions.push(args)}
+      />
+    ), host);
+    await settle();
+
+    const form = document.querySelector<HTMLElement>('[data-testid="web-service-metadata-dialog"]')!;
+    const dialog = form.closest<HTMLElement>('[role="dialog"]') ?? form.parentElement!;
+    const target = document.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')!;
+    expect(target.value).toBe('http://localhost:3000');
+    expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+    expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+
+    await userEvent.fill(target, 'https://example.com');
+    await settle();
+    expect(form.textContent).toContain('Available only inside this Environment');
+    expect(save.getBoundingClientRect().bottom).toBeLessThanOrEqual(760);
+
+    await userEvent.fill(target, '4173');
+    await userEvent.click(save);
+    expect(submissions).toEqual([['4173', 'Local dashboard', 'Development status', 'unified_proxy']]);
   });
 
   it('shows exact direct releases, current identity, filters, and disabled reasons at narrow width', async () => {

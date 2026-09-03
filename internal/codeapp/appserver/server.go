@@ -5425,9 +5425,15 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
+			auditDetail := map[string]any{"forward_id": parts[0]}
+			if strings.TrimSpace(req.Target) != "" {
+				scheme, host := auditURLHost(req.Target)
+				auditDetail["target_scheme"] = scheme
+				auditDetail["target_host"] = host
+			}
 			forward, err := g.pf.SaveForwardSession(r.Context(), parts[0], req)
 			if err != nil {
-				g.appendAudit(meta, "port_forward_session_save", "failure", map[string]any{"forward_id": parts[0]}, err)
+				g.appendAudit(meta, "port_forward_session_save", "failure", auditDetail, err)
 				status := http.StatusBadRequest
 				if errors.Is(err, portforward.ErrForwardNotFound) {
 					status = http.StatusNotFound
@@ -5435,7 +5441,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			g.appendAudit(meta, "port_forward_session_save", "success", map[string]any{"forward_id": parts[0]}, nil)
+			g.appendAudit(meta, "port_forward_session_save", "success", auditDetail, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: forward})
 			return
 		}
