@@ -196,7 +196,7 @@ func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repo
 		return nil, nil
 	}
 
-	repoRootReal, err := s.validateRepoRootPath(ctx, worktreePath)
+	identity, err := s.validateRepoRootIdentity(ctx, worktreePath)
 	if err != nil {
 		return &gitDeleteLinkedWorktreePreview{
 			WorktreePath: worktreePath,
@@ -205,7 +205,7 @@ func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repo
 		}, nil
 	}
 	if directWorkspaceRead {
-		linkedRepo, loadErr := s.loadRepoContext(ctx, repoRootReal)
+		linkedRepo, loadErr := s.loadResolvedRepoContext(ctx, identity)
 		if loadErr != nil {
 			return nil, loadErr
 		}
@@ -219,7 +219,7 @@ func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repo
 			Summary:      status.Summary(),
 		}, nil
 	}
-	snapshot, err := s.readLinkedWorktreeSnapshot(ctx, repoRootReal)
+	snapshot, err := s.readLinkedWorktreeSnapshot(ctx, identity.WorktreeRoot)
 	if err != nil {
 		return nil, err
 	}

@@ -28,12 +28,13 @@ func (s *Session) RetainRepository(ctx context.Context, id RepositoryIdentity) e
 	if s.closed {
 		return errors.New("git runtime session is closed")
 	}
-	if s.refs[id.WorktreeKey] != nil {
-		return nil
-	}
 	ref, err := s.runtime.RetainRepository(ctx, id)
 	if err != nil {
 		return err
+	}
+	if s.refs[id.WorktreeKey] != nil {
+		ref.Release()
+		return nil
 	}
 	s.refs[id.WorktreeKey] = ref
 	return nil

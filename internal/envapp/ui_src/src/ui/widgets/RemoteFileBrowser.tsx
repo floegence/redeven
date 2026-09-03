@@ -147,9 +147,7 @@ import {
   getParentDir,
   insertItemToTree,
   normalizePath,
-  removeCachePathPrefix,
   removeItemsFromTree,
-  rewriteCachePathPrefix,
   rewriteSubtreePaths,
   sortFileItems,
   toFileItem,
@@ -157,8 +155,7 @@ import {
   validateFileBrowserEntryName,
   withChildrenAtRoot,
 } from './FileBrowserShared';
-
-type DirCache = Map<string, FileItem[]>;
+import { DirectorySnapshotCache } from './RemoteFileBrowserNavigation';
 
 type PathLoadStatus =
   | 'canceled'
@@ -182,19 +179,21 @@ type DirectedNavigationFailure = {
   fallback: boolean;
 };
 
-type DirTargetLoadPolicy = 'use_cache' | 'revalidate_target' | 'force_reload';
+type DirectoryNavigationIntent = 'browse' | 'verify' | 'refresh' | 'scope-change';
 
-type PreparedDirectoryState = {
-  tree: FileItem[];
-  cache: DirCache;
-  rootPath: string;
-  committedPath: string;
-  lastLoadedPath: string;
+type PreparedDirectorySegment = {
+  path: string;
+  items: FileItem[];
+  expectedRevision: number;
+  source: 'cache' | 'remote';
 };
 
-type DirectoryStateSeed = {
-  tree: FileItem[];
-  cache: DirCache;
+type PreparedDirectoryState = {
+  segments: PreparedDirectorySegment[];
+  rootPath: string;
+  committedPath: string;
+  invalidatePrefix?: string;
+  resetCache?: boolean;
 };
 
 type DirectoryPrepareResult =
@@ -214,11 +213,29 @@ type DirectoryNavigationOptions = {
   persistOnFallback?: boolean;
   refreshPathContext?: boolean;
   directedRequestId?: string;
-  targetPolicy?: DirTargetLoadPolicy;
+  intent?: DirectoryNavigationIntent;
   showBlockingOverlay?: boolean;
-  seed?: DirectoryStateSeed;
   allowInvalidTargetFallback?: boolean;
   showHiddenOverride?: boolean;
+};
+
+type DirectoryNavigationRequest = {
+  token: object;
+  targetPath: string;
+  options: DirectoryNavigationOptions;
+  promise: Promise<DirectoryNavigationResult>;
+  resolve: (result: DirectoryNavigationResult) => void;
+  controller: AbortController | null;
+};
+
+type DirectoryViewState = {
+  activePath: string;
+  snapshotReady: boolean;
+  freshness: 'fresh' | 'refreshing' | 'stale';
+  pending: null | {
+    targetPath: string;
+    kind: 'opening' | 'refreshing';
+  };
 };
 
 type ManualDirectoryNavigationResult =
@@ -702,11 +719,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const decoratedFiles = createMemo(() => applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()));
   const [filesGitDiffDialogOpen, setFilesGitDiffDialogOpen] = createSignal(false);
   const [filesGitDiffDialogItem, setFilesGitDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
-  const [loading, setLoading] = createSignal(false);
-  const [pathLoadInFlight, setPathLoadInFlight] = createSignal('');
-  const [pendingBrowserPath, setPendingBrowserPath] = createSignal('');
+  const [directoryView, setDirectoryView] = createSignal<DirectoryViewState>({
+    activePath: '',
+    snapshotReady: false,
+    freshness: 'fresh',
+    pending: null,
+  });
+  const activeDirectoryPath = () => directoryView().activePath;
+  const activeDirectorySnapshotReady = () => directoryView().snapshotReady;
+  const pendingDirectoryPath = () => directoryView().pending?.targetPath ?? '';
+  const directoryBlocking = () => Boolean(directoryView().pending && !directoryView().snapshotReady);
+  const lastStableDirectoryPath = () => activeDirectorySnapshotReady() ? activeDirectoryPath() : '';
 
-  let cache: DirCache = new Map();
+  let directoryCache = new DirectorySnapshotCache();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [deleteDialogItems, setDeleteDialogItems] = createSignal<FileItem[]>([]);
@@ -726,8 +751,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [dragMoveLoading, setDragMoveLoading] = createSignal(false);
   const [fileBrowserResetSeq, setFileBrowserResetSeq] = createSignal(0);
 
-  const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
-  const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('');
   const [homePathDisplayHint, setHomePathDisplayHint] = createSignal('');
   const [directedNavigationFailure, setDirectedNavigationFailure] = createSignal<DirectedNavigationFailure | null>(null);
   const [titleOverridePath, setTitleOverridePath] = createSignal('');
@@ -821,8 +844,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let previousRootPermissionsSignature = '';
   const [gitDeleteActionError, setGitDeleteActionError] = createSignal('');
 
-  let dirReqSeq = 0;
+  let activeDirectoryRequest: DirectoryNavigationRequest | null = null;
+  let queuedDirectoryRequest: DirectoryNavigationRequest | null = null;
+  let directoryWorkerRunning = false;
+  let resetDirectoryRequestQueue = () => {};
+  let directoryModeHydrated = false;
   let repoReqSeq = 0;
+  let lastRepoInfoPath = '';
+  let repoRequestController: AbortController | null = null;
   let filesGitDecorationReqSeq = 0;
   let filesGitDecorationInFlight = false;
   let pendingFilesGitDecorationRequest: { repoRootPath: string; sequence: number } | null = null;
@@ -949,8 +978,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return Boolean(readGitCommitCacheEntry(contextKey)?.resolved);
   };
 
-  const cloneDirCache = (source: DirCache): DirCache => new Map(source);
-
   const clearFilesGitDecorationIndex = () => {
     filesGitDecorationReqSeq += 1;
     lastFilesGitDecorationRepoKey = '';
@@ -1050,14 +1077,32 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const applyPreparedDirectoryState = (state: PreparedDirectoryState, options: { persistEnvId?: string } = {}) => {
-    const previousPath = normalizeAbsolutePath(untrack(() => currentBrowserPath()));
+  const applyPreparedDirectoryState = (state: PreparedDirectoryState, options: { persistEnvId?: string } = {}): boolean => {
+    const previousPath = normalizeAbsolutePath(untrack(() => activeDirectoryPath()));
     const committedPath = normalizeAbsolutePath(state.committedPath);
+    let nextFiles = state.resetCache ? [] : files();
+    if (state.resetCache) {
+      directoryCache = new DirectorySnapshotCache();
+    }
+    if (state.invalidatePrefix) {
+      directoryCache.invalidatePrefix(state.invalidatePrefix);
+      nextFiles = removeItemsFromTree(nextFiles, new Set([state.invalidatePrefix]));
+    }
+    for (const segment of state.segments) {
+      const entry = segment.source === 'remote'
+        ? directoryCache.acceptRemote(segment.path, segment.items, segment.expectedRevision)
+        : directoryCache.read(segment.path);
+      if (!entry) return false;
+      nextFiles = withChildrenAtRoot(nextFiles, segment.path, entry.items, state.rootPath);
+    }
     batch(() => {
-      cache = state.cache;
-      setFiles(state.tree);
-      setLastLoadedBrowserPath(state.lastLoadedPath);
-      setCurrentBrowserPath(state.committedPath);
+      setFiles(nextFiles);
+      setDirectoryView((current) => ({
+        ...current,
+        activePath: state.committedPath,
+        snapshotReady: true,
+        freshness: 'fresh',
+      }));
       if (options.persistEnvId) {
         writePersistedLastPath(options.persistEnvId, state.committedPath);
       }
@@ -1065,6 +1110,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (committedPath && committedPath !== previousPath) {
       props.onCommittedPathChange?.(committedPath, matchFilesystemRoot(committedPath, filesystemRoots())?.id);
     }
+    return true;
   };
 
   createEffect(() => {
@@ -1084,13 +1130,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const clearDirectoryState = () => {
-    dirReqSeq += 1;
-    cache = new Map();
+    resetDirectoryRequestQueue();
+    directoryCache = new DirectorySnapshotCache();
     setFiles([]);
-    setLoading(false);
-    setPendingBrowserPath('');
-    setPathLoadInFlight('');
-    setLastLoadedBrowserPath('');
+    setDirectoryView({
+      activePath: '',
+      snapshotReady: false,
+      freshness: 'fresh',
+      pending: null,
+    });
   };
 
   const readPersistedLastPath = (id: string): string => {
@@ -1198,13 +1246,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )),
       }));
       await refreshFilesystemPathContext();
-      const currentPath = normalizeAbsolutePath(currentBrowserPath()) || defaultRootPath();
+      const currentPath = normalizeAbsolutePath(activeDirectoryPath()) || defaultRootPath();
       if (currentPath) {
         await requestDirectoryNavigation(currentPath, {
           fallbackPath: defaultRootPath(),
           persistEnvId: envId(),
           persistOnReady: true,
-          targetPolicy: 'force_reload',
+          intent: 'scope-change',
         });
       }
       notification.success(
@@ -1243,10 +1291,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const shouldNotifyGitLoadError = (options: { notifyOnError?: boolean }): boolean => options.notifyOnError !== false;
   const presentGitRequestError = (fallback = i18n.t('git.common.requestFailed')): string => fallback;
 
-  const resolveRepoInfo = async (path: string = currentBrowserPath(), options: { silent?: boolean; notifyOnError?: boolean } = {}): Promise<GitResolveRepoResponse | null> => {
+  const resolveRepoInfo = async (path: string = activeDirectoryPath(), options: { silent?: boolean; notifyOnError?: boolean; signal?: AbortSignal; force?: boolean } = {}): Promise<GitResolveRepoResponse | null> => {
+    const normalizedPath = normalizePath(path);
     const client = protocol.session?.();
     if (!client) {
       repoReqSeq += 1;
+      lastRepoInfoPath = '';
       setRepoInfo(null);
       setRepoInfoLoading(false);
       setRepoInfoResolved(false);
@@ -1254,14 +1304,27 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return null;
     }
 
+    // A stable path has one repository-context request. Explicit refreshes
+    // pass force so a background lifecycle event can revalidate it.
+    if (!options.force && normalizedPath === lastRepoInfoPath && repoRequestController) {
+      return null;
+    }
+    if (!options.force && normalizedPath === lastRepoInfoPath && untrack(() => repoInfoResolved())) {
+      return untrack(() => repoInfo());
+    }
+
     const seq = ++repoReqSeq;
+    lastRepoInfoPath = normalizedPath;
+    repoRequestController?.abort();
+    const controller = new AbortController();
+    repoRequestController = controller;
     if (!options.silent) {
       setRepoInfoLoading(true);
       setRepoInfoResolved(false);
       setRepoInfoError('');
     }
     try {
-      const resp = await rpc.git.resolveRepo({ path: normalizePath(path) });
+      const resp = await rpc.git.resolveRepo({ path: normalizedPath }, { signal: controller.signal });
       if (seq !== repoReqSeq) return null;
       const nextInfo: GitResolveRepoResponse = resp?.available
         ? {
@@ -1303,6 +1366,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setRepoInfoLoading(false);
         setRepoInfoResolved(true);
       }
+      if (repoRequestController === controller) repoRequestController = null;
     }
   };
 
@@ -3241,7 +3305,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const refreshGitWorkbench = async () => {
-    const nextInfo = await resolveRepoInfo(currentBrowserPath(), { silent: Boolean(repoInfo()) });
+    const nextInfo = await resolveRepoInfo(activeDirectoryPath(), { silent: Boolean(repoInfo()), force: true });
     if (!nextInfo?.available) {
       resetGitCommitSidebar();
       resetGitWorkbenchData();
@@ -3444,11 +3508,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   const prepareGitMode = async () => {
+    console.log('PREPARE', pageMode(), canEnterGitHistory(), repoInfo(), repoInfoResolved());
     if (pageMode() === 'git' || !canEnterGitHistory()) return;
-    setGitSurfacePrewarmed(true);
     const info = repoInfo();
     const repoRootPath = exactGitPath(info?.repoRootPath);
     if (!info?.available || !repoRootPath) return;
+    setGitSurfacePrewarmed(true);
 
     const refreshes: Array<Promise<unknown>> = [];
     if (!gitRepoSummary() && !gitRepoSummaryLoading()) {
@@ -3544,7 +3609,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
 
       const nextShowHidden = !showHidden();
-      const currentPath = normalizeAbsolutePath(currentBrowserPath()) || rootPath;
+      const currentPath = normalizeAbsolutePath(activeDirectoryPath()) || rootPath;
       const nextPath = nextShowHidden
         ? normalizePath(currentPath)
         : visibleBrowserPath(currentPath, rootPath, filesystemRoots());
@@ -3553,8 +3618,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       batch(() => {
         clearDirectoryState();
         setShowHidden(nextShowHidden);
-        setCurrentBrowserPath(nextPath);
-        setLoading(true);
         resetFileBrowser();
       });
 
@@ -3563,6 +3626,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         persistEnvId: id,
         persistOnReady: true,
         showBlockingOverlay: true,
+        intent: 'scope-change',
       });
     })();
   };
@@ -3580,7 +3644,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         class="cursor-pointer"
         aria-label={i18n.t('files.refreshCurrentDirectory')}
         onClick={() => { void refreshCurrentDirectory({ forceReload: true }); }}
-        disabled={!currentBrowserPath().trim() || loading() || !!pendingBrowserPath().trim()}
+        disabled={!activeDirectoryPath().trim() || directoryBlocking() || !!pendingDirectoryPath().trim()}
       >
         {i18n.t('common.actions.refresh')}
       </Button>
@@ -3616,7 +3680,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }));
 
     clearDirectoryState();
-    setCurrentBrowserPath(initialPathOverride() ? '' : restored.nextPath);
+    directoryModeHydrated = false;
     setAgentHomePathAbs('');
     setShowHidden(restored.nextShowHidden);
     setGitSubview(restored.nextSubview);
@@ -3634,10 +3698,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     resetFileBrowser();
 
     repoReqSeq += 1;
+    lastRepoInfoPath = '';
     if (previousEnvId && previousEnvId !== id) {
       filePreview.closePreview();
     }
     previousEnvId = id;
+    directoryModeHydrated = true;
   });
 
   const notifyPathLoadFailure = (result: PathLoadResult) => {
@@ -3645,16 +3711,33 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     notification.error(i18n.t('files.notifications.failedToLoadDirectoryTitle'), pathLoadFailureMessage(result));
   };
 
+  const directoryPathChain = (path: string, rootPath: string): string[] => {
+    const normalizedPath = normalizePath(path);
+    const normalizedRoot = normalizePath(rootPath);
+    const rel = normalizedPath === normalizedRoot ? '' : normalizedPath.slice(normalizedRoot.length);
+    const chain = [normalizedRoot];
+    let cursor = normalizedRoot;
+    for (const part of rel.split('/').filter(Boolean)) {
+      cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
+      chain.push(cursor);
+    }
+    return chain;
+  };
+
+  const isLatestDirectoryRequest = (request: DirectoryNavigationRequest): boolean => (
+    !request.controller?.signal.aborted
+    && (queuedDirectoryRequest ?? activeDirectoryRequest)?.token === request.token
+  );
+
   const prepareDirectoryState = async (
     requestedPath: string,
-    seq: number,
+    request: DirectoryNavigationRequest,
     options: {
-      targetPolicy?: DirTargetLoadPolicy;
-      seed?: DirectoryStateSeed;
+      intent?: DirectoryNavigationIntent;
       showHiddenOverride?: boolean;
     } = {},
   ): Promise<DirectoryPrepareResult> => {
-    if (seq !== dirReqSeq) return { status: 'canceled' };
+    if (!isLatestDirectoryRequest(request)) return { status: 'canceled' };
 
     if (!protocol.session?.()) {
       return { status: 'transport_error' };
@@ -3666,6 +3749,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch {
       return { status: 'transport_error' };
     }
+    if (!isLatestDirectoryRequest(request)) return { status: 'canceled' };
 
     const normalizedRequestedPath = normalizePath(requestedPath);
     const activeRoot = matchFilesystemRoot(normalizedRequestedPath, filesystemRoots());
@@ -3677,44 +3761,48 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     const activeRootPath = normalizePath(activeRoot.pathAbs || rootPath);
-    const targetPolicy = options.targetPolicy ?? 'use_cache';
-    let nextTree = options.seed?.tree ?? files();
-    const nextCache = options.seed?.cache ?? cloneDirCache(cache);
-
-    const rel = normalizedRequestedPath === activeRootPath ? '' : normalizedRequestedPath.slice(activeRootPath.length);
-    const parts = rel.split('/').filter(Boolean);
-    const chain: string[] = [activeRootPath];
-    let cursor = activeRootPath;
-    for (const part of parts) {
-      cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
-      chain.push(cursor);
-    }
+    const intent = options.intent ?? 'browse';
+    const segments: PreparedDirectorySegment[] = [];
+    const chain = directoryPathChain(normalizedRequestedPath, activeRootPath);
 
     for (const dir of chain) {
-      if (seq !== dirReqSeq) return { status: 'canceled' };
+      if (!isLatestDirectoryRequest(request)) return { status: 'canceled' };
 
-      const forceReload = dir === normalizedRequestedPath && (targetPolicy === 'force_reload' || targetPolicy === 'revalidate_target');
-      const cachedItems = !forceReload ? nextCache.get(dir) : undefined;
-      if (cachedItems) {
-        nextTree = withChildrenAtRoot(nextTree, dir, cachedItems, activeRootPath);
+      const visibilityChanged = options.showHiddenOverride !== undefined
+        && options.showHiddenOverride !== showHidden();
+      const canReuseCache = intent !== 'scope-change' && !visibilityChanged && dir !== normalizedRequestedPath;
+      const cached = canReuseCache ? directoryCache.read(dir) : undefined;
+      if (cached) {
+        segments.push({
+          path: dir,
+          items: cached.items,
+          expectedRevision: cached.revision,
+          source: 'cache',
+        });
         continue;
       }
 
+
+      const expectedRevision = directoryCache.revision(dir);
       try {
         const resp = await rpc.fs.list({
           path: dir,
           showHidden: options.showHiddenOverride ?? showHidden(),
-        });
-        if (seq !== dirReqSeq) return { status: 'canceled' };
+        }, { signal: request.controller?.signal });
+        if (!isLatestDirectoryRequest(request)) return { status: 'canceled' };
 
         const entries = resp?.entries ?? [];
         const items = entries
           .map(toFileItem)
           .sort((a: FileItem, b: FileItem) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
-        nextCache.set(dir, items);
-        nextTree = withChildrenAtRoot(nextTree, dir, items, activeRootPath);
+        segments.push({
+          path: dir,
+          items,
+          expectedRevision,
+          source: 'remote',
+        });
       } catch (error) {
-        if (seq !== dirReqSeq) return { status: 'canceled' };
+        if (!isLatestDirectoryRequest(request) || request.controller?.signal.aborted) return { status: 'canceled' };
         return {
           ...classifyPathLoadError(error),
           rootPath: activeRootPath,
@@ -3725,24 +3813,22 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return {
       status: 'ok',
       state: {
-        tree: nextTree,
-        cache: nextCache,
+        segments,
         rootPath: activeRootPath,
         committedPath: normalizedRequestedPath,
-        lastLoadedPath: normalizedRequestedPath,
+        resetCache: intent === 'scope-change',
       },
     };
   };
 
   const resolveDirectoryNavigation = async (
     requestedPath: string,
-    seq: number,
-    options: Pick<DirectoryNavigationOptions, 'fallbackPath' | 'targetPolicy' | 'seed' | 'allowInvalidTargetFallback' | 'showHiddenOverride'> = {},
+    request: DirectoryNavigationRequest,
+    options: Pick<DirectoryNavigationOptions, 'fallbackPath' | 'intent' | 'allowInvalidTargetFallback' | 'showHiddenOverride'> = {},
   ): Promise<DirectoryNavigationResult> => {
     const normalizedRequestedPath = normalizePath(requestedPath);
-    const prepared = await prepareDirectoryState(normalizedRequestedPath, seq, {
-      targetPolicy: options.targetPolicy ?? 'use_cache',
-      seed: options.seed,
+    const prepared = await prepareDirectoryState(normalizedRequestedPath, request, {
+      intent: options.intent ?? 'browse',
       showHiddenOverride: options.showHiddenOverride,
     });
     if (prepared.status === 'ok') {
@@ -3759,24 +3845,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const normalizedFallbackPath = options.fallbackPath
       ? normalizePath(options.fallbackPath)
       : '';
-    const nextCache = cloneDirCache(cache);
-    removeCachePathPrefix(nextCache, normalizedRequestedPath);
-    const nextTree = removeItemsFromTree(files(), new Set([normalizedRequestedPath]));
     const fallbackCandidates = buildFallbackDirectoryCandidates(normalizedRequestedPath, rootPath, normalizedFallbackPath, filesystemRoots());
 
     for (const candidate of fallbackCandidates) {
-      const fallbackPrepared = await prepareDirectoryState(candidate, seq, {
-        targetPolicy: 'force_reload',
-        seed: {
-          tree: nextTree,
-          cache: cloneDirCache(nextCache),
-        },
+      const fallbackPrepared = await prepareDirectoryState(candidate, request, {
+        intent: 'refresh',
         showHiddenOverride: options.showHiddenOverride,
       });
       if (fallbackPrepared.status === 'ok') {
         return {
           status: 'fallback',
-          state: fallbackPrepared.state,
+          state: {
+            ...fallbackPrepared.state,
+            invalidatePrefix: normalizedRequestedPath,
+          },
           result: prepared,
           requestedPath: normalizedRequestedPath,
         };
@@ -3792,86 +3874,224 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return { status: 'error', result: prepared };
   };
 
-  const runDirectoryNavigationRequest = async (
-    requestedPath: string,
-    options: DirectoryNavigationOptions = {},
+  const performDirectoryNavigation = async (
+    request: DirectoryNavigationRequest,
   ): Promise<DirectoryNavigationResult> => {
-    const normalizedRequestedPath = normalizePath(requestedPath);
-    const seq = ++dirReqSeq;
-    setPendingBrowserPath(normalizedRequestedPath);
-    setPathLoadInFlight(normalizedRequestedPath);
-    if (options.showBlockingOverlay) {
-      setLoading(true);
-    }
-    try {
-      if (options.refreshPathContext) {
-        try {
-          await refreshFilesystemPathContext();
-        } catch {
-          if (seq !== dirReqSeq) return { status: 'canceled' };
-          return { status: 'error', result: { status: 'transport_error' } };
-        }
-        if (seq !== dirReqSeq) return { status: 'canceled' };
-      }
-      const result = await resolveDirectoryNavigation(normalizedRequestedPath, seq, {
-        fallbackPath: options.fallbackPath,
-        targetPolicy: options.targetPolicy,
-        seed: options.seed,
-        allowInvalidTargetFallback: options.allowInvalidTargetFallback,
-        showHiddenOverride: options.showHiddenOverride,
-      });
-      if (seq !== dirReqSeq || result.status === 'canceled') {
-        return { status: 'canceled' };
-      }
-      if (result.status === 'error') {
-        return result;
-      }
-      applyPreparedDirectoryState(result.state, {
-        persistEnvId: options.persistEnvId && (
-          (result.status === 'ready' && options.persistOnReady === true)
-          || (result.status === 'fallback' && options.persistOnFallback === true)
-        )
-          ? options.persistEnvId
-          : undefined,
-      });
-      if (options.directedRequestId) {
-        setDirectedNavigationFailure(result.status === 'fallback'
-          ? {
-              requestId: options.directedRequestId,
-              requestedPath: result.requestedPath,
-              committedPath: result.state.committedPath,
-              result: result.result,
-              fallback: true,
+    const options = request.options;
+    if (options.refreshPathContext) {
+      try {
+        await Promise.race([
+          refreshFilesystemPathContext(),
+          new Promise<never>((_, reject) => {
+            const signal = request.controller?.signal;
+            if (!signal) return;
+            if (signal.aborted) {
+              reject(new DOMException('The operation was aborted.', 'AbortError'));
+              return;
             }
-          : null);
+            signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true });
+          }),
+        ]);
+      } catch {
+        if (!isLatestDirectoryRequest(request)) return { status: 'canceled' };
+        return { status: 'error', result: { status: 'transport_error' } };
       }
-      return result;
-    } finally {
-      if (seq === dirReqSeq) {
-        setPendingBrowserPath('');
-        setPathLoadInFlight('');
-        setLoading(false);
-      }
+      if (!isLatestDirectoryRequest(request)) return { status: 'canceled' };
     }
+    const result = await resolveDirectoryNavigation(request.targetPath, request, {
+      fallbackPath: options.fallbackPath,
+      intent: options.intent,
+      allowInvalidTargetFallback: options.allowInvalidTargetFallback,
+      showHiddenOverride: options.showHiddenOverride,
+    });
+    if (!isLatestDirectoryRequest(request) || result.status === 'canceled') {
+      return { status: 'canceled' };
+    }
+    if (result.status === 'error') return result;
+    if (!applyPreparedDirectoryState(result.state, {
+      persistEnvId: options.persistEnvId && (
+        (result.status === 'ready' && options.persistOnReady === true)
+        || (result.status === 'fallback' && options.persistOnFallback === true)
+      )
+        ? options.persistEnvId
+        : undefined,
+    })) {
+      return { status: 'canceled' };
+    }
+    if (options.directedRequestId) {
+      setDirectedNavigationFailure(result.status === 'fallback'
+        ? {
+            requestId: options.directedRequestId,
+            requestedPath: result.requestedPath,
+            committedPath: result.state.committedPath,
+            result: result.result,
+            fallback: true,
+          }
+        : null);
+    }
+    return result;
+  };
+
+  const drainDirectoryRequestQueue = async (): Promise<void> => {
+    if (directoryWorkerRunning) return;
+    directoryWorkerRunning = true;
+    try {
+      while (queuedDirectoryRequest) {
+        const request = queuedDirectoryRequest;
+        queuedDirectoryRequest = null;
+        request.controller = new AbortController();
+        activeDirectoryRequest = request;
+    const result = await performDirectoryNavigation(request);
+        request.resolve(result);
+        activeDirectoryRequest = null;
+        if (!queuedDirectoryRequest) {
+          setDirectoryView((current) => ({
+            ...current,
+            freshness: result.status === 'error'
+              && result.result.status === 'transport_error'
+              && current.activePath === request.targetPath
+              && current.snapshotReady
+              ? 'stale'
+              : current.freshness === 'refreshing' ? 'fresh' : current.freshness,
+            pending: null,
+          }));
+        }
+      }
+    } finally {
+      directoryWorkerRunning = false;
+    }
+  };
+
+  resetDirectoryRequestQueue = () => {
+    activeDirectoryRequest?.controller?.abort();
+    queuedDirectoryRequest?.resolve({ status: 'canceled' });
+    queuedDirectoryRequest = null;
+  };
+
+  const currentDirectoryResult = (): DirectoryNavigationResult => ({
+    status: 'ready',
+    state: {
+      segments: [],
+      rootPath: normalizePath(matchFilesystemRoot(activeDirectoryPath(), filesystemRoots())?.pathAbs || defaultRootPath() || '/'),
+      committedPath: normalizePath(activeDirectoryPath()),
+    },
+  });
+
+  const presentCachedDirectory = (targetPath: string, options: DirectoryNavigationOptions): boolean => {
+    if ((options.intent ?? 'browse') !== 'browse') return false;
+    const target = directoryCache.read(targetPath);
+    const activeRoot = matchFilesystemRoot(targetPath, filesystemRoots());
+    if (!target || !activeRoot) return false;
+    const rootPath = normalizePath(activeRoot.pathAbs || defaultRootPath() || '/');
+    let nextFiles = files();
+    for (const path of directoryPathChain(targetPath, rootPath)) {
+      const entry = directoryCache.read(path);
+      if (entry) nextFiles = withChildrenAtRoot(nextFiles, path, entry.items, rootPath);
+    }
+    const previousPath = normalizeAbsolutePath(activeDirectoryPath());
+    batch(() => {
+      setFiles(nextFiles);
+      setDirectoryView((current) => ({
+        ...current,
+        activePath: targetPath,
+        snapshotReady: true,
+        freshness: 'refreshing',
+      }));
+      if (options.persistEnvId && options.persistOnReady) {
+        writePersistedLastPath(options.persistEnvId, targetPath);
+      }
+    });
+    if (targetPath !== previousPath) {
+      props.onCommittedPathChange?.(targetPath, activeRoot.id);
+    }
+    return true;
   };
 
   const requestDirectoryNavigation = async (
     requestedPath: string,
     options: DirectoryNavigationOptions = {},
   ): Promise<DirectoryNavigationResult> => {
-    const result = await runDirectoryNavigationRequest(requestedPath, {
-      ...options,
-      allowInvalidTargetFallback: options.allowInvalidTargetFallback ?? true,
+    const targetPath = normalizePath(requestedPath);
+    const intent = options.intent ?? 'browse';
+    const current = untrack(directoryView);
+    const desiredRequest = queuedDirectoryRequest ?? activeDirectoryRequest;
+
+    // The controlled FileBrowser can replay its initial path while the first
+    // remote snapshot is still pending. Do not let that stale replay replace a
+    // newer user intent targeting another directory.
+    if (intent === 'browse'
+      && !current.snapshotReady
+      && targetPath === normalizePath(current.activePath || '/')
+      && desiredRequest
+      && desiredRequest?.targetPath !== targetPath) {
+      return desiredRequest?.promise ?? currentDirectoryResult();
+    }
+
+    if (intent === 'browse' && current.snapshotReady && targetPath === normalizePath(current.activePath || '/')) {
+      if (desiredRequest && desiredRequest.targetPath !== targetPath) {
+        activeDirectoryRequest?.controller?.abort();
+        queuedDirectoryRequest?.resolve({ status: 'canceled' });
+        queuedDirectoryRequest = null;
+        setDirectoryView((state) => ({
+          ...state,
+          freshness: state.freshness === 'stale' ? 'stale' : 'fresh',
+          pending: null,
+        }));
+      }
+      return currentDirectoryResult();
+    }
+
+    if (desiredRequest?.targetPath === targetPath) {
+      return desiredRequest.promise;
+    }
+
+    const cachePresented = presentCachedDirectory(targetPath, { ...options, intent });
+    let resolveRequest!: (result: DirectoryNavigationResult) => void;
+    const promise = new Promise<DirectoryNavigationResult>((resolve) => {
+      resolveRequest = resolve;
     });
+    const request: DirectoryNavigationRequest = {
+      token: {},
+      targetPath,
+      options: {
+        ...options,
+        intent,
+        allowInvalidTargetFallback: options.allowInvalidTargetFallback ?? true,
+        persistOnReady: cachePresented ? false : options.persistOnReady,
+      },
+      promise,
+      resolve: resolveRequest,
+      controller: null,
+    };
+
+    activeDirectoryRequest?.controller?.abort();
+    queuedDirectoryRequest?.resolve({ status: 'canceled' });
+    queuedDirectoryRequest = request;
+    setDirectoryView((state) => ({
+      ...state,
+      freshness: cachePresented || targetPath === state.activePath ? 'refreshing' : state.freshness,
+      pending: {
+        targetPath,
+        kind: cachePresented || targetPath === state.activePath ? 'refreshing' : 'opening',
+      },
+    }));
+    void drainDirectoryRequestQueue();
+
+    const result = await promise;
     if (result.status === 'error') {
       if (options.directedRequestId) {
         setDirectedNavigationFailure({
           requestId: options.directedRequestId,
-          requestedPath: normalizePath(requestedPath),
-          committedPath: normalizeAbsolutePath(currentBrowserPath()),
+          requestedPath: targetPath,
+          committedPath: normalizeAbsolutePath(activeDirectoryPath()),
           result: result.result,
           fallback: false,
         });
+      } else if (cachePresented && result.result.status === 'transport_error') {
+        notification.warning(
+          i18n.t('files.navigationFailure.title'),
+          i18n.t('files.navigationFailure.connectionFailed'),
+        );
       } else {
         notifyPathLoadFailure(result.result);
       }
@@ -3892,23 +4112,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
     const id = envId();
     const normalizedRequestedPath = normalizePath(requestedPath);
-    const normalizedCurrentPath = normalizeAbsolutePath(currentBrowserPath())
-      ? normalizePath(currentBrowserPath())
+    const normalizedCurrentPath = normalizeAbsolutePath(activeDirectoryPath())
+      ? normalizePath(activeDirectoryPath())
       : rootPath;
     const nextShowHidden = !showHidden() && pathInputIncludesHiddenSegment(normalizedRequestedPath, rootPath, filesystemRoots());
-    const result = await runDirectoryNavigationRequest(normalizedRequestedPath, {
-      fallbackPath: lastLoadedBrowserPath() || rootPath,
+    const result = await requestDirectoryNavigation(normalizedRequestedPath, {
+      fallbackPath: lastStableDirectoryPath() || rootPath,
       persistEnvId: id || undefined,
       persistOnReady: true,
-      targetPolicy: 'revalidate_target',
+      intent: 'verify',
       allowInvalidTargetFallback: false,
       showHiddenOverride: nextShowHidden ? true : undefined,
-      seed: nextShowHidden
-        ? {
-            tree: files(),
-            cache: new Map(),
-          }
-        : undefined,
     });
 
     if (result.status === 'canceled') {
@@ -3940,31 +4154,31 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     refreshPathContext?: boolean;
   } = {}): Promise<void> => {
     const id = envId();
-    const path = normalizeAbsolutePath(currentBrowserPath());
+    const path = normalizeAbsolutePath(activeDirectoryPath());
     if (!id || !path) return;
     const normalizedPath = normalizePath(path);
-    if (pathLoadInFlight() === normalizedPath) return;
+    if (activeDirectoryRequest?.targetPath === normalizedPath || queuedDirectoryRequest?.targetPath === normalizedPath) return;
     const repoRootPath = repoInfo()?.available ? exactGitPath(repoInfo()?.repoRootPath) : '';
     if (repoRootPath) {
       void loadFilesGitDecorationIndex(repoRootPath);
     }
 
     await requestDirectoryNavigation(path, {
-      fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
+      fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
       persistEnvId: id,
       persistOnReady: Boolean(options.directedRequestId),
       persistOnFallback: !options.directedRequestId,
-      targetPolicy: options.forceReload ? 'force_reload' : 'revalidate_target',
-      showBlockingOverlay: lastLoadedBrowserPath() === '',
+      intent: options.forceReload ? 'refresh' : 'browse',
+      showBlockingOverlay: !activeDirectorySnapshotReady(),
       refreshPathContext: options.refreshPathContext,
       directedRequestId: options.directedRequestId,
     });
   };
 
   const fileBrowserNavigationMessage = createMemo(() => {
-    const pendingPath = normalizeAbsolutePath(pendingBrowserPath());
+    const pendingPath = normalizeAbsolutePath(pendingDirectoryPath());
     if (!pendingPath) return '';
-    const currentPath = normalizeAbsolutePath(currentBrowserPath());
+    const currentPath = normalizeAbsolutePath(activeDirectoryPath());
     return normalizePath(pendingPath) === normalizePath(currentPath) ? i18n.t('files.refreshing') : i18n.t('files.opening');
   });
 
@@ -3975,12 +4189,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const retryDirectedNavigation = (failure: DirectedNavigationFailure) => {
     setDirectedNavigationFailure(null);
     void requestDirectoryNavigation(failure.requestedPath, {
-      fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
-      showBlockingOverlay: lastLoadedBrowserPath() === '',
+      fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
+      showBlockingOverlay: !activeDirectorySnapshotReady(),
       persistEnvId: envId(),
       persistOnReady: true,
       persistOnFallback: false,
-      targetPolicy: 'force_reload',
+      intent: 'refresh',
       refreshPathContext: true,
       directedRequestId: failure.requestId,
       allowInvalidTargetFallback: !failure.committedPath,
@@ -3994,7 +4208,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void requestDirectoryNavigation(homePath, {
       persistEnvId: envId(),
       persistOnReady: true,
-      targetPolicy: 'force_reload',
+      intent: 'verify',
       allowInvalidTargetFallback: false,
     });
   };
@@ -4006,7 +4220,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void requestDirectoryNavigation(parentPath, {
       persistEnvId: envId(),
       persistOnReady: true,
-      targetPolicy: 'force_reload',
+      intent: 'verify',
       allowInvalidTargetFallback: false,
     });
   };
@@ -4117,19 +4331,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
 
     const srcDir = getParentDir(from);
-    const srcCached = cache.get(srcDir);
-    if (srcCached) {
-      cache.set(srcDir, srcCached.filter((c) => normalizePath(c.path) !== from));
-    }
-
-    const destCached = cache.get(destDir);
-    if (destCached) {
-      const next = destCached.filter((c) => normalizePath(c.path) !== normalizePath(to));
-      cache.set(destDir, sortFileItems([...next, movedItem]));
-    }
+    directoryCache.mutate(srcDir, (items) => items.filter((entry) => normalizePath(entry.path) !== from));
+    directoryCache.mutate(destDir, (items) => {
+      const next = items.filter((entry) => normalizePath(entry.path) !== normalizePath(to));
+      return sortFileItems([...next, movedItem]);
+    });
 
     if (item.type === 'folder') {
-      rewriteCachePathPrefix(cache, from, to);
+      directoryCache.rewritePrefix(from, to);
     }
   };
 
@@ -4213,12 +4422,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setFiles((prev) => removeItemsFromTree(prev, pathsToRemove));
       for (const item of items) {
         const parentDir = getParentDir(item.path);
-        const cached = cache.get(parentDir);
-        if (cached) {
-          cache.set(parentDir, cached.filter((c) => !pathsToRemove.has(normalizePath(c.path))));
-        }
+        directoryCache.mutate(parentDir, (items) => items.filter((entry) => !pathsToRemove.has(normalizePath(entry.path))));
         if (item.type === 'folder') {
-          removeCachePathPrefix(cache, item.path);
+          directoryCache.invalidatePrefix(item.path);
         }
       }
 
@@ -4248,11 +4454,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const insertCreatedItemIntoState = (parentDirPath: string, item: FileItem) => {
     const parentDir = normalizePath(parentDirPath);
     const scopedRootPath = normalizePath(matchFilesystemRoot(parentDir, filesystemRoots())?.pathAbs || defaultRootPath() || parentDir);
-    const cached = cache.get(parentDir);
-
-    if (cached && !cached.some((entry) => normalizePath(entry.path) === normalizePath(item.path))) {
-      cache.set(parentDir, sortFileItems([...cached, item]));
-    }
+    directoryCache.mutate(parentDir, (items) => (
+      items.some((entry) => normalizePath(entry.path) === normalizePath(item.path))
+        ? items
+        : sortFileItems([...items, item])
+    ));
 
     if (canInsertIntoTree(files(), parentDir, scopedRootPath)) {
       setFiles((prev) => insertItemToTree(prev, parentDir, item, scopedRootPath));
@@ -4347,13 +4553,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         extension: newExt,
       };
       setFiles((prev) => updateItemInTree(prev, item.path, updates));
-      const cached = cache.get(parentDir);
-      if (cached) {
-        cache.set(
-          parentDir,
-          cached.map((c) => (normalizePath(c.path) === normalizePath(item.path) ? { ...c, ...updates } : c))
-        );
-      }
+      directoryCache.mutate(parentDir, (items) => (
+        items.map((entry) => (normalizePath(entry.path) === normalizePath(item.path) ? { ...entry, ...updates } : entry))
+      ));
 
       setRenameDialogOpen(false);
       setRenameDialogItem(null);
@@ -4393,10 +4595,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         extension: item.type === 'file' ? extNoDot(newName) : undefined,
       };
       setFiles((prev) => insertItemToTree(prev, parentDir, newItem, scopedRootPath));
-      const cached = cache.get(parentDir);
-      if (cached && !cached.some((c) => normalizePath(c.path) === normalizePath(destPath))) {
-        cache.set(parentDir, sortFileItems([...cached, newItem]));
-      }
+      directoryCache.mutate(parentDir, (items) => (
+        items.some((entry) => normalizePath(entry.path) === normalizePath(destPath))
+          ? items
+          : sortFileItems([...items, newItem])
+      ));
       return { ok: true, newName };
     } catch (e) {
       notification.error(i18n.t('files.notifications.duplicateFailedTitle'), e instanceof Error ? e.message : String(e));
@@ -4438,15 +4641,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setPendingCreatedEntryReveal(revealRequest);
       });
 
-      if (normalizePath(currentBrowserPath()) !== normalizePath(draft.parentDir)) {
+      if (normalizePath(activeDirectoryPath()) !== normalizePath(draft.parentDir)) {
         await requestDirectoryNavigation(draft.parentDir, {
-          fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
+          fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
           persistEnvId: envId(),
           persistOnReady: true,
-          targetPolicy: 'revalidate_target',
+          intent: 'browse',
         });
 
-        if (normalizePath(currentBrowserPath()) !== normalizePath(draft.parentDir)) {
+        if (normalizePath(activeDirectoryPath()) !== normalizePath(draft.parentDir)) {
           setPendingCreatedEntryReveal((current) => current?.requestId === revealRequest.requestId ? null : current);
         }
       }
@@ -4475,14 +4678,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           setDirectedNavigationFailure(null);
           await requestDirectoryNavigation(directedInitialPath, {
             fallbackPath: persistedPath,
-            showBlockingOverlay: lastLoadedBrowserPath() === '',
+            showBlockingOverlay: !activeDirectorySnapshotReady(),
             persistEnvId: id,
             persistOnReady: true,
             persistOnFallback: false,
-            targetPolicy: 'force_reload',
+            intent: 'verify',
             refreshPathContext: true,
             directedRequestId,
-            allowInvalidTargetFallback: lastLoadedBrowserPath() === '',
+            allowInvalidTargetFallback: !untrack(() => activeDirectorySnapshotReady()),
           });
         } else if (scopeRefreshKey > 0) {
           try {
@@ -4504,7 +4707,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         return;
       }
 
-      const rememberedPath = normalizeAbsolutePath(currentBrowserPath());
+      const rememberedPath = untrack(() => normalizeAbsolutePath(activeDirectoryPath()));
       const showHiddenEnabled = untrack(() => showHidden());
       const requestedStartPath = rememberedPath || persistedPath || rootPath;
       const startPath = showHiddenEnabled
@@ -4513,7 +4716,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (startPath !== requestedStartPath) {
         writePersistedLastPath(id, startPath);
       }
-      setCurrentBrowserPath(startPath);
+      setDirectoryView((current) => ({
+        ...current,
+        activePath: startPath,
+        snapshotReady: false,
+        freshness: 'fresh',
+        pending: null,
+      }));
     })();
   });
 
@@ -4526,7 +4735,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
-    const currentPath = normalizeAbsolutePath(currentBrowserPath());
+    const currentPath = normalizeAbsolutePath(activeDirectoryPath());
     const overridePath = normalizeAbsolutePath(titleOverridePath());
     if (overridePath && currentPath && currentPath !== overridePath) {
       setTitleOverridePath('');
@@ -4571,15 +4780,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void (async () => {
       try {
         await requestDirectoryNavigation(requestedPath, {
-          fallbackPath: lastLoadedBrowserPath() || requestedHomePath || defaultRootPath(),
-          showBlockingOverlay: lastLoadedBrowserPath() === '',
+          fallbackPath: lastStableDirectoryPath() || requestedHomePath || defaultRootPath(),
+          showBlockingOverlay: !activeDirectorySnapshotReady(),
           persistEnvId: envId(),
           persistOnReady: true,
           persistOnFallback: false,
-          targetPolicy: 'force_reload',
+          intent: 'verify',
           refreshPathContext: true,
           directedRequestId: requestId,
-          allowInvalidTargetFallback: lastLoadedBrowserPath() === '',
+          allowInvalidTargetFallback: !activeDirectorySnapshotReady(),
         });
       } finally {
         props.onOpenPathRequestHandled?.(requestId);
@@ -4644,11 +4853,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const id = envId();
     const client = protocol.session?.();
     const mode = pageMode();
-    const path = normalizeAbsolutePath(currentBrowserPath());
-    if (!id || !client || mode !== 'files' || !path) return;
+    const path = normalizeAbsolutePath(activeDirectoryPath());
+    if (!directoryModeHydrated || !id || !client || mode !== 'files' || !path) return;
+    if (activeDirectorySnapshotReady()) return;
 
     const normalizedPath = normalizePath(path);
-    if (loading() || pathLoadInFlight() === normalizedPath || lastLoadedBrowserPath() === normalizedPath) return;
+    if (directoryBlocking() || activeDirectoryRequest?.targetPath === normalizedPath || queuedDirectoryRequest?.targetPath === normalizedPath) return;
 
     void refreshCurrentDirectory();
   });
@@ -4656,14 +4866,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   createEffect(() => {
     const id = envId();
     const client = protocol.session?.();
-    const path = currentBrowserPath();
+    const view = directoryView();
+    const path = view.activePath;
     if (!id || !client || !path.trim()) {
       repoReqSeq += 1;
+      lastRepoInfoPath = '';
       setRepoInfo(null);
       setRepoInfoLoading(false);
       setRepoInfoResolved(false);
       setRepoInfoError('');
       return;
+    }
+    // Repository metadata belongs to a settled directory. A cached view is
+    // visible during its refresh, but its Git context is not authoritative
+    // until that refresh commits (or becomes explicitly stale).
+    if (view.pending) return;
+    const normalizedPath = normalizePath(path);
+    if (normalizedPath !== lastRepoInfoPath) {
+      setRepoInfo(null);
+      setRepoInfoLoading(false);
+      setRepoInfoResolved(false);
+      setRepoInfoError('');
+      discardGitWorkspaceGeneration();
     }
     void resolveRepoInfo(path);
   });
@@ -4967,7 +5191,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         isDirectory: item.type === 'folder',
         rootLabel: matchFilesystemRoot(item.path, filesystemRoots())?.label,
       })),
-      fallbackWorkingDirAbs: currentBrowserPath(),
+      fallbackWorkingDirAbs: activeDirectoryPath(),
     });
     if (!result.intent) {
       notification.error(i18n.t('files.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('files.notifications.failedToResolveSelectedFilePaths'));
@@ -5506,8 +5730,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       captureTypingFromPage={!hasEmbeddedWidget()}
                       files={decoratedFiles()}
-                      currentPath={currentBrowserPath()}
-                      pendingNavigationPath={pendingBrowserPath()}
+                      currentPath={activeDirectoryPath()}
+                      pendingNavigationPath={pendingDirectoryPath()}
                       initialPath={readPersistedLastPath(id)}
                       homePath={agentHomePathAbs() || undefined}
                       roots={filesystemRoots()}
@@ -5534,10 +5758,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onNavigate={(path) => {
                         const targetPath = normalizePath(path);
                         void requestDirectoryNavigation(targetPath, {
-                          fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
+                          fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
                           persistEnvId: id,
                           persistOnReady: true,
-                          targetPolicy: 'revalidate_target',
+                          intent: 'browse',
                         });
                       }}
                       onPathChange={(_path, source) => {
@@ -5591,7 +5815,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       resizable
                       onResize={(delta) => commitBrowserSidebarWidth(browserSidebarWidth() + delta)}
                       onClose={closePageSidebar}
-                      currentPath={currentBrowserPath()}
+                      currentPath={activeDirectoryPath()}
                       repoInfo={repoInfo()}
                       repoInfoLoading={repoInfoLoading()}
                       repoInfoError={repoInfoError()}
@@ -5692,7 +5916,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )}
       </Show>
 
-      <RedevenLoadingCurtain visible={pageMode() === 'files' && loading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
+      <RedevenLoadingCurtain visible={pageMode() === 'files' && directoryBlocking()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
       <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.moving')} />
 
       <GitDiffDialog

@@ -1610,6 +1610,7 @@
       "filesystemAccessUpdatedMessage": "{label} 现在是 {mode}。",
       "filesystemAccessUpdateFailedTitle": "文件系统访问更新失败",
       "failedToLoadDirectoryTitle": "目录加载失败",
+      "showingLastLoadedContents": "正在显示上次加载的内容。连接恢复后请再次刷新。",
       "unableToLoadDirectory": "无法加载目录。",
       "connectionNotReady": "连接尚未就绪。",
       "failedToResolveHomeDirectory": "无法解析 Home 目录。",

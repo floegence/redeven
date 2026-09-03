@@ -118,6 +118,28 @@ func TestSessionRetainsRepositoryOnceAndReleasesOnClose(t *testing.T) {
 	}
 }
 
+func TestSessionRetainRepositoryRevalidatesExistingIdentity(t *testing.T) {
+	runtime := New()
+	id := testIdentity(t)
+	session := runtime.NewSession()
+	t.Cleanup(session.Close)
+	if err := session.RetainRepository(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+
+	retainedGitDir := id.GitDir + ".retained"
+	if err := os.Rename(id.GitDir, retainedGitDir); err != nil {
+		t.Fatalf("rename git directory: %v", err)
+	}
+	if err := os.Mkdir(id.GitDir, 0o755); err != nil {
+		t.Fatalf("create replacement git directory: %v", err)
+	}
+
+	if err := session.RetainRepository(context.Background(), id); !errors.Is(err, ErrResourceLimit) {
+		t.Fatalf("RetainRepository after identity replacement = %v, want resource limit", err)
+	}
+}
+
 func TestRepositoryMutationAdvancesEpochAtBothBoundaries(t *testing.T) {
 	runtime := New()
 	id := testIdentity(t)

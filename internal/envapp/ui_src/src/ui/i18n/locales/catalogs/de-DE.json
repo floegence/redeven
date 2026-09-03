@@ -1610,6 +1610,7 @@
       "filesystemAccessUpdatedMessage": "{label} ist jetzt {mode}.",
       "filesystemAccessUpdateFailedTitle": "Aktualisierung des Dateisystemzugriffs fehlgeschlagen.",
       "failedToLoadDirectoryTitle": "Verzeichnis konnte nicht geladen werden.",
+      "showingLastLoadedContents": "Die zuletzt geladenen Inhalte werden angezeigt. Aktualisieren Sie erneut, sobald die Verbindung verfügbar ist.",
       "unableToLoadDirectory": "Verzeichnis konnte nicht geladen werden.",
       "connectionNotReady": "Verbindung ist nicht bereit.",
       "failedToResolveHomeDirectory": "Das Home-Verzeichnis konnte nicht aufgelöst werden.",

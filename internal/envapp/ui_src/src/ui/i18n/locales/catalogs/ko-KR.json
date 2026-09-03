@@ -1610,6 +1610,7 @@
       "filesystemAccessUpdatedMessage": "{label}는 이제 {mode}입니다.",
       "filesystemAccessUpdateFailedTitle": "파일 시스템 액세스 업데이트 실패",
       "failedToLoadDirectoryTitle": "디렉터리 로드 실패",
+      "showingLastLoadedContents": "마지막으로 로드한 내용을 표시하고 있습니다. 연결이 가능해지면 다시 새로 고치세요.",
       "unableToLoadDirectory": "디렉터리를 로드할 수 없습니다.",
       "connectionNotReady": "연결이 준비되지 않았습니다.",
       "failedToResolveHomeDirectory": "홈 디렉터리를 확인하지 못했습니다.",

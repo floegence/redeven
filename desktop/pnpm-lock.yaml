@@ -32,11 +32,11 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-boot':
-        specifier: 0.48.3
-        version: 0.48.3
+        specifier: 0.48.4
+        version: 0.48.4
       '@floegence/floe-webapp-core':
-        specifier: 0.48.3
-        version: 0.48.3(solid-js@1.9.13)
+        specifier: 0.48.4
+        version: 0.48.4(solid-js@1.9.13)
       '@floegence/flowersec-core':
         specifier: 5.0.1
         version: 5.0.1
@@ -526,12 +526,12 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-boot@0.48.3':
-    resolution: {integrity: sha512-AH3rLJNbAmwd0tZuz6//Z8bqxZBDzfO02LePUmNlc4/KbnMeq0hIfh/yoeO2rOJYH0Wv8Kl2mthp4v0BFiAIgQ==}
+  '@floegence/floe-webapp-boot@0.48.4':
+    resolution: {integrity: sha512-IuW9P/CCtfKg+IZJFtc6bGcLL4jVHNIcgAzrK34yrVvQ03nWNO+0MFmbxKo+p77tVu8A7nZ6j6Cs1BK6P6fg7g==}
     engines: {node: '>=24.20.0'}
 
-  '@floegence/floe-webapp-core@0.48.3':
-    resolution: {integrity: sha512-EB8k7pv2uV+9S270qlUgJsgXQE8Yr+8DLnN0IkrL+DIKjhvNRmkh9lFPxdaS6JnYVoZWobXUuRTlxEBHn3SNjA==}
+  '@floegence/floe-webapp-core@0.48.4':
+    resolution: {integrity: sha512-ZyEfD0nPU9cuvJcEvtDO1HfoHFzNoKlk2ZTMxN/WA99mcEwbhivvf3SemaFNHVYQYLGjTtZQS0Xv0YsPRzOxHg==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -558,14 +558,12 @@ packages:
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@floegence/flowersec-node-native-linux-x64-gnu@5.0.1':
     resolution: {integrity: sha512-hBCG7GLjwBwXdW5K5UaEDPW/vIV1pepcx1PvqJhmx02+5H7ZA6hQ7sa5rxgW0/wOA4K8wp+KsKtnFlLI+nnTPg==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@floegence/flowersec-node-native@5.0.1':
     resolution: {integrity: sha512-H8UXo7SHfdG7HCakMSI1DIoE3K0EP6dMHnzSbfd7Hr7cIWxd6UYZwt2V1dYd5dqqE2z8oAWAcYNOnB4gT/59aw==}
@@ -730,42 +728,36 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-musl@1.0.3':
     resolution: {integrity: sha512-VWkUHwWriDciit80wleYwKILoR/KMvxh/IdwS/paX+ZgpuRpCrKLUdadJbc0NpBEiyhpYawsJ73j9aCvOH+f7Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-linux-ppc64-gnu@1.0.3':
     resolution: {integrity: sha512-5f1laC0SlIR0yDbFCd8acUhvJIag6N3zC5P7oUPN6wX0aOma+uKJ0wBDH5aq7I1PVI2ttTlhJwzwRIBnLiSGEg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-s390x-gnu@1.0.3':
     resolution: {integrity: sha512-Iq4ko0r4XsgbrF/LunNgHtAGLRRVE2kXonAXQ/MV0mC6jQpMOhW1SvtZja2EhC/kd05++bP78dsqBeIQyYJ6Yg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-gnu@1.0.3':
     resolution: {integrity: sha512-B8m6tD5+/N5FeNQFbKlLA/2yVq9ycQP1SeedyEYYKWBNR3ZQbkvIUcNnDNM03lO1l5F2roiiFJGgvoLLyZXtSg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-musl@1.0.3':
     resolution: {integrity: sha512-pSdpdUJHkuCxun9LE7jvgUB9qsRgaiyNNCX7m/AvHTcq67AiT/Yhoxvw5zPfhrM8k/BfP8ce/hMOpthKDpEUow==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-openharmony-arm64@1.0.3':
     resolution: {integrity: sha512-OXXS3RKJgX2uLwM+gYyuH5omcH8fL1LJs96pZGgtetVCahON57+d4SJHzTgZiOjxgGkSnpXpOsWuPDGAKAigEg==}
@@ -883,28 +875,24 @@ packages:
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@tailwindcss/oxide-linux-arm64-musl@4.3.0':
     resolution: {integrity: sha512-Z6sukiQsngnWO+l39X4pPbiWT81IC+PLKF+PHxIlyZbGNb9MODfYlXEVlFvej5BOZInWX01kVyzeLvHsXhfczQ==}
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@tailwindcss/oxide-linux-x64-gnu@4.3.0':
     resolution: {integrity: sha512-DRNdQRpSGzRGfARVuVkxvM8Q12nh19l4BF/G7zGA1oe+9wcC6saFBHTISrpIcKzhiXtSrlSrluCfvMuledoCTQ==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@tailwindcss/oxide-linux-x64-musl@4.3.0':
     resolution: {integrity: sha512-Z0IADbDo8bh6I7h2IQMx601AdXBLfFpEdUotft86evd/8ZPflZe9COPO8Q1vw+pfLWIUo9zN/JGZvwuAJqduqg==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@tailwindcss/oxide-wasm32-wasi@4.3.0':
     resolution: {integrity: sha512-HNZGOUxEmElksYR7S6sC5jTeNGpobAsy9u7Gu0AskJ8/20FR9GqebUyB+HBcU/ax6BHuiuJi+Oda4B+YX6H1yA==}
@@ -2232,28 +2220,24 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.32.0:
     resolution: {integrity: sha512-UpQkoenr4UJEzgVIYpI80lDFvRmPVg6oqboNHfoH4CQIfNA+HOrZ7Mo7KZP02dC6LjghPQJeBsvXhJod/wnIBg==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.32.0:
     resolution: {integrity: sha512-V7Qr52IhZmdKPVr+Vtw8o+WLsQJYCTd8loIfpDaMRWGUZfBOYEJeyJIkqGIDMZPwPx24pUMfwSxxI8phr/MbOA==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.32.0:
     resolution: {integrity: sha512-bYcLp+Vb0awsiXg/80uCRezCYHNg1/l3mt0gzHnWV9XP1W5sKa5/TCdGWaR/zBM2PeF/HbsQv/j2URNOiVuxWg==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.32.0:
     resolution: {integrity: sha512-8SbC8BR40pS6baCM8sbtYDSwEVQd4JlFTOlaD3gWGHfThTcABnNDBda6eTZeqbofalIJhFx0qKzgHJmcPTnGdw==}
@@ -3599,14 +3583,14 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 2.4.0
 
-  '@floegence/floe-webapp-boot@0.48.3':
+  '@floegence/floe-webapp-boot@0.48.4':
     dependencies:
       '@floegence/flowersec-core': 5.0.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.48.3(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.48.4(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4

@@ -1660,6 +1660,7 @@
       "filesystemAccessUpdatedMessage": ". {label} теперь называется {mode}.",
       "filesystemAccessUpdateFailedTitle": "Не удалось обновить доступ к файловой системе.",
       "failedToLoadDirectoryTitle": "Не удалось загрузить каталог.",
+      "showingLastLoadedContents": "Показано последнее загруженное содержимое. Повторите обновление, когда соединение будет доступно.",
       "unableToLoadDirectory": "Невозможно загрузить каталог.",
       "connectionNotReady": "Соединение не готово.",
       "failedToResolveHomeDirectory": "Не удалось разрешить домашний каталог.",

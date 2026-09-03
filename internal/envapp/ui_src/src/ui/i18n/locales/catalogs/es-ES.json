@@ -1610,6 +1610,7 @@
       "filesystemAccessUpdatedMessage": "{label} ahora es {mode}.",
       "filesystemAccessUpdateFailedTitle": "Error al actualizar el acceso al sistema de archivos",
       "failedToLoadDirectoryTitle": "No se pudo cargar el directorio",
+      "showingLastLoadedContents": "Se muestran los últimos contenidos cargados. Vuelve a actualizar cuando la conexión esté disponible.",
       "unableToLoadDirectory": "No se pudo cargar el directorio.",
       "connectionNotReady": "La conexión no está lista.",
       "failedToResolveHomeDirectory": "No se pudo resolver el directorio de inicio.",
