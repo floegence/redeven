@@ -1,4 +1,5 @@
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
+type RpcOperationOptions = NonNullable<Parameters<RpcHelpers['call']>[3]>;
 import type { JsonValue } from '@floegence/flowersec-core';
 import {
   captureDebugConsoleProtocolCall,
@@ -203,7 +204,7 @@ function decodeNotificationWire<Wire, Result>(
 export type RedevenV1Rpc = {
   fs: {
     getPathContext: () => Promise<FsPathContextResponse>;
-    list: (req: FsListRequest) => Promise<FsListResponse>;
+    list: (req: FsListRequest, options?: RpcOperationOptions) => Promise<FsListResponse>;
     readFile: (req: FsReadFileRequest) => Promise<FsReadFileResponse>;
     writeFile: (req: FsWriteFileRequest) => Promise<FsWriteFileResponse>;
     mkdir: (req: FsMkdirRequest) => Promise<FsMkdirResponse>;
@@ -212,7 +213,7 @@ export type RedevenV1Rpc = {
     delete: (req: FsDeleteRequest) => Promise<FsDeleteResponse>;
   };
   git: {
-    resolveRepo: (req: GitResolveRepoRequest) => Promise<GitResolveRepoResponse>;
+    resolveRepo: (req: GitResolveRepoRequest, options?: RpcOperationOptions) => Promise<GitResolveRepoResponse>;
     getCapabilities: () => Promise<GitCapabilitiesResponse>;
     getRepoSummary: (req: GitRepoSummaryRequest) => Promise<GitRepoSummaryResponse>;
     listWorkspacePage: (req: GitListWorkspacePageRequest) => Promise<GitListWorkspacePageResponse>;
@@ -294,11 +295,12 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
     typeID: number,
     payload: Req,
     decodeResponse: (value: JsonValue) => Resp,
+    options?: RpcOperationOptions,
   ) =>
     captureDebugConsoleProtocolCall<Req, Resp>({
       typeID,
       payload,
-      execute: () => helpers.call(typeID, payload, decodeResponse),
+      execute: () => helpers.call(typeID, payload, decodeResponse, options),
     });
 
   return {
@@ -307,9 +309,9 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call(redevenV1TypeIds.fs.getPathContext, {}, decodeWire(redevenWireSchemaNames.fromWireFsPathContextResponse, fromWireFsPathContextResponse));
         return resp;
       },
-      list: async (req) => {
+      list: async (req, options) => {
         const payload = toWireFsListRequest(req);
-        const resp = await call(redevenV1TypeIds.fs.list, payload, decodeWire(redevenWireSchemaNames.fromWireFsListResponse, fromWireFsListResponse));
+        const resp = await call(redevenV1TypeIds.fs.list, payload, decodeWire(redevenWireSchemaNames.fromWireFsListResponse, fromWireFsListResponse), options);
         return resp;
       },
       readFile: async (req) => {
@@ -348,9 +350,9 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call(redevenV1TypeIds.git.getCapabilities, {}, decodeWire(redevenWireSchemaNames.fromWireGitCapabilitiesResponse, fromWireGitCapabilitiesResponse));
         return resp;
       },
-      resolveRepo: async (req) => {
+      resolveRepo: async (req, options) => {
         const payload = toWireGitResolveRepoRequest(req);
-        const resp = await call(redevenV1TypeIds.git.resolveRepo, payload, decodeWire(redevenWireSchemaNames.fromWireGitResolveRepoResponse, fromWireGitResolveRepoResponse));
+        const resp = await call(redevenV1TypeIds.git.resolveRepo, payload, decodeWire(redevenWireSchemaNames.fromWireGitResolveRepoResponse, fromWireGitResolveRepoResponse), options);
         return resp;
       },
       getRepoSummary: async (req) => {

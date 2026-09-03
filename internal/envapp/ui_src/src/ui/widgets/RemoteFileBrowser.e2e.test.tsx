@@ -607,6 +607,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo')}>mock-nav-repo</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/src')}>mock-nav-src</button>
+        <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/first')}>mock-nav-first</button>
+        <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/second')}>mock-nav-second</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/missing')}>mock-nav-missing</button>
         <button
           type="button"
@@ -1655,7 +1657,7 @@ describe('RemoteFileBrowser persistence', () => {
 
     try {
       await flush();
-      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/', showHidden: false });
+      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/', showHidden: false }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
       expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/');
       expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/');
     } finally {
@@ -2434,7 +2436,7 @@ describe('RemoteFileBrowser persistence', () => {
       const panel = host.querySelector('[data-testid="file-browser-navigation-failure"]');
       expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
       expect(panel?.textContent).toContain('temporarily unavailable');
-      expect(mockRpc.fs.list).not.toHaveBeenCalledWith({ path: '/workspace', showHidden: false });
+      expect(mockRpc.fs.list.mock.calls.some(([request]) => request?.path === '/workspace' && request?.showHidden === false)).toBe(false);
       expect(widgetStateStore.updateCalls).toEqual([]);
     } finally {
       dispose();
@@ -2557,7 +2559,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(filesPanel?.getAttribute('aria-hidden')).toBe('true');
       expect(filesPanel?.style.display).toBe('');
       expect(mockRpc.fs.list).not.toHaveBeenCalled();
-      expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/src' });
+      expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/src' }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
     } finally {
       dispose();
     }
@@ -2656,8 +2658,8 @@ describe('RemoteFileBrowser persistence', () => {
       const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
 
       expect(gitWorkspace?.textContent).toContain('git:git:history:/workspace/repo/dev-b:312');
-      expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/dev-b' });
-      expect(mockRpc.git.resolveRepo).not.toHaveBeenCalledWith({ path: '/workspace/repo/shared-collision' });
+      expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/dev-b' }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+      expect(mockRpc.git.resolveRepo.mock.calls.some(([request]) => request?.path === '/workspace/repo/shared-collision')).toBe(false);
     } finally {
       dispose();
     }
@@ -2684,7 +2686,7 @@ describe('RemoteFileBrowser persistence', () => {
       toFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false });
+      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
     } finally {
       dispose();
     }
@@ -2711,7 +2713,7 @@ describe('RemoteFileBrowser persistence', () => {
 
     try {
       await flush();
-      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: true });
+      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: true }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
     } finally {
       dispose();
     }
@@ -2885,6 +2887,119 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.textContent).toContain('files:files:/workspace/repo/src:312:0');
       expect(host.textContent).not.toContain('Opening...');
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('cancels an in-flight child navigation when returning to the committed directory', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const srcLoad = deferred<{ entries: Array<Record<string, unknown>> }>();
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      if (path === '/workspace') {
+        return { entries: [{ name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' }] };
+      }
+      if (path === '/workspace/repo') {
+        return { entries: [{ name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' }] };
+      }
+      if (path === '/workspace/repo/src') return srcLoad.promise;
+      return { entries: [] };
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+      const navSrc = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-src') as HTMLButtonElement;
+      const navRepo = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-repo') as HTMLButtonElement;
+      navSrc.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(host.textContent).toContain('Opening...');
+
+      navRepo.click();
+      await flush();
+      expect(host.textContent).toContain('files:files:/workspace/repo:');
+      expect(host.textContent).not.toContain('Opening...');
+      expect(mockRpc.fs.list.mock.calls.filter(([request]) => request?.path === '/workspace/repo')).toHaveLength(0);
+
+      srcLoad.resolve({ entries: [{ name: 'late.txt', path: '/workspace/repo/src/late.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' }] });
+      await flush();
+      expect(host.textContent).toContain('files:files:/workspace/repo:');
+      expect(host.textContent).not.toContain('late.txt');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('lets the latest queued directory intent win after an older response arrives', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const loads = new Map<string, ReturnType<typeof deferred<{ entries: Array<Record<string, unknown>> }>>>();
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      if (path === '/workspace') {
+        return { entries: [{ name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' }] };
+      }
+      if (path === '/workspace/repo') {
+        return {
+          entries: [
+            { name: 'first', path: '/workspace/repo/first', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            { name: 'second', path: '/workspace/repo/second', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+          ],
+        };
+      }
+      const load = loads.get(path) ?? deferred<{ entries: Array<Record<string, unknown>> }>();
+      loads.set(path, load);
+      return load.promise;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const navFirst = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-first') as HTMLButtonElement;
+      const navSecond = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-second') as HTMLButtonElement;
+      navFirst.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      navSecond.click();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      loads.get('/workspace/repo/first')?.resolve({ entries: [{ name: 'old.txt', path: '/workspace/repo/first/old.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' }] });
+      await flush();
+      loads.get('/workspace/repo/second')?.resolve({ entries: [{ name: 'latest.txt', path: '/workspace/repo/second/latest.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' }] });
+      await flush();
+      expect(host.textContent).toContain('files:files:/workspace/repo/second:');
+      expect(host.textContent).not.toContain('old.txt');
     } finally {
       dispose();
     }
@@ -4436,7 +4551,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
       await flush();
 
-      expect(mockRpc.fs.list).toHaveBeenLastCalledWith({ path: '/workspace/src', showHidden: false });
+      expect(mockRpc.fs.list).toHaveBeenLastCalledWith({ path: '/workspace/src', showHidden: false }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
       expect(host.textContent).toContain('files:files:/workspace/src:240:0');
       expect(widgetStateStore.updateCalls).toContainEqual({
         widgetId: 'widget-1',
@@ -4982,7 +5097,7 @@ describe('RemoteFileBrowser persistence', () => {
         path: '/workspace/repo/src/components',
         createParents: false,
       });
-      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false });
+      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
       expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/components');
       expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
       expect(host.querySelector('[data-testid="mock-reveal-parent-path"]')?.textContent).toBe('/workspace/repo/src');

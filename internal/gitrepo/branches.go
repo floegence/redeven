@@ -62,11 +62,11 @@ func (s *Service) filterAccessibleWorktreeBindings(ctx context.Context, bindings
 	}
 	filtered := make(map[string]worktreeBinding, len(bindings))
 	for ref, binding := range bindings {
-		repoRootReal, err := s.validateRepoRootPath(ctx, binding.Path)
+		identity, err := s.validateRepoRootIdentity(ctx, binding.Path)
 		if err != nil {
 			continue
 		}
-		filtered[ref] = worktreeBinding{Ref: binding.Ref, Path: repoRootReal}
+		filtered[ref] = worktreeBinding{Ref: binding.Ref, Path: identity.WorktreeRoot}
 	}
 	return filtered
 }
@@ -341,11 +341,11 @@ func findWorktreeBinding(bindings map[string]worktreeBinding, targetRef string) 
 }
 
 func (s *Service) readLinkedWorktreeSnapshot(ctx context.Context, worktreePath string) (*gitLinkedWorktreeSnapshot, error) {
-	repoRootReal, err := s.validateRepoRootPath(ctx, worktreePath)
+	identity, err := s.validateRepoRootIdentity(ctx, worktreePath)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := s.loadRepoContext(ctx, repoRootReal)
+	repo, err := s.loadResolvedRepoContext(ctx, identity)
 	if err != nil {
 		return nil, err
 	}

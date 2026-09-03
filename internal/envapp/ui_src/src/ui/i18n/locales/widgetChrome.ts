@@ -122,6 +122,7 @@ export const enUSWidgetChrome = defineDictionary({
       filesystemAccessUpdatedMessage: '{label} is now {mode}.',
       filesystemAccessUpdateFailedTitle: 'Filesystem access update failed',
       failedToLoadDirectoryTitle: 'Failed to load directory',
+      showingLastLoadedContents: 'Showing the last loaded contents. Refresh again when the connection is available.',
       unableToLoadDirectory: 'Unable to load directory.',
       connectionNotReady: 'Connection is not ready.',
       failedToResolveHomeDirectory: 'Failed to resolve home directory.',

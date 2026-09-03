@@ -1610,6 +1610,7 @@
       "filesystemAccessUpdatedMessage": "{label} 現在是 {mode}。",
       "filesystemAccessUpdateFailedTitle": "檔案系統存取更新失敗",
       "failedToLoadDirectoryTitle": "目錄載入失敗",
+      "showingLastLoadedContents": "正在顯示上次載入的內容。連線恢復後請再次重新整理。",
       "unableToLoadDirectory": "無法載入目錄。",
       "connectionNotReady": "連線尚未就緒。",
       "failedToResolveHomeDirectory": "無法解析 Home 目錄。",

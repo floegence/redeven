@@ -1610,6 +1610,7 @@
       "filesystemAccessUpdatedMessage": "{label} は {mode} になりました。",
       "filesystemAccessUpdateFailedTitle": "ファイルシステム アクセスの更新に失敗しました",
       "failedToLoadDirectoryTitle": "ディレクトリのロードに失敗しました",
+      "showingLastLoadedContents": "最後に読み込んだ内容を表示しています。接続が利用可能になったら、もう一度更新してください。",
       "unableToLoadDirectory": "ディレクトリをロードできません。",
       "connectionNotReady": "接続の準備ができていません。",
       "failedToResolveHomeDirectory": "ホーム ディレクトリの解決に失敗しました。",

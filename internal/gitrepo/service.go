@@ -1027,14 +1027,13 @@ func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoReso
 			UnavailableReason: "Current path is not inside a Git repository.",
 		}, nil
 	}
-	repoRootReal := identity.WorktreeRoot
-	if _, ok := s.scope.Contains(repoRootReal); !ok {
+	if _, ok := s.scope.Contains(identity.WorktreeRoot); !ok {
 		return repoResolveResult{
 			GitAvailable:      true,
 			UnavailableReason: "Current path is not inside a Git repository.",
 		}, nil
 	}
-	repo, err := s.loadRepoContext(ctx, repoRootReal)
+	repo, err := s.loadResolvedRepoContext(ctx, identity)
 	if err != nil {
 		return repoResolveResult{}, err
 	}
@@ -1046,43 +1045,43 @@ func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoReso
 }
 
 func (s *Service) resolveExplicitRepo(ctx context.Context, repoRootPath string) (repoContext, error) {
-	repoRootReal, err := s.validateRepoRootPath(ctx, repoRootPath)
+	identity, err := s.validateRepoRootIdentity(ctx, repoRootPath)
 	if err != nil {
 		return repoContext{}, err
 	}
-	return s.loadRepoContext(ctx, repoRootReal)
+	return s.loadResolvedRepoContext(ctx, identity)
 }
 
-func (s *Service) validateRepoRootPath(ctx context.Context, repoRootPath string) (string, error) {
+func (s *Service) validateRepoRootIdentity(ctx context.Context, repoRootPath string) (gitruntime.RepositoryIdentity, error) {
 	if strings.TrimSpace(repoRootPath) == "" {
-		return "", errors.New("missing repo_root_path")
+		return gitruntime.RepositoryIdentity{}, errors.New("missing repo_root_path")
 	}
 	resolved, err := s.scope.Resolve(repoRootPath, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 	if err != nil {
-		return "", err
+		return gitruntime.RepositoryIdentity{}, err
 	}
 	repoRootReal := resolved.RealAbs
 	stat, err := os.Stat(repoRootReal)
 	if err != nil {
-		return "", err
+		return gitruntime.RepositoryIdentity{}, err
 	}
 	if !stat.IsDir() {
-		return "", errors.New("repo root must be a directory")
+		return gitruntime.RepositoryIdentity{}, errors.New("repo root must be a directory")
 	}
 	identity, ok, err := s.runtime.ResolveRepositoryIdentity(ctx, repoRootReal)
 	if err != nil {
 		if gitutil.IsGitUnavailable(err) {
-			return "", errGitUnavailable
+			return gitruntime.RepositoryIdentity{}, errGitUnavailable
 		}
-		return "", err
+		return gitruntime.RepositoryIdentity{}, err
 	}
 	if !ok {
-		return "", errors.New("not a git repository")
+		return gitruntime.RepositoryIdentity{}, errors.New("not a git repository")
 	}
 	if filepath.Clean(identity.WorktreeRoot) != filepath.Clean(repoRootReal) {
-		return "", errors.New("repo_root_path must match worktree root")
+		return gitruntime.RepositoryIdentity{}, errors.New("repo_root_path must match worktree root")
 	}
-	return repoRootReal, nil
+	return identity, nil
 }
 
 func (s *Service) loadRepoContext(ctx context.Context, repoRootReal string) (repoContext, error) {
@@ -1093,6 +1092,11 @@ func (s *Service) loadRepoContext(ctx context.Context, repoRootReal string) (rep
 	if !ok || filepath.Clean(identity.WorktreeRoot) != filepath.Clean(repoRootReal) {
 		return repoContext{}, errors.New("not a git repository")
 	}
+	return s.loadResolvedRepoContext(ctx, identity)
+}
+
+func (s *Service) loadResolvedRepoContext(ctx context.Context, identity gitruntime.RepositoryIdentity) (repoContext, error) {
+	repoRootReal := identity.WorktreeRoot
 	if err := s.runtimeSession.RetainRepository(ctx, identity); err != nil {
 		return repoContext{}, err
 	}
