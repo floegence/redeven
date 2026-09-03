@@ -224,9 +224,14 @@ describe('Flower activity running sheen', () => {
     expect(dropdownRule).toContain('animation: flower-subagents-dropdown-enter 120ms');
     expect(dropdownRowRule).toContain('min-height: 3.875rem');
     expect(dropdownRowHoverRule).not.toContain('transform:');
-    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-base: var(--foreground)');
+    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-base: color-mix(in srgb, var(--foreground) 68%, var(--flower-subagents-panel) 32%)');
+    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-highlight: color-mix(in srgb, var(--flower-subagents-active) 52%, var(--foreground) 48%)');
+    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-peak: var(--foreground)');
     expect(dropdownRunningStatusRule).toContain('color: var(--primary)');
     expect(runningTextRule).toContain('background-clip: text');
+    expect(runningTextRule).toContain('var(--flower-subagent-running-text-highlight) 44%');
+    expect(runningTextRule).toContain('var(--flower-subagent-running-text-peak) 50%');
+    expect(runningTextRule).toContain('var(--flower-subagent-running-text-highlight) 56%');
     expect(runningTextRule).toContain('animation: flower-activity-title-sweep 2.6s ease-out infinite');
     expect(css).not.toContain('flower-running-text-shimmer');
     expect(css).toContain(".flower-subagents-dropdown-metric[data-tone='completed']");
@@ -254,7 +259,9 @@ describe('Flower activity running sheen', () => {
     expect(detailOverviewRule).toContain('background: var(--flower-subagent-window-surface-band)');
     expect(detailSignalRule).toContain('border-radius: 9999px');
     expect(runningStatusRule).toContain('color: var(--primary)');
-    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-base: var(--primary)');
+    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-base: color-mix(in srgb, var(--primary) 68%, var(--flower-subagent-window-surface-band) 32%)');
+    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-highlight: color-mix(in srgb, var(--flower-subagent-window-accent) 52%, var(--flower-subagent-window-text) 48%)');
+    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-peak: var(--flower-subagent-window-text)');
     expect(detailScrollRule).toContain('position: sticky');
     expect(css).not.toContain('.flower-subagent-detail-bottom-dock');
     expect(css).not.toContain('.flower-subagent-detail-bottom-track');

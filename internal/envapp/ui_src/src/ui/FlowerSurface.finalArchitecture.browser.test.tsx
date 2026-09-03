@@ -53,6 +53,29 @@ function controlledWorkspaceStream(initial: readonly FlowerLiveStreamEnvelope[])
   };
 }
 
+function resolveInheritedColor(host: HTMLElement, value: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = value;
+  host.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
+function srgbChannels(color: string): readonly number[] {
+  const channels = color.match(/-?\d*\.?\d+/g)?.slice(0, 3).map(Number) ?? [];
+  if (channels.length !== 3) {
+    throw new Error(`Expected an sRGB color, received ${color}`);
+  }
+  return color.startsWith('rgb') ? channels.map((channel) => channel / 255) : channels;
+}
+
+function maxSrgbChannelDistance(first: string, second: string): number {
+  const firstChannels = srgbChannels(first);
+  const secondChannels = srgbChannels(second);
+  return Math.max(...firstChannels.map((channel, index) => Math.abs(channel - secondChannels[index])));
+}
+
 function completedTerminalThread() {
   const threadID = 'thread-ca1c0220d0484c81cf2a5644d83439b5';
   const runID = 'turn-terminal';
@@ -291,11 +314,17 @@ describe('Flower final thread cache and workspace transport', () => {
     const subagentRow = document.querySelector(`[data-flower-subagent-row="0"]`) as HTMLButtonElement;
     const rowOrb = subagentRow.querySelector<HTMLCanvasElement>('[data-thinking-orb-state="composing"]');
     const rowTitle = subagentRow.querySelector('.flower-subagent-dropdown-name') as HTMLElement;
-    const rowStatus = subagentRow.querySelector('.flower-subagent-dropdown-status-label') as HTMLElement;
-    const rowStatusColor = getComputedStyle(rowStatus).color;
     expect(rowOrb).not.toBeNull();
     expect(rowOrb?.classList.contains('flower-subagent-thinking-orb')).toBe(true);
     expect(getComputedStyle(rowTitle).animationName).toBe('flower-activity-title-sweep');
+    rowTitle.style.setProperty('--foreground', '#f4f7fb');
+    rowTitle.style.setProperty('--primary', '#f4f7fb');
+    rowTitle.style.setProperty('--flower-subagents-panel', '#28313d');
+    rowTitle.style.setProperty('--flower-subagents-active', '#6bb7ff');
+    expect(maxSrgbChannelDistance(
+      resolveInheritedColor(rowTitle, 'var(--flower-subagent-running-text-base)'),
+      resolveInheritedColor(rowTitle, 'var(--flower-subagent-running-text-highlight)'),
+    )).toBeGreaterThan(0.12);
     subagentRow.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
 
@@ -312,7 +341,14 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(getComputedStyle(detailSignal).borderRadius).toBe('9999px');
     expect(statusText.textContent).toBe('Running');
     expect(getComputedStyle(statusText).animationName).toBe('flower-activity-title-sweep');
-    expect(rowStatusColor).toBe(getComputedStyle(statusText).color);
+    statusText.style.setProperty('--primary', '#f4f7fb');
+    statusText.style.setProperty('--flower-subagent-window-text', '#f4f7fb');
+    statusText.style.setProperty('--flower-subagent-window-surface-band', '#28313d');
+    statusText.style.setProperty('--flower-subagent-window-accent', '#6bb7ff');
+    expect(maxSrgbChannelDistance(
+      resolveInheritedColor(statusText, 'var(--flower-subagent-running-text-base)'),
+      resolveInheritedColor(statusText, 'var(--flower-subagent-running-text-highlight)'),
+    )).toBeGreaterThan(0.12);
 
     const presenceStates: string[] = [];
     const presenceObserver = new MutationObserver(() => {

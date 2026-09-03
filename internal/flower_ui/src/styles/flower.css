@@ -8397,8 +8397,9 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-dropdown-row-running .flower-subagent-dropdown-name {
-  --flower-subagent-running-text-base: var(--foreground);
-  --flower-subagent-running-text-highlight: color-mix(in srgb, var(--primary) 58%, var(--foreground) 42%);
+  --flower-subagent-running-text-base: color-mix(in srgb, var(--foreground) 68%, var(--flower-subagents-panel) 32%);
+  --flower-subagent-running-text-highlight: color-mix(in srgb, var(--flower-subagents-active) 52%, var(--foreground) 48%);
+  --flower-subagent-running-text-peak: var(--foreground);
 }
 
 .flower-subagent-dropdown-description {
@@ -8675,8 +8676,9 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-status-label-running .flower-subagent-status-text {
-  --flower-subagent-running-text-base: var(--primary);
-  --flower-subagent-running-text-highlight: color-mix(in srgb, var(--primary) 34%, var(--flower-subagent-window-text) 66%);
+  --flower-subagent-running-text-base: color-mix(in srgb, var(--primary) 68%, var(--flower-subagent-window-surface-band) 32%);
+  --flower-subagent-running-text-highlight: color-mix(in srgb, var(--flower-subagent-window-accent) 52%, var(--flower-subagent-window-text) 48%);
+  --flower-subagent-running-text-peak: var(--flower-subagent-window-text);
 }
 
 .flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,
@@ -8685,9 +8687,11 @@ button.flower-attachment-preview-trigger:disabled {
   background: linear-gradient(
     90deg,
     var(--flower-subagent-running-text-base) 0%,
-    var(--flower-subagent-running-text-base) 40%,
-    var(--flower-subagent-running-text-highlight) 50%,
-    var(--flower-subagent-running-text-base) 60%,
+    var(--flower-subagent-running-text-base) 34%,
+    var(--flower-subagent-running-text-highlight) 44%,
+    var(--flower-subagent-running-text-peak) 50%,
+    var(--flower-subagent-running-text-highlight) 56%,
+    var(--flower-subagent-running-text-base) 66%,
     var(--flower-subagent-running-text-base) 100%
   );
   background-position: 100% 0;
