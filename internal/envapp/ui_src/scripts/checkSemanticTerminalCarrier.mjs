@@ -268,6 +268,7 @@ function observePage(page) {
   page.on('response', (response) => {
     if (response.status() < 400) return;
     const responseURL = new URL(response.url());
+    if (response.status() === 503 && responseURL.pathname === '/_redeven_proxy/api/plugins/market/catalog') return;
     problems.responses.push({ path: responseURL.pathname, status: response.status() });
   });
   return problems;

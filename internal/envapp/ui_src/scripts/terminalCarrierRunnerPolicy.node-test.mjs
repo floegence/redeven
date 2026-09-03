@@ -119,6 +119,16 @@ test('reports Chromium readback diagnostics without weakening renderer failures'
     text: 'Failed to load resource: the server responded with a status of 403 (Forbidden)',
     location: { url: 'http://127.0.0.1:1234/_redevplugin/api/plugins/catalog/query-extra' },
   }), 'renderer_problem');
+  assert.equal(classifyTerminalCarrierConsoleMessage({
+    type: 'error',
+    text: 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)',
+    location: { url: 'http://127.0.0.1:1234/_redeven_proxy/api/plugins/market/catalog' },
+  }), 'expected_environment');
+  assert.equal(classifyTerminalCarrierConsoleMessage({
+    type: 'error',
+    text: 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)',
+    location: { url: 'http://127.0.0.1:1234/_redeven_proxy/api/plugins/market/catalog/refresh' },
+  }), 'renderer_problem');
 });
 
 test('checks every semantic frame boundary before visual sampling', () => {
