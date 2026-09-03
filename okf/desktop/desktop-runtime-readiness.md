@@ -44,7 +44,7 @@ Local and registered SSH/container targets are direct managed Environments and r
 
 One Launcher Operation owns Open and any nested direct Runtime recovery. Runtime recovery temporarily selects the Runtime lifecycle progress surface, then returns to Open without completing or deleting the parent operation. If nested recovery fails, the card names the failed Runtime operation, such as Start failed, and its details retain the structured failure and diagnostics. When a new Environment operation is accepted, older terminal Open, Runtime, and reinstall operations leave that card. Renderer selects the newest accepted attempt deterministically; multiple retained failures never remove the failure button or details entry.
 
-`runtime_state_incompatible` is a typed reinstall-required result. Desktop persists the existing reinstall-required marker and offers the standard wipe-reinstall review; Update and ordinary Retry are not valid alternatives. Toasts remain concise, while the card failure panel owns the original launch report, logs, and recovery action.
+`runtime_state_incompatible` is a typed reinstall-required result. Every managed-Linux transport classifies the blocked startup report before generic failure handling and preserves that report in technical diagnostics. Desktop persists the existing reinstall-required marker and offers the standard wipe-reinstall review; Update and ordinary Retry are not valid alternatives. Toasts remain concise, while the card failure panel owns the original launch report, logs, and recovery action.
 
 All operation labels, details, errors, recovery actions, tooltips, and accessibility text use structured keys and localized catalogs. Raw command stderr remains literal only inside technical diagnostics.
 
@@ -58,6 +58,7 @@ Read-only health probes do not start, stop, repair, or reconnect Runtime. Access
 - `redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1` - Local readiness hydration with explicit state and Runtime roots.
 - `redeven:desktop/src/main/runtimeProcess.ts:1` - Local inventory and status lookup path contract.
 - `redeven:desktop/src/main/runtimePlacementManager.ts:1` - Container process replacement, startup waiting, and ready Runtime snapshots.
+- `redeven:desktop/src/main/managedLinuxRuntime.ts:1` - Managed-Linux startup report classification and process readiness.
 - `redeven:desktop/src/main/reinstallRuntimePackage.ts:1` - Reinstall startup, single-process inventory, and Runtime Service terminal verification.
 - `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - One probe/decide/lifecycle/re-probe/open flow.
 - `redeven:desktop/src/main/runtimeOpenPreflight.ts:1` - Fresh status reuse requires exact process and Runtime Service identity.

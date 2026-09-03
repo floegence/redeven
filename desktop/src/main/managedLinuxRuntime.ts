@@ -9,7 +9,12 @@ import {
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
-import { parseAvailableLaunchReport } from './launchReport';
+import { formatBlockedLaunchDiagnostics, parseAvailableLaunchReport } from './launchReport';
+import {
+  DesktopOperationFailureError,
+  runtimeStateIncompatibleFailure,
+} from './desktopOperationFailure';
+import { classifyDesktopRuntimeBlockedLaunchReport } from '../shared/desktopRuntimeHealth';
 import {
   buildManagedSSHActivatePreparedRuntimeScript,
   buildManagedSSHReportReadScript,
@@ -310,6 +315,20 @@ async function waitForStartupReport(args: EnsureManagedLinuxRuntimeArgs, session
     ), { signal: args.signal });
     const launch = parseAvailableLaunchReport(report.stdout);
     if (launch?.status === 'blocked') {
+      const classification = classifyDesktopRuntimeBlockedLaunchReport(launch, {
+        target_runtime_version: args.runtime_release_tag,
+      });
+      if (classification.kind === 'reinstall_required') {
+        throw new DesktopOperationFailureError(runtimeStateIncompatibleFailure({
+          message: launch.message,
+          targetLabel: args.runtime_root,
+          diagnostics: [{
+            channel: 'runtime_startup_report',
+            label: 'Runtime startup report',
+            text: formatBlockedLaunchDiagnostics(launch),
+          }],
+        }));
+      }
       throw new Error(`Managed Linux Runtime startup was blocked (${launch.code}): ${launch.message}`);
     }
     if (launch) return launch.startup;
