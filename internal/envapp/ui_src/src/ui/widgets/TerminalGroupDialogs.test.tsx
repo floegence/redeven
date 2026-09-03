@@ -35,14 +35,16 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     </Show>
   ),
   ConfirmDialog: () => null,
-  DirectoryPicker: (props: any) => props.open ? (
-    <button data-testid="mock-directory-picker" onClick={() => {
-      props.onOpenChange(false);
-      props.onSelect('/workspace/services');
-    }}>
-      {props.title}
-    </button>
-  ) : null,
+  DirectoryPicker: (props: any) => (
+    <Show when={props.open}>
+      <button data-testid="mock-directory-picker" onClick={() => {
+        props.onOpenChange(false);
+        queueMicrotask(() => props.onSelect('/workspace/services'));
+      }}>
+        {props.title}
+      </button>
+    </Show>
+  ),
 }));
 
 afterEach(() => {
@@ -80,7 +82,7 @@ describe('TerminalGroupEditorDialog', () => {
     expect(nameInput.value).toBe('API');
   });
 
-  it('selects the default path through the shared directory picker', () => {
+  it('selects the default path through the shared directory picker', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onPickerOpen = vi.fn();
@@ -96,9 +98,13 @@ describe('TerminalGroupEditorDialog', () => {
     ), host);
 
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-path-picker-trigger"]')?.click();
+    await Promise.resolve();
     expect(onPickerOpen).toHaveBeenCalledOnce();
     expect(host.querySelector('[data-testid="group-editor-dialog"]')).toBeNull();
-    host.querySelector<HTMLButtonElement>('[data-testid="mock-directory-picker"]')?.click();
+    const picker = host.querySelector<HTMLButtonElement>('[data-testid="mock-directory-picker"]');
+    expect(picker).not.toBeNull();
+    picker!.click();
+    await Promise.resolve();
 
     expect(host.querySelector('[data-testid="group-editor-dialog"]')).not.toBeNull();
     expect(host.querySelector<HTMLInputElement>('[data-testid="terminal-group-path-input"]')?.value).toBe('/workspace/services');

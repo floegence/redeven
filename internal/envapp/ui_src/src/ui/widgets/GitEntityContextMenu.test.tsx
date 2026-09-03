@@ -422,6 +422,7 @@ describe('GitEntityContextMenu controller', () => {
     expect(document.activeElement).toBe(nextTarget);
 
     await open();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     document.dispatchEvent(new Event('scroll'));
     expect(controller.state()).toBeNull();
 
