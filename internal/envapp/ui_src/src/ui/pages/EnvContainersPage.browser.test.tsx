@@ -581,6 +581,7 @@ describe('native Containers responsive product surface', () => {
     expect(servicePage.querySelectorAll('.container-service-card')).toHaveLength(2);
     expect(getComputedStyle(servicePage.querySelector<HTMLElement>('.container-services-grid')!).gridTemplateColumns.split(' ')).toHaveLength(1);
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const visibleButtons = Array.from(servicePage.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.getClientRects().length > 0);
     expect(visibleButtons.every((button) => button.getBoundingClientRect().height >= 44)).toBe(true);
     Array.from(servicePage.querySelectorAll<HTMLButtonElement>('.container-service-card button')).find((button) => button.textContent?.includes('Configure'))?.click();
