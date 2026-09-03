@@ -379,7 +379,7 @@ func TestControlArtifactPoolTopUpResponseBindsPendingRequestBeforeApply(t *testi
 }
 
 func TestControlArtifactPoolTopUpGoldenFixture(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "spec", "fixtures", "rcpp-v2", "control_artifact_pool_top_up_v1.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "spec", "fixtures", "rcpp-v3", "control_artifact_pool_top_up_v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

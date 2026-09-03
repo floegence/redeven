@@ -101,6 +101,11 @@ import {
   type DesktopPlatformCapabilities,
 } from '../shared/desktopPlatformCapabilities';
 import type { DesktopWSLDiscoverySnapshot } from '../shared/desktopWSL';
+import {
+  isRedevenCloudOrigin,
+  redevenCloudAllowedOrigins,
+  type RedevenCloudOriginPolicy,
+} from '../shared/redevenCloud';
 
 export {
   desktopProviderRuntimeLinkTargetID,
@@ -124,6 +129,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   flowerSettingsFocusRevision?: number;
   platformCapabilities?: DesktopPlatformCapabilities;
   wslDiscovery?: DesktopWSLDiscoverySnapshot | null;
+  redevenCloudOriginPolicy?: RedevenCloudOriginPolicy;
 }>;
 
 function diagnosticsLines(lines: readonly string[]): string {
@@ -744,6 +750,7 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
   runtimeRunning?: boolean;
   runtimeControlStatus?: DesktopProviderRuntimeLinkTarget['runtime_control_status'];
   runtimeService?: RuntimeServiceSnapshot;
+  redevenCloudOriginPolicy: RedevenCloudOriginPolicy;
 }>): DesktopProviderRuntimeLinkTarget {
   const runtimeURL = compact(input.runtimeURL);
   const runtimeService = input.runtimeService
@@ -798,6 +805,10 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     provider_link_state: providerLinkBinding.state,
     provider_link_binding: providerLinkBinding,
     provider_origin: providerLinkBinding.provider_origin,
+    provider_origin_supported: isRedevenCloudOrigin(
+      providerLinkBinding.provider_origin ?? '',
+      input.redevenCloudOriginPolicy,
+    ),
     provider_id: providerLinkBinding.provider_id,
     env_public_id: providerLinkBinding.env_public_id,
     access_point_origin: providerLinkBinding.access_point_origin,
@@ -1192,6 +1203,7 @@ function buildLocalEnvironmentEntry(
   providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
   cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopRuntimePresence | undefined,
+  redevenCloudOriginPolicy: RedevenCloudOriginPolicy,
 ): DesktopEnvironmentEntry {
   const localSession = openSessions.local_host ?? null;
   const isOpen = sessionIsOpen(localSession);
@@ -1256,6 +1268,7 @@ function buildLocalEnvironmentEntry(
     runtimeRunning: runtimeHealth.status === 'online',
     runtimeControlStatus: presence?.runtime_control_status,
     runtimeService,
+    redevenCloudOriginPolicy,
   });
   const resolvedLocalRouteState = localRouteState(environment, localSession);
   const remoteRoute = kind === 'controlplane'
@@ -1543,6 +1556,7 @@ function buildEnvironmentEntries(
   savedRuntimeTargetHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopRuntimePresence>>,
   platformCapabilities: DesktopPlatformCapabilities,
+  redevenCloudOriginPolicy: RedevenCloudOriginPolicy,
 ): readonly DesktopEnvironmentEntry[] {
   const localLocalEnvironments = platformCapabilities.native_local_environment
     ? [preferences.local_environment]
@@ -1559,6 +1573,7 @@ function buildEnvironmentEntries(
     runtimeRunning: localPresence?.running,
     runtimeControlStatus: localPresence?.runtime_control_status,
     runtimeService: preferredRuntimeService(localEnvironmentRuntimeService(preferences.local_environment), undefined, localPresence),
+    redevenCloudOriginPolicy,
   });
   const visibleSavedRuntimeTargets = preferences.saved_runtime_targets.filter((target) => (
     platformCapabilities.native_host_runtime || target.host_access.kind !== 'local_host'
@@ -1577,6 +1592,7 @@ function buildEnvironmentEntries(
       runtimeRunning: presence?.running,
       runtimeControlStatus: presence?.runtime_control_status,
       runtimeService: preferredRuntimeService(undefined, undefined, presence),
+      redevenCloudOriginPolicy,
     });
   });
   const runtimeLinkTargets = [
@@ -1601,6 +1617,7 @@ function buildEnvironmentEntries(
           providerEnvironmentCandidatesForTarget(localRuntimeTarget.id),
           localRuntimeHealth[environment.id],
           localPresence,
+          redevenCloudOriginPolicy,
         )
       )),
     ...preferences.provider_environments.map((environment) => (
@@ -1676,6 +1693,7 @@ function buildEnvironmentEntries(
       savedRuntimeTargetHealth[target.id],
       managedRuntimePresenceByTargetID[runtimeTargetID],
       providerEnvironmentCandidatesForTarget(runtimeTargetID),
+      redevenCloudOriginPolicy,
     ));
   }
 
@@ -1773,6 +1791,7 @@ function buildSavedRuntimeTargetEntry(
   cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopRuntimePresence | undefined,
   providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
+  redevenCloudOriginPolicy: RedevenCloudOriginPolicy,
 ): DesktopEnvironmentEntry {
   const probeSource = target.host_access.kind === 'ssh_host'
     ? 'ssh_runtime_probe'
@@ -1812,6 +1831,7 @@ function buildSavedRuntimeTargetEntry(
     runtimeRunning: runtimeHealth.status === 'online',
     runtimeControlStatus: presence?.runtime_control_status,
     runtimeService,
+    redevenCloudOriginPolicy,
   });
   const localUIURL = presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '';
   const effectiveHostAccess = presence?.host_access ?? target.host_access;
@@ -1901,6 +1921,7 @@ export function buildDesktopWelcomeSnapshot(
   args: BuildDesktopWelcomeSnapshotArgs,
 ): DesktopWelcomeSnapshot {
   const preferences = args.preferences;
+  const redevenCloudOriginPolicy = args.redevenCloudOriginPolicy ?? { allow_development: false };
   const platformCapabilities = args.platformCapabilities ?? resolveDesktopPlatformCapabilities(process.platform);
   const controlPlanes = args.controlPlanes ?? fallbackControlPlaneSummaries(
     preferences.control_planes,
@@ -1922,6 +1943,7 @@ export function buildDesktopWelcomeSnapshot(
     args.savedRuntimeTargetHealth ?? {},
     args.managedRuntimePresenceByTargetID ?? {},
     platformCapabilities,
+    redevenCloudOriginPolicy,
   );
   // Only explicit URL records are Standalone Gateways. Direct host/container
   // targets belong to Environment storage and must never reach either the
@@ -1993,6 +2015,7 @@ export function buildDesktopWelcomeSnapshot(
     open_windows: buildOpenEnvironmentWindows(openSessions),
     environments,
     gateway_sources: gatewaySources,
+    redeven_cloud_origins: redevenCloudAllowedOrigins(redevenCloudOriginPolicy),
     control_planes: controlPlanes,
     action_progress: args.actionProgress ?? [],
     operations: args.operations ?? [],

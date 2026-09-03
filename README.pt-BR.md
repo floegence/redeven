@@ -146,7 +146,7 @@ O Redeven prioriza os recursos, mas o ambiente de execução continua sendo o li
 
 O Redeven mantém o conhecimento do repositório em [OKF v0.1](okf/index.md). O corpus OKF é gerado a partir do comportamento atual do código-fonte e incorporado ao ambiente de execução para `okf.search`.
 
-A superfície de integração RCPP Provider legível por máquina fica em [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Fora do OKF, os arquivos Markdown mantidos são deliberadamente limitados a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, ao `README.md` canônico e às traduções mantidas `README.<locale>.md` declaradas em `assets/readme/locales.json`.
+A superfície de integração RCPP Provider legível por máquina fica em [spec/openapi/rcpp-v3.yaml](spec/openapi/rcpp-v3.yaml). Fora do OKF, os arquivos Markdown mantidos são deliberadamente limitados a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, ao `README.md` canônico e às traduções mantidas `README.<locale>.md` declaradas em `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

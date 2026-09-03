@@ -53,6 +53,7 @@ export type DesktopProviderRuntimeLinkTarget = Readonly<{
   provider_link_state: RuntimeServiceProviderLinkState;
   provider_link_binding?: RuntimeServiceProviderLinkBinding;
   provider_origin?: string;
+  provider_origin_supported: boolean;
   provider_id?: string;
   env_public_id?: string;
   access_point_origin?: string;

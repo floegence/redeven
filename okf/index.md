@@ -106,7 +106,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Protocol
 
 - [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Define signed pairing, catalog, profile, open-session, and access-only Gateway routes.
-- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.
+- [RCPP v3 provider API](protocol/rcpp-v3-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.
 
 ## Release
 

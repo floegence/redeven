@@ -241,6 +241,7 @@ describe('DesktopWelcomeShell', () => {
         provider_connection_state: 'connected' as const,
         provider_link_state: 'linked' as const,
         provider_origin: 'https://legacy.example.invalid',
+        provider_origin_supported: false,
         provider_id: 'legacy',
         env_public_id: 'env_legacy',
         can_connect_provider: false,
@@ -2291,9 +2292,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('environmentCenter.viewEnvironments')");
     expect(appSrc).not.toContain('All Sources');
     expect(appSrc).toContain('Local');
-    expect(appSrc).toContain('CONTROL_PLANE_PROVIDER_PRESET_OPTIONS');
-    expect(appSrc).toContain('provider_origin: REDEVEN_CLOUD_ORIGIN');
-    expect(appSrc).toContain('provider_origin: REDEVEN_CLOUD_DEVELOPMENT_ORIGIN');
+    expect(appSrc).toContain('snapshot().redeven_cloud_origins');
+    expect(appSrc).not.toContain('CONTROL_PLANE_PROVIDER_PRESET_OPTIONS');
+    expect(appSrc).not.toContain('DESKTOP_WELCOME_IMPORT_META');
+    expect(appSrc).toContain('controlPlaneProviderPresetOptions(snapshot().redeven_cloud_origins)');
+    expect(appSrc).toContain("url.protocol !== 'https:'");
     expect(appSrc).not.toContain('ControlPlaneOriginMode');
     expect(appSrc).not.toContain('preset_provider_origin');
     expect(appSrc).not.toContain('custom_provider_origin');
@@ -2348,7 +2351,7 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('class="w-full justify-center"');
     expect(dialogSrc).not.toContain('footer={(');
     expect(dialogSrc).toContain(
-      "data-floe-autofocus={CONTROL_PLANE_PROVIDER_PRESET_OPTIONS.length <= 1 ? 'true' : undefined}",
+      "data-floe-autofocus={props.providerOptions.length <= 1 ? 'true' : undefined}",
     );
   });
 

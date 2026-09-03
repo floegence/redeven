@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Redeven Control Plane Provider Protocol
-  version: rcpp-v2
+  version: rcpp-v3
   summary: Provider authority plus access point contract for Redeven Desktop and Runtime.
 servers:
   - url: https://redeven.example
@@ -11,6 +11,8 @@ servers:
 tags:
   - name: ProviderAuthority
   - name: AccessPoint
+  - name: ManualRuntimeBootstrapV2
+    description: Frozen manual-install bootstrap contract; not part of RCPP v3 Desktop access.
 paths:
   /.well-known/redeven-provider.json:
     get:
@@ -23,7 +25,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiscoveryResponse'
-  /api/rcpp/v2/desktop/authorize:
+  /api/rcpp/v3/desktop/authorize:
     post:
       tags: [ProviderAuthority]
       operationId: createDesktopAuthorizationCode
@@ -42,7 +44,7 @@ paths:
                 $ref: '#/components/schemas/DesktopAuthorizationResponse'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/desktop/connect/exchange:
+  /api/rcpp/v3/desktop/connect/exchange:
     post:
       tags: [ProviderAuthority]
       operationId: exchangeDesktopAuthorizationCode
@@ -61,7 +63,7 @@ paths:
                 $ref: '#/components/schemas/DesktopConnectExchangeResponse'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/desktop/token/refresh:
+  /api/rcpp/v3/desktop/token/refresh:
     post:
       tags: [ProviderAuthority]
       operationId: refreshDesktopAccessToken
@@ -80,7 +82,7 @@ paths:
                 $ref: '#/components/schemas/DesktopTokenRefreshResponse'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/desktop/token/revoke:
+  /api/rcpp/v3/desktop/token/revoke:
     post:
       tags: [ProviderAuthority]
       operationId: revokeDesktopAuthorization
@@ -95,7 +97,7 @@ paths:
           description: Authorization revoked.
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/me:
+  /api/rcpp/v3/me:
     get:
       tags: [ProviderAuthority]
       operationId: getProviderAccount
@@ -110,7 +112,7 @@ paths:
                 $ref: '#/components/schemas/ProviderMeResponse'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/environments:
+  /api/rcpp/v3/environments:
     get:
       tags: [AccessPoint]
       operationId: listProviderEnvironments
@@ -125,7 +127,7 @@ paths:
                 $ref: '#/components/schemas/ProviderEnvironmentListResponse'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/environments/runtime-health/query:
+  /api/rcpp/v3/environments/runtime-health/query:
     post:
       tags: [AccessPoint]
       operationId: queryProviderEnvironmentRuntimeHealth
@@ -146,7 +148,7 @@ paths:
                 $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealthQueryResponse'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/environments/{envId}/desktop/open-session:
+  /api/rcpp/v3/environments/{envId}/desktop/open-session:
     post:
       tags: [AccessPoint]
       operationId: createDesktopOpenSession
@@ -167,9 +169,59 @@ paths:
                 $ref: '#/components/schemas/DesktopOpenSessionResponse'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
-  /api/rcpp/v2/runtime/bootstrap/exchange:
+  /api/rcpp/v3/environments/{envId}/runtime-link/authorizations:
     post:
       tags: [AccessPoint]
+      operationId: createRuntimeLinkAuthorization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeLinkAuthorizationRequest'
+      responses:
+        '200':
+          description: Short-lived Runtime-link ticket bound to the user, provider, access point, and Environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLinkAuthorizationResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v3/runtime-link/exchange:
+    post:
+      tags: [AccessPoint]
+      operationId: exchangeRuntimeLinkTicket
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeLinkExchangeRequest'
+      responses:
+        '200':
+          description: Runtime binding metadata and one exact control_artifact_pool_v1 initial delivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLinkExchangeResponse'
+        '409':
+          $ref: '#/components/responses/RuntimeLinkConflict'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/runtime/bootstrap/exchange:
+    post:
+      tags: [ManualRuntimeBootstrapV2]
       operationId: exchangeRuntimeBootstrapTicket
       security:
         - bearerAuth: []
@@ -218,6 +270,28 @@ components:
                     enum: [BOOTSTRAP_DELIVERY_EXPIRED, BOOTSTRAP_BINDING_STALE, CONTROL_POOL_RELINK_REQUIRED]
                   message:
                     type: string
+    RuntimeLinkConflict:
+      description: Runtime-link delivery or binding conflict.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [success, error]
+            properties:
+              success:
+                type: boolean
+                const: false
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code:
+                    type: string
+                    enum: [RUNTIME_LINK_DELIVERY_EXPIRED, RUNTIME_LINK_BINDING_STALE, CONTROL_POOL_RELINK_REQUIRED, ENVIRONMENT_BINDING_OCCUPIED]
+                  message:
+                    type: string
     ErrorEnvelope:
       description: Standard error envelope.
       content:
@@ -242,7 +316,7 @@ components:
       properties:
         protocol_version:
           type: string
-          const: rcpp-v2
+          const: rcpp-v3
         provider_id:
           type: string
         display_name:
@@ -367,15 +441,19 @@ components:
           format: int64
     ProviderEnvironmentListResponse:
       type: object
-      required: [environments]
+      additionalProperties: false
+      required: [protocol_version, environments]
       properties:
+        protocol_version:
+          type: string
+          const: rcpp-v3
         environments:
           type: array
           items:
             $ref: '#/components/schemas/ProviderEnvironmentSummary'
     ProviderEnvironmentSummary:
       type: object
-      required: [env_public_id, name, region, access_point_id, access_point_origin]
+      required: [env_public_id, name, region, access_point_id, access_point_origin, access]
       properties:
         env_public_id:
           type: string
@@ -405,6 +483,21 @@ components:
           format: int64
         runtime_health:
           $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealth'
+        access:
+          $ref: '#/components/schemas/ProviderEnvironmentAccess'
+    ProviderEnvironmentAccess:
+      type: object
+      additionalProperties: false
+      required: [can_connect, workspace_read, workspace_write, workspace_execute]
+      properties:
+        can_connect:
+          type: boolean
+        workspace_read:
+          type: boolean
+        workspace_write:
+          type: boolean
+        workspace_execute:
+          type: boolean
     ProviderEnvironmentRuntimeHealthQueryRequest:
       type: object
       required: [env_public_ids]
@@ -442,10 +535,9 @@ components:
           type: string
     DesktopOpenSessionResponse:
       type: object
+      additionalProperties: false
       required: [access_point_origin, expires_at_unix_ms]
       properties:
-        bootstrap_ticket:
-          type: string
         remote_session_url:
           type: string
         access_point_origin:
@@ -454,6 +546,87 @@ components:
         expires_at_unix_ms:
           type: integer
           format: int64
+    RuntimeLinkAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, env_public_id]
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v3
+        env_public_id:
+          type: string
+          minLength: 1
+    RuntimeLinkAuthorizationResponse:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, runtime_link_ticket, expires_at_unix_ms]
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v3
+        runtime_link_ticket:
+          type: string
+          minLength: 1
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+          minimum: 1
+    RuntimeLinkExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, env_public_id, provider_origin, local_environment_public_id, agent_instance_id, delivery_request_id_b64u]
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v3
+        env_public_id:
+          type: string
+          minLength: 1
+        provider_origin:
+          type: string
+          format: uri
+        local_environment_public_id:
+          type: string
+          minLength: 1
+        agent_instance_id:
+          type: string
+          minLength: 1
+        delivery_request_id_b64u:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        runtime_version:
+          type: string
+    RuntimeLinkExchangeResponse:
+      type: object
+      additionalProperties: false
+      required: [protocol_version, provider_id, provider_origin, access_point_id, access_point_origin, env_public_id, control_artifact_pool, local_environment_binding]
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v3
+        provider_id:
+          type: string
+        provider_origin:
+          type: string
+          format: uri
+        access_point_id:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        env_public_id:
+          type: string
+        control_artifact_pool:
+          $ref: '#/components/schemas/RuntimeBootstrapControlArtifactPoolV1'
+        local_environment_binding:
+          $ref: '#/components/schemas/ProviderLocalEnvironmentBinding'
     RuntimeBootstrapExchangeRequest:
       type: object
       additionalProperties: false

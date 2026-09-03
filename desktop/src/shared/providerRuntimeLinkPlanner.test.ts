@@ -64,6 +64,7 @@ function target(overrides: Partial<DesktopProviderRuntimeLinkTarget> = {}): Desk
     provider_connection_state: runtimeServiceProviderConnectionState(service),
     provider_link_state: service.bindings!.provider_link.state,
     provider_link_binding: service.bindings!.provider_link,
+    provider_origin_supported: true,
     can_connect_provider: true,
     can_disconnect_provider: false,
     ...overrides,

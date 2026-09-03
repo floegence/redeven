@@ -461,6 +461,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
   open_windows: readonly DesktopOpenEnvironmentWindow[];
   environments: readonly DesktopEnvironmentEntry[];
   gateway_sources: readonly DesktopGatewaySource[];
+  redeven_cloud_origins: readonly string[];
   control_planes: readonly DesktopControlPlaneSummary[];
   action_progress: readonly DesktopLauncherActionProgress[];
   operations: readonly DesktopLauncherOperationSnapshot[];

@@ -146,7 +146,7 @@ Redeven 以能力为先，但运行时仍然是信任边界，因为它实际掌
 
 Redeven 在 [OKF v0.1](okf/index.md) 中维护仓库知识。OKF 语料由当前源代码层面的行为生成，并嵌入运行时供 `okf.search` 使用。
 
-机器可读的 RCPP Provider 集成接口位于 [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml)。在 OKF 之外，维护中的 Markdown 被明确限制为 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、权威英文 `README.md`，以及在 `assets/readme/locales.json` 中声明的受支持 `README.<locale>.md` 翻译。
+机器可读的 RCPP Provider 集成接口位于 [spec/openapi/rcpp-v3.yaml](spec/openapi/rcpp-v3.yaml)。在 OKF 之外，维护中的 Markdown 被明确限制为 `AGENTS.md`、`THIRD_PARTY_NOTICES.md`、权威英文 `README.md`，以及在 `assets/readme/locales.json` 中声明的受支持 `README.<locale>.md` 翻译。
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

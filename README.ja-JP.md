@@ -146,7 +146,7 @@ Redeven は機能を前面に出しますが、実際のホストを管理する
 
 Redeven は、保守対象のリポジトリ知識を [OKF v0.1](okf/index.md) に集約しています。OKF コーパスは現在のソースレベルの動作から生成され、`okf.search` 用にランタイムへ埋め込まれます。
 
-機械可読な RCPP Provider 統合サーフェスは [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml) にあります。OKF 以外で保守する Markdown は、`AGENTS.md`、`THIRD_PARTY_NOTICES.md`、正本の `README.md`、および `assets/readme/locales.json` で宣言された対応 `README.<locale>.md` 翻訳に限定されます。
+機械可読な RCPP Provider 統合サーフェスは [spec/openapi/rcpp-v3.yaml](spec/openapi/rcpp-v3.yaml) にあります。OKF 以外で保守する Markdown は、`AGENTS.md`、`THIRD_PARTY_NOTICES.md`、正本の `README.md`、および `assets/readme/locales.json` で宣言された対応 `README.<locale>.md` 翻訳に限定されます。
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

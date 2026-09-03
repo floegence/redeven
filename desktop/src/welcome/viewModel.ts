@@ -6,7 +6,6 @@ import type {
 } from '../shared/desktopLauncherIPC';
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
-import { isRedevenCloudOrigin, type RedevenCloudOriginPolicy } from '../shared/redevenCloud';
 import type { DesktopControlPlaneSyncState } from '../shared/providerEnvironmentState';
 import {
   runtimeServiceAllowsOpenAttempt,
@@ -119,10 +118,6 @@ const ICON_LOCAL_LINK = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3d
 const ICON_ENV_ID = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjUuNSIgY3k9IjUuNSIgcj0iMi44Ii8+PHBhdGggZD0iTTcuNSA3LjVMMTIuNSAxMi41Ii8+PHBhdGggZD0iTTEwIDEwbDIuNSAyLjUiLz48L3N2Zz4K';
 
 export const ICON_ENDPOINTS = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMS40IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjIuNSIgY3k9IjEwLjUiIHI9IjEuOCIvPjxjaXJjbGUgY3g9IjEzLjUiIGN5PSIxMC41IiByPSIxLjgiLz48Y2lyY2xlIGN4PSI4IiBjeT0iMi41IiByPSIxLjgiLz48cGF0aCBkPSJNNCA5bDMtNSIvPjxwYXRoIGQ9Ik0xMiA5TDkgNCIvPjwvc3ZnPgo=';
-
-const DESKTOP_WELCOME_REDEVEN_CLOUD_POLICY: RedevenCloudOriginPolicy = {
-  allow_development: process.env.NODE_ENV !== 'production',
-};
 
 export const FACT_LABEL_ICONS: Record<string, string> = {
   'RUNS ON': ICON_RUNS_ON,
@@ -634,7 +629,8 @@ function orderEnvironmentCardFacts(
 }
 
 function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string {
-  if (isRedevenCloudOrigin(environment.provider_origin ?? '', DESKTOP_WELCOME_REDEVEN_CLOUD_POLICY)) {
+  if (environment.kind === 'provider_environment'
+    || environment.provider_runtime_link_target?.provider_origin_supported === true) {
     return 'Redeven Cloud';
   }
   return compact(environment.control_plane_label) || compact(environment.provider_origin);
@@ -644,12 +640,11 @@ export function runtimeHasUnsupportedLegacyControlPlaneLink(
   environment: DesktopEnvironmentEntry,
 ): boolean {
   const target = environment.provider_runtime_link_target;
-  const providerOrigin = compact(target?.provider_origin);
   return Boolean(
     target
     && target.provider_connection_state !== 'unlinked'
-    && providerOrigin !== ''
-    && !isRedevenCloudOrigin(providerOrigin, DESKTOP_WELCOME_REDEVEN_CLOUD_POLICY),
+    && compact(target.provider_origin) !== ''
+    && target.provider_origin_supported === false,
   );
 }
 
