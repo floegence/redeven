@@ -193,7 +193,7 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
     const verifying = readBranchLayout(host!);
 
     const visibleStatuses = Array.from(
-      host!.querySelectorAll('.git-inline-loading-status'),
+      host!.querySelectorAll('[data-git-content-skeleton="changed-files"][data-git-skeleton-busy="true"]'),
     ).filter((node) => node.getBoundingClientRect().width > 0);
     expect(visibleStatuses).toHaveLength(1);
     expect(visibleStatuses[0]?.textContent).toContain('Checking');
