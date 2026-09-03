@@ -9,7 +9,7 @@ require (
 	github.com/floegence/floret/v7 v7.1.2
 	github.com/floegence/flowersec/flowersec-go/v5 v5.0.1
 	github.com/floegence/redeven-service-templates v0.2.0
-	github.com/floegence/redevplugin/v3 v3.0.21
+	github.com/floegence/redevplugin/v3 v3.0.22
 	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go v1.12.0
 	github.com/pelletier/go-toml/v2 v2.4.3
