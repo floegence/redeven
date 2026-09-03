@@ -77,10 +77,12 @@ type Options struct {
 	// ThreadReadStateStore persists scoped per-surface thread read watermarks.
 	ThreadReadStateStore *threadreadstate.Store
 	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
-	PluginPlatform       http.Handler
-	PluginMarketSnapshot func(context.Context) (pluginmarket.Snapshot, error)
-	PluginMarketDetail   func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
-	PluginMarketIcon     func(context.Context, string, string) (pluginmarket.IconAsset, error)
+	PluginPlatform        http.Handler
+	PluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
+	PluginMarketRefresh   func(context.Context) (pluginmarket.Snapshot, error)
+	PluginMarketSubscribe func(context.Context, int64) ([]pluginmarket.RefreshEvent, <-chan pluginmarket.RefreshEvent, error)
+	PluginMarketDetail    func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
+	PluginMarketIcon      func(context.Context, string, string) (pluginmarket.IconAsset, error)
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string
 	FilesystemScope *filesystemscope.Registry
@@ -242,6 +244,8 @@ type Server struct {
 	threadReadState       *threadreadstate.Store
 	pluginPlatform        http.Handler
 	pluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
+	pluginMarketRefresh   func(context.Context) (pluginmarket.Snapshot, error)
+	pluginMarketSubscribe func(context.Context, int64) ([]pluginmarket.RefreshEvent, <-chan pluginmarket.RefreshEvent, error)
 	pluginMarketDetail    func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
 	pluginMarketIcon      func(context.Context, string, string) (pluginmarket.IconAsset, error)
 	pluginConnMu          sync.Mutex
@@ -434,6 +438,8 @@ func New(opts Options) (*Server, error) {
 		threadReadState:       opts.ThreadReadStateStore,
 		pluginPlatform:        opts.PluginPlatform,
 		pluginMarketSnapshot:  opts.PluginMarketSnapshot,
+		pluginMarketRefresh:   opts.PluginMarketRefresh,
+		pluginMarketSubscribe: opts.PluginMarketSubscribe,
 		pluginMarketDetail:    opts.PluginMarketDetail,
 		pluginMarketIcon:      opts.PluginMarketIcon,
 		pluginConns:           make(map[*pluginAdmissionConn]struct{}),
@@ -2504,6 +2510,33 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}))
 	defer func() { releaseAI() }()
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/plugins/market/catalog/events":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		g.handlePluginMarketEventStream(w, r)
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/plugins/market/catalog/refresh":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		if r.URL.RawQuery != "" || r.ContentLength != 0 {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid plugin market refresh request"})
+			return
+		}
+		if g.pluginMarketRefresh == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market is unavailable"})
+			return
+		}
+		snapshot, err := g.pluginMarketRefresh(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market refresh failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: snapshot})
+		return
+
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/plugins/market/plugins/") && strings.HasSuffix(r.URL.Path, "/icon"):
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return

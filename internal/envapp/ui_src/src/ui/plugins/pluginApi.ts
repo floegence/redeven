@@ -5,7 +5,7 @@ import {
 } from '@floegence/redevplugin-ui';
 
 import { officialPluginCatalog } from './officialPluginCatalog';
-import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
+import { fetchLocalApi, fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
 import type {
   OfficialPluginCatalogItem,
@@ -16,11 +16,19 @@ import type {
   PluginManagementCommand,
   PluginOfficialInstallCommand,
   ReDevPluginRecord,
+  PluginMarketRefreshEvent,
   PluginMarketSnapshot,
   PluginMarketDetail,
 } from './pluginTypes';
 
 const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
+const MARKET_REFRESH_TIMEOUT_MS = 20_000;
+
+export type PluginMarketCatalogResult = Readonly<{
+  generation: number;
+  changed: boolean;
+  stale: boolean;
+}>;
 
 export type PluginLifecycleAPI = ReturnType<typeof createPluginLifecycleAPI>;
 
@@ -30,6 +38,7 @@ export function createPluginLifecycleAPI(
   client: PluginPlatformClient,
   catalogSeed?: readonly OfficialPluginCatalogItem[],
   loadMarket: (signal?: AbortSignal) => Promise<PluginMarketSnapshot> = loadPluginMarketSnapshot,
+  refreshMarket: (signal?: AbortSignal) => Promise<PluginMarketSnapshot> = refreshPluginMarketSnapshot,
 ) {
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
   let marketUnavailable = false;
@@ -40,11 +49,31 @@ export function createPluginLifecycleAPI(
     return result.plugins;
   };
 
-  const refreshMarketCatalog = async (options: PluginRequestOptions = {}): Promise<void> => {
+  const acceptMarketSnapshot = (snapshot: PluginMarketSnapshot, requireFresh: boolean): PluginMarketCatalogResult => {
+    const nextCatalog = officialPluginCatalog(snapshot);
+    if (marketGeneration !== undefined && snapshot.generation < marketGeneration) {
+      return { generation: marketGeneration, changed: false, stale: marketUnavailable };
+    }
+    const changed = marketGeneration !== snapshot.generation;
+    catalog = nextCatalog;
+    marketGeneration = snapshot.generation;
+    marketUnavailable = false;
+    if (snapshot.stale || snapshot.source === 'cache') {
+      marketUnavailable = catalog.length === 0;
+      if (requireFresh) throw new Error('The plugin market is using stale cached data');
+    }
+    return {
+      generation: snapshot.generation,
+      changed,
+      stale: snapshot.stale || snapshot.source === 'cache',
+    };
+  };
+
+  const loadCachedMarketCatalog = async (options: PluginRequestOptions = {}): Promise<PluginMarketCatalogResult> => {
     if (catalogSeed !== undefined) {
       catalog = catalogSeed;
       marketUnavailable = false;
-      return;
+      return { generation: marketGeneration ?? 0, changed: false, stale: false };
     }
     try {
       const snapshot = await withAbortTimeout(
@@ -53,25 +82,28 @@ export function createPluginLifecycleAPI(
         INVENTORY_MARKET_TIMEOUT_MS,
         'Loading the plugin market',
       );
-      const nextCatalog = officialPluginCatalog(snapshot);
-      // Never let a delayed or cached response roll the UI back to an older
-      // generation after a newer catalog has already been accepted.
-      if (marketGeneration !== undefined && snapshot.generation < marketGeneration) {
-        return;
-      }
-      catalog = nextCatalog;
-      marketGeneration = snapshot.generation;
-      marketUnavailable = false;
-
-      // Cached catalog data remains useful for browsing, but it cannot prove
-      // that a manual update check used the current official release source.
-      if (snapshot.stale || snapshot.source === 'cache') {
-        marketUnavailable = catalog.length === 0;
-        throw new Error('The plugin market is using stale cached data');
-      }
+      return acceptMarketSnapshot(snapshot, false);
     } catch (error) {
-      // Keep the last usable catalog visible while callers receive an explicit
-      // failure and decide whether the action is background or user initiated.
+      marketUnavailable = catalog.length === 0;
+      throw error;
+    }
+  };
+
+  const refreshMarketCatalog = async (options: PluginRequestOptions = {}): Promise<PluginMarketCatalogResult> => {
+    if (catalogSeed !== undefined) {
+      catalog = catalogSeed;
+      marketUnavailable = false;
+      return { generation: marketGeneration ?? 0, changed: false, stale: false };
+    }
+    try {
+      const snapshot = await withAbortTimeout(
+        (signal) => refreshMarket(signal),
+        options.signal,
+        MARKET_REFRESH_TIMEOUT_MS,
+        'Refreshing the plugin market',
+      );
+      return acceptMarketSnapshot(snapshot, true);
+    } catch (error) {
       marketUnavailable = catalog.length === 0;
       throw error;
     }
@@ -313,6 +345,7 @@ export function createPluginLifecycleAPI(
 
   return Object.freeze({
     listInstalledPlugins,
+    loadCachedMarketCatalog,
     refreshMarketCatalog,
     loadInventoryProjection,
     loadMarketDetail: loadPluginMarketDetail,
@@ -362,6 +395,75 @@ async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMar
     '/_redeven_proxy/api/plugins/market/catalog',
     { method: 'GET', signal },
   );
+}
+
+async function refreshPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMarketSnapshot> {
+  return fetchLocalApiJSON<PluginMarketSnapshot>(
+    '/_redeven_proxy/api/plugins/market/catalog/refresh',
+    { method: 'POST', signal },
+  );
+}
+
+export async function connectPluginMarketEventStream(args: {
+  afterSeq: number;
+  signal: AbortSignal;
+  onEvent: (event: PluginMarketRefreshEvent) => void;
+}): Promise<void> {
+  const response = await fetchLocalApi(
+    `/_redeven_proxy/api/plugins/market/catalog/events?after_seq=${encodeURIComponent(String(args.afterSeq))}`,
+    { method: 'GET', headers: { Accept: 'text/event-stream' }, signal: args.signal },
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `HTTP ${response.status}`);
+  }
+  if (!response.body) throw new Error('Plugin market event stream unavailable');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const flushBlock = (block: string) => {
+    const payload = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n');
+    if (!payload) return;
+    const event = normalizePluginMarketRefreshEvent(JSON.parse(payload));
+    if (!event) throw new Error('Plugin market event stream returned an invalid event');
+    args.onEvent(event);
+  };
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, '\n');
+      let boundary = buffer.indexOf('\n\n');
+      while (boundary >= 0) {
+        flushBlock(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf('\n\n');
+      }
+    }
+    buffer += decoder.decode();
+    buffer = buffer.replace(/\r\n/g, '\n');
+    if (buffer.trim()) flushBlock(buffer.trim());
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function normalizePluginMarketRefreshEvent(value: unknown): PluginMarketRefreshEvent | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Partial<PluginMarketRefreshEvent>;
+  if (!Number.isSafeInteger(candidate.seq) || Number(candidate.seq) <= 0
+    || !Number.isSafeInteger(candidate.generation) || Number(candidate.generation) < -1
+    || (candidate.state !== 'refreshing' && candidate.state !== 'ready' && candidate.state !== 'refresh_failed')
+    || typeof candidate.stale !== 'boolean') return null;
+  if (candidate.checked_at !== undefined && typeof candidate.checked_at !== 'string') return null;
+  if (candidate.next_refresh_at !== undefined && typeof candidate.next_refresh_at !== 'string') return null;
+  return candidate as PluginMarketRefreshEvent;
 }
 
 export async function loadPluginMarketDetail(pluginID: string, generation: number, signal?: AbortSignal): Promise<PluginMarketDetail> {

@@ -16,6 +16,8 @@ import (
 )
 
 const pluginMarketCatalogPath = "/_redeven_proxy/api/plugins/market/catalog"
+const pluginMarketRefreshPath = pluginMarketCatalogPath + "/refresh"
+const pluginMarketEventsPath = pluginMarketCatalogPath + "/events"
 const pluginMarketDetailPath = "/_redeven_proxy/api/plugins/market/plugins/com.example.plugin?generation=41"
 const pluginMarketIconDigest = "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1"
 const pluginMarketIconPath = "/_redeven_proxy/api/plugins/market/plugins/com.example.plugin/icon?sha256=" + pluginMarketIconDigest
@@ -118,6 +120,127 @@ func TestServerPluginMarketCatalogFailsClosed(t *testing.T) {
 			t.Fatalf("status = %d, callback called = %t", response.Code, called)
 		}
 	})
+}
+
+func TestServerPluginMarketRefreshUsesExplicitPOST(t *testing.T) {
+	t.Parallel()
+	want := pluginmarket.Snapshot{
+		SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+		Generation:    42,
+		CachedAt:      time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC),
+		Source:        pluginmarket.SnapshotSourceRemote,
+	}
+	cap := config.PermissionSet{Read: true}
+	calls := 0
+	server := &Server{
+		localPermissionCap: &cap,
+		pluginMarketRefresh: func(context.Context) (pluginmarket.Snapshot, error) {
+			calls++
+			return want, nil
+		},
+	}
+	request := httptest.NewRequest(http.MethodPost, pluginMarketRefreshPath, nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, WithLocalUIEnvRoute(request))
+	if response.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("status = %d, calls = %d; body=%s", response.Code, calls, response.Body.String())
+	}
+	var envelope struct {
+		OK   bool                  `json:"ok"`
+		Data pluginmarket.Snapshot `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.Generation != want.Generation || envelope.Data.Source != pluginmarket.SnapshotSourceRemote {
+		t.Fatalf("refresh response = %#v", envelope)
+	}
+}
+
+func TestServerPluginMarketRefreshRejectsInvalidRequests(t *testing.T) {
+	t.Parallel()
+	cap := config.PermissionSet{Read: true}
+	for _, testCase := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		status int
+	}{
+		{name: "wrong method", method: http.MethodGet, path: pluginMarketRefreshPath, status: http.StatusNotFound},
+		{name: "query", method: http.MethodPost, path: pluginMarketRefreshPath + "?force=true", status: http.StatusBadRequest},
+		{name: "body", method: http.MethodPost, path: pluginMarketRefreshPath, body: `{}`, status: http.StatusBadRequest},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			called := false
+			server := &Server{
+				localPermissionCap: &cap,
+				pluginMarketRefresh: func(context.Context) (pluginmarket.Snapshot, error) {
+					called = true
+					return pluginmarket.Snapshot{}, nil
+				},
+			}
+			request := httptest.NewRequest(testCase.method, testCase.path, strings.NewReader(testCase.body))
+			response := httptest.NewRecorder()
+			server.ServeHTTP(response, WithLocalUIEnvRoute(request))
+			if response.Code != testCase.status || called {
+				t.Fatalf("status = %d, callback called = %t; body=%s", response.Code, called, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestServerPluginMarketEventsStreamsLatestState(t *testing.T) {
+	t.Parallel()
+	cap := config.PermissionSet{Read: true}
+	event := pluginmarket.RefreshEvent{
+		Seq: 7, State: pluginmarket.RefreshStateReady, Generation: 42,
+		CheckedAt: "2026-08-01T09:00:00Z", NextRefreshAt: "2026-08-01T09:10:00Z",
+	}
+	server := &Server{
+		localPermissionCap: &cap,
+		pluginMarketSubscribe: func(_ context.Context, afterSeq int64) ([]pluginmarket.RefreshEvent, <-chan pluginmarket.RefreshEvent, error) {
+			if afterSeq != 6 {
+				t.Fatalf("after sequence = %d, want 6", afterSeq)
+			}
+			updates := make(chan pluginmarket.RefreshEvent)
+			close(updates)
+			return []pluginmarket.RefreshEvent{event}, updates, nil
+		},
+	}
+	request := httptest.NewRequest(http.MethodGet, pluginMarketEventsPath+"?after_seq=6", nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, WithLocalUIEnvRoute(request))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Content-Type") != "text/event-stream" || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("stream headers = %#v", response.Header())
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, `"seq":7`) || !strings.Contains(body, `"state":"ready"`) || !strings.Contains(body, `"generation":42`) {
+		t.Fatalf("stream body = %q", body)
+	}
+}
+
+func TestServerPluginMarketEventsRejectsInvalidCursor(t *testing.T) {
+	t.Parallel()
+	cap := config.PermissionSet{Read: true}
+	for _, path := range []string{
+		pluginMarketEventsPath + "?after_seq=-1",
+		pluginMarketEventsPath + "?after_seq=01",
+		pluginMarketEventsPath + "?after_seq=%zz",
+		pluginMarketEventsPath + "?other=1",
+		pluginMarketEventsPath + "?after_seq=1&after_seq=2",
+	} {
+		server := &Server{localPermissionCap: &cap}
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, WithLocalUIEnvRoute(request))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("path %q status = %d; body=%s", path, response.Code, response.Body.String())
+		}
+	}
 }
 
 func TestServerPluginMarketDetailReturnsManifestPresentation(t *testing.T) {

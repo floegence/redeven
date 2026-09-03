@@ -85,7 +85,7 @@ import {
   type PluginPinPlacement,
   type PluginPlacementPins,
 } from './plugins/pluginDockPins';
-import { createPluginLifecycleAPI } from './plugins/pluginApi';
+import { connectPluginMarketEventStream, createPluginLifecycleAPI, type PluginMarketCatalogResult } from './plugins/pluginApi';
 import { clearPluginIconCache } from './plugins/pluginIconLoader';
 import {
   createPluginInstallCoordinator,
@@ -646,6 +646,9 @@ export function EnvAppShell() {
   };
   let pluginInventoryAbort: AbortController | undefined;
   let pluginMarketRefreshPromise: Promise<void> | undefined;
+  let pluginMarketInventoryOwner: object | undefined;
+  let pluginMarketInventoryGeneration = -1;
+  let pluginMarketInventorySyncLane: Promise<void> = Promise.resolve();
   const disposePluginPlatform = async () => {
     let coordinatorError: unknown;
     try {
@@ -1301,6 +1304,19 @@ export function EnvAppShell() {
       pluginInventoryAbort = controller;
       const previous = info.value?.owner === owner ? info.value.projection : undefined;
       try {
+        if (pluginMarketInventoryOwner !== owner) {
+          pluginMarketInventoryOwner = owner;
+          pluginMarketInventoryGeneration = -1;
+          try {
+            const market = await pluginLifecycle.loadCachedMarketCatalog({ signal: controller.signal });
+            if (!controller.signal.aborted && pluginInventorySource() === owner) {
+              pluginMarketInventoryGeneration = market.generation;
+            }
+          } catch {
+            // The lifecycle keeps usable LKG entries and marks a missing catalog
+            // unavailable. Inventory remains independently readable.
+          }
+        }
         const projection = await pluginLifecycle.loadInventoryProjection({ signal: controller.signal });
         if (!controller.signal.aborted) setPluginInventoryFailure(null);
         return { owner, projection };
@@ -1331,20 +1347,42 @@ export function EnvAppShell() {
     const state = await refetchPluginInventorySession();
     return state?.owner === pluginInventorySource() ? state.projection : undefined;
   };
+  const synchronizePluginInventoryForMarket = (result: PluginMarketCatalogResult): Promise<void> => {
+    const requestedOwner = pluginInventorySource();
+    const synchronize = async () => {
+      if (!requestedOwner || pluginInventorySource() !== requestedOwner) return;
+      if (pluginMarketInventoryOwner === requestedOwner && result.generation <= pluginMarketInventoryGeneration) return;
+      const projection = await refetchPluginInventory();
+      if (projection && pluginInventorySource() === requestedOwner) {
+        pluginMarketInventoryOwner = requestedOwner;
+        pluginMarketInventoryGeneration = result.generation;
+      }
+    };
+    const run = pluginMarketInventorySyncLane.then(synchronize, synchronize);
+    pluginMarketInventorySyncLane = run.then(
+      () => undefined,
+      (error) => {
+        if (requestedOwner && pluginInventorySource() === requestedOwner && !pluginInventoryProjection()) {
+          setPluginInventoryFailure({ owner: requestedOwner, error });
+        }
+      },
+    );
+    return run;
+  };
+  const synchronizeCachedPluginMarket = async (signal?: AbortSignal): Promise<void> => {
+    try {
+      const result = await pluginLifecycle.loadCachedMarketCatalog({ signal });
+      if (!signal?.aborted) await synchronizePluginInventoryForMarket(result);
+    } catch (error) {
+      if (!signal?.aborted && pluginMarketInventoryGeneration < 0) await refetchPluginInventory();
+      throw error;
+    }
+  };
   const refreshPluginMarket = (): Promise<void> => {
-    // Opening the center and restoring its activity surface can both request a
-    // refresh in the same render turn. Share the complete market+inventory
-    // refresh so the UI does not start duplicate network work.
     if (pluginMarketRefreshPromise) return pluginMarketRefreshPromise;
     const refresh = (async () => {
-      let marketError: unknown;
-      try {
-        await pluginLifecycle.refreshMarketCatalog();
-      } catch (error) {
-        marketError = error;
-      }
-      await refetchPluginInventory();
-      if (marketError !== undefined) throw marketError;
+      const result = await pluginLifecycle.refreshMarketCatalog();
+      await synchronizePluginInventoryForMarket(result);
     })();
     let tracked: Promise<void>;
     tracked = refresh.finally(() => {
@@ -1353,6 +1391,46 @@ export function EnvAppShell() {
     pluginMarketRefreshPromise = tracked;
     return tracked;
   };
+  createEffect(() => {
+    const owner = pluginInventorySource();
+    if (!owner) {
+      pluginMarketInventoryOwner = undefined;
+      pluginMarketInventoryGeneration = -1;
+      return;
+    }
+    const controller = new AbortController();
+    let afterSeq = 0;
+    void (async () => {
+      while (!controller.signal.aborted) {
+        try {
+          await connectPluginMarketEventStream({
+            afterSeq,
+            signal: controller.signal,
+            onEvent: (event) => {
+              afterSeq = Math.max(afterSeq, event.seq);
+              if (event.state === 'ready') {
+                void synchronizeCachedPluginMarket(controller.signal).catch((error) => {
+                  if (!controller.signal.aborted && pluginInventorySource() === owner && !pluginInventoryProjection()) {
+                    setPluginInventoryFailure({ owner, error });
+                  }
+                });
+              }
+            },
+          });
+        } catch {
+          if (controller.signal.aborted) return;
+        }
+        await new Promise<void>((resolve) => {
+          const timer = window.setTimeout(resolve, 900);
+          controller.signal.addEventListener('abort', () => {
+            window.clearTimeout(timer);
+            resolve();
+          }, { once: true });
+        });
+      }
+    })();
+    onCleanup(() => controller.abort('Plugin market owner changed'));
+  });
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: refetchPluginInventory,
@@ -1607,23 +1685,7 @@ export function EnvAppShell() {
     setPluginCenterFocusRequest((request) => request + 1);
     setViewMode('activity', { surfaceId: activeSurface() });
     activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID);
-    // The activation effect below refreshes market data independently while
-    // the center opens immediately with the current inventory.
   };
-
-  // Restored Activity state bypasses openPluginCenter; refresh the market in
-  // the background so the center never stays on an old catalog silently.
-  let lastPluginCenterRefreshOwner: object | undefined;
-  createEffect(() => {
-    const owner = pluginInventorySource();
-    if (viewMode() !== 'activity' || layout.sidebarActiveTab() !== PLUGIN_CENTER_ACTIVITY_ID || !owner) {
-      lastPluginCenterRefreshOwner = undefined;
-      return;
-    }
-    if (lastPluginCenterRefreshOwner === owner) return;
-    lastPluginCenterRefreshOwner = owner;
-    void refreshPluginMarket().catch(() => undefined);
-  });
 
   const closePluginCenter = () => {
     setPluginCenterSelectedInventoryKey(undefined);

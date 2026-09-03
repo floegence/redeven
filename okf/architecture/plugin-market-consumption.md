@@ -22,37 +22,54 @@ update.
 ## Snapshot lifecycle
 
 Startup reads only an already validated local last-known-good snapshot and does
-not wait for the public market. It then starts one background refresh of the
-stable catalog. Redeven sends its exact product and ReDevPlugin SemVer values so
-the market excludes incompatible releases before discovery. Catalog pages are
-fetched in order, while each visible plugin's exact latest release is fetched
-with at most four concurrent requests. Responses use strict JSON
-decoding, bounded bodies, stable generation checks, duplicate rejection, and
-schema validation. Every page and latest response must name the same non-stale
+not wait for the public market. One Integration-owned controller immediately
+refreshes the stable catalog, then refreshes every ten minutes with up to one
+minute of random jitter. Failures retry after 15 seconds, 30 seconds, one
+minute, two minutes, and then five minutes until recovery; success resets that
+backoff. Automatic refresh, manual refresh, and update review join the same
+in-flight task. Runtime shutdown cancels its timer, request, waiters, and status
+subscribers.
+
+Redeven sends its exact product and ReDevPlugin SemVer values so the market
+excludes incompatible releases before discovery. Catalog pages are fetched in
+order and each visible entry must carry its complete validated
+`install_preview`; Redeven does not fan out a second `/latest` request per
+plugin or keep a fallback path for incomplete catalog entries. Responses use
+strict JSON decoding, bounded bodies, stable generation checks, duplicate
+rejection, and schema validation. Every page must name the same non-stale
 generation. The resulting snapshot is sorted, timestamped, written atomically
 to the product cache, and atomically replaces the current in-process snapshot.
+An older generation is rejected before it can replace memory, cache, or release
+authority; an equal generation may update its check time.
 
-If refresh fails because the market is offline, Redeven may load only a
-previously persisted snapshot that still passes the current schema and release
-transport validation. It marks that snapshot `stale` with source `cache` and
-preserves its original `cached_at`. Unknown fields, malformed identities,
-incomplete transport, or a response that changes generation during pagination
-are invalid input, not offline fallback. If neither remote nor cache is valid,
-Redeven still starts; Plugin Center keeps installed plugins usable and reports
-that discovery and release installation are unavailable until a background
-refresh succeeds.
+Remote refresh and cached reads are separate operations. At startup Redeven may
+load only a previously persisted snapshot that still passes the current schema
+and release transport validation. It marks that snapshot `stale` with source
+`cache` and preserves its original `cached_at`. A failed remote refresh leaves
+the accepted memory and cache snapshot unchanged. Unknown fields, malformed
+identities, incomplete transport, or a response that changes generation during
+pagination are invalid input, not an alternate fetch or cache-selection path.
+If neither remote nor cache is valid, Redeven still starts; Plugin Center keeps
+installed plugins usable and reports that discovery and release installation
+are unavailable until the controller succeeds.
 
-AppServer exposes the current snapshot at
-`/_redeven_proxy/api/plugins/market/catalog`. The route requires read
-permission and an Env App route. Codespace, port-forward, plugin, missing, and
-untrusted origins receive no market data. Startup and catalog requests share
-one in-flight refresh task. A catalog request joins or starts that task, waits
-for it, and receives the resulting snapshot rather than the previous in-memory
-generation. Startup remains non-blocking, and Plugin Center keeps its current
-or validated cached inventory interactive while that work finishes. A stale
-cache remains display-only evidence: it cannot prove that a user-initiated
-update check used the latest official release. The browser cannot choose an
-origin, generation, or release.
+AppServer separates local reads, explicit refresh, and notification:
+
+- `GET /_redeven_proxy/api/plugins/market/catalog` returns only the accepted
+  in-memory or startup LKG snapshot and never performs remote I/O.
+- `POST /_redeven_proxy/api/plugins/market/catalog/refresh` joins the
+  controller's one in-flight remote task and waits for a fresh result.
+- `GET /_redeven_proxy/api/plugins/market/catalog/events?after_seq=...` streams
+  the latest `refreshing`, `ready`, or `refresh_failed` state. Events carry only
+  a process-local sequence, generation, staleness, check time, and next refresh
+  time; they never expose transport errors.
+
+All three routes require read permission and an Env App route. Codespace,
+port-forward, plugin, missing, and untrusted origins receive no market data.
+Each SSE subscriber retains only the newest event and is released on disconnect
+or Integration shutdown. A stale cache remains display-only evidence: it cannot
+prove that a user-initiated update check used the latest official release. The
+browser cannot choose an origin, remote cadence, generation, or release.
 
 Catalog and detail responses use the in-place `/v1` presentation contract.
 Catalog carries every compact locale record; selecting a plugin may load the
@@ -66,13 +83,22 @@ Plugin Center accepts and caches a detail only when that generation matches the
 catalog snapshot generation. Missing, stale, or negative detail generations
 fail closed rather than allowing cross-generation presentation mixing.
 
-Plugin Center renders the current inventory immediately and refreshes the market
-in the background. User refresh and official update review use the same
-market-then-inventory refresh chain. Official update review opens immediately,
-waits for a fresh catalog, relocates the exact inventory key, and only then
-inspects the current release source. Refresh failure exposes one retry action
-and never reports a stale source as current or as `no update`. Installation
-review reads the selected entry's cached
+The Env App reads the local catalog and opens the market status stream as soon
+as the authenticated plugin session is ready; discovery does not depend on
+opening Plugin Center. A `ready` event for a higher generation reloads the local
+snapshot and refreshes Host inventory once. Stream delivery and a simultaneous
+manual refresh are serialized by owner and generation, so they cannot trigger
+duplicate inventory reads. Owner replacement or page destruction aborts the old
+snapshot request and subscription. The browser does not poll the public market.
+
+Plugin Center renders the current inventory immediately. User refresh and
+official update review POST to the explicit refresh route with a 20-second UI
+deadline, covering the controller's 15-second remote deadline. Official update
+review opens immediately, waits for a fresh catalog, relocates the exact
+inventory key, and only then inspects the current release source. Background
+failure keeps a usable LKG catalog visible; no usable catalog exposes one retry
+action. Neither path reports a stale source as current or as `no update`.
+Installation review reads the selected entry's cached
 `install_preview` in one request; it never prefetches packages or Host inspection
 evidence. The preview is keyed by plugin instance, market generation, exact
 release reference, and its four binding digests. A generation or release change
@@ -158,8 +184,9 @@ does not grant permissions or enable runtime access.
 
 - The market owns reviewed latest-release metadata and Cloudflare publication.
 - GitHub Releases owns immutable package and signed trust-document transport.
-- Redeven owns startup refresh, last-known-good caching, trusted-origin
-  projection, product presentation, and product-pinned official anchors.
+- Redeven owns the one background refresh controller, last-known-good caching,
+  trusted-origin projection, product presentation, and product-pinned official
+  anchors.
 - ReDevPlugin owns remote download, cryptographic verification, durable install
   Executions and Events, update, rollback, revocation, registry state,
   permissions, and runtime lifecycle.
@@ -168,11 +195,12 @@ does not grant permissions or enable runtime access.
 
 # Evidence
 
-- `redeven:internal/pluginmarket/service.go` - Fetches and validates latest-only market snapshots; the integration atomically publishes the current snapshot.
+- `redeven:internal/pluginmarket/service.go` - Separates remote refresh from validated local snapshot reads and consumes catalog install previews without `/latest` fan-out.
 - `redeven:internal/pluginmarket/contracts.go` - Validates generation, GitHub release identity, hashes, anchors, and complete release transport.
-- `redeven:internal/codeapp/codeapp.go` - Starts background refresh and keeps market failure non-fatal.
-- `redeven:internal/codeapp/appserver/server.go` - Serves the current validated snapshot through the read-gated Env App route.
-- `redeven:internal/codeapp/appserver/server.go` - Preserves validated detail generation in the read-gated local proxy envelope.
-- `redeven:internal/redevpluginintegration/integration.go` - Publishes and refreshes one current validated market snapshot without adding product-specific package behavior.
+- `redeven:internal/redevpluginintegration/market_refresh.go` - Owns startup and periodic scheduling, backoff, single-flight joining, generation acceptance, and status subscriptions.
+- `redeven:internal/codeapp/codeapp.go` - Wires the controller into the private AppServer while keeping market failure non-fatal.
+- `redeven:internal/codeapp/appserver/server.go` - Separates read-only catalog GET and explicit refresh POST behind Env App authorization.
+- `redeven:internal/codeapp/appserver/plugin_market_events.go` - Projects bounded process-local refresh state over authenticated SSE.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current official discovery from the validated snapshot.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Preserves installed inventory and reports market unavailability.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Separates cached reads, explicit refresh, and SSE parsing while preserving installed inventory.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Subscribes per authenticated plugin owner and deduplicates inventory refreshes by generation.

@@ -116,6 +116,15 @@ export type PluginMarketSnapshot = {
   }>;
 };
 
+export type PluginMarketRefreshEvent = Readonly<{
+  seq: number;
+  state: 'refreshing' | 'ready' | 'refresh_failed';
+  generation: number;
+  stale: boolean;
+  checked_at?: string;
+  next_refresh_at?: string;
+}>;
+
 export type PluginMarketPresentationLocale = Readonly<{
   locale: string;
   name: string;

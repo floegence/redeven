@@ -363,36 +363,34 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
-	if marketErr := pluginIntegration.MarketError(); marketErr != nil {
-		logger.Warn("plugin market unavailable; catalog installs remain disabled while background refresh retries", "error", marketErr)
-	}
-
 	appSrv, err := appserver.New(appserver.Options{
-		Logger:               logger,
-		DistFS:               mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
-		Backend:              svc,
-		PortForward:          pfSvc,
-		ManagedWebServices:   managedSvc,
-		ContainerResources:   containerResourceSvc,
-		AIServiceProvider:    aiReady,
-		Notes:                notesSvc,
-		WorkbenchLayout:      workbenchLayoutSvc,
-		Terminal:             opts.Terminal,
-		Audit:                opts.Audit,
-		Diagnostics:          opts.Diagnostics,
-		ResolveSessionMeta:   opts.ResolveSessionMeta,
-		AcquirePluginSession: opts.AcquirePluginSession,
-		EndPluginSession:     opts.EndPluginSession,
-		ConfigPath:           strings.TrimSpace(opts.ConfigPath),
-		SecretsStore:         secrets,
-		ThreadReadStateStore: threadReadStateStore,
-		PluginPlatform:       pluginIntegration.Handler(),
-		PluginMarketSnapshot: pluginIntegration.MarketSnapshot,
-		PluginMarketDetail:   pluginIntegration.MarketDetail,
-		PluginMarketIcon:     pluginIntegration.MarketIcon,
-		AgentHomeDir:         agentHomeDir,
-		FilesystemScope:      scope,
-		ListenAddr:           "127.0.0.1:0",
+		Logger:                logger,
+		DistFS:                mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
+		Backend:               svc,
+		PortForward:           pfSvc,
+		ManagedWebServices:    managedSvc,
+		ContainerResources:    containerResourceSvc,
+		AIServiceProvider:     aiReady,
+		Notes:                 notesSvc,
+		WorkbenchLayout:       workbenchLayoutSvc,
+		Terminal:              opts.Terminal,
+		Audit:                 opts.Audit,
+		Diagnostics:           opts.Diagnostics,
+		ResolveSessionMeta:    opts.ResolveSessionMeta,
+		AcquirePluginSession:  opts.AcquirePluginSession,
+		EndPluginSession:      opts.EndPluginSession,
+		ConfigPath:            strings.TrimSpace(opts.ConfigPath),
+		SecretsStore:          secrets,
+		ThreadReadStateStore:  threadReadStateStore,
+		PluginPlatform:        pluginIntegration.Handler(),
+		PluginMarketSnapshot:  pluginIntegration.MarketSnapshot,
+		PluginMarketRefresh:   pluginIntegration.RefreshMarket,
+		PluginMarketSubscribe: pluginIntegration.SubscribeMarketRefresh,
+		PluginMarketDetail:    pluginIntegration.MarketDetail,
+		PluginMarketIcon:      pluginIntegration.MarketIcon,
+		AgentHomeDir:          agentHomeDir,
+		FilesystemScope:       scope,
+		ListenAddr:            "127.0.0.1:0",
 	})
 	if err != nil {
 		_ = pluginIntegration.Close()

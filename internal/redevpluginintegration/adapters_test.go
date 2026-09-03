@@ -649,7 +649,7 @@ type controlledMarketService struct {
 	err      error
 }
 
-func (service *controlledMarketService) Snapshot(ctx context.Context) (pluginmarket.Snapshot, error) {
+func (service *controlledMarketService) Refresh(ctx context.Context) (pluginmarket.Snapshot, error) {
 	service.calls <- struct{}{}
 	if service.release != nil {
 		select {
@@ -666,6 +666,33 @@ func (*controlledMarketService) Detail(context.Context, string) (pluginmarket.Pl
 }
 
 func (*controlledMarketService) Icon(context.Context, string, pluginmarket.PresentationIcon) (pluginmarket.IconAsset, error) {
+	return pluginmarket.IconAsset{}, pluginmarket.ErrUnavailable
+}
+
+type scriptedMarketService struct {
+	calls     chan time.Time
+	responses chan marketRefreshResult
+}
+
+func (service *scriptedMarketService) Refresh(ctx context.Context) (pluginmarket.Snapshot, error) {
+	select {
+	case service.calls <- time.Now():
+	case <-ctx.Done():
+		return pluginmarket.Snapshot{}, ctx.Err()
+	}
+	select {
+	case result := <-service.responses:
+		return result.snapshot.Clone(), result.err
+	case <-ctx.Done():
+		return pluginmarket.Snapshot{}, ctx.Err()
+	}
+}
+
+func (*scriptedMarketService) Detail(context.Context, string) (pluginmarket.PluginDetail, int64, error) {
+	return pluginmarket.PluginDetail{}, -1, pluginmarket.ErrUnavailable
+}
+
+func (*scriptedMarketService) Icon(context.Context, string, pluginmarket.PresentationIcon) (pluginmarket.IconAsset, error) {
 	return pluginmarket.IconAsset{}, pluginmarket.ErrUnavailable
 }
 
@@ -716,7 +743,41 @@ func TestNewDoesNotWaitForRemotePluginMarket(t *testing.T) {
 	}
 }
 
-func TestMarketSnapshotWaitsForCurrentSharedRefresh(t *testing.T) {
+func TestMarketSnapshotReturnsCachedStateWithoutWaitingForRefresh(t *testing.T) {
+	release := make(chan struct{})
+	service := &controlledMarketService{
+		calls:   make(chan struct{}, 1),
+		release: release,
+		snapshot: pluginmarket.Snapshot{
+			SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+			Generation:    8,
+			CachedAt:      time.Now().UTC(),
+			Source:        pluginmarket.SnapshotSourceRemote,
+		},
+	}
+	cached := pluginmarket.Snapshot{
+		SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+		Generation:    7,
+		CachedAt:      time.Now().UTC().Add(-time.Hour),
+		Stale:         true,
+		Source:        pluginmarket.SnapshotSourceCache,
+	}
+	integration := &Integration{marketService: service, marketSnapshot: &cached}
+	integration.startMarketRefreshController(marketRefreshPolicy{successDelay: func() time.Duration { return time.Hour }})
+	defer func() { _ = integration.Close() }()
+	select {
+	case <-service.calls:
+	case <-time.After(time.Second):
+		t.Fatal("background plugin market refresh did not start")
+	}
+	snapshot, err := integration.MarketSnapshot(context.Background())
+	if err != nil || snapshot.Generation != 7 || !snapshot.Stale {
+		t.Fatalf("MarketSnapshot() = %#v, %v", snapshot, err)
+	}
+	close(release)
+}
+
+func TestRefreshMarketJoinsCurrentControllerRefresh(t *testing.T) {
 	release := make(chan struct{})
 	service := &controlledMarketService{
 		calls:   make(chan struct{}, 4),
@@ -729,15 +790,13 @@ func TestMarketSnapshotWaitsForCurrentSharedRefresh(t *testing.T) {
 		},
 	}
 	integration := &Integration{marketService: service}
-	if _, err := integration.startMarketRefresh(); err != nil {
-		t.Fatal(err)
-	}
+	integration.startMarketRefreshController(marketRefreshPolicy{successDelay: func() time.Duration { return time.Hour }})
+	defer func() { _ = integration.Close() }()
 	select {
 	case <-service.calls:
 	case <-time.After(time.Second):
 		t.Fatal("background plugin market refresh did not start")
 	}
-
 	type result struct {
 		snapshot pluginmarket.Snapshot
 		err      error
@@ -745,69 +804,231 @@ func TestMarketSnapshotWaitsForCurrentSharedRefresh(t *testing.T) {
 	results := make(chan result, 2)
 	for range 2 {
 		go func() {
-			snapshot, err := integration.MarketSnapshot(context.Background())
+			snapshot, err := integration.RefreshMarket(context.Background())
 			results <- result{snapshot: snapshot, err: err}
 		}()
 	}
-	select {
-	case result := <-results:
-		t.Fatalf("MarketSnapshot() returned before refresh completed: %#v, %v", result.snapshot, result.err)
-	case <-time.After(50 * time.Millisecond):
+	time.Sleep(20 * time.Millisecond)
+	if len(service.calls) != 0 {
+		t.Fatal("concurrent refresh readers started a duplicate market request")
 	}
 	close(release)
 	for range 2 {
 		result := <-results
 		if result.err != nil || result.snapshot.Generation != 8 || result.snapshot.Stale {
-			t.Fatalf("MarketSnapshot() = %#v, %v", result.snapshot, result.err)
+			t.Fatalf("RefreshMarket() = %#v, %v", result.snapshot, result.err)
 		}
 	}
-	if len(service.calls) != 0 {
-		t.Fatal("concurrent snapshot readers started a duplicate market refresh")
-	}
 }
 
-func TestMarketSnapshotPreservesStaleFallbackWithoutCallingItFresh(t *testing.T) {
-	service := &controlledMarketService{
-		calls: make(chan struct{}, 1),
-		snapshot: pluginmarket.Snapshot{
-			SchemaVersion: pluginmarket.SnapshotSchemaVersion,
-			Generation:    7,
-			CachedAt:      time.Now().UTC(),
-			Stale:         true,
-			Source:        pluginmarket.SnapshotSourceCache,
-		},
-	}
-	integration := &Integration{marketService: service}
-	snapshot, err := integration.MarketSnapshot(context.Background())
-	if err != nil || snapshot.Generation != 7 || !snapshot.Stale || snapshot.Source != pluginmarket.SnapshotSourceCache {
-		t.Fatalf("MarketSnapshot() = %#v, %v", snapshot, err)
-	}
-}
-
-func TestMarketSnapshotHonorsCallerCancellation(t *testing.T) {
+func TestRefreshMarketHonorsCallerCancellation(t *testing.T) {
 	service := &controlledMarketService{
 		calls:   make(chan struct{}, 1),
 		release: make(chan struct{}),
 	}
 	integration := &Integration{marketService: service}
+	integration.startMarketRefreshController(marketRefreshPolicy{successDelay: func() time.Duration { return time.Hour }})
+	defer func() { _ = integration.Close() }()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := integration.MarketSnapshot(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("MarketSnapshot() error = %v, want context cancellation", err)
-	}
-	if err := integration.Close(); err != nil {
-		t.Fatal(err)
+	if _, err := integration.RefreshMarket(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("RefreshMarket() error = %v, want context cancellation", err)
 	}
 }
 
-func TestMarketSnapshotFailsWhenRefreshHasNoUsableSnapshot(t *testing.T) {
+func TestMarketSnapshotFailsWithoutAcceptedSnapshot(t *testing.T) {
 	service := &controlledMarketService{
 		calls: make(chan struct{}, 1),
 		err:   pluginmarket.ErrUnavailable,
 	}
 	integration := &Integration{marketService: service}
+	integration.startMarketRefreshController(marketRefreshPolicy{successDelay: func() time.Duration { return time.Hour }})
+	defer func() { _ = integration.Close() }()
 	if _, err := integration.MarketSnapshot(context.Background()); !errors.Is(err, pluginmarket.ErrUnavailable) {
 		t.Fatalf("MarketSnapshot() error = %v, want unavailable", err)
+	}
+}
+
+func TestMarketRefreshControllerRetriesAndResetsAfterSuccess(t *testing.T) {
+	service := &scriptedMarketService{
+		calls:     make(chan time.Time, 8),
+		responses: make(chan marketRefreshResult, 8),
+	}
+	remote := pluginmarket.Snapshot{
+		SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+		Generation:    9,
+		CachedAt:      time.Now().UTC(),
+		Source:        pluginmarket.SnapshotSourceRemote,
+	}
+	service.responses <- marketRefreshResult{err: errors.New("first failure")}
+	service.responses <- marketRefreshResult{err: errors.New("second failure")}
+	service.responses <- marketRefreshResult{snapshot: remote}
+	service.responses <- marketRefreshResult{err: errors.New("failure after success")}
+	service.responses <- marketRefreshResult{snapshot: remote}
+	integration := &Integration{marketService: service}
+	integration.startMarketRefreshController(marketRefreshPolicy{
+		timeout:      time.Second,
+		retryDelays:  []time.Duration{10 * time.Millisecond, 40 * time.Millisecond},
+		successDelay: func() time.Duration { return 10 * time.Millisecond },
+	})
+	defer func() { _ = integration.Close() }()
+
+	callTimes := make([]time.Time, 0, 5)
+	for len(callTimes) < 5 {
+		select {
+		case calledAt := <-service.calls:
+			callTimes = append(callTimes, calledAt)
+		case <-time.After(time.Second):
+			t.Fatalf("refresh calls = %d, want 5", len(callTimes))
+		}
+	}
+	if secondDelay := callTimes[1].Sub(callTimes[0]); secondDelay < 7*time.Millisecond {
+		t.Fatalf("first retry delay = %s, want about 10ms", secondDelay)
+	}
+	if thirdDelay := callTimes[2].Sub(callTimes[1]); thirdDelay < 30*time.Millisecond {
+		t.Fatalf("second retry delay = %s, want about 40ms", thirdDelay)
+	}
+	if resetDelay := callTimes[4].Sub(callTimes[3]); resetDelay >= 30*time.Millisecond {
+		t.Fatalf("retry delay after success = %s, want reset to about 10ms", resetDelay)
+	}
+}
+
+func TestDefaultMarketRefreshPolicyUsesDocumentedCadence(t *testing.T) {
+	policy := defaultMarketRefreshPolicy()
+	wantRetries := []time.Duration{15 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
+	if len(policy.retryDelays) != len(wantRetries) {
+		t.Fatalf("retry delays = %v", policy.retryDelays)
+	}
+	for index, want := range wantRetries {
+		if policy.retryDelays[index] != want {
+			t.Fatalf("retry delay %d = %s, want %s", index, policy.retryDelays[index], want)
+		}
+	}
+	for range 100 {
+		delay := policy.successDelay()
+		if delay < 9*time.Minute || delay > 11*time.Minute {
+			t.Fatalf("success delay = %s, want 10m ±1m", delay)
+		}
+	}
+}
+
+func TestMarketRefreshControllerRejectsOlderGeneration(t *testing.T) {
+	current := pluginmarket.Snapshot{
+		SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+		Generation:    9,
+		CachedAt:      time.Now().UTC(),
+		Source:        pluginmarket.SnapshotSourceRemote,
+	}
+	service := &controlledMarketService{
+		calls: make(chan struct{}, 1),
+		snapshot: pluginmarket.Snapshot{
+			SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+			Generation:    8,
+			CachedAt:      time.Now().UTC(),
+			Source:        pluginmarket.SnapshotSourceRemote,
+		},
+	}
+	integration := &Integration{marketService: service, marketSnapshot: &current}
+	integration.startMarketRefreshController(marketRefreshPolicy{
+		retryDelays:  []time.Duration{time.Hour},
+		successDelay: func() time.Duration { return time.Hour },
+	})
+	defer func() { _ = integration.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	baseline, events, err := integration.SubscribeMarketRefresh(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range baseline {
+		if event.State == pluginmarket.RefreshStateFailed {
+			goto failed
+		}
+	}
+	for {
+		select {
+		case event := <-events:
+			if event.State == pluginmarket.RefreshStateFailed {
+				goto failed
+			}
+		case <-time.After(time.Second):
+			t.Fatal("missing refresh_failed event")
+		}
+	}
+
+failed:
+	snapshot, err := integration.MarketSnapshot(context.Background())
+	if err != nil || snapshot.Generation != current.Generation {
+		t.Fatalf("MarketSnapshot() = %#v, %v", snapshot, err)
+	}
+}
+
+func TestSubscribeMarketRefreshReplaysLatestAndReleasesOnCancel(t *testing.T) {
+	service := &controlledMarketService{calls: make(chan struct{}, 1), release: make(chan struct{})}
+	integration := &Integration{marketService: service}
+	integration.startMarketRefreshController(marketRefreshPolicy{successDelay: func() time.Duration { return time.Hour }})
+	defer func() { _ = integration.Close() }()
+	select {
+	case <-service.calls:
+	case <-time.After(time.Second):
+		t.Fatal("background refresh did not start")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	baseline, events, err := integration.SubscribeMarketRefresh(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(baseline) != 1 || baseline[0].State != pluginmarket.RefreshStateRefreshing || baseline[0].Seq <= 0 {
+		t.Fatalf("baseline = %#v", baseline)
+	}
+	cancel()
+	select {
+	case _, ok := <-events:
+		if ok {
+			t.Fatal("subscription remained open after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription was not released after cancellation")
+	}
+}
+
+func TestMarketRefreshControllerCloseReleasesSubscriber(t *testing.T) {
+	service := &controlledMarketService{calls: make(chan struct{}, 1), release: make(chan struct{})}
+	integration := &Integration{marketService: service}
+	integration.startMarketRefreshController(marketRefreshPolicy{successDelay: func() time.Duration { return time.Hour }})
+	select {
+	case <-service.calls:
+	case <-time.After(time.Second):
+		t.Fatal("background refresh did not start")
+	}
+	_, events, err := integration.SubscribeMarketRefresh(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := integration.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case _, ok := <-events:
+		if ok {
+			// The latest refreshing state may already be buffered; the next read
+			// must observe controller shutdown.
+			select {
+			case _, stillOpen := <-events:
+				if stillOpen {
+					t.Fatal("subscription remained open after Integration.Close")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("subscription was not closed with the controller")
+			}
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription was not closed with the controller")
+	}
+	if _, _, err := integration.SubscribeMarketRefresh(context.Background(), 0); !errors.Is(err, pluginmarket.ErrUnavailable) {
+		t.Fatalf("SubscribeMarketRefresh() after close error = %v", err)
 	}
 }
 
