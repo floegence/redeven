@@ -11,7 +11,7 @@ export type ManagedOperation = Readonly<{
   progress_current: number;
   progress_total: number;
   progress_detail?: Readonly<{
-    schema_version: 1;
+    schema_version: 2;
     stage_started_at_unix_ms?: number;
     updated_at_unix_ms?: number;
     transfer?: Readonly<{
@@ -25,6 +25,20 @@ export type ManagedOperation = Readonly<{
       completed_layers?: number;
       total_layers?: number;
     }>;
+    commands?: ReadonlyArray<Readonly<{
+      command_id: string;
+      display: string;
+      state: 'running' | 'succeeded' | 'failed' | 'cancelled';
+      started_at_unix_ms?: number;
+      finished_at_unix_ms?: number;
+    }>>;
+    output?: ReadonlyArray<Readonly<{
+      sequence: number;
+      command_id: string;
+      stream: 'stdout' | 'stderr';
+      text: string;
+    }>>;
+    output_truncated?: boolean;
   }>;
   error_code?: string;
   error_message?: string;
@@ -35,6 +49,7 @@ export type ManagedOperation = Readonly<{
 type ManagedOperationControllerOptions = Readonly<{
   streamFailedMessage: () => string;
   timedOutMessage: () => string;
+  onSubmittingOperationAccepted?: (submittingOperationID: string, operationID: string) => void;
 }>;
 
 type ActiveStream = Readonly<{
@@ -76,6 +91,10 @@ export function createManagedServiceOperationController(options: ManagedOperatio
   const streams = new Map<string, ActiveStream>();
 
   const update = (operation: ManagedOperation) => {
+    const previous = states()[operation.service_id]?.operation;
+    if (previous?.state === 'submitting' && previous.operation_id !== operation.operation_id) {
+      options.onSubmittingOperationAccepted?.(previous.operation_id, operation.operation_id);
+    }
     setStates((current) => ({ ...current, [operation.service_id]: { operation } }));
   };
 
@@ -170,6 +189,7 @@ export function createManagedServiceOperationController(options: ManagedOperatio
   };
 
   const operationForService = (serviceID: string) => states()[serviceID]?.operation ?? null;
+  const operationIDs = () => Object.values(states()).map((state) => state.operation.operation_id);
   const knows = (operationID: string) => Object.values(states()).some((state) => state.operation.operation_id === operationID);
 
   const dispose = () => {
@@ -177,5 +197,5 @@ export function createManagedServiceOperationController(options: ManagedOperatio
     streams.clear();
   };
 
-  return { begin, track, clear, cancel, operationForService, knows, dispose };
+  return { begin, track, clear, cancel, operationForService, operationIDs, knows, dispose };
 }

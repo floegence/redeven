@@ -3411,6 +3411,9 @@
       "hostRuntimePrepareFailed": "Redeven konnte die Host-Laufzeit des Dienstes nicht vorbereiten. Versuchen Sie es erneut.",
       "dependencyLayoutInvalid": "Redeven konnte die Struktur des installierten npm-Pakets nicht verifizieren. Wiederholen Sie die Installation. Falls sie erneut fehlschlägt, aktualisieren Sie die Versionsliste und wählen Sie eine andere Version.",
       "hostProcessIdentityChanged": "Der gespeicherte Host-Prozess konnte nach dem Neustart der Laufzeit nicht verifiziert werden.",
+      "hostOpenTargetInvalid": "Der Host-Dienst hat eine unsichere oder ungültige Öffnungsadresse zurückgegeben. Starten Sie den Dienst neu und versuchen Sie es erneut.",
+      "hostOpenTargetMissing": "Der Host-Dienst hat vor Abschluss des Starts keine Öffnungsadresse bereitgestellt. Prüfen Sie die Befehlsausgabe und versuchen Sie es erneut.",
+      "hostOpenTargetUnavailable": "Die Öffnungsadresse des Host-Dienstes ist nicht verfügbar. Starten Sie den Dienst neu, um eine neue Sitzung zu erfassen.",
       "operationFailed": "Der Vorgang des verwalteten Dienstes ist fehlgeschlagen. Kopieren Sie die Diagnose und versuchen Sie es erneut.",
       "updateAvailable": "Update verfügbar",
       "update": "Aktualisieren",
@@ -3435,6 +3438,20 @@
       "operationLayers": "Ebenen",
       "operationLayersValue": "{current}/{total} Ebenen",
       "operationElapsed": "Dauer",
+      "operationCommandOutput": "Befehle und Ausgabe",
+      "operationOutput": "Befehlsausgabe",
+      "operationNoOutput": "Noch keine Ausgabe.",
+      "operationOutputTruncated": "Ältere Ausgabe wurde entfernt.",
+      "operationCommandState": {
+        "running": "Wird ausgeführt",
+        "succeeded": "Abgeschlossen",
+        "failed": "Fehlgeschlagen",
+        "cancelled": "Abgebrochen"
+      },
+      "operationStream": {
+        "stdout": "Standardausgabe",
+        "stderr": "Fehlerausgabe"
+      },
       "operationStreamFailed": "Der Fortschrittsstream für den Vorgang ist nicht verfügbar.",
       "operationTimedOut": "Der Vorgang des verwalteten Dienstes wurde nicht rechtzeitig abgeschlossen. Prüfen Sie den Status und versuchen Sie es erneut.",
       "cancelOperation": "Vorgang abbrechen",

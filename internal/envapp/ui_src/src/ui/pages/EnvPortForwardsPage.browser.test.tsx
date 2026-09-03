@@ -5,7 +5,13 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { ManagedReleaseCandidates, ManagedServiceRow, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
+import { ManagedReleaseCandidates, ManagedServiceRow as ManagedServiceRowComponent, ManagedTemplateNotices, PortForwardRow } from './EnvPortForwardsPage';
+import type { ManagedOperation } from './managedServiceOperationController';
+
+function ManagedServiceRow(props: Omit<Parameters<typeof ManagedServiceRowComponent>[0], 'operationExpanded' | 'onOperationExpandedChange'>) {
+  const [expanded, setExpanded] = createSignal(false);
+  return <ManagedServiceRowComponent {...props} operationExpanded={expanded()} onOperationExpandedChange={(_operationID, value) => setExpanded(value)} />;
+}
 
 const browserCommands = commands as unknown as Readonly<{
   wheelScrollRegion: (request: Readonly<{
@@ -472,7 +478,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           progress_current: 2,
           progress_total: 7,
           progress_detail: {
-            schema_version: 1,
+            schema_version: 2,
             stage_started_at_unix_ms: Date.now() - 2_000,
             updated_at_unix_ms: Date.now(),
             transfer: {
@@ -531,6 +537,81 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toContain('managed-operation-text-shimmer');
   });
 
+  it('renders bounded command output and follows only while the user stays at the bottom', async () => {
+    await page.viewport(1200, 900);
+    const host = document.createElement('div');
+    host.style.width = '1024px';
+    document.body.appendChild(host);
+    const initialOutput = Array.from({ length: 36 }, (_, index) => ({
+      sequence: index + 1,
+      command_id: 'npm-install',
+      stream: (index === 35 ? 'stderr' : 'stdout') as 'stdout' | 'stderr',
+      text: `package output line ${index + 1}`,
+    }));
+    const [operation, setOperation] = createSignal<ManagedOperation>({
+      operation_id: 'mop-output', service_id: 'mws-output', action: 'install', state: 'running', stage: 'installing',
+      progress_current: 3, progress_total: 7,
+      progress_detail: {
+        schema_version: 2,
+        commands: [{ command_id: 'npm-install', display: '<managed-node> <managed-npm-cli> install package@1.0.0', state: 'running' }],
+        output: initialOutput,
+        output_truncated: true,
+      },
+    });
+    const [expanded, setExpanded] = createSignal(false);
+    dispose = render(() => (
+      <ManagedServiceRowComponent
+        service={{
+          service_id: 'mws-output', template_id: 'example-host', service_family_id: 'example-host', name: 'Example Service',
+          template_source: 'custom', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected',
+          release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'installing',
+          forward_id: 'pf-output', runtime_port: 3000,
+        }}
+        operation={operation()}
+        operationExpanded={expanded()}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onOperationExpandedChange={(_operationID, value) => setExpanded(value)}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+        onCancelOperation={() => undefined}
+      />
+    ), host);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!);
+    await settle();
+
+    const output = host.querySelector<HTMLElement>('[data-testid="managed-operation-output"]')!;
+    expect(output.scrollHeight).toBeGreaterThan(output.clientHeight);
+    expect(output.scrollHeight - output.scrollTop - output.clientHeight).toBeLessThanOrEqual(2);
+    expect(host.querySelector('[data-testid="managed-operation-command-output"]')?.textContent).toContain('<managed-node> <managed-npm-cli> install package@1.0.0');
+    expect(host.querySelector('[data-testid="managed-operation-command-output"]')?.textContent).toContain('Older output was removed.');
+    expect(output.querySelector('[data-sequence="36"]')?.textContent).toContain('Error output: package output line 36');
+
+    output.scrollTop = 0;
+    output.dispatchEvent(new Event('scroll'));
+    setOperation((current) => ({
+      ...current,
+      progress_detail: { ...current.progress_detail!, output: [...current.progress_detail!.output!, { sequence: 37, command_id: 'npm-install', stream: 'stdout', text: 'user is reading older output' }] },
+    }));
+    await settle();
+    expect(host.querySelector('[data-testid="managed-operation-output"]')).toBe(output);
+    expect(output.scrollTop).toBe(0);
+
+    output.scrollTop = output.scrollHeight;
+    output.dispatchEvent(new Event('scroll'));
+    setOperation((current) => ({
+      ...current,
+      progress_detail: { ...current.progress_detail!, output: [...current.progress_detail!.output!, { sequence: 38, command_id: 'npm-install', stream: 'stdout', text: 'follow newest output' }] },
+    }));
+    await settle();
+    expect(output.scrollHeight - output.scrollTop - output.clientHeight).toBeLessThanOrEqual(2);
+    expect(output.textContent).toContain('follow newest output');
+  });
+
   it('keeps host package transfer details visible inside the service row', async () => {
     await page.viewport(720, 800);
     const host = document.createElement('div');
@@ -562,7 +643,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           progress_current: 2,
           progress_total: 7,
           progress_detail: {
-            schema_version: 1,
+            schema_version: 2,
             stage_started_at_unix_ms: Date.now() - 2_000,
             updated_at_unix_ms: Date.now(),
             transfer: {
@@ -633,7 +714,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           progress_current: 2,
           progress_total: 7,
           progress_detail: {
-            schema_version: 1,
+            schema_version: 2,
             stage_started_at_unix_ms: Date.now() - 1_000,
             updated_at_unix_ms: Date.now() - 1_000,
             transfer: {

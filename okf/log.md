@@ -1,6 +1,15 @@
 # Redeven OKF Update Log
 
 ## 2026-09-03
+* **Visible and stable Managed Service operations**: TemplateSpec v5 adds an
+  explicit Host startup-output URL contract, while Redeven validates and stores
+  the process-bound path outside Registry, logs, diagnostics, and audit. One
+  Reporter now persists bounded redacted command output as operation-progress
+  v2, including real npm install and rebuild output. The service-row disclosure
+  stays under user control across list and SSE refreshes. The Desktop loopback
+  gateway maps redirects under the current protected Forward back to the
+  isolated application root, and Registry v5 migrates existing template and
+  progress documents atomically.
 * **Stable Flower request identity**: Desktop existing-thread sends now carry
   the original top-level client request ID, and accepted receipts must echo the
   exact request and Thread identities. The core service rejects missing IDs;

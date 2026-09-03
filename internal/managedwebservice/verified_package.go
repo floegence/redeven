@@ -295,7 +295,8 @@ var (
 
 func redactLogLine(value string) string {
 	value = authorizationLogPattern.ReplaceAllString(value, `$1[REDACTED]`)
-	return credentialLogPattern.ReplaceAllString(value, `$1$2[REDACTED]`)
+	value = credentialLogPattern.ReplaceAllString(value, `$1$2[REDACTED]`)
+	return operationURLPattern.ReplaceAllStringFunc(value, redactOperationURL)
 }
 func tailRedactedFile(path string, tail int) (*LogResult, error) {
 	file, err := os.Open(path)

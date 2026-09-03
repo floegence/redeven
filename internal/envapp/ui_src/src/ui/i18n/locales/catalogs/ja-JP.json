@@ -3411,6 +3411,9 @@
       "hostRuntimePrepareFailed": "Redeven は Host サービスの実行環境を準備できませんでした。再試行してください。",
       "dependencyLayoutInvalid": "Redeven はインストールされた npm パッケージの構成を検証できませんでした。インストールを再試行し、再度失敗する場合はバージョン一覧を更新して別のリリースを選択してください。",
       "hostProcessIdentityChanged": "実行環境の再起動後、保存された Host プロセスを検証できませんでした。",
+      "hostOpenTargetInvalid": "Host サービスが安全でない、または無効な開始 URL を返しました。サービスを再起動して再試行してください。",
+      "hostOpenTargetMissing": "Host サービスは起動完了前に開始 URL を出力しませんでした。コマンド出力を確認して再試行してください。",
+      "hostOpenTargetUnavailable": "Host サービスの開始 URL を利用できません。サービスを再起動して新しいセッションを取得してください。",
       "operationFailed": "マネージドサービスの操作に失敗しました。診断情報をコピーして再試行してください。",
       "updateAvailable": "更新があります",
       "update": "更新",
@@ -3435,6 +3438,20 @@
       "operationLayers": "レイヤー",
       "operationLayersValue": "{current}/{total} レイヤー",
       "operationElapsed": "経過時間",
+      "operationCommandOutput": "コマンドと出力",
+      "operationOutput": "コマンド出力",
+      "operationNoOutput": "まだ出力はありません。",
+      "operationOutputTruncated": "古い出力は削除されました。",
+      "operationCommandState": {
+        "running": "実行中",
+        "succeeded": "完了",
+        "failed": "失敗",
+        "cancelled": "キャンセル済み"
+      },
+      "operationStream": {
+        "stdout": "標準出力",
+        "stderr": "エラー出力"
+      },
       "operationStreamFailed": "操作の進行状況ストリームを利用できません。",
       "operationTimedOut": "管理対象サービスの操作が時間内に完了しませんでした。状態を確認して再試行してください。",
       "cancelOperation": "操作をキャンセル",

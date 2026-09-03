@@ -17,6 +17,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
 - [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.
 - [Managed Web Services](architecture/managed-web-services.md) - Operate generic Host, Container, and Compose snapshots with exact bindings and explicit failure recovery.
+- [Managed Service operation progress](architecture/managed-service-operation-progress.md) - Persist and stream bounded, redacted command output without losing user-controlled disclosure state.
 - [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md) - Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
 - [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine immutable templates with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.

@@ -3425,6 +3425,9 @@
       "hostRuntimePrepareFailed": "Redeven 無法準備主機服務執行環境，請重試。",
       "dependencyLayoutInvalid": "Redeven 無法驗證已安裝 npm 套件的目錄結構。請重試安裝；若仍失敗，請重新整理版本清單並選擇其他版本。",
       "hostProcessIdentityChanged": "執行環境重新啟動後無法驗證已儲存的主機程序。",
+      "hostOpenTargetInvalid": "主機服務傳回了不安全或無效的開啟位址。請重新啟動服務後再試一次。",
+      "hostOpenTargetMissing": "主機服務未在啟動完成前提供開啟位址。請查看命令輸出後再試一次。",
+      "hostOpenTargetUnavailable": "主機服務的開啟位址無法使用。請重新啟動服務以再次取得。",
       "operationFailed": "受管服務操作失敗。請複製診斷資訊後重試。",
       "updateAvailable": "有可用更新",
       "update": "更新",
@@ -3449,6 +3452,20 @@
       "operationLayers": "映像層",
       "operationLayersValue": "{current}/{total} 層",
       "operationElapsed": "耗時",
+      "operationCommandOutput": "命令與輸出",
+      "operationOutput": "命令輸出",
+      "operationNoOutput": "尚無輸出。",
+      "operationOutputTruncated": "較早的輸出已移除。",
+      "operationCommandState": {
+        "running": "執行中",
+        "succeeded": "已完成",
+        "failed": "失敗",
+        "cancelled": "已取消"
+      },
+      "operationStream": {
+        "stdout": "標準輸出",
+        "stderr": "錯誤輸出"
+      },
       "operationStreamFailed": "操作進度串流無法使用。",
       "operationTimedOut": "受管理服務操作未及時完成。請檢查狀態後重試。",
       "cancelOperation": "取消操作",

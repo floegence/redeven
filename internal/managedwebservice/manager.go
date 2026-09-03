@@ -60,6 +60,7 @@ type Manager struct {
 	workers        sync.WaitGroup
 	cancelByOp     map[string]context.CancelFunc
 	listeners      map[string]map[uint64]chan pfregistry.ManagedOperation
+	reporters      map[string]*operationReporter
 	nextListener   uint64
 	closed         bool
 }
@@ -91,7 +92,7 @@ func New(opts ManagerOptions) (*Manager, error) {
 			return nil, err
 		}
 	}
-	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: catalog, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, releaseCursors: map[string]cachedReleaseCursor{}, updatePlans: map[string]cachedUpdatePlan{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: catalog, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, releaseCursors: map[string]cachedReleaseCursor{}, updatePlans: map[string]cachedUpdatePlan{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}, reporters: map[string]*operationReporter{}}
 	releaseBase := m.downloads.packageHTTPClient()
 	if releaseBase != nil {
 		copy := *releaseBase
@@ -821,7 +822,21 @@ func (m *Manager) launch(service pfregistry.ManagedService, op pfregistry.Manage
 
 func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op pfregistry.ManagedOperation, inputs operationInputs) {
 	defer m.workers.Done()
-	defer func() { m.mu.Lock(); delete(m.cancelByOp, op.OperationID); m.mu.Unlock() }()
+	reporter := newOperationReporter(m, &op, &service)
+	ctx = withOperationReporter(ctx, reporter)
+	m.mu.Lock()
+	if m.reporters == nil {
+		m.reporters = map[string]*operationReporter{}
+	}
+	m.reporters[op.OperationID] = reporter
+	m.mu.Unlock()
+	defer func() {
+		reporter.Close()
+		m.mu.Lock()
+		delete(m.cancelByOp, op.OperationID)
+		delete(m.reporters, op.OperationID)
+		m.mu.Unlock()
+	}()
 	op.State = "running"
 	m.saveAndPublish(&op)
 	driver := m.driver(Deployment(service.Deployment))
@@ -874,6 +889,7 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 	case ActionUninstall:
 		err = m.runUninstall(ctx, &service, &op, driver, inputs.DeleteData, inputs.DeleteWorkspace, inputs.WorkspaceCleanupOnly)
 	}
+	reporter.Close()
 	if err != nil {
 		if OperationAction(op.Action) == ActionUpdate {
 			m.finishUpdateFailure(&service, &op, err)
@@ -911,11 +927,15 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 		return
 	}
 	if OperationAction(op.Action) == ActionUninstall {
+		if op.ProgressDetail != nil {
+			op.ProgressDetail.Output = nil
+			op.ProgressDetail.OutputTruncated = false
+		}
 		op.State = "succeeded"
 		op.Stage = "completed"
 		op.ProgressCurrent = operationProgressTotal
 		op.FinishedAtUnixMs = time.Now().UnixMilli()
-		m.publish(op)
+		m.saveAndPublish(&op)
 		return
 	}
 	op.State = "succeeded"
@@ -1245,6 +1265,13 @@ func (m *Manager) operationProgress(op *pfregistry.ManagedOperation) operationPr
 }
 
 func (m *Manager) progress(op *pfregistry.ManagedOperation, stage string, current int64, transfer ...pfregistry.ManagedOperationTransferProgress) {
+	m.mu.Lock()
+	reporter := m.reporters[op.OperationID]
+	m.mu.Unlock()
+	if reporter != nil {
+		reporter.Progress(stage, current, transfer...)
+		return
+	}
 	now := time.Now().UnixMilli()
 	if op.ProgressDetail == nil {
 		op.ProgressDetail = &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion}

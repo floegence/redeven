@@ -98,9 +98,9 @@ type ManagedOperation struct {
 	FinishedAtUnixMs   int64                           `json:"finished_at_unix_ms,omitempty"`
 }
 
-const ManagedOperationProgressDetailSchemaVersion = 1
+const ManagedOperationProgressDetailSchemaVersion = 2
 
-const emptyManagedOperationProgressDetailJSON = `{"schema_version":1}`
+const emptyManagedOperationProgressDetailJSON = `{"schema_version":2}`
 
 const managedOperationSelectColumns = "operation_id,service_id,request_id,request_fingerprint,retry_of_operation_id,action,delete_data,delete_workspace,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json"
 
@@ -109,6 +109,24 @@ type ManagedOperationProgressDetail struct {
 	StageStartedAtUnixMs int64                             `json:"stage_started_at_unix_ms,omitempty"`
 	UpdatedAtUnixMs      int64                             `json:"updated_at_unix_ms,omitempty"`
 	Transfer             *ManagedOperationTransferProgress `json:"transfer,omitempty"`
+	Commands             []ManagedOperationCommand         `json:"commands,omitempty"`
+	Output               []ManagedOperationOutputLine      `json:"output,omitempty"`
+	OutputTruncated      bool                              `json:"output_truncated,omitempty"`
+}
+
+type ManagedOperationCommand struct {
+	CommandID        string `json:"command_id"`
+	Display          string `json:"display"`
+	State            string `json:"state"`
+	StartedAtUnixMs  int64  `json:"started_at_unix_ms,omitempty"`
+	FinishedAtUnixMs int64  `json:"finished_at_unix_ms,omitempty"`
+}
+
+type ManagedOperationOutputLine struct {
+	Sequence  int64  `json:"sequence"`
+	CommandID string `json:"command_id"`
+	Stream    string `json:"stream"`
+	Text      string `json:"text"`
 }
 
 type ManagedOperationTransferProgress struct {
@@ -147,6 +165,42 @@ func canonicalManagedOperationProgressDetail(detail ManagedOperationProgressDeta
 			transfer.CompletedLayers = transfer.TotalLayers
 		}
 	}
+	if len(detail.Commands) > 64 || len(detail.Output) > 400 {
+		return ManagedOperationProgressDetail{}, "", errors.New("operation command or output limit exceeded")
+	}
+	commandIDs := make(map[string]struct{}, len(detail.Commands))
+	for _, command := range detail.Commands {
+		if !validProgressText(command.CommandID, 128) || !validProgressText(command.Display, 4096) || command.StartedAtUnixMs < 0 || command.FinishedAtUnixMs < 0 {
+			return ManagedOperationProgressDetail{}, "", errors.New("operation command is invalid")
+		}
+		switch command.State {
+		case "running", "succeeded", "failed", "cancelled":
+		default:
+			return ManagedOperationProgressDetail{}, "", errors.New("operation command state is invalid")
+		}
+		if _, duplicate := commandIDs[command.CommandID]; duplicate {
+			return ManagedOperationProgressDetail{}, "", errors.New("operation command id is duplicated")
+		}
+		commandIDs[command.CommandID] = struct{}{}
+	}
+	var outputBytes int
+	var previousSequence int64
+	for _, line := range detail.Output {
+		if line.Sequence <= previousSequence || !validProgressText(line.CommandID, 128) || !validProgressText(line.Text, 4096) {
+			return ManagedOperationProgressDetail{}, "", errors.New("operation output line is invalid")
+		}
+		if _, ok := commandIDs[line.CommandID]; !ok {
+			return ManagedOperationProgressDetail{}, "", errors.New("operation output command is unknown")
+		}
+		if line.Stream != "stdout" && line.Stream != "stderr" {
+			return ManagedOperationProgressDetail{}, "", errors.New("operation output stream is invalid")
+		}
+		previousSequence = line.Sequence
+		outputBytes += len(line.Text)
+	}
+	if outputBytes > 128*1024 {
+		return ManagedOperationProgressDetail{}, "", errors.New("operation output byte limit exceeded")
+	}
 	raw, err := json.Marshal(detail)
 	if err != nil {
 		return ManagedOperationProgressDetail{}, "", err
@@ -154,7 +208,16 @@ func canonicalManagedOperationProgressDetail(detail ManagedOperationProgressDeta
 	return detail, string(raw), nil
 }
 
+func validProgressText(value string, maxBytes int) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && len(value) <= maxBytes && !strings.ContainsAny(value, "\x00\r\n")
+}
+
 func decodeManagedOperationProgressDetail(raw string) (ManagedOperationProgressDetail, string, error) {
+	return decodeManagedOperationProgressDetailVersion(raw, ManagedOperationProgressDetailSchemaVersion)
+}
+
+func decodeManagedOperationProgressDetailVersion(raw string, schemaVersion int) (ManagedOperationProgressDetail, string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return ManagedOperationProgressDetail{}, "", errors.New("progress detail must not be empty")
 	}
@@ -164,7 +227,7 @@ func decodeManagedOperationProgressDetail(raw string) (ManagedOperationProgressD
 	if err := decoder.Decode(&detail); err != nil {
 		return ManagedOperationProgressDetail{}, "", err
 	}
-	if detail.SchemaVersion != ManagedOperationProgressDetailSchemaVersion {
+	if detail.SchemaVersion != schemaVersion {
 		return ManagedOperationProgressDetail{}, "", fmt.Errorf("unsupported schema_version %d", detail.SchemaVersion)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
@@ -172,6 +235,9 @@ func decodeManagedOperationProgressDetail(raw string) (ManagedOperationProgressD
 			return ManagedOperationProgressDetail{}, "", errors.New("progress detail contains multiple JSON values")
 		}
 		return ManagedOperationProgressDetail{}, "", err
+	}
+	if schemaVersion == 1 {
+		return detail, strings.TrimSpace(raw), nil
 	}
 	return canonicalManagedOperationProgressDetail(detail)
 }
@@ -732,6 +798,9 @@ func (r *Registry) CompleteManagedServiceUninstall(ctx context.Context, serviceI
 		}
 		return errors.New("managed web service uninstall operation not found")
 	}
+	if err := clearManagedOperationOutputBodiesTx(tx, strings.TrimSpace(serviceID)); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`DELETE FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)); err != nil {
 		return err
 	}
@@ -739,6 +808,46 @@ func (r *Registry) CompleteManagedServiceUninstall(ctx context.Context, serviceI
 		return err
 	}
 	return tx.Commit()
+}
+
+func clearManagedOperationOutputBodiesTx(tx *sql.Tx, serviceID string) error {
+	rows, err := tx.Query(`SELECT operation_id,progress_detail_json FROM managed_web_service_operations WHERE service_id=? ORDER BY operation_id`, serviceID)
+	if err != nil {
+		return err
+	}
+	updates := [][2]string{}
+	for rows.Next() {
+		var operationID, raw string
+		if err := rows.Scan(&operationID, &raw); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		detail, _, err := decodeManagedOperationProgressDetail(raw)
+		if err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("managed Web Service operation %s progress detail: %w", operationID, err)
+		}
+		detail.Output = nil
+		detail.OutputTruncated = false
+		_, encoded, err := canonicalManagedOperationProgressDetail(detail)
+		if err != nil {
+			_ = rows.Close()
+			return err
+		}
+		updates = append(updates, [2]string{operationID, encoded})
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, update := range updates {
+		if _, err := tx.Exec(`UPDATE managed_web_service_operations SET progress_detail_json=? WHERE operation_id=?`, update[1], update[0]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Registry) CreateManagedOperation(ctx context.Context, operation ManagedOperation) error {

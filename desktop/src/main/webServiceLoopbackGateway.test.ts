@@ -95,6 +95,10 @@ describe('Web Service loopback gateway', () => {
   it('rewrites protected redirects, browser policy, cookies, and text resources to the isolated origin', async () => {
     const upstream = http.createServer((req, response) => {
       const origin = `http://${req.headers.host}`;
+      if (req.url === '/pf/demo/relative') {
+        response.writeHead(303, { Location: '/pf/demo/next?q=1#section' }).end();
+        return;
+      }
       response.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
         Location: `${origin}/pf/demo/next`,
@@ -117,6 +121,10 @@ describe('Web Service loopback gateway', () => {
     expect(accepted.headers['content-security-policy']).toContain(gateway.origin);
     expect(accepted.headers['set-cookie']?.[0]).toBe('model=ready; Path=/; HttpOnly');
     expect(accepted.body).toContain(`${gateway.origin}/settings`);
+
+    const relativeRedirect = await request(`${gateway.origin}/relative`, gateway.authorization_token);
+    expect(relativeRedirect.status).toBe(303);
+    expect(relativeRedirect.headers.location).toBe(`${gateway.origin}/next?q=1#section`);
   });
 
   it('keeps WebSocket upgrades inside the same authorized service gateway', async () => {

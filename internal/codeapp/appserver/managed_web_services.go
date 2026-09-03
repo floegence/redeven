@@ -281,6 +281,22 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	serviceID, action := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if r.Method == http.MethodPost && action == "open-session" {
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		session, err := g.managed.OpenSession(r.Context(), serviceID)
+		if err != nil {
+			g.appendAudit(meta, "managed_web_service_open", "failure", map[string]any{"service_id": serviceID}, err)
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "managed_web_service_open", "success", map[string]any{"service_id": serviceID, "forward_id": session.Forward.ForwardID}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: session})
+		return true
+	}
 	if r.Method == http.MethodPost && action == "release-candidates" {
 		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
 			return true

@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const templateSpecSchemaVersion = 4
+const templateSpecSchemaVersion = 5
 
 var (
 	templateNamePattern             = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
@@ -359,6 +359,11 @@ func validateTemplateSpec(spec TemplateSpec) error {
 				return err
 			}
 		}
+		if target := spec.Host.OpenTarget; target != nil {
+			if target.Mode != "startup_output_url" || !validHostOpenTargetPrefix(target.LinePrefix) {
+				return serviceError("TEMPLATE_HOST_OPEN_TARGET_INVALID", "The Host template startup output target is invalid.", 400, false, nil)
+			}
+		}
 	case DeploymentContainer:
 		if spec.Container == nil || !validImageReference(spec.Container.Image) || spec.Endpoint.ContainerPort < 1 || spec.Endpoint.ContainerPort > 65535 {
 			return serviceError("TEMPLATE_CONTAINER_INVALID", "Single-container templates require an image and a valid container Web port.", 400, false, nil)
@@ -401,6 +406,18 @@ func validateTemplateSpec(spec TemplateSpec) error {
 		return serviceError("DEPLOYMENT_INVALID", "Choose a host, single-container, or Compose template.", 400, false, nil)
 	}
 	return nil
+}
+
+func validHostOpenTargetPrefix(value string) bool {
+	if strings.TrimSpace(value) == "" || len(value) > 128 {
+		return false
+	}
+	for _, character := range value {
+		if character < 0x20 || character == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func validateNPMHostPackage(value NPMHostPackageSpec, parameters []TemplateParameter) error {

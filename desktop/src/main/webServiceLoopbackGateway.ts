@@ -152,6 +152,32 @@ function rewriteValue(value: string, sources: readonly string[], routeRoot: URL,
   return sources.reduce((current, source) => replaceOriginVariants(current, source, loopbackOrigin), output);
 }
 
+function rewriteLocationValue(value: string, sources: readonly string[], routeRoot: URL, loopbackOrigin: string): string {
+  const rewritten = rewriteValue(value, sources, routeRoot, loopbackOrigin);
+  let location: URL;
+  try {
+    location = new URL(rewritten, routeRoot.origin);
+  } catch {
+    return rewritten;
+  }
+  if (location.origin !== routeRoot.origin) return rewritten;
+
+  const routePrefix = routeRoot.pathname.replace(/\/$/u, '');
+  let appPath: string;
+  if (location.pathname === routePrefix) {
+    appPath = '/';
+  } else if (location.pathname.startsWith(routeRoot.pathname)) {
+    appPath = `/${location.pathname.slice(routeRoot.pathname.length)}`;
+  } else {
+    return rewritten;
+  }
+  const target = new URL(loopbackOrigin);
+  target.pathname = appPath;
+  target.search = location.search;
+  target.hash = location.hash;
+  return target.toString();
+}
+
 function isRewritableContentType(value: string | string[] | undefined): boolean {
   const contentType = Array.isArray(value) ? value[0] ?? '' : value ?? '';
   const normalized = contentType.trim();
@@ -226,11 +252,14 @@ export async function startWebServiceLoopbackGateway(
     const requestImpl = upstream.protocol === 'https:' ? https.request : http.request;
     const upstreamRequest = requestImpl(requestOptions(upstream, request, headers), (upstreamResponse) => {
       const responseHeaders = copyResponseHeaders(upstreamResponse.headers);
-      for (const headerName of ['location', 'content-security-policy', 'content-security-policy-report-only', 'access-control-allow-origin', 'link', 'refresh']) {
+      for (const headerName of ['content-security-policy', 'content-security-policy-report-only', 'access-control-allow-origin', 'link', 'refresh']) {
         const value = responseHeaders[headerName];
         if (typeof value === 'string') responseHeaders[headerName] = rewriteValue(value, rewriteSources, routeRoot, loopbackOrigin);
         else if (Array.isArray(value)) responseHeaders[headerName] = value.map((item) => rewriteValue(item, rewriteSources, routeRoot, loopbackOrigin));
       }
+      const location = responseHeaders.location;
+      if (typeof location === 'string') responseHeaders.location = rewriteLocationValue(location, rewriteSources, routeRoot, loopbackOrigin);
+      else if (Array.isArray(location)) responseHeaders.location = location.map((item) => rewriteLocationValue(item, rewriteSources, routeRoot, loopbackOrigin));
       const cookies = responseHeaders['set-cookie'];
       if (Array.isArray(cookies)) responseHeaders['set-cookie'] = cookies.map(stripCookieDomain);
       else if (typeof cookies === 'string') responseHeaders['set-cookie'] = stripCookieDomain(cookies);

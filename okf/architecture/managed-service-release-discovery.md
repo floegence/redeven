@@ -26,7 +26,7 @@ The Manager waits 30–90 seconds after startup, checks every six hours and afte
 
 ## npm Host source and installation
 
-TemplateSpec v4 Host declares an exact npm default, HTTPS Registry, executable, optional Secret-backed token, and non-secret environment. Discovery retains SemVer, deprecation, publication, dist-tags, integrity, and Node range. Invalid `sha512` or incompatible ranges remain visible but disabled. Tokens exist only in the request and a task-owned mode-0600 npm file, never persistent state, commands, logs, Hooks, or plaintext cache keys.
+TemplateSpec v5 Host declares an exact npm default, HTTPS Registry, executable, optional Secret-backed token, and non-secret environment. Discovery retains SemVer, deprecation, publication, dist-tags, integrity, and Node range. Invalid `sha512` or incompatible ranges remain visible but disabled. Tokens exist only in the request and a task-owned mode-0600 npm file, never persistent state, commands, logs, Hooks, or plaintext cache keys.
 
 Installation verifies the managed Node artifact and stages one release directory. Redeven writes one private application manifest containing only the exact selected dependency, then installs `package@version` into that explicit prefix with a fixed hoisted layout, no lock, and scripts disabled. The package metadata and executable must verify in that same prefix before Redeven deletes temporary token configuration and runs the confirmed lifecycle rebuild. Redeven verifies the exact layout again after scripts, then verifies Registry integrity, the Node artifact, and the Runtime tree before atomic selection. Hooks run only at declared positions. The foreground start script remains the launch owner and receives `REDEVEN_INSTALL_EXECUTABLE`.
 
@@ -64,7 +64,7 @@ Redeven does not mirror packages, images, metadata, or credentials and does not 
 - `redeven:internal/containerengine/registry_discovery.go` - Resolves paginated OCI tags, authentication challenges, manifests, platform digests, and stable errors.
 - `redeven:internal/containerengine/registry_credentials.go` - Reads Docker and Podman credential stores and helpers without product persistence.
 - `redeven:internal/managedwebservice/update.go` - Owns update-v2 staging, commit, rollback, and interrupted recovery.
-- `redeven:internal/portforward/registry/schema.go` - Preserves the v1-v4 Registry lineage and atomically migrates release-check summaries to schema v2.
+- `redeven:internal/portforward/registry/schema.go` - Preserves the v1-v5 Registry lineage and atomically migrates release and operation documents.
 - `redeven:internal/portforward/registry/release_checks.go` - Verifies and stores the last successful check summary.
 - `redeven:internal/codeapp/appserver/managed_web_services.go` - Exposes permission-checked candidate and update-plan APIs.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Presents release identity, filters, local scrolling, localized source failures, advisory risk hints, and exact update selection.
