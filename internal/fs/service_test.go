@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -275,6 +276,39 @@ func TestMutationRPCsBindEffectToCoordinatedCanonicalPaths(t *testing.T) {
 			test.assert(t, repoA, repoB)
 		})
 	}
+}
+
+func TestDeleteRPCSupportsSpecialCharacterFilenameUnderLocalizedHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fake git fixture")
+	}
+	bin := t.TempDir()
+	gitPath := filepath.Join(bin, "git")
+	gitScript := `#!/bin/sh
+if [ "${LC_ALL:-}" = "C" ]; then
+  echo "fatal: not a git repository (or any of the parent directories): .git" >&2
+else
+  echo "fatal: 不是 Git 仓库（或者任何父目录）：.git" >&2
+fi
+exit 128
+`
+	if err := os.WriteFile(gitPath, []byte(gitScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("LANG", "zh_CN.UTF-8")
+	t.Setenv("LC_ALL", "zh_CN.UTF-8")
+
+	root := t.TempDir()
+	target := filepath.Join(root, "x64?format=deb")
+	writeTestFile(t, target, "package")
+	scope, err := filesystemscope.NewDefaultRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewServiceWithCoordinator(scope, gitruntime.New())
+	callMutationRPC(t, svc, TypeID_FS_DELETE, fsDeleteReq{Path: target})
+	assertPathMissing(t, target)
 }
 
 func callMutationRPC(t *testing.T, svc *Service, typeID uint32, request any) {

@@ -435,6 +435,34 @@ vi.mock('./InputDialog', () => ({
   },
 }));
 
+vi.mock('../primitives/EnvAppModal', () => ({
+  ConfirmDialog: (props: {
+    open: boolean;
+    title: string;
+    confirmText: string;
+    loading?: boolean;
+    children?: JSX.Element;
+    onConfirm: () => void | Promise<void>;
+    onOpenChange: (open: boolean) => void;
+  }) => (
+    <Show when={props.open}>
+      <div data-testid="mock-confirm-dialog">
+        <div>{props.title}</div>
+        <div>{props.children}</div>
+        <button
+          type="button"
+          data-testid="mock-confirm-delete"
+          disabled={props.loading}
+          onClick={() => void props.onConfirm()}
+        >
+          {props.confirmText}
+        </button>
+        <button type="button" onClick={() => props.onOpenChange(false)}>Cancel</button>
+      </div>
+    </Show>
+  ),
+}));
+
 vi.mock('./FileBrowserWorkspace', () => ({
   FileBrowserWorkspace: (props: {
     mode: string;
@@ -476,6 +504,13 @@ vi.mock('./FileBrowserWorkspace', () => ({
       type: 'file',
       path: '/workspace/repo/src/app.log',
       size: 512,
+    };
+    const deleteTarget: FileItem = {
+      id: '/workspace/repo/src/x64?format=deb',
+      name: 'x64?format=deb',
+      type: 'file',
+      path: '/workspace/repo/src/x64?format=deb',
+      size: 4_424_448,
     };
     const fileEvent: ContextMenuEvent = {
       x: 40,
@@ -638,6 +673,14 @@ vi.mock('./FileBrowserWorkspace', () => ({
             onClick={() => props.contextMenuCallbacks?.onCopyName?.([copyNameTarget])}
           >
             mock-copy-name
+          </button>
+        ) : null}
+        {fileItems().some((item) => item.id === 'delete') ? (
+          <button
+            type="button"
+            onClick={() => props.contextMenuCallbacks?.onDelete?.([deleteTarget])}
+          >
+            mock-delete-file
           </button>
         ) : null}
         {fileItems().some((item) => item.id === 'copy-path') ? (
@@ -2089,6 +2132,100 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-files-decorations"]')?.textContent).toBe('');
       expect(notificationStore.error).toEqual([]);
       expect(notificationStore.warning).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('deletes a special-character filename only after confirmation succeeds', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockResolvedValue({
+      entries: [
+        { name: 'x64?format=deb', path: '/workspace/repo/src/x64?format=deb', isDirectory: false, size: 4_424_448, modifiedAt: 1 },
+      ],
+    });
+    const pendingDelete = deferred<{ success: boolean }>();
+    mockRpc.fs.delete.mockImplementationOnce(() => pendingDelete.promise);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/x64?format=deb');
+
+      const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-delete-file') as HTMLButtonElement | undefined;
+      deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(host.querySelector('[data-testid="mock-confirm-dialog"]')?.textContent).toContain('x64?format=deb');
+
+      const confirmButton = host.querySelector('[data-testid="mock-confirm-delete"]') as HTMLButtonElement | null;
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      expect(mockRpc.fs.delete).toHaveBeenCalledWith({
+        path: '/workspace/repo/src/x64?format=deb',
+        recursive: false,
+      });
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/x64?format=deb');
+
+      pendingDelete.resolve({ success: true });
+      await flush();
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).not.toContain('/workspace/repo/src/x64?format=deb');
+      expect(notificationStore.success).toContainEqual({ title: 'Deleted', message: '"x64?format=deb" deleted.' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps a special-character filename visible when deletion fails', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockResolvedValue({
+      entries: [
+        { name: 'x64?format=deb', path: '/workspace/repo/src/x64?format=deb', isDirectory: false, size: 4_424_448, modifiedAt: 1 },
+      ],
+    });
+    mockRpc.fs.delete.mockRejectedValueOnce(new Error('delete failed'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-delete-file') as HTMLButtonElement | undefined;
+      deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      const confirmButton = host.querySelector('[data-testid="mock-confirm-delete"]') as HTMLButtonElement | null;
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/x64?format=deb');
+      expect(notificationStore.error).toContainEqual({ title: 'Delete failed', message: 'delete failed' });
     } finally {
       dispose();
     }
