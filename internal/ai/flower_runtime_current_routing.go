@@ -10,7 +10,7 @@ import (
 	"github.com/floegence/redeven/internal/logsafe"
 )
 
-var errFlowerRuntimeEndpointConflict = errors.New("Flower runtime endpoint routing conflict")
+var errFlowerRuntimeEndpointConflict = errors.New("flower runtime endpoint routing conflict")
 
 func (s *Service) publishFlowerRuntimeCurrent(endpointID string, current flruntime.ThreadView) {
 	if s == nil {
@@ -105,7 +105,7 @@ func (s *Service) rememberFlowerRuntimeEndpoint(threadID string, endpointID stri
 	threadID = strings.TrimSpace(threadID)
 	endpointID = strings.TrimSpace(endpointID)
 	if s == nil || threadID == "" || endpointID == "" {
-		return errors.New("Flower runtime endpoint routing identity is incomplete")
+		return errors.New("flower runtime endpoint routing identity is incomplete")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -122,7 +122,7 @@ func (s *Service) rememberFlowerRuntimeEndpoint(threadID string, endpointID stri
 func (s *Service) resolveFlowerRuntimeRoute(ctx context.Context, threadID string) (string, string, error) {
 	threadID = strings.TrimSpace(threadID)
 	if s == nil || threadID == "" {
-		return "", "", errors.New("Flower runtime thread identity is incomplete")
+		return "", "", errors.New("flower runtime thread identity is incomplete")
 	}
 	s.mu.Lock()
 	endpointID := s.flowerRuntimeEndpointByThread[threadID]
@@ -142,7 +142,7 @@ func (s *Service) resolveFlowerRuntimeRoute(ctx context.Context, threadID string
 	}
 	endpointID = strings.TrimSpace(settings.EndpointID)
 	if endpointID == "" {
-		return "", "", errors.New("Flower runtime thread has no endpoint owner")
+		return "", "", errors.New("flower runtime thread has no endpoint owner")
 	}
 	if err := s.rememberFlowerRuntimeEndpoint(threadID, endpointID); err != nil {
 		return "", "", err

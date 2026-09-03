@@ -32,17 +32,17 @@ func (r *run) loadFloretPermissionSnapshot(_ context.Context, hostContext map[st
 	ownerThreadID = strings.TrimSpace(ownerThreadID)
 	ownerRunID = strings.TrimSpace(ownerRunID)
 	if snapshotID == "" || epoch == "" || ownerThreadID == "" || ownerRunID == "" {
-		return PermissionSnapshot{}, errors.New("Floret permission snapshot identity is incomplete")
+		return PermissionSnapshot{}, errors.New("floret permission snapshot identity is incomplete")
 	}
 	snapshot := r.currentPermissionSnapshot()
 	if strings.TrimSpace(snapshot.SnapshotID) != snapshotID {
-		return PermissionSnapshot{}, errors.New("Floret permission snapshot id mismatch")
+		return PermissionSnapshot{}, errors.New("floret permission snapshot id mismatch")
 	}
 	if permissionSurfaceEpoch(snapshot) != epoch {
-		return PermissionSnapshot{}, errors.New("Floret permission snapshot epoch mismatch")
+		return PermissionSnapshot{}, errors.New("floret permission snapshot epoch mismatch")
 	}
 	if strings.TrimSpace(r.threadID) != ownerThreadID {
-		return PermissionSnapshot{}, errors.New("Floret permission snapshot owner mismatch")
+		return PermissionSnapshot{}, errors.New("floret permission snapshot owner mismatch")
 	}
 	return snapshot, nil
 }

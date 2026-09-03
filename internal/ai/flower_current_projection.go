@@ -87,19 +87,19 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 
 func validateFlowerCurrentIdentity(current flruntime.ThreadView) error {
 	if strings.TrimSpace(current.ThreadID.String()) == "" {
-		return errors.New("Flower current view requires thread_id")
+		return errors.New("flower current view requires thread_id")
 	}
 	for _, item := range current.Items {
 		if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.TurnID.String()) == "" || strings.TrimSpace(item.RunID.String()) == "" {
-			return errors.New("Flower current item requires exact id, turn_id, and run_id")
+			return errors.New("flower current item requires exact id, turn_id, and run_id")
 		}
 		if item.Interaction != nil && (item.Interaction.TurnID != item.TurnID || item.Interaction.RunID != item.RunID) {
-			return errors.New("Flower current item and interaction identities differ")
+			return errors.New("flower current item and interaction identities differ")
 		}
 	}
 	for _, interaction := range current.Interactions {
 		if strings.TrimSpace(interaction.ID) == "" || strings.TrimSpace(interaction.TurnID.String()) == "" || strings.TrimSpace(interaction.RunID.String()) == "" {
-			return errors.New("Flower current interaction requires exact id, turn_id, and run_id")
+			return errors.New("flower current interaction requires exact id, turn_id, and run_id")
 		}
 	}
 	return nil

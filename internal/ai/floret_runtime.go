@@ -178,7 +178,7 @@ func buildFloretThreadAgent(
 	manualCompactions flruntime.ManualCompactionSource,
 ) (*flruntime.Agent, error) {
 	if r == nil || provider == nil {
-		return nil, errors.New("Floret effect adapter requires a run and provider")
+		return nil, errors.New("floret effect adapter requires a run and provider")
 	}
 	agentOptions := []flruntime.AgentOption{
 		flruntime.WithAgentTools(surface.FloretToolItems...),
@@ -223,7 +223,7 @@ func redevenFloretGatewayIdentity(providerID string, providerType string, baseUR
 	modelName = strings.TrimSpace(modelName)
 	route = strings.TrimSpace(route)
 	if providerID == "" || providerType == "" || modelName == "" || route == "" {
-		return flprovider.Identity{}, errors.New("Floret model gateway identity requires provider, type, model, and route")
+		return flprovider.Identity{}, errors.New("floret model gateway identity requires provider, type, model, and route")
 	}
 	endpoint, err := normalizedFloretGatewayBaseURL(baseURL)
 	if err != nil {

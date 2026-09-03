@@ -177,10 +177,10 @@ func (s *Service) listFlowerLiveBaseline(ctx context.Context, meta *session.Meta
 			return summaries, nil
 		}
 		if next == cursor {
-			return nil, errors.New("Flower live baseline cursor did not advance")
+			return nil, errors.New("flower live baseline cursor did not advance")
 		}
 		if _, repeated := seenCursors[next]; repeated {
-			return nil, errors.New("Flower live baseline cursor repeated")
+			return nil, errors.New("flower live baseline cursor repeated")
 		}
 		seenCursors[next] = struct{}{}
 		cursor = next

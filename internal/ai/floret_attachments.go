@@ -364,7 +364,7 @@ func (p *floretProviderAdapter) validateResolvedAttachmentForProvider(part Conte
 		switch p.providerType {
 		case "anthropic":
 			if mimeType != "application/pdf" && !isTextLikeMimeType(mimeType) {
-				return fmt.Errorf("Anthropic provider does not support file MIME type %q", mimeType)
+				return fmt.Errorf("anthropic provider does not support file MIME type %q", mimeType)
 			}
 			return nil
 		case DesktopModelSourceProviderType:

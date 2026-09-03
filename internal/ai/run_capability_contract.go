@@ -14,10 +14,7 @@ type runCapabilityContract struct {
 }
 
 func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, supportsAskUserQuestionBatches bool) runCapabilityContract {
-	allowUserInteraction := true
-	if r != nil && r.noUserInteraction {
-		allowUserInteraction = false
-	}
+	allowUserInteraction := r == nil || !r.noUserInteraction
 	allowedTools := make([]string, 0, len(tools))
 	seenTools := make(map[string]struct{}, len(tools))
 	for _, def := range tools {

@@ -774,9 +774,10 @@ func validUploadID(uploadID string) bool {
 		return false
 	}
 	for _, r := range uploadID[4:] {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '_' && r != '-' {
-			return false
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			continue
 		}
+		return false
 	}
 	return true
 }

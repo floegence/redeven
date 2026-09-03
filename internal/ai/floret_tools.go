@@ -38,15 +38,6 @@ func newFloretToolRuntimeState(state todoRuntimeState) *floretToolRuntimeState {
 	return &floretToolRuntimeState{state: state}
 }
 
-func (s *floretToolRuntimeState) snapshot() todoRuntimeState {
-	if s == nil {
-		return todoRuntimeState{}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.state
-}
-
 func (s *floretToolRuntimeState) todos() ([]TodoItem, int64) {
 	if s == nil {
 		return nil, 0
@@ -94,7 +85,7 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 	}
 	authorizationSnapshot := r.currentPermissionSnapshot()
 	if !permissionSnapshotActive(authorizationSnapshot) || strings.TrimSpace(authorizationSnapshot.SnapshotID) == "" {
-		return nil, errors.New("Floret tool registry permission snapshot is unavailable")
+		return nil, errors.New("floret tool registry permission snapshot is unavailable")
 	}
 	items := make([]fltools.Tool, 0, len(activeTools))
 	for _, def := range activeTools {
@@ -179,13 +170,13 @@ func validateFloretToolPermissionHostContext(hostContext map[string]string, snap
 	wantID := strings.TrimSpace(snapshot.SnapshotID)
 	wantEpoch := permissionSurfaceEpoch(snapshot)
 	if wantID == "" || wantEpoch == "" {
-		return errors.New("Floret tool permission snapshot identity is incomplete")
+		return errors.New("floret tool permission snapshot identity is incomplete")
 	}
 	if got := strings.TrimSpace(hostContext[floretToolHostContextPermissionSnapshotIDKey]); got != wantID {
-		return fmt.Errorf("Floret tool permission snapshot mismatch: got %q, want %q", got, wantID)
+		return fmt.Errorf("floret tool permission snapshot mismatch: got %q, want %q", got, wantID)
 	}
 	if got := strings.TrimSpace(hostContext[floretToolHostContextPermissionEpochKey]); got != wantEpoch {
-		return fmt.Errorf("Floret tool permission epoch mismatch: got %q, want %q", got, wantEpoch)
+		return fmt.Errorf("floret tool permission epoch mismatch: got %q, want %q", got, wantEpoch)
 	}
 	return nil
 }

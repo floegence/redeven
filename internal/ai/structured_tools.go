@@ -330,7 +330,7 @@ func renderMutationPatch(oldPath string, newPath string, hunks []mutationDiffHun
 	additions := 0
 	deletions := 0
 	for _, hunk := range hunks {
-		builder.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", hunk.oldStart, hunk.oldCount, hunk.newStart, hunk.newCount))
+		fmt.Fprintf(&builder, "@@ -%d,%d +%d,%d @@\n", hunk.oldStart, hunk.oldCount, hunk.newStart, hunk.newCount)
 		for _, line := range hunk.lines {
 			if line.prefix == '+' {
 				additions++

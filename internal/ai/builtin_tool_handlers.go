@@ -236,10 +236,7 @@ func normalizeFileReadPayload(payload any) (any, bool) {
 	if !ok || record == nil {
 		return normalized, false
 	}
-	truncated := false
-	if readBoolField(record, "truncated") {
-		truncated = true
-	}
+	truncated := readBoolField(record, "truncated")
 	if content, ok := record["content"].(string); ok {
 		trimmed, hit := truncateByRunes(content, 4000)
 		record["content"] = trimmed

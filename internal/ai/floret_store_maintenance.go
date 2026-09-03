@@ -79,7 +79,7 @@ type floretSQLiteMaintainer func(context.Context, string, flstorage.SQLiteMainte
 
 func openFloretHost(ctx context.Context, path string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener) (*flruntime.Host, error) {
 	if ctx == nil || strings.TrimSpace(path) == "" || path != strings.TrimSpace(path) || maintain == nil || open == nil {
-		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage startup requires a context, canonical path, SQLite maintainer, and runtime opener"))
+		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("floret storage startup requires a context, canonical path, SQLite maintainer, and runtime opener"))
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
@@ -127,7 +127,7 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 	if err != nil {
 		classified = classifyFloretStorageOpenError(err)
 	} else if host == nil {
-		classified = floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage source returned no runtime host"))
+		classified = floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("floret storage source returned no runtime host"))
 	}
 	if classified != nil {
 		if logger != nil {

@@ -74,7 +74,7 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 	service := adapter.service
 	adapter.mu.Unlock()
 	if service == nil {
-		return nil, errors.New("Flower thread effect request is unavailable")
+		return nil, errors.New("flower thread effect request is unavailable")
 	}
 	if !ok {
 		var err error
@@ -109,14 +109,14 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flruntime.AgentRequest) (floretEffectRequest, error) {
 	db := s.snapshotThreadStore()
 	if db == nil {
-		return floretEffectRequest{}, errors.New("Flower thread catalog is unavailable")
+		return floretEffectRequest{}, errors.New("flower thread catalog is unavailable")
 	}
 	settings, err := db.GetThreadSettingsByCanonicalThreadID(ctxOrBackground(ctx), request.ThreadID.String())
 	if err != nil {
 		return floretEffectRequest{}, err
 	}
 	if settings == nil {
-		return floretEffectRequest{}, errors.New("Flower thread is not present in the product catalog")
+		return floretEffectRequest{}, errors.New("flower thread is not present in the product catalog")
 	}
 	permission, err := threadPermissionType(settings)
 	if err != nil {
@@ -127,7 +127,7 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 		return floretEffectRequest{}, err
 	}
 	if authority == nil {
-		return floretEffectRequest{}, errors.New("Flower execution authority is unavailable after restart")
+		return floretEffectRequest{}, errors.New("flower execution authority is unavailable after restart")
 	}
 	meta := session.Meta{
 		ChannelID: strings.TrimSpace(authority.ChannelID), EndpointID: strings.TrimSpace(authority.EndpointID),
@@ -149,7 +149,7 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 
 func canonicalRunInputFromFloret(request flruntime.AgentRequest) (RunInput, error) {
 	if err := request.CanonicalTurnInput.Validate(); err != nil {
-		return RunInput{}, errors.New("Flower canonical turn input is unavailable")
+		return RunInput{}, errors.New("flower canonical turn input is unavailable")
 	}
 	return runInputFromFloret(request.CanonicalTurnInput), nil
 }
@@ -167,7 +167,7 @@ func runInputFromFloret(input flruntime.UserInput) RunInput {
 func (s *Service) executionAuthorityForRequest(ctx context.Context, request flruntime.AgentRequest) (*threadstore.ExecutionAuthority, error) {
 	db := s.snapshotThreadStore()
 	if db == nil {
-		return nil, errors.New("Flower execution authority store is unavailable")
+		return nil, errors.New("flower execution authority store is unavailable")
 	}
 	if key := strings.TrimSpace(request.RequestKey); key != "" {
 		if authority, err := db.GetExecutionAuthority(ctxOrBackground(ctx), key); err != nil || authority != nil {
@@ -187,7 +187,7 @@ func (s *Service) executionAuthorityForRequest(ctx context.Context, request flru
 
 func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error) {
 	if host == nil {
-		return nil, errors.New("Floret runtime Host is required")
+		return nil, errors.New("floret runtime Host is required")
 	}
 	effects := newFloretEffectAdapter()
 	threadRuntime, err := host.ThreadService(effects)
