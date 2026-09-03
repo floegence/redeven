@@ -2554,12 +2554,12 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         menu_actions: expect.arrayContaining([{
           id: 'disconnect_provider_runtime',
-          label: 'Disconnect from Redeven Cloud',
-          label_key: 'environmentAction.disconnectFromProvider',
+          label: 'Disconnect legacy control-plane link',
+          label_key: 'environmentAction.disconnectLegacyControlPlane',
           action: {
             intent: 'disconnect_provider_runtime',
-            label: 'Disconnect from Redeven Cloud',
-            label_key: 'environmentAction.disconnectFromProvider',
+            label: 'Disconnect legacy control-plane link',
+            label_key: 'environmentAction.disconnectLegacyControlPlane',
             enabled: true,
             variant: 'outline',
           },
@@ -2628,12 +2628,12 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         menu_actions: expect.arrayContaining([{
           id: 'disconnect_provider_runtime',
-          label: 'Disconnect from Redeven Cloud',
-          label_key: 'environmentAction.disconnectFromProvider',
+          label: 'Disconnect legacy control-plane link',
+          label_key: 'environmentAction.disconnectLegacyControlPlane',
           action: {
             intent: 'disconnect_provider_runtime',
-            label: 'Disconnect from Redeven Cloud',
-            label_key: 'environmentAction.disconnectFromProvider',
+            label: 'Disconnect legacy control-plane link',
+            label_key: 'environmentAction.disconnectLegacyControlPlane',
             enabled: true,
             variant: 'outline',
           },
