@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-09-03
+* **Dense Managed Service release browsing**: The version drawer now assigns
+  all remaining body height to one compact, divided candidate list while its
+  summary, filters, advisory hints, and footer remain fixed. The outer body no
+  longer scrolls, update-plan review replaces release browsing, and real
+  browser-wheel coverage verifies scrolling from candidate content and the
+  list viewport in both directions at wide and narrow sizes.
+
 ## 2026-09-02
 * **Advisory Managed Service version risks**: Version selection and update plans
   now show non-recommended, preview, deprecated, npm-script, downgrade,

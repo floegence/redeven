@@ -3355,6 +3355,7 @@
       "keepCurrentVersion": "保留目前應用程式版本",
       "keepCurrentVersionDescription": "若有新範本修訂，只套用範本變更；Redeven 不會把應用程式切回推薦版本。",
       "reviewUpdatePlan": "檢視更新計畫",
+      "backToReleaseList": "返回版本清單",
       "preparingUpdatePlan": "正在準備計畫…",
       "updateNotRequired": "所選應用程式版本與範本修訂均已安裝。",
       "updatePlanTitle": "更新計畫",

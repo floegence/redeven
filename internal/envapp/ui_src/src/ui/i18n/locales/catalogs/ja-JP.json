@@ -3342,6 +3342,7 @@
       "keepCurrentVersion": "現在のアプリケーションバージョンを維持",
       "keepCurrentVersionDescription": "新しいテンプレートリビジョンだけを適用します。Redeven が推奨バージョンへ戻すことはありません。",
       "reviewUpdatePlan": "更新プランを確認",
+      "backToReleaseList": "バージョン一覧に戻る",
       "preparingUpdatePlan": "プランを準備中…",
       "updateNotRequired": "選択したアプリケーションバージョンとテンプレートリビジョンは既にインストールされています。",
       "updatePlanTitle": "更新プラン",

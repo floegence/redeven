@@ -3342,6 +3342,7 @@
       "keepCurrentVersion": "현재 애플리케이션 버전 유지",
       "keepCurrentVersionDescription": "새 템플릿 리비전만 적용합니다. Redeven은 애플리케이션을 권장 버전으로 되돌리지 않습니다.",
       "reviewUpdatePlan": "업데이트 계획 검토",
+      "backToReleaseList": "버전 목록으로 돌아가기",
       "preparingUpdatePlan": "계획 준비 중…",
       "updateNotRequired": "선택한 애플리케이션 버전과 템플릿 리비전이 이미 설치되어 있습니다.",
       "updatePlanTitle": "업데이트 계획",

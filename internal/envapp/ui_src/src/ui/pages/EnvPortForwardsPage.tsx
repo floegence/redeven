@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { AlertTriangle, Check, ChevronDown, Copy, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Copy, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
   Button,
@@ -1236,6 +1236,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 	onQueryChange: (value: string) => void;
 	onFilterChange: (value: 'all' | 'stable' | 'preview') => void;
 	onSelect: (candidateID: string) => void;
+	leadingItem?: JSX.Element;
 	showRiskHints?: boolean;
 	defaultKind?: ManagedReleaseDefaultKind;
 }>): JSX.Element {
@@ -1247,47 +1248,46 @@ export function ManagedReleaseCandidates(props: Readonly<{
 	}));
 	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
 	return (
-		<div class="space-y-4" data-testid="managed-release-candidates">
-			<Show when={props.result}>{(result) => <div class="grid gap-3 rounded-lg border bg-muted/20 p-3 text-xs sm:grid-cols-2">
+		<div class="flex h-full min-h-0 flex-col gap-3" data-testid="managed-release-candidates">
+			<Show when={props.result}>{(result) => <div class="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(min(10rem,100%),1fr))] gap-x-4 gap-y-2 rounded-lg border bg-muted/20 px-3 py-2.5 text-xs">
 				<Show when={result().current_release}>{(identity) => <Show when={identity().kind !== 'none'}><div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</div><div class="mt-1 truncate font-mono text-foreground" title={releaseIdentityLabel(identity())}>{releaseIdentityLabel(identity())}</div><Show when={identity().integrity || identity().digest}>{(exactIdentity) => <code class="mt-1 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show><div class="mt-1 truncate text-[10px] text-muted-foreground">{identity().source || '—'}<Show when={identity().registry}>{(registry) => ` · ${registry()}`}</Show> · {releaseTrustLabel(identity().trust || 'registry', i18n)}</div></div></Show>}</Show>
 				<Show when={result().recommended_release}>{(identity) => <div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.recommendedVersion')}</div><div class="mt-1 truncate font-mono text-foreground">{releaseIdentityLabel(identity())}</div></div>}</Show>
 				<Show when={result().latest_stable_release}>{(candidate) => <div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.latestStableRelease')}</div><div class="mt-1 truncate font-mono text-foreground">{candidate().version || candidate().tag}</div></div>}</Show>
 				<Show when={result().latest_preview_release}>{(candidate) => <div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.latestPreviewRelease')}</div><div class="mt-1 truncate font-mono text-foreground">{candidate().version || candidate().tag}</div></div>}</Show>
 				<div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.releaseCheckedAt')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(result().checked_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div><div class="mt-1 text-[10px] text-muted-foreground">{i18n.t('webServices.managed.releaseDirectSource')}</div></div>
 			</div>}</Show>
-			<Show when={props.result?.last_error_message}><div class="rounded-lg border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.releaseCheckStale')}</div></Show>
-			<div class="flex flex-wrap gap-2">
+			<Show when={props.result?.last_error_message}><div class="shrink-0 rounded-lg border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.releaseCheckStale')}</div></Show>
+			<div class="flex shrink-0 flex-wrap gap-2">
 				<Input value={props.query} onInput={(event) => props.onQueryChange(event.currentTarget.value)} placeholder={i18n.t('webServices.managed.releaseSearch')} aria-label={i18n.t('webServices.managed.releaseSearch')} class="min-w-48 flex-1" />
 				<div class="inline-flex rounded-md border p-0.5" role="group" aria-label={i18n.t('webServices.managed.releaseFilterLabel')}>
 					<For each={['all', 'stable', 'preview'] as const}>{(filter) => <Button size="sm" variant={props.filter === filter ? 'default' : 'ghost'} onClick={() => props.onFilterChange(filter)}>{i18n.t(`webServices.managed.releaseFilter.${filter}` as EnvAppTranslationKey)}</Button>}</For>
 				</div>
 			</div>
-			<Show when={!props.loading} fallback={<div class="py-10 text-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}>
-				<Show when={!props.error} fallback={<div class="rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{props.error}</div>}>
+			<Show when={!props.loading} fallback={<div class="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}>
+				<Show when={!props.error} fallback={<div class="min-h-0 flex-1 rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{props.error}</div>}>
 					<div
 						{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-						class="max-h-[22rem] space-y-2 overflow-auto overscroll-contain pr-1 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
+						class="min-h-0 flex-1 divide-y overflow-y-auto overscroll-contain rounded-lg border [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
 						data-testid="managed-release-candidate-scroll"
 						role="region"
 						aria-label={i18n.t('webServices.managed.releaseListLabel')}
 						tabindex="0"
 					>
+						{props.leadingItem}
 						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => (
-							<button type="button" class={cn('w-full rounded-lg border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', props.selectedID === candidate.candidate_id && 'border-primary bg-primary/[0.06]', !candidate.selectable && 'cursor-not-allowed opacity-65')} disabled={!candidate.selectable} onClick={() => props.onSelect(candidate.candidate_id)} data-release-id={candidate.candidate_id}>
-								<div class="flex items-start justify-between gap-3">
-									<div class="min-w-0"><div class="font-mono text-sm font-semibold text-foreground">{candidate.version || candidate.tag}</div><div class="mt-1 truncate text-[11px] text-muted-foreground">{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div><div class="mt-1 text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.formatDateTime(published(), { dateStyle: 'medium' })}`}</Show></div></div>
-									<div class="flex max-w-52 shrink-0 flex-wrap justify-end gap-1"><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.is_latest_stable}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
-								</div>
-								<Show when={candidate.integrity || candidate.digest}><code class="mt-2 block truncate text-[10px] text-muted-foreground" title={candidate.integrity || candidate.digest}>{candidate.integrity || candidate.digest}</code></Show>
-								<Show when={candidate.tag_moved}><p class="mt-2 text-[11px] text-warning">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
-								<Show when={!candidate.selectable}><p class="mt-2 text-[11px] text-warning">{releaseReasonLabel(candidate, i18n)}</p></Show>
+							<button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', props.selectedID === candidate.candidate_id && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', !candidate.selectable && 'cursor-not-allowed opacity-65')} disabled={!candidate.selectable} aria-pressed={props.selectedID === candidate.candidate_id} onClick={() => props.onSelect(candidate.candidate_id)} data-release-id={candidate.candidate_id}>
+								<div class="min-w-0"><div class="truncate font-mono text-sm font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div>
+								<div class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"><div class="truncate text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.formatDateTime(published(), { dateStyle: 'medium' })}`}</Show></div><Show when={candidate.integrity || candidate.digest}>{(exactIdentity) => <code class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show></div>
+								<div class="col-start-2 row-start-1 flex min-w-0 flex-wrap justify-end gap-1 sm:col-start-3 sm:max-w-52"><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.is_latest_stable}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
+								<Show when={candidate.tag_moved}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
+								<Show when={!candidate.selectable}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
 							</button>
 						)}</For>
 					</div>
 				</Show>
 			</Show>
 			<Show when={props.showRiskHints && selected()} keyed>{(candidate) => (
-				<ManagedReleaseRiskHints riskIDs={releaseRiskHintIDs(candidate, props.defaultKind)} />
+				<div class="shrink-0"><ManagedReleaseRiskHints riskIDs={releaseRiskHintIDs(candidate, props.defaultKind)} /></div>
 			)}</Show>
 		</div>
 	);
@@ -2362,6 +2362,11 @@ export function EnvPortForwardsPage() {
 	});
 	const managedUpdatePlanNoticesAccepted = () => requiredNoticesAccepted(managedUpdatePlan()?.notices, updateNoticeAcceptances());
 	const managedUpdatePlanRequiresStopped = () => Boolean(managedUpdatePlan()?.requires_stopped && (releasePickerTarget()?.service?.desired_state !== 'stopped' || releasePickerTarget()?.service?.observed_state !== 'stopped'));
+	const returnToReleaseCandidates = () => {
+		setManagedUpdatePlan(null);
+		setManagedUpdatePlanError('');
+		setUpdateNoticeAcceptances({});
+	};
 	const installReleaseRiskHints = createMemo(() => {
 		const selected = selectedTemplateRelease()?.candidate;
 		if (selected) return releaseRiskHintIDs(selected, selectedTemplate()?.source === 'custom' ? 'template' : 'redeven');
@@ -3549,52 +3554,72 @@ export function EnvPortForwardsPage() {
 
       <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
 
-	  <EnvAppDrawer
-		open={releasePickerTarget() !== null}
-		class="managed-service-version-drawer"
-		bodyClass="h-full min-h-0"
-		onOpenChange={(open) => { if (!open && !releaseCandidatesLoading()) closeReleasePicker(); }}
-		title={i18n.t('webServices.managed.releaseTitle', { name: releasePickerTarget()?.name ?? '' })}
-		footer={<div class="flex w-full flex-wrap items-center justify-between gap-2">
-		  <Button size="sm" variant="ghost" onClick={() => void loadReleaseCandidates()} disabled={releaseCandidatesLoading() || managedUpdatePlanLoading()}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('common.actions.refresh')}</Button>
-		  <div class="ml-auto flex gap-2">
-			<Button size="sm" variant="outline" onClick={closeReleasePicker} disabled={managedUpdatePlanLoading()}>{i18n.t('webServices.actions.cancel')}</Button>
-			<Show when={releasePickerTarget()?.kind === 'template'}>
-			  <Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable}>{i18n.t('webServices.managed.deploySelectedRelease')}</Button>
-			</Show>
-			<Show when={releasePickerTarget()?.kind === 'service'}>
-			  <Show when={managedUpdatePlan()} fallback={<Button size="sm" variant="default" onClick={() => void createManagedUpdatePlan()} disabled={!canReviewManagedUpdate() || managedUpdatePlanLoading()}>{managedUpdatePlanLoading() ? i18n.t('webServices.managed.preparingUpdatePlan') : i18n.t('webServices.managed.reviewUpdatePlan')}</Button>}>
-				<Button size="sm" variant="default" onClick={submitManagedUpdatePlan} disabled={!canManageManagedService() || !managedUpdatePlanNoticesAccepted() || managedUpdatePlanRequiresStopped()}>{i18n.t('webServices.managed.update')}</Button>
-			  </Show>
-			</Show>
-		  </div>
-		</div>}
-	  >
-		<div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 space-y-4 overflow-y-auto overscroll-contain p-1 pb-3">
-			<Show when={releasePickerTarget()?.authTokenParameter}>{(parameterName) => <div class="rounded-lg border p-3"><label class="mb-1 block text-xs font-medium" for="managed-release-token">{i18n.t('webServices.managed.registryToken', { parameter: parameterName() })}</label><Input id="managed-release-token" type="password" autocomplete="off" value={releaseSecretParameters()[parameterName()] ?? ''} onInput={(event) => setReleaseSecretParameters((current) => ({ ...current, [parameterName()]: event.currentTarget.value }))} /><p class="mt-1 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.registryTokenDescription')}</p><Show when={!releaseCandidates() && !releaseCandidatesLoading()}><p class="mt-2 text-[11px] text-foreground">{i18n.t('webServices.managed.releaseTokenRefreshPrompt')}</p></Show></div>}</Show>
-			<Show when={releasePickerTarget()?.kind === 'service'}>
-			  <button type="button" class={cn('w-full rounded-lg border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', selectedReleaseID() === '' && 'border-primary bg-primary/[0.06]')} onClick={() => { setSelectedReleaseID(''); setManagedUpdatePlan(null); setManagedUpdatePlanError(''); }} data-testid="managed-release-keep-current">
-				<div class="flex items-center justify-between gap-3"><div><div class="text-sm font-semibold text-foreground">{i18n.t('webServices.managed.keepCurrentVersion')}</div><div class="mt-1 font-mono text-xs text-muted-foreground">{releasePickerTarget()?.service?.release_status.current_release ? releaseIdentityLabel(releasePickerTarget()!.service!.release_status.current_release!) : '—'}</div></div><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></div>
-				<p class="mt-2 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.keepCurrentVersionDescription')}</p>
-			  </button>
-			</Show>
-			<ManagedReleaseCandidates result={releaseCandidates()} loading={releaseCandidatesLoading()} error={releaseCandidatesError()} query={releaseQuery()} filter={releaseFilter()} selectedID={selectedReleaseID()} onQueryChange={setReleaseQuery} onFilterChange={setReleaseFilter} onSelect={(candidateID) => { setSelectedReleaseID(candidateID); setManagedUpdatePlan(null); setManagedUpdatePlanError(''); setUpdateNoticeAcceptances({}); }} showRiskHints={releasePickerTarget()?.kind === 'template'} defaultKind={selectedReleaseDefaultKind()} />
-			<Show when={releasePickerTarget()?.kind === 'service' && !canReviewManagedUpdate() && !managedUpdatePlan() && !releaseCandidatesLoading() && !releaseCandidatesError()}><div class="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.updateNotRequired')}</div></Show>
-			<Show when={managedUpdatePlanError()}><div class="rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{managedUpdatePlanError()}</div></Show>
-			<Show when={managedUpdatePlan()} keyed>{(plan) => <section class="space-y-3 rounded-lg border bg-muted/20 p-4" data-testid="managed-update-plan">
-			  <div><h3 class="text-sm font-semibold text-foreground">{i18n.t('webServices.managed.updatePlanTitle')}</h3><p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.updatePlanDescription')}</p></div>
-			  <div class="grid gap-3 text-xs sm:grid-cols-2">
-				<div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</div><div class="mt-1 font-mono text-foreground">{releaseIdentityLabel(plan.current_release)}</div></div>
-				<div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</div><div class="mt-1 font-mono text-foreground">{releaseIdentityLabel(plan.target_release)}</div></div>
-				<div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.templateRevision')}</div><div class="mt-1 text-foreground">{plan.current_template_revision === plan.target_template_revision ? i18n.t('webServices.managed.templateRevisionUnchanged', { revision: plan.current_template_revision }) : `${plan.current_template_revision} → ${plan.target_template_revision}`}</div></div>
-				<div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.updatePlanExpires')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(plan.expires_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div></div>
-			  </div>
-			  <Show when={managedUpdatePlanRequiresStopped()}><div class="rounded-md border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.downgradeRequiresStopped')}</div></Show>
-			  <Show when={(plan.notices?.length ?? 0) > 0}><ManagedTemplateNotices notices={localizedManagedNotices(plan.notices, releasePickerTarget()?.service?.localizations, i18n.locale())} accepted={updateNoticeAcceptances()} disabled={false} onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))} /></Show>
-			  <ManagedReleaseRiskHints riskIDs={plan.risk_ids ?? []} />
-			</section>}</Show>
-		</div>
-	  </EnvAppDrawer>
+      <EnvAppDrawer
+        open={releasePickerTarget() !== null}
+        class="managed-service-version-drawer"
+        bodyClass="h-full min-h-0"
+        onOpenChange={(open) => { if (!open && !releaseCandidatesLoading()) closeReleasePicker(); }}
+        title={i18n.t('webServices.managed.releaseTitle', { name: releasePickerTarget()?.name ?? '' })}
+        footer={<div class="flex w-full flex-wrap items-center justify-between gap-2">
+          <Show when={managedUpdatePlan()} fallback={<Button size="sm" variant="ghost" onClick={() => void loadReleaseCandidates()} disabled={releaseCandidatesLoading() || managedUpdatePlanLoading()}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('common.actions.refresh')}</Button>}>
+            <Button size="sm" variant="ghost" onClick={returnToReleaseCandidates} disabled={managedUpdatePlanLoading()}><ArrowLeft class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.managed.backToReleaseList')}</Button>
+          </Show>
+          <div class="ml-auto flex gap-2">
+            <Button size="sm" variant="outline" onClick={closeReleasePicker} disabled={managedUpdatePlanLoading()}>{i18n.t('webServices.actions.cancel')}</Button>
+            <Show when={releasePickerTarget()?.kind === 'template'}>
+              <Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable}>{i18n.t('webServices.managed.deploySelectedRelease')}</Button>
+            </Show>
+            <Show when={releasePickerTarget()?.kind === 'service'}>
+              <Show when={managedUpdatePlan()} fallback={<Button size="sm" variant="default" onClick={() => void createManagedUpdatePlan()} disabled={!canReviewManagedUpdate() || managedUpdatePlanLoading()}>{managedUpdatePlanLoading() ? i18n.t('webServices.managed.preparingUpdatePlan') : i18n.t('webServices.managed.reviewUpdatePlan')}</Button>}>
+                <Button size="sm" variant="default" onClick={submitManagedUpdatePlan} disabled={!canManageManagedService() || !managedUpdatePlanNoticesAccepted() || managedUpdatePlanRequiresStopped()}>{i18n.t('webServices.managed.update')}</Button>
+              </Show>
+            </Show>
+          </div>
+        </div>}
+      >
+        <div class="flex h-full min-h-0 flex-col overflow-hidden p-1" data-testid="managed-release-drawer-body" data-view={managedUpdatePlan() ? 'plan' : 'releases'}>
+          <Show when={!managedUpdatePlan()}>
+            <div class="flex h-full min-h-0 flex-col gap-3" data-testid="managed-release-browser">
+              <Show when={releasePickerTarget()?.authTokenParameter}>{(parameterName) => <div class="shrink-0 rounded-lg border p-3"><label class="mb-1 block text-xs font-medium" for="managed-release-token">{i18n.t('webServices.managed.registryToken', { parameter: parameterName() })}</label><Input id="managed-release-token" type="password" autocomplete="off" value={releaseSecretParameters()[parameterName()] ?? ''} onInput={(event) => setReleaseSecretParameters((current) => ({ ...current, [parameterName()]: event.currentTarget.value }))} /><p class="mt-1 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.registryTokenDescription')}</p><Show when={!releaseCandidates() && !releaseCandidatesLoading()}><p class="mt-2 text-[11px] text-foreground">{i18n.t('webServices.managed.releaseTokenRefreshPrompt')}</p></Show></div>}</Show>
+              <div class="min-h-0 flex-1">
+                <ManagedReleaseCandidates
+                  result={releaseCandidates()}
+                  loading={releaseCandidatesLoading()}
+                  error={releaseCandidatesError()}
+                  query={releaseQuery()}
+                  filter={releaseFilter()}
+                  selectedID={selectedReleaseID()}
+                  onQueryChange={setReleaseQuery}
+                  onFilterChange={setReleaseFilter}
+                  onSelect={(candidateID) => { setSelectedReleaseID(candidateID); setManagedUpdatePlanError(''); setUpdateNoticeAcceptances({}); }}
+                  leadingItem={<Show when={releasePickerTarget()?.kind === 'service'}>
+                    <button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring', selectedReleaseID() === '' && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]')} aria-pressed={selectedReleaseID() === ''} onClick={() => { setSelectedReleaseID(''); setManagedUpdatePlanError(''); }} data-testid="managed-release-keep-current">
+                      <div class="min-w-0"><div class="truncate text-sm font-semibold text-foreground">{i18n.t('webServices.managed.keepCurrentVersion')}</div><div class="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{releasePickerTarget()?.service?.release_status.current_release ? releaseIdentityLabel(releasePickerTarget()!.service!.release_status.current_release!) : '—'}</div><p class="mt-0.5 truncate text-[10px] text-muted-foreground" title={i18n.t('webServices.managed.keepCurrentVersionDescription')}>{i18n.t('webServices.managed.keepCurrentVersionDescription')}</p></div>
+                      <Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag>
+                    </button>
+                  </Show>}
+                  showRiskHints={releasePickerTarget()?.kind === 'template'}
+                  defaultKind={selectedReleaseDefaultKind()}
+                />
+              </div>
+              <Show when={releasePickerTarget()?.kind === 'service' && !canReviewManagedUpdate() && !releaseCandidatesLoading() && !releaseCandidatesError()}><div class="shrink-0 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.updateNotRequired')}</div></Show>
+              <Show when={managedUpdatePlanError()}><div class="shrink-0 rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{managedUpdatePlanError()}</div></Show>
+            </div>
+          </Show>
+          <Show when={managedUpdatePlan()} keyed>{(plan) => <section {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-lg border bg-muted/20 p-4 [scrollbar-gutter:stable]" data-testid="managed-update-plan">
+            <div><h3 class="text-sm font-semibold text-foreground">{i18n.t('webServices.managed.updatePlanTitle')}</h3><p class="mt-1 text-xs text-muted-foreground">{i18n.t('webServices.managed.updatePlanDescription')}</p></div>
+            <div class="grid gap-3 text-xs sm:grid-cols-2">
+              <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</div><div class="mt-1 font-mono text-foreground">{releaseIdentityLabel(plan.current_release)}</div></div>
+              <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</div><div class="mt-1 font-mono text-foreground">{releaseIdentityLabel(plan.target_release)}</div></div>
+              <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.templateRevision')}</div><div class="mt-1 text-foreground">{plan.current_template_revision === plan.target_template_revision ? i18n.t('webServices.managed.templateRevisionUnchanged', { revision: plan.current_template_revision }) : `${plan.current_template_revision} → ${plan.target_template_revision}`}</div></div>
+              <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.updatePlanExpires')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(plan.expires_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div></div>
+            </div>
+            <Show when={managedUpdatePlanRequiresStopped()}><div class="rounded-md border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.downgradeRequiresStopped')}</div></Show>
+            <Show when={(plan.notices?.length ?? 0) > 0}><ManagedTemplateNotices notices={localizedManagedNotices(plan.notices, releasePickerTarget()?.service?.localizations, i18n.locale())} accepted={updateNoticeAcceptances()} disabled={false} onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))} /></Show>
+            <ManagedReleaseRiskHints riskIDs={plan.risk_ids ?? []} />
+          </section>}</Show>
+        </div>
+      </EnvAppDrawer>
 
       <Dialog
         open={managedUninstall() !== null && !managedDeleteConfirm()}

@@ -3432,6 +3432,7 @@
       "keepCurrentVersion": "Сохранить текущую версию приложения",
       "keepCurrentVersionDescription": "Применяется только новая ревизия шаблона. Redeven не вернёт приложение к рекомендованной версии.",
       "reviewUpdatePlan": "Проверить план обновления",
+      "backToReleaseList": "Вернуться к списку версий",
       "preparingUpdatePlan": "Подготовка плана…",
       "updateNotRequired": "Выбранная версия приложения и ревизия шаблона уже установлены.",
       "updatePlanTitle": "План обновления",
