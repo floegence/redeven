@@ -19,8 +19,7 @@ const (
 )
 
 func TestOCIReleaseDiscoveryPaginatesAndSelectsPlatformDigest(t *testing.T) {
-	var server *httptest.Server
-	server = httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Basic "+base64.StdEncoding.EncodeToString([]byte("user:secret")) {
 			t.Errorf("registry credential was not applied")
 		}

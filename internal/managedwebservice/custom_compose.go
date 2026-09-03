@@ -511,15 +511,6 @@ func (d *composeTemplateDriver) expectedImages(service *pfregistry.ManagedServic
 	return images, nil
 }
 
-func containsString(values []string, expected string) bool {
-	for _, value := range values {
-		if value == expected {
-			return true
-		}
-	}
-	return false
-}
-
 func (d *composeTemplateDriver) Start(ctx context.Context, service *pfregistry.ManagedService) (string, error) {
 	if err := d.verifyIdentity(service); err != nil {
 		return "", err

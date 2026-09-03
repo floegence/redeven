@@ -138,18 +138,18 @@ func (s *Service) prepareComposeProjectDefinition(ctx context.Context, input Com
 func canonicalComposeFile(raw string, maxBytes int64) (string, error) {
 	path := strings.TrimSpace(raw)
 	if path == "" || !filepath.IsAbs(path) || strings.ContainsAny(path, "\x00\r\n") {
-		return "", errors.New("Compose file path must be absolute")
+		return "", errors.New("compose file path must be absolute")
 	}
 	resolved, err := filepath.EvalSymlinks(filepath.Clean(path))
 	if err != nil {
-		return "", errors.New("Compose file does not exist")
+		return "", errors.New("compose file does not exist")
 	}
 	info, err := os.Stat(resolved)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("Compose file must be a regular file")
+		return "", errors.New("compose file must be a regular file")
 	}
 	if info.Size() > maxBytes {
-		return "", errors.New("Compose file exceeds the size limit")
+		return "", errors.New("compose file exceeds the size limit")
 	}
 	return resolved, nil
 }

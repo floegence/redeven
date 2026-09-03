@@ -471,7 +471,7 @@ func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs
 		return nil, fmt.Errorf("invalid controlplane url: %w", err)
 	}
 	if !strings.EqualFold(u.Scheme, "https") || strings.TrimSpace(u.Hostname()) == "" {
-		return nil, errors.New("Runtime link exchange requires an HTTPS origin")
+		return nil, errors.New("runtime link exchange requires an HTTPS origin")
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v3/runtime-link/exchange"
 	u.RawQuery = ""
@@ -506,7 +506,7 @@ func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs
 		return nil, fmt.Errorf("read Runtime link exchange response: %w", err)
 	}
 	if len(body) > ControlArtifactMaxResponseBytes {
-		return nil, errors.New("Runtime link exchange response exceeds exact byte bound")
+		return nil, errors.New("runtime link exchange response exceeds exact byte bound")
 	}
 	if resp.StatusCode != http.StatusOK {
 		var failure bootstrapExchangeErrorResponse
@@ -514,9 +514,9 @@ func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs
 			if resp.StatusCode == http.StatusConflict && failure.Error.Code == "RUNTIME_LINK_DELIVERY_EXPIRED" {
 				return nil, errBootstrapDeliveryExpired
 			}
-			return nil, fmt.Errorf("Runtime link exchange failed with HTTP %d/%s", resp.StatusCode, failure.Error.Code)
+			return nil, fmt.Errorf("runtime link exchange failed with HTTP %d/%s", resp.StatusCode, failure.Error.Code)
 		}
-		return nil, fmt.Errorf("Runtime link exchange failed with HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("runtime link exchange failed with HTTP %d", resp.StatusCode)
 	}
 	var out runtimeLinkExchangeResponse
 	if err := decodeExactRuntimeLinkResponse(body, &out); err != nil {
@@ -543,7 +543,7 @@ func decodeExactRuntimeLinkResponse(raw []byte, response *runtimeLinkExchangeRes
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return errors.New("Runtime link response contains multiple JSON values")
+		return errors.New("runtime link response contains multiple JSON values")
 	}
 	return nil
 }

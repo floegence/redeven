@@ -99,7 +99,7 @@ func parseWorktreeBindingsPorcelainZ(out []byte) (map[string]worktreeBinding, er
 			return nil
 		}
 		validWorktree := pathValue != "" && !bare && seenHead &&
-			((refValue != "") != detached) && !(locked && prunable)
+			((refValue != "") != detached) && (!locked || !prunable)
 		validBare := pathValue != "" && bare && !seenHead && refValue == "" &&
 			!detached && !locked && !prunable
 		if !validWorktree && !validBare {

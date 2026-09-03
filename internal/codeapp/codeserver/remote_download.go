@@ -145,7 +145,7 @@ func (m *RuntimeManager) runRemoteDownloadSetupOperation(ctx context.Context, op
 func (m *RuntimeManager) resolveRemoteBrowserEditorAsset(ctx context.Context) (remoteBrowserEditorAsset, error) {
 	catalogURL, err := url.Parse(strings.TrimSpace(m.remoteDownload.catalogURL))
 	if err != nil || catalogURL.Scheme == "" || catalogURL.Host == "" {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog URL is invalid"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog URL is invalid"))
 	}
 	client := m.remoteHTTPClient(catalogURL, false)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, catalogURL.String(), nil)
@@ -160,24 +160,24 @@ func (m *RuntimeManager) resolveRemoteBrowserEditorAsset(ctx context.Context) (r
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return remoteBrowserEditorAsset{}, setupError("catalog_request_failed", fmt.Errorf("Redeven Browser Editor catalog returned HTTP %d", response.StatusCode))
+		return remoteBrowserEditorAsset{}, setupError("catalog_request_failed", fmt.Errorf("redeven Browser Editor catalog returned HTTP %d", response.StatusCode))
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxBrowserEditorCatalogBytes+1))
 	if err != nil {
 		return remoteBrowserEditorAsset{}, setupError("catalog_request_failed", fmt.Errorf("could not read the Redeven Browser Editor catalog: %w", err))
 	}
 	if len(body) > maxBrowserEditorCatalogBytes {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog is too large"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog is too large"))
 	}
 	var catalog remoteCatalog
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&catalog); err != nil {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", fmt.Errorf("Redeven Browser Editor catalog is invalid JSON: %w", err))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", fmt.Errorf("redeven Browser Editor catalog is invalid JSON: %w", err))
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog contains trailing JSON content"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog contains trailing JSON content"))
 	}
 	return validateRemoteBrowserEditorCatalog(catalog, currentWorkspaceEnginePlatform(), m.remoteDownload.packageOrigin)
 }
@@ -188,13 +188,13 @@ func validateRemoteBrowserEditorCatalog(
 	packageOrigin string,
 ) (remoteBrowserEditorAsset, error) {
 	if catalog.SchemaVersion != workspaceEngineManifestSchemaVersion {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", fmt.Errorf("Redeven Browser Editor catalog schema version %d is not supported", catalog.SchemaVersion))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", fmt.Errorf("redeven Browser Editor catalog schema version %d is not supported", catalog.SchemaVersion))
 	}
 	if strings.TrimSpace(catalog.Engine) != workspaceEngineNameCodeServer {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog has an unsupported engine"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog has an unsupported engine"))
 	}
 	if !catalog.MirrorComplete {
-		return remoteBrowserEditorAsset{}, setupError("catalog_incomplete", errors.New("Redeven Browser Editor catalog is not fully mirrored"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_incomplete", errors.New("redeven Browser Editor catalog is not fully mirrored"))
 	}
 	if !platform.Supported {
 		return remoteBrowserEditorAsset{}, setupError("platform_unsupported", errors.New(platform.Message))
@@ -202,31 +202,31 @@ func validateRemoteBrowserEditorCatalog(
 	version := strings.TrimSpace(catalog.Latest.Version)
 	releaseTag := strings.TrimSpace(catalog.Latest.ReleaseTag)
 	if version == "" || releaseTag == "" {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog is missing the latest version"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog is missing the latest version"))
 	}
 	entry, ok := remoteCatalogPlatformFor(catalog.Platforms, platform)
 	if !ok {
-		return remoteBrowserEditorAsset{}, setupError("catalog_platform_missing", fmt.Errorf("Redeven Browser Editor catalog does not include %s/%s", platform.OS, platform.Arch))
+		return remoteBrowserEditorAsset{}, setupError("catalog_platform_missing", fmt.Errorf("redeven Browser Editor catalog does not include %s/%s", platform.OS, platform.Arch))
 	}
 	if strings.TrimSpace(entry.OS) != platform.OS || strings.TrimSpace(entry.Arch) != platform.Arch {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog package platform does not match this environment"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog package platform does not match this environment"))
 	}
 	if platform.OS == "linux" && strings.TrimSpace(entry.Libc) != "glibc" {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog package does not target Linux glibc"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog package does not target Linux glibc"))
 	}
 	if strings.TrimSpace(entry.PlatformID) == "" || strings.TrimSpace(entry.AssetName) == "" || strings.TrimSpace(entry.RootDirHint) == "" {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog has an incomplete platform package entry"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog has an incomplete platform package entry"))
 	}
 	if strings.TrimSpace(entry.Compression) != "tar.gz" {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", fmt.Errorf("Redeven Browser Editor catalog package compression %q is not supported", entry.Compression))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", fmt.Errorf("redeven Browser Editor catalog package compression %q is not supported", entry.Compression))
 	}
 	sha256 := strings.ToLower(strings.TrimSpace(entry.SHA256))
 	decodedSHA, err := hex.DecodeString(sha256)
 	if err != nil || len(decodedSHA) != 32 {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog package SHA-256 is invalid"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog package SHA-256 is invalid"))
 	}
 	if entry.SizeBytes <= 0 || entry.SizeBytes > defaultWorkspaceEngineArchiveLimit {
-		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("Redeven Browser Editor catalog package size is invalid"))
+		return remoteBrowserEditorAsset{}, setupError("catalog_invalid", errors.New("redeven Browser Editor catalog package size is invalid"))
 	}
 	packageURL, err := validateRemotePackageURL(entry.DownloadURL, packageOrigin)
 	if err != nil {
@@ -284,14 +284,14 @@ func remoteCatalogPlatformFor(platforms map[string]remoteCatalogPlatform, platfo
 func validateRemotePackageURL(rawURL string, packageOrigin string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
-		return nil, errors.New("Redeven Browser Editor package URL is invalid")
+		return nil, errors.New("redeven Browser Editor package URL is invalid")
 	}
 	origin, err := url.Parse(strings.TrimSpace(packageOrigin))
 	if err != nil || origin.Scheme == "" || origin.Host == "" {
-		return nil, errors.New("Redeven Browser Editor package origin is invalid")
+		return nil, errors.New("redeven Browser Editor package origin is invalid")
 	}
 	if parsed.Scheme != "https" || !sameURLOrigin(parsed, origin) || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return nil, errors.New("Redeven Browser Editor package URL is outside the approved package service")
+		return nil, errors.New("redeven Browser Editor package URL is outside the approved package service")
 	}
 	return parsed, nil
 }
@@ -317,12 +317,12 @@ func (m *RuntimeManager) remoteHTTPClient(initialURL *url.URL, packageRequest bo
 			if packageRequest {
 				_, err := validateRemotePackageURL(req.URL.String(), m.remoteDownload.packageOrigin)
 				if err != nil {
-					return errors.New("Browser Editor package redirect left the approved package service")
+					return errors.New("browser Editor package redirect left the approved package service")
 				}
 				return nil
 			}
 			if !sameURLOrigin(req.URL, initialURL) {
-				return errors.New("Browser Editor catalog redirect changed origin")
+				return errors.New("browser Editor catalog redirect changed origin")
 			}
 			return nil
 		},
@@ -368,10 +368,10 @@ func (m *RuntimeManager) ensureRemoteBrowserEditorArchive(
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", false, setupError("environment_download_failed", fmt.Errorf("Redeven package service returned HTTP %d", response.StatusCode))
+		return "", false, setupError("environment_download_failed", fmt.Errorf("redeven package service returned HTTP %d", response.StatusCode))
 	}
 	if response.ContentLength > 0 && response.ContentLength != asset.Manifest.Archive.SizeBytes {
-		return "", false, setupError("environment_download_size_mismatch", fmt.Errorf("Browser Editor package response size is %d bytes, expected %d", response.ContentLength, asset.Manifest.Archive.SizeBytes))
+		return "", false, setupError("environment_download_size_mismatch", fmt.Errorf("browser Editor package response size is %d bytes, expected %d", response.ContentLength, asset.Manifest.Archive.SizeBytes))
 	}
 
 	tempPath := remoteDownloadTempPath(m.stateRoot, platform, operationID)
@@ -399,7 +399,7 @@ func (m *RuntimeManager) ensureRemoteBrowserEditorArchive(
 		return "", false, setupError("environment_download_write_failed", closeErr)
 	}
 	if completed != asset.Manifest.Archive.SizeBytes {
-		return "", false, setupError("environment_download_size_mismatch", fmt.Errorf("Browser Editor package download ended at %d bytes, expected %d", completed, asset.Manifest.Archive.SizeBytes))
+		return "", false, setupError("environment_download_size_mismatch", fmt.Errorf("browser Editor package download ended at %d bytes, expected %d", completed, asset.Manifest.Archive.SizeBytes))
 	}
 	if err := verifyWorkspaceEngineArchive(tempPath, asset.Manifest); err != nil {
 		return "", false, setupError("artifact_validation_failed", err)
@@ -434,7 +434,7 @@ func (m *RuntimeManager) copyRemoteDownload(
 	for {
 		idleErr := setupError(
 			"environment_download_idle_timeout",
-			fmt.Errorf("Browser Editor package download received no data for %s", idleTimeout),
+			fmt.Errorf("browser Editor package download received no data for %s", idleTimeout),
 		)
 		idleTimer := time.AfterFunc(idleTimeout, func() {
 			cancel(idleErr)
@@ -451,7 +451,7 @@ func (m *RuntimeManager) copyRemoteDownload(
 		if readBytes > 0 {
 			completed += int64(readBytes)
 			if completed > expectedBytes {
-				return completed, setupError("environment_download_size_mismatch", errors.New("Browser Editor package download exceeded the catalog size"))
+				return completed, setupError("environment_download_size_mismatch", errors.New("browser Editor package download exceeded the catalog size"))
 			}
 			if _, err := destination.Write(buffer[:readBytes]); err != nil {
 				return completed, setupError("environment_download_write_failed", err)

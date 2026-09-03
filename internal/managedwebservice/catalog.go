@@ -26,11 +26,6 @@ type verifiedPackageArtifact struct {
 	NPMCLIRelPath string `json:"npm_cli_rel_path"`
 }
 
-type dockerArtifact struct {
-	Image  string `json:"image"`
-	Digest string `json:"digest"`
-}
-
 type packageDownloadClient struct {
 	client *http.Client
 }

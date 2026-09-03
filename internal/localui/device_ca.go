@@ -27,11 +27,11 @@ const (
 )
 
 var (
-	ErrLocalUIDeviceCAMissing   = errors.New("Local UI device CA is missing")
-	ErrLocalUIDeviceCAInvalid   = errors.New("Local UI device CA is invalid")
-	ErrLocalUIDeviceCAExpired   = errors.New("Local UI device CA is expired")
-	ErrLocalUIDeviceCAUntrusted = errors.New("Local UI device CA is not trusted by this OS user")
-	ErrLocalUIDeviceCAManual    = errors.New("Local UI device CA requires manual trust installation")
+	ErrLocalUIDeviceCAMissing   = errors.New("local UI device CA is missing")
+	ErrLocalUIDeviceCAInvalid   = errors.New("local UI device CA is invalid")
+	ErrLocalUIDeviceCAExpired   = errors.New("local UI device CA is expired")
+	ErrLocalUIDeviceCAUntrusted = errors.New("local UI device CA is not trusted by this OS user")
+	ErrLocalUIDeviceCAManual    = errors.New("local UI device CA requires manual trust installation")
 )
 
 // DeviceCAStatus is the stable, credential-free Local UI trust projection.

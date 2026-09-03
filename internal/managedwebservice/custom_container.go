@@ -285,13 +285,6 @@ func defaultString(value, fallback string) string {
 	return strings.TrimSpace(value)
 }
 
-func effectivePIDsLimit(value int64) int {
-	if value <= 0 {
-		return 512
-	}
-	return int(value)
-}
-
 func customContainerName(serviceID string) string {
 	return standardContainerName(serviceID)
 }
@@ -584,22 +577,6 @@ func mountSourceMatchesForHost(expected containerengine.ContainerMount, actual c
 	}
 	actualSource := filepath.Clean(actual.Source)
 	return actualSource == expectedSource || actualSource == filepath.Join("/host_mnt", expectedSource)
-}
-
-func containerRuntimeMatchesProfile(runtime containerengine.RuntimeSummary, profile string, pidsLimit int) bool {
-	if runtime.Privileged || runtime.NetworkMode != "bridge" || !privateNamespaceMode(runtime.PIDMode) || !privateNamespaceMode(runtime.IPCMode) || len(runtime.CapAdd) != 0 || len(runtime.Devices) != 0 {
-		return false
-	}
-	if profile == ContainerRuntimeProfileInteractiveDesktop {
-		for _, option := range runtime.SecurityOpts {
-			lower := strings.ToLower(strings.TrimSpace(option))
-			if strings.Contains(lower, "seccomp=unconfined") || strings.Contains(lower, "apparmor=unconfined") {
-				return false
-			}
-		}
-		return !runtime.ReadOnlyRoot && runtime.PIDsLimit == 2048 && runtime.ShmSizeBytes == 1024*1024*1024 && strings.TrimSpace(runtime.User) == "" && len(runtime.CapDrop) == 0
-	}
-	return runtime.ReadOnlyRoot && runtime.PIDsLimit == pidsLimit && slices.Contains(runtime.CapDrop, "ALL") && slices.Contains(runtime.SecurityOpts, "no-new-privileges:true")
 }
 
 func privateNamespaceMode(value string) bool {

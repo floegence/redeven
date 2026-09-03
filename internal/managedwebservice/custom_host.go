@@ -48,7 +48,7 @@ func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.Mana
 	}
 	executable := ""
 	if spec.Host.NPM != nil {
-		identity := ReleaseIdentity{}
+		var identity ReleaseIdentity
 		executable, identity, err = d.installNPMRuntime(ctx, service, *spec.Host.NPM, progress)
 		if err != nil {
 			return "", "", err

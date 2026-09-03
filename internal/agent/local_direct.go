@@ -82,7 +82,7 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	connectedAtUnixMs := time.Now().UnixMilli()
 	runtimeLease, err := a.admitRuntimeWorkload(runtimeservice.ManagedWorkload{Identity: "session:" + channelID, Kind: "session", Protected: true})
 	if err != nil {
-		return fmt.Errorf("Runtime workload admission failed: %w", err)
+		return fmt.Errorf("runtime workload admission failed: %w", err)
 	}
 
 	// Register in the in-memory session list so the Env App can show it under Monitoring.

@@ -75,7 +75,7 @@ func (c *CLIClient) EndpointMetadata(ctx context.Context, endpoint EngineEndpoin
 		} `json:"host"`
 	}
 	if err := json.Unmarshal(raw, &info); err != nil {
-		return endpoint, errors.New("Podman endpoint metadata is invalid")
+		return endpoint, errors.New("podman endpoint metadata is invalid")
 	}
 	rootless := info.Host.Security.Rootless
 	endpoint.Rootless = &rootless
@@ -94,7 +94,7 @@ func (c *CLIClient) listDockerContexts(ctx context.Context) ([]EngineEndpoint, e
 	}
 	rows, err := decodeJSONLinesOrArray[row](raw)
 	if err != nil {
-		return nil, errors.New("Docker context inventory is invalid")
+		return nil, errors.New("docker context inventory is invalid")
 	}
 	out := make([]EngineEndpoint, 0, len(rows))
 	for _, item := range rows {
@@ -126,7 +126,7 @@ func (c *CLIClient) listPodmanConnections(ctx context.Context) ([]EngineEndpoint
 	rows := []row{}
 	if len(bytes.TrimSpace(raw)) > 0 {
 		if decodeErr := json.Unmarshal(raw, &rows); decodeErr != nil {
-			return nil, errors.New("Podman connection inventory is invalid")
+			return nil, errors.New("podman connection inventory is invalid")
 		}
 	}
 	out := []EngineEndpoint{{EndpointID: endpointID(EnginePodman, "local:"), Engine: EnginePodman, DisplayName: "local", Default: len(rows) == 0, Remote: false, Capabilities: endpointCapabilities(EnginePodman)}}
@@ -227,7 +227,7 @@ func (c *CLIClient) ListPods(ctx context.Context) ([]PodRecord, error) {
 	rows := []row{}
 	if len(bytes.TrimSpace(raw)) > 0 {
 		if err := json.Unmarshal(raw, &rows); err != nil {
-			return nil, errors.New("Podman Pod inventory is invalid")
+			return nil, errors.New("podman Pod inventory is invalid")
 		}
 	}
 	identities := make([]string, 0, len(rows))
@@ -244,7 +244,7 @@ func (c *CLIClient) ListPods(ctx context.Context) ([]PodRecord, error) {
 
 func (c *CLIClient) InspectPod(ctx context.Context, podID string) (PodRecord, error) {
 	if invalidWorkspaceIdentity(podID) || !boundForEngine(ctx, EnginePodman) {
-		return PodRecord{}, errors.New("Pod identity is invalid")
+		return PodRecord{}, errors.New("pod identity is invalid")
 	}
 	raw, err := c.run(ctx, EnginePodman, "pod", "inspect", strings.TrimSpace(podID))
 	if err != nil {
@@ -252,7 +252,7 @@ func (c *CLIClient) InspectPod(ctx context.Context, podID string) (PodRecord, er
 	}
 	rows, err := decodePodInspect(raw)
 	if err != nil || len(rows) != 1 {
-		return PodRecord{}, errors.New("Podman Pod inspection is invalid")
+		return PodRecord{}, errors.New("podman Pod inspection is invalid")
 	}
 	return rows[0], nil
 }
@@ -273,7 +273,7 @@ func (c *CLIClient) inspectPodRecords(ctx context.Context, identities []string) 
 		}
 		rows, err := decodePodInspect(raw)
 		if err != nil || len(rows) != end-start {
-			return nil, errors.New("Podman Pod inspection is invalid")
+			return nil, errors.New("podman Pod inspection is invalid")
 		}
 		out = append(out, rows...)
 	}
@@ -309,7 +309,7 @@ func decodePodInspect(raw []byte) ([]PodRecord, error) {
 		podID := strings.TrimSpace(item.ID)
 		name := strings.TrimSpace(item.Name)
 		if invalidWorkspaceIdentity(podID) || invalidWorkspaceIdentity(name) {
-			return nil, errors.New("Podman Pod inspection contains an invalid identity")
+			return nil, errors.New("podman Pod inspection contains an invalid identity")
 		}
 		pod := PodRecord{
 			PodID:           podID,
@@ -339,7 +339,7 @@ func (c *CLIClient) CreatePod(ctx context.Context, req PodCreateRequest) (PodRec
 	}
 	id := strings.TrimSpace(string(raw))
 	if invalidWorkspaceIdentity(id) {
-		return PodRecord{}, errors.New("Podman returned an invalid Pod identity")
+		return PodRecord{}, errors.New("podman returned an invalid Pod identity")
 	}
 	return c.InspectPod(ctx, id)
 }
@@ -378,7 +378,7 @@ func (c *CLIClient) composeProjectRows(ctx context.Context) ([]composeProjectRow
 		return rows, nil
 	}
 	if err := json.Unmarshal(raw, &rows); err != nil {
-		return nil, errors.New("Docker Compose project inventory is invalid")
+		return nil, errors.New("docker Compose project inventory is invalid")
 	}
 	return rows, nil
 }
@@ -414,7 +414,7 @@ func (c *CLIClient) inspectComposeProjectRow(ctx context.Context, row composePro
 	}
 	items, err := decodeJSONLinesOrArray[item](raw)
 	if err != nil {
-		return ComposeProjectDetails{}, errors.New("Docker Compose project inspection is invalid")
+		return ComposeProjectDetails{}, errors.New("docker Compose project inspection is invalid")
 	}
 	project := ComposeProject{ProjectID: ComposeProjectID(row.Name), Name: strings.TrimSpace(row.Name), Status: normalizeProjectStatus(row.Status), ContainerCount: len(items)}
 	services := map[string]struct{}{}
@@ -436,17 +436,17 @@ func (c *CLIClient) inspectComposeProjectRow(ctx context.Context, row composePro
 func composeArgs(row composeProjectRow) ([]string, error) {
 	name := strings.TrimSpace(row.Name)
 	if invalidWorkspaceIdentity(name) {
-		return nil, errors.New("Compose project identity is invalid")
+		return nil, errors.New("compose project identity is invalid")
 	}
 	args := []string{"compose"}
 	files := strings.Split(row.ConfigFiles, ",")
 	if len(files) > 32 {
-		return nil, errors.New("Compose project configuration exceeds resource limits")
+		return nil, errors.New("compose project configuration exceeds resource limits")
 	}
 	for _, raw := range files {
 		path := strings.TrimSpace(raw)
 		if path == "" || hasControl(path) || strings.HasPrefix(path, "-") {
-			return nil, errors.New("Compose project configuration is invalid")
+			return nil, errors.New("compose project configuration is invalid")
 		}
 		args = append(args, "--file", path)
 	}

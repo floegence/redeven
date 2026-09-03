@@ -586,7 +586,7 @@ func (i artifactIssuer) issueSignedArtifact(req gatewayprotocol.OpenSessionReque
 		})
 	}
 	if strings.TrimSpace(directURL) == "" {
-		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway Env App entry URL is unavailable")
+		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("gateway Env App entry URL is unavailable")
 	}
 	issue, err := gatewaysession.NewSignedLocalDirectIssue(struct {
 		GatewayID           string
@@ -646,7 +646,7 @@ func (s *Server) openProfileSession(profile gatewayenvprofiles.EnvironmentProfil
 	}
 	if session.GatewayEnvID == "" || session.TargetBaseURL == "" || session.AccessPath == "" || session.EntryURL == "" {
 		_ = ln.Close()
-		return nil, errors.New("Gateway profile session is incomplete")
+		return nil, errors.New("gateway profile session is incomplete")
 	}
 	session.Server = &http.Server{
 		Handler:           s.profileSessionHandler(session),
@@ -928,24 +928,24 @@ func gatewayProfileProxyTransport(policy gatewayenvprofiles.URLTargetPolicy) htt
 			return nil, err
 		}
 		if !gatewayenvprofiles.URLTargetAllowed(host, policy) {
-			return nil, fmt.Errorf("Gateway profile target host is not allowed")
+			return nil, fmt.Errorf("gateway profile target host is not allowed")
 		}
 		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 		if err != nil {
 			return nil, err
 		}
 		if len(ips) == 0 {
-			return nil, fmt.Errorf("Gateway profile target did not resolve")
+			return nil, fmt.Errorf("gateway profile target did not resolve")
 		}
 		var lastErr error
 		for _, resolved := range ips {
 			if !gatewayenvprofiles.URLTargetIPAllowed(resolved.IP, policy) {
-				lastErr = fmt.Errorf("Gateway profile target resolved to a blocked address")
+				lastErr = fmt.Errorf("gateway profile target resolved to a blocked address")
 				continue
 			}
 			addr, ok := netip.AddrFromSlice(resolved.IP)
 			if !ok {
-				lastErr = fmt.Errorf("Gateway profile target resolved to an invalid address")
+				lastErr = fmt.Errorf("gateway profile target resolved to an invalid address")
 				continue
 			}
 			conn, err := baseDialer.DialContext(ctx, network, net.JoinHostPort(addr.String(), port))
@@ -957,7 +957,7 @@ func gatewayProfileProxyTransport(policy gatewayenvprofiles.URLTargetPolicy) htt
 		if lastErr != nil {
 			return nil, lastErr
 		}
-		return nil, fmt.Errorf("Gateway profile target is not reachable")
+		return nil, fmt.Errorf("gateway profile target is not reachable")
 	}
 	return transport
 }

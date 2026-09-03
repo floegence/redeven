@@ -322,7 +322,7 @@ func (c *cli) serviceStopCmd(args []string) int {
 	}
 	if stopErr != nil || !stopped {
 		if stopErr == nil {
-			stopErr = errors.New("Gateway service did not release its state-root lock before the shutdown timeout")
+			stopErr = errors.New("gateway service did not release its state-root lock before the shutdown timeout")
 		}
 		writeError(c.stderr, fmt.Sprintf("service-stop failed: %v", stopErr))
 		return 1
@@ -631,11 +631,11 @@ func waitServiceReady(stateRoot string, expectedPID int) (serviceStatus, error) 
 				}
 				return serviceStatus{}, errors.New(message)
 			}
-			return serviceStatus{}, errors.New("Gateway service exited before it became ready")
+			return serviceStatus{}, errors.New("gateway service exited before it became ready")
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return serviceStatus{}, errors.New("Gateway service did not become ready before the startup timeout")
+	return serviceStatus{}, errors.New("gateway service did not become ready before the startup timeout")
 }
 
 func pidRunning(pid int) bool {

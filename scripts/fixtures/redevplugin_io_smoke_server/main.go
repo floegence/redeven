@@ -30,19 +30,21 @@ func isWebSocketUpgrade(request *http.Request) bool {
 }
 
 func newLocalUIReverseProxy(target *url.URL, publicAuthority, rewriteAuthority string, preserveAuthority bool, diagnostic func(string, ...any)) *httputil.ReverseProxy {
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	originalDirector := proxy.Director
-	proxy.Director = func(request *http.Request) {
-		originalDirector(request)
-		request.Header.Set("Accept-Encoding", "identity")
+	proxy := &httputil.ReverseProxy{}
+	proxy.Rewrite = func(request *httputil.ProxyRequest) {
+		request.SetURL(target)
+		request.SetXForwarded()
+		request.Out.Header.Set("Accept-Encoding", "identity")
+		if preserveAuthority {
+			request.Out.Host = request.In.Host
+		}
 		if !preserveAuthority {
-			request.Host = target.Host
-			if request.Header.Get("Origin") != "" {
-				request.Header.Set("Origin", target.Scheme+"://"+target.Host)
+			if request.Out.Header.Get("Origin") != "" {
+				request.Out.Header.Set("Origin", target.Scheme+"://"+target.Host)
 			}
 		}
 		if diagnostic != nil {
-			diagnostic("local UI proxy request method=%s path=%q websocket=%t", request.Method, request.URL.EscapedPath(), isWebSocketUpgrade(request))
+			diagnostic("local UI proxy request method=%s path=%q websocket=%t", request.Out.Method, request.Out.URL.EscapedPath(), isWebSocketUpgrade(request.Out))
 		}
 	}
 	proxy.ModifyResponse = func(response *http.Response) error {

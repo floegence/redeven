@@ -149,7 +149,7 @@ func validateCatalogTemplate(template catalogTemplate, locales []string) error {
 		}
 	}
 	if template.Deployment == DeploymentCompose && template.ReleaseDiscovery != nil {
-		return errors.New("Compose templates cannot declare single-release discovery")
+		return errors.New("compose templates cannot declare single-release discovery")
 	}
 	return nil
 }

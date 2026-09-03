@@ -295,15 +295,6 @@ func (catalogDockerEngineClient) PullImage(context.Context, containerengine.Engi
 	return containerengine.EngineImageResult{}, errors.New("not implemented")
 }
 
-func templateByID(templates []Template, templateID string) *Template {
-	for i := range templates {
-		if templates[i].TemplateID == templateID {
-			return &templates[i]
-		}
-	}
-	return nil
-}
-
 func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))

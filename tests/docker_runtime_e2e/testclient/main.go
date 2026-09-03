@@ -273,7 +273,7 @@ func loadEnvApp(ctx context.Context, client *http.Client, parsedBase *url.URL) e
 		return err
 	}
 	if resp.StatusCode != http.StatusOK || !bytes.Contains(bytes.ToLower(body), []byte("<html")) {
-		return fmt.Errorf("Env App load returned HTTP %d without HTML", resp.StatusCode)
+		return fmt.Errorf("env App load returned HTTP %d without HTML", resp.StatusCode)
 	}
 	return nil
 }
@@ -405,7 +405,7 @@ func connectFlowersecSession(ctx context.Context, client *http.Client, parsedBas
 
 func commitArtifactSpend(ctx context.Context, client *http.Client, parsedBase *url.URL, origin, attemptID string, scope localSpendScope) error {
 	if client == nil || parsedBase == nil {
-		return errors.New("Local UI artifact spend client is unavailable")
+		return errors.New("local UI artifact spend client is unavailable")
 	}
 	payload, err := json.Marshal(struct {
 		AttemptID            string          `json:"attempt_id"`
@@ -447,7 +447,7 @@ func commitArtifactSpend(ctx context.Context, client *http.Client, parsedBase *u
 
 func connectorTrustRoots(endpoint *url.URL, loadSystemRoots func() (*x509.CertPool, error)) (*x509.CertPool, error) {
 	if endpoint == nil || strings.TrimSpace(endpoint.Hostname()) == "" {
-		return nil, errors.New("Local UI endpoint is unavailable")
+		return nil, errors.New("local UI endpoint is unavailable")
 	}
 	switch strings.ToLower(strings.TrimSpace(endpoint.Scheme)) {
 	case "http":
@@ -466,6 +466,6 @@ func connectorTrustRoots(endpoint *url.URL, loadSystemRoots func() (*x509.CertPo
 		}
 		return trustRoots, nil
 	default:
-		return nil, errors.New("Local UI endpoint must use HTTP or HTTPS")
+		return nil, errors.New("local UI endpoint must use HTTP or HTTPS")
 	}
 }
