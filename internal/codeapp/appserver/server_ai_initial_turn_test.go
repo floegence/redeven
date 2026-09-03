@@ -101,6 +101,11 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 	if secondStatus != http.StatusAccepted || second.ClientRequestID != first.ClientRequestID || second.ThreadID != first.ThreadID || second.Kind != first.Kind || second.TurnID != first.TurnID || second.Current.ViewVersion < first.Current.ViewVersion {
 		t.Fatalf("second status=%d receipt=%#v body=%s, want %#v", secondStatus, second, secondBody, first)
 	}
+	conflictingInitialPayload := strings.Replace(payload, "{", `{"client_request_id":"client_redundant",`, 1)
+	conflictingInitialStatus, _, conflictingInitialBody := post(conflictingInitialPayload, "", "")
+	if conflictingInitialStatus != http.StatusBadRequest {
+		t.Fatalf("redundant initial identity status=%d body=%s", conflictingInitialStatus, conflictingInitialBody)
+	}
 	postExisting := func(body string) (int, ai.SendUserTurnResponse, string) {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+first.ThreadID+"/turns", bytes.NewBufferString(body))
@@ -122,14 +127,18 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		return recorder.Code, response.Data, recorder.Body.String()
 	}
 	existingRequestID := "client_existing_http_223456789012345678901234"
-	existingPayload := `{"client_request_id":"` + existingRequestID + `","thread_id":"` + first.ThreadID + `","input":{"text":"existing request identity","attachments":[]},"options":{}}`
+	existingPayload := `{"client_request_id":"` + existingRequestID + `","input":{"text":"existing request identity","attachments":[]},"options":{}}`
 	existingStatus, existingReceipt, existingBody := postExisting(existingPayload)
 	if existingStatus != http.StatusAccepted || existingReceipt.ClientRequestID != existingRequestID || existingReceipt.ThreadID != first.ThreadID {
 		t.Fatalf("existing status=%d receipt=%#v body=%s", existingStatus, existingReceipt, existingBody)
 	}
-	missingIdentityStatus, _, missingIdentityBody := postExisting(`{"thread_id":"` + first.ThreadID + `","input":{"text":"missing request identity must not persist","attachments":[]},"options":{}}`)
+	missingIdentityStatus, _, missingIdentityBody := postExisting(`{"input":{"text":"missing request identity must not persist","attachments":[]},"options":{}}`)
 	if missingIdentityStatus != http.StatusBadRequest || !strings.Contains(missingIdentityBody, "invalid client_request_id") {
 		t.Fatalf("missing identity status=%d body=%s", missingIdentityStatus, missingIdentityBody)
+	}
+	redundantThreadStatus, _, redundantThreadBody := postExisting(`{"client_request_id":"client_redundant_thread","thread_id":"` + first.ThreadID + `","input":{"text":"redundant thread identity must not persist","attachments":[]},"options":{}}`)
+	if redundantThreadStatus != http.StatusBadRequest || !strings.Contains(redundantThreadBody, "thread_id must be omitted") {
+		t.Fatalf("redundant thread identity status=%d body=%s", redundantThreadStatus, redundantThreadBody)
 	}
 	missingIdentityRead := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+first.ThreadID+"/messages", nil)
 	missingIdentityRead.Header.Set("Origin", origin)
@@ -200,7 +209,7 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		t.Fatalf("welcome canonical read status=%d body=%s", welcomeReadResponse.Code, welcomeReadResponse.Body.String())
 	}
 
-	unknownPayload := `{"thread_id":"th_223456789012345678901235","model":"openai/gpt-5-mini","input":{"text":"must not create","attachments":[]},"options":{}}`
+	unknownPayload := `{"client_request_id":"client_unknown_thread","model":"openai/gpt-5-mini","input":{"text":"must not create","attachments":[]},"options":{}}`
 	unknownRequest := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_223456789012345678901235/turns", bytes.NewBufferString(unknownPayload))
 	unknownRequest.Header.Set("Origin", origin)
 	unknownResponse := httptest.NewRecorder()
@@ -220,7 +229,7 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 			input = legacyField
 			legacyField = ""
 		}
-		legacyPayload := `{"thread_id":"` + first.ThreadID + `",` + input + `,"options":{}`
+		legacyPayload := `{"client_request_id":"client_legacy_shape",` + input + `,"options":{}`
 		if legacyField != "" {
 			legacyPayload += `,` + legacyField
 		}

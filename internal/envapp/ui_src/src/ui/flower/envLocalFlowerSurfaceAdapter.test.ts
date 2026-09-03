@@ -1199,7 +1199,7 @@ describe('Env local Flower surface adapter', () => {
     expect(uploadAttachment).not.toHaveBeenCalled();
     expect(subscribeThread).not.toHaveBeenCalled();
     expect(turnBodies[0]).toMatchObject({
-      thread_id: 'thread_upload',
+      client_request_id: 'client_upload',
       staging_scope_id: 'staging_thread_upload',
       input: {
         text: 'review notes',
@@ -1207,6 +1207,7 @@ describe('Env local Flower surface adapter', () => {
         context_action: contextAction,
       },
     });
+    expect(turnBodies[0]).not.toHaveProperty('thread_id');
     expect(new Headers(turnHeaders[0]).get('Upload-Staging-Capability')).toBe('secret_thread_upload');
     expect(JSON.stringify(turnBodies[0])).not.toContain('secret_thread_upload');
     expect(turnBodies[0]).not.toHaveProperty('draft_id');
@@ -1343,9 +1344,9 @@ describe('Env local Flower surface adapter', () => {
 
     expect(body).toMatchObject({
       client_request_id: 'client_existing_send',
-      thread_id: 'thread_existing',
       input: { text: 'hello' },
     });
+    expect(body).not.toHaveProperty('thread_id');
   });
 
   it('passes reasoning selection through create thread and turn launch', async () => {
@@ -1555,7 +1556,11 @@ describe('Env local Flower surface adapter', () => {
       thread_id: 'thread_existing',
       prompt: 'send once',
     }).catch((error: unknown) => error);
-    expect(definiteFailure).toMatchObject({ name: 'LocalApiError', code: 'turn_rejected' });
+    expect(definiteFailure).toMatchObject({
+      name: 'FlowerTurnAdmissionError',
+      admission_kind: 'rejected',
+      code: 'turn_rejected',
+    });
     expect(definiteFailure).not.toHaveProperty('uncertain_admission');
 
     turnOutcome = 'transport';
@@ -1563,7 +1568,7 @@ describe('Env local Flower surface adapter', () => {
       client_request_id: 'client_transport',
       thread_id: 'thread_existing',
       prompt: 'send once',
-    })).rejects.toThrow('transport disconnected');
+    })).rejects.toMatchObject({ message: 'transport disconnected', admission_kind: 'unknown' });
 
     turnOutcome = 'malformed';
     await expect(createAdapter().launchTurn({
@@ -1582,6 +1587,7 @@ describe('Env local Flower surface adapter', () => {
       prompt: 'send once',
     })).rejects.toMatchObject({
       code: 'INVALID_JSON_RESPONSE',
+      admission_kind: 'unknown',
     });
   });
 
@@ -1637,12 +1643,13 @@ describe('Env local Flower surface adapter', () => {
       model: expect.anything(),
     }));
     expect(turnBodies[0]).toEqual(expect.objectContaining({
-      thread_id: 'thread_existing',
+      client_request_id: 'client_existing',
       input: expect.objectContaining({
         text: 'continue existing thread',
         attachments: [],
       }),
     }));
+    expect(turnBodies[0]).not.toHaveProperty('thread_id');
     expect((turnBodies[0] as { input: Record<string, unknown> }).input).not.toHaveProperty('attachment_ids');
   });
 

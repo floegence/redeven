@@ -745,6 +745,7 @@
     "youLabel": "你",
     "replyToFlowerLabel": "回覆 Flower",
     "launchTurn": "傳送訊息",
+    "admissionUnknownTitle": "傳送結果仍在確認中。重試會核對同一筆請求。",
     "contextPreviewTitle": "情境預覽",
     "contextFallback": "情境",
     "terminalFallback": "終端機",

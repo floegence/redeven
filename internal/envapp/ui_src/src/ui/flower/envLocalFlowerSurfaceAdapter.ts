@@ -21,7 +21,6 @@ import type {
   FlowerPermissionType,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
-  FlowerTurnLaunchReceipt,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerModelSourceModel,
@@ -42,7 +41,12 @@ import {
 import {
   createFlowerClientRequestID,
 } from '../../../../../flower_ui/src/flowerRequestIdentity';
-import { normalizeFlowerTurnLaunchReceipt } from '../../../../../flower_ui/src/turnLaunchReceipt';
+import {
+  buildFlowerTurnHTTPBody,
+  flowerTurnAdmissionError,
+  normalizeFlowerTurnLaunchReceipt,
+  type FlowerTurnHTTPResponse,
+} from '../../../../../flower_ui/src/flowerTurnAdmission';
 import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
@@ -110,16 +114,6 @@ type ThreadReadStatus = FlowerThreadReadStatus;
 type LoadThreadResponse = Readonly<{
   client_request_id?: string;
   thread?: ThreadView;
-}>;
-
-type SendTurnResponse = Readonly<{
-  client_request_id?: string;
-  thread_id?: string;
-  run_id?: string;
-  turn_id?: string;
-  queue_id?: string;
-  kind?: string;
-  current?: FlowerTurnLaunchReceipt['current'];
 }>;
 
 type SubmitInputResponse = Readonly<{
@@ -910,52 +904,41 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         throw new Error('Flower attachments require a staging scope.');
       }
       let turnModelID = trim(input.model_id);
-      let createBody: Record<string, unknown> | undefined;
       if (!existingThreadID) {
         if (!models) throw new Error('Flower model catalog is unavailable.');
         turnModelID = turnModelID || currentModelID(snapshot!, models);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
-        createBody = {
-          client_request_id: clientRequestID,
-          title: '',
-          model_id: turnModelID,
-          ...(permissionType ? { permission_type: permissionType } : {}),
-        };
-        const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
-        if (reasoningSelection) {
-          createBody.reasoning_selection = reasoningSelection;
-        }
-        if (trim(input.working_dir)) {
-          createBody.working_dir = trim(input.working_dir);
-        }
       }
       const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;
-        const endpoint = existingThreadID
-          ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
-          : '/_redeven_proxy/api/ai/turns';
-        const response = await fetchLocalApiJSON<SendTurnResponse>(
-          endpoint,
+      const requestBody = buildFlowerTurnHTTPBody({
+        launch: input,
+        modelID: turnModelID,
+        permissionType,
+        contextAction,
+        attachmentIDs,
+        reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection),
+      });
+      let response: FlowerTurnHTTPResponse;
+      try {
+        response = await fetchLocalApiJSON<FlowerTurnHTTPResponse>(
+          existingThreadID
+            ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
+            : '/_redeven_proxy/api/ai/turns',
           {
             method: 'POST',
             ...(stagingHeaders ? { headers: stagingHeaders } : {}),
-            body: JSON.stringify({
-              client_request_id: clientRequestID,
-              ...(existingThreadID ? { thread_id: existingThreadID } : {}),
-              ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
-              ...(turnModelID ? { model: turnModelID } : {}),
-              input: {
-                text: prompt,
-                attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
-                ...(contextAction ? { context_action: contextAction } : {}),
-              },
-              options: {
-                ...(permissionType ? { permission_type: permissionType } : {}),
-                ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
-              },
-              ...(createBody ? { create: createBody } : {}),
-            }),
+            body: JSON.stringify(requestBody),
           },
         );
+      } catch (error) {
+        if (error instanceof LocalApiError) {
+          const responseWasUnusable = error.code === 'INVALID_JSON_RESPONSE'
+            && error.status >= 200
+            && error.status < 300;
+          throw flowerTurnAdmissionError(responseWasUnusable ? 'unknown' : 'rejected', error);
+        }
+        throw flowerTurnAdmissionError('unknown', error, 'Flower response was not received.');
+      }
       return normalizeFlowerTurnLaunchReceipt(response, { clientRequestID, existingThreadID });
     },
     retryThread: async (threadID) => {

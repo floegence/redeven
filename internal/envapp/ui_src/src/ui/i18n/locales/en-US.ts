@@ -1520,6 +1520,7 @@ export const enUS = defineDictionary({
     youLabel: 'You',
     replyToFlowerLabel: 'Reply to Flower',
     launchTurn: 'Send message',
+    admissionUnknownTitle: 'Delivery is still being confirmed. Retry to check the same request.',
     contextPreviewTitle: 'Context preview',
     contextFallback: 'Context',
     terminalFallback: 'Terminal',

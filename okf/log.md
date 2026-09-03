@@ -10,6 +10,12 @@
   gateway maps redirects under the current protected Forward back to the
   isolated application root, and Registry v5 migrates existing template and
   progress documents atomically.
+* **Unified Flower turn admission**: Welcome and in-product launchers allocate
+  one request ID per open intent and reuse it after an unresolved response.
+  Desktop and Env App share one mutually exclusive HTTP request shape and one
+  strict receipt classifier. Explicit rejection is the only send failure;
+  disconnects and unusable success receipts preserve the original request for
+  reconciliation, while the launcher owns the only inline presentation.
 * **Stable Flower request identity**: Desktop existing-thread sends now carry
   the original top-level client request ID, and accepted receipts must echo the
   exact request and Thread identities. The core service rejects missing IDs;

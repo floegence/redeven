@@ -8,6 +8,7 @@ import type {
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
 import {
   adapter,
   blockedDecision,
@@ -1237,6 +1238,106 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect(flowerSurfaceNotifications().filter((notification) => notification.tone === 'error')).toEqual([]);
+  });
+
+  it('reconciles an unknown send with the same request identity without restoring the draft or reporting failure', async () => {
+    clearFlowerSurfaceNotifications();
+    const threadID = 'thread-response-lost';
+    const initial = thread({
+      thread_id: threadID,
+      title: 'Response lost',
+      status: 'idle',
+      messages: [],
+    });
+    let attempts = 0;
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw flowerTurnAdmissionError('unknown', new Error('response lost'));
+      }
+      const receipt = launchReceipt(threadID, 'turn-response-lost', 'start', input.client_request_id);
+      return {
+        ...receipt,
+        current: {
+          ...receipt.current,
+          view_version: 2,
+          items: [{
+            id: `user:${input.client_request_id}`,
+            turn_id: 'turn-response-lost',
+            run_id: 'turn-response-lost',
+            ordinal: 1,
+            kind: 'user' as const,
+            text: input.prompt,
+          }],
+        },
+      };
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [initial]),
+      loadThread: vi.fn(async () => liveBootstrap(initial, 1)),
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'send exactly once';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => launchTurn.mock.calls.length === 2);
+    expect(launchTurn.mock.calls[0]?.[0].client_request_id).toBe(launchTurn.mock.calls[1]?.[0].client_request_id);
+    await waitFor(() => runtime.querySelectorAll('[data-flower-message-role="user"]').length === 1);
+    expect(runtime.textContent).toContain('send exactly once');
+    expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(flowerSurfaceNotifications().filter((notification) => notification.tone === 'error')).toEqual([]);
+  });
+
+  it('restores the draft and reports one error when an unresolved send is later rejected', async () => {
+    clearFlowerSurfaceNotifications();
+    const threadID = 'thread-retry-rejected';
+    const initial = thread({
+      thread_id: threadID,
+      title: 'Retry rejected',
+      status: 'idle',
+      messages: [],
+    });
+    let attempts = 0;
+    const launchTurn = vi.fn(async (_input: FlowerTurnLaunchInput) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw flowerTurnAdmissionError('unknown', new Error('response lost'));
+      }
+      throw flowerTurnAdmissionError('rejected', new Error('request rejected'));
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [initial]),
+      loadThread: vi.fn(async () => liveBootstrap(initial, 1)),
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'restore after rejection';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => launchTurn.mock.calls.length === 2);
+    expect(launchTurn.mock.calls[0]?.[0].client_request_id).toBe(launchTurn.mock.calls[1]?.[0].client_request_id);
+    await waitFor(() => (runtime.querySelector('textarea') as HTMLTextAreaElement).value === 'restore after rejection');
+    expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
+    expect(flowerSurfaceNotifications()).toEqual([expect.objectContaining({
+      tone: 'error',
+      message: 'request rejected',
+    })]);
   });
 
   it('preserves the draft, restores Stop, and deduplicates active-turn admission errors', async () => {

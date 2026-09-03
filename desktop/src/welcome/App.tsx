@@ -127,7 +127,6 @@ import {
   FlowerSurface,
   FlowerTurnLauncherWindow,
 	createFlowerComposerDraftCoordinator,
-	createFlowerClientRequestID,
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
   type FlowerTurnLauncherSubmitInput,
@@ -6217,7 +6216,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       throw new Error(i18n().t('environmentCenter.askFlowerCardNoMessage'));
     }
     const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
-      client_request_id: createFlowerClientRequestID(),
+      client_request_id: input.client_request_id,
       prompt,
       context_action: input.intent.context_action,
       working_dir: input.intent.suggested_working_dir,
@@ -6556,6 +6555,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           send_turn: i18n().t('environmentCenter.askFlowerCardSend'),
           empty_message: i18n().t('environmentCenter.askFlowerCardNoMessage'),
           launch_failed_title: i18n().t('environmentCenter.askFlowerCardLaunchFailedTitle'),
+          launch_unknown_title: i18n().t('environmentCenter.askFlowerCardAdmissionUnknownTitle'),
           prompt: {
             environment_question: i18n().t('environmentCenter.askFlowerLauncherQuestion'),
             environment_placeholder: i18n().t('environmentCenter.askFlowerLauncherPlaceholder'),

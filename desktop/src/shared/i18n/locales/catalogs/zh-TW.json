@@ -1271,6 +1271,7 @@
     "askFlowerCardSending": "正在傳送...",
     "askFlowerWorkingDirectoryUnavailable": "未選擇工作目錄。",
     "askFlowerCardLaunchFailedTitle": "Flower 無法發起這次對話。",
+    "askFlowerCardAdmissionUnknownTitle": "傳送結果仍在確認中。重試會核對同一筆請求。",
     "addConnectionLauncherPrompt": "開啟 launcher 以新增 connection。",
     "addProviderLauncherPrompt": "開啟啟動器新增 Redeven Cloud。",
     "addGatewayLauncherPrompt": "開啟啟動器以新增網關。",

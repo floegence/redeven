@@ -173,17 +173,25 @@ describe('shared Flower UI boundary', () => {
 
   it('keeps Welcome launch failures owned by one inline semantic error alert', () => {
     const appSrc = readText(path.join(repoRoot, 'desktop', 'src', 'welcome', 'App.tsx'));
+    const envShellSrc = readText(path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'EnvAppShell.tsx'));
     const launcherSrc = readText(path.join(flowerRoot, 'FlowerTurnLauncherWindow.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
     const submitStart = appSrc.indexOf('async function submitFlowerTurnLauncher');
     const submitEnd = appSrc.indexOf('async function openEnvironmentCenterSurface', submitStart);
     const submitSource = appSrc.slice(submitStart, submitEnd);
+    const envSubmitStart = envShellSrc.indexOf('const submitFlowerTurnLauncher');
+    const envSubmitEnd = envShellSrc.indexOf('const RECENT_AGENT_RX_MS', envSubmitStart);
+    const envSubmitSource = envShellSrc.slice(envSubmitStart, envSubmitEnd);
     const errorRule = cssSrc.match(/\.flower-turn-launcher-error\s*\{[^}]+\}/u)?.[0] ?? '';
 
     expect(submitStart).toBeGreaterThanOrEqual(0);
     expect(submitEnd).toBeGreaterThan(submitStart);
     expect(submitSource).not.toContain("showActionToast(getErrorMessage(error), 'error')");
-    expect(launcherSrc).toContain('<div role="alert" class="flower-turn-launcher-error">');
+    expect(envSubmitStart).toBeGreaterThanOrEqual(0);
+    expect(envSubmitEnd).toBeGreaterThan(envSubmitStart);
+    expect(envSubmitSource).not.toContain('notify.error');
+    expect(launcherSrc).toContain("role={launchErrorKind() === 'unknown' ? 'status' : 'alert'}");
+    expect(launcherSrc).toContain("'flower-turn-launcher-error'");
     expect(errorRule).toContain('color: var(--error);');
     expect(errorRule).not.toContain('var(--destructive)');
   });

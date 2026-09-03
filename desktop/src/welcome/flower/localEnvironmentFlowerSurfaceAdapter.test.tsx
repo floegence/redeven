@@ -473,9 +473,9 @@ describe('Local Environment Flower surface adapter', () => {
     });
     expect(requestBody).toMatchObject({
       client_request_id: 'client-request',
-      thread_id: 'thread-existing',
       input: { text: 'send once', attachments: [] },
     });
+    expect(requestBody).not.toHaveProperty('thread_id');
   });
 
   it.each([
@@ -591,7 +591,7 @@ describe('Local Environment Flower surface adapter', () => {
               message: 'Flower returned an invalid JSON response.',
               status: 200,
             },
-            failureKind: 'response' as const,
+            failureKind: 'transport_unknown' as const,
           };
         }
         throw new Error(`unexpected path: ${request.path}`);

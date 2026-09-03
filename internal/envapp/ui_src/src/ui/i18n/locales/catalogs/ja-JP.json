@@ -745,6 +745,7 @@
     "youLabel": "あなた",
     "replyToFlowerLabel": "Flower に返信",
     "launchTurn": "メッセージを送信",
+    "admissionUnknownTitle": "送信結果を確認中です。再試行すると同じリクエストを確認します。",
     "contextPreviewTitle": "コンテキストプレビュー",
     "contextFallback": "コンテキスト",
     "terminalFallback": "ターミナル",

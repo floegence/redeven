@@ -4285,6 +4285,17 @@ html.dark .flower-component-shell {
   line-height: 1.35;
 }
 
+.flower-turn-launcher-unknown {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.375rem;
+  margin: 0.375rem 0.25rem 0;
+  color: var(--redeven-status-warning-foreground);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 @media (max-width: 640px) {
   .flower-turn-launcher-dock {
     padding-bottom: env(safe-area-inset-bottom, 0);

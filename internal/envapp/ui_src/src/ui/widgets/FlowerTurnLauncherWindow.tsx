@@ -50,6 +50,7 @@ function createFlowerTurnLauncherCopy(i18n: ReturnType<typeof useI18n>): FlowerT
     ready: i18n.t('common.status.ready'),
     close: i18n.t('common.actions.close'),
     launch_failed_title: i18n.t('shell.notifications.failedToSendToFlowerTitle'),
+    launch_unknown_title: i18n.t('flowerTurnLauncher.admissionUnknownTitle'),
     context: {
       environment_fallback: i18n.t('flowerTurnLauncher.context.environmentFallback'),
       context_fallback: i18n.t('flowerTurnLauncher.contextFallback'),

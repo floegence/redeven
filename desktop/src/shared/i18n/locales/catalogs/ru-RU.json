@@ -1273,6 +1273,7 @@
     "askFlowerCardSending": "Отправка...",
     "askFlowerWorkingDirectoryUnavailable": "Рабочая папка не выбрана.",
     "askFlowerCardLaunchFailedTitle": "Flower не удалось начать этот ход.",
+    "askFlowerCardAdmissionUnknownTitle": "Доставка ещё подтверждается. Повторная попытка проверит тот же запрос.",
     "addConnectionLauncherPrompt": "Откройте launcher, чтобы добавить подключение.",
     "addProviderLauncherPrompt": "Откройте панель запуска, чтобы добавить Redeven Cloud.",
     "addGatewayLauncherPrompt": "Откройте панель запуска, чтобы добавить шлюз.",

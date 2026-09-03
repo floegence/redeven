@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 
 import type { FlowerTurnLauncherIntent } from './contracts/flowerSurfaceContracts';
-import { FlowerTurnLauncherPanel } from './FlowerTurnLauncherWindow';
+import {
+  FlowerTurnLauncherPanel,
+  type FlowerTurnLauncherSubmitInput,
+} from './FlowerTurnLauncherWindow';
+import { flowerTurnAdmissionError } from './flowerTurnAdmission';
 
 const intent: FlowerTurnLauncherIntent = {
   id: 'launcher-panel-test',
@@ -34,6 +38,9 @@ beforeEach(() => {
   host = document.createElement('div');
   document.body.append(host);
   animationFrameCallbacks = [];
+  vi.stubGlobal('crypto', {
+    randomUUID: vi.fn(() => '00000000-0000-4000-8000-000000000001'),
+  });
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     animationFrameCallbacks.push(callback);
     return animationFrameCallbacks.length;
@@ -105,7 +112,11 @@ describe('FlowerTurnLauncherPanel', () => {
     sendButton.click();
     await flushAsync();
 
-    expect(onSubmit).toHaveBeenCalledWith({ prompt: 'explain the failure', intent });
+    expect(onSubmit).toHaveBeenCalledWith({
+      client_request_id: 'client_00000000-0000-4000-8000-000000000001',
+      prompt: 'explain the failure',
+      intent,
+    });
     expect(textarea.disabled).toBe(true);
     expect(sendButton.disabled).toBe(true);
     expect(host.textContent).toContain('Sending');
@@ -144,5 +155,26 @@ describe('FlowerTurnLauncherPanel', () => {
     await flushAsync();
 
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('runtime unavailable');
+  });
+
+  it('reuses one client request identity when an unresolved submission is retried', async () => {
+    let attempts = 0;
+    const onSubmit = vi.fn(async (_input: FlowerTurnLauncherSubmitInput) => {
+      attempts += 1;
+      if (attempts === 1) throw flowerTurnAdmissionError('unknown', new Error('response lost'));
+    });
+    renderPanel({ onSubmit });
+
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    sendButton.click();
+    await flushAsync();
+    expect((host.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    sendButton.click();
+    await flushAsync();
+
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect(onSubmit.mock.calls[0]?.[0].client_request_id).toBe(
+      onSubmit.mock.calls[1]?.[0].client_request_id,
+    );
   });
 });
