@@ -242,7 +242,12 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
-	ts, err := threadstore.Open(threadsPath)
+	pendingInputMigration := &pendingInputMigrationState{}
+	ts, err := threadstore.OpenWithPendingInputMigration(
+		ctx,
+		threadsPath,
+		newPendingInputMigrationHandler(opts, floretBootstrap.threadRuntime, floretBootstrap.effects, pendingInputMigration),
+	)
 	if err != nil {
 		_ = floretBootstrap.close()
 		return nil, err
@@ -342,9 +347,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	svc.typedSendOps = make(map[string]*typedSendOperation)
 	svc.floretEffects.bind(svc)
-	if err := svc.importPendingInputs(ctx); err != nil {
+	if err := svc.resumeMigratedPendingInputs(ctx, pendingInputMigration.threadIDs); err != nil {
 		closeServiceBeforeMaintenance(svc)
-		return nil, fmt.Errorf("import pending inputs: %w", err)
+		return nil, fmt.Errorf("resume migrated pending inputs: %w", err)
 	}
 	svc.startFlowerRuntimeViewPump()
 	uploadRecoveryCtx, cancelUploadRecovery := context.WithTimeout(ctx, persistTO)

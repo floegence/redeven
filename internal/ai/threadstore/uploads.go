@@ -101,16 +101,6 @@ type UploadAttemptRecord struct {
 	UpdatedAtUnixMs    int64
 }
 
-type UploadRefRecord struct {
-	ID              int64  `json:"id"`
-	EndpointID      string `json:"endpoint_id"`
-	UploadID        string `json:"upload_id"`
-	ThreadID        string `json:"thread_id"`
-	RefKind         string `json:"ref_kind"`
-	RefID           string `json:"ref_id"`
-	CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
-}
-
 type SQLitePageStats struct {
 	PageSize       int64
 	PageCount      int64

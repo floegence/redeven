@@ -1,6 +1,7 @@
 package threadstore
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -9,7 +10,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
-	threadstoreCurrentSchemaVersion = 4
+	threadstoreCurrentSchemaVersion = 5
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -18,6 +19,10 @@ func CurrentSchemaVersion() int {
 }
 
 func threadstoreSchemaSpec() sqliteutil.Spec {
+	return threadstoreSchemaSpecWithPendingInputMigration(nil, nil)
+}
+
+func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate PendingInputMigrationHandler) sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           threadstoreSchemaKind,
 		CurrentVersion: threadstoreCurrentSchemaVersion,
@@ -28,6 +33,9 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 1, ToVersion: 2, Apply: migrateThreadstoreV1ToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateThreadstoreV2ToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateThreadstoreV3ToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: func(tx *sql.Tx) error {
+				return migrateThreadstoreV4ToV5(ctx, tx, migrate)
+			}},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -58,7 +66,6 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		return err
 	}
 	builders := []func(*sql.Tx) error{
-		createPendingInputImportsTableTx,
 		createProviderCapabilitiesTableTx,
 		createUploadTablesTx,
 		createUploadStagingScopesTableTx,
@@ -215,17 +222,15 @@ func createUploadTablesTx(tx *sql.Tx) error {
 	}
 	_, err := tx.Exec(`
 CREATE TABLE ai_upload_refs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
   endpoint_id TEXT NOT NULL,
   upload_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   ref_kind TEXT NOT NULL,
   ref_id TEXT NOT NULL,
-  created_at_unix_ms INTEGER NOT NULL
-);
-CREATE UNIQUE INDEX idx_ai_upload_refs_unique_ref ON ai_upload_refs(endpoint_id, upload_id, ref_kind, ref_id);
+  created_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY(endpoint_id, upload_id, ref_kind, ref_id)
+) WITHOUT ROWID;
 CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id);
-CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id);
 `)
 	return err
 }

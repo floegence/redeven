@@ -261,6 +261,10 @@ func normalizeReviewedSchemaSQL(value string) string {
 }
 
 func compareReviewedSchemas(actual, expected reviewedSchemaSnapshot) error {
+	if expected.Version >= 5 {
+		actual = withoutSQLiteSequence(actual)
+		expected = withoutSQLiteSequence(expected)
+	}
 	if reflect.DeepEqual(actual, expected) {
 		return nil
 	}
@@ -279,6 +283,24 @@ func compareReviewedSchemas(actual, expected reviewedSchemaSnapshot) error {
 		return fmt.Errorf("table_xinfo or index_list differs (actual tables=%d, expected=%d)", len(actual.Tables), len(expected.Tables))
 	}
 	return fmt.Errorf("index_xinfo differs (actual indexes=%d, expected=%d)", len(actual.Indexes), len(expected.Indexes))
+}
+
+func withoutSQLiteSequence(snapshot reviewedSchemaSnapshot) reviewedSchemaSnapshot {
+	objects := snapshot.Objects[:0:0]
+	for _, object := range snapshot.Objects {
+		if object.Name != "sqlite_sequence" {
+			objects = append(objects, object)
+		}
+	}
+	snapshot.Objects = objects
+	tables := snapshot.Tables[:0:0]
+	for _, table := range snapshot.Tables {
+		if table.Name != "sqlite_sequence" {
+			tables = append(tables, table)
+		}
+	}
+	snapshot.Tables = tables
+	return snapshot
 }
 
 func quoteReviewedIdentifier(name string) string {

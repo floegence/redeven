@@ -1,7 +1,10 @@
 package threadstore
 
 import (
+	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,23 +16,232 @@ import (
 func TestPendingInputMigrationPreservesStableRequestOrder(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	createReviewedV1DatabaseForTest(t, path)
-	store, err := Open(path)
+	var migrated []PendingInputMigrationRecord
+	store, err := OpenWithPendingInputMigration(t.Context(), path, func(_ context.Context, _ PendingInputMigrationSource, records []PendingInputMigrationRecord) ([]ExecutionAuthority, error) {
+		migrated = append(migrated, records...)
+		authorities := make([]ExecutionAuthority, 0, len(records))
+		for _, record := range records {
+			authorities = append(authorities, ExecutionAuthority{
+				RequestKey: record.RequestID, ThreadID: record.ThreadID, EndpointID: record.EndpointID,
+				NamespacePublicID: "ns_queue_migration", ChannelID: "ch_queue_migration", UserPublicID: "user_queue_migration",
+			})
+		}
+		return authorities, nil
+	})
 	if err != nil {
 		t.Fatalf("open and migrate v1 threadstore: %v", err)
 	}
 	defer store.Close()
-	records, err := store.ListPendingInputImports(t.Context(), 10)
+	if len(migrated) != 2 || migrated[0].RequestID != "request_queue_1" || migrated[1].RequestID != "request_queue_2" || migrated[0].TextContent != "first" || migrated[1].TextContent != "second" {
+		t.Fatalf("migrated pending input order=%#v", migrated)
+	}
+	assertCurrentSchemaHasNoRetiredPendingStorage(t, store.db)
+}
+
+func TestPendingInputMigrationFailureRollsBackWithoutStaging(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	createReviewedV1DatabaseForTest(t, path)
+	wantErr := errors.New("canonical import unavailable")
+	store, err := OpenWithPendingInputMigration(t.Context(), path, func(context.Context, PendingInputMigrationSource, []PendingInputMigrationRecord) ([]ExecutionAuthority, error) {
+		return nil, wantErr
+	})
+	if store != nil {
+		_ = store.Close()
+		t.Fatal("failed migration returned a store")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("migration error=%v, want %v", err, wantErr)
+	}
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 2 || records[0].RequestID != "request_queue_1" || records[1].RequestID != "request_queue_2" || records[0].TextContent != "first" || records[1].TextContent != "second" {
-		t.Fatalf("migrated pending input order=%#v", records)
+	defer db.Close()
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != 1 {
+		t.Fatalf("version after rollback=%d, want 1", version)
+	}
+	var sourceRows, stagingTables int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ai_queued_turns`).Scan(&sourceRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ai_pending_input_imports'`).Scan(&stagingTables); err != nil {
+		t.Fatal(err)
+	}
+	if sourceRows != 2 || stagingTables != 0 {
+		t.Fatalf("rollback source rows=%d staging tables=%d, want 2 and 0", sourceRows, stagingTables)
+	}
+}
+
+func TestThreadstoreV4ToV5PreservesUploadRefsAndReopensCleanly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	createReviewedVersionDatabaseForTest(t, path, 4)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO ai_upload_refs(id, endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(41, 'env_ref_migration', 'upload_ref_migration', 'thread_ref_migration', 'thread', 'message_ref_migration', 1234)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO ai_pending_input_imports(request_id, endpoint_id, thread_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json, created_at_unix_ms, imported_at_unix_ms) VALUES('request_already_imported', 'env_old', 'thread_old', 'openai/gpt-5-mini', 'already canonical', '[]', '', '{}', '{}', 1, 2)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := Open(path)
+	if err != nil {
+		t.Fatalf("migrate v4 threadstore: %v", err)
+	}
+	assertMigratedUploadRefForTest(t, store.db)
+	assertCurrentSchemaHasNoRetiredPendingStorage(t, store.db)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen current threadstore: %v", err)
+	}
+	defer reopened.Close()
+	assertMigratedUploadRefForTest(t, reopened.db)
+	assertCurrentSchemaHasNoRetiredPendingStorage(t, reopened.db)
+}
+
+func TestPendingInputMigrationAuthorityConflictRollsBackRetiredSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	createReviewedVersionDatabaseForTest(t, path, 4)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO ai_pending_input_imports(request_id, endpoint_id, thread_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json, created_at_unix_ms) VALUES('request_conflict', 'env_source', 'thread_source', 'openai/gpt-5-mini', 'source input', '[]', '', '{}', '{}', 10)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO ai_flower_execution_authority(request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms) VALUES('request_conflict', 'thread_other', '', 'env_other', 'ns', 'ch', 'user', '', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := OpenWithPendingInputMigration(t.Context(), path, func(_ context.Context, _ PendingInputMigrationSource, records []PendingInputMigrationRecord) ([]ExecutionAuthority, error) {
+		if len(records) != 1 || records[0].RequestID != "request_conflict" {
+			t.Fatalf("migration records=%#v", records)
+		}
+		return []ExecutionAuthority{{
+			RequestKey: "request_conflict", ThreadID: "thread_source", EndpointID: "env_source",
+			NamespacePublicID: "ns", ChannelID: "ch", UserPublicID: "user",
+		}}, nil
+	})
+	if store != nil {
+		_ = store.Close()
+		t.Fatal("conflicting migration returned a store")
+	}
+	if !errors.Is(err, ErrExecutionAuthorityConflict) {
+		t.Fatalf("migration error=%v, want %v", err, ErrExecutionAuthorityConflict)
+	}
+	db, err = sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var version, sourceRows int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ai_pending_input_imports WHERE request_id = 'request_conflict'`).Scan(&sourceRows); err != nil {
+		t.Fatal(err)
+	}
+	if version != 4 || sourceRows != 1 {
+		t.Fatalf("rolled back version=%d source rows=%d, want 4 and 1", version, sourceRows)
+	}
+}
+
+func assertMigratedUploadRefForTest(t *testing.T, db *sql.DB) {
+	t.Helper()
+	var endpointID, uploadID, threadID, refKind, refID string
+	var createdAtUnixMs int64
+	if err := db.QueryRow(`SELECT endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms FROM ai_upload_refs`).Scan(
+		&endpointID, &uploadID, &threadID, &refKind, &refID, &createdAtUnixMs,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if endpointID != "env_ref_migration" || uploadID != "upload_ref_migration" || threadID != "thread_ref_migration" || refKind != "thread" || refID != "message_ref_migration" || createdAtUnixMs != 1234 {
+		t.Fatalf("migrated upload ref=(%q, %q, %q, %q, %q, %d)", endpointID, uploadID, threadID, refKind, refID, createdAtUnixMs)
+	}
+}
+
+func assertCurrentSchemaHasNoRetiredPendingStorage(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, name := range []string{"ai_pending_input_imports", "sqlite_sequence"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, name).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("retired table %s remains", name)
+		}
+	}
+	rows, err := db.Query(`PRAGMA table_xinfo(ai_upload_refs)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, primaryKey, hidden int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey, &hidden); err != nil {
+			t.Fatal(err)
+		}
+		if name == "id" {
+			t.Fatal("retired ai_upload_refs.id remains")
+		}
 	}
 }
 
 func createReviewedV1DatabaseForTest(t *testing.T, path string) {
 	t.Helper()
-	snapshot, err := reviewedProductSchemaContract(1)
+	createReviewedVersionDatabaseForTest(t, path, 1)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`INSERT INTO ai_thread_settings(thread_id, endpoint_id, namespace_public_id, model_id, permission_type, queue_revision, settings_created_at_unix_ms, settings_updated_at_unix_ms) VALUES('thread_queue_migration', 'env_queue_migration', 'ns_queue_migration', 'openai/gpt-5-mini', 'approval_required', 2, 1, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	metaJSON := `{"channel_id":"ch_queue_migration","endpoint_id":"env_queue_migration","namespace_public_id":"ns_queue_migration","user_public_id":"user_queue_migration","can_read":true,"can_write":true,"can_execute":true}`
+	for _, input := range []struct {
+		requestID string
+		text      string
+		createdAt int64
+	}{
+		{requestID: "request_queue_1", text: "first", createdAt: 10},
+		{requestID: "request_queue_2", text: "second", createdAt: 20},
+	} {
+		if _, err := tx.Exec(`INSERT INTO ai_queued_turns(queue_id, endpoint_id, thread_id, channel_id, lane, sort_index, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json, created_at_unix_ms, updated_at_unix_ms) VALUES(?, 'env_queue_migration', 'thread_queue_migration', 'ch_queue_migration', 'queued', ?, 'openai/gpt-5-mini', ?, '[]', '', '{}', ?, ?, ?)`, input.requestID, input.createdAt, input.text, metaJSON, input.createdAt, input.createdAt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func createReviewedVersionDatabaseForTest(t *testing.T, path string, version int) {
+	t.Helper()
+	snapshot, err := reviewedProductSchemaContract(version)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +261,7 @@ func createReviewedV1DatabaseForTest(t *testing.T, path string) {
 				continue
 			}
 			if _, err := tx.Exec(object.SQL); err != nil {
-				t.Fatalf("create v1 %s %s: %v", object.Type, object.Name, err)
+				t.Fatalf("create reviewed v%d %s %s: %v", version, object.Type, object.Name, err)
 			}
 		}
 	}
@@ -71,30 +283,14 @@ func createReviewedV1DatabaseForTest(t *testing.T, path string) {
 			continue
 		}
 		if _, err := tx.Exec(object.SQL); err != nil {
-			t.Fatalf("create v1 index %s: %v", object.Name, err)
+			t.Fatalf("create reviewed v%d index %s: %v", version, object.Name, err)
 		}
 	}
 	if _, err := tx.Exec(`INSERT INTO __redeven_db_meta(singleton, db_kind, created_at_unix_ms, last_migrated_at_unix_ms, last_migrated_from_version, last_migrated_to_version) VALUES(1, 'ai_threadstore_product_v1', 1, 0, 0, 0)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(`PRAGMA user_version = 1`); err != nil {
+	if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, version)); err != nil {
 		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`INSERT INTO ai_thread_settings(thread_id, endpoint_id, namespace_public_id, model_id, permission_type, queue_revision, settings_created_at_unix_ms, settings_updated_at_unix_ms) VALUES('thread_queue_migration', 'env_queue_migration', 'ns_queue_migration', 'openai/gpt-5-mini', 'approval_required', 2, 1, 1)`); err != nil {
-		t.Fatal(err)
-	}
-	metaJSON := `{"channel_id":"ch_queue_migration","endpoint_id":"env_queue_migration","namespace_public_id":"ns_queue_migration","user_public_id":"user_queue_migration","can_read":true,"can_write":true,"can_execute":true}`
-	for _, input := range []struct {
-		requestID string
-		text      string
-		createdAt int64
-	}{
-		{requestID: "request_queue_1", text: "first", createdAt: 10},
-		{requestID: "request_queue_2", text: "second", createdAt: 20},
-	} {
-		if _, err := tx.Exec(`INSERT INTO ai_queued_turns(queue_id, endpoint_id, thread_id, channel_id, lane, sort_index, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json, created_at_unix_ms, updated_at_unix_ms) VALUES(?, 'env_queue_migration', 'thread_queue_migration', 'ch_queue_migration', 'queued', ?, 'openai/gpt-5-mini', ?, '[]', '', '{}', ?, ?, ?)`, input.requestID, input.createdAt, input.text, metaJSON, input.createdAt, input.createdAt); err != nil {
-			t.Fatal(err)
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)

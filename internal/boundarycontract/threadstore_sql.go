@@ -115,6 +115,14 @@ func ScanThreadstoreSQL(root string) ([]ThreadstoreQueryContract, error) {
 	for _, column := range []string{"name", "type", "sql", "tbl_name"} {
 		knownColumns[column] = struct{}{}
 	}
+	// Retired columns remain visible only to the closed migration query set
+	// below. They are deliberately absent from the current physical manifest.
+	for _, column := range []string{
+		"id", "request_id", "text_content", "attachments_json", "context_action_json",
+		"options_json", "session_meta_json", "imported_at_unix_ms", "error_message",
+	} {
+		knownColumns[column] = struct{}{}
+	}
 	directories := []string{
 		filepath.Join(root, "internal", "ai", "threadstore"),
 		filepath.Join(root, "internal", "persistence", "sqliteutil"),
@@ -519,7 +527,8 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 			issues = append(issues, fmt.Sprintf("dynamic threadstore query %s is not bound to the reviewed builder closure", query.ID))
 		}
 		for _, table := range query.Tables {
-			if _, ok := tables[table]; !ok && table != "sqlite_master" && !strings.HasPrefix(table, "pragma_") && !isReviewedV1MigrationTable(query, table) {
+			_, _, migrationTable := reviewedMigrationTable(query, table)
+			if _, ok := tables[table]; !ok && table != "sqlite_master" && !strings.HasPrefix(table, "pragma_") && !migrationTable {
 				issues = append(issues, fmt.Sprintf("threadstore query %s references unowned table %s", query.ID, table))
 			}
 		}
@@ -530,6 +539,11 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 					availableColumns[column] = struct{}{}
 				}
 				continue
+			}
+			if columns, _, ok := reviewedMigrationTable(query, table); ok {
+				for _, column := range columns {
+					availableColumns[column] = struct{}{}
+				}
 			}
 			for _, column := range tables[table].Columns {
 				availableColumns[column] = struct{}{}
@@ -548,6 +562,11 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 					allowed["type"] = struct{}{}
 					allowed["tbl_name"] = struct{}{}
 					continue
+				}
+				if _, keys, ok := reviewedMigrationTable(query, table); ok {
+					for _, key := range keys {
+						allowed[key] = struct{}{}
+					}
 				}
 				for _, key := range tables[table].AllowedLookupKeys {
 					allowed[key] = struct{}{}
@@ -577,24 +596,38 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 	return issues
 }
 
-func isReviewedV1MigrationTable(query ThreadstoreQueryContract, table string) bool {
-	if query.Function != "migrateThreadstoreV1ToV2" || query.Action != "schema" || query.ConsumerKind != "schema_maintenance" {
-		return false
+func reviewedMigrationTable(query ThreadstoreQueryContract, table string) (columns, lookupKeys []string, ok bool) {
+	if query.ConsumerKind != "schema_maintenance" {
+		return nil, nil, false
 	}
-	switch table {
-	case "ai_child_permission_snapshots",
-		"ai_permission_snapshots",
-		"ai_queued_turns",
-		"ai_subagent_publication_operations",
-		"ai_thread_create_operations",
-		"ai_thread_delete_operations",
-		"ai_thread_fork_operations",
-		"ai_turn_admission_receipts",
-		"ai_thread_settings_v2":
-		return true
-	default:
-		return false
+	if query.Function == "migrateThreadstoreV1ToV2" && query.Action == "schema" {
+		switch table {
+		case "ai_child_permission_snapshots",
+			"ai_permission_snapshots",
+			"ai_queued_turns",
+			"ai_subagent_publication_operations",
+			"ai_thread_create_operations",
+			"ai_thread_delete_operations",
+			"ai_thread_fork_operations",
+			"ai_turn_admission_receipts",
+			"ai_thread_settings_v2":
+			return nil, nil, true
+		}
 	}
+	if table == "ai_pending_input_imports" {
+		switch query.Function {
+		case "createPendingInputImportsTableTx", "migrateThreadstoreV1ToV2", "migrateThreadstoreV4ToV5", "loadPendingInputMigrationRecords":
+			return []string{
+				"request_id", "endpoint_id", "thread_id", "model_id", "text_content",
+				"attachments_json", "context_action_json", "options_json", "session_meta_json",
+				"created_at_unix_ms", "imported_at_unix_ms", "error_message",
+			}, []string{"request_id", "endpoint_id", "thread_id", "imported_at_unix_ms"}, true
+		}
+	}
+	if table == "ai_upload_refs_v4" && query.Function == "rebuildUploadRefsV5" {
+		return []string{"id", "endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id", "created_at_unix_ms"}, nil, true
+	}
+	return nil, nil, false
 }
 
 func RefreshThreadstoreQueries(existing ThreadstoreBoundaryManifest, scanned []ThreadstoreQueryContract) ThreadstoreBoundaryManifest {
@@ -684,13 +717,14 @@ func reviewedDynamicThreadstoreQuery(query ThreadstoreQueryContract) string {
 		"threadstore.d8b5ab2c0ba41c63": "reviewed ai_uploads/ai_upload_refs cleanup query; optional clauses only narrow product resource eligibility",
 		"threadstore.df3ccbde3304ed95": "reviewed ai_thread_settings exact read; format argument is the package-constant reviewed column projection",
 		"threadstore.fa59a5e9f6bba496": "reviewed product cleanup transaction; SQL is selected from a closed package-local table deletion list",
+		"threadstore.f9f015abc34fd5b2": "reviewed migration-only ai_thread_settings exact read; format argument is the package-constant reviewed column projection",
 		"threadstore.2c98775a07b4d6a1": "reviewed ai_thread_settings recovery page; optional predicate uses exact endpoint/thread keyset fields",
 	}
 	return reviews[query.ID]
 }
 
 func reviewedThreadstoreConsumerKind(query ThreadstoreQueryContract) string {
-	if query.Action == "schema" || strings.Contains(query.Path, "/sqliteutil/") {
+	if query.Action == "schema" || strings.Contains(query.Path, "/sqliteutil/") || strings.Contains(query.Path, "/pending_input_migration.go") {
 		return "schema_maintenance"
 	}
 	return "product_operation"
@@ -721,7 +755,7 @@ func applyReviewedDynamicInventory(query *ThreadstoreQueryContract) {
 		"threadstore.d0f67f8765bb2a81": {[]string{"ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, []string{"delete_after_unix_ms", "state"}},
 		"threadstore.d8b5ab2c0ba41c63": {[]string{"ai_upload_refs", "ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, nil},
 		"threadstore.fa59a5e9f6bba496": {
-			[]string{"ai_flower_thread_routing", "ai_pending_input_imports", "ai_upload_staging_scopes"},
+			[]string{"ai_flower_thread_routing", "ai_upload_staging_scopes"},
 			[]string{"endpoint_id", "target_id", "thread_id"},
 			[]string{"endpoint_id", "target_id", "thread_id"},
 			nil,

@@ -78,13 +78,35 @@ func immutableUploadIdentityFromFloretResourceRef(resourceRef string) (string, s
 }
 
 func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []flruntime.MessageReference) (flruntime.TurnInput, error) {
-	out := flruntime.TurnInput{Text: strings.TrimSpace(input.Text), References: append([]flruntime.MessageReference(nil), references...)}
-	uploadIDs := make([]string, 0, len(input.Attachments))
 	if r != nil {
 		r.muCanonicalAttachments.Lock()
 		r.canonicalAttachmentIDs = nil
 		r.muCanonicalAttachments.Unlock()
 	}
+	if r == nil || r.product.getThreadOwnedUpload == nil {
+		if len(input.Attachments) > 0 {
+			return flruntime.TurnInput{}, errors.New("attachment store is unavailable")
+		}
+		return floretTurnInputWithUploadLoader(ctx, input, references, nil)
+	}
+	out, err := floretTurnInputWithUploadLoader(ctx, input, references, r.product.loadThreadOwnedUpload)
+	if err != nil {
+		return flruntime.TurnInput{}, err
+	}
+	uploadIDs := make([]string, 0, len(out.Attachments))
+	for _, attachment := range input.Attachments {
+		uploadIDs = append(uploadIDs, strings.TrimSpace(attachment.AttachmentID))
+	}
+	r.muCanonicalAttachments.Lock()
+	r.canonicalAttachmentIDs = uniqueStrings(uploadIDs)
+	r.muCanonicalAttachments.Unlock()
+	return out, nil
+}
+
+type floretTurnUploadLoader func(context.Context, string) (*threadstore.UploadRecord, error)
+
+func floretTurnInputWithUploadLoader(ctx context.Context, input RunInput, references []flruntime.MessageReference, load floretTurnUploadLoader) (flruntime.TurnInput, error) {
+	out := flruntime.TurnInput{Text: strings.TrimSpace(input.Text), References: append([]flruntime.MessageReference(nil), references...)}
 	if input.StructuredResponse != nil {
 		summary := strings.TrimSpace(input.StructuredResponse.PublicSummary)
 		switch {
@@ -100,7 +122,7 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 		}
 		return out, nil
 	}
-	if r == nil || r.product.getThreadOwnedUpload == nil {
+	if load == nil {
 		return flruntime.TurnInput{}, errors.New("attachment store is unavailable")
 	}
 	for index, attachment := range input.Attachments {
@@ -108,7 +130,7 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 		if err != nil {
 			return flruntime.TurnInput{}, fmt.Errorf("attachment %d has an invalid attachment_id", index)
 		}
-		record, err := r.product.loadThreadOwnedUpload(ctxOrBackground(ctx), uploadID)
+		record, err := load(ctxOrBackground(ctx), uploadID)
 		if err != nil {
 			return flruntime.TurnInput{}, fmt.Errorf("load attachment %d: %w", index, err)
 		}
@@ -133,14 +155,10 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 			}
 		}
 		out.Attachments = append(out.Attachments, canonical)
-		uploadIDs = append(uploadIDs, strings.TrimSpace(record.UploadID))
 	}
 	if err := out.Validate(); err != nil {
 		return flruntime.TurnInput{}, err
 	}
-	r.muCanonicalAttachments.Lock()
-	r.canonicalAttachmentIDs = uniqueStrings(uploadIDs)
-	r.muCanonicalAttachments.Unlock()
 	return out, nil
 }
 
