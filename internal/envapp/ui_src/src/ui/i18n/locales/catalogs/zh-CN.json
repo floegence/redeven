@@ -2901,6 +2901,7 @@
     },
     "fields": {
       "target": "目标",
+      "url": "URL",
       "name": "名称",
       "description": "描述",
       "lastOpened": "上次打开",

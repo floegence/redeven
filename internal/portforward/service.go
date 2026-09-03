@@ -40,6 +40,7 @@ type OpenForwardSessionRequest struct {
 }
 
 type SaveForwardSessionRequest struct {
+	Target      string `json:"target,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	AccessMode  string `json:"access_mode,omitempty"`
@@ -225,10 +226,19 @@ func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req 
 	if !ok {
 		return nil, ErrForwardNotFound
 	}
-	accessMode, err := normalizeAccessMode(req.AccessMode, ephemeral.forward.TargetURL)
+	originalTargetURL := ephemeral.forward.TargetURL
+	targetURL := originalTargetURL
+	if strings.TrimSpace(req.Target) != "" {
+		targetURL, err = normalizePersistentTarget(req.Target)
+		if err != nil {
+			return nil, err
+		}
+	}
+	accessMode, err := normalizeAccessMode(req.AccessMode, targetURL)
 	if err != nil {
 		return nil, err
 	}
+	ephemeral.forward.TargetURL = targetURL
 	ephemeral.forward.Name = name
 	ephemeral.forward.Description = description
 	ephemeral.forward.AccessMode = accessMode
@@ -237,7 +247,9 @@ func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req 
 		return nil, err
 	}
 	delete(s.ephemeralByID, id)
-	delete(s.ephemeralIDByTarget, ephemeral.forward.TargetURL)
+	if s.ephemeralIDByTarget[originalTargetURL] == id {
+		delete(s.ephemeralIDByTarget, originalTargetURL)
+	}
 	return s.reg.GetForward(ctx, id)
 }
 
@@ -249,7 +261,7 @@ func (s *Service) CreateForward(ctx context.Context, req CreateForwardRequest) (
 		ctx = context.Background()
 	}
 
-	targetURL, err := normalizeTargetURL(req.Target)
+	targetURL, err := normalizePersistentTarget(req.Target)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +330,7 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 
 	var targetURL *string
 	if req.Target != nil {
-		v, err := normalizeTargetURL(strings.TrimSpace(*req.Target))
+		v, err := normalizePersistentTarget(*req.Target)
 		if err != nil {
 			return nil, err
 		}
@@ -657,6 +669,17 @@ func normalizeBrowserTarget(raw string) (string, string, error) {
 		return "", "", err
 	}
 	return targetURL, path, nil
+}
+
+func normalizePersistentTarget(raw string) (string, error) {
+	targetURL, appPath, err := normalizeBrowserTarget(raw)
+	if err != nil {
+		return "", err
+	}
+	if appPath != "/" {
+		return "", errors.New("target path, query, and fragment are not supported for a saved service")
+	}
+	return targetURL, nil
 }
 
 func randomForwardID() string {

@@ -2901,6 +2901,7 @@
     },
     "fields": {
       "target": "Ziel",
+      "url": "URL",
       "name": "Name",
       "description": "Beschreibung",
       "lastOpened": "Zuletzt geöffnet",

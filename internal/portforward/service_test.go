@@ -102,13 +102,26 @@ func TestServiceRejectsNonLoopbackTargetsAcrossMutationAndSessionPaths(t *testin
 	if _, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: "baidu.com"}); err == nil {
 		t.Fatal("OpenForwardSession unexpectedly accepted a public host")
 	}
-	created, err := svc.CreateForward(ctx, CreateForwardRequest{Target: "localhost:3000"})
+	created, err := svc.CreateForward(ctx, CreateForwardRequest{Target: "3000"})
 	if err != nil {
 		t.Fatalf("CreateForward loopback: %v", err)
+	}
+	if created.TargetURL != "http://localhost:3000" {
+		t.Fatalf("CreateForward target = %q, want numeric port normalized to loopback", created.TargetURL)
 	}
 	external := "http://192.168.1.10:3000"
 	if _, err := svc.UpdateForward(ctx, created.ForwardID, UpdateForwardRequest{Target: &external}); err == nil {
 		t.Fatal("UpdateForward unexpectedly accepted a LAN host")
+	}
+	opened, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: "localhost:4173"})
+	if err != nil {
+		t.Fatalf("OpenForwardSession loopback: %v", err)
+	}
+	if _, err := svc.SaveForwardSession(ctx, opened.Forward.ForwardID, SaveForwardSessionRequest{Target: external, Name: "External"}); err == nil {
+		t.Fatal("SaveForwardSession unexpectedly accepted a LAN host")
+	}
+	if forwards, err := svc.ListForwards(ctx); err != nil || len(forwards) != 1 {
+		t.Fatalf("rejected session save mutated persisted forwards: %#v, %v", forwards, err)
 	}
 }
 
@@ -140,6 +153,32 @@ func TestServicePersistedNonLoopbackTargetFailsClosedWithoutMutation(t *testing.
 	}
 	if persisted == nil || persisted.TargetURL != legacy.TargetURL || persisted.LastOpenedAtUnixMs != 0 {
 		t.Fatalf("legacy forward was mutated: %#v", persisted)
+	}
+}
+
+func TestService_UpdateForwardChangesTargetWithoutReplacingIdentity(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t)
+	ctx := context.Background()
+	created, err := svc.CreateForward(ctx, CreateForwardRequest{Target: "3000", Name: "Dashboard"})
+	if err != nil {
+		t.Fatalf("CreateForward: %v", err)
+	}
+
+	target := ":4173"
+	updated, err := svc.UpdateForward(ctx, created.ForwardID, UpdateForwardRequest{Target: &target})
+	if err != nil {
+		t.Fatalf("UpdateForward: %v", err)
+	}
+	if updated.ForwardID != created.ForwardID || updated.TargetURL != "http://localhost:4173" {
+		t.Fatalf("updated = %#v", updated)
+	}
+	persisted, err := svc.GetForward(ctx, created.ForwardID)
+	if err != nil {
+		t.Fatalf("GetForward: %v", err)
+	}
+	if persisted == nil || persisted.TargetURL != updated.TargetURL {
+		t.Fatalf("persisted = %#v, want target %q", persisted, updated.TargetURL)
 	}
 }
 
@@ -200,11 +239,11 @@ func TestService_SaveForwardSessionKeepsIDAndPersistsMetadata(t *testing.T) {
 		t.Fatalf("OpenForwardSession: %v", err)
 	}
 
-	saved, err := svc.SaveForwardSession(context.Background(), opened.Forward.ForwardID, SaveForwardSessionRequest{Name: "Admin", Description: "Local admin UI"})
+	saved, err := svc.SaveForwardSession(context.Background(), opened.Forward.ForwardID, SaveForwardSessionRequest{Target: "9090", Name: "Admin", Description: "Local admin UI"})
 	if err != nil {
 		t.Fatalf("SaveForwardSession: %v", err)
 	}
-	if saved.ForwardID != opened.Forward.ForwardID || saved.Name != "Admin" || saved.Description != "Local admin UI" {
+	if saved.ForwardID != opened.Forward.ForwardID || saved.TargetURL != "http://localhost:9090" || saved.Name != "Admin" || saved.Description != "Local admin UI" {
 		t.Fatalf("saved = %#v", saved)
 	}
 	forwards, err := svc.ListForwards(context.Background())

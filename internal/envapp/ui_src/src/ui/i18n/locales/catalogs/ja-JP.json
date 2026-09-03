@@ -2901,6 +2901,7 @@
     },
     "fields": {
       "target": "ターゲット",
+      "url": "URL",
       "name": "名前",
       "description": "説明",
       "lastOpened": "最終オープン",

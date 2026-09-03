@@ -407,6 +407,7 @@ describe('web service metadata and template validation', () => {
         open
         mode="edit"
         editorKey="pf-one"
+        targetURL="http://localhost:3000"
         initialName="Original service"
         initialDescription="Original description"
         loading={false}
@@ -415,6 +416,10 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
+      const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
+      expect(target.value).toBe('http://localhost:3000');
+      target.value = 'localhost:4173';
+      target.dispatchEvent(new InputEvent('input', { bubbles: true }));
       const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
       expect(name.value).toBe('Original service');
       name.value = '';
@@ -430,7 +435,7 @@ describe('web service metadata and template validation', () => {
       description.value = 'Internal status and release dashboard';
       description.dispatchEvent(new InputEvent('input', { bubbles: true }));
       Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
-      expect(submit).toHaveBeenCalledWith('Team dashboard', 'Internal status and release dashboard', 'unified_proxy');
+      expect(submit).toHaveBeenCalledWith('localhost:4173', 'Team dashboard', 'Internal status and release dashboard', 'unified_proxy');
     } finally {
       dispose();
       host.remove();
@@ -458,7 +463,7 @@ describe('web service metadata and template validation', () => {
     try {
       host.querySelector<HTMLButtonElement>('[data-access-mode="desktop_loopback"]')?.click();
       Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
-      expect(submit).toHaveBeenCalledWith('Example Service', '', 'desktop_loopback');
+      expect(submit).toHaveBeenCalledWith('http://127.0.0.1:3080', 'Example Service', '', 'desktop_loopback');
     } finally {
       dispose();
       host.remove();
@@ -486,6 +491,38 @@ describe('web service metadata and template validation', () => {
       const loopback = host.querySelector<HTMLButtonElement>('[data-access-mode="desktop_loopback"]');
       expect(loopback?.disabled).toBe(true);
       expect(loopback?.textContent).toContain('only for HTTP services');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('requires a supported loopback URL before saving service details', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const submit = vi.fn();
+    const dispose = render(() => (
+      <ForwardMetadataDialog
+        open
+        mode="edit"
+        editorKey="pf-invalid-target"
+        targetURL="http://localhost:3000"
+        initialName="Local service"
+        initialDescription=""
+        loading={false}
+        onOpenChange={() => undefined}
+        onSubmit={submit}
+      />
+    ), host);
+    try {
+      const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
+      target.value = 'https://example.com';
+      target.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
+      await flushPage();
+      expect(submit).not.toHaveBeenCalled();
+      expect(target.getAttribute('aria-invalid')).toBe('true');
+      expect(host.textContent).toContain('Available only inside this Environment');
     } finally {
       dispose();
       host.remove();
@@ -2605,7 +2642,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/forwards/temporary-save/touch') return { forward_id: 'temporary-save' };
       if (url === '/_redeven_proxy/api/forward-sessions/temporary-save/save' && init?.method === 'POST') {
         saveBody = JSON.parse(String(init.body));
-        return { forward_id: 'temporary-save', target_url: 'http://localhost:3000', name: saveBody?.name, description: saveBody?.description };
+        return { forward_id: 'temporary-save', target_url: 'http://localhost:4173', name: saveBody?.name, description: saveBody?.description };
       }
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -2621,6 +2658,10 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
 
     expect(host.textContent).toContain('Save Web Service');
+    const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
+    expect(target.value).toBe('http://localhost:3000');
+    target.value = '4173';
+    target.dispatchEvent(new InputEvent('input', { bubbles: true }));
     const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
     expect(name.value).toBe('localhost:3000');
     name.value = 'Local documentation';
@@ -2628,7 +2669,7 @@ describe('EnvPortForwardsPage', () => {
     const dialog = Array.from(host.querySelectorAll('h2')).find((heading) => heading.textContent === 'Save Web Service')?.parentElement;
     Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Save service')?.click();
 
-    await waitForAssertion(() => expect(saveBody).toEqual({ name: 'Local documentation', description: '', access_mode: 'unified_proxy' }));
+    await waitForAssertion(() => expect(saveBody).toEqual({ target: '4173', name: 'Local documentation', description: '', access_mode: 'unified_proxy' }));
   });
 
   it('updates the name of an already saved service', async () => {
@@ -2651,12 +2692,16 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector('[data-testid="port-forward-row"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('button[aria-label="Edit service details"]')?.click();
     await flushPage();
+    const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
+    expect(target.value).toBe('http://localhost:3000');
+    target.value = 'http://127.0.0.1:4173';
+    target.dispatchEvent(new InputEvent('input', { bubbles: true }));
     const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
     name.value = 'Renamed dashboard';
     name.dispatchEvent(new InputEvent('input', { bubbles: true }));
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')?.click();
 
-    await waitForAssertion(() => expect(updateBody).toEqual({ name: 'Renamed dashboard', description: 'Browser preview', access_mode: 'unified_proxy' }));
+    await waitForAssertion(() => expect(updateBody).toEqual({ target: 'http://127.0.0.1:4173', name: 'Renamed dashboard', description: 'Browser preview', access_mode: 'unified_proxy' }));
   });
 
   it('keeps temporary-session progress on the address launcher without covering page content', async () => {

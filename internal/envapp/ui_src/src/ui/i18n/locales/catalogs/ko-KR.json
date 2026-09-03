@@ -2901,6 +2901,7 @@
     },
     "fields": {
       "target": "대상",
+      "url": "URL",
       "name": "이름",
       "description": "설명",
       "lastOpened": "마지막으로 연 시간",

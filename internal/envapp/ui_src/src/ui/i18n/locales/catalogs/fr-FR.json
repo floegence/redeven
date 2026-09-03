@@ -2901,6 +2901,7 @@
     },
     "fields": {
       "target": "Cible",
+      "url": "URL",
       "name": "Nom",
       "description": "Service",
       "lastOpened": "Dernière ouverture",

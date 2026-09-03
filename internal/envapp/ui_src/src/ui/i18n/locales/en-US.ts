@@ -2918,6 +2918,7 @@ export const enUS = defineDictionary({
     },
     fields: {
       target: 'Target',
+      url: 'URL',
       name: 'Name',
       description: 'Description',
       lastOpened: 'Last opened',
