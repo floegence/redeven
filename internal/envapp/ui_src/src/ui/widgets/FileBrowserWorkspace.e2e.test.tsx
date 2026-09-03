@@ -498,7 +498,9 @@ describe('FileBrowserWorkspace interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Mode');
+      const modeSwitch = host.querySelector<HTMLElement>('[data-browser-mode-switch]');
+      expect(modeSwitch).not.toBeNull();
+      expect(modeSwitch?.dataset.mode).toBe('files');
       expect(host.querySelector('.redeven-git-browser')).toBeNull();
       expect(host.querySelector('[class*="git-browser-selection-"]')).toBeNull();
       const gitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Git'));
