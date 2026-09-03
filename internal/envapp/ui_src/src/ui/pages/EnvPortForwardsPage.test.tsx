@@ -131,6 +131,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
+  DialogPlacementProvider: (props: any) => <div data-testid="dialog-placement-provider" data-mode={props.mode}>{props.children}</div>,
   DirectoryPicker: (props: any) => <Show when={props.open}><div data-testid="managed-workspace-picker-mock" data-initial-path={props.initialPath}><h2>{props.title}</h2><button type="button" onClick={() => { props.onSelect('/Users/demo/Projects/Focused App'); props.onOpenChange(false); }}>Select focused folder</button></div></Show>,
   Dropdown: (props: any) => (
     <div>
@@ -203,7 +204,7 @@ vi.mock('../primitives/EnvAppModal', () => ({
 }));
 
 vi.mock('../primitives/EnvAppDrawer', () => ({
-  EnvAppDrawer: (props: any) => <Show when={props.open}><div data-testid="env-app-drawer-mock"><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
+  EnvAppDrawer: (props: any) => <Show when={props.open}><div data-testid="env-app-drawer-mock" tabindex="0" onKeyDown={(event) => { if (event.key === 'Escape') props.onOpenChange(false); }}><button type="button" data-testid="env-app-drawer-overlay" onClick={() => props.onOpenChange(false)}>Overlay</button><button type="button" data-testid="env-app-drawer-close" aria-label="Close" onClick={() => props.onOpenChange(false)}>Close</button><h2>{props.title}</h2>{props.children}{props.footer}</div></Show>,
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -1561,7 +1562,7 @@ describe('EnvPortForwardsPage', () => {
     };
     const currentRelease = { schema_version: 1 as const, kind: 'oci' as const, source: 'registry.example/app', tag: '1.0.0', digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' };
     const targetRelease = { ...currentRelease, tag: '1.1.0', digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' };
-    const candidate = { schema_version: 1 as const, candidate_id: 'candidate-new', source_kind: 'oci' as const, source: targetRelease.source, tag: targetRelease.tag, digest: targetRelease.digest, channel: 'stable' as const, trust: 'registry_verified', selectable: true, relation: 'newer' as const, is_latest_stable: true };
+    const candidate = { schema_version: 2 as const, candidate_id: 'candidate-new', source_kind: 'oci' as const, source: targetRelease.source, tag: targetRelease.tag, digest: targetRelease.digest, channel: 'stable' as const, trust: 'registry_verified', selectable: true, relation: 'newer' as const, is_latest_stable: true, verification_status: 'verified' as const };
     const service = {
       service_id: 'mws-desktop', template_id: 'example-desktop-a', service_family_id: 'example-desktop-a',
       name: 'Unlocalized Service', description: 'Unlocalized description', template_source: 'builtin', deployment: 'container',
@@ -1578,7 +1579,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ ...service, release_status: updated ? { ...service.release_status, current_release: targetRelease, latest_stable_relation: 'same', available_template_revision: undefined, current_template_revision: 2 } : service.release_status }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/release-candidates' && init?.method === 'POST') return { schema_version: 1, current_release: currentRelease, recommended_release: currentRelease, latest_stable_release: candidate, candidates: [candidate], check_status: 'fresh', checked_at_unix_ms: Date.now() };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/release-candidates' && init?.method === 'POST') return { schema_version: 2, current_release: currentRelease, recommended_release: currentRelease, latest_stable_release: candidate, candidates: [candidate], catalog_status: 'complete', has_more: false, loaded_count: 1, check_status: 'fresh', checked_at_unix_ms: Date.now() };
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/update-plans' && init?.method === 'POST') {
         updatePlanBody = JSON.parse(String(init.body));
         return { schema_version: 2, update_plan_id: 'upl-reviewed', current_release: currentRelease, target_release: targetRelease, current_template_revision: 1, target_template_revision: 2, notices: [updateNotice], risk_ids: ['non_recommended_release'], expires_at_unix_ms: Date.now() + 60_000 };
@@ -1669,6 +1670,88 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).not.toContain('Container Registry credentials could not be read from the current engine store.');
   });
 
+  it('always closes and aborts release browsing while the source is loading', async () => {
+    const service = {
+      service_id: 'mws-release-loading', template_id: 'example-container', service_family_id: 'example-container',
+      name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace',
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-release-loading', runtime_port: 32102,
+    };
+    const signals: AbortSignal[] = [];
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return Promise.resolve({ templates: [] });
+      if (url === '/_redeven_proxy/api/managed-web-services') return Promise.resolve({ services: [service] });
+      if (url === '/_redeven_proxy/api/forwards') return Promise.resolve({ forwards: [] });
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-release-loading/release-candidates' && init?.method === 'POST') {
+        const signal = init.signal;
+        if (signal) signals.push(signal);
+        return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true }));
+      }
+      return Promise.reject(new Error(`Unexpected local API call: ${url}`));
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-version"]')).toBeTruthy());
+    const closeActions = [
+      () => host.querySelector<HTMLButtonElement>('[data-testid="env-app-drawer-overlay"]')?.click(),
+      () => host.querySelector<HTMLButtonElement>('[data-testid="env-app-drawer-close"]')?.click(),
+      () => host.querySelector<HTMLElement>('[data-testid="env-app-drawer-mock"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => button.textContent?.trim() === 'Cancel')?.click(),
+    ];
+    for (const close of closeActions) {
+      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeTruthy());
+      expect(host.querySelector('[data-testid="managed-release-drawer-body"]')?.closest('[data-testid="dialog-placement-provider"]')?.getAttribute('data-mode')).toBe('global');
+      const signal = signals.at(-1);
+      expect(signal?.aborted).toBe(false);
+      close();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull());
+      expect(signal?.aborted).toBe(true);
+    }
+    expect(host.textContent).not.toContain('could not load available versions');
+  });
+
+  it('ignores a late release response after closing and opening another service', async () => {
+    const first = {
+      service_id: 'mws-release-first', template_id: 'example-first', service_family_id: 'example-first',
+      name: 'First Service', template_source: 'builtin', deployment: 'container', workspace_path: '/first',
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-first', runtime_port: 32103,
+    };
+    const second = {
+      service_id: 'mws-release-second', template_id: 'example-second', service_family_id: 'example-second',
+      name: 'Second Service', template_source: 'builtin', deployment: 'container', workspace_path: '/second',
+      release_status: releaseStatus('oci', '2.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-second', runtime_port: 32104,
+    };
+    const late = deferred<any>();
+    const releaseResult = (version: string, candidateID: string) => {
+      const identity = releaseStatus('oci', version).current_release;
+      const candidate = { schema_version: 2, candidate_id: candidateID, source_kind: 'oci', source: 'registry.example/app', tag: version, channel: 'stable', trust: 'registry_verified', selectable: true, relation: 'same', is_current: true, verification_status: 'verified' };
+      return { schema_version: 2, current_release: identity, recommended_release: identity, candidates: [candidate], catalog_status: 'complete', has_more: false, loaded_count: 1, check_status: 'fresh', checked_at_unix_ms: Date.now() };
+    };
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return Promise.resolve({ templates: [] });
+      if (url === '/_redeven_proxy/api/managed-web-services') return Promise.resolve({ services: [first, second] });
+      if (url === '/_redeven_proxy/api/forwards') return Promise.resolve({ forwards: [] });
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-release-first/release-candidates' && init?.method === 'POST') return late.promise;
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-release-second/release-candidates' && init?.method === 'POST') return Promise.resolve(releaseResult('2.0.0', 'candidate-second'));
+      return Promise.reject(new Error(`Unexpected local API call: ${url}`));
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-release-first"]')).toBeTruthy());
+    host.querySelector<HTMLElement>('[data-managed-service-id="mws-release-first"]')?.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeTruthy());
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => button.textContent?.trim() === 'Cancel')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull());
+
+    host.querySelector<HTMLElement>('[data-managed-service-id="mws-release-second"]')?.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-drawer-body"]')?.textContent).toContain('2.0.0'));
+    late.resolve(releaseResult('1.0.0', 'candidate-first'));
+    await flushPage();
+    const drawer = host.querySelector<HTMLElement>('[data-testid="managed-release-drawer-body"]');
+    expect(drawer?.textContent).toContain('2.0.0');
+    expect(drawer?.textContent).not.toContain('1.0.0');
+  });
+
   it('keeps the current application release when reviewing a template-only update', async () => {
     const currentRelease = { schema_version: 1 as const, kind: 'npm' as const, source: '@example/service', registry: 'https://registry.npmjs.org/', version: '1.0.0', integrity: 'sha512-current' };
     const service = {
@@ -1682,7 +1765,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services/mws-host/release-candidates') return { schema_version: 1, current_release: currentRelease, recommended_release: currentRelease, candidates: [], check_status: 'fresh', checked_at_unix_ms: Date.now() };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-host/release-candidates') return { schema_version: 2, current_release: currentRelease, recommended_release: currentRelease, candidates: [], catalog_status: 'complete', has_more: false, loaded_count: 0, check_status: 'fresh', checked_at_unix_ms: Date.now() };
       if (url === '/_redeven_proxy/api/managed-web-services/mws-host/update-plans' && init?.method === 'POST') {
         planBody = JSON.parse(String(init.body));
         return { schema_version: 2, update_plan_id: 'upl-template-only', current_release: currentRelease, target_release: currentRelease, current_template_revision: 1, target_template_revision: 2, risk_ids: ['npm_lifecycle_scripts'], expires_at_unix_ms: Date.now() + 60_000 };

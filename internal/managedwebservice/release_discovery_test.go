@@ -86,10 +86,11 @@ func TestDiscoverNPMCandidatesKeepsLastSuccessAndNeverReturnsToken(t *testing.T)
 	}))
 	t.Cleanup(server.Close)
 	m := &Manager{
-		releaseClient: server.Client(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{},
+		releaseClient: server.Client(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, releaseCursors: map[string]cachedReleaseCursor{},
 	}
 	spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Host: &HostTemplateSpec{NPM: &NPMHostPackageSpec{PackageName: "@scope/private", Version: "1.0.0", RegistryURL: server.URL, AuthTokenParameter: "registry_token", Executable: "private"}}}
-	result, err := m.discoverAndCache(context.Background(), "template:private", "private", spec, map[string]string{"registry_token": "private-token"}, nil, "custom")
+	browse := releaseBrowseContext{Scope: "template:private", TemplateID: "private", Spec: spec, Parameters: map[string]string{"registry_token": "private-token"}, TemplateSource: "custom"}
+	result, err := m.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "refresh"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +103,7 @@ func TestDiscoverNPMCandidatesKeepsLastSuccessAndNeverReturnsToken(t *testing.T)
 	}
 	checkedAt := result.CheckedAtUnixMs
 	fail.Store(true)
-	result, err = m.discoverAndCache(withReleaseSourceRefresh(context.Background()), "template:private", "private", spec, map[string]string{"registry_token": "private-token"}, nil, "custom")
+	result, err = m.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "refresh"})
 	if err != nil {
 		t.Fatalf("last successful result should remain usable: %v", err)
 	}
@@ -112,7 +113,9 @@ func TestDiscoverNPMCandidatesKeepsLastSuccessAndNeverReturnsToken(t *testing.T)
 }
 
 type releaseCredentialClient struct {
+	credential    containerengine.RegistryCredential
 	credentialErr error
+	calls         atomic.Int32
 }
 
 func (*releaseCredentialClient) Status(context.Context, containerengine.Engine) (containerengine.EngineStatus, error) {
@@ -140,7 +143,8 @@ func (*releaseCredentialClient) PullImage(context.Context, containerengine.Engin
 }
 
 func (c *releaseCredentialClient) RegistryCredential(context.Context, containerengine.Engine, string) (containerengine.RegistryCredential, error) {
-	return containerengine.RegistryCredential{}, c.credentialErr
+	c.calls.Add(1)
+	return c.credential, c.credentialErr
 }
 
 func TestDiscoverOCICandidatesFallsBackToAnonymousForPublicRegistry(t *testing.T) {
@@ -160,22 +164,121 @@ func TestDiscoverOCICandidatesFallsBackToAnonymousForPublicRegistry(t *testing.T
 		}
 	}))
 	t.Cleanup(server.Close)
-	adapter, err := containerengine.NewAdapter(&releaseCredentialClient{credentialErr: errors.New("credential helper is unavailable")})
+	credentials := &releaseCredentialClient{credentialErr: errors.New("credential helper is unavailable")}
+	adapter, err := containerengine.NewAdapter(credentials)
 	if err != nil {
 		t.Fatal(err)
 	}
 	host := strings.TrimPrefix(server.URL, "https://")
 	manager := &Manager{containers: adapter, releaseClient: server.Client()}
-	items, err := manager.discoverOCICandidates(context.Background(), TemplateSpec{
+	spec := TemplateSpec{
 		SchemaVersion: templateSpecSchemaVersion,
 		Kind:          DeploymentContainer,
 		Container:     &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("c")},
-	}, nil, "builtin")
+	}
+	result, err := manager.browseReleaseCandidates(context.Background(), releaseBrowseContext{Scope: "template:public", TemplateID: "public", Spec: spec, TemplateSource: "builtin"}, ReleaseCandidateRequest{Action: "refresh"})
 	if err != nil {
 		t.Fatalf("public anonymous discovery failed after credential lookup error: %v", err)
 	}
-	if len(items) != 1 || items[0].Candidate.Tag != "1.2.3" || !items[0].Candidate.Selectable {
-		t.Fatalf("unexpected anonymous candidates: %#v", items)
+	if len(result.Candidates) != 1 || result.Candidates[0].VerificationStatus != "pending" {
+		t.Fatalf("unexpected anonymous tag candidates: %#v", result.Candidates)
+	}
+	result, err = manager.browseReleaseCandidates(context.Background(), releaseBrowseContext{Scope: "template:public", TemplateID: "public", Spec: spec, TemplateSource: "builtin"}, ReleaseCandidateRequest{Action: "verify", CandidateIDs: []string{result.Candidates[0].CandidateID}})
+	if err != nil || !result.Candidates[0].Selectable {
+		t.Fatalf("unexpected verified anonymous candidates: %#v, error: %v", result.Candidates, err)
+	}
+	if calls := credentials.calls.Load(); calls != 0 {
+		t.Fatalf("public Registry requested local credentials %d times", calls)
+	}
+}
+
+func TestOCIReleaseCatalogReadsCredentialsOnlyAfterAnonymousAuthenticationFailure(t *testing.T) {
+	var anonymousRequests atomic.Int32
+	var authenticatedRequests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v2/team/app/tags/list" {
+			t.Fatalf("unexpected Registry request %s", request.URL)
+		}
+		username, secret, authenticated := request.BasicAuth()
+		if !authenticated {
+			anonymousRequests.Add(1)
+			response.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		authenticatedRequests.Add(1)
+		if username != "registry-user" || secret != "registry-secret" {
+			t.Fatalf("unexpected Registry credentials %q/%q", username, secret)
+		}
+		_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"1.2.3"}})
+	}))
+	t.Cleanup(server.Close)
+	credentials := &releaseCredentialClient{credential: containerengine.RegistryCredential{Username: "registry-user", Secret: "registry-secret"}}
+	adapter, err := containerengine.NewAdapter(credentials)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := strings.TrimPrefix(server.URL, "https://")
+	manager := &Manager{containers: adapter, releaseClient: server.Client()}
+	result, err := manager.browseReleaseCandidates(context.Background(), releaseBrowseContext{
+		Scope: "template:private", TemplateID: "private", TemplateSource: "builtin",
+		Spec: TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("c")}},
+	}, ReleaseCandidateRequest{Action: "refresh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Candidates) != 1 || result.Candidates[0].Tag != "1.2.3" {
+		t.Fatalf("authenticated Registry candidates = %#v", result.Candidates)
+	}
+	if credentials.calls.Load() != 1 || anonymousRequests.Load() != 1 || authenticatedRequests.Load() != 1 {
+		t.Fatalf("credential calls=%d anonymous requests=%d authenticated requests=%d", credentials.calls.Load(), anonymousRequests.Load(), authenticatedRequests.Load())
+	}
+}
+
+func TestOCIReleaseCatalogPinsAndVerifiesCurrentAndRecommendedTags(t *testing.T) {
+	currentDigest := testReleaseDigest("a")
+	recommendedDigest := testReleaseDigest("b")
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.URL.Path == "/v2/team/app/tags/list":
+			_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"9.0.0", "8.0.0"}})
+		case strings.HasPrefix(request.URL.Path, "/v2/team/app/manifests/"):
+			tag := strings.TrimPrefix(request.URL.Path, "/v2/team/app/manifests/")
+			digest := testReleaseDigest("c")
+			if tag == "1.0.0" {
+				digest = currentDigest
+			} else if tag == "2.0.0" {
+				digest = recommendedDigest
+			}
+			response.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
+			_ = json.NewEncoder(response).Encode(map[string]any{"schemaVersion": 2, "manifests": []map[string]any{{"digest": digest, "platform": map[string]string{"os": "linux", "architecture": runtime.GOARCH}}}})
+		default:
+			t.Fatalf("unexpected Registry request %s", request.URL)
+		}
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	repository := host + "/team/app"
+	manager := &Manager{releaseClient: server.Client()}
+	browse := releaseBrowseContext{
+		Scope: "service:mws-one", ServiceID: "", TemplateID: "example", TemplateSource: "builtin",
+		Spec:        TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: repository + ":2.0.0@" + recommendedDigest}},
+		Current:     &ReleaseIdentity{SchemaVersion: 1, Kind: "oci", Source: repository, Tag: "1.0.0", Digest: currentDigest},
+		Recommended: &ReleaseIdentity{SchemaVersion: 1, Kind: "oci", Source: repository, Tag: "2.0.0", Digest: recommendedDigest},
+	}
+	result, err := manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "open"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Candidates) != 4 || !result.Candidates[0].IsCurrent || !result.Candidates[1].IsRecommended {
+		t.Fatalf("pinned release order = %#v", result.Candidates)
+	}
+	ids := []string{result.Candidates[0].CandidateID, result.Candidates[1].CandidateID}
+	result, err = manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "verify", CandidateIDs: ids})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Candidates[0].Selectable || !result.Candidates[1].Selectable || result.Candidates[0].VerificationStatus != "verified" || result.Candidates[1].VerificationStatus != "verified" {
+		t.Fatalf("verified pinned releases = %#v", result.Candidates[:2])
 	}
 }
 
@@ -191,14 +294,119 @@ func TestDiscoverOCICandidatesReportsCredentialStoreOnlyWhenRegistryRequiresAuth
 	}
 	host := strings.TrimPrefix(server.URL, "https://")
 	manager := &Manager{containers: adapter, releaseClient: server.Client()}
-	_, err = manager.discoverOCICandidates(context.Background(), TemplateSpec{
+	_, err = manager.browseReleaseCandidates(context.Background(), releaseBrowseContext{Scope: "template:private", TemplateID: "private", Spec: TemplateSpec{
 		SchemaVersion: templateSpecSchemaVersion,
 		Kind:          DeploymentContainer,
 		Container:     &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("c")},
-	}, nil, "builtin")
+	}, TemplateSource: "builtin"}, ReleaseCandidateRequest{Action: "refresh"})
 	code, _, _, retryable := ErrorDetails(err)
 	if code != "RELEASE_SOURCE_AUTH_UNAVAILABLE" || !retryable {
 		t.Fatalf("authenticated Registry error = (%q, retryable=%t), want RELEASE_SOURCE_AUTH_UNAVAILABLE", code, retryable)
+	}
+}
+
+func TestOCIReleaseCatalogRetriesOpenAfterAnInitialSourceFailure(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v2/team/app/tags/list" {
+			t.Fatalf("unexpected Registry request %s", request.URL)
+		}
+		if requests.Add(1) == 1 {
+			response.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"1.0.0"}})
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	manager := &Manager{releaseClient: server.Client()}
+	browse := releaseBrowseContext{
+		Scope: "template:retry", TemplateID: "retry", TemplateSource: "builtin",
+		Spec: TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("a")}},
+	}
+	if _, err := manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "open"}); err == nil {
+		t.Fatal("initial source failure was not returned")
+	}
+	result, err := manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "open"})
+	if err != nil {
+		t.Fatalf("reopened catalog did not retry the source: %v", err)
+	}
+	if requests.Load() != 2 || len(result.Candidates) != 1 || result.Candidates[0].Tag != "1.0.0" {
+		t.Fatalf("retried release catalog = %#v, requests=%d", result, requests.Load())
+	}
+}
+
+func TestOCIReleaseCatalogKeepsPaginationCursorAfterCancellation(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v2/team/app/tags/list" {
+			t.Fatalf("unexpected Registry request %s", request.URL)
+		}
+		if request.URL.Query().Get("last") == "" {
+			response.Header().Set("Link", `</v2/team/app/tags/list?n=100&last=1.0.0>; rel="next"`)
+			_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"1.0.0"}})
+			return
+		}
+		_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"2.0.0"}})
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	manager := &Manager{releaseClient: server.Client()}
+	browse := releaseBrowseContext{
+		Scope: "template:cancel-page", TemplateID: "cancel-page", TemplateSource: "builtin",
+		Spec: TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("a")}},
+	}
+	result, err := manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "open"})
+	if err != nil || !result.HasMore || result.CursorID == "" {
+		t.Fatalf("first page = %#v, error=%v", result, err)
+	}
+	cursorID := result.CursorID
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err = manager.browseReleaseCandidates(cancelled, browse, ReleaseCandidateRequest{Action: "continue", CursorID: cursorID})
+	if !errors.Is(err, context.Canceled) || result != nil {
+		t.Fatalf("cancelled page = %#v, error=%v", result, err)
+	}
+	result, err = manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "continue", CursorID: cursorID})
+	if err != nil {
+		t.Fatalf("cursor was consumed by cancellation: %v", err)
+	}
+	if result.HasMore || len(result.Candidates) != 2 {
+		t.Fatalf("retried page = %#v", result)
+	}
+}
+
+func TestOCIReleaseCatalogRefetchesExpiredTemplateCandidateIDs(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v2/team/app/tags/list" {
+			t.Fatalf("unexpected Registry request %s", request.URL)
+		}
+		requests.Add(1)
+		_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"1.0.0"}})
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	manager := &Manager{releaseClient: server.Client()}
+	browse := releaseBrowseContext{
+		Scope: "template:expired", TemplateID: "expired", TemplateSource: "builtin",
+		Spec: TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: host + "/team/app:1.0.0@" + testReleaseDigest("a")}},
+	}
+	first, err := manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "open"})
+	if err != nil || len(first.Candidates) != 1 {
+		t.Fatalf("first catalog = %#v, error=%v", first, err)
+	}
+	oldID := first.Candidates[0].CandidateID
+	manager.releaseMu.Lock()
+	expired := manager.releaseItems[oldID]
+	expired.ExpiresAt = time.Now().Add(-time.Second)
+	manager.releaseItems[oldID] = expired
+	manager.releaseMu.Unlock()
+	second, err := manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "open"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 2 || len(second.Candidates) != 1 || second.Candidates[0].CandidateID == oldID {
+		t.Fatalf("expired catalog was reused: %#v, requests=%d", second, requests.Load())
 	}
 }
 

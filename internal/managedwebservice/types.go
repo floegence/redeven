@@ -319,11 +319,14 @@ type ReleaseCandidate struct {
 	IsLatestStable     bool   `json:"is_latest_stable,omitempty"`
 	IsLatestPreview    bool   `json:"is_latest_preview,omitempty"`
 	Relation           string `json:"relation"`
+	VerificationStatus string `json:"verification_status"`
 }
 
 type ReleaseCandidateRequest struct {
-	Parameters map[string]string `json:"parameters,omitempty"`
-	Refresh    bool              `json:"refresh,omitempty"`
+	Action       string            `json:"action"`
+	Parameters   map[string]string `json:"parameters,omitempty"`
+	CursorID     string            `json:"cursor_id,omitempty"`
+	CandidateIDs []string          `json:"candidate_ids,omitempty"`
 }
 
 type ReleaseCandidateResult struct {
@@ -333,11 +336,15 @@ type ReleaseCandidateResult struct {
 	LatestStableRelease  *ReleaseCandidate  `json:"latest_stable_release,omitempty"`
 	LatestPreviewRelease *ReleaseCandidate  `json:"latest_preview_release,omitempty"`
 	Candidates           []ReleaseCandidate `json:"candidates"`
+	CatalogStatus        string             `json:"catalog_status"`
+	HasMore              bool               `json:"has_more"`
+	CursorID             string             `json:"cursor_id,omitempty"`
+	LoadedCount          int                `json:"loaded_count"`
 	CheckStatus          string             `json:"check_status"`
 	CheckedAtUnixMs      int64              `json:"checked_at_unix_ms"`
 	NextCheckAtUnixMs    int64              `json:"next_check_at_unix_ms,omitempty"`
 	LastErrorCode        string             `json:"last_error_code,omitempty"`
-	LastErrorMessage     string             `json:"last_error_message,omitempty"`
+	LastErrorMessage     string             `json:"-"`
 }
 
 type ReleaseStatus struct {

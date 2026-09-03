@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Services
 description: Operate generic Host, Container, and Compose services from verified external template snapshots.
 tags: [architecture, web-services, runtime, containers, security]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 # Summary
 
@@ -51,7 +51,7 @@ Every retry records its real action and `retry_of_operation_id`. A current failu
 
 ## Persistence baseline
 
-`portforward_registry_v1` schema version 3 is the current lineage. Fresh initialization retains the reviewed `0 -> 1` baseline and then applies contiguous `1 -> 2` and `2 -> 3` migrations. Version 2 migrates TemplateSpec v3 documents to v4, removes duplicated template and service `version` columns, and adds digest-verified release-check summaries. Version 3 adds non-null workspace ownership and the operation's delete-workspace intent while preserving exact ReleaseIdentity, configuration, secrets, resources, operations, RuntimeBinding, forwards, and user data. Existing services migrate conservatively to `user_selected`; no existing directory is claimed or removed.
+`portforward_registry_v1` schema version 4 is the current lineage. Fresh initialization retains the reviewed `0 -> 1` baseline and then applies contiguous `1 -> 2`, `2 -> 3`, and `3 -> 4` migrations. Version 2 migrates TemplateSpec v3 documents to v4, removes duplicated template and service `version` columns, and adds digest-verified release-check summaries. Version 3 adds non-null workspace ownership and the operation's delete-workspace intent while preserving exact ReleaseIdentity, configuration, secrets, resources, operations, RuntimeBinding, forwards, and user data. Version 4 upgrades release-check documents to schema v2, preserves known latest identities and timestamps, and marks the incomplete migrated snapshot stale for progressive discovery. Existing services migrate conservatively to `user_selected`; no existing directory is claimed or removed.
 
 An existing file with another kind, a future version, or exact structure drift is rejected read-only and remains byte-for-byte unchanged. After this pre-release baseline, every persistent change must retain the kind and append a contiguous transactional migration; another reset is not permitted.
 
@@ -67,6 +67,6 @@ Redeven does not contain built-in service names, descriptions, notices, icons, t
 - `redeven:internal/managedwebservice/custom_host.go` - Owns generic Host execution and v2 process identity.
 - `redeven:internal/managedwebservice/custom_container.go` - Owns exact current container identity and generic resource validation.
 - `redeven:internal/managedwebservice/update.go` - Commits or restores release and binding state around health validation.
-- `redeven:internal/portforward/registry/schema.go` - Defines exact v1-v3 shapes plus the atomic v1-to-v2 and v2-to-v3 migrations.
+- `redeven:internal/portforward/registry/schema.go` - Defines exact v1-v4 shapes plus every contiguous atomic migration.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Renders backend capabilities, localized catalog content, progress, and safe diagnostics.
 - `redeven:scripts/check_managed_service_catalog_boundary.mjs` - Prevents service-specific catalog content from returning to Redeven runtime and Renderer source.

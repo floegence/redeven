@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Database schema migration ownership
 description: Redeven automatically migrates product databases at startup while upstream-owned stores remain opaque.
 tags: [architecture, storage, sqlite, migrations, upgrades]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 # Summary
 
@@ -24,7 +24,7 @@ The current startup composition opens product stores such as Code App, Port Forw
 
 `ai_threadstore_product_v1` is the permanent AI product lineage. Its exact version-1 input upgrades through the reviewed version-2 edge; later changes must retain the kind and append every contiguous migration. The one-time discarded pre-launch shapes are not accepted as migration inputs.
 
-`portforward_registry_v1` version 1 is likewise a user-approved pre-release baseline reset. It initializes Port Forward and Managed Service tables together, including configuration, release identity, RuntimeBinding, resources, operation progress, and retry lineage. Version 2 is its first permanent forward edge: it upgrades TemplateSpec v3 documents to v4, removes duplicated version columns, and adds digest-verified release-check summaries in the same transaction. Version 3 adds workspace ownership and explicit workspace-deletion intent with conservative existing-service defaults. The kind intentionally has no decoder from discarded pre-release Registry kinds. It is permanent and every later change must append a contiguous automatic migration; another pre-release reset is not allowed.
+`portforward_registry_v1` version 1 is likewise a user-approved pre-release baseline reset. It initializes Port Forward and Managed Service tables together, including configuration, release identity, RuntimeBinding, resources, operation progress, and retry lineage. Version 2 is its first permanent forward edge: it upgrades TemplateSpec v3 documents to v4, removes duplicated version columns, and adds digest-verified release-check summaries in the same transaction. Version 3 adds workspace ownership and explicit workspace-deletion intent with conservative existing-service defaults. Version 4 atomically upgrades release-check documents to schema v2, retains known latest identities and timestamps, and marks their incomplete catalog stale until progressive discovery refreshes it. The kind intentionally has no decoder from discarded pre-release Registry kinds. It is permanent and every later change must append a contiguous automatic migration; another pre-release reset is not allowed.
 
 State requiring a live external system is not manufactured inside a SQLite migration. Runtime resource identity must already be represented by the current Registry contract and verified by the owning generic driver. No marker import, live-engine guess, or cross-system adoption path supplements the fresh Port Forward Registry.
 
@@ -46,7 +46,7 @@ Automatic migration is not permission to accept arbitrary historical shapes. Rem
 - `redeven:internal/persistence/sqliteutil/engine_test.go` - Covers initialization, rollback, kind, version, metadata, and concurrency rules.
 - `redeven:internal/persistence/sqliteutil/repository_contract_test.go` - Locks the reviewed Redeven and upstream SQLite opening inventory.
 - `redeven:internal/codeapp/codeapp.go` - Opens product stores before publishing dependent Runtime services.
-- `redeven:internal/portforward/registry/schema.go` - Defines exact v1-v3 shapes plus the atomic v1-to-v2 and v2-to-v3 edges.
+- `redeven:internal/portforward/registry/schema.go` - Defines exact v1-v4 shapes plus every contiguous atomic edge.
 - `redeven:internal/portforward/registry/registry.go` - Performs read-only Port Forward Registry preflight before writable open.
 - `redeven:internal/portforward/registry/registry_test.go` - Covers fresh initialization, v1-to-v2 data preservation, and byte-preserving kind, future, and drift rejection.
 - `redeven:internal/ai/threadstore/schema.go` - Defines the current AI product lineage and its contiguous migration.

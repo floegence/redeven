@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpenCreatesFreshRegistryV3(t *testing.T) {
+func TestOpenCreatesFreshRegistryV4(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	registry, err := Open(path)
 	if err != nil {
@@ -212,7 +213,7 @@ func TestManagedServicePersistsBindingAndRetryLineage(t *testing.T) {
 	}
 }
 
-func TestOpenMigratesRegistryV1ToV3WithoutChangingServiceIdentity(t *testing.T) {
+func TestOpenMigratesRegistryV1ToV4WithoutChangingServiceIdentity(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	legacy, err := sqliteutil.Open(path, sqliteutil.Spec{
 		Kind: registrySchemaKind, CurrentVersion: 1,
@@ -238,6 +239,25 @@ func TestOpenMigratesRegistryV1ToV3WithoutChangingServiceIdentity(t *testing.T) 
 	}
 	if _, err := legacy.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_total,created_at_unix_ms,updated_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
 		"mop-one", "mws-one", "request-one", "fingerprint-one", "uninstall", 1, "failed", "failed", 7, 1, 1, `{"schema_version":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err = sqliteutil.Open(path, sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 3,
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
+		},
+		Verify: verifyRegistryV3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseCheckV1 := `{"schema_version":1,"latest_stable_release":{"schema_version":1,"kind":"oci","source":"example.invalid/app","tag":"1.0.0","digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}`
+	if _, err := legacy.Exec(`INSERT INTO managed_web_service_release_checks(service_id,summary_json,summary_sha256,checked_at_unix_ms,next_check_at_unix_ms,stale,last_error_code,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?)`, "mws-one", releaseCheckV1, digest(releaseCheckV1), 10, 20, 0, "", 10); err != nil {
 		t.Fatal(err)
 	}
 	if err := legacy.Close(); err != nil {
@@ -273,12 +293,35 @@ func TestOpenMigratesRegistryV1ToV3WithoutChangingServiceIdentity(t *testing.T) 
 	if !strings.Contains(migratedSpec, `"schema_version":4`) || strings.Contains(migratedSpec, "release_policy") {
 		t.Fatalf("migrated TemplateSpec = %s", migratedSpec)
 	}
-	columns, err := sqliteutil.TableColumnNamesTx(mustBegin(t, registry.db), "managed_web_services")
+	tx := mustBegin(t, registry.db)
+	columns, err := sqliteutil.TableColumnNamesTx(tx, "managed_web_services")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if slices.Contains(columns, "version") {
 		t.Fatalf("legacy version column remains: %v", columns)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	check, err := registry.GetManagedReleaseCheck(context.Background(), "mws-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if check == nil || !check.Stale || check.CheckedAtUnixMs != 10 || check.NextCheckAtUnixMs != 20 {
+		t.Fatalf("migrated release check = %#v", check)
+	}
+	var releaseCheckV2 struct {
+		SchemaVersion       int               `json:"schema_version"`
+		CatalogStatus       string            `json:"catalog_status"`
+		Candidates          []json.RawMessage `json:"candidates"`
+		LatestStableRelease json.RawMessage   `json:"latest_stable_release"`
+	}
+	if err := json.Unmarshal([]byte(check.SummaryJSON), &releaseCheckV2); err != nil {
+		t.Fatal(err)
+	}
+	if releaseCheckV2.SchemaVersion != 2 || releaseCheckV2.CatalogStatus != "stale" || releaseCheckV2.Candidates == nil || len(releaseCheckV2.LatestStableRelease) == 0 {
+		t.Fatalf("migrated release summary = %s", check.SummaryJSON)
 	}
 }
 
@@ -332,6 +375,137 @@ func TestOpenMigratesRegistryV2ToV3WithConservativeWorkspaceOwnership(t *testing
 	}
 	if operation == nil || !operation.DeleteData || operation.DeleteWorkspace {
 		t.Fatalf("migrated v2 operation = %#v", operation)
+	}
+}
+
+func TestRegistryV3ToV4MigrationRollsBackAnInvalidReleaseSummary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	registry, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedReleaseCheckService(t, registry)
+	if err := registry.Close(); err != nil {
+		t.Fatal(err)
+	}
+	invalid := `{"schema_version":99}`
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`UPDATE managed_web_service_release_checks SET summary_json=?,summary_sha256=? WHERE service_id='mws-release-check'; PRAGMA user_version=3;`, invalid, digest(invalid)); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(path); err == nil {
+		t.Fatal("invalid v3 release summary was migrated")
+	}
+	raw, err = sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var version int
+	var summary string
+	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT summary_json FROM managed_web_service_release_checks WHERE service_id='mws-release-check'`).Scan(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if version != 3 || summary != invalid {
+		t.Fatalf("failed migration changed registry: version=%d summary=%s", version, summary)
+	}
+}
+
+func TestOpenRejectsV4ReleaseSummaryDriftWithoutChangingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	registry, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedReleaseCheckService(t, registry)
+	if err := registry.Close(); err != nil {
+		t.Fatal(err)
+	}
+	invalid := `{"schema_version":99}`
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`UPDATE managed_web_service_release_checks SET summary_json=?,summary_sha256=? WHERE service_id='mws-release-check'`, invalid, digest(invalid)); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before := mustRead(t, path)
+	_, err = Open(path)
+	var verifyError *sqliteutil.SchemaVerifyError
+	if !errors.As(err, &verifyError) {
+		t.Fatalf("Open() error = %v, want SchemaVerifyError", err)
+	}
+	if after := mustRead(t, path); !slices.Equal(before, after) {
+		t.Fatal("drifted release summary was modified")
+	}
+}
+
+func TestOpenRejectsV4NestedReleaseCandidateDriftWithoutChangingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	registry, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedReleaseCheckService(t, registry)
+	if err := registry.Close(); err != nil {
+		t.Fatal(err)
+	}
+	invalid := `{"schema_version":2,"source_fingerprint":"source","catalog_status":"complete","candidates":[{"schema_version":2,"candidate_id":"","source_kind":"oci","source":"example.invalid/app","channel":"stable","trust":"registry","selectable":true,"relation":"newer","verification_status":"verified","unexpected":true}]}`
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`UPDATE managed_web_service_release_checks SET summary_json=?,summary_sha256=? WHERE service_id='mws-release-check'`, invalid, digest(invalid)); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before := mustRead(t, path)
+	_, err = Open(path)
+	var verifyError *sqliteutil.SchemaVerifyError
+	if !errors.As(err, &verifyError) {
+		t.Fatalf("Open() error = %v, want SchemaVerifyError", err)
+	}
+	if after := mustRead(t, path); !slices.Equal(before, after) {
+		t.Fatal("drifted nested release candidate was modified")
+	}
+}
+
+func seedReleaseCheckService(t *testing.T, registry *Registry) {
+	t.Helper()
+	snapshot := `{"schema_version":4,"kind":"container","endpoint":{"scheme":"http"},"container":{"image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","read_only_root":true}}`
+	configuration := `{"schema_version":2}`
+	release := `{"schema_version":1,"kind":"oci"}`
+	binding := `{"schema_version":1,"deployment":"container","container":{"name":"redeven-mws-release-check"}}`
+	service := ManagedService{
+		ServiceID: "mws-release-check", TemplateID: "fictional-release-check", TemplateSource: "custom", TemplateRevision: 1,
+		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest(snapshot), ServiceFamilyID: "fictional-release-check",
+		Deployment: "container", WorkspacePath: "/workspace", WorkspaceOwnership: "user_selected", ConfigurationJSON: configuration, ConfigurationSHA256: digest(configuration),
+		ReleaseIdentityJSON: release, ReleaseIdentitySHA256: digest(release), RuntimeBindingJSON: binding, RuntimeBindingSHA256: digest(binding),
+		DesiredState: "stopped", ObservedState: "stopped", ForwardID: "pf-release-check",
+	}
+	forward := Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080", AccessMode: AccessModeUnifiedProxy}
+	operation := ManagedOperation{OperationID: "mop-release-check", ServiceID: service.ServiceID, RequestID: "req-release-check", RequestFingerprint: "install", Action: "install", State: "succeeded", Stage: "completed"}
+	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, forward, operation); err != nil {
+		t.Fatal(err)
+	}
+	summary := `{"schema_version":2,"source_fingerprint":"source","catalog_status":"complete","candidates":[]}`
+	if err := registry.UpsertManagedReleaseCheck(context.Background(), ManagedReleaseCheck{ServiceID: service.ServiceID, SummaryJSON: summary, SummarySHA256: digest(summary), CheckedAtUnixMs: 10, NextCheckAtUnixMs: 20}); err != nil {
+		t.Fatal(err)
 	}
 }
 

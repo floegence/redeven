@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +22,8 @@ import (
 const (
 	maxRegistryTagsBytes     = 8 << 20
 	maxRegistryManifestBytes = 4 << 20
-	maxRegistryTags          = 10_000
+	registryTagPageSize      = 100
+	registryVerifyWorkers    = 4
 )
 
 var registryDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
@@ -35,11 +38,23 @@ type RegistryCredential struct {
 	Secret   string
 }
 
-type OCIReleaseDiscoveryRequest struct {
+type OCIReleaseTagPageRequest struct {
+	Reference  string
+	Credential RegistryCredential
+	Cursor     string
+}
+
+type OCIReleaseTagPage struct {
+	Tags       []string
+	NextCursor string
+}
+
+type OCIReleaseVerificationRequest struct {
 	Reference    string
 	PlatformOS   string
 	PlatformArch string
 	Credential   RegistryCredential
+	Tags         []string
 }
 
 type OCIRelease struct {
@@ -69,7 +84,14 @@ func (e *ociReleaseVerificationError) Unwrap() error {
 	return e.cause
 }
 
-func unverifiableOCIRelease(tag, platformOS, platformArch string, err error) (OCIRelease, bool) {
+func unavailableOCIRelease(tag, platformOS, platformArch string, err error) (OCIRelease, bool) {
+	if errors.Is(err, ErrImageNotFound) {
+		return OCIRelease{
+			Tag: tag, PlatformOS: platformOS, PlatformArch: platformArch,
+			ReasonCode: "RELEASE_NOT_FOUND",
+			Reason:     "The Registry no longer publishes this tag.",
+		}, true
+	}
 	var verificationError *ociReleaseVerificationError
 	if !errors.As(err, &verificationError) {
 		return OCIRelease{}, false
@@ -81,7 +103,60 @@ func unverifiableOCIRelease(tag, platformOS, platformArch string, err error) (OC
 	}, true
 }
 
-func (d OCIReleaseDiscovery) Discover(ctx context.Context, request OCIReleaseDiscoveryRequest) ([]OCIRelease, error) {
+func (d OCIReleaseDiscovery) ListTagsPage(ctx context.Context, request OCIReleaseTagPageRequest) (OCIReleaseTagPage, error) {
+	client := d.Client
+	if client == nil {
+		client = &http.Client{Timeout: 45 * time.Second}
+	}
+	reference, err := parseRegistryReference(request.Reference)
+	if err != nil {
+		return OCIReleaseTagPage{}, err
+	}
+	endpoint := strings.TrimSpace(request.Cursor)
+	if endpoint == "" {
+		endpoint = reference.APIBase + "/tags/list?n=" + strconv.Itoa(registryTagPageSize)
+	} else if !validRegistryCursor(endpoint, reference) {
+		return OCIReleaseTagPage{}, fmt.Errorf("%w: unsafe pagination cursor", ErrImageRegistryResponseInvalid)
+	}
+	response, _, err := registryRequest(ctx, client, http.MethodGet, endpoint, reference.Repository, request.Credential, "", "application/json")
+	if err != nil {
+		return OCIReleaseTagPage{}, err
+	}
+	raw, err := readRegistryBody(response, maxRegistryTagsBytes)
+	if err != nil {
+		return OCIReleaseTagPage{}, err
+	}
+	var document struct {
+		Tags []string `json:"tags"`
+	}
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return OCIReleaseTagPage{}, fmt.Errorf("%w: invalid tag response", ErrImageRegistryResponseInvalid)
+	}
+	if len(document.Tags) > registryTagPageSize {
+		return OCIReleaseTagPage{}, fmt.Errorf("%w: tag page exceeded its safe limit", ErrImageRegistryResponseInvalid)
+	}
+	seen := map[string]struct{}{}
+	tags := make([]string, 0, min(len(document.Tags), registryTagPageSize))
+	for _, tag := range document.Tags {
+		tag = strings.TrimSpace(tag)
+		if !registryTagPattern.MatchString(tag) {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		tags = append(tags, tag)
+	}
+	link := response.Header.Get("Link")
+	next := registryNextLink(response.Request.URL, link, reference.RegistryHost)
+	if next == "" && strings.Contains(strings.ToLower(link), `rel="next"`) {
+		return OCIReleaseTagPage{}, fmt.Errorf("%w: unsafe pagination link", ErrImageRegistryResponseInvalid)
+	}
+	return OCIReleaseTagPage{Tags: tags, NextCursor: next}, nil
+}
+
+func (d OCIReleaseDiscovery) VerifyTags(ctx context.Context, request OCIReleaseVerificationRequest) ([]OCIRelease, error) {
 	client := d.Client
 	if client == nil {
 		client = &http.Client{Timeout: 45 * time.Second}
@@ -90,80 +165,79 @@ func (d OCIReleaseDiscovery) Discover(ctx context.Context, request OCIReleaseDis
 	if err != nil {
 		return nil, err
 	}
-	token := ""
-	tags, token, err := d.listTags(ctx, client, reference, request.Credential, token)
-	if err != nil {
-		return nil, err
-	}
+	tags := uniqueRegistryTags(request.Tags)
 	if len(tags) == 0 {
 		return []OCIRelease{}, nil
 	}
 	resolved := make([]OCIRelease, len(tags))
 	present := make([]bool, len(tags))
+	token := ""
 	first, refreshed, err := d.resolveTag(ctx, client, reference, tags[0], request.PlatformOS, request.PlatformArch, request.Credential, token)
 	if refreshed != "" {
 		token = refreshed
 	}
 	if err == nil {
 		resolved[0], present[0] = first, true
-	} else if item, ok := unverifiableOCIRelease(tags[0], request.PlatformOS, request.PlatformArch, err); ok {
+	} else if item, ok := unavailableOCIRelease(tags[0], request.PlatformOS, request.PlatformArch, err); ok {
 		resolved[0], present[0] = item, true
-	} else if !errors.Is(err, ErrImageNotFound) {
-		return nil, err
+		err = nil
 	}
-	workerContext, cancel := context.WithCancel(ctx)
-	defer cancel()
+	if err != nil {
+		return collectOCIReleases(resolved, present), err
+	}
 	indexes := make(chan int)
 	errorsFound := make(chan error, 1)
 	var workers sync.WaitGroup
-	workerCount := min(8, len(tags)-1)
+	workerCount := min(registryVerifyWorkers, len(tags)-1)
 	for range workerCount {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
 			for index := range indexes {
-				item, _, discoverErr := d.resolveTag(workerContext, client, reference, tags[index], request.PlatformOS, request.PlatformArch, request.Credential, token)
+				item, _, discoverErr := d.resolveTag(ctx, client, reference, tags[index], request.PlatformOS, request.PlatformArch, request.Credential, token)
 				if discoverErr != nil {
-					if unavailable, ok := unverifiableOCIRelease(tags[index], request.PlatformOS, request.PlatformArch, discoverErr); ok {
+					if unavailable, ok := unavailableOCIRelease(tags[index], request.PlatformOS, request.PlatformArch, discoverErr); ok {
 						resolved[index], present[index] = unavailable, true
-						continue
-					}
-					if errors.Is(discoverErr, ErrImageNotFound) {
 						continue
 					}
 					select {
 					case errorsFound <- discoverErr:
-						cancel()
 					default:
 					}
-					return
+					continue
 				}
 				resolved[index], present[index] = item, true
 			}
 		}()
 	}
-sendLoop:
 	for index := 1; index < len(tags); index++ {
 		select {
-		case <-workerContext.Done():
-			break sendLoop
+		case <-ctx.Done():
+			close(indexes)
+			workers.Wait()
+			return collectOCIReleases(resolved, present), ctx.Err()
 		case indexes <- index:
 		}
 	}
 	close(indexes)
 	workers.Wait()
+	items := collectOCIReleases(resolved, present)
 	select {
 	case discoverErr := <-errorsFound:
-		return nil, discoverErr
+		return items, discoverErr
 	default:
 	}
-	items := make([]OCIRelease, 0, len(tags))
+	return items, nil
+}
+
+func collectOCIReleases(resolved []OCIRelease, present []bool) []OCIRelease {
+	items := make([]OCIRelease, 0, len(resolved))
 	for index := range resolved {
 		if present[index] {
 			items = append(items, resolved[index])
 		}
 	}
-	return items, nil
+	return items
 }
 
 type parsedRegistryReference struct {
@@ -212,51 +286,37 @@ func parseRegistryReference(value string) (parsedRegistryReference, error) {
 	return parsedRegistryReference{RegistryHost: host, Repository: repository, APIBase: "https://" + host + "/v2/" + repository}, nil
 }
 
-func (d OCIReleaseDiscovery) listTags(ctx context.Context, client *http.Client, reference parsedRegistryReference, credential RegistryCredential, token string) ([]string, string, error) {
-	next := reference.APIBase + "/tags/list?n=100"
+func validRegistryCursor(value string, reference parsedRegistryReference) bool {
+	cursor, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || cursor.Scheme != "https" || cursor.Host != reference.RegistryHost || cursor.User != nil || cursor.Fragment != "" ||
+		cursor.Path != reference.APIBase[len("https://"+reference.RegistryHost):]+"/tags/list" {
+		return false
+	}
+	if pageSize := cursor.Query().Get("n"); pageSize != "" {
+		value, parseErr := strconv.Atoi(pageSize)
+		return parseErr == nil && value > 0 && value <= registryTagPageSize
+	}
+	return true
+}
+
+func uniqueRegistryTags(values []string) []string {
 	seen := map[string]struct{}{}
-	for page := 0; next != "" && page < 100; page++ {
-		response, refreshed, err := registryRequest(ctx, client, http.MethodGet, next, reference.Repository, credential, token, "application/json")
-		if err != nil {
-			return nil, token, err
+	result := make([]string, 0, min(len(values), 20))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !registryTagPattern.MatchString(value) {
+			continue
 		}
-		if refreshed != "" {
-			token = refreshed
+		if _, ok := seen[value]; ok {
+			continue
 		}
-		raw, err := readRegistryBody(response, maxRegistryTagsBytes)
-		if err != nil {
-			return nil, token, err
-		}
-		var document struct {
-			Tags []string `json:"tags"`
-		}
-		if err := json.Unmarshal(raw, &document); err != nil {
-			return nil, token, fmt.Errorf("invalid OCI tag response")
-		}
-		for _, tag := range document.Tags {
-			tag = strings.TrimSpace(tag)
-			if tag == "" || len(tag) > 128 || strings.ContainsAny(tag, "\x00\r\n\t /@") {
-				continue
-			}
-			seen[tag] = struct{}{}
-			if len(seen) > maxRegistryTags {
-				return nil, token, fmt.Errorf("OCI Registry returned too many tags")
-			}
-		}
-		link := response.Header.Get("Link")
-		next = registryNextLink(response.Request.URL, link, reference.RegistryHost)
-		if next == "" && strings.Contains(strings.ToLower(link), `rel="next"`) {
-			return nil, token, fmt.Errorf("OCI Registry returned an unsafe pagination link")
+		seen[value] = struct{}{}
+		result = append(result, value)
+		if len(result) == 20 {
+			break
 		}
 	}
-	if next != "" {
-		return nil, token, fmt.Errorf("OCI Registry pagination exceeded its safe limit")
-	}
-	tags := make([]string, 0, len(seen))
-	for tag := range seen {
-		tags = append(tags, tag)
-	}
-	return tags, token, nil
+	return result
 }
 
 func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client, reference parsedRegistryReference, tag, platformOS, platformArch string, credential RegistryCredential, token string) (OCIRelease, string, error) {
@@ -348,10 +408,7 @@ func registryRequest(ctx context.Context, client *http.Client, method, endpoint,
 	}
 	response, err := makeRequest(token)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, token, err
-		}
-		return nil, token, fmt.Errorf("%w", ErrImageRegistryUnavailable)
+		return nil, token, registryTransportError(err)
 	}
 	if response.StatusCode == http.StatusUnauthorized {
 		challenge := response.Header.Get("WWW-Authenticate")
@@ -362,10 +419,7 @@ func registryRequest(ctx context.Context, client *http.Client, method, endpoint,
 		}
 		response, err = makeRequest(fresh)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return nil, token, err
-			}
-			return nil, token, fmt.Errorf("%w", ErrImageRegistryUnavailable)
+			return nil, token, registryTransportError(err)
 		}
 		token = fresh
 	}
@@ -418,14 +472,18 @@ func registryBearerToken(ctx context.Context, client *http.Client, challenge, re
 	req.Header.Set("Accept", "application/json")
 	response, err := client.Do(req)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return "", err
-		}
-		return "", ErrImageRegistryUnavailable
+		return "", registryTransportError(err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return "", ErrImageAccessDenied
+		switch response.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return "", ErrImageAccessDenied
+		case http.StatusTooManyRequests:
+			return "", ErrImageRateLimited
+		default:
+			return "", ErrImageRegistryUnavailable
+		}
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
@@ -433,7 +491,7 @@ func registryBearerToken(ctx context.Context, client *http.Client, challenge, re
 	}
 	var document struct{ Token, AccessToken string }
 	if err := json.Unmarshal(raw, &document); err != nil {
-		return "", ErrImageAccessDenied
+		return "", fmt.Errorf("%w: invalid bearer token response", ErrImageRegistryResponseInvalid)
 	}
 	token := strings.TrimSpace(document.Token)
 	if token == "" {
@@ -445,14 +503,28 @@ func registryBearerToken(ctx context.Context, client *http.Client, challenge, re
 	return token, nil
 }
 
+func registryTransportError(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("%w: %v", ErrImageRegistryTimeout, err)
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) && networkError.Timeout() {
+		return fmt.Errorf("%w: %v", ErrImageRegistryTimeout, err)
+	}
+	return fmt.Errorf("%w: %v", ErrImageRegistryNetworkUnavailable, err)
+}
+
 func readRegistryBody(response *http.Response, limit int64) ([]byte, error) {
 	defer response.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: read response body", ErrImageRegistryResponseInvalid)
 	}
 	if int64(len(raw)) > limit {
-		return nil, fmt.Errorf("OCI Registry response exceeded its safe limit")
+		return nil, fmt.Errorf("%w: response exceeded its safe limit", ErrImageRegistryResponseInvalid)
 	}
 	return raw, nil
 }
@@ -463,7 +535,7 @@ func registryContentDigest(header string, raw []byte) (string, error) {
 	computed := "sha256:" + hex.EncodeToString(digest[:])
 	if header != "" {
 		if !registryDigestPattern.MatchString(header) || header != computed {
-			return "", fmt.Errorf("OCI Registry returned a mismatched content digest")
+			return "", fmt.Errorf("%w: mismatched content digest", ErrImageRegistryResponseInvalid)
 		}
 	}
 	return computed, nil
@@ -483,7 +555,16 @@ func registryNextLink(current *url.URL, value, expectedHost string) string {
 		return ""
 	}
 	target = current.ResolveReference(target)
-	if target.Scheme != "https" || target.Host != expectedHost {
+	if target.Scheme != "https" || target.Host != expectedHost || target.User != nil || target.Fragment != "" || target.Path != current.Path {
+		return ""
+	}
+	if pageSize := target.Query().Get("n"); pageSize != "" {
+		value, parseErr := strconv.Atoi(pageSize)
+		if parseErr != nil || value <= 0 || value > registryTagPageSize {
+			return ""
+		}
+	}
+	if target.RawQuery == "" {
 		return ""
 	}
 	return target.String()

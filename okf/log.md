@@ -1,6 +1,15 @@
 # Redeven OKF Update Log
 
 ## 2026-09-03
+* **Recoverable Managed Service release picker**: Version browsing now keeps
+  every close path available during source work, aborts one generation-scoped
+  request on close or service switch, and ignores late results. OCI discovery
+  pages at most 100 tags on demand near the list end, verifies at most 20
+  visible items with four workers, consumes opaque cursors only after success,
+  preserves partial and restart-restored candidates, tries anonymous access
+  before bounded credential lookup, and reports distinct safe source failures.
+  Registry v4 migrates release-check summaries to the digest-verified
+  progressive schema v2.
 * **Accurate Flower send feedback**: Successful Turn receipts now settle the
   request and bind its optimistic outbox row by exact request and Thread
   identity without requiring an immediate current view. Missing or unusable

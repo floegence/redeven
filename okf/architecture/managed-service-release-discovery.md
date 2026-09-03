@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Service release discovery and updates
 description: Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
 tags: [architecture, web-services, releases, npm, oci, updates]
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 # Summary
 
@@ -16,13 +16,13 @@ timestamp: 2026-09-01T00:00:00Z
 
 ## Candidate discovery
 
-Schema-v1 `ReleaseCandidate` projects npm and OCI source, version or tag, channel, trust, compatibility, immutable identity, selectability, markers, and installed-release relation. SemVer-like values use semantic order; other tags remain visible without being called latest. A moved tag is marked and never silently replaces the installed digest.
+Schema-v2 `ReleaseCandidate` projects npm and OCI source, version or tag, channel, trust, compatibility, immutable identity, verification state, selectability, markers, and installed-release relation. SemVer-like values use semantic order; other tags remain visible without being called latest. A moved tag is marked and never silently replaces the installed digest.
 
-Template queries discover before installation; service queries use the installed snapshot and Secrets. Opaque short-lived candidate IDs are scoped to source, identity, and platform and expose no credentials. Create accepts `target_release_id`; omission selects the recommendation/default. Update-plan omission retains the installed release while applying a newer template revision. Update accepts only the resulting `update_plan_id` and template Notice acknowledgements.
+Template queries discover before installation; service queries use the installed snapshot and Secrets. One POST endpoint accepts `open`, `refresh`, `continue`, or `verify`. Opaque short-lived candidate and cursor IDs are scoped to source, identity, platform, and expiry and expose no credentials or Registry cursor. Create accepts `target_release_id`; omission selects the recommendation/default. Update-plan omission retains the installed release while applying a newer template revision. Update accepts only the resulting `update_plan_id` and template Notice acknowledgements.
 
 Ephemeral update-plan schema v2 combines an exact release with the latest compatible template revision. It rejects empty updates and records identities, revisions, advisory `risk_ids`, notices, stopped-state requirement, and expiry. The Manager revalidates the source, scope, platform, expiry, and stopped state before consuming the plan once. Release-risk acknowledgement fields do not exist. Renderer submits no URLs, digests, or credentials.
 
-The Manager waits 30–90 seconds after startup, checks every six hours and after install or update, and collapses matching bounded requests. Conditional refresh strips authorization on cross-origin redirects. Verified latest identities and schedule are hashed and persisted; failure preserves the last success as stale without blocking service actions or creating a toast.
+The Manager waits 30–90 seconds after startup, checks every six hours and after install or update, and collapses matching bounded source requests. Conditional refresh uses ETag or Last-Modified and strips authorization on cross-origin redirects. Release-check schema v2 persists the source fingerprint, loaded tags, verified identities, completion state, last-success summary, and schedule, but never credentials, cursors, transient candidate IDs, or raw errors. A matching snapshot is restored with newly issued IDs after restart. Cancellation changes neither memory nor persistence; source failure preserves a last success as stale without blocking service actions or creating a toast.
 
 ## npm Host source and installation
 
@@ -34,9 +34,9 @@ npm lifecycle scripts execute with the current Environment user's authority and 
 
 ## OCI source and selection
 
-Single-container templates discover directly from their image repository; Compose is excluded because multiple image versions do not form one release identity. Bounded Distribution pagination verifies Docker/OCI manifest bytes and selects the current Linux platform digest. Basic/Bearer challenges may reuse Docker or Podman credentials without persistence. Credential-helper failure does not block public anonymous access and becomes diagnostic only after Registry denial. Authentication, rate limiting, and availability remain distinct failures.
+Single-container templates discover directly from their image repository; Compose is excluded because multiple image versions do not form one release identity. Distribution pages load at most 100 tags. Current and recommended tags are pinned into the first result. The Renderer requests another page only when the user reaches the end of the loaded list, and verifies at most 20 visible or explicitly selected tags per batch; the Registry resolver uses at most four Manifest workers. “Latest” markers appear only after enumeration completes and are computed independently from the pinned display order. A cursor is consumed only after its page succeeds, so cancellation and temporary failure remain retryable. Every source request starts anonymously, including an anonymous Bearer challenge. Redeven reads Docker or Podman credentials only after the Registry rejects anonymous access, retries that exact request once, and gives a credential helper at most five seconds. A broken local helper therefore cannot delay a public Registry or outlive a bounded private-source request.
 
-All tags remain visible. Preview, special, and non-SemVer tags are selectable when identity and platform verify; other items show a disabled reason. Install and update persist tag context plus exact platform digest. Registry protocol, identity, limit, and platform failures return stable safe errors without raw bodies.
+Unverified tags remain visible but cannot be submitted. Selection triggers exact Manifest and current Linux platform verification; a missing, incompatible, or malformed tag disables only that item. Authentication rejection, credential unavailability, repository absence, rate limiting, timeout, network failure, invalid response, and general source failure retain distinct safe codes. Install and update persist tag context plus exact platform digest, and update-plan creation revalidates only the chosen tag instead of rescanning the repository.
 
 ## Update, downgrade, and recovery
 
@@ -46,7 +46,9 @@ Interrupted recovery uses the v2 journal to finalize a healthy committed target 
 
 Template recommendation, template revision, and release identity remain separate. Recommendation is presentation plus the new-install default. Template revision owns endpoint, mount, command, and security policy. ReleaseIdentity is the sole installed-version authority and owns npm version/integrity or OCI tag/digest/platform/source. A newer recommendation never rewrites an instance. A newer template can be applied while retaining the current release, and a source release can be selected without changing template policy.
 
-The service API projects current, recommended, latest stable, latest preview, check state and time, and current and available template revisions. The row makes the exact current release a direct version entry and shows source-latest hints only for a genuinely newer comparable release. The fixed-footer version drawer defaults a service to “keep current”; new deployment defaults to recommendation. It never selects the first source result automatically. Version risks use compact read-only text instead of checkbox acknowledgements. Summary, filters, advisory hints, and footer remain fixed while one compact, divided candidate list consumes the remaining height and owns all browsing scroll. The outer drawer body is non-scrolling, and plan review replaces the browser instead of extending it. Mouse, trackpad, touch, and keyboard input therefore stay with one visible local scroll owner instead of reaching the Workbench canvas. Source errors are rendered from stable localized error codes rather than backend English messages.
+The service API projects current, recommended, latest stable, latest preview, check state and time, and current and available template revisions. The row makes the exact current release a direct version entry and shows source-latest hints only for a genuinely newer comparable release. The fixed-footer version drawer defaults a service to “keep current”; new deployment defaults to recommendation. It never selects the first source result automatically. Version risks use compact read-only text instead of checkbox acknowledgements. Summary, filters, advisory hints, and footer remain fixed while one compact, divided candidate list consumes the remaining height and owns all browsing scroll. The outer drawer body is non-scrolling, and plan review replaces the browser instead of extending it. Mouse, trackpad, touch, and keyboard input therefore stay with one visible local scroll owner instead of reaching the Workbench canvas.
+
+The overlay, close button, Escape, and footer Cancel remain available during listing, verification, refresh, and plan generation. Closing or switching services aborts the session request; a generation fence rejects late and cross-service responses. Existing candidates stay visible under an inline loading state. Abort is silent, while source failures use stable localized codes rather than backend English messages. An explicitly clicked pending item becomes selected after successful verification.
 
 # Boundaries
 
@@ -54,19 +56,20 @@ Redeven does not mirror packages, images, metadata, or credentials and does not 
 
 # Evidence
 
-- `redeven:internal/managedwebservice/release_discovery.go` - Builds, annotates, persists, scopes, revalidates, and schedules release candidates and summaries.
+- `redeven:internal/managedwebservice/release_discovery.go` - Persists, scopes, revalidates, restores, and schedules release candidates and summaries.
+- `redeven:internal/managedwebservice/release_catalog.go` - Owns the open, refresh, continue, verify, cursor, candidate, and partial-failure state machine.
 - `redeven:internal/managedwebservice/update_plan.go` - Creates, validates, expires, and consumes the single release-and-template update plan.
 - `redeven:internal/managedwebservice/release_http_cache.go` - Enforces request collapse, conditional metadata caching, response bounds, credential scoping, and redirect policy.
 - `redeven:internal/managedwebservice/npm_host.go` - Discovers npm metadata and installs and verifies isolated exact package releases.
 - `redeven:internal/containerengine/registry_discovery.go` - Resolves paginated OCI tags, authentication challenges, manifests, platform digests, and stable errors.
 - `redeven:internal/containerengine/registry_credentials.go` - Reads Docker and Podman credential stores and helpers without product persistence.
 - `redeven:internal/managedwebservice/update.go` - Owns update-v2 staging, commit, rollback, and interrupted recovery.
-- `redeven:internal/portforward/registry/schema.go` - Migrates Registry v1 to v2 and persists exact release identity separately from release-check summaries.
+- `redeven:internal/portforward/registry/schema.go` - Preserves the v1-v4 Registry lineage and atomically migrates release-check summaries to schema v2.
 - `redeven:internal/portforward/registry/release_checks.go` - Verifies and stores the last successful check summary.
 - `redeven:internal/codeapp/appserver/managed_web_services.go` - Exposes permission-checked candidate and update-plan APIs.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Presents release identity, filters, local scrolling, localized source failures, advisory risk hints, and exact update selection.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.browser.test.tsx` - Verifies compact wide and narrow geometry plus real Playwright wheel input in both directions.
-- `redeven:internal/managedwebservice/release_discovery_test.go` - Covers npm ordering, stale success, anonymous OCI fallback, authenticated OCI failure, identity visibility, redaction, range compatibility, and comparison.
+- `redeven:internal/managedwebservice/release_discovery_test.go` - Covers npm ordering, stale success, OCI pagination retry, pinned releases, restart restoration, authentication, redaction, range compatibility, and comparison.
 - `redeven:internal/managedwebservice/update_test.go` - Covers recommendation, current-version retention, downgrade, risk, expiry, and restart-persisted status.
 - `redeven:internal/containerengine/registry_discovery_test.go` - Covers OCI pagination, authentication, platform choice, digest verification, hostile links, limits, and cancellation.
-- `redeven:internal/portforward/registry/registry_test.go` - Covers fresh exact release, binding, and operation lineage persistence.
+- `redeven:internal/portforward/registry/registry_test.go` - Covers fresh v4 initialization, contiguous migration, release-summary preservation, rollback, drift, binding, and operation lineage.
