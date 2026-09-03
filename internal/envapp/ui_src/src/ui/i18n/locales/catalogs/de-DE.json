@@ -3293,6 +3293,8 @@
       "workspaceCustomDescription": "Der Dienst kann den ausgewählten Ordner lesen und ändern. Wählen Sie einen möglichst eng begrenzten Arbeitsbereich.",
       "workspaceCreatedOnDeploy": "Dieses Verzeichnis wird beim Start der Bereitstellung erstellt.",
       "workspaceCreateFailed": "Redeven konnte das Arbeitsbereichsverzeichnis nicht erstellen oder überprüfen. Prüfen Sie den Speicherort und versuchen Sie es erneut.",
+      "workspaceMissing": "Das Arbeitsbereichsverzeichnis fehlt. Bei einem erneuten Versuch wird ein neues leeres Verzeichnis erstellt und der Dienst gestartet. Stellen Sie zuerst das ursprüngliche Verzeichnis wieder her, wenn Sie dessen Inhalte benötigen.",
+      "workspaceUnavailable": "Der gespeicherte Arbeitsbereich kann nicht verwendet werden. Stellen Sie das ursprüngliche Verzeichnis oder den Zugriff darauf wieder her und versuchen Sie es erneut. Falls dies nicht möglich ist, deinstallieren Sie den Dienst und stellen Sie ihn erneut bereit.",
       "workspaceDeleteFailed": "Redeven konnte das Arbeitsbereichsverzeichnis nicht löschen. Der Diensteintrag wurde für einen erneuten Versuch beibehalten.",
       "workspaceDeleteUnsafe": "Der gespeicherte Arbeitsbereich kann nicht mehr sicher gelöscht werden. Sein Inhalt blieb unverändert.",
       "workspaceInUse": "Ein anderer verwalteter Dienst verwendet diesen Arbeitsbereich oder ein zugehöriges Verzeichnis. Er wurde nicht gelöscht.",

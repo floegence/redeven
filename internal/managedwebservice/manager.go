@@ -849,6 +849,11 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 		m.fail(&service, &op, code, message, err)
 		return
 	}
+	if err := m.prepareOperationWorkspace(&service, &op); err != nil {
+		code, message, _, _ := ErrorDetails(err)
+		m.fail(&service, &op, code, message, err)
+		return
+	}
 	var err error
 	switch OperationAction(op.Action) {
 	case ActionInstall, ActionRetryInstall:
@@ -969,7 +974,7 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 		return err
 	}
 	m.progress(op, "starting", 5)
-	runtimeID, err = driver.Start(ctx, service)
+	runtimeID, err = m.startRuntime(ctx, service, driver)
 	if err != nil {
 		return err
 	}
@@ -993,7 +998,7 @@ func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedServi
 		return err
 	}
 	m.progress(op, "starting", 5)
-	runtimeID, err := driver.Start(ctx, service)
+	runtimeID, err := m.startRuntime(ctx, service, driver)
 	if err != nil {
 		return err
 	}
@@ -1008,6 +1013,27 @@ func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedServi
 	}
 	blank := ""
 	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &running, LastErrorCode: &blank, LastErrorMessage: &blank})
+}
+
+func (m *Manager) prepareOperationWorkspace(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation) error {
+	if service == nil || op == nil {
+		return serviceError("WORKSPACE_UNAVAILABLE", "The saved workspace directory is unavailable.", 409, false, nil)
+	}
+	action := OperationAction(op.Action)
+	switch action {
+	case ActionStart, ActionRestart:
+		mode := workspaceVerifyExisting
+		if strings.TrimSpace(op.RetryOfOperationID) != "" {
+			mode = workspaceCreateIfMissing
+		}
+		_, err := m.prepareWorkspace(service.WorkspacePath, mode)
+		return err
+	case ActionUpdate, ActionReconfigure:
+		_, err := m.prepareWorkspace(service.WorkspacePath, workspaceVerifyExisting)
+		return err
+	default:
+		return nil
+	}
 }
 
 func (m *Manager) runStop(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {

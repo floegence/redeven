@@ -3293,6 +3293,8 @@
       "workspaceCustomDescription": "Le service peut lire et modifier le dossier sélectionné. Choisissez un espace de travail au périmètre aussi limité que possible.",
       "workspaceCreatedOnDeploy": "Ce répertoire sera créé au démarrage du déploiement.",
       "workspaceCreateFailed": "Redeven n’a pas pu créer ou vérifier le répertoire de l’espace de travail. Vérifiez l’emplacement, puis réessayez.",
+      "workspaceMissing": "Le répertoire de l’espace de travail est introuvable. Une nouvelle tentative créera un répertoire vide et démarrera le service. Si vous avez besoin du contenu d’origine, restaurez d’abord le répertoire.",
+      "workspaceUnavailable": "L’espace de travail enregistré ne peut pas être utilisé. Restaurez le répertoire d’origine ou son accès, puis réessayez. Si cela est impossible, désinstallez et redéployez le service.",
       "workspaceDeleteFailed": "Redeven n’a pas pu supprimer le répertoire de l’espace de travail. L’enregistrement du service a été conservé afin de permettre une nouvelle tentative.",
       "workspaceDeleteUnsafe": "L’espace de travail enregistré ne peut plus être supprimé en toute sécurité. Son contenu n’a pas été modifié.",
       "workspaceInUse": "Un autre service géré utilise cet espace de travail ou un répertoire associé. Il n’a donc pas été supprimé.",
