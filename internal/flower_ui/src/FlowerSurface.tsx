@@ -1599,9 +1599,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadPreferenceEditable = createMemo(() => {
     if (selectedThreadDetailPending()) return false;
     if (selectedThreadReadOnly()) return false;
-    if (selectedInputRequest()) return false;
-    const status = selectedThreadLiveStatus();
-    return status !== 'running' && status !== 'waiting_approval' && status !== 'waiting_user';
+    if (!selectedThreadID()) return true;
+    return !selectedThreadHasActiveTurnEvidence()
+      && Number(selectedThread()?.queued_turn_count ?? 0) === 0
+      && selectedCanonicalQueuedTurns().length === 0
+      && selectedApprovalActions().length === 0
+      && !selectedInputRequest();
   });
   const permissionPatchPending = createMemo(() => {
     const pending = pendingPermissionPatch();
@@ -1698,11 +1701,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     attachmentStateRevision();
     return currentAttachmentController().snapshot();
   });
-  const composerPermissionInteractive = createMemo(() => (
+  const composerPermissionAvailable = createMemo(() => (
     !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && (Boolean(selectedThreadID()) || snapshot() !== null)
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
+  ));
+  const composerPermissionInteractive = createMemo(() => (
+    composerPermissionAvailable()
+    && selectedThreadPreferenceEditable()
   ));
   type ComposerDraftOperation = Readonly<{
     sessionKey: string;
@@ -2167,14 +2174,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!props.adapter.setThreadPermissionType || !composerPermissionInteractive()) return;
     const previous = selectedThreadPermissionType();
     if (previous === permissionType) return;
-    const appliesToActiveTurn = flowerThreadHasActiveTurnEvidence(selectedThread());
     setPendingPermissionPatch({ threadID, requested: permissionType, previous });
     try {
       const live = await props.adapter.setThreadPermissionType(threadID, permissionType);
       const updated = receiveThreadView(live, 'user_action').thread;
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
-        if (appliesToActiveTurn) notifySuccess(copy().chat.permissionSelectorUpdatedForActiveTurn);
       }
     } catch (error) {
       if (selectedThreadDetailMatches(threadID)) {
@@ -5626,8 +5631,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const permissionSelector = () => {
-    const canUseMenu = createMemo(() => composerPermissionInteractive());
-    const interactive = createMemo(() => canUseMenu() && !permissionPatchPending());
+    const canUseMenu = createMemo(() => composerPermissionAvailable());
+    const interactive = createMemo(() => composerPermissionInteractive() && !permissionPatchPending());
     return (
       <div
         class="flower-permission-selector"

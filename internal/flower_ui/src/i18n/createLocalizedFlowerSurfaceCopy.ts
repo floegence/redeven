@@ -79,7 +79,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       permissionSelectorLabel: t(i18n, k('chat.permissionSelectorLabel')),
       permissionSelectorSaving: t(i18n, k('chat.permissionSelectorSaving')),
       permissionSelectorErrorTitle: t(i18n, k('chat.permissionSelectorErrorTitle')),
-      permissionSelectorUpdatedForActiveTurn: t(i18n, k('chat.permissionSelectorUpdatedForActiveTurn')),
       toolActivityRunCommand: t(i18n, k('chat.toolActivityRunCommand')),
       toolActivityReadCommandOutput: t(i18n, k('chat.toolActivityReadCommandOutput')),
       toolActivityWriteCommandInput: t(i18n, k('chat.toolActivityWriteCommandInput')),

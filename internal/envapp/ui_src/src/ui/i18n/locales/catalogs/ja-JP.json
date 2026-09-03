@@ -4037,7 +4037,6 @@
       "permissionSelectorLabel": "スレッド権限",
       "permissionSelectorSaving": "権限を保存中...",
       "permissionSelectorErrorTitle": "Flower は権限を保存できませんでした。",
-      "permissionSelectorUpdatedForActiveTurn": "権限を更新しました。この回答の以降の操作に適用されます。",
       "toolActivityRunCommand": "コマンドを実行",
       "toolActivityReadCommandOutput": "コマンド出力を表示",
       "toolActivityWriteCommandInput": "コマンドに入力を送信",

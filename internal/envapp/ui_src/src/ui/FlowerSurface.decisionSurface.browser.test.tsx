@@ -976,6 +976,8 @@ describe('Flower bottom decision surface', () => {
     const permissionTrigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
     permissionTrigger.click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    const selectedPermission = runtime.querySelector('.flower-permission-menu-item-active') as HTMLButtonElement;
+    expect(getComputedStyle(selectedPermission).borderLeftWidth).toBe('0px');
     approvalVisible = true;
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')), 2000);
     expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
@@ -991,7 +993,7 @@ describe('Flower bottom decision surface', () => {
     expect(runtime.querySelector('.flower-composer-reference-menu')).toBeNull();
   });
 
-  it('updates permission during an active turn from one authoritative receipt', async () => {
+  it('disables permission changes while the selected thread is active', async () => {
     const runningThread = thread({
       thread_id: 'thread-active-permission',
       status: 'running',
@@ -999,13 +1001,8 @@ describe('Flower bottom decision surface', () => {
       permission_type: 'approval_required',
       settings_revision: 10,
     });
-    const confirmedThread = {
-      ...runningThread,
-      permission_type: 'full_access' as const,
-      settings_revision: 11,
-    };
     const loadThread = vi.fn(async () => liveBootstrap(runningThread, 21));
-    const setThreadPermissionType = vi.fn(async () => liveBootstrap(confirmedThread, 21));
+    const setThreadPermissionType = vi.fn();
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
@@ -1016,14 +1013,12 @@ describe('Flower bottom decision surface', () => {
     (runtime.querySelector(`[data-thread-id="${runningThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
 
-    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]')));
-    const fullAccess = runtime.querySelector<HTMLButtonElement>('.flower-permission-menu-item[data-permission-type="full_access"]')!;
-    fullAccess.click();
-
-    await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
-    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
-    expect(setThreadPermissionType).toHaveBeenCalledWith(runningThread.thread_id, 'full_access');
+    const permissionTrigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
+    expect(permissionTrigger.disabled).toBe(true);
+    permissionTrigger.click();
+    expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
+    expect(setThreadPermissionType).not.toHaveBeenCalled();
+    expect(permissionTrigger.getAttribute('data-permission-type')).toBe('approval_required');
     expect(loadThread).toHaveBeenCalledTimes(1);
   });
 

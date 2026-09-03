@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-09-03
+* **Coherent Flower permission controls**: The shared preference-editability
+  projection now disables permission mutation while a thread is active, queued,
+  or waiting on an interaction, matching the canonical service guard. The
+  permission menu retains its check and background selection without a left
+  accent bar, and the obsolete active-turn update path and copy are removed.
 * **Visible and stable Managed Service operations**: TemplateSpec v5 adds an
   explicit Host startup-output URL contract, while Redeven validates and stores
   the process-bound path outside Registry, logs, diagnostics, and audit. One

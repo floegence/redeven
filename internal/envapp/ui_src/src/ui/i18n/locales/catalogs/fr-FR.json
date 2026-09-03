@@ -4037,7 +4037,6 @@
       "permissionSelectorLabel": "Autorisation du fil",
       "permissionSelectorSaving": "Enregistrement de l’autorisation...",
       "permissionSelectorErrorTitle": "Flower n’a pas pu enregistrer l’autorisation.",
-      "permissionSelectorUpdatedForActiveTurn": "Autorisation mise à jour. Elle s’appliquera aux opérations suivantes de cette réponse.",
       "toolActivityRunCommand": "Exécuter la commande",
       "toolActivityReadCommandOutput": "Afficher la sortie de la commande",
       "toolActivityWriteCommandInput": "Envoyer une entrée à la commande",

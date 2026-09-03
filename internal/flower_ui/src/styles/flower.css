@@ -1861,7 +1861,6 @@ html.dark .flower-component-shell {
   grid-template-columns: minmax(0, 1fr);
   gap: 0.125rem;
   border: 0;
-  border-left: 3px solid transparent;
   border-radius: 0.375rem;
   background: transparent;
   color: var(--foreground);
@@ -1869,7 +1868,6 @@ html.dark .flower-component-shell {
   text-align: left;
   transition:
     background-color 140ms ease,
-    border-color 140ms ease,
     color 140ms ease;
 }
 
@@ -1881,7 +1879,6 @@ html.dark .flower-component-shell {
 
 .flower-permission-menu-item-active {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
-  border-left-color: color-mix(in srgb, var(--primary) 58%, transparent);
   outline: none;
 }
 

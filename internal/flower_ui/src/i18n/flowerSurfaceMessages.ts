@@ -66,7 +66,6 @@ export const flowerSurfaceEnUS = {
     permissionSelectorLabel: 'Thread permission',
     permissionSelectorSaving: 'Saving permission...',
     permissionSelectorErrorTitle: 'Flower could not save permission.',
-    permissionSelectorUpdatedForActiveTurn: 'Permission updated. It applies to later operations in this reply.',
     toolActivityRunCommand: 'Run command',
     toolActivityReadCommandOutput: 'View command output',
     toolActivityWriteCommandInput: 'Send input to command',

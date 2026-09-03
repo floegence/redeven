@@ -4051,7 +4051,6 @@
       "permissionSelectorLabel": "线程权限",
       "permissionSelectorSaving": "正在保存权限...",
       "permissionSelectorErrorTitle": "Flower 未能保存权限。",
-      "permissionSelectorUpdatedForActiveTurn": "权限已更新，将用于本轮后续操作。",
       "toolActivityRunCommand": "运行命令",
       "toolActivityReadCommandOutput": "查看命令输出",
       "toolActivityWriteCommandInput": "向命令发送输入",
