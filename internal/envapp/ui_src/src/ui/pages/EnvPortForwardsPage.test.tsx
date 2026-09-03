@@ -542,6 +542,39 @@ describe('web service metadata and template validation', () => {
     }
   });
 
+  it('shows opening progress inside the managed service action', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-opening', template_id: 'example-host', service_family_id: 'example-host',
+          name: 'Example Service', template_source: 'builtin', deployment: 'host',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running',
+          forward_id: 'pf-opening', runtime_port: 3000,
+        }}
+        busy
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      const openButton = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-actions"] button');
+      expect(openButton?.disabled).toBe(true);
+      expect(openButton?.getAttribute('aria-busy')).toBe('true');
+      expect(openButton?.querySelector('[data-testid="snake-loader"]')).not.toBeNull();
+      expect(openButton?.querySelector('[data-testid="external-link-icon"]')).toBeNull();
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
   it('keeps failed managed services concise and copies only structured diagnostics', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1042,7 +1075,7 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).toContain('No web services yet');
   });
 
-  it('keeps the blocking curtain for opening a web service', async () => {
+  it('keeps page content visible while the initiating service row reports opening progress', async () => {
     const runtimeRequest = deferred<typeof localRuntime>();
     controlplaneMocks.getLocalRuntime.mockReturnValue(runtimeRequest.promise);
     const assign = vi.fn();
@@ -1054,8 +1087,11 @@ describe('EnvPortForwardsPage', () => {
     openButton?.click();
     await flushMicrotasks();
 
-    expect(host.querySelector('.redeven-loading-curtain')).not.toBeNull();
-    expect(host.textContent).toContain('Resolving route');
+    expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
+    expect(host.querySelector('[data-testid="port-forward-row"]')).not.toBeNull();
+    expect(openButton?.disabled).toBe(true);
+    expect(openButton?.getAttribute('aria-busy')).toBe('true');
+    expect(openButton?.querySelector('[data-testid="snake-loader"]')).not.toBeNull();
 
     runtimeRequest.resolve(localRuntime);
     await waitForAssertion(() => {
@@ -2581,7 +2617,7 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(updateBody).toEqual({ name: 'Renamed dashboard', description: 'Browser preview', access_mode: 'unified_proxy' }));
   });
 
-  it('keeps one blocking transaction while a temporary session is created and opened', async () => {
+  it('keeps temporary-session progress on the address launcher without covering page content', async () => {
     const sessionRequest = deferred<any>();
     const runtimeRequest = deferred<typeof localRuntime>();
     const assign = vi.fn();
@@ -2606,9 +2642,12 @@ describe('EnvPortForwardsPage', () => {
     );
     await flushMicrotasks();
 
-    expect(host.querySelector('.redeven-loading-curtain')).not.toBeNull();
-    expect(host.textContent).toContain('Preparing a temporary Web Service session');
+    const addressOpenButton = host.querySelector<HTMLButtonElement>('[data-testid="web-service-address-open"]');
+    expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
     expect(addressInput?.disabled).toBe(true);
+    expect(addressOpenButton?.disabled).toBe(true);
+    expect(addressOpenButton?.getAttribute('aria-busy')).toBe('true');
+    expect(addressOpenButton?.querySelector('[data-testid="snake-loader"]')).not.toBeNull();
 
     sessionRequest.resolve({
       forward: { forward_id: 'temporary-1', target_url: 'http://localhost:3000' },
@@ -2616,15 +2655,17 @@ describe('EnvPortForwardsPage', () => {
       ephemeral: true,
     });
     await flushMicrotasks();
-    expect(host.querySelector('.redeven-loading-curtain')).not.toBeNull();
-    expect(host.textContent).toContain('Resolving route');
+    expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
     expect(addressInput?.disabled).toBe(true);
+    expect(addressOpenButton?.getAttribute('aria-busy')).toBe('true');
 
     runtimeRequest.resolve(localRuntime);
     await waitForAssertion(() => {
       expect(assign).toHaveBeenCalledWith('https://localhost/pf/temporary-1/');
       expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
       expect(addressInput?.disabled).toBe(false);
+      expect(addressOpenButton?.getAttribute('aria-busy')).toBeNull();
+      expect(addressOpenButton?.querySelector('[data-testid="snake-loader"]')).toBeNull();
     });
   });
 

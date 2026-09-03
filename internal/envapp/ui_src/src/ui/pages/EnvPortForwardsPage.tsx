@@ -33,7 +33,6 @@ import { readUIStorageJSON, removeUIStorageItem } from '../services/uiStorage';
 import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
-import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from '../utils/clipboard';
@@ -798,7 +797,14 @@ export function PortForwardRow(props: {
 
       <div class={serviceRowActionsClass} data-testid="port-forward-actions">
         <Tooltip content={props.openUnavailableReason || props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="col-start-1 w-full">
-          <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy || props.canOpen === false} class="h-8 w-full px-3">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={props.onOpen}
+            disabled={props.busy || props.canOpen === false}
+            aria-busy={props.busy || undefined}
+            class="h-8 w-full px-3"
+          >
             <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
               <InlineButtonSnakeLoading class="mr-1.5" />
             </Show>
@@ -1629,8 +1635,20 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
         </div>
 
         <div class={serviceRowActionsClass} data-testid="managed-service-actions">
-          <Tooltip content={props.openUnavailableReason || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="w-full">
-            <Button size="sm" variant="default" class="h-8 w-full px-3" onClick={props.onOpen} disabled={!running() || busy() || !props.canOpen}><ExternalLink class="mr-1.5 h-3.5 w-3.5" />{i18n.t('webServices.actions.open')}</Button>
+          <Tooltip content={props.openUnavailableReason || (props.busy ? i18n.t('webServices.status.opening') : i18n.t('webServices.actions.openServiceTooltip'))} placement="top" anchorClass="w-full">
+            <Button
+              size="sm"
+              variant="default"
+              class="h-8 w-full px-3"
+              onClick={props.onOpen}
+              disabled={!running() || busy() || !props.canOpen}
+              aria-busy={props.busy || undefined}
+            >
+              <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
+                <InlineButtonSnakeLoading class="mr-1.5" />
+              </Show>
+              {i18n.t('webServices.actions.open')}
+            </Button>
           </Tooltip>
           <Tooltip content={managedActionUnavailableReason(primaryCapability(), i18n)} placement="top" anchorClass="w-full" disabled={primaryCapability().available}>
             <Button size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={() => props.onAction(primaryAction())} disabled={busy() || !props.canManage || !primaryCapability().available}>
@@ -2880,6 +2898,7 @@ export function EnvPortForwardsPage() {
   // Busy state for individual operations
   const [busyID, setBusyID] = createSignal<string | null>(null);
   const [busyText, setBusyText] = createSignal<string>('');
+  const addressOpening = () => busyID() === 'new-session';
 
   // Create dialog state
   const [createOpen, setCreateOpen] = createSignal(false);
@@ -3192,8 +3211,18 @@ export function EnvPortForwardsPage() {
                     data-testid="web-service-address-input"
                   />
                 </div>
-                <Button type="submit" size="sm" class="h-10 shrink-0 px-4" disabled={!canExecute() || !!busyID() || !address().trim()} data-testid="web-service-address-open">
-                  <ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />
+                <Button
+                  type="submit"
+                  size="sm"
+                  class="h-10 shrink-0 px-4"
+                  disabled={!canExecute() || !!busyID() || !address().trim()}
+                  aria-busy={addressOpening() || undefined}
+                  aria-label={addressOpening() ? busyText() : i18n.t('webServices.actions.openAddress')}
+                  data-testid="web-service-address-open"
+                >
+                  <Show when={addressOpening()} fallback={<ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />}>
+                    <InlineButtonSnakeLoading class="mr-1.5" />
+                  </Show>
                   {i18n.t('webServices.actions.openAddress')}
                 </Button>
               </div>
@@ -3927,9 +3956,6 @@ export function EnvPortForwardsPage() {
           </p>
         </div>
       </ConfirmDialog>
-
-      {/* Global loading overlay for opening operations */}
-      <RedevenLoadingCurtain visible={!!busyID() && !!busyText()} eyebrow={i18n.t('webServices.loadingEyebrow')} message={busyText() || i18n.t('webServices.status.working')} />
     </div>
   );
 }
