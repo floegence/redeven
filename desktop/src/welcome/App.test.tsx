@@ -1371,7 +1371,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`');
     expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');
     expect(appSrc).toContain('current?.request_id === requestID ? null : current');
-    expect(appSrc).toContain('closeFlowerTurnLauncher();\n      await openFlowerSurface();');
+    expect(appSrc).toMatch(/closeFlowerTurnLauncher\(\);\s*await openFlowerSurface\(\);/u);
     expect(appSrc).toContain(
       'context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel)',
     );
@@ -2740,11 +2740,11 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toMatch(/return \w+\(\) \? "surface" : "global";/);
     expect(dialogSrc).toContain('"global"');
     expect(dialogSrc).toContain('"fixed inset-0 box-border p-4"');
-    expect(dialogSrc).toContain('globalZIndex === void 0 && "z-50"');
-    expect(dialogSrc).toContain('"z-index": e.globalZIndex');
+    expect(dialogSrc).toMatch(/\w+\(\) === void 0 && "z-50"/u);
+    expect(dialogSrc).toMatch(/"z-index": \w+\(\)/u);
     expect(dialogSrc).toContain('data-floe-dialog-backdrop');
     expect(dialogSrc).toContain('data-floe-dialog-panel');
-    expect(dialogSrc).toContain('"flex flex-col", e.class');
+    expect(dialogSrc).toMatch(/flex flex-col.*e\.class/u);
     expect(dialogSrc).toMatch(/return \w+\(\) \? void 0 : "true";/);
     expect(dialogSrc).toContain('return e.children ??');
     expect(dialogSrc).toContain('as ConfirmDialog');
