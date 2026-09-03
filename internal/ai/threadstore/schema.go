@@ -19,7 +19,7 @@ func CurrentSchemaVersion() int {
 }
 
 func threadstoreSchemaSpec() sqliteutil.Spec {
-	return threadstoreSchemaSpecWithPendingInputMigration(nil, nil)
+	return threadstoreSchemaSpecWithPendingInputMigration(context.TODO(), nil)
 }
 
 func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate PendingInputMigrationHandler) sqliteutil.Spec {
