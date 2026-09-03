@@ -104,7 +104,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		t.Fatalf("CreateThread: %v", err)
 	}
 	start, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
+		ClientRequestID: "request-ask-user-start", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
 		Input:   RunInput{Text: "Deploy the application."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	})
@@ -174,7 +174,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	}
 
 	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
+		ClientRequestID: "request-ask-user-history", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
 		Input:   RunInput{Text: "Confirm that the earlier answer remains available."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	}); err != nil {
@@ -295,7 +295,7 @@ func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Finish with a normal response."},
+		ClientRequestID: "request-natural-stop", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Finish with a normal response."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	}); err != nil {
 		t.Fatal(err)
@@ -391,7 +391,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-pro",
+		ClientRequestID: "request-user-input-receipt", ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-pro",
 		Input: RunInput{Text: "Ask for a receipt value."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	}); err != nil {
 		t.Fatalf("SendUserTurn: %v", err)

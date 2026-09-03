@@ -91,7 +91,7 @@ func TestThreadModelSwitchUsesPersistedModelAcrossTurnsAndRestart(t *testing.T) 
 		t.Fatalf("SetThreadPermissionType(readonly): %v", err)
 	}
 	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-flash", Input: RunInput{Text: "stale model must fail"},
+		ClientRequestID: "request-stale-model", ThreadID: thread.ThreadID, Model: "deepseek/deepseek-v4-flash", Input: RunInput{Text: "stale model must fail"},
 	}); !errors.Is(err, ErrThreadModelConflict) {
 		t.Fatalf("SendUserTurn stale model error=%v, want ErrThreadModelConflict", err)
 	}
@@ -127,7 +127,7 @@ func TestThreadModelSwitchUsesPersistedModelAcrossTurnsAndRestart(t *testing.T) 
 func sendAndWaitForModelSwitch(t *testing.T, svc *Service, meta *session.Meta, threadID string, text string, model string) {
 	t.Helper()
 	response, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
-		ThreadID: threadID, Model: model, Input: RunInput{Text: text},
+		ClientRequestID: "request-model-switch-" + strings.ReplaceAll(text, " ", "-"), ThreadID: threadID, Model: model, Input: RunInput{Text: text},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	})
 	if err != nil || response.Kind != "start" {

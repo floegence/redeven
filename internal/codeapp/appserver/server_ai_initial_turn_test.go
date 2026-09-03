@@ -101,6 +101,43 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 	if secondStatus != http.StatusAccepted || second.ClientRequestID != first.ClientRequestID || second.ThreadID != first.ThreadID || second.Kind != first.Kind || second.TurnID != first.TurnID || second.Current.ViewVersion < first.Current.ViewVersion {
 		t.Fatalf("second status=%d receipt=%#v body=%s, want %#v", secondStatus, second, secondBody, first)
 	}
+	postExisting := func(body string) (int, ai.SendUserTurnResponse, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+first.ThreadID+"/turns", bytes.NewBufferString(body))
+		req.Header.Set("Origin", origin)
+		recorder := httptest.NewRecorder()
+		server.serveHTTP(recorder, req)
+		var response struct {
+			OK   bool                    `json:"ok"`
+			Data ai.SendUserTurnResponse `json:"data"`
+		}
+		if recorder.Code == http.StatusAccepted {
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode existing-thread receipt: %v", err)
+			}
+			if !response.OK {
+				t.Fatalf("response=%s", recorder.Body.String())
+			}
+		}
+		return recorder.Code, response.Data, recorder.Body.String()
+	}
+	existingRequestID := "client_existing_http_223456789012345678901234"
+	existingPayload := `{"client_request_id":"` + existingRequestID + `","thread_id":"` + first.ThreadID + `","input":{"text":"existing request identity","attachments":[]},"options":{}}`
+	existingStatus, existingReceipt, existingBody := postExisting(existingPayload)
+	if existingStatus != http.StatusAccepted || existingReceipt.ClientRequestID != existingRequestID || existingReceipt.ThreadID != first.ThreadID {
+		t.Fatalf("existing status=%d receipt=%#v body=%s", existingStatus, existingReceipt, existingBody)
+	}
+	missingIdentityStatus, _, missingIdentityBody := postExisting(`{"thread_id":"` + first.ThreadID + `","input":{"text":"missing request identity must not persist","attachments":[]},"options":{}}`)
+	if missingIdentityStatus != http.StatusBadRequest || !strings.Contains(missingIdentityBody, "invalid client_request_id") {
+		t.Fatalf("missing identity status=%d body=%s", missingIdentityStatus, missingIdentityBody)
+	}
+	missingIdentityRead := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+first.ThreadID+"/messages", nil)
+	missingIdentityRead.Header.Set("Origin", origin)
+	missingIdentityResponse := httptest.NewRecorder()
+	server.serveHTTP(missingIdentityResponse, missingIdentityRead)
+	if missingIdentityResponse.Code != http.StatusOK || strings.Contains(missingIdentityResponse.Body.String(), "missing request identity must not persist") {
+		t.Fatalf("missing identity mutated messages status=%d body=%s", missingIdentityResponse.Code, missingIdentityResponse.Body.String())
+	}
 
 	welcomeClientRequestID := "create_welcome_ssh_http_223456789012345678901234"
 	welcomePayload := `{

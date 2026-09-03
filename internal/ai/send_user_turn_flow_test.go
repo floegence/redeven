@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func testSendTurnMeta() *session.Meta {
@@ -53,6 +55,64 @@ func TestSendUserTurnReturnsImmediateTypedCurrent(t *testing.T) {
 	}
 	if response.Current.Activity != flruntime.ThreadActivityActive || response.Current.TurnID.String() != response.TurnID || len(response.Current.Items) != 1 || response.Current.Items[0].Kind != flruntime.ThreadItemUser {
 		t.Fatalf("command current=%#v, want immediate canonical user/running view", response.Current)
+	}
+}
+
+func TestSendUserTurnRejectsMissingExistingRequestIdentity(t *testing.T) {
+	svc := newRealtimeTestService(t, 2*time.Second)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "missing identity", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Input:    RunInput{Text: "must not be admitted"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid client_request_id") {
+		t.Fatalf("SendUserTurn error=%v, want invalid client_request_id", err)
+	}
+	view, viewErr := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if viewErr != nil {
+		t.Fatal(viewErr)
+	}
+	if len(view.Items) != 0 || len(view.Queue) != 0 {
+		t.Fatalf("missing request identity mutated runtime view: %#v", view)
+	}
+}
+
+func TestRPCSendUserTurnAllocatesMissingRequestIdentityAtAdapterBoundary(t *testing.T) {
+	svc := newRealtimeTestService(t, 2*time.Second)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "rpc identity", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := sessionrpc.NewRouter()
+	peer := newTestRPCPeer(router)
+	svc.RegisterRPC(router, meta, peer)
+	payload, err := json.Marshal(aiSendUserTurnReq{
+		ThreadID: thread.ThreadID,
+		Input:    RunInput{Text: "allocate at RPC boundary"},
+		Options:  RunOptions{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, rpcErr, err := callTestRPC(context.Background(), peer, TypeID_AI_SEND_USER_TURN, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("RPC error=%#v", rpcErr)
+	}
+	var response aiSendUserTurnResp
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(response.ClientRequestID, "send_") {
+		t.Fatalf("RPC client_request_id=%q, want adapter-generated send_ identity", response.ClientRequestID)
 	}
 }
 

@@ -104,9 +104,10 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	start, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "deepseek/deepseek-v4-flash",
-		Input:    RunInput{Text: "Find a maintained weather project."},
+		ClientRequestID: "request-unknown-tool-start",
+		ThreadID:        thread.ThreadID,
+		Model:           "deepseek/deepseek-v4-flash",
+		Input:           RunInput{Text: "Find a maintained weather project."},
 		Options: RunOptions{
 			PermissionType: config.AIPermissionFullAccess,
 			ToolAllowlist:  []string{"web_fetch"},
@@ -141,9 +142,10 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 	}
 
 	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "deepseek/deepseek-v4-flash",
-		Input:    RunInput{Text: "Continue using only tools available in this version."},
+		ClientRequestID: "request-unknown-tool-history",
+		ThreadID:        thread.ThreadID,
+		Model:           "deepseek/deepseek-v4-flash",
+		Input:           RunInput{Text: "Continue using only tools available in this version."},
 		Options: RunOptions{
 			PermissionType: config.AIPermissionFullAccess,
 			ToolAllowlist:  []string{"web_fetch"},

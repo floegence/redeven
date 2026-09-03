@@ -1531,7 +1531,12 @@ describe('Env local Flower surface adapter', () => {
             text: async () => '<html>not json</html>',
           } as Response;
         }
-        return jsonResponse({ turn_id: 'turn_malformed', kind: 'start' });
+        return jsonResponse({
+          client_request_id: 'client_malformed',
+          thread_id: 'thread_existing',
+          turn_id: 'turn_malformed',
+          kind: 'start',
+        });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });

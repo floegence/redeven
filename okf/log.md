@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-09-03
+* **Stable Flower request identity**: Desktop existing-thread sends now carry
+  the original top-level client request ID, and accepted receipts must echo the
+  exact request and Thread identities. The core service rejects missing IDs;
+  only the legacy RPC adapter allocates one before using that core path. This
+  keeps accepted messages, composer settlement, and transport outbox
+  reconciliation on one identity without false failure feedback or duplicates.
 * **Deterministic npm Host installation**: npm Host staging now owns one exact
   private application manifest and passes the same explicit prefix and hoisted
   layout to install and lifecycle rebuild. Package metadata and executable
