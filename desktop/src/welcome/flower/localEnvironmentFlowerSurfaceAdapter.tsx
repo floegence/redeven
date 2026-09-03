@@ -715,7 +715,7 @@ export async function launchLocalEnvironmentFlowerTurn(
     ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
     : '/_redeven_proxy/api/ai/turns';
   const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', endpoint, {
-    ...(existingThreadID ? { thread_id: existingThreadID } : {}),
+    ...(existingThreadID ? { client_request_id: clientRequestID, thread_id: existingThreadID } : {}),
     ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
     ...(modelID ? { model: modelID } : {}),
     input: {

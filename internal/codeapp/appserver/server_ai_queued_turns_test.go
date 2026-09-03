@@ -124,8 +124,9 @@ func TestServer_AIQueueEndpoints(t *testing.T) {
 	threadIDForCleanup = thread.ThreadID
 
 	started, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
+		ClientRequestID: "request-appserver-active",
+		ThreadID:        thread.ThreadID,
+		Model:           "openai/gpt-5-mini",
 		Input: ai.RunInput{
 			Text: "keep this run active briefly",
 		},
@@ -162,8 +163,9 @@ func TestServer_AIQueueEndpoints(t *testing.T) {
 	}
 
 	queuedResp1, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
+		ClientRequestID: "request-appserver-queued-first",
+		ThreadID:        thread.ThreadID,
+		Model:           "openai/gpt-5-mini",
 		Input: ai.RunInput{
 			Text: "first queued via app server test",
 		},
@@ -173,8 +175,9 @@ func TestServer_AIQueueEndpoints(t *testing.T) {
 		t.Fatalf("SendUserTurn first: %v", err)
 	}
 	queuedResp2, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
+		ClientRequestID: "request-appserver-queued-second",
+		ThreadID:        thread.ThreadID,
+		Model:           "openai/gpt-5-mini",
 		Input: ai.RunInput{
 			Text: "second queued via app server test",
 		},

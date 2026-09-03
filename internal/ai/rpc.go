@@ -119,8 +119,16 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 		if !service.Enabled() {
 			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
+		clientRequestID := strings.TrimSpace(req.ClientRequestID)
+		if clientRequestID == "" {
+			generatedRequestID, requestIDErr := newProductRequestID("send_")
+			if requestIDErr != nil {
+				return nil, &sessionrpc.Error{Code: 500, Message: "failed to allocate request identity"}
+			}
+			clientRequestID = generatedRequestID
+		}
 		resp, err := service.SendUserTurn(leaseCtx, meta, SendUserTurnRequest{
-			ClientRequestID: strings.TrimSpace(req.ClientRequestID),
+			ClientRequestID: clientRequestID,
 			ThreadID:        strings.TrimSpace(req.ThreadID),
 			Model:           strings.TrimSpace(req.Model),
 			Input:           req.Input,

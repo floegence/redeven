@@ -116,12 +116,9 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
 		return SendUserTurnResponse{}, err
 	}
-	if strings.TrimSpace(req.ClientRequestID) == "" {
-		requestID, err := newProductRequestID("send_")
-		if err != nil {
-			return SendUserTurnResponse{}, err
-		}
-		req.ClientRequestID = requestID
+	req.ClientRequestID = strings.TrimSpace(req.ClientRequestID)
+	if req.ClientRequestID == "" {
+		return SendUserTurnResponse{}, errors.New("invalid client_request_id")
 	}
 	leaseKey, newlyAdmitted, err := s.admitAIUserTurn(endpointID, threadID, req.ClientRequestID)
 	if err != nil {

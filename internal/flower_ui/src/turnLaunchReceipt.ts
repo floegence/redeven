@@ -31,17 +31,15 @@ export function normalizeFlowerTurnLaunchReceipt(
   const existingThreadID = trim(expected.existingThreadID);
   const responseClientRequestID = trim(response.client_request_id);
   const responseThreadID = trim(response.thread_id);
-  const threadID = existingThreadID || responseThreadID;
-  const clientIdentityValid = existingThreadID
-    ? !responseClientRequestID || responseClientRequestID === clientRequestID
-    : responseClientRequestID === clientRequestID;
-  const threadIdentityValid = Boolean(
-    threadID
-    && (!existingThreadID || !responseThreadID || responseThreadID === existingThreadID),
-  );
-  if (!clientRequestID || !clientIdentityValid || !threadIdentityValid) {
+  if (
+    !clientRequestID
+    || responseClientRequestID !== clientRequestID
+    || !responseThreadID
+    || (existingThreadID && responseThreadID !== existingThreadID)
+  ) {
     throw new Error('Flower send returned an invalid acceptance receipt.');
   }
+  const threadID = responseThreadID;
   const current = currentViewForThread(response.current, threadID);
   return {
     client_request_id: clientRequestID,

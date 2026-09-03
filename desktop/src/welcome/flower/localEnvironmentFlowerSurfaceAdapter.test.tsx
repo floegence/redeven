@@ -430,11 +430,32 @@ describe('Local Environment Flower surface adapter', () => {
     })).rejects.toThrow('Flower send returned an invalid acceptance receipt.');
   });
 
-  it('accepts matching identities and discards an unusable current view', async () => {
+  it('rejects an existing-thread receipt that changes the thread identity', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
         return {
           client_request_id: 'client-request',
+          thread_id: 'thread-other',
+        };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      thread_id: 'thread-existing',
+      client_request_id: 'client-request',
+      prompt: 'send once',
+    })).rejects.toThrow('Flower send returned an invalid acceptance receipt.');
+  });
+
+  it('sends the stable client request identity for an existing thread', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const bridge = bridgeFor((request) => {
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
+        requestBody = request.body as Record<string, unknown>;
+        const echoedRequestID = String(requestBody.client_request_id ?? '').trim() || 'send_generated_by_server';
+        return {
+          client_request_id: echoedRequestID,
           thread_id: 'thread-existing',
           current: currentView({ thread_id: 'thread-other', activity: 'active', turn_id: 'turn-other' }),
         };
@@ -450,6 +471,27 @@ describe('Local Environment Flower surface adapter', () => {
       client_request_id: 'client-request',
       thread_id: 'thread-existing',
     });
+    expect(requestBody).toMatchObject({
+      client_request_id: 'client-request',
+      thread_id: 'thread-existing',
+      input: { text: 'send once', attachments: [] },
+    });
+  });
+
+  it.each([
+    ['client request identity', { thread_id: 'thread-existing' }],
+    ['thread identity', { client_request_id: 'client-request' }],
+  ])('rejects an existing-thread receipt missing its %s', async (_label, response) => {
+    const bridge = bridgeFor((request) => {
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') return response;
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      thread_id: 'thread-existing',
+      client_request_id: 'client-request',
+      prompt: 'send once',
+    })).rejects.toThrow('Flower send returned an invalid acceptance receipt.');
   });
 
   it('propagates runtime command failures without creating local admission state', async () => {
@@ -518,7 +560,7 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
-        return { thread_id: 'thread-existing' };
+        return { client_request_id: 'client-malformed', thread_id: 'thread-existing' };
       }
       throw new Error(`unexpected path: ${request.path}`);
     });
@@ -1137,6 +1179,7 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-upload/turns') {
         return {
+          client_request_id: 'client-upload',
           thread_id: 'thread-upload',
           current: currentView({ thread_id: 'thread-upload', activity: 'active', turn_id: 'turn-upload' }),
         };
