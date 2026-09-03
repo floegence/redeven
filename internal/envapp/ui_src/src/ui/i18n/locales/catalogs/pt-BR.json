@@ -3293,6 +3293,8 @@
       "workspaceCustomDescription": "O serviço pode ler e modificar a pasta selecionada. Escolha uma área de trabalho com o menor escopo necessário.",
       "workspaceCreatedOnDeploy": "Este diretório será criado quando a implantação começar.",
       "workspaceCreateFailed": "O Redeven não conseguiu criar ou verificar o diretório da área de trabalho. Verifique o local e tente novamente.",
+      "workspaceMissing": "O diretório da área de trabalho não existe. Ao tentar novamente, um novo diretório vazio será criado e o serviço será iniciado. Se você precisar do conteúdo original, restaure o diretório primeiro.",
+      "workspaceUnavailable": "A área de trabalho salva não pode ser usada. Restaure o diretório original ou o acesso a ele e tente novamente. Se isso não for possível, desinstale e implante o serviço novamente.",
       "workspaceDeleteFailed": "O Redeven não conseguiu excluir o diretório da área de trabalho. O registro do serviço foi mantido para permitir uma nova tentativa.",
       "workspaceDeleteUnsafe": "A área de trabalho salva não pode mais ser excluída com segurança. Seu conteúdo não foi alterado.",
       "workspaceInUse": "Outro serviço gerenciado usa esta área de trabalho ou um diretório relacionado, portanto ela não foi excluída.",

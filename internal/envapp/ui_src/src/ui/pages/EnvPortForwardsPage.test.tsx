@@ -641,6 +641,48 @@ describe('web service metadata and template validation', () => {
     }
   });
 
+  it('explains that retry recreates a missing workspace without exposing backend details', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const retry = vi.fn();
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-missing-workspace', template_id: 'example-host', service_family_id: 'example-host',
+          name: 'Example Host', template_source: 'builtin', deployment: 'host',
+          workspace_path: '/private/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.2.3'), desired_state: 'stopped', observed_state: 'error',
+          forward_id: 'pf-missing-workspace', runtime_port: 3000,
+          actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } },
+          last_failure: { action: 'start', stage: 'failed', error_code: 'WORKSPACE_MISSING', message: 'stat /private/workspace: no such file or directory', operation_id: 'mop-missing-workspace' },
+        }}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={retry}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
+      await Promise.resolve();
+      const diagnostic = clipboardMocks.writeText.mock.calls.at(-1)?.[0] ?? '';
+      expect(diagnostic).toContain('WORKSPACE_MISSING');
+      expect(diagnostic).toContain('Retry will create a new empty directory and start the service.');
+      expect(diagnostic).not.toContain('/private/workspace: no such file or directory');
+
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Retry')
+        ?.click();
+      expect(retry).toHaveBeenCalledWith('retry');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
   it('explains invalid npm Host layouts without exposing backend details', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

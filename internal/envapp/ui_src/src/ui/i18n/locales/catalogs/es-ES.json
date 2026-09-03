@@ -3293,6 +3293,8 @@
       "workspaceCustomDescription": "El servicio puede leer y modificar la carpeta seleccionada. Elige un espacio de trabajo con el alcance mínimo necesario.",
       "workspaceCreatedOnDeploy": "Este directorio se creará cuando comience el despliegue.",
       "workspaceCreateFailed": "Redeven no pudo crear o verificar el directorio del espacio de trabajo. Comprueba la ubicación y vuelve a intentarlo.",
+      "workspaceMissing": "Falta el directorio del espacio de trabajo. Al volver a intentarlo, se creará un directorio vacío y se iniciará el servicio. Si necesitas el contenido original, restaura primero el directorio.",
+      "workspaceUnavailable": "No se puede usar el espacio de trabajo guardado. Restaura el directorio original o su acceso y vuelve a intentarlo. Si no es posible, desinstala el servicio y vuelve a implementarlo.",
       "workspaceDeleteFailed": "Redeven no pudo eliminar el directorio del espacio de trabajo. El registro del servicio se conservó para que puedas volver a intentarlo.",
       "workspaceDeleteUnsafe": "El espacio de trabajo guardado ya no se puede eliminar de forma segura. Su contenido no se modificó.",
       "workspaceInUse": "Otro servicio administrado usa este espacio de trabajo o un directorio relacionado, por lo que no se eliminó.",

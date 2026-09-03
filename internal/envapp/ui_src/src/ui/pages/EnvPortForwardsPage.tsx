@@ -934,6 +934,8 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
     case 'DATA_IDENTITY_UNAVAILABLE': return i18n.t('webServices.managed.dataIdentityUnavailable');
     case 'DATA_VOLUME_CREATE_FAILED': return i18n.t('webServices.managed.dataVolumeCreateFailed');
     case 'WORKSPACE_CREATE_FAILED': return i18n.t('webServices.managed.workspaceCreateFailed');
+    case 'WORKSPACE_MISSING': return i18n.t('webServices.managed.workspaceMissing');
+    case 'WORKSPACE_UNAVAILABLE': return i18n.t('webServices.managed.workspaceUnavailable');
     case 'WORKSPACE_DELETE_FAILED': return i18n.t('webServices.managed.workspaceDeleteFailed');
     case 'WORKSPACE_DELETE_UNSAFE': return i18n.t('webServices.managed.workspaceDeleteUnsafe');
     case 'WORKSPACE_IN_USE': return i18n.t('webServices.managed.workspaceInUse');

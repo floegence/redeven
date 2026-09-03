@@ -152,7 +152,7 @@ func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.
 		return err
 	}
 	m.progress(op, "starting", 5)
-	runtimeID, err := driver.Start(ctx, &targetService)
+	runtimeID, err := m.startRuntime(ctx, &targetService, driver)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (m *Manager) rollbackHostReleaseUpdate(ctx context.Context, service *pfregi
 	}
 	old := serviceFromUpdateRelease(*service, journal.Old)
 	if journal.Old.DesiredState == "running" && phaseAtLeast(journal.Phase, updatePhaseOldStopped) {
-		runtimeID, err := driver.Start(ctx, &old)
+		runtimeID, err := m.startRuntime(ctx, &old, driver)
 		if err != nil {
 			return err
 		}
@@ -354,7 +354,7 @@ func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregis
 	}
 
 	m.progress(op, "starting", 5)
-	if _, err := driver.Start(ctx, &targetService); err != nil {
+	if _, err := m.startRuntime(ctx, &targetService, driver); err != nil {
 		return err
 	}
 	m.progress(op, "health_check", 6)
@@ -458,7 +458,7 @@ func (m *Manager) runComposeTemplateUpdate(ctx context.Context, service *pfregis
 	}
 	if journal.Old.DesiredState == "running" {
 		m.progress(op, "starting", 5)
-		if runtimeID, err = driver.Start(ctx, &target); err != nil {
+		if runtimeID, err = m.startRuntime(ctx, &target, driver); err != nil {
 			return err
 		}
 		target.RuntimeIdentity, journal.Target.RuntimeIdentity = runtimeID, runtimeID
@@ -495,7 +495,7 @@ func (m *Manager) rollbackComposeTemplateUpdate(ctx context.Context, service *pf
 	journal.Old.RuntimeIdentity, journal.Old.ArtifactReference = runtimeID, artifact
 	old.RuntimeIdentity, old.ArtifactReference = runtimeID, artifact
 	if journal.Old.DesiredState == "running" {
-		runtimeID, err = driver.Start(ctx, &old)
+		runtimeID, err = m.startRuntime(ctx, &old, driver)
 		if err != nil {
 			return err
 		}
@@ -625,7 +625,7 @@ func (m *Manager) rollbackContainerUpdate(ctx context.Context, service *pfregist
 		journal.Old.RuntimeIdentity = runtimeID
 	}
 	if journal.Old.DesiredState == "running" {
-		if _, err := driver.Start(ctx, &old); err != nil {
+		if _, err := m.startRuntime(ctx, &old, driver); err != nil {
 			return err
 		}
 		if err := m.waitHealthy(ctx, &old); err != nil {
@@ -665,7 +665,7 @@ func (m *Manager) recoverInterruptedContainerUpdate(service *pfregistry.ManagedS
 		}
 		if specErr == nil {
 			if journal.Old.DesiredState == "running" {
-				_, specErr = driver.Start(context.Background(), &target)
+				_, specErr = m.startRuntime(context.Background(), &target, driver)
 			} else {
 				specErr = driver.Stop(context.Background(), &target)
 			}
@@ -703,7 +703,7 @@ func (m *Manager) recoverInterruptedHostUpdate(service *pfregistry.ManagedServic
 		// restart adoption. Start that exact release afresh and verify it before
 		// making the journal target authoritative.
 		target.RuntimeIdentity = ""
-		runtimeID, startErr := driver.Start(context.Background(), &target)
+		runtimeID, startErr := m.startRuntime(context.Background(), &target, driver)
 		if startErr == nil {
 			target.RuntimeIdentity = runtimeID
 			startErr = m.waitHealthy(context.Background(), &target)

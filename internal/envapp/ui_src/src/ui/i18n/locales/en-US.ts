@@ -3235,6 +3235,8 @@ export const enUS = defineDictionary({
       workspaceCustomDescription: 'The service can read and modify the selected folder. Choose a narrowly scoped workspace.',
       workspaceCreatedOnDeploy: 'This directory will be created when deployment begins.',
       workspaceCreateFailed: 'Redeven could not create or verify the workspace directory. Check the location and retry.',
+      workspaceMissing: 'The workspace directory is missing. Retry will create a new empty directory and start the service. Restore the original directory first if you need its contents.',
+      workspaceUnavailable: 'The saved workspace cannot be used. Restore the original directory or its access and retry. If that is not possible, uninstall and redeploy the service.',
       workspaceDeleteFailed: 'Redeven could not delete the workspace directory. The service record was retained so you can retry.',
       workspaceDeleteUnsafe: 'The saved workspace is no longer safe to delete. Its contents were left unchanged.',
       workspaceInUse: 'Another managed service uses this workspace or a related directory, so it was not deleted.',

@@ -3293,6 +3293,8 @@
       "workspaceCustomDescription": "服務可以讀取和修改所選目錄，請選擇範圍盡可能小的工作區。",
       "workspaceCreatedOnDeploy": "此目錄會在部署開始後建立。",
       "workspaceCreateFailed": "Redeven 無法建立或驗證工作區目錄。請檢查位置後重試。",
+      "workspaceMissing": "工作區目錄不存在。重試將建立新的空目錄並啟動服務；如需保留原有內容，請先還原原目錄。",
+      "workspaceUnavailable": "已儲存的工作區無法使用。請還原原目錄或存取權限後重試；如無法還原，請解除安裝並重新部署服務。",
       "workspaceDeleteFailed": "Redeven 無法刪除工作區目錄。服務記錄已保留，您可以重試。",
       "workspaceDeleteUnsafe": "已儲存的工作區已無法安全刪除，其內容未被修改。",
       "workspaceInUse": "另一個託管服務正在使用此工作區或關聯目錄，因此未刪除。",
