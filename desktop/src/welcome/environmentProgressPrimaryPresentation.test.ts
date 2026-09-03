@@ -353,6 +353,21 @@ describe('environmentProgressPanelPrimaryAction', () => {
 });
 
 describe('environmentProgressPrimaryPresentation', () => {
+  it('reports the owned Runtime operation when Open recovery fails', () => {
+    const progress = lifecycleActionProgress({
+      action: 'open_local_environment',
+      operation: 'start',
+      phase: 'checking_runtime_service',
+      status: 'failed',
+    });
+
+    expect(environmentProgressPrimaryPresentation(progress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Start failed',
+      label_key: 'progress.startFailed',
+    });
+  });
+
   it('uses running lifecycle progress as the primary trigger', () => {
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'restart_environment_runtime', status: 'running' }),

@@ -41,6 +41,12 @@ const RUNTIME_READY_OPERATIONS: readonly DesktopRuntimeLifecycleOperation[] = [
   'update',
 ];
 
+const OPEN_RUNTIME_RECOVERY_ACTIONS: readonly DesktopLauncherActionKind[] = [
+  'open_local_environment',
+  'open_ssh_environment',
+  'prepare_environment_open',
+];
+
 export function runtimeLifecycleReadyPrimaryAction(
   progress: DesktopLauncherActionProgress,
   primaryAction: EnvironmentActionModel | undefined,
@@ -269,18 +275,27 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): Pr
   if (progress.active_progress_surface === 'open' && progress.open_progress) {
     return { label: 'Open failed', label_key: 'progress.openFailed' };
   }
-  switch (progress.action) {
+  const runtimeOperation = progress.active_progress_surface === 'runtime_lifecycle'
+    && OPEN_RUNTIME_RECOVERY_ACTIONS.includes(progress.action)
+    ? progress.lifecycle_progress?.operation
+    : undefined;
+  switch (runtimeOperation ?? progress.action) {
     case 'refresh_gateway':
     case 'check_gateway':
       return { label: 'Refresh failed', label_key: 'progress.checkFailed' };
+    case 'start':
     case 'start_environment_runtime':
       return { label: 'Start failed', label_key: 'progress.startFailed' };
+    case 'restart':
     case 'restart_environment_runtime':
       return { label: 'Restart failed', label_key: 'progress.restartFailed' };
+    case 'update':
     case 'update_environment_runtime':
       return { label: 'Update failed', label_key: 'progress.updateFailed' };
+    case 'stop':
     case 'stop_environment_runtime':
       return { label: 'Stop failed', label_key: 'progress.stopFailed' };
+    case 'refresh':
     case 'refresh_environment_runtime':
       return { label: 'Refresh failed', label_key: 'progress.checkFailed' };
     case 'sync_gateway':

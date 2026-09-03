@@ -907,6 +907,83 @@ describe('launcherBusyState', () => {
     )).toBe(failures[2]);
   });
 
+  it('keeps the latest gzcom Open recovery failure on the card when an older update failure remains', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'ssh:host:gzcom:7afba939',
+      managed_runtime_target_id: runtimeID('ssh:host:gzcom:7afba939'),
+      managed_runtime_placement_target_id: runtimeID('ssh:host:gzcom:7afba939'),
+      provider_runtime_link_target: providerRuntimeTarget('ssh:host:gzcom:7afba939'),
+    };
+    const updateFailure: DesktopLauncherActionProgress = {
+      action: 'update_environment_runtime',
+      operation_key: 'ssh:host:gzcom:7afba939:update_runtime:older',
+      subject_kind: 'runtime_target',
+      subject_id: 'ssh:host:gzcom:7afba939',
+      environment_id: environment.id,
+      environment_label: 'gzcom',
+      started_at_unix_ms: 100,
+      updated_at_unix_ms: 120,
+      status: 'failed',
+      phase: 'failed',
+      title: 'SSH Runtime Start Failed',
+      detail: 'Runtime startup failed.',
+      active_progress_surface: 'runtime_lifecycle',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        operation: 'update',
+        phase: 'checking_runtime_service',
+        targetID: 'ssh:host:gzcom:7afba939',
+        targetLabel: 'gzcom',
+      }),
+    };
+    const openRecoveryFailure: DesktopLauncherActionProgress = {
+      action: 'open_local_environment',
+      operation_key: 'ssh:host:gzcom:7afba939:open',
+      subject_kind: 'runtime_target',
+      subject_id: 'ssh:host:gzcom:7afba939',
+      environment_id: environment.id,
+      environment_label: 'gzcom',
+      started_at_unix_ms: 200,
+      updated_at_unix_ms: 220,
+      status: 'failed',
+      phase: 'failed',
+      title: 'Runtime recovery failed',
+      detail: 'Runtime startup failed.',
+      active_progress_surface: 'runtime_lifecycle',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        operation: 'start',
+        phase: 'checking_runtime_service',
+        targetID: 'ssh:host:gzcom:7afba939',
+        targetLabel: 'gzcom',
+      }),
+      failure: {
+        code: 'ssh_runtime_launch_failed',
+        severity: 'error',
+        title: 'SSH Runtime Start Failed',
+        summary: 'Runtime startup failed.',
+        diagnostics: [{
+          channel: 'control_stdout',
+          label: 'SSH command stdout',
+          text: 'wrong database kind',
+        }],
+      },
+    };
+
+    const operationState = environmentOperationState(
+      environment as never,
+      [updateFailure, openRecoveryFailure],
+      IDLE_LAUNCHER_BUSY_STATE,
+    );
+
+    expect(operationState.panelProgress).toBe(openRecoveryFailure);
+    expect(operationState.panelProgress?.failure?.diagnostics).toEqual(openRecoveryFailure.failure?.diagnostics);
+    expect(environmentProgressPrimaryPresentation(operationState.panelProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Start failed',
+    });
+  });
+
   it('clears busy progress when the accepted snapshot contains matching Open progress', () => {
     const staleBusyProgress = localOpenActionProgress({
       status: 'running',
