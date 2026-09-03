@@ -49,14 +49,15 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const [selected, setSelected] = createSignal('');
     dispose = render(() => <ManagedReleaseCandidates
       result={{
-        schema_version: 1,
+        schema_version: 2,
         current_release: { schema_version: 1, kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', integrity: 'sha512-current', trust: 'registry_verified' },
         check_status: 'fresh',
+		catalog_status: 'complete', has_more: false, loaded_count: 3,
         checked_at_unix_ms: Date.now(),
         candidates: [
-          { schema_version: 1, candidate_id: 'preview', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview', relation: 'newer', is_latest_preview: true },
-          { schema_version: 1, candidate_id: 'stable', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable', relation: 'same', is_current: true, is_recommended: true, is_latest_stable: true },
-          { schema_version: 1, candidate_id: 'deprecated', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: true, deprecated: true, relation: 'older' },
+          { schema_version: 2, candidate_id: 'preview', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview', relation: 'newer', is_latest_preview: true, verification_status: 'verified' },
+          { schema_version: 2, candidate_id: 'stable', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable', relation: 'same', is_current: true, is_recommended: true, is_latest_stable: true, verification_status: 'verified' },
+          { schema_version: 2, candidate_id: 'deprecated', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: true, deprecated: true, relation: 'older', verification_status: 'verified' },
         ],
       }}
       loading={false}
@@ -102,7 +103,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     document.body.appendChild(host);
     const [selected, setSelected] = createSignal('release-1');
     const candidates = Array.from({ length: 12 }, (_, index) => ({
-      schema_version: 1 as const,
+      schema_version: 2 as const,
       candidate_id: `release-${index + 1}`,
       source_kind: 'oci' as const,
       source: 'registry.example/managed/example-service',
@@ -114,14 +115,16 @@ describe('EnvPortForwardsPage browser presentation', () => {
       selectable: true,
       platform: 'linux/arm64',
       relation: 'newer' as const,
+	  verification_status: 'verified' as const,
       is_latest_stable: index === 0,
     }));
     dispose = render(() => <ManagedReleaseCandidates
       result={{
-        schema_version: 1,
+        schema_version: 2,
         recommended_release: { schema_version: 1, kind: 'oci', source: candidates[0]!.source, tag: '1.0.12', digest: candidates[0]!.digest },
         latest_stable_release: candidates[0],
         check_status: 'fresh',
+		catalog_status: 'complete', has_more: false, loaded_count: candidates.length,
         checked_at_unix_ms: Date.now(),
         candidates,
       }}
@@ -168,6 +171,62 @@ describe('EnvPortForwardsPage browser presentation', () => {
       deltaY: -260,
     });
     expect(up.after).toBeLessThan(up.before);
+  });
+
+  it('verifies visible candidates and loads another page only near the list end', async () => {
+    await page.viewport(1024, 768);
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '820px', height: '620px' });
+    document.body.appendChild(host);
+    const visibleBatches: string[][] = [];
+    let loadMoreCalls = 0;
+    const candidates = Array.from({ length: 20 }, (_, index) => ({
+      schema_version: 2 as const,
+      candidate_id: `pending-${index + 1}`,
+      source_kind: 'oci' as const,
+      source: 'registry.example/managed/example-service',
+      tag: `build-${index + 1}`,
+      channel: 'special' as const,
+      trust: 'registry_verified',
+      selectable: false,
+      platform: 'linux/arm64',
+      relation: 'unknown' as const,
+      verification_status: 'pending' as const,
+    }));
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{
+        schema_version: 2,
+        check_status: 'fresh',
+        catalog_status: 'loading',
+        has_more: true,
+        cursor_id: 'cursor-next',
+        loaded_count: candidates.length,
+        checked_at_unix_ms: Date.now(),
+        candidates,
+      }}
+      loading={false}
+      error=""
+      query=""
+      filter="all"
+      selectedID=""
+      onQueryChange={() => undefined}
+      onFilterChange={() => undefined}
+      onSelect={() => undefined}
+      onVisible={(candidateIDs) => visibleBatches.push(candidateIDs)}
+      onLoadMore={() => { loadMoreCalls += 1; }}
+    />, host);
+    await settle();
+
+    const scrollViewport = document.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
+    expect(visibleBatches.flat()).toContain('pending-1');
+    expect(visibleBatches.flat()).not.toContain('pending-20');
+    expect(loadMoreCalls).toBe(0);
+
+    scrollViewport.scrollTop = scrollViewport.scrollHeight;
+    scrollViewport.dispatchEvent(new Event('scroll'));
+    await settle();
+    expect(visibleBatches.flat()).toContain('pending-20');
+    expect(loadMoreCalls).toBe(1);
   });
 
   it('keeps notice geometry and scroll position fixed when acknowledgement changes', async () => {

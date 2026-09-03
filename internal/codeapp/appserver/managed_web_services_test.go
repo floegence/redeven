@@ -173,7 +173,7 @@ func TestManagedReleaseCandidateRoutesRequireLifecyclePermissionAndForwardSecret
 	backend := &managedBackendStub{}
 	channelID := "ch_managed_releases"
 	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
-	request := httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/private-host/release-candidates", strings.NewReader(`{"refresh":true,"parameters":{"registry_token":"secret"}}`))
+	request := httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/private-host/release-candidates", strings.NewReader(`{"action":"refresh","parameters":{"registry_token":"secret"}}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response := httptest.NewRecorder()
 	readServer.handleManagedWebServicesAPI(response, request)
@@ -182,15 +182,15 @@ func TestManagedReleaseCandidateRoutesRequireLifecyclePermissionAndForwardSecret
 	}
 
 	fullServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request = httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/private-host/release-candidates", strings.NewReader(`{"refresh":true,"parameters":{"registry_token":"secret"}}`))
+	request = httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/private-host/release-candidates", strings.NewReader(`{"action":"refresh","parameters":{"registry_token":"secret"}}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	fullServer.handleManagedWebServicesAPI(response, request)
-	if response.Code != http.StatusOK || backend.templateReleaseCalls != 1 || !backend.lastReleaseRequest.Refresh || backend.lastReleaseRequest.Parameters["registry_token"] != "secret" {
+	if response.Code != http.StatusOK || backend.templateReleaseCalls != 1 || backend.lastReleaseRequest.Action != "refresh" || backend.lastReleaseRequest.Parameters["registry_token"] != "secret" {
 		t.Fatalf("template release request status=%d calls=%d request=%+v body=%s", response.Code, backend.templateReleaseCalls, backend.lastReleaseRequest, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/release-candidates", strings.NewReader(`{"refresh":true}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/release-candidates", strings.NewReader(`{"action":"open"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	fullServer.handleManagedWebServicesAPI(response, request)

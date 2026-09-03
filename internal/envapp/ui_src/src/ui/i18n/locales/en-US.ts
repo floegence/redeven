@@ -3252,14 +3252,22 @@ export const enUS = defineDictionary({
 	  releaseCheckedAt: 'Last checked',
 	  releaseDirectSource: 'Read directly from the configured registry',
 	  releaseCheckStale: 'The latest check failed. Showing the last successful result.',
+	  releaseLoadingProgress: '{count} versions loaded. Checking the source…',
+	  releaseLoadMoreHint: '{count} versions loaded. Scroll down to load more.',
 	  releaseListLabel: 'Available versions',
 	  releaseSourceError: {
 		RELEASE_SOURCE_AUTH_UNAVAILABLE: 'Redeven could not read the container engine’s saved registry credentials. Check Docker or Podman credential settings, then refresh.',
 		RELEASE_SOURCE_AUTH_REQUIRED: 'The registry requires valid credentials. Sign in with Docker or Podman, or provide the configured Secret token, then refresh.',
+		RELEASE_SOURCE_NOT_FOUND: 'The configured registry repository was not found. Check the image source, then refresh.',
 		RELEASE_SOURCE_RATE_LIMITED: 'The registry request limit was reached. Wait a moment, then refresh.',
+		RELEASE_SOURCE_TIMEOUT: 'The registry took too long to respond. Check the network, then refresh.',
+		RELEASE_SOURCE_NETWORK_UNAVAILABLE: 'Redeven could not reach the registry. Check the network connection, then refresh.',
 		RELEASE_SOURCE_RESPONSE_INVALID: 'The registry returned invalid version information. Refresh later or check the configured source.',
 		RELEASE_SOURCE_UNAVAILABLE: 'Redeven could not read versions from the registry. Check the network and configured source, then refresh.',
 		unavailable: 'Redeven could not load available versions. Check the network, then refresh.',
+	  },
+	  releaseVerification: {
+		pending: 'Checking',
 	  },
       releaseSearch: 'Search versions or tags',
       releaseFilterLabel: 'Filter versions',
@@ -3287,12 +3295,13 @@ export const enUS = defineDictionary({
 		registry_verified: 'Registry-verified identity',
 		registry: 'Registry source',
 	  },
-	  releaseReason: {
+      releaseReason: {
 		NODE_RANGE_UNSUPPORTED: 'Redeven cannot safely verify this release’s Node.js requirement.',
 		NODE_VERSION_UNAVAILABLE: 'This release is incompatible with Redeven’s managed Node.js Runtime.',
 		PLATFORM_UNAVAILABLE: 'This tag has no image for the current platform.',
 		RELEASE_IDENTITY_UNVERIFIABLE: 'The source did not provide a verifiable identity for this exact version.',
 		RELEASE_DEPRECATED: 'The npm Registry marks this release as deprecated.',
+		RELEASE_NOT_FOUND: 'This version is no longer available from the registry.',
 		unavailable: 'This release cannot be selected.',
 	  },
 	  releaseBadge: {

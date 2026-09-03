@@ -98,8 +98,10 @@ func preflightExistingRegistry(path string) error {
 		verifyErr = verifyRegistryV1(tx)
 	case 2:
 		verifyErr = verifyRegistryV2(tx)
-	case registryCurrentSchemaVersion:
+	case 3:
 		verifyErr = verifyRegistryV3(tx)
+	case registryCurrentSchemaVersion:
+		verifyErr = verifyRegistryV4(tx)
 	default:
 		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
 	}

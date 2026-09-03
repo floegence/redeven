@@ -48,19 +48,20 @@ type Manager struct {
 	compose           deploymentDriver
 	healthCheck       func(context.Context, *pfregistry.ManagedService) error
 
-	requestMu     sync.Mutex
-	releaseMu     sync.Mutex
-	releaseItems  map[string]cachedReleaseCandidate
-	releaseViews  map[string]ReleaseCandidateResult
-	updatePlans   map[string]cachedUpdatePlan
-	releaseCancel context.CancelFunc
-	releaseClient *http.Client
-	mu            sync.Mutex
-	workers       sync.WaitGroup
-	cancelByOp    map[string]context.CancelFunc
-	listeners     map[string]map[uint64]chan pfregistry.ManagedOperation
-	nextListener  uint64
-	closed        bool
+	requestMu      sync.Mutex
+	releaseMu      sync.Mutex
+	releaseItems   map[string]cachedReleaseCandidate
+	releaseViews   map[string]ReleaseCandidateResult
+	releaseCursors map[string]cachedReleaseCursor
+	updatePlans    map[string]cachedUpdatePlan
+	releaseCancel  context.CancelFunc
+	releaseClient  *http.Client
+	mu             sync.Mutex
+	workers        sync.WaitGroup
+	cancelByOp     map[string]context.CancelFunc
+	listeners      map[string]map[uint64]chan pfregistry.ManagedOperation
+	nextListener   uint64
+	closed         bool
 }
 
 func New(opts ManagerOptions) (*Manager, error) {
@@ -90,7 +91,7 @@ func New(opts ManagerOptions) (*Manager, error) {
 			return nil, err
 		}
 	}
-	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: catalog, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, updatePlans: map[string]cachedUpdatePlan{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	m := &Manager{log: logger, stateDir: root, registry: opts.Registry, scope: opts.Scope, containers: opts.Containers, catalog: catalog, downloads: defaultPackageDownloadClient(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, releaseCursors: map[string]cachedReleaseCursor{}, updatePlans: map[string]cachedUpdatePlan{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 	releaseBase := m.downloads.packageHTTPClient()
 	if releaseBase != nil {
 		copy := *releaseBase

@@ -43,7 +43,20 @@ func TestOCIReleaseDiscoveryPaginatesAndSelectsPlatformDigest(t *testing.T) {
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "https://")
 	discovery := OCIReleaseDiscovery{Client: server.Client()}
-	items, err := discovery.Discover(context.Background(), OCIReleaseDiscoveryRequest{Reference: host + "/team/app:old", PlatformOS: "linux", PlatformArch: "amd64", Credential: RegistryCredential{Username: "user", Secret: "secret"}})
+	request := OCIReleaseTagPageRequest{Reference: host + "/team/app:old", Credential: RegistryCredential{Username: "user", Secret: "secret"}}
+	first, err := discovery.ListTagsPage(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Tags) != 1 || first.Tags[0] != "1.0.0" || first.NextCursor == "" {
+		t.Fatalf("unexpected first tag page: %#v", first)
+	}
+	request.Cursor = first.NextCursor
+	second, err := discovery.ListTagsPage(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := discovery.VerifyTags(context.Background(), OCIReleaseVerificationRequest{Reference: request.Reference, PlatformOS: "linux", PlatformArch: "amd64", Credential: request.Credential, Tags: append(first.Tags, second.Tags...)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +101,12 @@ func TestOCIReleaseDiscoveryUsesBearerChallengeAndVerifiesSingleManifestPlatform
 	}))
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "https://")
-	items, err := (OCIReleaseDiscovery{Client: server.Client()}).Discover(context.Background(), OCIReleaseDiscoveryRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64"})
+	discovery := OCIReleaseDiscovery{Client: server.Client()}
+	page, err := discovery.ListTagsPage(context.Background(), OCIReleaseTagPageRequest{Reference: host + "/team/app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := discovery.VerifyTags(context.Background(), OCIReleaseVerificationRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64", Tags: page.Tags})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +132,12 @@ func TestOCIReleaseDiscoveryKeepsUnverifiableTagVisibleButDisabled(t *testing.T)
 	}))
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "https://")
-	items, err := (OCIReleaseDiscovery{Client: server.Client()}).Discover(context.Background(), OCIReleaseDiscoveryRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64"})
+	discovery := OCIReleaseDiscovery{Client: server.Client()}
+	page, err := discovery.ListTagsPage(context.Background(), OCIReleaseTagPageRequest{Reference: host + "/team/app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := discovery.VerifyTags(context.Background(), OCIReleaseVerificationRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64", Tags: page.Tags})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,10 +153,56 @@ func TestOCIReleaseDiscoveryKeepsUnverifiableTagVisibleButDisabled(t *testing.T)
 	}
 }
 
+func TestOCIReleaseDiscoveryListsWithoutResolvingManifests(t *testing.T) {
+	manifestRequests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/manifests/") {
+			manifestRequests++
+			t.Fatalf("tag listing resolved a manifest: %s", request.URL)
+		}
+		_ = json.NewEncoder(response).Encode(map[string]any{"tags": []string{"3.0.0", "2.0.0"}})
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	page, err := (OCIReleaseDiscovery{Client: server.Client()}).ListTagsPage(context.Background(), OCIReleaseTagPageRequest{Reference: host + "/team/app"})
+	if err != nil || len(page.Tags) != 2 || manifestRequests != 0 {
+		t.Fatalf("tag page = %#v, manifest requests = %d, error = %v", page, manifestRequests, err)
+	}
+}
+
+func TestOCIReleaseDiscoveryPreservesVerifiedSiblingsOnSourceFailure(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v2/team/app/manifests/good":
+			response.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
+			_ = json.NewEncoder(response).Encode(map[string]any{"schemaVersion": 2, "manifests": []map[string]any{{"digest": testAMD64Digest, "platform": map[string]string{"os": "linux", "architecture": "amd64"}}}})
+		case "/v2/team/app/manifests/limited":
+			response.WriteHeader(http.StatusTooManyRequests)
+		default:
+			t.Fatalf("unexpected request %s", request.URL)
+		}
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	items, err := (OCIReleaseDiscovery{Client: server.Client()}).VerifyTags(context.Background(), OCIReleaseVerificationRequest{
+		Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64", Tags: []string{"good", "limited"},
+	})
+	if !errors.Is(err, ErrImageRateLimited) || len(items) != 1 || items[0].Tag != "good" || !items[0].Compatible {
+		t.Fatalf("partial verification = %#v, error = %v", items, err)
+	}
+}
+
 func TestRegistryNextLinkRejectsCrossRegistryPagination(t *testing.T) {
 	requestURL := mustParseURLForTest(t, "https://registry.example/v2/team/app/tags/list")
-	if got := registryNextLink(requestURL, `<https://attacker.example/tags?page=2>; rel="next"`, "registry.example"); got != "" {
-		t.Fatalf("accepted cross-registry pagination URL %q", got)
+	for _, link := range []string{
+		`<https://attacker.example/v2/team/app/tags/list?last=one&n=100>; rel="next"`,
+		`<https://registry.example/v2/team/app/tags/list-extra?last=one&n=100>; rel="next"`,
+		`<https://user:secret@registry.example/v2/team/app/tags/list?last=one&n=100>; rel="next"`,
+		`<https://registry.example/v2/team/app/tags/list?last=one&n=101>; rel="next"`,
+	} {
+		if got := registryNextLink(requestURL, link, "registry.example"); got != "" {
+			t.Fatalf("accepted unsafe pagination URL %q from %q", got, link)
+		}
 	}
 }
 
@@ -164,12 +233,12 @@ func TestOCIReleaseDiscoveryPreservesRateLimitAndCancellation(t *testing.T) {
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "https://")
 	discovery := OCIReleaseDiscovery{Client: server.Client()}
-	if _, err := discovery.Discover(context.Background(), OCIReleaseDiscoveryRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64"}); !errors.Is(err, ErrImageRateLimited) {
+	if _, err := discovery.ListTagsPage(context.Background(), OCIReleaseTagPageRequest{Reference: host + "/team/app"}); !errors.Is(err, ErrImageRateLimited) {
 		t.Fatalf("rate limit error = %v", err)
 	}
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := discovery.Discover(cancelled, OCIReleaseDiscoveryRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64"}); !errors.Is(err, context.Canceled) {
+	if _, err := discovery.ListTagsPage(cancelled, OCIReleaseTagPageRequest{Reference: host + "/team/app"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation error = %v", err)
 	}
 }

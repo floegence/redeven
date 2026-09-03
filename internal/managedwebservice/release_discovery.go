@@ -8,20 +8,19 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
 const (
-	releaseCandidateSchemaVersion = 1
+	releaseCandidateSchemaVersion = 2
 	releaseCandidateTTL           = 15 * time.Minute
 	releaseCheckInterval          = 6 * time.Hour
+	maxReleaseCatalogCandidates   = 10_000
+	maxReleaseVerificationBatch   = 20
 )
 
 const (
@@ -41,16 +40,23 @@ type cachedReleaseCandidate struct {
 	ExpiresAt        time.Time
 }
 
+type cachedReleaseCursor struct {
+	Scope             string
+	SourceFingerprint string
+	Next              string
+	ExpiresAt         time.Time
+}
+
 type releaseCheckSummary struct {
-	SchemaVersion        int              `json:"schema_version"`
-	LatestStableRelease  *ReleaseIdentity `json:"latest_stable_release,omitempty"`
-	LatestPreviewRelease *ReleaseIdentity `json:"latest_preview_release,omitempty"`
+	SchemaVersion        int                `json:"schema_version"`
+	SourceFingerprint    string             `json:"source_fingerprint,omitempty"`
+	CatalogStatus        string             `json:"catalog_status"`
+	Candidates           []ReleaseCandidate `json:"candidates"`
+	LatestStableRelease  *ReleaseIdentity   `json:"latest_stable_release,omitempty"`
+	LatestPreviewRelease *ReleaseIdentity   `json:"latest_preview_release,omitempty"`
 }
 
 func (m *Manager) TemplateReleaseCandidates(ctx context.Context, templateID string, request ReleaseCandidateRequest) (*ReleaseCandidateResult, error) {
-	if request.Refresh {
-		ctx = withReleaseSourceRefresh(ctx)
-	}
 	template, err := m.Template(ctx, strings.TrimSpace(templateID))
 	if err != nil {
 		return nil, err
@@ -67,13 +73,13 @@ func (m *Manager) TemplateReleaseCandidates(ctx context.Context, templateID stri
 			}
 		}
 	}
-	return m.discoverAndCache(ctx, "template:"+template.TemplateID, template.TemplateID, *template.Spec, secrets, nil, template.Source)
+	return m.browseReleaseCandidates(ctx, releaseBrowseContext{
+		Scope: "template:" + template.TemplateID, TemplateID: template.TemplateID, Spec: *template.Spec,
+		Parameters: secrets, TemplateSource: template.Source, Recommended: template.RecommendedRelease,
+	}, request)
 }
 
 func (m *Manager) ServiceReleaseCandidates(ctx context.Context, serviceID string, request ReleaseCandidateRequest) (*ReleaseCandidateResult, error) {
-	if request.Refresh {
-		ctx = withReleaseSourceRefresh(ctx)
-	}
 	service, err := m.registry.GetManagedService(ctx, strings.TrimSpace(serviceID))
 	if err != nil {
 		return nil, err
@@ -93,87 +99,24 @@ func (m *Manager) ServiceReleaseCandidates(ctx context.Context, serviceID string
 	if err != nil {
 		return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, err)
 	}
-	return m.discoverAndCache(ctx, "service:"+service.ServiceID, service.TemplateID, spec, parameters, current, service.TemplateSource)
-}
-
-func (m *Manager) discoverAndCache(ctx context.Context, scope, templateID string, spec TemplateSpec, parameters map[string]string, current *ReleaseIdentity, templateSource string) (*ReleaseCandidateResult, error) {
-	candidates, err := m.discoverCandidates(ctx, spec, parameters, current, templateSource)
-	now := time.Now()
 	var recommended *ReleaseIdentity
-	if template, templateErr := m.Template(ctx, templateID); templateErr == nil {
+	if template, templateErr := m.Template(ctx, service.TemplateID); templateErr == nil {
 		recommended = template.RecommendedRelease
 	}
-	result := ReleaseCandidateResult{SchemaVersion: releaseCandidateSchemaVersion, CurrentRelease: current, RecommendedRelease: recommended, Candidates: []ReleaseCandidate{}, CheckStatus: "fresh", CheckedAtUnixMs: now.UnixMilli(), NextCheckAtUnixMs: now.Add(releaseCheckInterval).UnixMilli()}
-	if err != nil {
-		code, message, _, _ := ErrorDetails(err)
-		result.LastErrorCode, result.LastErrorMessage = code, message
-		hasPrevious := false
-		m.releaseMu.Lock()
-		if previous, ok := m.releaseViews[scope]; ok && len(previous.Candidates) > 0 {
-			hasPrevious = true
-			previous.LastErrorCode, previous.LastErrorMessage = code, message
-			previous.CheckStatus = "stale"
-			previous.NextCheckAtUnixMs = result.NextCheckAtUnixMs
-			m.releaseViews[scope] = previous
-			result = previous
-		} else {
-			result.CheckStatus = "error"
-			m.releaseViews[scope] = result
-		}
-		m.releaseMu.Unlock()
-		if strings.HasPrefix(scope, "service:") {
-			_ = m.registry.MarkManagedReleaseCheckStale(ctx, strings.TrimPrefix(scope, "service:"), code, result.NextCheckAtUnixMs)
-		}
-		if hasPrevious {
-			return &result, nil
-		}
-		return &result, err
-	}
-	m.releaseMu.Lock()
-	defer m.releaseMu.Unlock()
-	for id, item := range m.releaseItems {
-		if item.Scope == scope || now.After(item.ExpiresAt) {
-			delete(m.releaseItems, id)
-		}
-	}
-	for index := range candidates {
-		id, idErr := randomID("rel")
-		if idErr != nil {
-			return nil, idErr
-		}
-		candidates[index].Candidate.CandidateID = id
-		candidates[index].Candidate.SchemaVersion = releaseCandidateSchemaVersion
-		candidates[index].Scope = scope
-		candidates[index].TemplateID = templateID
-		candidates[index].ExpiresAt = now.Add(releaseCandidateTTL)
-		m.releaseItems[id] = candidates[index]
-		candidate := &candidates[index].Candidate
-		candidate.IsCurrent = current != nil && sameReleaseSelection(*current, candidates[index].Identity)
-		candidate.IsRecommended = recommended != nil && sameReleaseSelection(*recommended, candidates[index].Identity)
-		candidate.Relation = releaseRelation(current, candidates[index].Identity)
-		if result.LatestStableRelease == nil && candidate.Channel == "stable" {
-			candidate.IsLatestStable = true
-			value := *candidate
-			result.LatestStableRelease = &value
-		}
-		if result.LatestPreviewRelease == nil && candidate.Channel == "preview" {
-			candidate.IsLatestPreview = true
-			value := *candidate
-			result.LatestPreviewRelease = &value
-		}
-		result.Candidates = append(result.Candidates, *candidate)
-	}
-	m.releaseViews[scope] = result
-	if strings.HasPrefix(scope, "service:") {
-		if err := m.persistReleaseCheck(ctx, strings.TrimPrefix(scope, "service:"), result); err != nil {
-			m.log.Warn("persist managed Web Service release check", "service_id", strings.TrimPrefix(scope, "service:"), "cause", safeManagedFailureCause(err))
-		}
-	}
-	return &result, nil
+	return m.browseReleaseCandidates(ctx, releaseBrowseContext{
+		Scope: "service:" + service.ServiceID, ServiceID: service.ServiceID, TemplateID: service.TemplateID,
+		Spec: spec, Parameters: parameters, Current: current, TemplateSource: service.TemplateSource, Recommended: recommended,
+	}, request)
 }
 
-func (m *Manager) persistReleaseCheck(ctx context.Context, serviceID string, result ReleaseCandidateResult) error {
-	summary := releaseCheckSummary{SchemaVersion: 1}
+func (m *Manager) persistReleaseCheck(ctx context.Context, serviceID, sourceFingerprint string, result ReleaseCandidateResult) error {
+	snapshots := make([]ReleaseCandidate, 0, len(result.Candidates))
+	for _, candidate := range result.Candidates {
+		candidate.CandidateID = ""
+		candidate.IsLatestStable, candidate.IsLatestPreview = false, false
+		snapshots = append(snapshots, candidate)
+	}
+	summary := releaseCheckSummary{SchemaVersion: 2, SourceFingerprint: sourceFingerprint, CatalogStatus: result.CatalogStatus, Candidates: snapshots}
 	if result.LatestStableRelease != nil {
 		value := releaseIdentityFromCandidate(*result.LatestStableRelease)
 		summary.LatestStableRelease = &value
@@ -201,20 +144,13 @@ func decodeReleaseCheckSummary(record *pfregistry.ManagedReleaseCheck) (releaseC
 	if err := decodeStrictJSON([]byte(record.SummaryJSON), &summary); err != nil {
 		return releaseCheckSummary{}, err
 	}
-	if summary.SchemaVersion != 1 {
+	if summary.SchemaVersion != 2 {
 		return releaseCheckSummary{}, errors.New("managed release check schema is unsupported")
 	}
+	if summary.Candidates == nil {
+		summary.Candidates = []ReleaseCandidate{}
+	}
 	return summary, nil
-}
-
-func (m *Manager) discoverCandidates(ctx context.Context, spec TemplateSpec, parameters map[string]string, current *ReleaseIdentity, templateSource string) ([]cachedReleaseCandidate, error) {
-	if spec.Kind == DeploymentHost && spec.Host != nil && spec.Host.NPM != nil {
-		return m.discoverNPMCandidates(ctx, spec, parameters, current, templateSource)
-	}
-	if spec.Kind == DeploymentContainer && spec.Container != nil {
-		return m.discoverOCICandidates(ctx, spec, current, templateSource)
-	}
-	return nil, serviceError("RELEASE_DISCOVERY_UNSUPPORTED", "Release discovery supports npm Host and single-container templates.", 409, false, nil)
 }
 
 func (m *Manager) discoverNPMCandidates(ctx context.Context, spec TemplateSpec, parameters map[string]string, current *ReleaseIdentity, templateSource string) ([]cachedReleaseCandidate, error) {
@@ -253,77 +189,6 @@ func (m *Manager) discoverNPMCandidates(ctx context.Context, spec TemplateSpec, 
 		identity := ReleaseIdentity{SchemaVersion: 1, Kind: "npm", Source: npm.PackageName, Registry: normalizedRegistryURL(npm.RegistryURL), Version: item.Version, Integrity: item.Integrity, Platform: currentPlatformKey(), Trust: trust}
 		result = append(result, cachedReleaseCandidate{Candidate: candidate, Identity: identity, Spec: candidateSpec})
 	}
-	return result, nil
-}
-
-func (m *Manager) discoverOCICandidates(ctx context.Context, spec TemplateSpec, current *ReleaseIdentity, templateSource string) ([]cachedReleaseCandidate, error) {
-	reference := releaseImageRepository(spec.Container.Image)
-	registryHost := releaseRegistryHost(reference)
-	credential := containerengine.RegistryCredential{}
-	var credentialErr error
-	if m.containers != nil {
-		value, err := m.containers.RegistryCredential(ctx, containerengine.EngineDocker, registryHost)
-		if err != nil {
-			credentialErr = err
-		} else {
-			credential = value
-		}
-	}
-	discovery := containerengine.OCIReleaseDiscovery{Client: m.releaseHTTPClient()}
-	items, err := discovery.Discover(ctx, containerengine.OCIReleaseDiscoveryRequest{Reference: reference, PlatformOS: "linux", PlatformArch: runtime.GOARCH, Credential: credential})
-	if err != nil {
-		switch {
-		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-			return nil, err
-		case errors.Is(err, containerengine.ErrImageAccessDenied):
-			if credentialErr != nil {
-				return nil, serviceError("RELEASE_SOURCE_AUTH_UNAVAILABLE", "Container Registry credentials could not be read from the current engine store.", 503, true, credentialErr)
-			}
-			return nil, serviceError("RELEASE_SOURCE_AUTH_REQUIRED", "The Container Registry rejected its current engine credentials.", 401, false, err)
-		case errors.Is(err, containerengine.ErrImageRateLimited):
-			return nil, serviceError("RELEASE_SOURCE_RATE_LIMITED", "The Container Registry rate limit was reached.", 429, true, err)
-		default:
-			return nil, serviceError("RELEASE_SOURCE_UNAVAILABLE", "The Container Registry could not provide release metadata.", 503, true, err)
-		}
-	}
-	trust := "user_configured_registry"
-	if templateSource == "builtin" {
-		trust = "catalog_reviewed_source"
-	}
-	result := make([]cachedReleaseCandidate, 0, len(items))
-	for _, item := range items {
-		channel := "special"
-		_, semanticTag := parseSemanticVersion(strings.TrimPrefix(item.Tag, "v"))
-		if exactSemverPattern.MatchString(strings.TrimPrefix(item.Tag, "v")) && semanticTag {
-			channel = "stable"
-			if strings.Contains(item.Tag, "-") {
-				channel = "preview"
-			}
-		}
-		selectable, reasonCode, reason := item.Compatible, item.ReasonCode, item.Reason
-		candidateSpec := cloneTemplateSpec(spec)
-		candidateSpec.Container.Image = reference + ":" + item.Tag + "@" + item.PlatformDigest
-		candidate := ReleaseCandidate{SourceKind: "oci", Source: reference, Tag: item.Tag, Channel: channel, Trust: trust, Selectable: selectable, ReasonCode: reasonCode, Reason: reason, Platform: "linux/" + runtime.GOARCH, IndexDigest: item.IndexDigest, Digest: item.PlatformDigest}
-		if current != nil && current.Kind == "oci" && current.Tag == item.Tag && current.Digest != "" && current.Digest != item.PlatformDigest {
-			candidate.TagMoved = true
-		}
-		identity := ReleaseIdentity{SchemaVersion: 1, Kind: "oci", Source: reference, Tag: item.Tag, Digest: item.PlatformDigest, Platform: "linux/" + runtime.GOARCH, ArtifactReference: candidateSpec.Container.Image, Trust: trust}
-		result = append(result, cachedReleaseCandidate{Candidate: candidate, Identity: identity, Spec: candidateSpec})
-	}
-	sort.SliceStable(result, func(i, j int) bool {
-		left, right := strings.TrimPrefix(result[i].Candidate.Tag, "v"), strings.TrimPrefix(result[j].Candidate.Tag, "v")
-		_, leftSemver := parseSemanticVersion(left)
-		_, rightSemver := parseSemanticVersion(right)
-		leftSemver = leftSemver && exactSemverPattern.MatchString(left)
-		rightSemver = rightSemver && exactSemverPattern.MatchString(right)
-		if leftSemver != rightSemver {
-			return leftSemver
-		}
-		if leftSemver {
-			return compareReleaseVersions(left, right) > 0
-		}
-		return result[i].Candidate.Tag < result[j].Candidate.Tag
-	})
 	return result, nil
 }
 
@@ -485,16 +350,31 @@ func (m *Manager) resolveReleaseCandidate(ctx context.Context, scope, candidateI
 	if !ok || cached.Scope != scope || time.Now().After(cached.ExpiresAt) {
 		return nil, serviceError("RELEASE_CANDIDATE_EXPIRED", "Refresh the version list before selecting this release.", 409, true, nil)
 	}
-	fresh, err := m.discoverCandidates(withReleaseSourceRefresh(ctx), cached.Spec, parameters, current, templateSource)
+	if cached.Candidate.VerificationStatus != "verified" || !cached.Candidate.Selectable {
+		return nil, serviceError("RELEASE_CANDIDATE_UNVERIFIED", "Verify this release before selecting it.", 409, true, nil)
+	}
+	if cached.Candidate.SourceKind == "oci" {
+		items, err := m.verifyOCIReleaseTags(withReleaseSourceRefresh(ctx), cached.Spec, []string{cached.Candidate.Tag})
+		if err != nil {
+			return nil, err
+		}
+		if len(items) != 1 || !items[0].Compatible {
+			return nil, serviceError("RELEASE_CANDIDATE_CHANGED", "The selected release changed at its source. Refresh the version list and review it again.", 409, true, nil)
+		}
+		fresh := verifiedOCIReleaseCandidate(releaseBrowseContext{Scope: cached.Scope, TemplateID: cached.TemplateID, Spec: cached.Spec, Current: current, TemplateSource: templateSource}, cached, items[0])
+		if !sameReleaseIdentity(fresh.Identity, cached.Identity) {
+			return nil, serviceError("RELEASE_CANDIDATE_CHANGED", "The selected release changed at its source. Refresh the version list and review it again.", 409, true, nil)
+		}
+		return &fresh, nil
+	}
+	fresh, err := m.discoverNPMCandidates(withReleaseSourceRefresh(ctx), cached.Spec, parameters, current, templateSource)
 	if err != nil {
 		return nil, err
 	}
 	for index := range fresh {
-		if sameReleaseIdentity(fresh[index].Identity, cached.Identity) {
-			if !fresh[index].Candidate.Selectable {
-				return nil, serviceError(fresh[index].Candidate.ReasonCode, fresh[index].Candidate.Reason, 409, false, nil)
-			}
+		if sameReleaseIdentity(fresh[index].Identity, cached.Identity) && fresh[index].Candidate.Selectable {
 			fresh[index].Candidate.CandidateID = candidateID
+			fresh[index].Candidate.VerificationStatus = "verified"
 			fresh[index].Scope, fresh[index].TemplateID = cached.Scope, cached.TemplateID
 			return &fresh[index], nil
 		}
@@ -597,7 +477,7 @@ func (m *Manager) scheduleReleaseCheck(serviceID string) {
 	m.mu.Unlock()
 	go func() {
 		defer m.workers.Done()
-		if _, err := m.ServiceReleaseCandidates(context.Background(), serviceID, ReleaseCandidateRequest{Refresh: true}); err != nil {
+		if err := m.refreshServiceReleaseCatalog(context.Background(), serviceID); err != nil {
 			m.log.Debug("refresh managed Web Service release after lifecycle change", "service_id", serviceID, "error", err)
 		}
 	}()
@@ -624,11 +504,38 @@ func (m *Manager) refreshInstalledReleases(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		_, err := m.ServiceReleaseCandidates(ctx, services[index].ServiceID, ReleaseCandidateRequest{})
-		if err != nil {
+		if err := m.refreshServiceReleaseCatalog(ctx, services[index].ServiceID); err != nil {
 			m.log.Debug("managed Web Service release check failed", "service_id", services[index].ServiceID, "error", err)
 		}
 	}
+}
+
+func (m *Manager) refreshServiceReleaseCatalog(ctx context.Context, serviceID string) error {
+	result, err := m.ServiceReleaseCandidates(ctx, serviceID, ReleaseCandidateRequest{Action: "refresh"})
+	if err != nil {
+		return err
+	}
+	for page := 0; result.HasMore && page < 100; page++ {
+		result, err = m.ServiceReleaseCandidates(ctx, serviceID, ReleaseCandidateRequest{Action: "continue", CursorID: result.CursorID})
+		if err != nil {
+			return err
+		}
+	}
+	if result.HasMore {
+		return serviceError("RELEASE_SOURCE_RESPONSE_INVALID", "The Container Registry pagination exceeded its safe limit.", 502, true, nil)
+	}
+	verifyIDs := []string{}
+	channels := map[string]bool{}
+	for _, candidate := range result.Candidates {
+		if candidate.VerificationStatus == "pending" && !channels[candidate.Channel] && (candidate.Channel == "stable" || candidate.Channel == "preview") {
+			verifyIDs = append(verifyIDs, candidate.CandidateID)
+			channels[candidate.Channel] = true
+		}
+	}
+	if len(verifyIDs) > 0 {
+		_, err = m.ServiceReleaseCandidates(ctx, serviceID, ReleaseCandidateRequest{Action: "verify", CandidateIDs: verifyIDs})
+	}
+	return err
 }
 
 func (m *Manager) releaseView(scope string) (ReleaseCandidateResult, bool) {

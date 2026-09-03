@@ -16,7 +16,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v1"
-	registryCurrentSchemaVersion = 3
+	registryCurrentSchemaVersion = 4
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -28,8 +28,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryV3ToV4},
 		},
-		Verify: verifyRegistryV3,
+		Verify: verifyRegistryV4,
 	}
 }
 
@@ -237,6 +238,63 @@ ALTER TABLE managed_web_service_operations ADD COLUMN delete_workspace INTEGER N
 	return verifyRegistryV3(tx)
 }
 
+func migrateRegistryV3ToV4(tx *sql.Tx) error {
+	if err := verifyRegistryV3(tx); err != nil {
+		return fmt.Errorf("verify port forward registry v3 before migration: %w", err)
+	}
+	type releaseCheckV1 struct {
+		SchemaVersion        int             `json:"schema_version"`
+		LatestStableRelease  json.RawMessage `json:"latest_stable_release,omitempty"`
+		LatestPreviewRelease json.RawMessage `json:"latest_preview_release,omitempty"`
+	}
+	type releaseCheckV2 struct {
+		SchemaVersion        int             `json:"schema_version"`
+		CatalogStatus        string          `json:"catalog_status"`
+		Candidates           []any           `json:"candidates"`
+		LatestStableRelease  json.RawMessage `json:"latest_stable_release,omitempty"`
+		LatestPreviewRelease json.RawMessage `json:"latest_preview_release,omitempty"`
+	}
+	rows, err := tx.Query(`SELECT service_id,summary_json FROM managed_web_service_release_checks ORDER BY service_id`)
+	if err != nil {
+		return err
+	}
+	updates := [][3]string{}
+	for rows.Next() {
+		var serviceID, raw string
+		if err := rows.Scan(&serviceID, &raw); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		var legacy releaseCheckV1
+		if err := decodeStrictRegistryJSON(raw, &legacy); err != nil || legacy.SchemaVersion != 1 {
+			_ = rows.Close()
+			return fmt.Errorf("release check %s is not schema v1", serviceID)
+		}
+		migrated, err := json.Marshal(releaseCheckV2{
+			SchemaVersion: 2, CatalogStatus: "stale", Candidates: []any{},
+			LatestStableRelease: legacy.LatestStableRelease, LatestPreviewRelease: legacy.LatestPreviewRelease,
+		})
+		if err != nil {
+			_ = rows.Close()
+			return err
+		}
+		sum := sha256.Sum256(migrated)
+		updates = append(updates, [3]string{serviceID, string(migrated), hex.EncodeToString(sum[:])})
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, update := range updates {
+		if _, err := tx.Exec(`UPDATE managed_web_service_release_checks SET summary_json=?,summary_sha256=?,stale=1 WHERE service_id=?`, update[1], update[2], update[0]); err != nil {
+			return err
+		}
+	}
+	return verifyRegistryV4(tx)
+}
+
 func verifyRegistryV1(tx *sql.Tx) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
@@ -327,6 +385,62 @@ func verifyRegistryV2(tx *sql.Tx) error {
 
 func verifyRegistryV3(tx *sql.Tx) error {
 	return verifyRegistryVersion(tx, 3)
+}
+
+func verifyRegistryV4(tx *sql.Tx) error {
+	return verifyRegistryVersion(tx, 4)
+}
+
+type registryReleaseIdentityV1 struct {
+	SchemaVersion     int    `json:"schema_version"`
+	Kind              string `json:"kind"`
+	Source            string `json:"source,omitempty"`
+	Registry          string `json:"registry,omitempty"`
+	Version           string `json:"version,omitempty"`
+	Tag               string `json:"tag,omitempty"`
+	Digest            string `json:"digest,omitempty"`
+	Integrity         string `json:"integrity,omitempty"`
+	Platform          string `json:"platform,omitempty"`
+	ArtifactReference string `json:"artifact_reference,omitempty"`
+	Trust             string `json:"trust,omitempty"`
+}
+
+type registryReleaseCandidateV2 struct {
+	SchemaVersion      int    `json:"schema_version"`
+	CandidateID        string `json:"candidate_id"`
+	SourceKind         string `json:"source_kind"`
+	Source             string `json:"source"`
+	Registry           string `json:"registry,omitempty"`
+	Version            string `json:"version,omitempty"`
+	Tag                string `json:"tag,omitempty"`
+	PublishedAtUnixMs  int64  `json:"published_at_unix_ms,omitempty"`
+	Channel            string `json:"channel"`
+	Deprecated         bool   `json:"deprecated,omitempty"`
+	DeprecationMessage string `json:"deprecation_message,omitempty"`
+	Trust              string `json:"trust"`
+	Selectable         bool   `json:"selectable"`
+	ReasonCode         string `json:"reason_code,omitempty"`
+	Reason             string `json:"reason,omitempty"`
+	Platform           string `json:"platform,omitempty"`
+	IndexDigest        string `json:"index_digest,omitempty"`
+	Digest             string `json:"digest,omitempty"`
+	Integrity          string `json:"integrity,omitempty"`
+	TagMoved           bool   `json:"tag_moved,omitempty"`
+	IsCurrent          bool   `json:"is_current,omitempty"`
+	IsRecommended      bool   `json:"is_recommended,omitempty"`
+	IsLatestStable     bool   `json:"is_latest_stable,omitempty"`
+	IsLatestPreview    bool   `json:"is_latest_preview,omitempty"`
+	Relation           string `json:"relation"`
+	VerificationStatus string `json:"verification_status"`
+}
+
+type registryReleaseCheckV2 struct {
+	SchemaVersion        int                          `json:"schema_version"`
+	SourceFingerprint    string                       `json:"source_fingerprint,omitempty"`
+	CatalogStatus        string                       `json:"catalog_status"`
+	Candidates           []registryReleaseCandidateV2 `json:"candidates"`
+	LatestStableRelease  *registryReleaseIdentityV1   `json:"latest_stable_release,omitempty"`
+	LatestPreviewRelease *registryReleaseIdentityV1   `json:"latest_preview_release,omitempty"`
 }
 
 func verifyRegistryVersion(tx *sql.Tx, version int) error {
@@ -433,7 +547,48 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 			return fmt.Errorf("port forward registry v%d has %d invalid workspace deletion values", version, invalid)
 		}
 	}
+	if version >= 4 {
+		if err := verifyReleaseCheckSchemaV2(tx); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func verifyReleaseCheckSchemaV2(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT service_id,summary_json FROM managed_web_service_release_checks ORDER BY service_id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var serviceID, raw string
+		if err := rows.Scan(&serviceID, &raw); err != nil {
+			return err
+		}
+		var document registryReleaseCheckV2
+		if err := decodeStrictRegistryJSON(raw, &document); err != nil || document.SchemaVersion != 2 || document.Candidates == nil {
+			return fmt.Errorf("release check %s schema v2 is invalid", serviceID)
+		}
+		if document.CatalogStatus != "loading" && document.CatalogStatus != "complete" && document.CatalogStatus != "stale" && document.CatalogStatus != "error" {
+			return fmt.Errorf("release check %s catalog status is invalid", serviceID)
+		}
+		for _, candidate := range document.Candidates {
+			if candidate.SchemaVersion != 2 || candidate.CandidateID != "" || candidate.Source == "" ||
+				(candidate.SourceKind != "npm" && candidate.SourceKind != "oci") ||
+				(candidate.Channel != "stable" && candidate.Channel != "preview" && candidate.Channel != "special") ||
+				(candidate.Relation != "newer" && candidate.Relation != "same" && candidate.Relation != "older" && candidate.Relation != "unknown") ||
+				(candidate.VerificationStatus != "pending" && candidate.VerificationStatus != "verified" && candidate.VerificationStatus != "unavailable") {
+				return fmt.Errorf("release check %s candidate schema v2 is invalid", serviceID)
+			}
+		}
+		for _, identity := range []*registryReleaseIdentityV1{document.LatestStableRelease, document.LatestPreviewRelease} {
+			if identity != nil && (identity.SchemaVersion != 1 || (identity.Kind != "npm" && identity.Kind != "oci")) {
+				return fmt.Errorf("release check %s latest release identity is invalid", serviceID)
+			}
+		}
+	}
+	return rows.Err()
 }
 
 func verifyTemplateSpecDocuments(tx *sql.Tx, schemaVersion int) error {

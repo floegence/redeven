@@ -12,9 +12,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var credentialHelperPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+
+var registryCredentialHelperTimeout = 5 * time.Second
 
 type registryAuthDocument struct {
 	Auths map[string]struct {
@@ -111,12 +114,17 @@ func readRegistryCredentialHelper(ctx context.Context, helper, server string) (R
 	if !credentialHelperPattern.MatchString(helper) {
 		return RegistryCredential{}, errors.New("invalid container credential helper name")
 	}
-	cmd := exec.CommandContext(ctx, "docker-credential-"+helper, "get")
+	helperContext, cancel := context.WithTimeout(ctx, registryCredentialHelperTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(helperContext, "docker-credential-"+helper, "get")
 	cmd.Stdin = strings.NewReader(server + "\n")
 	var stdout bytes.Buffer
 	cmd.Stdout = &limitedCredentialWriter{destination: &stdout, remaining: 1 << 20}
 	cmd.Stderr = io.Discard
 	if err := cmd.Run(); err != nil {
+		if helperContext.Err() != nil {
+			return RegistryCredential{}, helperContext.Err()
+		}
 		return RegistryCredential{}, err
 	}
 	var response struct {
