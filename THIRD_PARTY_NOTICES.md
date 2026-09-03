@@ -33,7 +33,7 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/floegence/floeterm/terminal-go | v0.18.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.18.1 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.19.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.0 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.1.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.1.2 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.0.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.2.0 | Floegence first-party versioned Managed Service template catalog. |
@@ -190,7 +190,7 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | @floegence/floe-webapp-boot | 0.48.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.48.4 |  |
 | @floegence/floe-webapp-core | 0.48.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.48.4 |  |
 | @floegence/floe-webapp-protocol | 0.48.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.48.4 |  |
-| @floegence/floeterm-terminal-web | 0.18.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.18.1 | Built-in theme attribution and license texts are reproduced below from the verified 0.18.1 package. |
+| @floegence/floeterm-terminal-web | 0.19.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.0 package. |
 | @floegence/flowersec-core | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.0.1 |  |
 | @floegence/flowersec-node-native-darwin-arm64 | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.0.1 |  |
 | @floegence/flowersec-node-native-darwin-x64 | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.0.1 |  |
@@ -1221,7 +1221,7 @@ SOFTWARE.
 
 ## Floeterm Built-in Theme Notices
 
-Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.18.1`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.19.0`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
 
 - `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
 - `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`
