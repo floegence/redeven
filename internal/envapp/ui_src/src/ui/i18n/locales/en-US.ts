@@ -3380,6 +3380,7 @@ export const enUS = defineDictionary({
       dataIdentityUnavailable: 'Docker did not provide a stable identity for the service data volume. Check Docker, then retry.',
       dataVolumeCreateFailed: 'Redeven could not create the service data volume. Check Docker and storage, then retry.',
       hostRuntimePrepareFailed: 'Redeven could not prepare the Host service runtime. Retry the operation.',
+      dependencyLayoutInvalid: 'Redeven could not verify the installed npm package layout. Retry the installation; if it still fails, refresh the version list and choose another release.',
       hostProcessIdentityChanged: 'The saved Host process could not be verified after the Runtime restarted.',
       operationFailed: 'The managed service operation failed. Copy the diagnostic and retry.',
       updateAvailable: 'Update available',

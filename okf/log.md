@@ -1,6 +1,10 @@
 # Redeven OKF Update Log
 
 ## 2026-09-03
+* **Deterministic npm Host installation**: npm Host staging now owns one exact
+  private application manifest and passes the same explicit prefix and hoisted
+  layout to install and lifecycle rebuild. Package metadata and executable
+  identity must verify both before and after third-party scripts run.
 * **Recoverable Managed Service release picker**: Version browsing now keeps
   every close path available during source work, aborts one generation-scoped
   request on close or service switch, and ignores late results. OCI discovery

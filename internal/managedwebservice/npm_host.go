@@ -156,6 +156,11 @@ type npmRuntimeManifest struct {
 	RuntimeSHA256    string `json:"runtime_sha256"`
 }
 
+type npmApplicationManifest struct {
+	Private      bool              `json:"private"`
+	Dependencies map[string]string `json:"dependencies"`
+}
+
 func (d *hostScriptDriver) installNPMRuntime(ctx context.Context, service *pfregistry.ManagedService, spec NPMHostPackageSpec, progress operationProgress) (string, ReleaseIdentity, error) {
 	parameters, err := d.manager.serviceParameters(service)
 	if err != nil {
@@ -305,6 +310,9 @@ func runNPMReleaseInstall(ctx context.Context, nodePath, npmCLIPath, appRoot, ta
 	if err := os.MkdirAll(homeRoot, 0o700); err != nil {
 		return err
 	}
+	if err := writeNPMApplicationManifest(appRoot, spec); err != nil {
+		return serviceError("DEPENDENCY_LAYOUT_INVALID", "Redeven could not prepare the exact npm application manifest.", 500, true, err)
+	}
 	userConfig := filepath.Join(configRoot, "user.npmrc")
 	globalConfig := filepath.Join(configRoot, "global.npmrc")
 	if err := os.WriteFile(globalConfig, nil, 0o600); err != nil {
@@ -318,25 +326,40 @@ func runNPMReleaseInstall(ctx context.Context, nodePath, npmCLIPath, appRoot, ta
 		return err
 	}
 	env := npmCommandEnvironment(nodePath, homeRoot, cacheRoot, userConfig, globalConfig, spec.RegistryURL)
-	installArgs := append([]string{npmCLIPath}, npmPackageInstallArguments(spec.PackageName, spec.Version)...)
+	installArgs := append([]string{npmCLIPath}, npmPackageInstallArguments(spec.PackageName, spec.Version, appRoot)...)
 	if err := runManagedNPMCommand(ctx, nodePath, installArgs, appRoot, env); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		return serviceError("DEPENDENCY_INSTALL_FAILED", "The exact npm package could not be installed from its Registry.", 503, true, err)
 	}
+	if err := verifyInstalledNPMPackage(appRoot, spec); err != nil {
+		return err
+	}
 	// Credentials must be gone before third-party lifecycle scripts execute.
 	if err := os.WriteFile(userConfig, []byte("registry="+normalizedRegistryURL(spec.RegistryURL)+"\n"), 0o600); err != nil {
 		return err
 	}
-	rebuildArgs := append([]string{npmCLIPath}, npmPackageRebuildArguments()...)
+	rebuildArgs := append([]string{npmCLIPath}, npmPackageRebuildArguments(appRoot)...)
 	if err := runManagedNPMCommand(ctx, nodePath, rebuildArgs, appRoot, env); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		return serviceError("LIFECYCLE_SCRIPT_FAILED", "The npm package lifecycle scripts failed.", 502, true, err)
 	}
-	return nil
+	return verifyInstalledNPMPackage(appRoot, spec)
+}
+
+func writeNPMApplicationManifest(appRoot string, spec NPMHostPackageSpec) error {
+	manifest := npmApplicationManifest{
+		Private:      true,
+		Dependencies: map[string]string{strings.TrimSpace(spec.PackageName): strings.TrimSpace(spec.Version)},
+	}
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(appRoot, "package.json"), raw, 0o600)
 }
 
 func runManagedNPMCommand(ctx context.Context, nodePath string, args []string, dir string, env []string) error {
@@ -374,6 +397,14 @@ func npmAuthConfigKey(registry string) string {
 }
 
 func verifyInstalledNPMPackage(appRoot string, spec NPMHostPackageSpec) error {
+	manifestRaw, err := os.ReadFile(filepath.Join(appRoot, "package.json"))
+	if err != nil {
+		return serviceError("DEPENDENCY_LAYOUT_INVALID", "The managed npm application manifest is missing.", 502, false, err)
+	}
+	var manifest npmApplicationManifest
+	if err := decodeStrictJSON(manifestRaw, &manifest); err != nil || !manifest.Private || manifest.Dependencies[strings.TrimSpace(spec.PackageName)] != strings.TrimSpace(spec.Version) || len(manifest.Dependencies) != 1 {
+		return serviceError("DEPENDENCY_IDENTITY_MISMATCH", "The managed npm application manifest does not match the selected exact release.", 502, false, err)
+	}
 	parts := strings.Split(spec.PackageName, "/")
 	packageRoot := filepath.Join(append([]string{appRoot, "node_modules"}, parts...)...)
 	raw, err := os.ReadFile(filepath.Join(packageRoot, "package.json"))

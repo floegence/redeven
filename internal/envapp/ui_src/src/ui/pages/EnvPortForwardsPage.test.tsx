@@ -603,6 +603,41 @@ describe('web service metadata and template validation', () => {
     }
   });
 
+  it('explains invalid npm Host layouts without exposing backend details', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ManagedServiceRow
+        service={{
+          service_id: 'mws-host-failed', template_id: 'example-host', service_family_id: 'example-host',
+          name: 'Example Host', template_source: 'builtin', deployment: 'host',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.2.3'), desired_state: 'stopped', observed_state: 'error',
+          forward_id: 'pf-host-failed', runtime_port: 3000,
+          actions: { start: { available: false }, stop: { available: false }, restart: { available: false }, retry: { available: true } },
+          last_failure: { action: 'retry_install', stage: 'failed', error_code: 'DEPENDENCY_LAYOUT_INVALID', message: 'private runtime path detail' },
+        }}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    try {
+      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
+      await Promise.resolve();
+      const diagnostic = clipboardMocks.writeText.mock.calls.at(-1)?.[0] ?? '';
+      expect(diagnostic).toContain('Redeven could not verify the installed npm package layout.');
+      expect(diagnostic).not.toContain('private runtime path detail');
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
   it('replaces stale service status with contextual operation details', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

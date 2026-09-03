@@ -3423,6 +3423,7 @@
       "dataIdentityUnavailable": "Docker 未提供穩定的服務資料卷身分。請檢查 Docker 後再試一次。",
       "dataVolumeCreateFailed": "Redeven 無法建立服務資料卷。請檢查 Docker 與儲存空間後再試一次。",
       "hostRuntimePrepareFailed": "Redeven 無法準備主機服務執行環境，請重試。",
+      "dependencyLayoutInvalid": "Redeven 無法驗證已安裝 npm 套件的目錄結構。請重試安裝；若仍失敗，請重新整理版本清單並選擇其他版本。",
       "hostProcessIdentityChanged": "執行環境重新啟動後無法驗證已儲存的主機程序。",
       "operationFailed": "受管服務操作失敗。請複製診斷資訊後重試。",
       "updateAvailable": "有可用更新",
