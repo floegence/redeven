@@ -28,6 +28,8 @@ export type ManagedOperation = Readonly<{
   }>;
   error_code?: string;
   error_message?: string;
+  delete_data?: boolean;
+  delete_workspace?: boolean;
 }>;
 
 type ManagedOperationControllerOptions = Readonly<{

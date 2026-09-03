@@ -272,9 +272,11 @@ type OperationRequest struct {
 	RequestID               string              `json:"request_id"`
 	Action                  OperationAction     `json:"action"`
 	DeleteData              bool                `json:"delete_data,omitempty"`
+	DeleteWorkspace         bool                `json:"delete_workspace,omitempty"`
 	AcceptedNoticeRevisions map[string]int64    `json:"accepted_notice_revisions,omitempty"`
 	Reconfigure             *ReconfigureRequest `json:"reconfigure,omitempty"`
 	UpdatePlanID            string              `json:"update_plan_id,omitempty"`
+	Administrator           bool                `json:"-"`
 }
 
 type ReleaseIdentity struct {

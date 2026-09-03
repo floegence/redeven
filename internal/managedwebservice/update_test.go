@@ -153,7 +153,7 @@ func newUpdatePlanFixture(t *testing.T) updatePlanFixture {
 	service := pfregistry.ManagedService{
 		ServiceID: "mws-release-plan", TemplateID: "template-release-plan", TemplateSource: "custom", TemplateRevision: 1,
 		TemplateSnapshotJSON: currentSnapshot, TemplateSnapshotSHA256: currentSnapshotDigest, ServiceFamilyID: "family-release-plan",
-		Deployment: string(DeploymentHost), WorkspacePath: filepath.Join(home, "workspace"), ConfigurationJSON: configurationJSON,
+		Deployment: string(DeploymentHost), WorkspacePath: filepath.Join(home, "workspace"), WorkspaceOwnership: workspaceOwnershipUserSelected, ConfigurationJSON: configurationJSON,
 		ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseDigest,
 		RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingDigest, DesiredState: "running", ObservedState: "running",
 		ForwardID: "pf-release-plan", RuntimeManifestJSON: "{}", RuntimePort: 3080,

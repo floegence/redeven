@@ -131,7 +131,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
-  DirectoryPicker: (props: any) => <Show when={props.open}><div data-testid="managed-workspace-picker-mock"><h2>{props.title}</h2><button type="button" onClick={() => { props.onSelect('/Users/demo/Projects/Focused App'); props.onOpenChange(false); }}>Select focused folder</button></div></Show>,
+  DirectoryPicker: (props: any) => <Show when={props.open}><div data-testid="managed-workspace-picker-mock" data-initial-path={props.initialPath}><h2>{props.title}</h2><button type="button" onClick={() => { props.onSelect('/Users/demo/Projects/Focused App'); props.onOpenChange(false); }}>Select focused folder</button></div></Show>,
   Dropdown: (props: any) => (
     <div>
       {props.trigger}
@@ -509,7 +509,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-one', template_id: 'example-desktop-a', service_family_id: 'example-desktop-family-a',
           name: 'Example Desktop A', template_source: 'builtin', deployment: 'container',
-          workspace_path: '/workspace', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'running', forward_id: 'pf-one', runtime_port: 3000,
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'running', forward_id: 'pf-one', runtime_port: 3000,
           container_resources: [
             { kind: 'container', engine: 'docker', view: 'containers', identity: 'container-id' },
             { kind: 'image', engine: 'docker', view: 'images', identity: 'lscr.io/example/desktop@sha256:abc' },
@@ -546,7 +546,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-failed', template_id: 'example-container', service_family_id: 'example-service',
           name: 'Example Service', template_source: 'builtin', deployment: 'container',
-          workspace_path: '/workspace', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-failed', runtime_port: 3000,
           actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } },
           last_failure: { action: 'start', stage: 'starting', error_code: 'DATA_IDENTITY_MISSING', message: 'Raw backend message must not be shown.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
@@ -611,7 +611,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-retry', template_id: 'example-container', service_family_id: 'example-service',
           name: 'Example Service', template_source: 'builtin', deployment: 'container',
-          workspace_path: '/workspace', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error',
           forward_id: 'pf-retry', runtime_port: 3000,
           actions: { start: { available: false, reason_code: 'OPERATION_ACTIVE' }, stop: { available: false, reason_code: 'OPERATION_ACTIVE' }, restart: { available: false, reason_code: 'OPERATION_ACTIVE' }, retry: { available: false, reason_code: 'OPERATION_ACTIVE' } },
         }}
@@ -662,7 +662,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-native', template_id: 'example-host', service_family_id: 'example-host',
           name: 'Example Service', template_source: 'builtin', deployment: 'host',
-          workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'installing',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'installing',
           forward_id: 'pf-native', runtime_port: 3000,
         }}
         operation={{
@@ -721,7 +721,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-native-install', template_id: 'example-host', service_family_id: 'example-host',
           name: 'Example Service', template_source: 'builtin', deployment: 'host',
-          workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'installing',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'installing',
           forward_id: 'pf-native-install', runtime_port: 3000,
         }}
         operation={{
@@ -764,7 +764,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-cached', template_id: 'example-desktop-b', service_family_id: 'example-desktop-b',
           name: 'Example Desktop B', template_source: 'builtin', deployment: 'container',
-          workspace_path: '/workspace', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'installing',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'installing',
           forward_id: 'pf-cached', runtime_port: 3000,
         }}
         operation={{
@@ -1371,7 +1371,8 @@ describe('EnvPortForwardsPage', () => {
 
     host.querySelector<HTMLButtonElement>('[data-testid="managed-workspace-picker-trigger"]')?.click();
     await flushPage();
-    expect(host.querySelector('[data-testid="managed-workspace-picker-mock"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="managed-workspace-picker-mock"]')?.getAttribute('data-initial-path')).toBe('/Users/demo');
+    expect(host.textContent).toContain('This directory will be created when deployment begins.');
     host.querySelector<HTMLButtonElement>('[data-testid="managed-workspace-picker-mock"] button')?.click();
     await flushPage();
     expect(workspace?.dataset.path).toBe('/Users/demo/Projects/Focused App');
@@ -2058,7 +2059,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('uninstalls a managed service while retaining its data by default', async () => {
-    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected' as const, release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
     let removed = false;
     let operationBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -2084,7 +2085,7 @@ describe('EnvPortForwardsPage', () => {
       .find((button) => button.textContent?.trim() === 'Uninstall');
     uninstall?.click();
 
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false }));
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false, delete_workspace: false }));
     await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service uninstalled', expect.any(String)));
   });
 
@@ -2093,7 +2094,7 @@ describe('EnvPortForwardsPage', () => {
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
       { state: 'ready', loading: false, error: null },
     );
-    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected' as const, release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
     let operationBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -2114,6 +2115,11 @@ describe('EnvPortForwardsPage', () => {
     const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(checkbox?.disabled).toBe(false);
     checkbox?.click();
+    await flushPage();
+    expect(host.textContent).toContain('The workspace and everything in it will be retained.');
+    const workspaceCheckbox = host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1];
+    expect(workspaceCheckbox?.checked).toBe(false);
+    workspaceCheckbox?.click();
     const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
       .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
     Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
@@ -2123,7 +2129,49 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).toContain('This permanently deletes');
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data')?.click();
 
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true }));
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true, delete_workspace: true }));
+  });
+
+  it('automatically deletes a Redeven-created workspace with managed data', async () => {
+    envContextMocks.env = Object.assign(
+      () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
+      { state: 'ready', loading: false, error: null },
+    );
+    const service = {
+      service_id: 'mws-dedicated', template_id: 'example-service', deployment: 'host',
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service', workspace_ownership: 'redeven_created' as const,
+      release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running',
+      forward_id: 'managed-forward', runtime_port: 3080,
+    };
+    let operationBody: Record<string, unknown> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: operationBody ? [] : [service] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-dedicated/operations' && init?.method === 'POST') {
+        operationBody = JSON.parse(String(init.body));
+        return { operation_id: 'mop-delete-dedicated', service_id: service.service_id, state: 'pending', stage: 'stopping', progress_current: 0, progress_total: 7 };
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-delete-dedicated', service_id: service.service_id, state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
+    host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
+    await flushPage();
+    host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    await flushPage();
+    expect(host.textContent).toContain('The dedicated workspace and everything in it will also be deleted');
+    expect(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(1);
+    const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
+      .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
+    Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+      .find((button) => button.textContent?.trim() === 'Uninstall')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data')?.click();
+
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true, delete_workspace: true }));
   });
 
   it('uses Web Services copy for the product surface', async () => {

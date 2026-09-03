@@ -15,7 +15,7 @@ import (
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestOpenCreatesFreshRegistryV2(t *testing.T) {
+func TestOpenCreatesFreshRegistryV3(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	registry, err := Open(path)
 	if err != nil {
@@ -37,12 +37,23 @@ func TestOpenCreatesFreshRegistryV2(t *testing.T) {
 	if kind != registrySchemaKind {
 		t.Fatalf("db_kind = %q, want %q", kind, registrySchemaKind)
 	}
-	columns, err := sqliteutil.TableColumnNamesTx(mustBegin(t, registry.db), "managed_web_services")
+	tx := mustBegin(t, registry.db)
+	columns, err := sqliteutil.TableColumnNamesTx(tx, "managed_web_services")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(columns, "runtime_binding_json") || !slices.Contains(columns, "runtime_binding_sha256") {
 		t.Fatalf("runtime binding columns are missing: %v", columns)
+	}
+	if !slices.Contains(columns, "workspace_ownership") {
+		t.Fatalf("workspace ownership column is missing: %v", columns)
+	}
+	operationColumns, err := sqliteutil.TableColumnNamesTx(tx, "managed_web_service_operations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(operationColumns, "delete_workspace") {
+		t.Fatalf("workspace deletion column is missing: %v", operationColumns)
 	}
 }
 
@@ -99,7 +110,7 @@ func TestOpenRejectsOldKindWithoutChangingDatabase(t *testing.T) {
 func TestOpenRejectsFutureVersionWithoutChangingDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	db, err := sqliteutil.Open(path, sqliteutil.Spec{
-		Kind: registrySchemaKind, CurrentVersion: 3, MinimumVersion: 3,
+		Kind: registrySchemaKind, CurrentVersion: registryCurrentSchemaVersion + 1, MinimumVersion: registryCurrentSchemaVersion + 1,
 		Initialize: func(tx *sql.Tx) error {
 			_, err := tx.Exec(`CREATE TABLE future_registry_record(id TEXT PRIMARY KEY)`)
 			return err
@@ -166,7 +177,7 @@ func TestManagedServicePersistsBindingAndRetryLineage(t *testing.T) {
 	service := ManagedService{
 		ServiceID: "mws_test", TemplateID: "fictional-template", TemplateSource: "builtin", TemplateRevision: 1,
 		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest(snapshot), ServiceFamilyID: "fictional-family",
-		Deployment: "container", WorkspacePath: "/workspace", ConfigurationJSON: configuration, ConfigurationSHA256: digest(configuration),
+		Deployment: "container", WorkspacePath: "/workspace", WorkspaceOwnership: "user_selected", ConfigurationJSON: configuration, ConfigurationSHA256: digest(configuration),
 		ReleaseIdentityJSON: release, ReleaseIdentitySHA256: digest(release), RuntimeBindingJSON: binding, RuntimeBindingSHA256: digest(binding),
 		DesiredState: "stopped", ObservedState: "installing", ForwardID: "pf-test",
 	}
@@ -201,7 +212,7 @@ func TestManagedServicePersistsBindingAndRetryLineage(t *testing.T) {
 	}
 }
 
-func TestOpenMigratesRegistryV1ToV2WithoutChangingServiceIdentity(t *testing.T) {
+func TestOpenMigratesRegistryV1ToV3WithoutChangingServiceIdentity(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.sqlite")
 	legacy, err := sqliteutil.Open(path, sqliteutil.Spec{
 		Kind: registrySchemaKind, CurrentVersion: 1,
@@ -225,6 +236,10 @@ func TestOpenMigratesRegistryV1ToV2WithoutChangingServiceIdentity(t *testing.T) 
 		"mws-one", "custom-one", "custom", 1, spec, digest(spec), "family-one", "container", "/workspace", configuration, 1, digest(configuration), release, digest(release), binding, digest(binding), "1.0.0", "stopped", "stopped", "pf-one", 1, 1); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := legacy.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_total,created_at_unix_ms,updated_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"mop-one", "mws-one", "request-one", "fingerprint-one", "uninstall", 1, "failed", "failed", 7, 1, 1, `{"schema_version":1}`); err != nil {
+		t.Fatal(err)
+	}
 	if err := legacy.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +256,16 @@ func TestOpenMigratesRegistryV1ToV2WithoutChangingServiceIdentity(t *testing.T) 
 	if service == nil || service.ReleaseIdentityJSON != release || service.RuntimeBindingJSON != binding || service.ConfigurationJSON != configuration {
 		t.Fatalf("migrated service = %#v", service)
 	}
+	if service.WorkspaceOwnership != "user_selected" {
+		t.Fatalf("workspace ownership = %q, want user_selected", service.WorkspaceOwnership)
+	}
+	operation, err := registry.GetManagedOperation(context.Background(), "mop-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation == nil || !operation.DeleteData || operation.DeleteWorkspace {
+		t.Fatalf("migrated operation = %#v", operation)
+	}
 	var migratedSpec string
 	if err := registry.db.QueryRow(`SELECT template_snapshot_json FROM managed_web_services WHERE service_id='mws-one'`).Scan(&migratedSpec); err != nil {
 		t.Fatal(err)
@@ -254,6 +279,59 @@ func TestOpenMigratesRegistryV1ToV2WithoutChangingServiceIdentity(t *testing.T) 
 	}
 	if slices.Contains(columns, "version") {
 		t.Fatalf("legacy version column remains: %v", columns)
+	}
+}
+
+func TestOpenMigratesRegistryV2ToV3WithConservativeWorkspaceOwnership(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	legacy, err := sqliteutil.Open(path, sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 2, MinimumVersion: 0,
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
+		},
+		Verify: verifyRegistryV2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := `{"schema_version":4,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":"true"}}`
+	configuration := `{"schema_version":2}`
+	release := `{"schema_version":1,"kind":"none"}`
+	binding := `{"schema_version":1,"deployment":"host","host":{"install_dir":"/managed/install","data_dir":"/managed/data","log_path":"/managed/log"}}`
+	if _, err := legacy.Exec(`INSERT INTO port_forwards(forward_id,target_url,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES('pf-v2','http://127.0.0.1:3000',1,1,0,'unified_proxy')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"mws-v2", "custom-v2", "custom", 1, spec, digest(spec), "family-v2", "host", "/existing-workspace", configuration, 1, digest(configuration), release, digest(release), binding, digest(binding), "stopped", "stopped", "pf-v2", 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,action,delete_data,state,stage,progress_total,created_at_unix_ms,updated_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"mop-v2", "mws-v2", "request-v2", "fingerprint-v2", "uninstall", 1, "failed", "failed", 7, 1, 1, `{"schema_version":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	registry, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	service, err := registry.GetManagedService(context.Background(), "mws-v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := registry.GetManagedOperation(context.Background(), "mop-v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if service == nil || service.WorkspacePath != "/existing-workspace" || service.WorkspaceOwnership != "user_selected" {
+		t.Fatalf("migrated v2 service = %#v", service)
+	}
+	if operation == nil || !operation.DeleteData || operation.DeleteWorkspace {
+		t.Fatalf("migrated v2 operation = %#v", operation)
 	}
 }
 

@@ -364,8 +364,9 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
 		return true
 	}
-	detail := map[string]any{"service_id": serviceID, "action": string(req.Action), "delete_data": req.DeleteData}
-	if req.DeleteData && req.Action == managedwebservice.ActionUninstall && !meta.CanAdmin {
+	detail := map[string]any{"service_id": serviceID, "action": string(req.Action), "delete_data": req.DeleteData, "delete_workspace": req.DeleteWorkspace}
+	req.Administrator = meta.CanAdmin
+	if (req.DeleteData || req.DeleteWorkspace) && req.Action == managedwebservice.ActionUninstall && !meta.CanAdmin {
 		err := errors.New("admin permission is required to delete managed service data")
 		g.appendAudit(meta, "managed_web_service_uninstall", "failure", detail, err)
 		writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: err.Error(), ErrorCode: "ADMIN_REQUIRED"})

@@ -246,25 +246,6 @@ func (m *Manager) defaultWorkspacePath(templateID string) (string, error) {
 	return filepath.Join(selectedRoot, "Redeven", "workspaces", "managed-services", templateID), nil
 }
 
-func (m *Manager) prepareDefaultWorkspace(templateID string) (string, error) {
-	path, err := m.defaultWorkspacePath(templateID)
-	if err != nil || path == "" {
-		return path, err
-	}
-	resolvedTarget, err := m.scope.ResolveTarget(path, filesystemscope.ResolveOptions{ForWrite: true})
-	if err != nil {
-		return "", serviceError("WORKSPACE_UNAVAILABLE", "Redeven could not prepare the dedicated managed-service workspace.", 409, false, err)
-	}
-	if err := os.MkdirAll(resolvedTarget.LogicalAbs, 0o700); err != nil {
-		return "", serviceError("WORKSPACE_UNAVAILABLE", "Redeven could not prepare the dedicated managed-service workspace.", 409, false, err)
-	}
-	resolved, err := m.scope.Resolve(resolvedTarget.LogicalAbs, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true, ForWrite: true})
-	if err != nil {
-		return "", serviceError("WORKSPACE_UNAVAILABLE", "Redeven could not verify the dedicated managed-service workspace.", 409, false, err)
-	}
-	return resolved.RealAbs, nil
-}
-
 func (m *Manager) dockerAvailability(ctx context.Context) (bool, string, string) {
 	if m.containers == nil {
 		return false, "DOCKER_UNAVAILABLE", "Docker is not available in this Environment."
@@ -507,9 +488,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if req.Deployment != "" && req.Deployment != template.Deployment {
 		return nil, serviceError("DEPLOYMENT_INVALID", "The requested deployment type does not match the selected template.", 400, false, nil)
 	}
-	resolved, err := m.scope.Resolve(strings.TrimSpace(req.WorkspacePath), filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true, ForWrite: true})
+	resolved, workspaceOwnership, err := m.resolveInstallWorkspace(strings.TrimSpace(req.WorkspacePath))
 	if err != nil {
-		return nil, serviceError("WORKSPACE_UNAVAILABLE", "The workspace directory is not writable or is outside this Environment's allowed roots.", 400, false, err)
+		return nil, err
 	}
 	if template.Deployment == DeploymentContainer || template.Deployment == DeploymentCompose {
 		if ok, code, reason := m.dockerAvailability(ctx); !ok {
@@ -569,7 +550,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, WorkspaceOwnership: workspaceOwnership, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
@@ -674,7 +655,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	defer m.requestMu.Unlock()
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
 	reconfigureJSON, _ := json.Marshal(req.Reconfigure)
-	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), strings.TrimSpace(req.UpdatePlanID), string(noticeJSON), string(reconfigureJSON))
+	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), fmt.Sprint(req.DeleteWorkspace), strings.TrimSpace(req.UpdatePlanID), string(noticeJSON), string(reconfigureJSON))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -691,6 +672,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
 	retryOfOperationID := ""
+	retryWorkspaceCleanupOnly := false
 	if req.Action == ActionRetry {
 		failure, failureErr := m.registry.GetLatestManagedOperationFailure(ctx, service.ServiceID)
 		if failureErr != nil {
@@ -702,6 +684,9 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		}
 		req.Action = resolved
 		retryOfOperationID = failure.OperationID
+		req.DeleteData = failure.DeleteData
+		req.DeleteWorkspace = failure.DeleteWorkspace
+		retryWorkspaceCleanupOnly = failure.Action == string(ActionUninstall) && isUninstallPostRuntimeFailure(failure.ErrorCode)
 	}
 	switch req.Action {
 	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUpdate, ActionReconfigure, ActionUninstall:
@@ -710,6 +695,15 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	}
 	if req.DeleteData && req.Action != ActionUninstall {
 		return nil, serviceError("REQUEST_INVALID", "delete_data is valid only for uninstall.", 400, false, nil)
+	}
+	if req.DeleteWorkspace && (req.Action != ActionUninstall || !req.DeleteData) {
+		return nil, serviceError("REQUEST_INVALID", "delete_workspace requires uninstall with delete_data.", 400, false, nil)
+	}
+	if (req.DeleteData || req.DeleteWorkspace) && !req.Administrator {
+		return nil, serviceError("ADMIN_REQUIRED", "Administrator permission is required to delete managed service data.", 403, false, nil)
+	}
+	if req.Action == ActionUninstall && req.DeleteData && service.WorkspaceOwnership == "redeven_created" {
+		req.DeleteWorkspace = true
 	}
 	var reconfigure *reconfigureCandidate
 	if req.Action == ActionReconfigure {
@@ -748,13 +742,13 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 			err = idErr
 		} else {
 			now := time.Now().UnixMilli()
-			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, RetryOfOperationID: retryOfOperationID, Action: string(req.Action), DeleteData: req.DeleteData, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+			op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: service.ServiceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, RetryOfOperationID: retryOfOperationID, Action: string(req.Action), DeleteData: req.DeleteData, DeleteWorkspace: req.DeleteWorkspace, State: "pending", Stage: initialStage(req.Action), ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 			if err = m.registry.CreateManagedOperation(ctx, op); err == nil {
 				if updatePlan != nil {
 					m.consumeUpdatePlan(req.UpdatePlanID)
 				}
 				m.mu.Unlock()
-				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
+				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, DeleteWorkspace: req.DeleteWorkspace, WorkspaceCleanupOnly: retryWorkspaceCleanupOnly, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
 				return &op, nil
 			}
 		}
@@ -803,6 +797,8 @@ func initialStage(action OperationAction) string {
 
 type operationInputs struct {
 	DeleteData              bool
+	DeleteWorkspace         bool
+	WorkspaceCleanupOnly    bool
 	AcceptedNoticeRevisions map[string]int64
 	Reconfigure             *reconfigureCandidate
 	Release                 *cachedReleaseCandidate
@@ -875,7 +871,7 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 			err = m.runReconfigure(ctx, &service, &op, driver, *inputs.Reconfigure)
 		}
 	case ActionUninstall:
-		err = m.runUninstall(ctx, &service, &op, driver, inputs.DeleteData)
+		err = m.runUninstall(ctx, &service, &op, driver, inputs.DeleteData, inputs.DeleteWorkspace, inputs.WorkspaceCleanupOnly)
 	}
 	if err != nil {
 		if OperationAction(op.Action) == ActionUpdate {
@@ -934,6 +930,9 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 
 func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
 	m.progress(op, "environment_check", 1)
+	if err := m.ensureInstallWorkspace(ctx, service); err != nil {
+		return err
+	}
 	stage := map[Deployment]string{DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
 	m.progress(op, stage, 2)
 	runtimeID, artifact, err := driver.Install(ctx, service, m.operationProgress(op))
@@ -1004,12 +1003,20 @@ func (m *Manager) runStop(ctx context.Context, service *pfregistry.ManagedServic
 	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &stopped, LastErrorCode: &blank, LastErrorMessage: &blank})
 }
 
-func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, deleteData bool) error {
-	if err := driver.Uninstall(ctx, service, deleteData, m.operationProgress(op)); err != nil {
-		return err
+func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, deleteData, deleteWorkspace, workspaceCleanupOnly bool) error {
+	if !workspaceCleanupOnly {
+		if err := driver.Uninstall(ctx, service, deleteData, m.operationProgress(op)); err != nil {
+			return err
+		}
+	}
+	if deleteWorkspace {
+		m.progress(op, "workspace_cleanup", 6)
+		if err := m.deleteServiceWorkspace(ctx, *service); err != nil {
+			return err
+		}
 	}
 	if err := os.Remove(m.serviceSecretPath(service.ServiceID)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return serviceError("SERVICE_SECRETS_DELETE_FAILED", "The managed Web Service secret data could not be removed.", 500, true, err)
 	}
 	op.State = "succeeded"
 	op.Stage = "completed"
@@ -1018,9 +1025,22 @@ func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedS
 	// The external resources are already gone, so persist their removal even if
 	// the request was cancelled immediately after the driver returned.
 	if err := m.registry.CompleteManagedServiceUninstall(context.Background(), service.ServiceID, *op); err != nil {
-		return err
+		return serviceError("UNINSTALL_RECORD_FINALIZE_FAILED", "The managed Web Service removal could not be finalized.", 500, true, err)
 	}
 	return nil
+}
+
+func isWorkspaceCleanupFailure(code string) bool {
+	switch strings.TrimSpace(code) {
+	case "WORKSPACE_DELETE_FAILED", "WORKSPACE_DELETE_UNSAFE", "WORKSPACE_IN_USE":
+		return true
+	default:
+		return false
+	}
+}
+
+func isUninstallPostRuntimeFailure(code string) bool {
+	return isWorkspaceCleanupFailure(code) || strings.TrimSpace(code) == "SERVICE_SECRETS_DELETE_FAILED" || strings.TrimSpace(code) == "UNINSTALL_RECORD_FINALIZE_FAILED"
 }
 
 func (m *Manager) cleanupCancelledOperation(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {

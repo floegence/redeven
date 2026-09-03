@@ -199,7 +199,7 @@ func (m *Manager) builtInCatalog(ctx context.Context) ([]Template, error) {
 		if err := validateTemplateSpec(spec); err != nil && available {
 			return nil, fmt.Errorf("validate managed service template %q: %w", definition.TemplateID, err)
 		}
-		workspace, err := m.prepareDefaultWorkspace(definition.TemplateID)
+		workspace, err := m.defaultWorkspacePath(definition.TemplateID)
 		if err != nil {
 			return nil, err
 		}

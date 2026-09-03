@@ -114,6 +114,7 @@ type ManagedService = Readonly<{
   template_source: 'builtin' | 'custom';
   deployment: ManagedDeployment;
   workspace_path: string;
+  workspace_ownership: 'pending' | 'redeven_created' | 'user_selected';
   desired_state: string;
   observed_state: string;
   forward_id: string;
@@ -295,7 +296,7 @@ type ManagedCatalogTemplate = Readonly<{
   host_lifecycle_plan?: HostLifecyclePlan;
 }>;
 
-type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
+type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean; deleteWorkspace: boolean }>;
 type ManagedReconfigureRequest = Readonly<{
   draft: ManagedServiceReconfigureDraft;
   plan_digest: string;
@@ -849,6 +850,7 @@ function managedStageLabel(stage: string, i18n: WebServicesI18n): string {
     case 'health_check': return i18n.t('webServices.managed.stages.healthCheck');
     case 'stopping': return i18n.t('webServices.managed.stages.stopping');
     case 'uninstalling': return i18n.t('webServices.managed.stages.uninstalling');
+    case 'workspace_cleanup': return i18n.t('webServices.managed.stages.workspaceCleanup');
     case 'update_preparing': return i18n.t('webServices.managed.stages.updatePreparing');
     case 'reconfigure_preflight': return i18n.t('webServices.managed.stages.reconfigurePreflight');
     case 'applying_configuration': return i18n.t('webServices.managed.stages.applyingConfiguration');
@@ -920,6 +922,10 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
     case 'DATA_IDENTITY_MISMATCH': return i18n.t('webServices.managed.dataIdentityChanged');
     case 'DATA_IDENTITY_UNAVAILABLE': return i18n.t('webServices.managed.dataIdentityUnavailable');
     case 'DATA_VOLUME_CREATE_FAILED': return i18n.t('webServices.managed.dataVolumeCreateFailed');
+    case 'WORKSPACE_CREATE_FAILED': return i18n.t('webServices.managed.workspaceCreateFailed');
+    case 'WORKSPACE_DELETE_FAILED': return i18n.t('webServices.managed.workspaceDeleteFailed');
+    case 'WORKSPACE_DELETE_UNSAFE': return i18n.t('webServices.managed.workspaceDeleteUnsafe');
+    case 'WORKSPACE_IN_USE': return i18n.t('webServices.managed.workspaceInUse');
     case 'HOST_RUNTIME_PREPARE_FAILED':
     case 'HOST_LOG_PREPARE_FAILED': return i18n.t('webServices.managed.hostRuntimePrepareFailed');
     case 'HOST_PROCESS_IDENTITY_MISMATCH':
@@ -2241,7 +2247,7 @@ export function EnvPortForwardsPage() {
     setManagedDeleteConfirm(false);
     let operationID = managedOperations.begin(request.service.service_id, 'uninstall').operation_id;
     try {
-      const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(request.service.service_id)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action: 'uninstall', delete_data: request.deleteData }) });
+      const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(request.service.service_id)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action: 'uninstall', delete_data: request.deleteData, delete_workspace: request.deleteWorkspace }) });
       operationID = result.operation_id;
       const operationPromise = managedOperations.track(result);
       await loadManaged(false);
@@ -2351,6 +2357,16 @@ export function EnvPortForwardsPage() {
   const workspaceUsesRecommendedPath = createMemo(() => {
     const template = selectedTemplate();
     return Boolean(template?.default_workspace_path) && workspacePath() === template?.default_workspace_path;
+  });
+  const workspacePickerInitialPath = createMemo(() => {
+    if (!workspaceUsesRecommendedPath()) return workspacePath();
+    const template = selectedTemplate();
+    const recommended = template?.default_workspace_path ?? '';
+    const roots = [...(template?.workspace_roots ?? [])].sort((left, right) => right.path.length - left.path.length);
+    return roots.find((root) => {
+      const prefix = root.path.replace(/[\\/]+$/, '');
+      return recommended === root.path || recommended.startsWith(`${prefix}/`) || recommended.startsWith(`${prefix}\\`);
+    })?.path ?? '/';
   });
 	const templateByID = (templateID: string) => managedTemplates().find((template) => template.template_id === templateID);
 	const selectedReleaseCandidate = createMemo(() => releaseCandidates()?.candidates.find((candidate) => candidate.candidate_id === selectedReleaseID()));
@@ -2592,14 +2608,24 @@ export function EnvPortForwardsPage() {
   };
 
   const confirmManagedUninstall = () => {
-    const request = managedUninstall();
+    const current = managedUninstall();
+    const request = current && current.deleteData && current.service.workspace_ownership === 'redeven_created'
+      ? { ...current, deleteWorkspace: true }
+      : current;
     if (!request) return;
+    if (request !== current) setManagedUninstall(request);
     if (request.deleteData) {
       setManagedDeleteConfirm(true);
       return;
     }
     void uninstallManaged(request);
   };
+
+  const managedUninstallDeletesWorkspace = createMemo(() => {
+    const request = managedUninstall();
+    if (!request?.deleteData) return false;
+    return request.service.workspace_ownership === 'redeven_created' || request.deleteWorkspace;
+  });
 
   const loadManagedLogs = async (serviceID: string) => {
     try { const result = await fetchLocalApiJSON<{ lines: string[] }>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/logs`, { method: 'GET' }); setManagedLogs(result.lines ?? []); }
@@ -3132,7 +3158,7 @@ export function EnvPortForwardsPage() {
                           onSettings={() => setManagedSettingsService(service)}
 						  onVersions={() => openServiceReleasePicker(service)}
                           onLogs={() => void loadManagedLogs(service.service_id)}
-                          onUninstall={() => setManagedUninstall({ service, deleteData: false })}
+                          onUninstall={() => setManagedUninstall({ service, deleteData: false, deleteWorkspace: false })}
                         />
                       )}</For>
                       <For each={filteredForwards()}>{(forward) => (
@@ -3308,7 +3334,10 @@ export function EnvPortForwardsPage() {
                   <Show when={workspaceUsesRecommendedPath()} fallback={<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}>
                     <ShieldCheck class="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
                   </Show>
-                  <span>{workspaceUsesRecommendedPath() ? i18n.t('webServices.managed.workspaceSafeDefaultDescription') : i18n.t('webServices.managed.workspaceCustomDescription')}</span>
+                  <div>
+                    <div>{workspaceUsesRecommendedPath() ? i18n.t('webServices.managed.workspaceSafeDefaultDescription') : i18n.t('webServices.managed.workspaceCustomDescription')}</div>
+                    <Show when={workspaceUsesRecommendedPath()}><div>{i18n.t('webServices.managed.workspaceCreatedOnDeploy')}</div></Show>
+                  </div>
                 </div>
                 <Show when={!workspaceUsesRecommendedPath() && template.default_workspace_path}>
                   <Button
@@ -3538,7 +3567,7 @@ export function EnvPortForwardsPage() {
         open={workspacePickerOpen()}
         onOpenChange={setWorkspacePickerOpen}
         files={workspacePicker.files()}
-        initialPath={workspacePath()}
+        initialPath={workspacePickerInitialPath()}
         homePath="/"
         title={i18n.t('webServices.managed.selectWorkspace')}
         confirmText={i18n.t('common.actions.confirm')}
@@ -3629,7 +3658,17 @@ export function EnvPortForwardsPage() {
       >
         <div class="space-y-3">
           <p class="text-sm">{i18n.t('webServices.managed.uninstallQuestion')}</p>
-          <Checkbox checked={managedUninstall()?.deleteData ?? false} onChange={(checked) => setManagedUninstall((current) => current ? { ...current, deleteData: Boolean(checked) } : current)} label={i18n.t('webServices.managed.deleteData')} size="sm" disabled={!(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)} />
+          <Checkbox checked={managedUninstall()?.deleteData ?? false} onChange={(checked) => setManagedUninstall((current) => current ? { ...current, deleteData: Boolean(checked), deleteWorkspace: checked ? current.deleteWorkspace : false } : current)} label={i18n.t('webServices.managed.deleteData')} size="sm" disabled={!(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)} />
+          <Show when={managedUninstall()?.deleteData && managedUninstall()?.service.workspace_ownership === 'redeven_created'}>
+            <p class="rounded-md border border-destructive/20 bg-destructive/[0.04] p-2 text-xs text-muted-foreground">{i18n.t('webServices.managed.dedicatedWorkspaceWillBeDeleted', { path: managedUninstall()?.service.workspace_path ?? '' })}</p>
+          </Show>
+          <Show when={managedUninstall()?.deleteData && managedUninstall()?.service.workspace_ownership !== 'redeven_created'}>
+            <div class="space-y-1.5 rounded-md border p-2">
+              <Checkbox checked={managedUninstall()?.deleteWorkspace ?? false} onChange={(checked) => setManagedUninstall((current) => current ? { ...current, deleteWorkspace: Boolean(checked) } : current)} label={i18n.t('webServices.managed.deleteExistingWorkspace')} size="sm" />
+              <p class="break-all font-mono text-[11px] text-muted-foreground">{managedUninstall()?.service.workspace_path}</p>
+              <Show when={!managedUninstall()?.deleteWorkspace}><p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.existingWorkspaceWillBeRetained')}</p></Show>
+            </div>
+          </Show>
           <Show when={!(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)}><p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.adminRequired')}</p></Show>
         </div>
       </Dialog>
@@ -3643,7 +3682,15 @@ export function EnvPortForwardsPage() {
         loading={false}
         onConfirm={() => { const request = managedUninstall(); if (request) void uninstallManaged(request); }}
       >
-        <p class="text-sm">{i18n.t('webServices.managed.deleteDataWarning')}</p>
+        <div class="space-y-3 text-sm">
+          <p>{i18n.t('webServices.managed.deleteDataWarning')}</p>
+          <ul class="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+            <li>{i18n.t('webServices.managed.uninstallDeletesRuntime')}</li>
+            <li>{i18n.t('webServices.managed.uninstallDeletesManagedData')}</li>
+            <Show when={managedUninstallDeletesWorkspace()}><li>{i18n.t('webServices.managed.uninstallDeletesWorkspace', { path: managedUninstall()?.service.workspace_path ?? '' })}</li></Show>
+            <Show when={!managedUninstallDeletesWorkspace()}><li>{i18n.t('webServices.managed.uninstallRetainsWorkspace', { path: managedUninstall()?.service.workspace_path ?? '' })}</li></Show>
+          </ul>
+        </div>
       </ConfirmDialog>
 
       {/* Delete confirmation dialog */}
