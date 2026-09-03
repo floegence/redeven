@@ -150,8 +150,6 @@ func TestIOModuleWiresOnlyReleasedHostAdapters(t *testing.T) {
 	if module == nil || module.FileSystem == nil || module.NetworkPolicy == nil {
 		t.Fatalf("I/O module is incomplete: %+v", module)
 	}
-	var _ host.FileSystemAdapter = module.FileSystem
-	var _ host.NetworkPolicyAdapter = module.NetworkPolicy
 }
 
 func ioTestSessionContext(canRead, canWrite bool) sessionctx.Context {

@@ -367,7 +367,7 @@ func (s *Store) validateBindingAudience(state fileState, bindingAudience string)
 	}
 	expectedGatewayID := security.StableGatewayID(cleanAudience)
 	if state.Gateway.GatewayID != expectedGatewayID && !isBlankAudienceGatewayID(state.Gateway.GatewayID) {
-		return errors.New("Gateway identity does not match binding audience")
+		return errors.New("gateway identity does not match binding audience")
 	}
 	return nil
 }
@@ -397,7 +397,7 @@ func (s *Store) ensureStateForRead() (fileState, error) {
 		return fileState{}, err
 	}
 	if state.Gateway.GatewayID == "" {
-		return fileState{}, errors.New("Gateway identity is not initialized")
+		return fileState{}, errors.New("gateway identity is not initialized")
 	}
 	s.state = state
 	return s.state, nil

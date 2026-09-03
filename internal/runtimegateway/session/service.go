@@ -169,7 +169,7 @@ func NewSignedLocalDirectIssue(input struct {
 	bindingAudience := strings.TrimSpace(input.BindingAudience)
 	url := strings.TrimSpace(input.URL)
 	if gatewayID == "" || gatewayEnvID == "" || bindingAudience == "" || url == "" {
-		return GatewayConnectArtifactIssue{}, errors.New("Gateway local direct artifact input is incomplete")
+		return GatewayConnectArtifactIssue{}, errors.New("gateway local direct artifact input is incomplete")
 	}
 	gatewaySessionID, err := randomID("gws", 24)
 	if err != nil {
@@ -240,7 +240,7 @@ func NewSignedDesktopBridgeIssue(input struct {
 	bridgeSessionID := strings.TrimSpace(input.BridgeSessionID)
 	routeID := strings.TrimSpace(input.RouteID)
 	if gatewayID == "" || gatewayEnvID == "" || bindingAudience == "" || bridgeSessionID == "" || routeID == "" {
-		return GatewayConnectArtifactIssue{}, errors.New("Gateway desktop bridge artifact input is incomplete")
+		return GatewayConnectArtifactIssue{}, errors.New("gateway desktop bridge artifact input is incomplete")
 	}
 	gatewaySessionID, err := randomID("gws", 24)
 	if err != nil {

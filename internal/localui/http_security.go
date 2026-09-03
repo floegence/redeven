@@ -44,11 +44,11 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 		}
 		addr, ok := listener.Addr().(*net.TCPAddr)
 		if !ok || addr == nil || addr.IP == nil {
-			return fmt.Errorf("Local UI listener must use a TCP address")
+			return fmt.Errorf("local UI listener must use a TCP address")
 		}
 		parsedAddr, err := netip.ParseAddr(addr.IP.String())
 		if err != nil || addr.Port <= 0 || addr.Zone != "" || parsedAddr.Is4In6() {
-			return fmt.Errorf("Local UI listener has an invalid TCP address")
+			return fmt.Errorf("local UI listener has an invalid TCP address")
 		}
 		if s.bind.IsLoopbackOnly() {
 			if !parsedAddr.IsLoopback() {
@@ -66,7 +66,7 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 				return fmt.Errorf("wildcard Local UI bind resolved to a non-wildcard listener")
 			}
 		} else if parsedAddr.String() != s.bind.Host() {
-			return fmt.Errorf("Local UI listener address %s does not match bind %s", parsedAddr, s.bind.Host())
+			return fmt.Errorf("local UI listener address %s does not match bind %s", parsedAddr, s.bind.Host())
 		}
 		for _, host := range accessHosts {
 			authority := net.JoinHostPort(host.String(), strconv.Itoa(addr.Port))

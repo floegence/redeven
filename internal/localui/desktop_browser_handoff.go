@@ -141,7 +141,7 @@ func normalizeDesktopBrowserAppPath(raw string) (*url.URL, string, error) {
 		return nil, "", errors.New("invalid Web Service application path")
 	}
 	if _, reserved := u.Query()[desktopBrowserHandoffQueryName]; reserved {
-		return nil, "", errors.New("Web Service application path uses a reserved query parameter")
+		return nil, "", errors.New("web Service application path uses a reserved query parameter")
 	}
 	cleanPath := u.EscapedPath()
 	if cleanPath == "" {

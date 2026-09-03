@@ -41,7 +41,7 @@ func NewVerifier(store *trust.Store) *Verifier {
 func (v *Verifier) Verify(ctx context.Context, r *http.Request, body []byte, bindingAudience string) (VerifiedRequest, error) {
 	bodyDigest, err := security.CanonicalJSONDigestFromBytes(body)
 	if err != nil {
-		return VerifiedRequest{}, errors.New("Gateway request body is not canonical JSON")
+		return VerifiedRequest{}, errors.New("gateway request body is not canonical JSON")
 	}
 	return v.VerifyDigest(ctx, r, bodyDigest, bindingAudience)
 }
@@ -51,7 +51,7 @@ func (v *Verifier) VerifyDigest(ctx context.Context, r *http.Request, bodyDigest
 		return VerifiedRequest{}, err
 	}
 	if v == nil || v.store == nil {
-		return VerifiedRequest{}, errors.New("Gateway auth verifier is unavailable")
+		return VerifiedRequest{}, errors.New("gateway auth verifier is unavailable")
 	}
 	cleanAudience := strings.TrimSpace(bindingAudience)
 	gatewayID := strings.TrimSpace(r.Header.Get("X-Redeven-Gateway-ID"))
@@ -60,26 +60,26 @@ func (v *Verifier) VerifyDigest(ctx context.Context, r *http.Request, bodyDigest
 	signature := strings.TrimSpace(r.Header.Get("X-Redeven-Request-Signature"))
 	ts, err := parseTimestampMS(r.Header.Get("X-Redeven-Request-TS"))
 	if err != nil || gatewayID == "" || clientKeyID == "" || nonce == "" || signature == "" {
-		return VerifiedRequest{}, errors.New("Gateway authentication headers are incomplete")
+		return VerifiedRequest{}, errors.New("gateway authentication headers are incomplete")
 	}
 	metadata, _, err := v.store.GatewayMetadata(cleanAudience)
 	if err != nil {
 		return VerifiedRequest{}, err
 	}
 	if metadata.GatewayID != gatewayID {
-		return VerifiedRequest{}, errors.New("Gateway authentication id does not match this runtime")
+		return VerifiedRequest{}, errors.New("gateway authentication id does not match this runtime")
 	}
 	now := time.Now().UnixMilli()
 	if ts < now-int64(maxClockSkew/time.Millisecond) || ts > now+int64(maxClockSkew/time.Millisecond) {
-		return VerifiedRequest{}, errors.New("Gateway authentication timestamp is outside the accepted window")
+		return VerifiedRequest{}, errors.New("gateway authentication timestamp is outside the accepted window")
 	}
 	publicKey, ok := v.store.ClientPublicKey(clientKeyID, cleanAudience)
 	if !ok {
-		return VerifiedRequest{}, errors.New("Gateway client is not paired")
+		return VerifiedRequest{}, errors.New("gateway client is not paired")
 	}
 	bodyDigest = strings.TrimSpace(bodyDigest)
 	if bodyDigest == "" {
-		return VerifiedRequest{}, errors.New("Gateway request body digest is required")
+		return VerifiedRequest{}, errors.New("gateway request body digest is required")
 	}
 	payload, err := security.CanonicalJSON(map[string]any{
 		"binding_audience":  cleanAudience,
@@ -95,10 +95,10 @@ func (v *Verifier) VerifyDigest(ctx context.Context, r *http.Request, bodyDigest
 		return VerifiedRequest{}, err
 	}
 	if !security.VerifySignature(publicKey, payload, signature) {
-		return VerifiedRequest{}, errors.New("Gateway request signature is invalid")
+		return VerifiedRequest{}, errors.New("gateway request signature is invalid")
 	}
 	if !v.consumeNonce(clientKeyID, nonce, ts, now) {
-		return VerifiedRequest{}, errors.New("Gateway authentication nonce was already used")
+		return VerifiedRequest{}, errors.New("gateway authentication nonce was already used")
 	}
 	return VerifiedRequest{
 		GatewayID:       gatewayID,

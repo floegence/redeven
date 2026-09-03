@@ -82,7 +82,7 @@ func (s *Server) listenForDirectWebSockets(uiListeners []net.Listener) ([]net.Li
 		addr, ok := uiListener.Addr().(*net.TCPAddr)
 		if !ok || addr == nil || addr.IP == nil || addr.Port <= 0 {
 			closeNetworkListeners(directListeners)
-			return nil, errors.New("Local UI listener must use a TCP address")
+			return nil, errors.New("local UI listener must use a TCP address")
 		}
 		network := "tcp6"
 		if addr.IP.To4() != nil {
@@ -100,7 +100,7 @@ func (s *Server) listenForDirectWebSockets(uiListeners []net.Listener) ([]net.Li
 
 func (s *Server) configureDirectAuthorities(uiListeners, directListeners []net.Listener) error {
 	if len(uiListeners) == 0 || len(uiListeners) != len(directListeners) {
-		return errors.New("Flowersec WSS listeners do not match Local UI listeners")
+		return errors.New("flowersec WSS listeners do not match Local UI listeners")
 	}
 	type listenerPorts struct {
 		uiPort     int
@@ -162,7 +162,7 @@ func (s *Server) configureDirectAuthorities(uiListeners, directListeners []net.L
 
 func (s *Server) createDirectServers() error {
 	if s == nil || s.acceptor == nil || s.tlsConfig == nil || len(s.directListeners) == 0 {
-		return errors.New("Flowersec WSS server is not configured")
+		return errors.New("flowersec WSS server is not configured")
 	}
 	servers := make([]*flowersec.WebSocketHTTPServer, 0, len(s.directListeners))
 	for range s.directListeners {

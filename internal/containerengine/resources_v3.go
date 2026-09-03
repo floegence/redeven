@@ -314,7 +314,7 @@ func validateContainerCreateRequest(req ContainerCreateRequest) error {
 	}
 	for _, capability := range append(append([]string(nil), req.CapAdd...), req.CapDrop...) {
 		if !containerCapPattern.MatchString(strings.TrimSpace(capability)) {
-			return errors.New("Linux capability is invalid")
+			return errors.New("linux capability is invalid")
 		}
 	}
 	for _, device := range req.Devices {

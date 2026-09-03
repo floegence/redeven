@@ -2,7 +2,6 @@ package managedwebservice
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
@@ -238,12 +237,4 @@ func (m *Manager) consumeUpdatePlan(planID string) {
 	m.releaseMu.Lock()
 	delete(m.updatePlans, strings.TrimSpace(planID))
 	m.releaseMu.Unlock()
-}
-
-func updatePlanErrorCode(err error) string {
-	var managed *Error
-	if errors.As(err, &managed) {
-		return managed.Code
-	}
-	return ""
 }

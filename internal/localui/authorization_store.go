@@ -1653,7 +1653,7 @@ func RotateLocalAuthorizationKey(stateRoot string) (LocalAuthorizationKeyRotatio
 		return LocalAuthorizationKeyRotationResult{}, err
 	}
 	if fresh {
-		return LocalAuthorizationKeyRotationResult{}, errors.New("Local UI authorization store does not exist")
+		return LocalAuthorizationKeyRotationResult{}, errors.New("local UI authorization store does not exist")
 	}
 	store, err := openLocalAuthorizationStore(path)
 	if err != nil {

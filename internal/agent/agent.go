@@ -424,7 +424,7 @@ func New(opts Options) (*Agent, error) {
 func bundledReDevPluginRuntimePath(redevenBinaryPath string) (string, error) {
 	redevenBinaryPath = strings.TrimSpace(redevenBinaryPath)
 	if redevenBinaryPath == "" || !filepath.IsAbs(redevenBinaryPath) || filepath.Clean(redevenBinaryPath) != redevenBinaryPath {
-		return "", errors.New("Redeven executable path is unavailable for ReDevPlugin runtime resolution")
+		return "", errors.New("redeven executable path is unavailable for ReDevPlugin runtime resolution")
 	}
 	return filepath.Join(filepath.Dir(redevenBinaryPath), "redevplugin-runtime"), nil
 }

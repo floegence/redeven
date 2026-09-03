@@ -967,7 +967,7 @@ func safeDockerCLIConfiguration(raw []byte) ([]byte, []string, error) {
 			return nil, nil, err
 		}
 		if document == nil {
-			return nil, nil, errors.New("Docker CLI configuration must be a JSON object")
+			return nil, nil, errors.New("docker CLI configuration must be a JSON object")
 		}
 	}
 	registries := make([]string, 0)
@@ -995,7 +995,7 @@ func mergeDockerCLIConfiguration(current, safeCandidate []byte) ([]byte, error) 
 			return nil, err
 		}
 		if currentDocument == nil {
-			return nil, errors.New("Docker CLI configuration must be a JSON object")
+			return nil, errors.New("docker CLI configuration must be a JSON object")
 		}
 	}
 	candidateDocument := map[string]json.RawMessage{}
@@ -1004,11 +1004,11 @@ func mergeDockerCLIConfiguration(current, safeCandidate []byte) ([]byte, error) 
 			return nil, err
 		}
 		if candidateDocument == nil {
-			return nil, errors.New("Docker CLI configuration must be a JSON object")
+			return nil, errors.New("docker CLI configuration must be a JSON object")
 		}
 	}
 	if _, attemptsCredentialWrite := candidateDocument["auths"]; attemptsCredentialWrite {
-		return nil, errors.New("Docker registry credentials must be managed through docker login")
+		return nil, errors.New("docker registry credentials must be managed through docker login")
 	}
 	if protected := currentDocument["auths"]; len(protected) > 0 {
 		candidateDocument["auths"] = protected

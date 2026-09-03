@@ -464,7 +464,7 @@ func (a *Adapter) ListPods(ctx context.Context, req PodListRequest) ([]PodRecord
 
 func (a *Adapter) InspectPod(ctx context.Context, req PodRequest) (PodRecord, error) {
 	if req.Engine != EnginePodman || invalidWorkspaceIdentity(req.PodID) {
-		return PodRecord{}, errors.New("Pod identity is invalid")
+		return PodRecord{}, errors.New("pod identity is invalid")
 	}
 	bound, _, err := a.BindEndpoint(ctx, req.Engine, req.EndpointID)
 	if err != nil {
@@ -479,7 +479,7 @@ func (a *Adapter) InspectPod(ctx context.Context, req PodRequest) (PodRecord, er
 
 func (a *Adapter) CreatePodPreflight(ctx context.Context, req PodCreateRequest) (ResourcePlan, error) {
 	if req.Engine != EnginePodman || !containerNamePattern.MatchString(strings.TrimSpace(req.Name)) || !req.EndpointID.Valid() {
-		return ResourcePlan{}, errors.New("Pod create request is invalid")
+		return ResourcePlan{}, errors.New("pod create request is invalid")
 	}
 	if _, _, err := a.BindEndpoint(ctx, req.Engine, req.EndpointID); err != nil {
 		return ResourcePlan{}, err

@@ -600,7 +600,7 @@ func (s *Server) configureAcceptor() error {
 
 func (s *Server) configureDesktopBridgeDirectHandler() error {
 	if s == nil || s.acceptor == nil {
-		return errors.New("Flowersec acceptor is not configured")
+		return errors.New("flowersec acceptor is not configured")
 	}
 	handler, err := s.acceptor.PrivateLoopbackHandler(flowersec.PrivateLoopbackHandlerOptions{
 		AuthorizeRequest: isTrustedLocalUIBridge,
@@ -1845,11 +1845,11 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if directAuthority == "" && s.resolveDirectAuthority != nil {
 		directAuthority, err = s.resolveDirectAuthority(requestAuthority)
 		if err != nil {
-			return "", errors.New("Flowersec WSS endpoint is unavailable")
+			return "", errors.New("flowersec WSS endpoint is unavailable")
 		}
 	}
 	if directAuthority == "" {
-		return "", errors.New("Flowersec WSS endpoint is unavailable")
+		return "", errors.New("flowersec WSS endpoint is unavailable")
 	}
 	return (&url.URL{Scheme: "wss", Host: directAuthority, Path: flowersec.WebSocketDirectPath}).String(), nil
 }

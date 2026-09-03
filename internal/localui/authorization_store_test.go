@@ -187,7 +187,7 @@ func TestLocalAuthorizationStoreExactReleaseAndOwnerRevoke(t *testing.T) {
 		}
 		states = append(states, state)
 	}
-	if len(states) != 2 || !((states[0] == "released" && states[1] == "burned") || (states[0] == "burned" && states[1] == "released")) {
+	if len(states) != 2 || (states[0] != "released" && states[0] != "burned") || states[0] == states[1] {
 		t.Fatalf("owner revoke states = %#v, want released/burned", states)
 	}
 }

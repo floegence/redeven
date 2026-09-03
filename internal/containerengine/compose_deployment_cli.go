@@ -63,7 +63,7 @@ func (c *CLIClient) InspectComposeDeployment(ctx context.Context, req ComposeDep
 	}
 	items, err := decodeJSONLinesOrArray[item](raw)
 	if err != nil {
-		return ComposeProjectDetails{}, errors.New("Docker Compose deployment inspection is invalid")
+		return ComposeProjectDetails{}, errors.New("docker Compose deployment inspection is invalid")
 	}
 	project := ComposeProject{ProjectID: ComposeProjectID(req.ProjectName), Name: strings.TrimSpace(req.ProjectName), ContainerCount: len(items)}
 	services := map[string]struct{}{}

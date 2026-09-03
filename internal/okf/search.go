@@ -321,7 +321,7 @@ func tokenize(input string) []string {
 		return nil
 	}
 	parts := strings.FieldsFunc(input, func(r rune) bool {
-		return !(r == '_' || r == '-' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+		return r != '_' && r != '-' && (r < 'a' || r > 'z') && (r < '0' || r > '9')
 	})
 	out := make([]string, 0, len(parts))
 	seen := make(map[string]struct{}, len(parts))

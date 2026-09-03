@@ -1111,20 +1111,20 @@ func writeMarkdown(path string, report evalReport) error {
 	}
 	var b strings.Builder
 	b.WriteString("# Flower Behavioral Eval Report\n\n")
-	b.WriteString(fmt.Sprintf("- Generated at: %s\n", report.GeneratedAt.Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("- Model: `%s`\n", report.ModelID))
-	b.WriteString(fmt.Sprintf("- Task spec: `%s`\n", report.TaskSpecPath))
-	b.WriteString(fmt.Sprintf("- Source workspace: `%s`\n", report.SourceWorkspacePath))
-	b.WriteString(fmt.Sprintf("- Materialized task workspaces: `%s`\n", report.MaterializedWorkspaceDir))
-	b.WriteString(fmt.Sprintf("- Tasks: %d\n", report.TaskCount))
+	fmt.Fprintf(&b, "- Generated at: %s\n", report.GeneratedAt.Format(time.RFC3339))
+	fmt.Fprintf(&b, "- Model: `%s`\n", report.ModelID)
+	fmt.Fprintf(&b, "- Task spec: `%s`\n", report.TaskSpecPath)
+	fmt.Fprintf(&b, "- Source workspace: `%s`\n", report.SourceWorkspacePath)
+	fmt.Fprintf(&b, "- Materialized task workspaces: `%s`\n", report.MaterializedWorkspaceDir)
+	fmt.Fprintf(&b, "- Tasks: %d\n", report.TaskCount)
 
 	b.WriteString("\n## Suite Metrics\n\n")
-	b.WriteString(fmt.Sprintf("- Pass rate: %.2f\n", report.Metrics.PassRate))
-	b.WriteString(fmt.Sprintf("- Loop safety rate: %.2f\n", report.Metrics.LoopSafetyRate))
-	b.WriteString(fmt.Sprintf("- Recovery success rate: %.2f\n", report.Metrics.RecoverySuccessRate))
-	b.WriteString(fmt.Sprintf("- Fallback-free rate: %.2f\n", report.Metrics.FallbackFreeRate))
-	b.WriteString(fmt.Sprintf("- Average accuracy: %.2f\n", report.Metrics.AverageAccuracy))
-	b.WriteString(fmt.Sprintf("- Average overall: %.2f\n", report.Metrics.AverageOverall))
+	fmt.Fprintf(&b, "- Pass rate: %.2f\n", report.Metrics.PassRate)
+	fmt.Fprintf(&b, "- Loop safety rate: %.2f\n", report.Metrics.LoopSafetyRate)
+	fmt.Fprintf(&b, "- Recovery success rate: %.2f\n", report.Metrics.RecoverySuccessRate)
+	fmt.Fprintf(&b, "- Fallback-free rate: %.2f\n", report.Metrics.FallbackFreeRate)
+	fmt.Fprintf(&b, "- Average accuracy: %.2f\n", report.Metrics.AverageAccuracy)
+	fmt.Fprintf(&b, "- Average overall: %.2f\n", report.Metrics.AverageOverall)
 
 	if len(report.StageMetrics) > 0 {
 		b.WriteString("\n## Stage Metrics\n\n")
@@ -1135,27 +1135,27 @@ func writeMarkdown(path string, report evalReport) error {
 			if !ok {
 				continue
 			}
-			b.WriteString(fmt.Sprintf("| `%s` | %.2f | %.2f | %.2f | %.2f | %.2f |\n", stage, metrics.PassRate, metrics.LoopSafetyRate, metrics.RecoverySuccessRate, metrics.FallbackFreeRate, metrics.AverageAccuracy))
+			fmt.Fprintf(&b, "| `%s` | %.2f | %.2f | %.2f | %.2f | %.2f |\n", stage, metrics.PassRate, metrics.LoopSafetyRate, metrics.RecoverySuccessRate, metrics.FallbackFreeRate, metrics.AverageAccuracy)
 		}
 	}
 
 	if report.Gate.Enabled {
 		b.WriteString("\n## Gate Status\n\n")
-		b.WriteString(fmt.Sprintf("- Status: `%s`\n", report.Gate.Status))
-		b.WriteString(fmt.Sprintf("- Baseline: `%s`\n", report.Gate.BaselinePath))
-		b.WriteString(fmt.Sprintf("- Thresholds: pass>=%.2f loop_safe>=%.2f fallback_free>=%.2f accuracy>=%.2f\n",
+		fmt.Fprintf(&b, "- Status: `%s`\n", report.Gate.Status)
+		fmt.Fprintf(&b, "- Baseline: `%s`\n", report.Gate.BaselinePath)
+		fmt.Fprintf(&b, "- Thresholds: pass>=%.2f loop_safe>=%.2f fallback_free>=%.2f accuracy>=%.2f\n",
 			report.Gate.Thresholds.MinPassRate,
 			report.Gate.Thresholds.MinLoopSafetyRate,
 			report.Gate.Thresholds.MinFallbackFreeRate,
 			report.Gate.Thresholds.MinAverageAccuracy,
-		))
-		b.WriteString(fmt.Sprintf("- Best reference: pass=%.2f loop_safe=%.2f recovery=%.2f fallback_free=%.2f accuracy=%.2f\n",
+		)
+		fmt.Fprintf(&b, "- Best reference: pass=%.2f loop_safe=%.2f recovery=%.2f fallback_free=%.2f accuracy=%.2f\n",
 			report.Gate.ReferenceBest.PassRate,
 			report.Gate.ReferenceBest.LoopSafetyRate,
 			report.Gate.ReferenceBest.RecoverySuccessRate,
 			report.Gate.ReferenceBest.FallbackFreeRate,
 			report.Gate.ReferenceBest.AverageAccuracy,
-		))
+		)
 		if len(report.Gate.Reasons) > 0 {
 			b.WriteString("- Reasons: " + strings.Join(report.Gate.Reasons, "; ") + "\n")
 		}
@@ -1163,32 +1163,32 @@ func writeMarkdown(path string, report evalReport) error {
 
 	b.WriteString("\n## Task Results\n\n")
 	for _, result := range report.Results {
-		b.WriteString(fmt.Sprintf("### %s\n\n", result.Task.ID))
-		b.WriteString(fmt.Sprintf("- Score: %.2f (acc %.2f / nat %.2f / eff %.2f)\n", result.Score.Overall, result.Score.Accuracy, result.Score.Natural, result.Score.Efficiency))
-		b.WriteString(fmt.Sprintf("- Outcome: passed=%t loop_safe=%t fallback=%t recovery_candidate=%t recovery_succeeded=%t\n",
+		fmt.Fprintf(&b, "### %s\n\n", result.Task.ID)
+		fmt.Fprintf(&b, "- Score: %.2f (acc %.2f / nat %.2f / eff %.2f)\n", result.Score.Overall, result.Score.Accuracy, result.Score.Natural, result.Score.Efficiency)
+		fmt.Fprintf(&b, "- Outcome: passed=%t loop_safe=%t fallback=%t recovery_candidate=%t recovery_succeeded=%t\n",
 			result.Outcome.Passed,
 			result.Outcome.LoopSafe,
 			result.Outcome.FallbackFinal,
 			result.Outcome.RecoveryCandidate,
 			result.Outcome.RecoverySucceeded,
-		))
-		b.WriteString(fmt.Sprintf("- Thread: permission=`%s` status=`%s` waiting_prompt=%t\n",
+		)
+		fmt.Fprintf(&b, "- Thread: permission=`%s` status=`%s` waiting_prompt=%t\n",
 			result.ThreadState.PermissionType,
 			result.ThreadState.RunStatus,
 			result.ThreadState.WaitingPrompt,
-		))
-		b.WriteString(fmt.Sprintf("- Workspace: mode=`%s` path=`%s`\n", result.WorkspaceMode, result.WorkspacePath))
+		)
+		fmt.Fprintf(&b, "- Workspace: mode=`%s` path=`%s`\n", result.WorkspaceMode, result.WorkspacePath)
 		if seed := strings.TrimSpace(result.WorkspaceSeed); seed != "" {
-			b.WriteString(fmt.Sprintf("- Workspace seed: `%s`\n", seed))
+			fmt.Fprintf(&b, "- Workspace seed: `%s`\n", seed)
 		}
-		b.WriteString(fmt.Sprintf("- Tool calls: %d\n", len(result.ToolCalls)))
+		fmt.Fprintf(&b, "- Tool calls: %d\n", len(result.ToolCalls))
 		if result.TodoSnapshot != nil {
-			b.WriteString(fmt.Sprintf("- Todos: total=%d pending=%d in_progress=%d completed=%d\n",
+			fmt.Fprintf(&b, "- Todos: total=%d pending=%d in_progress=%d completed=%d\n",
 				result.TodoSnapshot.Total,
 				result.TodoSnapshot.Pending,
 				result.TodoSnapshot.InProgress,
 				result.TodoSnapshot.Completed,
-			))
+			)
 		}
 		if len(result.EvidencePaths) > 0 {
 			b.WriteString("- Evidence paths: " + strings.Join(result.EvidencePaths, ", ") + "\n")
@@ -1201,7 +1201,7 @@ func writeMarkdown(path string, report evalReport) error {
 			if utf8.RuneCountInString(preview) > 260 {
 				preview = string([]rune(preview)[:260]) + "..."
 			}
-			b.WriteString(fmt.Sprintf("- Output preview: %s\n", strings.ReplaceAll(preview, "\n", " ")))
+			fmt.Fprintf(&b, "- Output preview: %s\n", strings.ReplaceAll(preview, "\n", " "))
 		}
 		b.WriteString("\n")
 	}

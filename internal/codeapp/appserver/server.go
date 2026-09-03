@@ -1192,18 +1192,18 @@ func validateEnvAppShellFS(distFS stdfs.FS) error {
 		return fmt.Errorf("missing Env App shell: %w", err)
 	}
 	if info.IsDir() {
-		return errors.New("Env App shell points to a directory")
+		return errors.New("env App shell points to a directory")
 	}
 	data, err := stdfs.ReadFile(distFS, "env/index.html")
 	if err != nil {
 		return fmt.Errorf("read Env App shell: %w", err)
 	}
 	if !envAppShellRootPattern.Match(data) {
-		return errors.New("Env App shell is missing its root mount")
+		return errors.New("env App shell is missing its root mount")
 	}
 	matches := envAppShellAssetRefPattern.FindAllSubmatch(data, -1)
 	if len(matches) == 0 {
-		return errors.New("Env App shell is missing bundled asset references")
+		return errors.New("env App shell is missing bundled asset references")
 	}
 	for _, match := range matches {
 		if len(match) < 2 {
@@ -1211,14 +1211,14 @@ func validateEnvAppShellFS(distFS stdfs.FS) error {
 		}
 		assetPath := cleanDistPath("env/assets/" + string(match[1]))
 		if assetPath == "" || !strings.HasPrefix(assetPath, "env/assets/") {
-			return fmt.Errorf("Env App shell references an invalid asset path: %q", string(match[1]))
+			return fmt.Errorf("env App shell references an invalid asset path: %q", string(match[1]))
 		}
 		assetInfo, err := stdfs.Stat(distFS, assetPath)
 		if err != nil {
-			return fmt.Errorf("Env App shell references a missing asset %q: %w", assetPath, err)
+			return fmt.Errorf("env App shell references a missing asset %q: %w", assetPath, err)
 		}
 		if assetInfo.IsDir() {
-			return fmt.Errorf("Env App shell asset %q points to a directory", assetPath)
+			return fmt.Errorf("env App shell asset %q points to a directory", assetPath)
 		}
 	}
 	return nil

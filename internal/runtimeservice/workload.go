@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	ErrLifecycleOperation = errors.New("Runtime workload admission is invalid")
+	ErrLifecycleOperation = errors.New("runtime workload admission is invalid")
 )
 
 type WorkloadKnowledge string

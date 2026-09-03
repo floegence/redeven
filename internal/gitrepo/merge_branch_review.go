@@ -172,10 +172,10 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 	plan.Files = compare.Files
 	plan.LinkedWorktree = compare.LinkedWorktree
 
-	switch {
-	case plan.MergeBase == plan.SourceCommit:
+	switch plan.MergeBase {
+	case plan.SourceCommit:
 		plan.Outcome = mergeBranchOutcomeUpToDate
-	case plan.MergeBase == plan.CurrentCommit:
+	case plan.CurrentCommit:
 		plan.Outcome = mergeBranchOutcomeFastForward
 	default:
 		plan.Outcome = mergeBranchOutcomeMergeCommit
