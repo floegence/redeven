@@ -1014,7 +1014,7 @@
               "sqlite",
               "storage"
             ],
-            "summary": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 4 and whose contiguous migrations import retired queue data, add execution authority, and add delete authority. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
+            "summary": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 5 and whose contiguous migrations import retired queue data, add execution and delete authority, and remove obsolete physical storage. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
             "section_count": 2
           },
           {
@@ -2224,15 +2224,15 @@
         "title": "Flower context action admission",
         "type": "AI Context Contract"
       },
-      "body_length": 6693,
+      "body_length": 6813,
       "summary": "- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle.\n- Outcome: one validated context-action shape is queued with the command, then one admission mapper produces ordered durable `MessageReference` values and current-turn `SupplementalContext` values.\n- Invariants: Redeven does not persist the mapped references, supplemental context, or a post-admission context-action copy.\n- Failure boundary: malformed envelopes, unknown kinds, privacy-matrix violations, forged resource targets, damaged queued JSON, and projection failures stop the turn without dropping context.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Clients send one `assistant.ask.flower` action with target, source, presentation, and typed context items. The runtime validates the source/kind privacy matrix: file surfaces use `file_path`, terminal uses `terminal_selection`, monitoring uses `process_snapshot`, and Git/environment producers use bounded `text_snapshot`. File/process records reject hidden text payloads; required identity, finite numeric values, Unicode counts, and capture metadata are validated.\n\nTarget fields on text, terminal, and process context are bounded current-turn routing metadata. They identify what the user selected but do not grant permission, change tool routing, or prove remote execution authority. Only actions containing file or directory references bind server-derived canonical reference authority before admission. For those resource actions, the Desktop local-environment alias `local:local` is accepted in target and current-target fields and canonicalized to the current endpoint; unknown targets, mismatched source environments, and incompatible locality fail closed.\n\nBefore admission, the normalized action is stored only inside the unadmitted queued command. The canonical JSON writer preserves required zero values and rejects unknown kinds. Queue decode is strict; invalid JSON or an invalid item is an execution error, not a default empty action or unsupported-chip repair path. Once Floret admits the exact `TurnID`, Redeven removes the queued prompt/action record with the rest of the command.\n\nRedeven consumes the published Floret v7.1.2 typed `ThreadService` contract. Before `Send`, one pure mapper converts every accepted context item into ordered message references and effect-only supplemental context. Text, terminal, and process references contain bounded user-visible text, while target and execution hints are copied into supplemental metadata for that provider turn. File and directory references contain a self-contained opaque host `ResourceRef`; it is durable only inside Floret and is not copied into Redeven storage. Supplemental items remain visible only to the current provider attempt. Structured upload attachments continue through typed user input and are independent from references.\n\nFloret validates the message text, attachments, references, and turn-only supplemental context before returning the typed current view. After canonical acceptance, Redeven removes any imported product queue row and does not emit or store `flower.context_action.received`, `flower.context_action.injected`, a mapped reference row, or a supplemental-context audit copy.\n\nCanonical Floret turn pages return the ordered public reference fields. Redeven projects only `reference_id`, kind, label, bounded text, truncation, and availability into Flower; raw `ResourceRef` never reaches the browser. Flower renders admitted references from this canonical DTO, including reference-only user messages. Queued commands continue to render their pre-admission `context_action`. The two paths are not merged or used as fallbacks for each other.",
-          "char_count": 3045
+          "body": "Clients send one `assistant.ask.flower` action with target, source, presentation, and typed context items. The runtime validates the source/kind privacy matrix: file surfaces use `file_path`, terminal uses `terminal_selection`, monitoring uses `process_snapshot`, and Git/environment producers use bounded `text_snapshot`. File/process records reject hidden text payloads; required identity, finite numeric values, Unicode counts, and capture metadata are validated.\n\nTarget fields on text, terminal, and process context are bounded current-turn routing metadata. They identify what the user selected but do not grant permission, change tool routing, or prove remote execution authority. Only actions containing file or directory references bind server-derived canonical reference authority before admission. For those resource actions, the Desktop local-environment alias `local:local` is accepted in target and current-target fields and canonicalized to the current endpoint; unknown targets, mismatched source environments, and incompatible locality fail closed.\n\nBefore admission, the normalized action is stored only inside the unadmitted queued command. The canonical JSON writer preserves required zero values and rejects unknown kinds. Queue decode is strict; invalid JSON or an invalid item is an execution error, not a default empty action or unsupported-chip repair path. Once Floret admits the exact `TurnID`, Redeven removes the queued prompt/action record with the rest of the command.\n\nRedeven consumes the published Floret v7.1.2 typed `ThreadService` contract. Before `Send`, one pure mapper converts every accepted context item into ordered message references and effect-only supplemental context. Text, terminal, and process references contain bounded user-visible text, while target and execution hints are copied into supplemental metadata for that provider turn. File and directory references contain a self-contained opaque host `ResourceRef`; it is durable only inside Floret and is not copied into Redeven storage. Supplemental items remain visible only to the current provider attempt. Structured upload attachments continue through typed user input and are independent from references.\n\nFloret validates the message text, attachments, references, and turn-only supplemental context before returning the typed current view. During the version 4 to 5 product migration, canonical acceptance allows the old migration source to be dropped before the schema transaction commits. Redeven does not retain a current-schema queue row or emit or store `flower.context_action.received`, `flower.context_action.injected`, a mapped reference row, or a supplemental-context audit copy.\n\nCanonical Floret turn pages return the ordered public reference fields. Redeven projects only `reference_id`, kind, label, bounded text, truncation, and availability into Flower; raw `ResourceRef` never reaches the browser. Flower renders admitted references from this canonical DTO, including reference-only user messages. Queued commands continue to render their pre-admission `context_action`. The two paths are not merged or used as fallbacks for each other.",
+          "char_count": 3162
         },
         {
           "id": "boundaries",
@@ -2256,8 +2256,8 @@
           "description": "Normalization rejects damaged or unsupported context-action shapes before admission."
         },
         {
-          "id": "redeven:internal/ai/pending_input_import.go:0:migration-only queued context actions decode through the strict validator.",
-          "source": "redeven:internal/ai/pending_input_import.go",
+          "id": "redeven:internal/ai/pending_input_migration.go:0:migration-only queued context actions decode through the strict validator.",
+          "source": "redeven:internal/ai/pending_input_migration.go",
           "description": "Migration-only queued context actions decode through the strict validator."
         },
         {
@@ -2426,44 +2426,54 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 4783,
-      "summary": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 4 and whose contiguous migrations import retired queue data, add execution authority, and add delete authority. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
+      "body_length": 5935,
+      "summary": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 5 and whose contiguous migrations import retired queue data, add execution and delete authority, and remove obsolete physical storage. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Fresh product databases initialize version 4 with thread settings, pending-input migration staging, uploads, upload staging scopes, provider capabilities, Flower routing, execution authority, and delete authority. Version 1 upgrades atomically to version 2: queued inputs are copied to `ai_pending_input_imports` using their stable request IDs, retired lifecycle tables are dropped, `queue_revision` is removed, and the exact target shape is verified. Version 2 to 3 adds the minimum submitting-user authority needed for restart redispatch. Version 3 to 4 adds endpoint-scoped delete authority. Every edge verifies its exact target before the shared schema owner advances metadata and commits.\n\nDuring service startup, after the Floret effect adapter is bound and before live subscriptions or maintenance start, the pending-input importer synchronously converts each migration row into Floret typed queue input. Only a successful canonical import is marked complete. If completion marking fails, startup fails and a restart repeats the same stable request keys; Floret idempotency prevents duplicates. Canonical import failure also stops startup and leaves staging intact. The legacy codecs live only beside that importer. Production handlers cannot create, read, reorder, settle, or recover a Redeven queue row.\n\nPublished Floret v7.1.2 opens its own physical backend and migrates logical and session-tree domain state through its public runtime boundary. Domain schema v9 retains the complete v2-to-v9 chain. The v6-to-v7 edge restores exact RunID identity, terminates uncertain effects, and removes terminal forked Effect Attempt records only with exact ancestry and execution evidence. The v7-to-v8 edge rewrites only the exact legacy Engine continuation prompt paired with its save point into a control signal. The v8-to-v9 edge moves context identity into the canonical entry and follows each canonical Run across interaction resumes within one Turn; it does not reuse the Turn's initial Run. It repairs only verified fork copies whose payload ThreadID names an ancestor while TurnID and RunID still match. Non-ancestor identity, drift, malformed JSON, mixed state, and future versions fail without writes. Provider-context v6 remains an internal render boundary, not a domain migration. Every migration edge is atomic and has no production dual-read path. These layers remain opaque to Redeven: Redeven never inspects or edits Floret tables, including for an affected historical fork. Canonical user input, interactions, assistant output, tools, effects, context identity, and terminal facts stay upstream.\n\nFloret v7.1.2 classifies fresh, current-v9, and legacy stores through one startup path, reuses SQLite statements during migration, and avoids duplicate full-state verification when no write occurred. A legacy store reports `migrating` then `verifying`; fresh and current stores report only `verifying`. Redeven forwards those phases and never derives progress from record counts or polling. Current format, mixed state, corruption, and cancellation retain the same fail-closed and transactional guarantees.",
-          "char_count": 3121
+          "body": "Fresh product databases initialize directly at version 5 with ten physical tables including shared schema metadata. They contain thread settings, uploads, upload staging scopes, provider capabilities, Flower routing, execution authority, and delete authority, but no product queue or migration-staging table. Version 1 upgrades atomically to version 2: queued inputs are copied to `ai_pending_input_imports` using their stable request IDs, retired lifecycle tables are dropped, `queue_revision` is removed, and the exact target shape is verified. Version 2 to 3 adds the minimum submitting-user authority needed for restart redispatch. Version 3 to 4 adds endpoint-scoped delete authority.\n\nVersion 4 to 5 is the removal edge. While the product migration transaction still owns the exact retired source, a migration-only callback converts every pending row into typed Floret queue input through the public idempotent import API. The same product transaction records restart authority, rebuilds `ai_upload_refs` around its natural `(endpoint_id, upload_id, ref_kind, ref_id)` identity, preserves every live reference field, and drops `ai_pending_input_imports`. This removes the unused surrogate `id`, its redundant indexes, and the resulting SQLite sequence metadata. A verified post-migration vacuum removes SQLite's otherwise-retained internal sequence table; repeated current-version startup is clean and idempotent.\n\nThe historical version 1 to 2 edge remains immutable, so a direct version 1 upgrade may create `ai_pending_input_imports` temporarily inside the single contiguous migration transaction. Version 4 to 5 removes it before that transaction commits. Canonical import failure rolls back to the exact source schema and records. If a later product write fails after Floret accepted the input, restart repeats the same stable request key and Floret deduplicates it. Legacy codecs and old-table reads exist only in the closed migration path; production handlers cannot create, read, reorder, settle, or recover a Redeven queue row.\n\nPublished Floret v7.1.2 opens its own physical backend and migrates logical and session-tree domain state through its public runtime boundary. Domain schema v9 retains the complete v2-to-v9 chain. The v6-to-v7 edge restores exact RunID identity, terminates uncertain effects, and removes terminal forked Effect Attempt records only with exact ancestry and execution evidence. The v7-to-v8 edge rewrites only the exact legacy Engine continuation prompt paired with its save point into a control signal. The v8-to-v9 edge moves context identity into the canonical entry and follows each canonical Run across interaction resumes within one Turn; it does not reuse the Turn's initial Run. It repairs only verified fork copies whose payload ThreadID names an ancestor while TurnID and RunID still match. Non-ancestor identity, drift, malformed JSON, mixed state, and future versions fail without writes. Provider-context v6 remains an internal render boundary, not a domain migration. Every migration edge is atomic and has no production dual-read path. These layers remain opaque to Redeven: Redeven never inspects or edits Floret tables, including for an affected historical fork. Canonical user input, interactions, assistant output, tools, effects, context identity, and terminal facts stay upstream.\n\nFloret v7.1.2 classifies fresh, current-v9, and legacy stores through one startup path, reuses SQLite statements during migration, and avoids duplicate full-state verification when no write occurred. A legacy store reports `migrating` then `verifying`; fresh and current stores report only `verifying`. Redeven forwards those phases and never derives progress from record counts or polling. Current format, mixed state, corruption, and cancellation retain the same fail-closed and transactional guarantees.",
+          "char_count": 3851
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Every future product schema change appends a contiguous automatic migration and retains database kind `ai_threadstore_product_v1`. Redeven never resets a distributed schema, deletes an upgrade edge, opens Floret tables, or turns a migration staging table into production lifecycle authority.",
-          "char_count": 291
+          "body": "Every future product schema change appends a contiguous automatic migration and retains database kind `ai_threadstore_product_v1`. Redeven never resets a distributed schema, deletes an upgrade edge, opens Floret tables, retains a migration staging table in the current schema, or turns retired storage into production lifecycle authority.",
+          "char_count": 338
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/ai/threadstore/schema.go:0:version 4 initializer and contiguous v1-to-v2, v2-to-v3, and v3-to-v4 migrations.",
+          "id": "redeven:internal/ai/threadstore/schema.go:0:version 5 initializer and the complete contiguous migration registration.",
           "source": "redeven:internal/ai/threadstore/schema.go",
-          "description": "Version 4 initializer and contiguous v1-to-v2, v2-to-v3, and v3-to-v4 migrations."
+          "description": "Version 5 initializer and the complete contiguous migration registration."
         },
         {
-          "id": "redeven:internal/ai/pending_input_import.go:0:migration-only decoding and typed floret import.",
-          "source": "redeven:internal/ai/pending_input_import.go",
-          "description": "Migration-only decoding and typed Floret import."
+          "id": "redeven:internal/ai/threadstore/pending_input_migration.go:0:closed v4-to-v5 conversion, authority persistence, retired-table removal, and upload-reference rebuild.",
+          "source": "redeven:internal/ai/threadstore/pending_input_migration.go",
+          "description": "Closed v4-to-v5 conversion, authority persistence, retired-table removal, and upload-reference rebuild."
         },
         {
-          "id": "redeven:internal/ai/service.go:0:runs pending-input import before subscriptions and maintenance.",
+          "id": "redeven:internal/ai/pending_input_migration.go:0:migration-only decoding and typed public floret import.",
+          "source": "redeven:internal/ai/pending_input_migration.go",
+          "description": "Migration-only decoding and typed public Floret import."
+        },
+        {
+          "id": "redeven:internal/ai/service.go:0:supplies the migration callback before subscriptions and maintenance.",
           "source": "redeven:internal/ai/service.go",
-          "description": "Runs pending-input import before subscriptions and maintenance."
+          "description": "Supplies the migration callback before subscriptions and maintenance."
         },
         {
-          "id": "redeven:internal/ai/pending_input_import_startup_test.go:0:covers completion failure, restart dedupe, ordering, and canonical failure.",
-          "source": "redeven:internal/ai/pending_input_import_startup_test.go",
-          "description": "Covers completion failure, restart dedupe, ordering, and canonical failure."
+          "id": "redeven:internal/ai/pending_input_migration_startup_test.go:0:covers canonical import, stable ordering, source rollback, and retired-storage removal.",
+          "source": "redeven:internal/ai/pending_input_migration_startup_test.go",
+          "description": "Covers canonical import, stable ordering, source rollback, and retired-storage removal."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/pending_input_migration_test.go:0:covers the full v1-to-v5 chain, v4 data preservation, clean reopen, and failure rollback.",
+          "source": "redeven:internal/ai/threadstore/pending_input_migration_test.go",
+          "description": "Covers the full v1-to-v5 chain, v4 data preservation, clean reopen, and failure rollback."
         },
         {
           "id": "redeven:internal/ai/threadstore/reviewed_schema_manifest.json:0:reviewed product schema source.",
@@ -2486,7 +2496,7 @@
           "description": "Enforces exact published-v7 adoption and rejects replacement or retired imports."
         }
       ],
-      "snippet": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 4 and whose contiguous migrations import retired queue data, add execution authori",
+      "snippet": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 5 and whose contiguous migrations import retired queue data, add execution and del",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -2528,15 +2538,15 @@
         "title": "Flower thread deletion coordination",
         "type": "AI Persistence Contract"
       },
-      "body_length": 3177,
+      "body_length": 3243,
       "summary": "Floret owns canonical thread deletion and Redeven owns product settings, routing, read state, and attachment claims. One authenticated DELETE request performs those two owner operations in that order and returns success only after both complete. The operation is synchronous, idempotent, and retryable; it does not claim cross-database atomicity or persist a second lifecycle receipt.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The service first reads Redeven product settings. An absent product row is already converged and returns success. For an existing product row, the service reads the typed Floret `ThreadView`; an active thread requires `force=true`, which requests typed cancellation before deletion. Without force, active work returns the busy result without changing either owner.\n\nCanonical deletion runs before product cleanup. Floret typed deleted or not-found results mean canonical deletion has already converged, so Redeven continues its own cleanup. This is required when an earlier request deleted Floret successfully but product cleanup failed. Other Floret errors stop the request and preserve Redeven product data.\n\nAfter canonical deletion, one Redeven transaction releases attachment claims and removes thread settings, pending-input migration staging, and routing rows. Read-state retirement is best-effort asynchronous presentation cleanup and cannot change the canonical deletion result. A product cleanup failure is returned directly; retrying the same DELETE observes the Floret tombstone/not-found result and resumes product cleanup without creating an operation row.\n\nThe HTTP boundary accepts only an absent query or one exact `force=true|false` pair. Success is HTTP 200 with `{\"ok\":true}`. Busy without force is HTTP 409. Other failures use the normal product error envelope and preserve the Flower dialog and current selection. Flower sends `force=true` after destructive confirmation, retires the local cache entry only after HTTP success, and has no pending, committed, failed, operation-id, or durable-intent UI state.",
-          "char_count": 1629
+          "body": "The service first reads Redeven product settings. An absent product row is already converged and returns success. For an existing product row, the service reads the typed Floret `ThreadView`; an active thread requires `force=true`, which requests typed cancellation before deletion. Without force, active work returns the busy result without changing either owner.\n\nCanonical deletion runs before product cleanup. Floret typed deleted or not-found results mean canonical deletion has already converged, so Redeven continues its own cleanup. This is required when an earlier request deleted Floret successfully but product cleanup failed. Other Floret errors stop the request and preserve Redeven product data.\n\nAfter canonical deletion, one Redeven transaction releases attachment claims and removes thread settings, execution authority, upload staging scopes, and routing rows. The current schema has no pending-input staging table. Read-state retirement is best-effort asynchronous presentation cleanup and cannot change the canonical deletion result. A product cleanup failure is returned directly; retrying the same DELETE observes the Floret tombstone/not-found result and resumes product cleanup without creating an operation row.\n\nThe HTTP boundary accepts only an absent query or one exact `force=true|false` pair. Success is HTTP 200 with `{\"ok\":true}`. Busy without force is HTTP 409. Other failures use the normal product error envelope and preserve the Flower dialog and current selection. Flower sends `force=true` after destructive confirmation, retires the local cache entry only after HTTP success, and has no pending, committed, failed, operation-id, or durable-intent UI state.",
+          "char_count": 1695
         },
         {
           "id": "boundaries",
@@ -11645,5 +11655,5 @@
       ]
     }
   ],
-  "source_sha256": "5f0a6d9d679fabf273fa9551c275655b181ce4fe73ab505cb9ece23e0159badc"
+  "source_sha256": "88d26a3675c6b6c5e13076513ceccbe2ebcde3e2639d5b7ecb906dfdb9c98fde"
 }
