@@ -4133,7 +4133,6 @@
       "permissionSelectorLabel": "Разрешение беседы",
       "permissionSelectorSaving": "Сохранение разрешения...",
       "permissionSelectorErrorTitle": "Flower не удалось сохранить разрешение.",
-      "permissionSelectorUpdatedForActiveTurn": "Разрешение обновлено. Оно будет применено к следующим операциям в этом ответе.",
       "toolActivityRunCommand": "Выполнить команду",
       "toolActivityReadCommandOutput": "Просмотреть вывод команды",
       "toolActivityWriteCommandInput": "Отправить ввод команде",

@@ -71,7 +71,6 @@
       "permissionSelectorLabel": "執行緒權限",
       "permissionSelectorSaving": "正在儲存權限...",
       "permissionSelectorErrorTitle": "Flower 無法儲存權限。",
-      "permissionSelectorUpdatedForActiveTurn": "權限已更新，將套用於本輪後續操作。",
       "toolActivityRunCommand": "執行命令",
       "toolActivityReadCommandOutput": "查看命令輸出",
       "toolActivityWriteCommandInput": "向命令傳送輸入",

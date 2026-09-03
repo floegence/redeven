@@ -71,7 +71,6 @@
       "permissionSelectorLabel": "Thread-Berechtigung",
       "permissionSelectorSaving": "Berechtigung wird gespeichert...",
       "permissionSelectorErrorTitle": "Flower konnte die Berechtigung nicht speichern.",
-      "permissionSelectorUpdatedForActiveTurn": "Berechtigung aktualisiert. Sie gilt für spätere Aktionen in dieser Antwort.",
       "toolActivityRunCommand": "Befehl ausführen",
       "toolActivityReadCommandOutput": "Befehlsausgabe anzeigen",
       "toolActivityWriteCommandInput": "Eingabe an Befehl senden",

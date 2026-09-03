@@ -4037,7 +4037,6 @@
       "permissionSelectorLabel": "Permiso del hilo",
       "permissionSelectorSaving": "Guardando permiso...",
       "permissionSelectorErrorTitle": "Flower no pudo guardar el permiso.",
-      "permissionSelectorUpdatedForActiveTurn": "Permiso actualizado. Se aplicará a las operaciones posteriores de esta respuesta.",
       "toolActivityRunCommand": "Ejecutar comando",
       "toolActivityReadCommandOutput": "Ver salida del comando",
       "toolActivityWriteCommandInput": "Enviar entrada al comando",
