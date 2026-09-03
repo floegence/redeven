@@ -768,9 +768,10 @@ func inspectTypeScriptSource(source []byte) Finding {
 	var keys []string
 	for alias, kind := range storageAliases {
 		methods := "setItem|removeItem|clear"
-		if kind == "indexed_db" {
+		switch kind {
+		case "indexed_db":
 			methods = "open|deleteDatabase"
-		} else if kind == "cache_storage" {
+		case "cache_storage":
 			methods = "open|delete"
 		}
 		pattern := regexp.MustCompile(`(?m)\b(?:(?:window|globalThis|self)\s*\.\s*)?` + regexp.QuoteMeta(alias) + `\s*\.\s*(?:` + methods + `)\s*\(\s*([^,\)\n]*)`)

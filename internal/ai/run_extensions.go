@@ -29,14 +29,6 @@ func (r *run) listSkills() []SkillMeta {
 	return mgr.List(r.skillPermissionType())
 }
 
-func (r *run) activeSkills() []SkillActivation {
-	mgr := r.ensureSkillManager()
-	if mgr == nil {
-		return nil
-	}
-	return mgr.Active()
-}
-
 func (r *run) activateSkill(ctx context.Context, name string) (SkillActivation, bool, error) {
 	if r == nil {
 		return SkillActivation{}, false, errors.New("nil run")

@@ -2852,22 +2852,6 @@ func buildMarkdownOutputContractLines() []string {
 	}
 }
 
-func joinSkillNames(skills []SkillMeta) string {
-	if len(skills) == 0 {
-		return "[]"
-	}
-	names := make([]string, 0, len(skills))
-	for _, skill := range skills {
-		name := strings.TrimSpace(skill.Name)
-		if name == "" {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ",")
-}
-
 func buildSkillCatalogPrompt(skills []SkillMeta) string {
 	if len(skills) == 0 {
 		return ""

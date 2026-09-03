@@ -19,7 +19,7 @@ type flowerCanonicalContextProjection struct {
 
 func (s *Service) readCanonicalThreadContextProjection(ctx context.Context, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
 	if s == nil || s.threadRuntime == nil {
-		return flowerCanonicalContextProjection{}, errors.New("Flower thread runtime is unavailable")
+		return flowerCanonicalContextProjection{}, errors.New("flower thread runtime is unavailable")
 	}
 	reader, ok := s.threadRuntime.(flruntime.ThreadContextReader)
 	if !ok {
@@ -80,7 +80,7 @@ func flowerThreadTokenUsageFromFloret(totals *flruntime.ThreadTokenUsageTotals) 
 		return nil, nil
 	}
 	if totals.InputTokens < 0 || totals.OutputTokens < 0 || totals.CacheReadTokens < 0 || totals.CacheWriteTokens < 0 {
-		return nil, errors.New("Floret thread token usage contains a negative count")
+		return nil, errors.New("floret thread token usage contains a negative count")
 	}
 	return &FlowerThreadTokenUsage{
 		InputTokens: totals.InputTokens, OutputTokens: totals.OutputTokens,

@@ -31,7 +31,7 @@ func normalizeTimelineLimit(limit int) int {
 
 func (service *Service) typedTimelineMessages(ctx context.Context, endpointID, threadID string) ([]threadTimelineMessage, error) {
 	if service == nil || service.threadRuntime == nil || service.threadsDB == nil {
-		return nil, errors.New("Flower thread runtime is unavailable")
+		return nil, errors.New("flower thread runtime is unavailable")
 	}
 	endpointID, threadID = strings.TrimSpace(endpointID), strings.TrimSpace(threadID)
 	if endpointID == "" || threadID == "" {

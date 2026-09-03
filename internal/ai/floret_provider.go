@@ -402,10 +402,10 @@ func (p *floretProviderAdapter) previousResponseID(state *flprovider.State) (str
 		return "", nil
 	}
 	if p == nil || !p.continuationSupported {
-		return "", errors.New("Floret provided continuation state to a gateway without continuation support")
+		return "", errors.New("floret provided continuation state to a gateway without continuation support")
 	}
 	if strings.TrimSpace(state.Kind) != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" {
-		return "", errors.New("Floret provided invalid OpenAI Responses continuation state")
+		return "", errors.New("floret provided invalid OpenAI Responses continuation state")
 	}
 	return strings.TrimSpace(state.ID), nil
 }
@@ -453,7 +453,7 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 		}
 		for attachmentIndex, attachment := range msg.Attachments {
 			if p == nil || resolver == nil {
-				return nil, fmt.Errorf("Floret model message %d attachment %d has no host resolver", i, attachmentIndex)
+				return nil, fmt.Errorf("floret model message %d attachment %d has no host resolver", i, attachmentIndex)
 			}
 			part, err := resolver(ctx, attachment)
 			if err != nil {
@@ -476,7 +476,7 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 		}
 		for _, call := range msg.ToolCalls {
 			if !json.Valid([]byte(call.Args)) {
-				return nil, fmt.Errorf("Floret model message %d tool %q has invalid JSON args", i, call.Name)
+				return nil, fmt.Errorf("floret model message %d tool %q has invalid JSON args", i, call.Name)
 			}
 			parts = append(parts, ContentPart{
 				Type:       "tool_call",
@@ -544,7 +544,7 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
 		if name == "" || def.InputSchema == nil {
-			return nil, errors.New("Floret tool definition requires name and input schema")
+			return nil, errors.New("floret tool definition requires name and input schema")
 		}
 		b, err := json.Marshal(def.InputSchema)
 		if err != nil || !json.Valid(b) {
@@ -566,7 +566,7 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, e
 	kind := strings.TrimSpace(state.Kind)
 	id := strings.TrimSpace(state.ID)
 	if kind == "" || id == "" {
-		return nil, errors.New("Flower provider state requires kind and id")
+		return nil, errors.New("flower provider state requires kind and id")
 	}
 	return &flprovider.State{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}, nil
 }

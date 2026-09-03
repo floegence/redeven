@@ -39,7 +39,7 @@ func newFloretEffectAuthorizationRegistry() *floretEffectAuthorizationRegistry {
 
 func (r *floretEffectAuthorizationRegistry) authorize(req flruntime.EffectAuthorizationRequest, snapshot PermissionSnapshot) (func(), error) {
 	if r == nil {
-		return nil, errors.New("Floret effect authorization registry is unavailable")
+		return nil, errors.New("floret effect authorization registry is unavailable")
 	}
 	key := floretEffectAuthorizationKey{
 		ThreadID: strings.TrimSpace(string(req.ThreadID)), TurnID: strings.TrimSpace(string(req.TurnID)),
@@ -48,13 +48,13 @@ func (r *floretEffectAuthorizationRegistry) authorize(req flruntime.EffectAuthor
 	}
 	effectAttemptID := strings.TrimSpace(req.EffectAttemptID)
 	if key.ThreadID == "" || key.TurnID == "" || key.RunID == "" || key.ToolCallID == "" || key.ArgumentHash == "" || effectAttemptID == "" || !permissionSnapshotActive(snapshot) {
-		return nil, errors.New("Floret effect authorization identity is incomplete")
+		return nil, errors.New("floret effect authorization identity is incomplete")
 	}
 	entry := &floretEffectAuthorizationEntry{snapshot: snapshot, effectAttemptID: effectAttemptID}
 	r.mu.Lock()
 	if _, exists := r.active[key]; exists {
 		r.mu.Unlock()
-		return nil, errors.New("Floret effect authorization is already active")
+		return nil, errors.New("floret effect authorization is already active")
 	}
 	r.active[key] = entry
 	r.mu.Unlock()
@@ -67,7 +67,7 @@ func (r *floretEffectAuthorizationRegistry) authorize(req flruntime.EffectAuthor
 
 func (r *floretEffectAuthorizationRegistry) snapshotForInvocation(inv fltools.Invocation[map[string]any]) (PermissionSnapshot, string, error) {
 	if r == nil {
-		return PermissionSnapshot{}, "", errors.New("Floret effect authorization registry is unavailable")
+		return PermissionSnapshot{}, "", errors.New("floret effect authorization registry is unavailable")
 	}
 	key := floretEffectAuthorizationKey{
 		ThreadID: strings.TrimSpace(string(inv.ThreadID)), TurnID: strings.TrimSpace(string(inv.TurnID)), RunID: strings.TrimSpace(string(inv.RunID)),
@@ -82,7 +82,7 @@ func (r *floretEffectAuthorizationRegistry) snapshotForInvocation(inv fltools.In
 	}
 	r.mu.Unlock()
 	if !ok || entry == nil || !permissionSnapshotActive(entry.snapshot) || strings.TrimSpace(entry.effectAttemptID) == "" {
-		return PermissionSnapshot{}, "", errors.New("Floret effect authorization proof is unavailable")
+		return PermissionSnapshot{}, "", errors.New("floret effect authorization proof is unavailable")
 	}
 	return entry.snapshot, entry.effectAttemptID, nil
 }
@@ -101,7 +101,7 @@ func floretEffectAuthorizationGateForRun(r *run) flruntime.EffectAuthorizationGa
 
 func (r *run) dispatchFloretEffect(ctx context.Context, req flruntime.EffectAuthorizationRequest, effect flruntime.AuthorizedEffect) (flruntime.EffectDispatchResult, error) {
 	if r == nil || effect == nil {
-		return flruntime.EffectDispatchResult{}, errors.New("Floret effect authorization is unavailable")
+		return flruntime.EffectDispatchResult{}, errors.New("floret effect authorization is unavailable")
 	}
 	var result flruntime.EffectDispatchResult
 	err := r.withAuthorizedFloretEffect(ctx, req, func(executionCtx context.Context, proof flruntime.EffectAuthorizationProof) error {
@@ -114,7 +114,7 @@ func (r *run) dispatchFloretEffect(ctx context.Context, req flruntime.EffectAuth
 
 func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.EffectAuthorizationRequest, dispatch func(context.Context, flruntime.EffectAuthorizationProof) error) error {
 	if r == nil || dispatch == nil {
-		return errors.New("Floret effect authorization is unavailable")
+		return errors.New("floret effect authorization is unavailable")
 	}
 	if err := r.requireExecutionOpen(); err != nil {
 		return err
@@ -131,7 +131,7 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 	}
 	authorityThreadID := strings.TrimSpace(req.HostContext[floretToolHostContextAuthorityThreadIDKey])
 	if authorityThreadID == "" {
-		return errors.New("Floret effect permission authority is missing")
+		return errors.New("floret effect permission authority is missing")
 	}
 	currentSnapshot, err := policyRun.refreshFloretEffectPermissionSnapshot(ctx, authorityThreadID, req)
 	if err != nil {
@@ -150,7 +150,7 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 	// allow to ask after admission, the invocation has no matching Floret
 	// approval and must be rejected as stale.
 	if decision == ApprovalDecisionAsk && req.Permission.Mode != fltools.PermissionAsk {
-		return errors.New("Floret effect authorization snapshot is stale")
+		return errors.New("floret effect authorization snapshot is stale")
 	}
 	policyRevision := floretEffectPolicyRevision(authorityThreadID, currentSnapshot)
 	releaseAuthorization := func() {}
@@ -187,10 +187,10 @@ func validateFloretEffectAuthorizationRequest(req flruntime.EffectAuthorizationR
 		strings.TrimSpace(string(req.ThreadID)) == "" || strings.TrimSpace(string(req.TurnID)) == "" ||
 		strings.TrimSpace(string(req.RunID)) == "" || strings.TrimSpace(req.ToolCallID) == "" ||
 		strings.TrimSpace(req.ToolName) == "" || strings.TrimSpace(req.ArgumentHash) == "" {
-		return errors.New("Floret effect authorization request identity is incomplete")
+		return errors.New("floret effect authorization request identity is incomplete")
 	}
 	if req.Permission.Mode != fltools.PermissionAllow && req.Permission.Mode != fltools.PermissionAsk && req.Permission.Mode != fltools.PermissionDeny {
-		return errors.New("Floret effect authorization request has invalid permission mode")
+		return errors.New("floret effect authorization request has invalid permission mode")
 	}
 	return nil
 }
@@ -200,7 +200,7 @@ func floretEffectAuthorizationContext(ctx context.Context, base *run, req flrunt
 	ownerRunID := strings.TrimSpace(string(req.RunID))
 	if childThreadID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey]); childThreadID != "" {
 		if ownerThreadID != childThreadID {
-			return nil, PermissionSnapshot{}, errors.New("Floret child effect thread identity mismatch")
+			return nil, PermissionSnapshot{}, errors.New("floret child effect thread identity mismatch")
 		}
 		ownerRunID = strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
 	}
@@ -218,10 +218,10 @@ func floretEffectAuthorizationContext(ctx context.Context, base *run, req flrunt
 func validateFloretEffectRequestAgainstSnapshot(req flruntime.EffectAuthorizationRequest, snapshot PermissionSnapshot) error {
 	policy, ok := snapshot.ToolPolicies[strings.TrimSpace(req.ToolName)]
 	if !ok || !stringSliceContains(snapshot.FloretToolNames, req.ToolName) {
-		return errors.New("Floret effect tool is absent from its admitted permission snapshot")
+		return errors.New("floret effect tool is absent from its admitted permission snapshot")
 	}
 	if req.Permission.Mode != floretPermissionMode(policy.ApprovalDecision) {
-		return errors.New("Floret effect permission mode differs from its admitted permission snapshot")
+		return errors.New("floret effect permission mode differs from its admitted permission snapshot")
 	}
 	return nil
 }

@@ -221,9 +221,10 @@ func splitShellSegments(command string) []string {
 			continue
 		}
 		if ch == '\'' || ch == '"' || ch == '`' {
-			if quote == 0 {
+			switch quote {
+			case 0:
 				quote = ch
-			} else if quote == ch {
+			case ch:
 				quote = 0
 			}
 			sb.WriteRune(ch)
@@ -941,12 +942,12 @@ func isEnvAssignment(token string) bool {
 	name := token[:eq]
 	for i, ch := range name {
 		if i == 0 {
-			if !(ch == '_' || unicode.IsLetter(ch)) {
+			if ch != '_' && !unicode.IsLetter(ch) {
 				return false
 			}
 			continue
 		}
-		if !(ch == '_' || unicode.IsLetter(ch) || unicode.IsDigit(ch)) {
+		if ch != '_' && !unicode.IsLetter(ch) && !unicode.IsDigit(ch) {
 			return false
 		}
 	}

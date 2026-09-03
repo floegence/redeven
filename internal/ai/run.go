@@ -232,17 +232,17 @@ func (r *run) floretCanonicalIdentity() (string, string, string) {
 
 func (r *run) observeFloretCanonicalIdentity(runID, threadID, turnID string) error {
 	if r == nil {
-		return errors.New("Floret canonical identity owner is unavailable")
+		return errors.New("floret canonical identity owner is unavailable")
 	}
 	runID, threadID, turnID = strings.TrimSpace(runID), strings.TrimSpace(threadID), strings.TrimSpace(turnID)
 	if runID == "" || threadID == "" || turnID == "" || threadID != strings.TrimSpace(r.threadID) {
-		return errors.New("Floret canonical identity is incomplete or bound to another thread")
+		return errors.New("floret canonical identity is incomplete or bound to another thread")
 	}
 	r.muFloretIdentity.Lock()
 	defer r.muFloretIdentity.Unlock()
 	if r.floretEventIdentity.configured {
 		if r.floretEventIdentity.runID != runID || r.floretEventIdentity.threadID != threadID || r.floretEventIdentity.turnID != turnID {
-			return errors.New("Floret canonical identity changed during execution")
+			return errors.New("floret canonical identity changed during execution")
 		}
 		return nil
 	}

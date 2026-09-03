@@ -206,19 +206,19 @@ func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
 		eventTurnID := strings.TrimSpace(string(ev.TurnID))
 		eventRunID := strings.TrimSpace(string(ev.RunID))
 		if eventThreadID != identity.threadID {
-			return errors.New("Floret event thread or turn identity mismatch")
+			return errors.New("floret event thread or turn identity mismatch")
 		}
 		isTitleEvent := ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed
 		if isTitleEvent {
 			threadScoped := eventRunID == "" && eventTurnID == ""
 			runScoped := eventRunID == identity.runID && eventTurnID == identity.turnID
 			if !threadScoped && !runScoped {
-				return errors.New("Floret title event identity mismatch")
+				return errors.New("floret title event identity mismatch")
 			}
 		} else if eventTurnID != identity.turnID {
-			return errors.New("Floret event thread or turn identity mismatch")
+			return errors.New("floret event thread or turn identity mismatch")
 		} else if identity.checkRunID && eventRunID != identity.runID {
-			return errors.New("Floret event run identity mismatch")
+			return errors.New("floret event run identity mismatch")
 		}
 	}
 	return nil
@@ -288,7 +288,7 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompaction) (FlowerTimelineDecoration, error) {
 	operationID := strings.TrimSpace(compaction.OperationID)
 	if operationID == "" {
-		return FlowerTimelineDecoration{}, errors.New("Floret compaction missing operation id")
+		return FlowerTimelineDecoration{}, errors.New("floret compaction missing operation id")
 	}
 	anchor := r.contextCompactionAnchor(operationID)
 	return FlowerTimelineDecoration{
@@ -473,7 +473,7 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, totals *flr
 	}
 	runID := strings.TrimSpace(string(status.RunID))
 	if runID == "" {
-		return FlowerContextUsage{}, errors.New("Floret context status missing run id")
+		return FlowerContextUsage{}, errors.New("floret context status missing run id")
 	}
 	phase, err := normalizeFlowerContextUsagePhase(status.Phase)
 	if err != nil {
@@ -518,7 +518,7 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent) 
 	}
 	runID := strings.TrimSpace(string(compaction.RunID))
 	if runID == "" {
-		return FlowerContextCompaction{}, errors.New("Floret compaction missing run id")
+		return FlowerContextCompaction{}, errors.New("floret compaction missing run id")
 	}
 	phase, err := normalizeFlowerContextCompactionPhase(compaction.Phase)
 	if err != nil {
