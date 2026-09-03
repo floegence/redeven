@@ -1757,8 +1757,7 @@
     "providerSyncInProgress": "Desktop vérifie déjà le dernier statut du Redeven Cloud.",
     "providerAuthorizationExpiredTitle": "Autorisation du Redeven Cloud expirée",
     "providerAuthorizationRequired": "Desktop a besoin d'une nouvelle autorisation Redeven Cloud avant de pouvoir ouvrir ou connecter cet environnement Redeven Cloud.",
-    "providerAuthorizationExpired": "L’autorisation Desktop pour Redeven Cloud a expiré. Reconnectez Redeven Cloud, puis réessayez l’action.",
-    "flowerPromptQueued": "Envoyé à Flower."
+    "providerAuthorizationExpired": "L’autorisation Desktop pour Redeven Cloud a expiré. Reconnectez Redeven Cloud, puis réessayez l’action."
   },
   "progress": {
     "connectionRemoved": "Connexion supprimée",

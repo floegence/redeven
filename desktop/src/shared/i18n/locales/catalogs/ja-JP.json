@@ -1753,8 +1753,7 @@
     "providerSyncInProgress": "Desktop はすでに最新のRedeven Cloudのステータスをチェックしています。",
     "providerAuthorizationExpiredTitle": "Redeven Cloudの認証が期限切れになりました",
     "providerAuthorizationRequired": "Desktop は、このRedeven Cloud環境を開いたり接続したりする前に、新しいRedeven Cloudの承認を必要とします。",
-    "providerAuthorizationExpired": "Redeven Cloud の Desktop 認証の有効期限が切れました。Redeven Cloud に再接続してから、もう一度お試しください。",
-    "flowerPromptQueued": "Flower に送信しました。"
+    "providerAuthorizationExpired": "Redeven Cloud の Desktop 認証の有効期限が切れました。Redeven Cloud に再接続してから、もう一度お試しください。"
   },
   "progress": {
     "connectionRemoved": "接続を削除しました",

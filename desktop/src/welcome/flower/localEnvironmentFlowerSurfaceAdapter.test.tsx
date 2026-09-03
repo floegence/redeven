@@ -387,7 +387,29 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
-  it('rejects a receipt that changes the echoed client request identity', async () => {
+  it('accepts a new-thread receipt while canonical detail is still unavailable', async () => {
+    const bridge = bridgeFor((request) => {
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/turns') {
+        return {
+          client_request_id: 'client-new',
+          thread_id: 'thread-new',
+        };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      client_request_id: 'client-new',
+      prompt: 'send once',
+    })).resolves.toEqual({
+      client_request_id: 'client-new',
+      thread_id: 'thread-new',
+    });
+  });
+
+  it('rejects an acceptance receipt that changes the echoed client request identity', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
@@ -405,7 +427,29 @@ describe('Local Environment Flower surface adapter', () => {
       thread_id: 'thread-existing',
       client_request_id: 'client-request',
       prompt: 'send once',
-    })).rejects.toThrow('Flower send returned an invalid current view.');
+    })).rejects.toThrow('Flower send returned an invalid acceptance receipt.');
+  });
+
+  it('accepts matching identities and discards an unusable current view', async () => {
+    const bridge = bridgeFor((request) => {
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
+        return {
+          client_request_id: 'client-request',
+          thread_id: 'thread-existing',
+          current: currentView({ thread_id: 'thread-other', activity: 'active', turn_id: 'turn-other' }),
+        };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      thread_id: 'thread-existing',
+      client_request_id: 'client-request',
+      prompt: 'send once',
+    })).resolves.toEqual({
+      client_request_id: 'client-request',
+      thread_id: 'thread-existing',
+    });
   });
 
   it('propagates runtime command failures without creating local admission state', async () => {
@@ -482,7 +526,10 @@ describe('Local Environment Flower surface adapter', () => {
       thread_id: 'thread-existing',
       client_request_id: 'client-malformed',
       prompt: 'send once',
-    })).rejects.toThrow('Flower send returned an invalid current view.');
+    })).resolves.toEqual({
+      client_request_id: 'client-malformed',
+      thread_id: 'thread-existing',
+    });
 
     const invalidJSONBridge: DesktopSettingsBridge = {
       ...attachmentBridgeStubs(),

@@ -42,6 +42,7 @@ import {
 import {
   createFlowerClientRequestID,
 } from '../../../../../flower_ui/src/flowerRequestIdentity';
+import { normalizeFlowerTurnLaunchReceipt } from '../../../../../flower_ui/src/turnLaunchReceipt';
 import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
@@ -955,22 +956,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
             }),
           },
         );
-        const responseClientRequestID = trim(response.client_request_id);
-        const responseThreadID = trim(response.thread_id) || existingThreadID;
-        const current = response.current;
-        const currentValid = Boolean(
-          current
-          && trim(current.thread_id) === responseThreadID
-          && Number.isFinite(Number(current.view_version))
-          && Number(current.view_version) > 0,
-        );
-        const clientIdentityValid = existingThreadID
-          ? !responseClientRequestID || responseClientRequestID === clientRequestID
-          : responseClientRequestID === clientRequestID;
-        if (!responseThreadID || !clientIdentityValid || !currentValid) {
-          throw new Error('Flower send returned an invalid current view.');
-        }
-      return { client_request_id: clientRequestID, thread_id: responseThreadID, current: current! };
+      return normalizeFlowerTurnLaunchReceipt(response, { clientRequestID, existingThreadID });
     },
     retryThread: async (threadID) => {
       const tid = trim(threadID);

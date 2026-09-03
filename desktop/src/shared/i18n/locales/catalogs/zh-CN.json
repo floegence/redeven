@@ -1753,8 +1753,7 @@
     "providerSyncInProgress": "Desktop 已经在检查最新的 Redeven Cloud 状态。",
     "providerAuthorizationExpiredTitle": "Redeven Cloud 授权已过期",
     "providerAuthorizationRequired": "Desktop 需要新的 Redeven Cloud 授权才能打开或连接此 Redeven Cloud 环境。",
-    "providerAuthorizationExpired": "Redeven Cloud 的 Desktop 授权已过期。请重新连接 Redeven Cloud，然后重试。",
-    "flowerPromptQueued": "已发送给 Flower。"
+    "providerAuthorizationExpired": "Redeven Cloud 的 Desktop 授权已过期。请重新连接 Redeven Cloud，然后重试。"
   },
   "progress": {
     "connectionRemoved": "Connection 已移除",

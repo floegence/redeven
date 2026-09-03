@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-09-03
+* **Accurate Flower send feedback**: Successful Turn receipts now settle the
+  request and bind its optimistic outbox row by exact request and Thread
+  identity without requiring an immediate current view. Missing or unusable
+  receipt detail recovers through the canonical thread load and live stream,
+  so an accepted send is not reported as failed. Welcome-to-Flower handoff no
+  longer adds a redundant success toast after navigation.
 * **Dense Managed Service release browsing**: The version drawer now assigns
   all remaining body height to one compact, divided candidate list while its
   summary, filters, advisory hints, and footer remain fixed. The outer body no

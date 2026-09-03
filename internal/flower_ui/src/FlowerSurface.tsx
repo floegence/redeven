@@ -71,6 +71,7 @@ import type {
   FlowerActivityStatus,
   FlowerThreadView,
   FlowerLiveStreamEnvelope,
+  FlowerRuntimeCurrentView,
   FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
   FlowerRunProgressPhase,
@@ -1564,45 +1565,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 	const [outboxRetryTick, setOutboxRetryTick] = createSignal(0);
 	const outboxRetryAttempts = new Map<string, number>();
 	const outboxRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-	createEffect(() => {
-		outboxRetryTick();
-		if (!props.adapter.launchTurn) return;
-		for (const entry of transportOutbox().entries.values()) {
-			if (outboxResendInFlight.has(entry.requestId)) continue;
-			if (entry.terminalError) continue;
-			if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
-			if (entry.threadId === PENDING_NEW_THREAD_ID && !pendingAdmissionHandoffs.has(entry.requestId)) {
-				pendingAdmissionHandoffs.set(entry.requestId, {
-					sessionKey: PENDING_NEW_THREAD_ID,
-					selectionSequence: threadLoadSequence,
-					settle: () => undefined,
-				});
-			}
-			outboxResendInFlight.add(entry.requestId);
-			void props.adapter.launchTurn(entry.input).then((receipt) => {
-				outboxRetryAttempts.delete(entry.requestId);
-				const retryTimer = outboxRetryTimers.get(entry.requestId);
-				if (retryTimer !== undefined) clearTimeout(retryTimer);
-				outboxRetryTimers.delete(entry.requestId);
-				applyRuntimeCurrent(receipt.current);
-			}).catch(() => {
-				const attempt = (outboxRetryAttempts.get(entry.requestId) ?? 0) + 1;
-				outboxRetryAttempts.set(entry.requestId, attempt);
-				if (outboxRetryTimers.has(entry.requestId)) return;
-				const delay = Math.min(10_000, 250 * 2 ** Math.min(attempt - 1, 5));
-				outboxRetryTimers.set(entry.requestId, setTimeout(() => {
-					outboxRetryTimers.delete(entry.requestId);
-					setOutboxRetryTick((tick) => tick + 1);
-				}, delay));
-			}).finally(() => {
-				outboxResendInFlight.delete(entry.requestId);
-			});
-		}
-	});
-	onCleanup(() => {
-		for (const timer of outboxRetryTimers.values()) clearTimeout(timer);
-		outboxRetryTimers.clear();
-	});
   const composerSessionDraftFromValue = (value: FlowerComposerDraftValue): FlowerComposerSessionDraft => ({
     chatDraft: value.text,
     references: value.references,
@@ -3163,7 +3125,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const receiveThreadDetail = (
     candidate: ThreadView,
     source: ThreadDetailSource,
-    current?: FlowerTurnLaunchReceipt['current'],
+    current?: FlowerRuntimeCurrentView,
   ): ThreadDetailReceiveResult => {
     const threadID = trimString(candidate.thread.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) {
@@ -4146,7 +4108,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const applyRuntimeCurrent = (
-    current: FlowerTurnLaunchReceipt['current'],
+    current: FlowerRuntimeCurrentView,
     contextUsage?: FlowerLiveStreamEnvelope['context_usage'],
     contextCompactions?: FlowerLiveStreamEnvelope['context_compactions'],
     timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
@@ -4220,6 +4182,96 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return false;
     }
   };
+
+  const acceptTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt): boolean => {
+    const requestID = trimString(receipt.client_request_id);
+    const threadID = trimString(receipt.thread_id);
+    if (!requestID || !threadID) {
+      throw new Error('Flower send returned an invalid acceptance receipt.');
+    }
+    const currentOutbox = transportOutbox();
+    const entry = currentOutbox.entries.get(requestID);
+    if (!entry) return false;
+    const requestedThreadID = trimString(entry.input.thread_id);
+    if (requestedThreadID && requestedThreadID !== threadID) {
+      throw new Error('Flower send returned a different thread identity.');
+    }
+    const handoff = pendingAdmissionHandoffs.get(requestID);
+    const transferDraftScope = Boolean(
+      handoff
+      && entry.threadId === PENDING_NEW_THREAD_ID
+      && handoff.sessionKey === PENDING_NEW_THREAD_ID
+      && handoff.selectionSequence === threadLoadSequence
+      && !threadCache().selectedId
+    );
+    if (transferDraftScope) beginThreadDetailDisplayCycle(threadID);
+    batch(() => {
+      handoff?.settle(threadID, transferDraftScope);
+      pendingAdmissionHandoffs.delete(requestID);
+      setTransportOutbox(currentOutbox.bindAcceptedThread(requestID, threadID));
+      if (transferDraftScope) {
+        setThreadCache((cache) => cache.select(threadID));
+        setLoadError('');
+        setThreadLoadError('');
+        setSidePanel('chat');
+      }
+    });
+    return true;
+  };
+
+  const applyAcceptedTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt): void => {
+    if (receipt.current) applyRuntimeCurrent(receipt.current);
+    const waitingForCanonicalDetail = acceptTurnLaunchReceipt(receipt);
+    const threadID = trimString(receipt.thread_id);
+    if (waitingForCanonicalDetail && selectedThreadID() === threadID) {
+      void requestThreadDetail(
+        threadID,
+        threadSnapshotRevision(threadCache().summaries.get(threadID)),
+        'user_action',
+        true,
+      );
+    }
+  };
+
+	createEffect(() => {
+		outboxRetryTick();
+		if (!props.adapter.launchTurn) return;
+		for (const entry of transportOutbox().entries.values()) {
+			if (outboxResendInFlight.has(entry.requestId)) continue;
+			if (entry.terminalError) continue;
+			if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
+			if (entry.threadId === PENDING_NEW_THREAD_ID && !pendingAdmissionHandoffs.has(entry.requestId)) {
+				pendingAdmissionHandoffs.set(entry.requestId, {
+					sessionKey: PENDING_NEW_THREAD_ID,
+					selectionSequence: threadLoadSequence,
+					settle: () => undefined,
+				});
+			}
+			outboxResendInFlight.add(entry.requestId);
+			void props.adapter.launchTurn(entry.input).then((receipt) => {
+				outboxRetryAttempts.delete(entry.requestId);
+				const retryTimer = outboxRetryTimers.get(entry.requestId);
+				if (retryTimer !== undefined) clearTimeout(retryTimer);
+				outboxRetryTimers.delete(entry.requestId);
+				applyAcceptedTurnLaunchReceipt(receipt);
+			}).catch(() => {
+				const attempt = (outboxRetryAttempts.get(entry.requestId) ?? 0) + 1;
+				outboxRetryAttempts.set(entry.requestId, attempt);
+				if (outboxRetryTimers.has(entry.requestId)) return;
+				const delay = Math.min(10_000, 250 * 2 ** Math.min(attempt - 1, 5));
+				outboxRetryTimers.set(entry.requestId, setTimeout(() => {
+					outboxRetryTimers.delete(entry.requestId);
+					setOutboxRetryTick((tick) => tick + 1);
+				}, delay));
+			}).finally(() => {
+				outboxResendInFlight.delete(entry.requestId);
+			});
+		}
+	});
+	onCleanup(() => {
+		for (const timer of outboxRetryTimers.values()) clearTimeout(timer);
+		outboxRetryTimers.clear();
+	});
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
@@ -4842,7 +4894,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectedID) cancelDeferredThreadSelection();
       if (!submissionCurrent()) return;
       transcriptScroll.startFollowing();
-      let receipt: FlowerTurnLaunchReceipt;
       let originalCommandFenced = false;
       try {
         const decision = currentHandlerDecision() ?? await resolveHandlerDecision();
@@ -4912,7 +4963,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (trimString(returnedReceipt.client_request_id) !== clientRequestID) {
           throw new Error('Flower send returned a different client request identity.');
         }
-        receipt = returnedReceipt;
+        applyAcceptedTurnLaunchReceipt(returnedReceipt);
       } catch (error) {
         if (originalCommandFenced) {
           outboxResendInFlight.delete(clientRequestID);
@@ -4985,9 +5036,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return;
       }
-      applyRuntimeCurrent(receipt.current);
-      updateThreadIDMembership(setBusyAdmissionThreadIDs, receipt.thread_id, false);
-      busyAdmissionNotifiedThreadIDs.delete(trimString(receipt.thread_id));
+      updateThreadIDMembership(setBusyAdmissionThreadIDs, selectedID, false);
+      busyAdmissionNotifiedThreadIDs.delete(selectedID);
       if (originalCommandFenced) {
         outboxResendInFlight.delete(clientRequestID);
         originalCommandFenced = false;
