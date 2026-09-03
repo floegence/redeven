@@ -150,7 +150,7 @@ group termination. Redeven does not elevate privileges, change socket
 permissions, add users to system groups, or silently switch engines. Host
 administrators remain responsible for engine access.
 
-Container Exec uses Floeterm terminal-go v0.18.1 program sessions. The engine
+Container Exec uses Floeterm terminal-go v0.19.0 program sessions. The engine
 constructs exact Docker or Podman argv for the bound target; no shell parses the
 request and no initialization script is injected. The request accepts at most
 32 argv entries and 8 KiB, rejects control characters, and defaults to
