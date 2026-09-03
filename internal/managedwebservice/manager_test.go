@@ -53,6 +53,9 @@ func setTestRuntimeBinding(t *testing.T, service *pfregistry.ManagedService) {
 	if service.ServiceFamilyID == "" {
 		service.ServiceFamilyID = "family-test"
 	}
+	if service.WorkspaceOwnership == "" {
+		service.WorkspaceOwnership = workspaceOwnershipUserSelected
+	}
 	raw, digest, err := newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, Deployment(service.Deployment))
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +63,7 @@ func setTestRuntimeBinding(t *testing.T, service *pfregistry.ManagedService) {
 	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = raw, digest
 }
 
-func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
+func TestCatalogReturnsDedicatedManagedWorkspaceWithoutCreatingIt(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
 	scope, err := filesystemscope.NewDefaultRegistry(home)
@@ -104,9 +107,8 @@ func TestCatalogUsesDedicatedManagedWorkspaceInsteadOfHome(t *testing.T) {
 			t.Fatalf("templates %q and %q share a default workspace", previous, template.TemplateID)
 		}
 		seenWorkspaces[template.DefaultWorkspacePath] = template.TemplateID
-		info, err := os.Stat(template.DefaultWorkspacePath)
-		if err != nil || !info.IsDir() {
-			t.Fatalf("dedicated workspace %q was not prepared: info=%v err=%v", template.DefaultWorkspacePath, info, err)
+		if _, err := os.Stat(template.DefaultWorkspacePath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("catalog created workspace %q: err=%v", template.DefaultWorkspacePath, err)
 		}
 		if template.Deployment == DeploymentHost && template.HostLifecyclePlan == nil {
 			t.Fatalf("host template %q has no lifecycle plan", template.TemplateID)
@@ -363,7 +365,7 @@ func TestRunUninstallDelegatesLifecycleOwnershipOnce(t *testing.T) {
 	manager := &Manager{listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 	service := &pfregistry.ManagedService{ServiceID: "mws_uninstall_once"}
 	op := &pfregistry.ManagedOperation{OperationID: "mop_uninstall_once", ServiceID: service.ServiceID, ProgressTotal: operationProgressTotal}
-	if err := manager.runUninstall(context.Background(), service, op, driver, false); !errors.Is(err, wantErr) {
+	if err := manager.runUninstall(context.Background(), service, op, driver, false, false, false); !errors.Is(err, wantErr) {
 		t.Fatalf("runUninstall() error = %v", err)
 	}
 	if driver.stopCalls != 0 || driver.uninstallCalls != 1 {

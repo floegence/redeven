@@ -55,6 +55,7 @@ type ManagedService struct {
 	ServiceFamilyID        string `json:"service_family_id"`
 	Deployment             string `json:"deployment"`
 	WorkspacePath          string `json:"workspace_path"`
+	WorkspaceOwnership     string `json:"workspace_ownership"`
 	ConfigurationJSON      string `json:"-"`
 	ConfigurationRevision  int64  `json:"configuration_revision"`
 	ConfigurationSHA256    string `json:"configuration_sha256"`
@@ -83,6 +84,7 @@ type ManagedOperation struct {
 	RetryOfOperationID string                          `json:"retry_of_operation_id,omitempty"`
 	Action             string                          `json:"action"`
 	DeleteData         bool                            `json:"delete_data,omitempty"`
+	DeleteWorkspace    bool                            `json:"delete_workspace,omitempty"`
 	State              string                          `json:"state"`
 	Stage              string                          `json:"stage"`
 	ProgressCurrent    int64                           `json:"progress_current"`
@@ -100,7 +102,7 @@ const ManagedOperationProgressDetailSchemaVersion = 1
 
 const emptyManagedOperationProgressDetailJSON = `{"schema_version":1}`
 
-const managedOperationSelectColumns = "operation_id,service_id,request_id,request_fingerprint,retry_of_operation_id,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json"
+const managedOperationSelectColumns = "operation_id,service_id,request_id,request_fingerprint,retry_of_operation_id,action,delete_data,delete_workspace,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json"
 
 type ManagedOperationProgressDetail struct {
 	SchemaVersion        int                               `json:"schema_version"`
@@ -185,6 +187,7 @@ type ManagedServicePatch struct {
 	ReleaseIdentitySHA256  *string
 	RuntimeBindingJSON     *string
 	RuntimeBindingSHA256   *string
+	WorkspaceOwnership     *string
 	DesiredState           *string
 	ObservedState          *string
 	RuntimeIdentity        *string
@@ -364,7 +367,7 @@ func (r *Registry) ListManagedServices(ctx context.Context) ([]ManagedService, e
 	if r == nil || r.db == nil {
 		return nil, errors.New("registry not initialized")
 	}
-	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
+	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +388,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 		return nil, errors.New("registry not initialized")
 	}
 	value := ManagedService{}
-	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
+	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -398,7 +401,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 type rowScanner interface{ Scan(dest ...any) error }
 
 func scanManagedService(row rowScanner, value *ManagedService) error {
-	return row.Scan(&value.ServiceID, &value.TemplateID, &value.TemplateSource, &value.TemplateRevision, &value.TemplateSnapshotJSON, &value.TemplateSnapshotSHA256, &value.ServiceFamilyID, &value.Deployment, &value.WorkspacePath, &value.ConfigurationJSON, &value.ConfigurationRevision, &value.ConfigurationSHA256, &value.ReleaseIdentityJSON, &value.ReleaseIdentitySHA256, &value.RuntimeBindingJSON, &value.RuntimeBindingSHA256, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
+	return row.Scan(&value.ServiceID, &value.TemplateID, &value.TemplateSource, &value.TemplateRevision, &value.TemplateSnapshotJSON, &value.TemplateSnapshotSHA256, &value.ServiceFamilyID, &value.Deployment, &value.WorkspacePath, &value.WorkspaceOwnership, &value.ConfigurationJSON, &value.ConfigurationRevision, &value.ConfigurationSHA256, &value.ReleaseIdentityJSON, &value.ReleaseIdentitySHA256, &value.RuntimeBindingJSON, &value.RuntimeBindingSHA256, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
 }
 
 func (r *Registry) CreateManagedService(ctx context.Context, service ManagedService, forward Forward) error {
@@ -444,6 +447,9 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 	if strings.TrimSpace(service.RuntimeBindingJSON) == "" || len(strings.TrimSpace(service.RuntimeBindingSHA256)) != 64 {
 		return errors.New("invalid managed service runtime binding identity")
 	}
+	if service.WorkspaceOwnership != "pending" && service.WorkspaceOwnership != "redeven_created" && service.WorkspaceOwnership != "user_selected" {
+		return errors.New("invalid managed service workspace ownership")
+	}
 	if forward.CreatedAtUnixMs <= 0 {
 		forward.CreatedAtUnixMs = now
 	}
@@ -478,11 +484,11 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 	if _, err = tx.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES(?,?,?,?,?,?,?,?,?,?)`, forward.ForwardID, forward.TargetURL, forward.Name, forward.Description, forward.HealthPath, boolToInt(forward.InsecureSkipVerify), forward.CreatedAtUnixMs, forward.UpdatedAtUnixMs, forward.LastOpenedAtUnixMs, forward.AccessMode); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.TemplateSource, service.TemplateRevision, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, service.ServiceFamilyID, service.Deployment, service.WorkspacePath, service.ConfigurationJSON, service.ConfigurationRevision, service.ConfigurationSHA256, service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256, service.RuntimeBindingJSON, service.RuntimeBindingSHA256, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs); err != nil {
+	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.TemplateSource, service.TemplateRevision, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, service.ServiceFamilyID, service.Deployment, service.WorkspacePath, service.WorkspaceOwnership, service.ConfigurationJSON, service.ConfigurationRevision, service.ConfigurationSHA256, service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256, service.RuntimeBindingJSON, service.RuntimeBindingSHA256, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs); err != nil {
 		return err
 	}
 	if operation != nil {
-		if _, err = tx.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,retry_of_operation_id,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.RetryOfOperationID, operation.Action, boolToInt(operation.DeleteData), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, operationProgressDetailJSON); err != nil {
+		if _, err = tx.Exec(`INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,retry_of_operation_id,action,delete_data,delete_workspace,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.RetryOfOperationID, operation.Action, boolToInt(operation.DeleteData), boolToInt(operation.DeleteWorkspace), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, operationProgressDetailJSON); err != nil {
 			return err
 		}
 	}
@@ -524,6 +530,9 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 	}
 	if patch.RuntimeBindingSHA256 != nil {
 		add("runtime_binding_sha256", strings.TrimSpace(*patch.RuntimeBindingSHA256))
+	}
+	if patch.WorkspaceOwnership != nil {
+		add("workspace_ownership", strings.TrimSpace(*patch.WorkspaceOwnership))
 	}
 	if patch.DesiredState != nil {
 		add("desired_state", strings.TrimSpace(*patch.DesiredState))
@@ -751,7 +760,7 @@ func (r *Registry) CreateManagedOperation(ctx context.Context, operation Managed
 		}
 		operation.ProgressDetail, progressDetailJSON = &detail, raw
 	}
-	_, err := r.db.ExecContext(nonNilContext(ctx), `INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,retry_of_operation_id,action,delete_data,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.RetryOfOperationID, operation.Action, boolToInt(operation.DeleteData), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, progressDetailJSON)
+	_, err := r.db.ExecContext(nonNilContext(ctx), `INSERT INTO managed_web_service_operations(operation_id,service_id,request_id,request_fingerprint,retry_of_operation_id,action,delete_data,delete_workspace,state,stage,progress_current,progress_total,cancel_requested,error_code,error_message,created_at_unix_ms,updated_at_unix_ms,finished_at_unix_ms,progress_detail_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, operation.OperationID, operation.ServiceID, operation.RequestID, operation.RequestFingerprint, operation.RetryOfOperationID, operation.Action, boolToInt(operation.DeleteData), boolToInt(operation.DeleteWorkspace), operation.State, operation.Stage, operation.ProgressCurrent, operation.ProgressTotal, boolToInt(operation.CancelRequested), operation.ErrorCode, operation.ErrorMessage, operation.CreatedAtUnixMs, operation.UpdatedAtUnixMs, operation.FinishedAtUnixMs, progressDetailJSON)
 	return err
 }
 
@@ -783,9 +792,9 @@ func (r *Registry) queryManagedOperation(ctx context.Context, query, value strin
 		return nil, errors.New("registry not initialized")
 	}
 	op := ManagedOperation{}
-	var cancel, deleteData int
+	var cancel, deleteData, deleteWorkspace int
 	var progressDetailJSON sql.NullString
-	err := r.db.QueryRowContext(nonNilContext(ctx), query, strings.TrimSpace(value)).Scan(&op.OperationID, &op.ServiceID, &op.RequestID, &op.RequestFingerprint, &op.RetryOfOperationID, &op.Action, &deleteData, &op.State, &op.Stage, &op.ProgressCurrent, &op.ProgressTotal, &cancel, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAtUnixMs, &op.UpdatedAtUnixMs, &op.FinishedAtUnixMs, &progressDetailJSON)
+	err := r.db.QueryRowContext(nonNilContext(ctx), query, strings.TrimSpace(value)).Scan(&op.OperationID, &op.ServiceID, &op.RequestID, &op.RequestFingerprint, &op.RetryOfOperationID, &op.Action, &deleteData, &deleteWorkspace, &op.State, &op.Stage, &op.ProgressCurrent, &op.ProgressTotal, &cancel, &op.ErrorCode, &op.ErrorMessage, &op.CreatedAtUnixMs, &op.UpdatedAtUnixMs, &op.FinishedAtUnixMs, &progressDetailJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -794,6 +803,7 @@ func (r *Registry) queryManagedOperation(ctx context.Context, query, value strin
 	}
 	op.CancelRequested = cancel != 0
 	op.DeleteData = deleteData != 0
+	op.DeleteWorkspace = deleteWorkspace != 0
 	if !progressDetailJSON.Valid {
 		return nil, fmt.Errorf("managed Web Service operation %s progress detail is missing", op.OperationID)
 	}
@@ -896,6 +906,9 @@ func (r *Registry) FinalizeManagedOperation(ctx context.Context, op ManagedOpera
 	}
 	if patch.RuntimeBindingSHA256 != nil {
 		add("runtime_binding_sha256", strings.TrimSpace(*patch.RuntimeBindingSHA256))
+	}
+	if patch.WorkspaceOwnership != nil {
+		add("workspace_ownership", strings.TrimSpace(*patch.WorkspaceOwnership))
 	}
 	if patch.DesiredState != nil {
 		add("desired_state", strings.TrimSpace(*patch.DesiredState))

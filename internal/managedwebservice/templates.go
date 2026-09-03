@@ -93,9 +93,6 @@ func (m *Manager) CreateTemplate(ctx context.Context, req TemplateWriteRequest) 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := m.prepareDefaultWorkspace(templateID); err != nil {
-		return nil, err
-	}
 	record := pfregistry.ManagedTemplate{
 		TemplateID: templateID, Name: strings.TrimSpace(req.Name), Description: strings.TrimSpace(req.Description), Source: "custom",
 		Deployment: string(req.Spec.Kind), Revision: 1, SpecJSON: specJSON, SpecSHA256: specHash, ServiceFamilyID: familyID,
@@ -196,9 +193,6 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := m.prepareDefaultWorkspace(templateID); err != nil {
-		return nil, err
-	}
 	record := pfregistry.ManagedTemplate{
 		TemplateID: copyID, Name: name, Description: source.Description, Source: "custom", Deployment: string(spec.Kind),
 		Revision: 1, SpecJSON: specJSON, SpecSHA256: specHash, DerivedFromTemplateID: source.TemplateID, DerivedFromRevision: source.Revision, ServiceFamilyID: familyID,
@@ -230,7 +224,7 @@ func (m *Manager) templateFromRecord(ctx context.Context, record pfregistry.Mana
 		return nil, serviceError("TEMPLATE_SPEC_INVALID", "The saved template definition is invalid or no longer satisfies the template policy.", 409, false, err)
 	}
 	available, code, reason := m.customTemplateAvailability(ctx, spec.Kind)
-	defaultWorkspacePath, err := m.prepareDefaultWorkspace(record.TemplateID)
+	defaultWorkspacePath, err := m.defaultWorkspacePath(record.TemplateID)
 	if err != nil {
 		return nil, err
 	}

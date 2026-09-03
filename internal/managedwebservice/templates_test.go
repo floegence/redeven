@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -90,6 +91,11 @@ func TestDuplicateTemplateCreatesIndependentEditableDefinition(t *testing.T) {
 	}
 	if filepath.Base(source.DefaultWorkspacePath) != source.TemplateID || filepath.Base(copy.DefaultWorkspacePath) != copy.TemplateID {
 		t.Fatalf("template-specific workspace suffixes = %q, %q", source.DefaultWorkspacePath, copy.DefaultWorkspacePath)
+	}
+	for _, path := range []string{source.DefaultWorkspacePath, copy.DefaultWorkspacePath} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("template write created workspace %q: %v", path, err)
+		}
 	}
 	if copy.Spec == nil || copy.Spec.Host == nil || copy.Spec.Host.StartScript != source.Spec.Host.StartScript {
 		t.Fatalf("duplicate definition = %+v", copy.Spec)

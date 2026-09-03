@@ -271,9 +271,6 @@ func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.Ma
 			return err
 		}
 	}
-	if err := os.Remove(d.manager.serviceSecretPath(service.ServiceID)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
 	return nil
 }
 

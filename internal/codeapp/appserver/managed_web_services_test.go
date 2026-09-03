@@ -50,6 +50,23 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 	if response.Code != http.StatusForbidden || backend.operateCalls != 0 {
 		t.Fatalf("non-admin data deletion status=%d operate_calls=%d", response.Code, backend.operateCalls)
 	}
+
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-workspace-delete","action":"uninstall","delete_data":true,"delete_workspace":true}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	fullServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusForbidden || backend.operateCalls != 0 {
+		t.Fatalf("non-admin workspace deletion status=%d operate_calls=%d", response.Code, backend.operateCalls)
+	}
+
+	adminServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true})}
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_one/operations", strings.NewReader(`{"request_id":"request-admin-workspace-delete","action":"uninstall","delete_data":true,"delete_workspace":true}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response = httptest.NewRecorder()
+	adminServer.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusAccepted || backend.operateCalls != 1 || !backend.lastOperate.DeleteWorkspace || !backend.lastOperate.Administrator {
+		t.Fatalf("admin workspace deletion status=%d request=%+v", response.Code, backend.lastOperate)
+	}
 }
 
 func TestManagedWebServiceRoutesCarryNoticeRevisionsForInstallAndUpdate(t *testing.T) {

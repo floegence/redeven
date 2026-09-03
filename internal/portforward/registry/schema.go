@@ -16,7 +16,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v1"
-	registryCurrentSchemaVersion = 2
+	registryCurrentSchemaVersion = 3
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -27,8 +27,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
 		},
-		Verify: verifyRegistryV2,
+		Verify: verifyRegistryV3,
 	}
 }
 
@@ -221,6 +222,21 @@ func migrateTemplateSpecV3ToV4(raw string) (string, string, error) {
 	return string(migrated), hex.EncodeToString(sum[:]), nil
 }
 
+func migrateRegistryV2ToV3(tx *sql.Tx) error {
+	if err := verifyRegistryV2(tx); err != nil {
+		return fmt.Errorf("verify port forward registry v2 before migration: %w", err)
+	}
+	if _, err := tx.Exec(`
+ALTER TABLE managed_web_services ADD COLUMN workspace_ownership TEXT NOT NULL DEFAULT 'user_selected'
+  CHECK(workspace_ownership IN ('pending','redeven_created','user_selected'));
+ALTER TABLE managed_web_service_operations ADD COLUMN delete_workspace INTEGER NOT NULL DEFAULT 0
+  CHECK(delete_workspace IN (0,1));
+`); err != nil {
+		return err
+	}
+	return verifyRegistryV3(tx)
+}
+
 func verifyRegistryV1(tx *sql.Tx) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
@@ -306,6 +322,14 @@ func verifyRegistryV1(tx *sql.Tx) error {
 }
 
 func verifyRegistryV2(tx *sql.Tx) error {
+	return verifyRegistryVersion(tx, 2)
+}
+
+func verifyRegistryV3(tx *sql.Tx) error {
+	return verifyRegistryVersion(tx, 3)
+}
+
+func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
@@ -320,7 +344,7 @@ func verifyRegistryV2(tx *sql.Tx) error {
 		"port_forwards",
 	}
 	if !slices.Equal(tables, wantTables) {
-		return fmt.Errorf("port forward registry v2 table mismatch: got %v, want %v", tables, wantTables)
+		return fmt.Errorf("port forward registry v%d table mismatch: got %v, want %v", version, tables, wantTables)
 	}
 	wantColumns := map[string][]string{
 		"port_forwards": {
@@ -356,13 +380,17 @@ func verifyRegistryV2(tx *sql.Tx) error {
 			"last_error_code", "updated_at_unix_ms",
 		},
 	}
+	if version >= 3 {
+		wantColumns["managed_web_services"] = append(wantColumns["managed_web_services"], "workspace_ownership")
+		wantColumns["managed_web_service_operations"] = append(wantColumns["managed_web_service_operations"], "delete_workspace")
+	}
 	for table, want := range wantColumns {
 		got, err := sqliteutil.TableColumnNamesTx(tx, table)
 		if err != nil {
 			return err
 		}
 		if !slices.Equal(got, want) {
-			return fmt.Errorf("port forward registry v2 %s column mismatch: got %v, want %v", table, got, want)
+			return fmt.Errorf("port forward registry v%d %s column mismatch: got %v, want %v", version, table, got, want)
 		}
 	}
 	indexes, err := sqliteutil.ListUserIndexesTx(tx)
@@ -370,7 +398,7 @@ func verifyRegistryV2(tx *sql.Tx) error {
 		return err
 	}
 	if len(indexes) != 0 {
-		return fmt.Errorf("port forward registry v2 has unexpected indexes %v", indexes)
+		return fmt.Errorf("port forward registry v%d has unexpected indexes %v", version, indexes)
 	}
 	if err := verifyRegistryDocuments(tx); err != nil {
 		return err
@@ -383,13 +411,27 @@ func verifyRegistryV2(tx *sql.Tx) error {
 		return err
 	}
 	if invalid != 0 {
-		return fmt.Errorf("port forward registry v2 has %d invalid access modes", invalid)
+		return fmt.Errorf("port forward registry v%d has %d invalid access modes", version, invalid)
 	}
 	if err := tx.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE length(forward_id) NOT BETWEEN 1 AND 48 OR forward_id GLOB '*[^a-z0-9-]*' OR substr(forward_id,1,1)='-' OR substr(forward_id,-1,1)='-'`).Scan(&invalid); err != nil {
 		return err
 	}
 	if invalid != 0 {
-		return fmt.Errorf("port forward registry v2 has %d invalid forward identities", invalid)
+		return fmt.Errorf("port forward registry v%d has %d invalid forward identities", version, invalid)
+	}
+	if version >= 3 {
+		if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_services WHERE workspace_ownership NOT IN ('pending','redeven_created','user_selected')`).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid != 0 {
+			return fmt.Errorf("port forward registry v%d has %d invalid workspace ownership values", version, invalid)
+		}
+		if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_service_operations WHERE delete_workspace NOT IN (0,1)`).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid != 0 {
+			return fmt.Errorf("port forward registry v%d has %d invalid workspace deletion values", version, invalid)
+		}
 	}
 	return nil
 }
