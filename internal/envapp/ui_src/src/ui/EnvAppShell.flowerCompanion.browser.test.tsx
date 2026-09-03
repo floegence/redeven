@@ -874,6 +874,7 @@ vi.mock('./services/desktopShellBridge', () => ({
   runtimeMaintenanceMethodUsesDesktop: () => false,
 }));
 vi.mock('./services/localApi', () => ({
+  fetchLocalApi: vi.fn(),
   fetchLocalApiJSON: vi.fn(),
   fetchLocalApiJSONResponse: vi.fn(),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,

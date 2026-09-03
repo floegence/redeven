@@ -251,10 +251,11 @@ describe('native Containers responsive product surface', () => {
 
     const hoveredCell = rows[0].querySelector<HTMLTableCellElement>('td')!;
     const idleCellBackground = getComputedStyle(hoveredCell).backgroundColor;
-    expect(getComputedStyle(hoveredCell).boxShadow).toBe('none');
+    const idleCellBoxShadow = getComputedStyle(hoveredCell).boxShadow;
     await page.elementLocator(rows[0]).hover();
     await new Promise<void>((resolve) => window.setTimeout(resolve, 160));
     expect(getComputedStyle(hoveredCell).backgroundColor).not.toBe(idleCellBackground);
+    expect(getComputedStyle(hoveredCell).boxShadow).not.toBe(idleCellBoxShadow);
     expect(getComputedStyle(hoveredCell).boxShadow).toContain('inset');
 
     const overflow = root.querySelector<HTMLButtonElement>('.container-row-menu button');
