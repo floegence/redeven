@@ -7,6 +7,13 @@
   longer scrolls, update-plan review replaces release browsing, and real
   browser-wheel coverage verifies scrolling from candidate content and the
   list viewport in both directions at wide and narrow sizes.
+* **Migration-only Flower storage**: Product threadstore schema v5 converts any
+  retired queue input directly into Floret's canonical idempotent import path
+  during the contiguous startup migration, persists restart authority, and
+  removes the migration table before commit. Upload references now use their
+  natural composite identity; the unused surrogate ID, redundant indexes, and
+  residual SQLite sequence table are removed automatically while reference data
+  is preserved.
 
 ## 2026-09-02
 * **Advisory Managed Service version risks**: Version selection and update plans

@@ -29,6 +29,22 @@ func (s *Store) PutExecutionAuthority(ctx context.Context, authority ExecutionAu
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
+	ctx = ctxOrBackground(ctx)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := putExecutionAuthorityTx(ctx, tx, authority); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func putExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority ExecutionAuthority) error {
+	if tx == nil {
+		return errors.New("store not initialized")
+	}
 	authority.RequestKey = strings.TrimSpace(authority.RequestKey)
 	authority.ThreadID = strings.TrimSpace(authority.ThreadID)
 	authority.TurnID = strings.TrimSpace(authority.TurnID)
@@ -44,13 +60,8 @@ func (s *Store) PutExecutionAuthority(ctx context.Context, authority ExecutionAu
 		authority.CreatedAtUnixMs = time.Now().UnixMilli()
 	}
 	ctx = ctxOrBackground(ctx)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
 	var existing ExecutionAuthority
-	err = tx.QueryRowContext(ctx, `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms FROM ai_flower_execution_authority WHERE request_key = ?`, authority.RequestKey).Scan(
+	err := tx.QueryRowContext(ctx, `SELECT request_key, thread_id, turn_id, endpoint_id, namespace_public_id, channel_id, user_public_id, user_email, created_at_unix_ms FROM ai_flower_execution_authority WHERE request_key = ?`, authority.RequestKey).Scan(
 		&existing.RequestKey, &existing.ThreadID, &existing.TurnID, &existing.EndpointID, &existing.NamespacePublicID, &existing.ChannelID, &existing.UserPublicID, &existing.UserEmail, &existing.CreatedAtUnixMs,
 	)
 	switch {
@@ -69,7 +80,7 @@ func (s *Store) PutExecutionAuthority(ctx context.Context, authority ExecutionAu
 				return err
 			}
 		}
-		return tx.Commit()
+		return nil
 	case !errors.Is(err, sql.ErrNoRows):
 		return err
 	}
@@ -77,7 +88,7 @@ func (s *Store) PutExecutionAuthority(ctx context.Context, authority ExecutionAu
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func scanExecutionAuthority(row rowScanner, authority *ExecutionAuthority) error {

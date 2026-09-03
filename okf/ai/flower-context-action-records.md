@@ -22,7 +22,7 @@ Before admission, the normalized action is stored only inside the unadmitted que
 
 Redeven consumes the published Floret v7.1.2 typed `ThreadService` contract. Before `Send`, one pure mapper converts every accepted context item into ordered message references and effect-only supplemental context. Text, terminal, and process references contain bounded user-visible text, while target and execution hints are copied into supplemental metadata for that provider turn. File and directory references contain a self-contained opaque host `ResourceRef`; it is durable only inside Floret and is not copied into Redeven storage. Supplemental items remain visible only to the current provider attempt. Structured upload attachments continue through typed user input and are independent from references.
 
-Floret validates the message text, attachments, references, and turn-only supplemental context before returning the typed current view. After canonical acceptance, Redeven removes any imported product queue row and does not emit or store `flower.context_action.received`, `flower.context_action.injected`, a mapped reference row, or a supplemental-context audit copy.
+Floret validates the message text, attachments, references, and turn-only supplemental context before returning the typed current view. During the version 4 to 5 product migration, canonical acceptance allows the old migration source to be dropped before the schema transaction commits. Redeven does not retain a current-schema queue row or emit or store `flower.context_action.received`, `flower.context_action.injected`, a mapped reference row, or a supplemental-context audit copy.
 
 Canonical Floret turn pages return the ordered public reference fields. Redeven projects only `reference_id`, kind, label, bounded text, truncation, and availability into Flower; raw `ResourceRef` never reaches the browser. Flower renders admitted references from this canonical DTO, including reference-only user messages. Queued commands continue to render their pre-admission `context_action`. The two paths are not merged or used as fallbacks for each other.
 
@@ -34,7 +34,7 @@ Context actions and references do not alter working directory, target permission
 
 - `redeven:internal/ai/context_action.go:101` - Canonical JSON encoding preserves the typed queued context fields.
 - `redeven:internal/ai/context_action.go:185` - Normalization rejects damaged or unsupported context-action shapes before admission.
-- `redeven:internal/ai/pending_input_import.go` - Migration-only queued context actions decode through the strict validator.
+- `redeven:internal/ai/pending_input_migration.go` - Migration-only queued context actions decode through the strict validator.
 - `redeven:internal/ai/context_action_floret.go:43` - One mapper produces Floret message references and current-turn supplemental items.
 - `redeven:internal/ai/canonical_reference_authority.go` - Resource-bearing actions alone receive server-derived target authority; canonical identities and the documented local alias are enforced before canonicalization.
 - `redeven:internal/ai/context_action_floret.go` - References and supplemental context are prepared together before typed Floret `Send`.

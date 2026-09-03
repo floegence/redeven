@@ -27,6 +27,23 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
+	return open(context.Background(), path, nil)
+}
+
+// OpenWithPendingInputMigration opens the current product store and gives the
+// startup owner one atomic opportunity to convert retired queue inputs into
+// canonical Floret state before their old table is removed.
+func OpenWithPendingInputMigration(ctx context.Context, path string, migrate PendingInputMigrationHandler) (*Store, error) {
+	if ctx == nil {
+		return nil, errors.New("pending input migration context is required")
+	}
+	if migrate == nil {
+		return nil, errors.New("pending input migration handler is required")
+	}
+	return open(ctx, path, migrate)
+}
+
+func open(ctx context.Context, path string, migrate PendingInputMigrationHandler) (*Store, error) {
 	p := filepath.Clean(strings.TrimSpace(path))
 	if p == "" {
 		return nil, errors.New("missing db path")
@@ -34,7 +51,7 @@ func Open(path string) (*Store, error) {
 	if err := preflightCurrentThreadstore(p); err != nil {
 		return nil, err
 	}
-	db, err := sqliteutil.Open(p, threadstoreSchemaSpec())
+	db, err := sqliteutil.Open(p, threadstoreSchemaSpecWithPendingInputMigration(ctx, migrate))
 	if err != nil {
 		return nil, err
 	}
@@ -42,8 +59,42 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := removeRetiredSQLiteSequence(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 
 	return &Store{db: db}, nil
+}
+
+func removeRetiredSQLiteSequence(db *sql.DB) error {
+	if db == nil {
+		return errors.New("nil db")
+	}
+	var exists int
+	if err := db.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	var autoIncrementTables int
+	if err := db.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND upper(COALESCE(sql, '')) LIKE '%AUTOINCREMENT%'`).Scan(&autoIncrementTables); err != nil {
+		return err
+	}
+	if autoIncrementTables != 0 {
+		return fmt.Errorf("current threadstore still contains %d AUTOINCREMENT tables", autoIncrementTables)
+	}
+	if _, err := db.Exec(`VACUUM`); err != nil {
+		return fmt.Errorf("remove retired sqlite_sequence: %w", err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists != 0 {
+		return errors.New("retired sqlite_sequence remains after vacuum")
+	}
+	return nil
 }
 
 func preflightCurrentThreadstore(path string) error {
