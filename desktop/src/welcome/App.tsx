@@ -6213,29 +6213,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!prompt) {
       throw new Error(i18n().t('environmentCenter.askFlowerCardNoMessage'));
     }
-    try {
-      const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
-        client_request_id: createFlowerClientRequestID(),
-        prompt,
-        context_action: input.intent.context_action,
-        working_dir: input.intent.suggested_working_dir,
-      });
-      const threadID = trimString(receipt.thread_id);
-      if (!threadID) {
-        throw new Error('Missing thread id.');
-      }
-      flowerFocusThreadRequestSequence += 1;
-      setFlowerFocusThreadRequest({
-        request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`,
-        thread_id: threadID,
-      });
-      closeFlowerTurnLauncher();
-      await openFlowerSurface();
-      showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
-	} catch (error) {
-		showActionToast(getErrorMessage(error), 'error');
-      throw error;
+    const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
+      client_request_id: createFlowerClientRequestID(),
+      prompt,
+      context_action: input.intent.context_action,
+      working_dir: input.intent.suggested_working_dir,
+    });
+    const threadID = trimString(receipt.thread_id);
+    if (!threadID) {
+      throw new Error('Missing thread id.');
     }
+    flowerFocusThreadRequestSequence += 1;
+    setFlowerFocusThreadRequest({
+      request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`,
+      thread_id: threadID,
+    });
+    closeFlowerTurnLauncher();
+    await openFlowerSurface();
+    showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
   }
 
   async function openEnvironmentCenterSurface(): Promise<void> {

@@ -116,6 +116,132 @@ func TestAuthorizeFlowerContextActionTargetAcceptsMatchingLocalRuntimeAlias(t *t
 	}
 }
 
+func TestFlowerContextActionRequiresCanonicalReferenceAuthorityOnlyForResources(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name string
+		kind string
+		want bool
+	}{
+		{name: "file", kind: contextActionKindFilePath, want: true},
+		{name: "terminal", kind: contextActionKindTerminal},
+		{name: "process", kind: contextActionKindProcess},
+		{name: "text", kind: contextActionKindText},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			action := &ContextActionEnvelope{Context: []ContextActionContextItem{{Kind: testCase.kind}}}
+			if got := flowerContextActionRequiresCanonicalReferenceAuthority(action); got != testCase.want {
+				t.Fatalf("flowerContextActionRequiresCanonicalReferenceAuthority()=%t, want %t", got, testCase.want)
+			}
+		})
+	}
+	if flowerContextActionRequiresCanonicalReferenceAuthority(nil) {
+		t.Fatal("nil action must not require canonical reference authority")
+	}
+}
+
+func TestFloretContextProjectionKeepsEnvironmentRoutingMetadataWithoutResourceAuthority(t *testing.T) {
+	t.Parallel()
+
+	projection, err := floretContextProjectionForInput(RunInput{
+		Text: "is this host reachable",
+		ContextAction: &ContextActionEnvelope{
+			SchemaVersion: ContextActionSchemaVersion,
+			ActionID:      contextActionAskFlowerID,
+			Provider:      contextActionFlowerProvider,
+			Target: ContextActionTarget{
+				TargetID: "ssh:orange",
+				Locality: contextActionLocalityAuto,
+			},
+			Source: ContextActionSource{
+				Surface:   contextActionSurfaceWelcomeEnv,
+				SurfaceID: "saved:ssh:orange",
+			},
+			ExecutionContext: &ContextActionExecutionHint{
+				CurrentTargetID:   "ssh:orange",
+				SourceEnvPublicID: "env_orange",
+				RuntimeHint:       contextActionRuntimeHintAuto,
+				SessionSource:     contextActionSessionSSH,
+			},
+			Context: []ContextActionContextItem{{
+				Kind:    contextActionKindText,
+				Title:   "orange",
+				Detail:  "SSH host · Unchecked",
+				Content: "Environment: orange\nKind: ssh_environment",
+			}},
+			Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+		},
+	})
+	if err != nil {
+		t.Fatalf("floretContextProjectionForInput: %v", err)
+	}
+	if len(projection.Items) != 1 || len(projection.References) != 1 {
+		t.Fatalf("projection=%#v, want one item and one reference", projection)
+	}
+	metadata := projection.Items[0].Metadata
+	for key, want := range map[string]string{
+		"source_surface":       contextActionSurfaceWelcomeEnv,
+		"source_surface_id":    "saved:ssh:orange",
+		"target_id":            "ssh:orange",
+		"target_locality":      contextActionLocalityAuto,
+		"current_target_id":    "ssh:orange",
+		"source_env_public_id": "env_orange",
+		"runtime_hint":         contextActionRuntimeHintAuto,
+		"session_source":       contextActionSessionSSH,
+	} {
+		if got := metadata[key]; got != want {
+			t.Fatalf("metadata[%q]=%q, want %q in %#v", key, got, want, metadata)
+		}
+	}
+	if projection.References[0].ResourceRef != "" {
+		t.Fatalf("reference=%#v, environment text must not carry resource authority", projection.References[0])
+	}
+}
+
+func TestFloretContextProjectionKeepsFileReferencesBoundToServerAuthority(t *testing.T) {
+	t.Parallel()
+
+	authority := flowerCanonicalReferenceTargetAuthority{
+		TargetID:          "env_authoritative",
+		TargetLocality:    contextActionLocalityCurrent,
+		SourceEnvPublicID: "env_authoritative",
+	}
+	newFileAction := func(targetID string) *ContextActionEnvelope {
+		return &ContextActionEnvelope{
+			SchemaVersion: ContextActionSchemaVersion,
+			ActionID:      contextActionAskFlowerID,
+			Provider:      contextActionFlowerProvider,
+			Target:        ContextActionTarget{TargetID: targetID, Locality: contextActionLocalityAuto},
+			Source:        ContextActionSource{Surface: contextActionSurfaceFile},
+			ExecutionContext: &ContextActionExecutionHint{
+				CurrentTargetID: targetID,
+			},
+			Context:      []ContextActionContextItem{{Kind: contextActionKindFilePath, Path: "/workspace/main.go"}},
+			Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+		}
+	}
+
+	if _, err := floretContextProjectionForInputWithAuthority(RunInput{ContextAction: newFileAction("target_forged")}, &authority); !errors.Is(err, ErrInvalidContextAction) {
+		t.Fatalf("forged file target error=%v, want invalid context action", err)
+	}
+
+	projection, err := floretContextProjectionForInputWithAuthority(RunInput{ContextAction: newFileAction("local:local")}, &authority)
+	if err != nil {
+		t.Fatalf("local alias projection: %v", err)
+	}
+	if len(projection.References) != 1 || projection.References[0].ResourceRef == "" {
+		t.Fatalf("projection=%#v, want one authorized resource reference", projection)
+	}
+	locator, err := decodeFlowerCanonicalReferenceLocator(projection.References[0].ResourceRef)
+	if err != nil {
+		t.Fatalf("decode resource locator: %v", err)
+	}
+	if !flowerCanonicalReferenceLocatorMatchesAuthority(locator, authority) {
+		t.Fatalf("locator=%#v, want authority %#v", locator, authority)
+	}
+}
+
 func TestFloretSupplementalContextFormatsProcessSnapshot(t *testing.T) {
 	t.Parallel()
 

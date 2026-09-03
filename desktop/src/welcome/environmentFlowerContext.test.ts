@@ -175,4 +175,49 @@ describe('environment Flower context envelope', () => {
       session_source: 'runtime_gateway',
     });
   });
+
+  it.each([
+    {
+      kind: 'ssh_environment' as const,
+      id: 'saved:ssh:orange',
+      targetID: 'ssh:orange',
+      sessionSource: 'ssh_environment',
+    },
+    {
+      kind: 'wsl_environment' as const,
+      id: 'saved:wsl:ubuntu',
+      targetID: 'wsl:ubuntu',
+      sessionSource: 'wsl_environment',
+    },
+    {
+      kind: 'external_local_ui' as const,
+      id: 'external:lab',
+      targetID: 'external:lab',
+      sessionSource: 'external_local_ui',
+    },
+  ])('keeps $kind target identity as routing metadata', ({ kind, id, targetID, sessionSource }) => {
+    const local = snapshotEnvironment((entry) => entry.kind === 'local_environment');
+    const environment: DesktopEnvironmentEntry = {
+      ...local,
+      id,
+      kind,
+      label: kind,
+      env_public_id: undefined,
+      provider_runtime_link_target: undefined,
+      managed_runtime_target_id: kind === 'external_local_ui'
+        ? undefined
+        : targetID as NonNullable<DesktopEnvironmentEntry['managed_runtime_target_id']>,
+      managed_runtime_placement_target_id: undefined,
+    };
+
+    const action = buildEnvironmentFlowerContextAction(environment, `${kind} context`);
+
+    expect(environmentFlowerPrimaryTargetID(environment)).toBe(targetID);
+    expect(action.target).toEqual({ target_id: targetID, locality: 'auto' });
+    expect(action.execution_context).toEqual({
+      current_target_id: targetID,
+      runtime_hint: 'auto',
+      session_source: sessionSource,
+    });
+  });
 });
