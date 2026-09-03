@@ -117,6 +117,20 @@ describe('desktopRuntimeHealth', () => {
     expect(desktopRuntimeMaintenanceFromBlockedLaunchReport(report)).toBeUndefined();
   });
 
+  it('classifies incompatible runtime state as reinstall-required without parsing the message', () => {
+    expect(classifyDesktopRuntimeBlockedLaunchReport({
+      code: 'startup_failed',
+      message: 'localized or implementation-specific detail',
+      diagnostics: {
+        failure_code: 'runtime_state_incompatible',
+      },
+    })).toEqual({
+      kind: 'reinstall_required',
+      message: 'localized or implementation-specific detail',
+      failure_code: 'runtime_state_incompatible',
+    });
+  });
+
   it('maps live blocked reports to restart recovery', () => {
     expect(desktopRuntimeMaintenanceFromBlockedLaunchReport({
       code: 'live_process_without_management_socket',

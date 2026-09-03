@@ -7,7 +7,7 @@ timestamp: 2026-06-17T00:00:00Z
 ---
 # Summary
 
-`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and public machine events are renderers over the same state snapshot, while a separate private Desktop report carries machine-only attach data needed to open the local Env App safely.
+`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and public machine events are renderers over the same state snapshot, while a separate private Desktop report carries machine-only attach data and stable failure codes needed to open or recover the local Env App safely.
 
 # Contract
 
@@ -16,6 +16,8 @@ timestamp: 2026-06-17T00:00:00Z
 The run command parses `--mode`, `--local-ui-bind`, `--startup-report-file`, and `--presentation`. When `--mode` is omitted, it defaults to local mode, starts the loopback-only Local UI, and does not require bootstrap configuration or enable the control channel. Explicit remote, hybrid, local, and desktop modes retain their mode-specific behavior. A machine presentation with `--startup-report-file` is the private Desktop startup handoff; the command initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a private `0600` launch report when a desktop-mode Local UI becomes ready. Ready and attached reports require `local_ui_bridge_url` plus a canonical 256-bit `local_ui_bridge_token`, validate both before atomic write, and retain public `local_ui_url(s)` separately for display and external access.
 
 Startup secrets never use literal command-line values. Ordinary CLI startup accepts hidden password prompting, stdin, protected files, or fixed secret environment fallbacks. `--bootstrap-ticket-stdin` reads without echo when stdin is an interactive terminal, while preserving prompt-free pipe and redirect behavior for automation. Explicit sources override fixed environment values, empty environment values are ignored, and secret variables are removed from child process environments before any command can start a child process. Diagnostics record only the source category. Machine startup instead sends one version 1 JSON envelope through private stdin, with a 64 KiB limit and a hard conflict against every other secret source.
+
+A blocked Desktop report keeps the startup phase in `code` and carries a stable cause in `diagnostics.failure_code`. A wrapped database-kind mismatch reports `startup_failed` with `runtime_state_incompatible`; Desktop must use that machine code, never localized error text, to select user-confirmed wipe reinstall. The original error remains available only as technical detail.
 
 # Boundaries
 

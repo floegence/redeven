@@ -24,7 +24,7 @@ export type EnvironmentProgressPrimaryPresentation = Readonly<
 export type EnvironmentProgressPanelPrimaryActionPresentation = Readonly<{
   action: EnvironmentActionModel;
   label: string;
-  icon: 'external_link' | 'refresh';
+  icon: 'alert_triangle' | 'external_link' | 'refresh';
   loading: boolean;
   disabled: boolean;
 }>;
@@ -108,7 +108,25 @@ export function environmentProgressPanelPrimaryAction(
   primaryAction: EnvironmentActionModel | undefined,
   input: Readonly<{ busy?: boolean }> = {},
 ): EnvironmentProgressPanelPrimaryActionPresentation | null {
-  const action = runtimeLifecycleReadyPrimaryAction(progress, primaryAction)
+  const reinstallRequest = progress.next_actions?.find(
+    (candidate) => candidate.kind === 'retry'
+      && candidate.retry_action?.kind === 'preview_reinstall_target',
+  );
+  const reinstallAction =
+    (progress.status === 'failed' || progress.status === 'cleanup_failed')
+    && progress.failure?.code === 'reinstall_required'
+    && reinstallRequest?.kind === 'retry'
+    && reinstallRequest.retry_action?.kind === 'preview_reinstall_target'
+      ? {
+          intent: 'reinstall_target' as const,
+          label: 'Reinstall Redeven',
+          enabled: true,
+          variant: 'default' as const,
+          reinstall_mode: reinstallRequest.retry_action.mode ?? 'wipe_data',
+        }
+      : null;
+  const action = reinstallAction
+    ?? runtimeLifecycleReadyPrimaryAction(progress, primaryAction)
     ?? openConnectionFailurePrimaryAction(progress, primaryAction);
   if (!action) {
     return null;
@@ -117,9 +135,11 @@ export function environmentProgressPanelPrimaryAction(
   return {
     action,
     label: action.intent === 'focus' ? 'Focus' : action.label,
-    icon: action.intent === 'update_runtime' || action.intent === 'refresh_runtime'
-      ? 'refresh'
-      : 'external_link',
+    icon: action.intent === 'reinstall_target'
+      ? 'alert_triangle'
+      : action.intent === 'update_runtime' || action.intent === 'refresh_runtime'
+        ? 'refresh'
+        : 'external_link',
     loading: busy,
     disabled: busy,
   };

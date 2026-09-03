@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
@@ -25,6 +26,8 @@ const (
 	desktopLaunchCodeStateDirLocked = "state_dir_locked"
 	desktopLaunchCodeStartupInvalid = "startup_invalid"
 	desktopLaunchCodeStartupFailed  = "startup_failed"
+
+	desktopLaunchFailureCodeRuntimeStateIncompatible = "runtime_state_incompatible"
 )
 
 type desktopLaunchLockOwner struct {
@@ -89,6 +92,14 @@ type runtimeControlEndpoint struct {
 	BaseURL         string `json:"base_url"`
 	Token           string `json:"token"`
 	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms,omitempty"`
+}
+
+func desktopLaunchDiagnosticFailureCode(err error) string {
+	var wrongKind *sqliteutil.WrongDatabaseKindError
+	if errors.As(err, &wrongKind) {
+		return desktopLaunchFailureCodeRuntimeStateIncompatible
+	}
+	return ""
 }
 
 func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {

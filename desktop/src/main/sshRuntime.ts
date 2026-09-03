@@ -25,6 +25,7 @@ import {
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
 import {
+  formatBlockedLaunchDiagnostics,
   parseAvailableLaunchReport,
   parseLaunchReport,
   type LaunchBlockedReport,
@@ -33,6 +34,7 @@ import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
   diagnosticsFromRecentLogs,
+  runtimeStateIncompatibleFailure,
 } from './desktopOperationFailure';
 import {
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -1882,6 +1884,20 @@ async function waitForRemoteStartupReport(args: Readonly<{
         }
         await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
         continue;
+      }
+      if (classification.kind === 'reinstall_required') {
+        throw new DesktopOperationFailureError(runtimeStateIncompatibleFailure({
+          message: launchReport.message,
+          targetLabel: desktopSSHAuthority(args.session.target),
+          diagnostics: [
+            {
+              channel: 'runtime_startup_report',
+              label: 'Runtime startup report',
+              text: formatBlockedLaunchDiagnostics(launchReport),
+            },
+            ...diagnosticsFromRecentLogs(args.session.logs, SSH_RECENT_LOG_LABELS),
+          ],
+        }));
       }
       throw readinessFailure(
         launchReport.message,

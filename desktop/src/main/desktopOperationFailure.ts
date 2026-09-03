@@ -66,6 +66,25 @@ export function desktopOperationFailurePresentation(
   };
 }
 
+export function runtimeStateIncompatibleFailure(
+  input: Readonly<{
+    message: string;
+    targetLabel?: string;
+    diagnostics?: readonly DesktopFailureDiagnostic[];
+  }>,
+): DesktopOperationFailurePresentation {
+  return desktopOperationFailurePresentation({
+    code: 'reinstall_required',
+    title: 'Reinstall requires attention',
+    titleKey: 'confirm.reinstallFailedTitle',
+    summary: 'This environment has incompatible state. Reinstall is the only safe recovery.',
+    summaryKey: 'confirm.reinstallRequiredDescription',
+    detail: input.message,
+    targetLabel: input.targetLabel,
+    diagnostics: input.diagnostics,
+  });
+}
+
 export function diagnosticsFromRecentLogs(
   logs: Record<string, unknown>,
   labels: Record<string, string> = {},

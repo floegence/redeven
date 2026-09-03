@@ -830,7 +830,7 @@ describe('launcherBusyState', () => {
     )).toBe(true);
   });
 
-  it('selects the single active Open attempt without comparing timestamps', () => {
+  it('selects the latest accepted Open attempt instead of an older stale active record', () => {
     const environment: RuntimeProgressEnvironmentMatch = {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
@@ -858,7 +858,53 @@ describe('launcherBusyState', () => {
       [olderRunningProgress, newerFailedProgress],
     );
 
-    expect(selectedProgress).toBe(olderRunningProgress);
+    expect(selectedProgress).toBe(newerFailedProgress);
+  });
+
+  it('selects the latest Runtime failure when one Environment retains several failed attempts', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'local',
+      managed_runtime_target_id: runtimeID('local:local'),
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const failures = [
+      localRuntimeLifecycleActionProgress({
+        status: 'failed',
+        action: 'update_environment_runtime',
+        operation: 'update',
+        phase: 'starting_runtime_process',
+        title: 'Update failed',
+        operationKey: 'local:update',
+        startedAt: 100,
+        updatedAt: 110,
+      }),
+      localRuntimeLifecycleActionProgress({
+        status: 'failed',
+        action: 'restart_environment_runtime',
+        operation: 'restart',
+        phase: 'starting_runtime_process',
+        title: 'Restart failed',
+        operationKey: 'local:restart',
+        startedAt: 200,
+        updatedAt: 210,
+      }),
+      localRuntimeLifecycleActionProgress({
+        status: 'failed',
+        action: 'start_environment_runtime',
+        operation: 'start',
+        phase: 'starting_runtime_process',
+        title: 'Start failed',
+        operationKey: 'local:start',
+        startedAt: 300,
+        updatedAt: 310,
+      }),
+    ];
+
+    expect(selectedSnapshotRuntimeLifecycleProgressForEnvironment(
+      environment as never,
+      failures,
+    )).toBe(failures[2]);
   });
 
   it('clears busy progress when the accepted snapshot contains matching Open progress', () => {

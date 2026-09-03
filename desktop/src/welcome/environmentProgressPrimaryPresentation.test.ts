@@ -230,6 +230,41 @@ describe('openConnectionFailurePrimaryAction', () => {
 });
 
 describe('environmentProgressPanelPrimaryAction', () => {
+  it('promotes the confirmed wipe-reinstall review for incompatible Runtime state', () => {
+    const failedOpen = openConnectionProgress('failed', {
+      failure: {
+        code: 'reinstall_required',
+        severity: 'warning',
+        title: 'Reinstall requires attention',
+        summary: 'This environment has incompatible state.',
+      },
+      nextActions: [{
+        kind: 'retry',
+        operation_key: 'open-operation',
+        label: 'Review reinstall target',
+        retry_action: {
+          kind: 'preview_reinstall_target',
+          environment_id: 'local-environment',
+          mode: 'wipe_data',
+        },
+      }],
+    });
+
+    expect(environmentProgressPanelPrimaryAction(failedOpen, openAction)).toEqual({
+      action: {
+        intent: 'reinstall_target',
+        label: 'Reinstall Redeven',
+        enabled: true,
+        variant: 'default',
+        reinstall_mode: 'wipe_data',
+      },
+      label: 'Reinstall Redeven',
+      icon: 'alert_triangle',
+      loading: false,
+      disabled: false,
+    });
+  });
+
   it('promotes runtime update inside the popup without changing failed card presentation', () => {
     const failedOpen = openConnectionProgress('failed', {
       nextActions: [
