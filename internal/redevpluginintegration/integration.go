@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/config"
@@ -37,32 +36,28 @@ type Options struct {
 	PluginMarket         *pluginmarket.Service
 }
 
-type marketRefreshTask struct {
-	done     chan struct{}
-	cancel   context.CancelFunc
-	snapshot pluginmarket.Snapshot
-	err      error
-}
-
 type pluginMarketService interface {
-	Snapshot(context.Context) (pluginmarket.Snapshot, error)
+	Refresh(context.Context) (pluginmarket.Snapshot, error)
 	Detail(context.Context, string) (pluginmarket.PluginDetail, int64, error)
 	Icon(context.Context, string, pluginmarket.PresentationIcon) (pluginmarket.IconAsset, error)
 }
 
 type Integration struct {
-	handler             http.Handler
-	host                *host.Host
-	runtimeAuthority    *RuntimeProcessAuthority
-	marketSnapshot      *pluginmarket.Snapshot
-	marketService       pluginMarketService
-	releaseProvider     *officialReleaseProvider
-	marketErr           error
-	marketMu            sync.RWMutex
-	marketRefreshMu     sync.Mutex
-	marketRefresh       *marketRefreshTask
-	marketRefreshClosed bool
-	closers             []func() error
+	handler                http.Handler
+	host                   *host.Host
+	runtimeAuthority       *RuntimeProcessAuthority
+	marketSnapshot         *pluginmarket.Snapshot
+	marketService          pluginMarketService
+	releaseProvider        *officialReleaseProvider
+	marketMu               sync.RWMutex
+	marketEvent            pluginmarket.RefreshEvent
+	marketSubscribers      map[int]chan pluginmarket.RefreshEvent
+	marketNextSubID        int
+	marketRequests         chan marketRefreshRequest
+	marketResults          chan marketRefreshResult
+	marketControllerDone   chan struct{}
+	marketControllerCancel context.CancelFunc
+	closers                []func() error
 }
 
 func New(ctx context.Context, opts Options) (*Integration, error) {
@@ -110,7 +105,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	var releaseModule *host.ReleaseModule
 	var releaseProvider *officialReleaseProvider
 	var marketSnapshot *pluginmarket.Snapshot
-	var marketErr error
 	if opts.PluginMarket != nil {
 		releaseStage, releaseErr := externalsource.NewStageStore(filepath.Join(root, "release-artifacts"))
 		if releaseErr != nil {
@@ -131,7 +125,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			return nil, releaseErr
 		}
 		if snapshot, ok := opts.PluginMarket.CachedSnapshot(); ok {
-			if marketErr = releaseProvider.setSnapshot(snapshot); marketErr == nil {
+			if err := releaseProvider.setSnapshot(snapshot); err == nil {
 				frozen := snapshot.Clone()
 				marketSnapshot = &frozen
 			}
@@ -230,67 +224,12 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		marketSnapshot:   marketSnapshot,
 		marketService:    opts.PluginMarket,
 		releaseProvider:  releaseProvider,
-		marketErr:        marketErr,
 		closers:          closers,
 	}
 	if integration.marketService != nil {
-		_, _ = integration.startMarketRefresh()
+		integration.startMarketRefreshController(defaultMarketRefreshPolicy())
 	}
 	return integration, nil
-}
-
-func (i *Integration) MarketSnapshot(ctx context.Context) (pluginmarket.Snapshot, error) {
-	if i == nil || i.marketService == nil {
-		return pluginmarket.Snapshot{}, pluginmarket.ErrUnavailable
-	}
-	if ctx == nil {
-		return pluginmarket.Snapshot{}, errors.New("plugin market snapshot context is required")
-	}
-	refresh, err := i.startMarketRefresh()
-	if err != nil {
-		return pluginmarket.Snapshot{}, err
-	}
-	select {
-	case <-ctx.Done():
-		return pluginmarket.Snapshot{}, ctx.Err()
-	case <-refresh.done:
-	}
-	if refresh.err != nil {
-		return pluginmarket.Snapshot{}, refresh.err
-	}
-	return refresh.snapshot.Clone(), nil
-}
-
-func (i *Integration) startMarketRefresh() (*marketRefreshTask, error) {
-	if i == nil || i.marketService == nil {
-		return nil, pluginmarket.ErrUnavailable
-	}
-	i.marketRefreshMu.Lock()
-	if i.marketRefreshClosed {
-		i.marketRefreshMu.Unlock()
-		return nil, pluginmarket.ErrUnavailable
-	}
-	if i.marketRefresh != nil {
-		refresh := i.marketRefresh
-		i.marketRefreshMu.Unlock()
-		return refresh, nil
-	}
-	refreshContext, cancelRefresh := context.WithCancel(context.Background())
-	refresh := &marketRefreshTask{done: make(chan struct{}), cancel: cancelRefresh}
-	i.marketRefresh = refresh
-	i.marketRefreshMu.Unlock()
-	go func() {
-		ctx, cancel := context.WithTimeout(refreshContext, 15*time.Second)
-		defer cancel()
-		refresh.snapshot, refresh.err = i.refreshMarket(ctx)
-		i.marketRefreshMu.Lock()
-		if i.marketRefresh == refresh {
-			i.marketRefresh = nil
-		}
-		close(refresh.done)
-		i.marketRefreshMu.Unlock()
-	}()
-	return refresh, nil
 }
 
 func (i *Integration) MarketDetail(ctx context.Context, pluginID string) (pluginmarket.PluginDetail, int64, error) {
@@ -312,7 +251,6 @@ func (i *Integration) MarketIcon(ctx context.Context, pluginID, digest string) (
 	}
 	i.marketMu.RUnlock()
 	if snapshot == nil {
-		_, _ = i.startMarketRefresh()
 		return pluginmarket.IconAsset{}, pluginmarket.ErrReleaseMissing
 	}
 	for _, plugin := range snapshot.Plugins {
@@ -321,44 +259,7 @@ func (i *Integration) MarketIcon(ctx context.Context, pluginID, digest string) (
 			return i.marketService.Icon(ctx, pluginID, *icon)
 		}
 	}
-	_, _ = i.startMarketRefresh()
 	return pluginmarket.IconAsset{}, pluginmarket.ErrReleaseMissing
-}
-
-func (i *Integration) MarketError() error {
-	if i == nil {
-		return pluginmarket.ErrUnavailable
-	}
-	i.marketMu.RLock()
-	defer i.marketMu.RUnlock()
-	return i.marketErr
-}
-
-func (i *Integration) refreshMarket(ctx context.Context) (pluginmarket.Snapshot, error) {
-	if i == nil || i.marketService == nil {
-		return pluginmarket.Snapshot{}, pluginmarket.ErrUnavailable
-	}
-	snapshot, err := i.marketService.Snapshot(ctx)
-	if err != nil {
-		i.marketMu.Lock()
-		i.marketErr = err
-		i.marketMu.Unlock()
-		return pluginmarket.Snapshot{}, err
-	}
-	if i.releaseProvider != nil {
-		if err := i.releaseProvider.setSnapshot(snapshot); err != nil {
-			i.marketMu.Lock()
-			i.marketErr = err
-			i.marketMu.Unlock()
-			return pluginmarket.Snapshot{}, err
-		}
-	}
-	frozen := snapshot.Clone()
-	i.marketMu.Lock()
-	i.marketSnapshot = &frozen
-	i.marketErr = nil
-	i.marketMu.Unlock()
-	return frozen, nil
 }
 
 func (i *Integration) Handler() http.Handler {
@@ -445,14 +346,7 @@ func (i *Integration) Close() error {
 		return nil
 	}
 	var out error
-	i.marketRefreshMu.Lock()
-	i.marketRefreshClosed = true
-	marketRefresh := i.marketRefresh
-	i.marketRefreshMu.Unlock()
-	if marketRefresh != nil {
-		marketRefresh.cancel()
-		<-marketRefresh.done
-	}
+	i.stopMarketRefreshController()
 	if i.host != nil {
 		out = errors.Join(out, i.host.Close())
 	}

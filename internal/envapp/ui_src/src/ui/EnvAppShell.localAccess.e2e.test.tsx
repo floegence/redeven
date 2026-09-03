@@ -72,7 +72,18 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
 const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
-  const refreshMarketCatalog = vi.fn(async () => undefined);
+  const loadCachedMarketCatalog = vi.fn(async () => ({ generation: 13, changed: true, stale: false }));
+  const refreshMarketCatalog = vi.fn(async () => ({ generation: 14, changed: true, stale: false }));
+  const marketEventListeners = new Set<(event: any) => void>();
+  const connectPluginMarketEventStream = vi.fn(({ signal, onEvent }: { signal: AbortSignal; onEvent: (event: any) => void }) => new Promise<void>((resolve) => {
+    marketEventListeners.add(onEvent);
+    const close = () => {
+      marketEventListeners.delete(onEvent);
+      resolve();
+    };
+    if (signal.aborted) close();
+    else signal.addEventListener('abort', close, { once: true });
+  }));
   const recoverEnabled = vi.fn(async (): Promise<PluginRecoverySnapshot> => ({ revision: 1, complete: true, results: [] }));
   const retryRecovery = vi.fn(async (pluginInstanceID: string) => ({ plugin_instance_id: pluginInstanceID, status: 'ready' as const }));
   const execute = vi.fn(async (_command: any) => ({}));
@@ -92,7 +103,12 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   return {
     listInstalledPlugins,
     loadInventoryProjection,
+    loadCachedMarketCatalog,
     refreshMarketCatalog,
+    connectPluginMarketEventStream,
+    emitMarketEvent: (event: any) => {
+      for (const listener of marketEventListeners) listener(event);
+    },
     recoverEnabled,
     retryRecovery,
     execute,
@@ -107,6 +123,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     createPluginLifecycleAPI: vi.fn(() => ({
       listInstalledPlugins,
       loadInventoryProjection,
+      loadCachedMarketCatalog,
       refreshMarketCatalog,
       recoverEnabled,
       retryRecovery,
@@ -1351,6 +1368,7 @@ vi.mock('./services/localApi', () => ({
 }));
 vi.mock('./plugins/pluginApi', () => ({
   createPluginLifecycleAPI: pluginLifecycleMocks.createPluginLifecycleAPI,
+  connectPluginMarketEventStream: pluginLifecycleMocks.connectPluginMarketEventStream,
 }));
 vi.mock('./plugins/pluginPlatform', () => ({
   createRedevenPluginPlatform: pluginPlatformMocks.createRedevenPluginPlatform,
@@ -1537,8 +1555,11 @@ beforeEach(async () => {
   pluginLifecycleMocks.createPluginLifecycleAPI.mockClear();
   pluginLifecycleMocks.listInstalledPlugins.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
+  pluginLifecycleMocks.loadCachedMarketCatalog.mockReset();
+  pluginLifecycleMocks.loadCachedMarketCatalog.mockResolvedValue({ generation: 13, changed: true, stale: false });
   pluginLifecycleMocks.refreshMarketCatalog.mockReset();
-  pluginLifecycleMocks.refreshMarketCatalog.mockResolvedValue(undefined);
+  pluginLifecycleMocks.refreshMarketCatalog.mockResolvedValue({ generation: 14, changed: true, stale: false });
+  pluginLifecycleMocks.connectPluginMarketEventStream.mockClear();
   pluginLifecycleMocks.recoverEnabled.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: true, results: [] });
   pluginLifecycleMocks.retryRecovery.mockReset();
@@ -2060,7 +2081,6 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
       await pluginPanelState.lastProps.onOpenCenter();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
-      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2, 40);
       const requestsBeforeMutation = pluginLifecycleMocks.loadInventoryProjection.mock.calls.length;
       currentProjection = examplePluginProjection('disabled');
       await pluginCenterViewState.lastProps.onCommand({
@@ -2096,6 +2116,68 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginPanelState.lastProps.model.tiles).not.toContainEqual(
         expect.objectContaining({ kind: 'empty' }),
       );
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('projects a newer market generation from the background stream without reopening Plugin Center', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadCachedMarketCatalog
+      .mockResolvedValueOnce({ generation: 13, changed: true, stale: false })
+      .mockResolvedValueOnce({ generation: 14, changed: true, stale: false });
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockResolvedValueOnce({ items: [], marketUnavailable: false })
+      .mockResolvedValueOnce(examplePluginProjection('enabled'));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.connectPluginMarketEventStream.mock.calls.length === 1, 40);
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+
+      pluginLifecycleMocks.emitMarketEvent({
+        seq: 2,
+        state: 'ready',
+        generation: 14,
+        stale: false,
+        checked_at: '2026-09-03T01:00:00Z',
+      });
+
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
+        (tile: any) => tile.kind === 'plugin' && tile.item?.pluginID === examplePluginCatalog.pluginID,
+      ), 40);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      expect(pluginLifecycleMocks.refreshMarketCatalog).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('coalesces a stream update and manual refresh for the same generation', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadCachedMarketCatalog
+      .mockResolvedValueOnce({ generation: 13, changed: true, stale: false })
+      .mockResolvedValueOnce({ generation: 14, changed: true, stale: false });
+    pluginLifecycleMocks.refreshMarketCatalog.mockResolvedValue({ generation: 14, changed: true, stale: false });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({ items: [], marketUnavailable: false });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onRefresh), 40);
+
+      pluginLifecycleMocks.emitMarketEvent({ seq: 2, state: 'ready', generation: 14, stale: false });
+      await pluginCenterViewState.lastProps.onRefresh();
+      await flushUntil(() => pluginLifecycleMocks.loadCachedMarketCatalog.mock.calls.length === 2, 40);
+
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
     } finally {
       dispose();
     }

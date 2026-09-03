@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -188,6 +187,35 @@ func response(status int, body string, headers http.Header) *http.Response {
 	}
 }
 
+func catalogResponseWithInstallPreview(t *testing.T) string {
+	t.Helper()
+	var catalog CatalogResponse
+	if err := json.Unmarshal([]byte(validCatalogResponse), &catalog); err != nil {
+		t.Fatalf("decode catalog fixture: %v", err)
+	}
+	var latest LatestReleaseResponse
+	if err := json.Unmarshal([]byte(validLatestResponse), &latest); err != nil {
+		t.Fatalf("decode release fixture: %v", err)
+	}
+	preview := InstallPreview{
+		Release:               latest.Data,
+		ReleaseRef:            latest.Data.PublisherReleaseRef.ReleaseRef,
+		TransportAssets:       slices.Clone(latest.Data.TransportAssets),
+		Compatibility:         latest.Data.Compatibility,
+		SecuritySummary:       host.ExternalPackageSecuritySummary{SummarySHA256: "sha256:" + strings.Repeat("a", 64)},
+		ReleaseIdentityDigest: latest.Data.ReleaseIdentityDigest,
+		ManifestSHA256:        "sha256:" + strings.Repeat("b", 64),
+		ContractSetSHA256:     "sha256:" + strings.Repeat("c", 64),
+		SummarySHA256:         "sha256:" + strings.Repeat("a", 64),
+	}
+	catalog.Data[0].Latest.InstallPreview = &preview
+	raw, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatalf("encode catalog fixture: %v", err)
+	}
+	return string(raw)
+}
+
 func TestValidateLatestReleaseAcceptsInstallPreviewEvidence(t *testing.T) {
 	var release LatestRelease
 	if err := json.Unmarshal([]byte(validLatestResponse), &struct {
@@ -218,7 +246,7 @@ func TestValidateLatestReleaseAcceptsInstallPreviewEvidence(t *testing.T) {
 	}
 }
 
-func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
+func TestServiceRefreshesAndKeepsValidatedCacheSeparate(t *testing.T) {
 	t.Parallel()
 	cachePath := filepath.Join(t.TempDir(), "plugin-market-lkg.json")
 	now := time.Date(2026, 8, 1, 8, 30, 0, 0, time.UTC)
@@ -228,9 +256,7 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 			if request.URL.Query().Get("redeven_version") != "1.2.3" || request.URL.Query().Get("redevplugin_version") != "3.0.9" {
 				t.Fatalf("catalog compatibility query = %q", request.URL.RawQuery)
 			}
-			return response(http.StatusOK, validCatalogResponse, http.Header{"Etag": {`"catalog-g7"`}}), nil
-		case "/v1/plugins/com.example.metrics/latest":
-			return response(http.StatusOK, validLatestResponse, nil), nil
+			return response(http.StatusOK, catalogResponseWithInstallPreview(t), http.Header{"Etag": {`"catalog-g7"`}}), nil
 		default:
 			return response(http.StatusNotFound, `{}`, nil), nil
 		}
@@ -247,9 +273,9 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	snapshot, err := service.Snapshot(context.Background())
+	snapshot, err := service.Refresh(context.Background())
 	if err != nil {
-		t.Fatalf("Snapshot() error = %v", err)
+		t.Fatalf("Refresh() error = %v", err)
 	}
 	if snapshot.Stale || snapshot.Generation != 7 || snapshot.ETag != `"catalog-g7"` || len(snapshot.Plugins) != 1 {
 		t.Fatalf("unexpected live snapshot: %#v", snapshot)
@@ -275,41 +301,17 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 	if local, ok := offline.CachedSnapshot(); !ok || !local.Stale || local.Source != SnapshotSourceCache {
 		t.Fatalf("CachedSnapshot() = %#v, %v", local, ok)
 	}
-	cached, err := offline.Snapshot(context.Background())
-	if err != nil {
-		t.Fatalf("offline Snapshot() error = %v", err)
-	}
-	if !cached.Stale || cached.Source != SnapshotSourceCache || cached.CachedAt != now {
-		t.Fatalf("unexpected cached snapshot: %#v", cached)
+	if _, err := offline.Refresh(context.Background()); err == nil || !strings.Contains(err.Error(), "offline") {
+		t.Fatalf("offline Refresh() error = %v", err)
 	}
 }
 
-func TestServiceFetchesLatestReleasesWithBoundedConcurrency(t *testing.T) {
+func TestServiceRefreshUsesCatalogInstallPreviewWithoutLatestRequest(t *testing.T) {
 	t.Parallel()
-	started := make(chan struct{}, 2)
-	releaseRequests := make(chan struct{})
-	var activeMu sync.Mutex
-	active := 0
-	maximumActive := 0
+	var requestedPaths []string
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		pluginID := strings.TrimSuffix(strings.TrimPrefix(request.URL.Path, "/v1/plugins/"), "/latest")
-		activeMu.Lock()
-		active++
-		if active > maximumActive {
-			maximumActive = active
-		}
-		activeMu.Unlock()
-		started <- struct{}{}
-		select {
-		case <-releaseRequests:
-		case <-request.Context().Done():
-			return nil, request.Context().Err()
-		}
-		activeMu.Lock()
-		active--
-		activeMu.Unlock()
-		body := strings.ReplaceAll(validLatestResponse, "com.example.metrics", pluginID)
-		return response(http.StatusOK, body, nil), nil
+		requestedPaths = append(requestedPaths, request.URL.Path)
+		return response(http.StatusOK, catalogResponseWithInstallPreview(t), nil), nil
 	})
 	service, err := NewService(ServiceOptions{
 		Origin: "https://plugins.redeven.com", CachePath: filepath.Join(t.TempDir(), "market.json"),
@@ -318,26 +320,69 @@ func TestServiceFetchesLatestReleasesWithBoundedConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plugins := []CatalogPlugin{{PluginID: "com.example.metrics"}, {PluginID: "com.redeven.official.toolbox"}}
-	requests := []latestFetchRequest{
-		{index: 0, pluginID: plugins[0].PluginID, channel: "stable", version: "4.0.0"},
-		{index: 1, pluginID: plugins[1].PluginID, channel: "stable", version: "4.0.0"},
-	}
-	done := make(chan error, 1)
-	go func() { done <- service.fetchLatestReleases(context.Background(), plugins, requests, 7) }()
-	for range 2 {
-		select {
-		case <-started:
-		case <-time.After(time.Second):
-			t.Fatal("latest release requests did not overlap")
-		}
-	}
-	close(releaseRequests)
-	if err := <-done; err != nil {
+	snapshot, err := service.Refresh(context.Background())
+	if err != nil {
 		t.Fatal(err)
 	}
-	if maximumActive != 2 || plugins[0].Release == nil || plugins[1].Release == nil {
-		t.Fatalf("maximum active = %d, plugins = %#v", maximumActive, plugins)
+	if !slices.Equal(requestedPaths, []string{"/v1/catalog"}) {
+		t.Fatalf("requested paths = %v", requestedPaths)
+	}
+	if len(snapshot.Plugins) != 1 || snapshot.Plugins[0].Release == nil || snapshot.Plugins[0].Release.Version != "4.0.0" {
+		t.Fatalf("snapshot release = %#v", snapshot.Plugins)
+	}
+}
+
+func TestServiceRefreshRejectsVisibleReleaseWithoutInstallPreview(t *testing.T) {
+	t.Parallel()
+	service, err := NewService(ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "market.json"),
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return response(http.StatusOK, validCatalogResponse, nil), nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Refresh(context.Background()); !errors.Is(err, ErrInvalidResponse) || !strings.Contains(err.Error(), "install preview") {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+}
+
+func TestServiceRefreshDoesNotReplaceCacheWithOlderGeneration(t *testing.T) {
+	t.Parallel()
+	cachePath := filepath.Join(t.TempDir(), "market.json")
+	requestCount := 0
+	service, err := NewService(ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: cachePath,
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			requestCount++
+			body := catalogResponseWithInstallPreview(t)
+			if requestCount == 1 {
+				body = strings.Replace(body, `"generation":7`, `"generation":9`, 1)
+			}
+			return response(http.StatusOK, body, nil), nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.Refresh(context.Background())
+	if err != nil || first.Generation != 9 {
+		t.Fatalf("first Refresh() = %#v, %v", first, err)
+	}
+	if _, err := service.Refresh(context.Background()); !errors.Is(err, ErrInvalidResponse) || !strings.Contains(err.Error(), "moved backwards") {
+		t.Fatalf("older Refresh() error = %v", err)
+	}
+
+	reloaded, err := NewService(ServiceOptions{Origin: "https://plugins.redeven.com", CachePath: cachePath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached, ok := reloaded.CachedSnapshot()
+	if !ok || cached.Generation != 9 {
+		t.Fatalf("CachedSnapshot() = %#v, %t", cached, ok)
 	}
 }
 
@@ -501,8 +546,8 @@ func TestServiceRejectsUnknownFieldsWithoutReplacingCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	if _, err := service.Snapshot(context.Background()); !errors.Is(err, ErrInvalidResponse) {
-		t.Fatalf("Snapshot() error = %v, want ErrInvalidResponse", err)
+	if _, err := service.Refresh(context.Background()); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("Refresh() error = %v, want ErrInvalidResponse", err)
 	}
 }
 
@@ -520,8 +565,8 @@ func TestServiceRejectsNonCanonicalOrDuplicatePresentation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	if _, err := service.Snapshot(context.Background()); !errors.Is(err, ErrInvalidResponse) {
-		t.Fatalf("Snapshot() error = %v, want ErrInvalidResponse", err)
+	if _, err := service.Refresh(context.Background()); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("Refresh() error = %v, want ErrInvalidResponse", err)
 	}
 }
 
@@ -589,22 +634,26 @@ func validFullPresentationForTest() PresentationFull {
 	}
 }
 
-func TestLatestReleaseBuildsCompleteRemoteProjection(t *testing.T) {
+func TestCatalogInstallPreviewBuildsCompleteRemoteProjection(t *testing.T) {
 	t.Parallel()
 	service, err := NewService(ServiceOptions{
 		Origin:    "https://plugins.redeven.com",
 		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			if request.URL.Path == "/v1/catalog" {
-				return response(http.StatusOK, validCatalogResponse, nil), nil
+				return response(http.StatusOK, catalogResponseWithInstallPreview(t), nil), nil
 			}
-			return response(http.StatusOK, validLatestResponse, nil), nil
+			return response(http.StatusNotFound, `{}`, nil), nil
 		})},
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	release, err := service.LatestRelease(context.Background(), "com.example.metrics", "stable")
+	snapshot, err := service.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	release, err := snapshot.LatestRelease("com.example.metrics", "stable")
 	if err != nil {
 		t.Fatalf("LatestRelease() error = %v", err)
 	}

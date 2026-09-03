@@ -4,13 +4,14 @@ import {
 } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
-import { fetchLocalApiJSONResponse } from '../services/localApi';
-import { createPluginLifecycleAPI, loadPluginMarketDetail } from './pluginApi';
+import { fetchLocalApi, fetchLocalApiJSONResponse } from '../services/localApi';
+import { connectPluginMarketEventStream, createPluginLifecycleAPI, loadPluginMarketDetail } from './pluginApi';
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 import { EXAMPLE_PLUGIN_RELEASE_REF } from './examplePluginRelease.test-fixture';
 import type { ReDevPluginRecord } from './pluginTypes';
 
 vi.mock('../services/localApi', () => ({
+  fetchLocalApi: vi.fn(),
   fetchLocalApiJSON: vi.fn(),
   fetchLocalApiJSONResponse: vi.fn(),
   prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
@@ -319,11 +320,11 @@ describe('plugin lifecycle client integration', () => {
       loadMarket,
     );
 
-    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
-      marketUnavailable: false,
-      items: [],
+    await expect(lifecycle.loadCachedMarketCatalog()).resolves.toEqual({
+      generation: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.generation,
+      changed: true,
+      stale: false,
     });
-    await expect(lifecycle.refreshMarketCatalog()).resolves.toBeUndefined();
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
       items: [expect.objectContaining({
@@ -338,13 +339,14 @@ describe('plugin lifecycle client integration', () => {
   it('refreshes the market asynchronously without blocking the installed inventory', async () => {
     const { mocks } = createClientHarness();
     let resolveMarket!: (snapshot: typeof OFFICIAL_PLUGIN_MARKET_SNAPSHOT) => void;
-    const loadMarket = vi.fn(() => new Promise<typeof OFFICIAL_PLUGIN_MARKET_SNAPSHOT>((resolve) => {
+    const refreshMarket = vi.fn(() => new Promise<typeof OFFICIAL_PLUGIN_MARKET_SNAPSHOT>((resolve) => {
       resolveMarket = resolve;
     }));
     const lifecycle = createPluginLifecycleAPI(
       mocks as unknown as PluginPlatformClient,
       undefined,
-      loadMarket,
+      async () => { throw new Error('cache unavailable'); },
+      refreshMarket,
     );
 
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
@@ -352,14 +354,14 @@ describe('plugin lifecycle client integration', () => {
       marketUnavailable: false,
     });
     const refresh = lifecycle.refreshMarketCatalog();
-    expect(loadMarket).toHaveBeenCalledOnce();
+    expect(refreshMarket).toHaveBeenCalledOnce();
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [],
       marketUnavailable: false,
     });
 
     resolveMarket(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
-    await expect(refresh).resolves.toBeUndefined();
+    await expect(refresh).resolves.toEqual({ generation: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.generation, changed: true, stale: false });
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [expect.objectContaining({
         pluginID: 'com.example.metrics',
@@ -368,12 +370,39 @@ describe('plugin lifecycle client integration', () => {
     });
   });
 
+  it('allows a ten-second backend refresh without the former five-second UI timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const { mocks } = createClientHarness();
+      const lifecycle = createPluginLifecycleAPI(
+        mocks as unknown as PluginPlatformClient,
+        undefined,
+        async () => { throw new Error('cache unavailable'); },
+        () => new Promise((resolve) => {
+          globalThis.setTimeout(() => resolve(OFFICIAL_PLUGIN_MARKET_SNAPSHOT), 10_000);
+        }),
+      );
+
+      const refresh = lifecycle.refreshMarketCatalog();
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await expect(refresh).resolves.toEqual({
+        generation: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.generation,
+        changed: true,
+        stale: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('marks an empty stale cache unavailable so the UI can offer a retry', async () => {
     const { mocks } = createClientHarness();
     const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, plugins: [], stale: true, source: 'cache' as const };
     const lifecycle = createPluginLifecycleAPI(
       mocks as unknown as PluginPlatformClient,
       undefined,
+      async () => { throw new Error('cache unavailable'); },
       async () => staleSnapshot,
     );
 
@@ -391,8 +420,14 @@ describe('plugin lifecycle client integration', () => {
       mocks as unknown as PluginPlatformClient,
       undefined,
       async () => staleSnapshot,
+      async () => staleSnapshot,
     );
 
+    await expect(lifecycle.loadCachedMarketCatalog()).resolves.toEqual({
+      generation: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.generation,
+      changed: true,
+      stale: true,
+    });
     await expect(lifecycle.refreshMarketCatalog()).rejects.toThrow('stale cached data');
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
@@ -401,6 +436,48 @@ describe('plugin lifecycle client integration', () => {
         officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
+  });
+
+  it('parses background market events from the authenticated local stream', async () => {
+    vi.mocked(fetchLocalApi).mockResolvedValueOnce(new Response([
+      ': keepalive',
+      '',
+      'event: message',
+      'data: {"seq":7,"state":"ready","generation":41,"stale":false,"checked_at":"2026-09-03T01:00:00Z"}',
+      '',
+    ].join('\r\n'), {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }));
+    const onEvent = vi.fn();
+    const signal = new AbortController().signal;
+
+    await connectPluginMarketEventStream({ afterSeq: 6, signal, onEvent });
+
+    expect(fetchLocalApi).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/plugins/market/catalog/events?after_seq=6',
+      expect.objectContaining({ method: 'GET', signal }),
+    );
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
+      seq: 7,
+      state: 'ready',
+      generation: 41,
+      stale: false,
+    }));
+  });
+
+  it('rejects invalid market stream events without mutating catalog state', async () => {
+    vi.mocked(fetchLocalApi).mockResolvedValueOnce(new Response(
+      'data: {"seq":0,"state":"ready","generation":41,"stale":false}\n\n',
+      { status: 200 },
+    ));
+
+    await expect(connectPluginMarketEventStream({
+      afterSeq: 0,
+      signal: new AbortController().signal,
+      onEvent: vi.fn(),
+    })).rejects.toThrow('invalid event');
   });
 
   it('projects installed plugins without waiting for the market snapshot', async () => {

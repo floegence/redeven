@@ -19,6 +19,8 @@ const flowersecSmokePeerDir = path.join(scriptDir, 'flowersec-smoke-peer');
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
+const pluginMarketRefreshPath = `${pluginMarketCatalogPath}/refresh`;
+const pluginMarketEventsPath = `${pluginMarketCatalogPath}/events`;
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js)$/;
 const builtPluginPackageHashes = Object.freeze({
   package_sha256: 'sha256:954894fbc63c3490fe011c9a6baf8985258a3c9c98a16827ed8342aaf438ed32',
@@ -518,6 +520,21 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (requestURL.pathname === pluginMarketCatalogPath) {
         jsonResponse(response, { ok: true, data: builtPluginMarketSnapshot() });
+        return;
+      }
+      if (requestURL.pathname === pluginMarketRefreshPath) {
+        if (request.method !== 'POST') throw new Error(`unexpected plugin market refresh method: ${request.method}`);
+        jsonResponse(response, { ok: true, data: builtPluginMarketSnapshot() });
+        return;
+      }
+      if (requestURL.pathname === pluginMarketEventsPath) {
+        response.writeHead(200, {
+          'cache-control': 'no-store',
+          'content-type': 'text/event-stream',
+        });
+        response.write('event: message\n');
+        response.write('data: {"seq":1,"state":"ready","generation":1,"stale":false,"checked_at":"2026-08-01T10:00:00Z"}\n\n');
+        request.on('close', () => response.end());
         return;
       }
       if (requestURL.pathname === pluginMarketDetailPath) {
