@@ -10,18 +10,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const (
-	uploadURLPrefix            = "/_redeven_proxy/api/ai/uploads/"
-	uploadStagedTTL            = 24 * time.Hour
-	uploadCleanupRetryDelay    = 15 * time.Minute
-	uploadCleanupSweepInterval = 15 * time.Minute
-	uploadCleanupSweepTimeout  = 30 * time.Second
-	uploadCleanupBatchSize     = 50
-	uploadAttemptRecoveryTTL   = 24 * time.Hour
-	sqliteCompactionTimeout    = 30 * time.Second
+	uploadURLPrefix             = "/_redeven_proxy/api/ai/uploads/"
+	uploadStagedTTL             = 24 * time.Hour
+	uploadCleanupRetryDelay     = 15 * time.Minute
+	uploadCleanupSweepInterval  = 15 * time.Minute
+	uploadCleanupSweepTimeout   = 30 * time.Second
+	uploadCleanupBatchSize      = 50
+	uploadAttemptRecoveryTTL    = 24 * time.Hour
+	uploadAttemptIdempotencyTTL = 7 * 24 * time.Hour
+	executionAuthorityTTL       = 7 * 24 * time.Hour
+	sqliteCompactionTimeout     = 30 * time.Second
 )
 
 type resolvedUploadAttachment struct {
@@ -504,6 +508,7 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), uploadCleanupSweepTimeout)
 	defer cancel()
+	defer s.scheduleThreadstoreCompaction("maintenance:" + reason)
 	expiredScopes, expiredScopeErr := s.sweepExpiredUploadStagingScopes(ctx)
 	if expiredScopeErr != nil {
 		if s.log != nil {
@@ -528,6 +533,127 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	} else if orphans > 0 && s.log != nil {
 		s.log.Info("ai upload orphan recovery reclaimed artifacts", "reason", reason, "count", orphans)
 	}
+	if removed, pruneErr := s.pruneTerminalUploadAttempts(ctx, time.Now()); pruneErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai upload attempt maintenance failed", "reason", reason, "error", pruneErr)
+		}
+	} else if removed > 0 && s.log != nil {
+		s.log.Info("ai upload attempt maintenance reclaimed records", "reason", reason, "count", removed)
+	}
+	if removed, pruneErr := s.pruneExecutionAuthorities(ctx, time.Now()); pruneErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai execution authority maintenance failed", "reason", reason, "error", pruneErr)
+		}
+	} else if removed > 0 && s.log != nil {
+		s.log.Info("ai execution authority maintenance reclaimed records", "reason", reason, "count", removed)
+	}
+}
+
+func (s *Service) pruneTerminalUploadAttempts(ctx context.Context, now time.Time) (int64, error) {
+	if s == nil {
+		return 0, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	cursor := s.uploadAttemptPruneCursor
+	s.mu.Unlock()
+	if db == nil {
+		return 0, nil
+	}
+	next, removed, _, err := db.PruneTerminalUploadAttemptsPage(ctxOrBackground(ctx), now.Add(-uploadAttemptIdempotencyTTL).UnixMilli(), cursor, uploadCleanupBatchSize)
+	if err != nil {
+		return 0, err
+	}
+	s.mu.Lock()
+	s.uploadAttemptPruneCursor = next
+	s.mu.Unlock()
+	return removed, nil
+}
+
+type executionAuthorityThreadViewer interface {
+	View(context.Context, identity.ThreadID) (flruntime.ThreadView, error)
+}
+
+func executionAuthorityProtected(authority threadstore.ExecutionAuthority, view flruntime.ThreadView) bool {
+	turnID := strings.TrimSpace(authority.TurnID)
+	if turnID != "" && view.TurnID.String() == turnID {
+		if view.Activity == flruntime.ThreadActivityActive {
+			return true
+		}
+		if view.LastOutcome != nil && *view.LastOutcome == flruntime.TurnOutcomeFailed {
+			return true
+		}
+	}
+	for _, queued := range view.Queue {
+		if strings.TrimSpace(queued.RequestKey) == strings.TrimSpace(authority.RequestKey) {
+			return true
+		}
+	}
+	return false
+}
+
+func pruneExecutionAuthorityPage(ctx context.Context, db *threadstore.Store, runtime executionAuthorityThreadViewer, cursor threadstore.ExecutionAuthorityCursor, cutoffUnixMs int64, limit int) (threadstore.ExecutionAuthorityCursor, int64, error) {
+	if db == nil || runtime == nil {
+		return cursor, 0, errors.New("execution authority maintenance is unavailable")
+	}
+	authorities, next, _, err := db.ListExecutionAuthoritiesPage(ctxOrBackground(ctx), cursor, limit)
+	if err != nil {
+		return cursor, 0, err
+	}
+	views := make(map[string]flruntime.ThreadView)
+	missing := make(map[string]bool)
+	unavailable := make(map[string]bool)
+	deleteKeys := make([]string, 0, len(authorities))
+	for _, authority := range authorities {
+		threadID := strings.TrimSpace(authority.ThreadID)
+		view, loaded := views[threadID]
+		if !loaded && !missing[threadID] && !unavailable[threadID] {
+			view, err = runtime.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
+			switch {
+			case err == nil:
+				views[threadID] = view
+			case errors.Is(err, flruntime.ErrThreadNotFound), errors.Is(err, flruntime.ErrThreadDeleted):
+				missing[threadID] = true
+			default:
+				unavailable[threadID] = true
+			}
+		}
+		switch {
+		case missing[threadID]:
+			deleteKeys = append(deleteKeys, authority.RequestKey)
+		case unavailable[threadID]:
+			continue
+		case authority.CreatedAtUnixMs <= cutoffUnixMs && !executionAuthorityProtected(authority, view):
+			deleteKeys = append(deleteKeys, authority.RequestKey)
+		}
+	}
+	removed, err := db.DeleteExecutionAuthorities(ctxOrBackground(ctx), deleteKeys)
+	if err != nil {
+		return cursor, 0, err
+	}
+	return next, removed, nil
+}
+
+func (s *Service) pruneExecutionAuthorities(ctx context.Context, now time.Time) (int64, error) {
+	if s == nil {
+		return 0, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	runtime := s.threadRuntime
+	cursor := s.executionAuthorityCursor
+	s.mu.Unlock()
+	if db == nil || runtime == nil {
+		return 0, nil
+	}
+	next, removed, err := pruneExecutionAuthorityPage(ctx, db, runtime, cursor, now.Add(-executionAuthorityTTL).UnixMilli(), uploadCleanupBatchSize)
+	if err != nil {
+		return 0, err
+	}
+	s.mu.Lock()
+	s.executionAuthorityCursor = next
+	s.mu.Unlock()
+	return removed, nil
 }
 
 func (s *Service) scheduleThreadstoreCompaction(reason string) {

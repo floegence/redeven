@@ -185,8 +185,6 @@ func (service *Service) AdoptOrphanCanonicalRoot(ctx context.Context, req AdoptO
 	settings := threadstore.ThreadSettings{
 		ThreadID: req.ThreadID, EndpointID: req.EndpointID, NamespacePublicID: req.NamespacePublicID,
 		ModelID: req.ModelID, PermissionType: req.PermissionType, WorkingDir: req.WorkingDir,
-		CreatedByUserPublicID: req.OperatorPublicID, CreatedByUserEmail: req.OperatorEmail,
-		UpdatedByUserPublicID: req.OperatorPublicID, UpdatedByUserEmail: req.OperatorEmail,
 	}
 	if err := service.threadsDB.AdoptCanonicalRootSettings(ctxOrBackground(ctx), settings); err != nil {
 		return 0, err

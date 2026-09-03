@@ -14,7 +14,6 @@ func stagingScopeForTest(endpointID, targetID, ownerHash, scopeID string) Upload
 		OwnerUserHash:   ownerHash,
 		TargetID:        targetID,
 		CapabilityHash:  fmt.Sprintf("%x", capabilityHash),
-		CreatedAtUnixMs: 10,
 		ExpiresAtUnixMs: time.Now().Add(time.Hour).UnixMilli(),
 	}
 }

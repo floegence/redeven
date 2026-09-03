@@ -16,7 +16,6 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
-	contextstore "github.com/floegence/redeven/internal/ai/context/store"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -51,10 +50,9 @@ type Options struct {
 
 	Config *config.AIConfig
 
-	ToolTargetPolicy       ToolTargetPolicy
-	TargetToolExecutor     TargetToolExecutor
-	ToolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ToolTargetPolicy
-	WorkloadAdmission      WorkloadAdmission
+	ToolTargetPolicy   ToolTargetPolicy
+	TargetToolExecutor TargetToolExecutor
+	WorkloadAdmission  WorkloadAdmission
 
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
@@ -115,9 +113,8 @@ type Service struct {
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
 
-	toolTargetPolicy       ToolTargetPolicy
-	targetToolExecutor     TargetToolExecutor
-	toolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ToolTargetPolicy
+	toolTargetPolicy   ToolTargetPolicy
+	targetToolExecutor TargetToolExecutor
 
 	mu sync.Mutex
 	// threadSettingsMu serializes persisted thread-setting changes with the
@@ -156,12 +153,14 @@ type Service struct {
 	skillManager       *skillManager
 	terminalProcesses  *terminalProcessManager
 
-	flowerReadStateCleaner FlowerReadStateCleaner
-	maintenanceStopCh      chan struct{}
-	maintenanceDoneCh      chan struct{}
-	compactionScheduled    bool
-	lifecycleCtx           context.Context
-	lifecycleCancel        context.CancelFunc
+	flowerReadStateCleaner   FlowerReadStateCleaner
+	maintenanceStopCh        chan struct{}
+	maintenanceDoneCh        chan struct{}
+	compactionScheduled      bool
+	uploadAttemptPruneCursor threadstore.UploadAttemptPruneCursor
+	executionAuthorityCursor threadstore.ExecutionAuthorityCursor
+	lifecycleCtx             context.Context
+	lifecycleCancel          context.CancelFunc
 }
 
 type resolvedRunModel struct {
@@ -284,8 +283,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		streamWTO = defaultStreamWriteTO
 	}
 
-	contextRepo := contextstore.NewRepository(ts)
-	capabilityResolver := contextadapter.NewResolver(contextRepo)
+	capabilityResolver := contextadapter.NewResolver()
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
@@ -305,7 +303,6 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		resolveWebSearchKey:             resolveWebSearchKey,
 		toolTargetPolicy:                toolTargetPolicy,
 		targetToolExecutor:              opts.TargetToolExecutor,
-		toolTargetPolicyForRun:          opts.ToolTargetPolicyForRun,
 		workloadAdmission:               opts.WorkloadAdmission,
 		workloadLeases:                  make(map[string]*aiWorkloadLease),
 		flowerLiveSubscribersByEndpoint: make(map[string]int),
@@ -532,50 +529,6 @@ func (s *Service) ToolTargetPolicy() ToolTargetPolicy {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return normalizeToolTargetPolicy(s.toolTargetPolicy)
-}
-
-func (s *Service) UpsertFlowerThreadRouting(ctx context.Context, rec threadstore.FlowerThreadRouting) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	pctx, cancel := context.WithTimeout(ctx, persistTO)
-	defer cancel()
-	return db.UpsertFlowerThreadRouting(pctx, rec)
-}
-
-func (s *Service) GetFlowerThreadRouting(ctx context.Context, endpointID string, threadID string) (*threadstore.FlowerThreadRouting, error) {
-	if s == nil {
-		return nil, errors.New("nil service")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return nil, errors.New("threads store not ready")
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	pctx, cancel := context.WithTimeout(ctx, persistTO)
-	defer cancel()
-	return db.GetFlowerThreadRouting(pctx, endpointID, threadID)
 }
 
 func (s *Service) RuntimeStatus(ctx context.Context) *AIRuntimeStatus {
@@ -1262,7 +1215,6 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	cfg := s.cfg
 	desktopModelSource := s.desktopModelSource
 	baseToolTargetPolicy := s.toolTargetPolicy
-	toolTargetPolicyForRun := s.toolTargetPolicyForRun
 	uploadsDir := s.uploadsDir
 	targetToolExecutor := s.targetToolExecutor
 	s.mu.Unlock()
@@ -1294,19 +1246,10 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	if err != nil {
 		return nil, err
 	}
-	pctx, cancel = context.WithTimeout(context.Background(), persistTO)
-	routing, err := db.GetFlowerThreadRouting(pctx, endpointID, threadID)
-	cancel()
-	if err != nil {
-		return nil, err
-	}
 	toolTargetPolicy := normalizeToolTargetPolicy(baseToolTargetPolicy)
-	if toolTargetPolicyForRun != nil {
-		toolTargetPolicy = normalizeToolTargetPolicy(toolTargetPolicyForRun(metaRef, *settings, routing))
-	}
 	var referenceAuthority *flowerCanonicalReferenceTargetAuthority
 	if flowerContextActionRequiresCanonicalReferenceAuthority(req.Input.ContextAction) {
-		resolved, resolveErr := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, toolTargetPolicy, routing)
+		resolved, resolveErr := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, toolTargetPolicy)
 		if resolveErr != nil {
 			return nil, resolveErr
 		}

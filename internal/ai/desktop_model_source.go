@@ -1238,7 +1238,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 	missing := map[string]struct{}{}
 	seen := map[string]struct{}{}
 	currentLocal := strings.TrimSpace(cfg.CurrentModelID)
-	capabilityResolver := contextadapter.NewResolver(nil)
+	capabilityResolver := contextadapter.NewResolver()
 	for _, p := range cfg.Providers {
 		providerID := strings.TrimSpace(p.ID)
 		if providerID == "" {

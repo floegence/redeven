@@ -185,11 +185,6 @@ type ThreadSettings struct {
 	WorkingDir             string `json:"working_dir"`
 	PinnedAtUnixMs         int64  `json:"pinned_at_unix_ms"`
 
-	CreatedByUserPublicID string `json:"created_by_user_public_id"`
-	CreatedByUserEmail    string `json:"created_by_user_email"`
-	UpdatedByUserPublicID string `json:"updated_by_user_public_id"`
-	UpdatedByUserEmail    string `json:"updated_by_user_email"`
-
 	SettingsCreatedAtUnixMs int64 `json:"settings_created_at_unix_ms"`
 	SettingsUpdatedAtUnixMs int64 `json:"settings_updated_at_unix_ms"`
 }
@@ -208,8 +203,6 @@ type ThreadSettingsRecoveryCursor struct {
 const threadSelectColumnsSQL = `
   thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
   pinned_at_unix_ms,
-  created_by_user_public_id, created_by_user_email,
-  updated_by_user_public_id, updated_by_user_email,
   settings_created_at_unix_ms, settings_updated_at_unix_ms
 `
 
@@ -231,10 +224,6 @@ func scanThreadRow(scan rowScanner, t *ThreadSettings) error {
 		&t.PermissionType,
 		&t.WorkingDir,
 		&t.PinnedAtUnixMs,
-		&t.CreatedByUserPublicID,
-		&t.CreatedByUserEmail,
-		&t.UpdatedByUserPublicID,
-		&t.UpdatedByUserEmail,
 		&t.SettingsCreatedAtUnixMs,
 		&t.SettingsUpdatedAtUnixMs,
 	); err != nil {
@@ -513,10 +502,6 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 	}
 	t.PermissionType = permissionType
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
-	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
-	t.CreatedByUserEmail = strings.TrimSpace(t.CreatedByUserEmail)
-	t.UpdatedByUserPublicID = strings.TrimSpace(t.UpdatedByUserPublicID)
-	t.UpdatedByUserEmail = strings.TrimSpace(t.UpdatedByUserEmail)
 
 	if t.ThreadID == "" || t.EndpointID == "" {
 		return errors.New("invalid thread")
@@ -534,14 +519,11 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 	}
 	defer func() { _ = tx.Rollback() }()
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO ai_thread_settings(
-		  thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
-	  pinned_at_unix_ms,
-	  created_by_user_public_id, created_by_user_email,
-	  updated_by_user_public_id, updated_by_user_email,
-	  settings_created_at_unix_ms, settings_updated_at_unix_ms
-			) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`,
+INSERT INTO ai_thread_settings(
+  thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
+  pinned_at_unix_ms, settings_created_at_unix_ms, settings_updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`,
 		t.ThreadID,
 		t.ParentThreadID,
 		t.EndpointID,
@@ -551,10 +533,6 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 		t.PermissionType,
 		t.WorkingDir,
 		nonNegativeInt64(t.PinnedAtUnixMs),
-		t.CreatedByUserPublicID,
-		t.CreatedByUserEmail,
-		t.UpdatedByUserPublicID,
-		t.UpdatedByUserEmail,
 		t.SettingsCreatedAtUnixMs,
 		t.SettingsUpdatedAtUnixMs,
 	)
@@ -741,7 +719,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return tx.Commit()
 }
 
-func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID string, pinned bool, updatedByID string, updatedByEmail string) (int64, error) {
+func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID string, pinned bool) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, errors.New("store not initialized")
 	}
@@ -772,11 +750,9 @@ func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET pinned_at_unix_ms = ?,
-    updated_by_user_public_id = ?,
-    updated_by_user_email = ?,
     settings_updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, pinnedAt, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), revision, endpointID, threadID)
+`, pinnedAt, revision, endpointID, threadID)
 	if err != nil {
 		return 0, err
 	}

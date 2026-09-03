@@ -8,7 +8,6 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -89,10 +88,10 @@ func TestTypedSendPublishesRunningBeforeEffectPreparation(t *testing.T) {
 	}
 	preparationStarted := make(chan struct{})
 	releasePreparation := make(chan struct{})
-	svc.toolTargetPolicyForRun = func(*session.Meta, threadstore.ThreadSettings, *threadstore.FlowerThreadRouting) ToolTargetPolicy {
+	svc.resolveProviderKey = func(string) (string, bool, error) {
 		close(preparationStarted)
 		<-releasePreparation
-		return ToolTargetPolicy{}
+		return "", false, nil
 	}
 	t.Cleanup(func() {
 		select {

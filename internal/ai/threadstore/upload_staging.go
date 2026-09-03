@@ -19,7 +19,6 @@ func (s *Store) ClaimStagedUploadsToThread(
 	endpointID string,
 	threadID string,
 	uploadIDs []string,
-	claimedAtUnixMs int64,
 	admission AttachmentClaimPolicy,
 	scope UploadStagingScope,
 ) error {
@@ -36,9 +35,6 @@ func (s *Store) ClaimStagedUploadsToThread(
 	if len(uploadIDs) == 0 {
 		return nil
 	}
-	if claimedAtUnixMs <= 0 {
-		claimedAtUnixMs = time.Now().UnixMilli()
-	}
 	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
 	if err != nil {
 		return err
@@ -51,21 +47,19 @@ func (s *Store) ClaimStagedUploadsToThread(
 		return err
 	}
 	refID := stagingUploadRefID(scope.OwnerUserHash, scope.StagingScopeID)
-	if err := bindUploadsToRefTx(ctxOrBackground(ctx), tx, endpointID, threadID, UploadRefKindThread, threadID, uploadIDs, claimedAtUnixMs, UploadRefKindStaging, refID, scope.OwnerUserHash); err != nil {
+	if err := bindUploadsToRefTx(ctxOrBackground(ctx), tx, endpointID, threadID, UploadRefKindThread, threadID, uploadIDs, UploadRefKindStaging, refID, scope.OwnerUserHash); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
 type UploadStagingScope struct {
-	StagingScopeID   string `json:"staging_scope_id"`
-	EndpointID       string `json:"endpoint_id"`
-	OwnerUserHash    string `json:"-"`
-	TargetID         string `json:"target_id"`
-	CapabilityHash   string `json:"-"`
-	CreatedAtUnixMs  int64  `json:"created_at_unix_ms"`
-	ExpiresAtUnixMs  int64  `json:"expires_at_unix_ms"`
-	ReleasedAtUnixMs int64  `json:"-"`
+	StagingScopeID  string `json:"staging_scope_id"`
+	EndpointID      string `json:"endpoint_id"`
+	OwnerUserHash   string `json:"-"`
+	TargetID        string `json:"target_id"`
+	CapabilityHash  string `json:"-"`
+	ExpiresAtUnixMs int64  `json:"expires_at_unix_ms"`
 }
 
 func (s *Store) CompleteUploadAttemptToStaging(ctx context.Context, attempt UploadAttemptRecord, rec UploadRecord, scope UploadStagingScope) error {
@@ -90,7 +84,7 @@ func (s *Store) CompleteUploadAttemptToStaging(ctx context.Context, attempt Uplo
 	if err := tx.QueryRowContext(ctxOrBackground(ctx), `
 SELECT COUNT(1) FROM ai_upload_staging_scopes
 WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND target_id = ?
-  AND capability_hash = ? AND released_at_unix_ms = 0 AND expires_at_unix_ms > ?
+  AND capability_hash = ? AND expires_at_unix_ms > ?
 `, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, time.Now().UnixMilli()).Scan(&active); err != nil || active != 1 {
 		return errors.New("upload staging scope is unavailable")
 	}
@@ -117,18 +111,16 @@ WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_request_id = ?
 	if status != UploadAttemptReceiving {
 		return errors.New("upload attempt is not receiving")
 	}
-	if rec.OwnerScopeKind == UploadOwnerScopeUser {
-		if err := enforceUploadQuotaTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.OwnerUserHash, "", UploadStateStaged, rec.SizeBytes); err != nil {
-			return err
-		}
+	if err := enforceUploadQuotaTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.OwnerUserHash, "", UploadStateStaged, rec.SizeBytes); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
 INSERT INTO ai_uploads(
-  upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-  declared_media_type, detected_media_type, size_bytes, content_sha256,
+  upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+  detected_media_type, size_bytes, content_sha256,
   unicode_code_points, logical_line_count, source, state,
-  created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  created_at_unix_ms, delete_after_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, uploadRecordArgs(rec)...); err != nil {
 		return err
 	}
@@ -139,9 +131,9 @@ WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_request_id = ? AND stat
 		return err
 	}
 	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
-VALUES(?, ?, ?, ?, ?, ?)
-`, rec.EndpointID, rec.UploadID, scope.TargetID, UploadRefKindStaging, refID, rec.CreatedAtUnixMs); err != nil {
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, target_id, ref_kind, ref_id)
+VALUES(?, ?, ?, ?, ?)
+`, rec.EndpointID, rec.UploadID, scope.TargetID, UploadRefKindStaging, refID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -156,7 +148,7 @@ func requireUploadStagingScopeActiveTx(ctx context.Context, tx *sql.Tx, scope Up
 	if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1) FROM ai_upload_staging_scopes
 WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND target_id = ?
-  AND capability_hash = ? AND released_at_unix_ms = 0 AND expires_at_unix_ms > ?
+  AND capability_hash = ? AND expires_at_unix_ms > ?
 `, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, nowUnixMs).Scan(&count); err != nil {
 		return err
 	}
@@ -176,7 +168,7 @@ func normalizeUploadStagingScope(scope UploadStagingScope) UploadStagingScope {
 }
 
 func validateUploadStagingScope(scope UploadStagingScope) error {
-	if scope.StagingScopeID == "" || scope.EndpointID == "" || len(scope.OwnerUserHash) != 64 || scope.TargetID == "" || len(scope.CapabilityHash) != 64 || scope.CreatedAtUnixMs <= 0 || scope.ExpiresAtUnixMs <= scope.CreatedAtUnixMs {
+	if scope.StagingScopeID == "" || scope.EndpointID == "" || len(scope.OwnerUserHash) != 64 || scope.TargetID == "" || len(scope.CapabilityHash) != 64 || scope.ExpiresAtUnixMs <= 0 {
 		return errors.New("invalid upload staging scope")
 	}
 	return nil
@@ -192,16 +184,15 @@ func (s *Store) CreateUploadStagingScope(ctx context.Context, scope UploadStagin
 	}
 	_, err := s.db.ExecContext(ctxOrBackground(ctx), `
 INSERT INTO ai_upload_staging_scopes(
-  staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash,
-  created_at_unix_ms, expires_at_unix_ms, released_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, 0)
-`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, scope.CreatedAtUnixMs, scope.ExpiresAtUnixMs)
+  staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash, expires_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?)
+`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, scope.ExpiresAtUnixMs)
 	return err
 }
 
 func loadUploadStagingScopeRow(row *sql.Row) (UploadStagingScope, error) {
 	var scope UploadStagingScope
-	err := row.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.TargetID, &scope.CapabilityHash, &scope.CreatedAtUnixMs, &scope.ExpiresAtUnixMs, &scope.ReleasedAtUnixMs)
+	err := row.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.TargetID, &scope.CapabilityHash, &scope.ExpiresAtUnixMs)
 	return normalizeUploadStagingScope(scope), err
 }
 
@@ -218,10 +209,10 @@ func (s *Store) AuthorizeUploadStagingScope(ctx context.Context, endpointID, own
 	}
 	scope, err := loadUploadStagingScopeRow(s.db.QueryRowContext(ctxOrBackground(ctx), `
 SELECT staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash,
-       created_at_unix_ms, expires_at_unix_ms, released_at_unix_ms
+       expires_at_unix_ms
 FROM ai_upload_staging_scopes WHERE staging_scope_id = ?
 `, stagingScopeID))
-	if err != nil || scope.EndpointID != endpointID || scope.OwnerUserHash != ownerUserHash || scope.ReleasedAtUnixMs != 0 || scope.ExpiresAtUnixMs <= nowUnixMs || subtle.ConstantTimeCompare([]byte(scope.CapabilityHash), []byte(capabilityHash)) != 1 {
+	if err != nil || scope.EndpointID != endpointID || scope.OwnerUserHash != ownerUserHash || scope.ExpiresAtUnixMs <= nowUnixMs || subtle.ConstantTimeCompare([]byte(scope.CapabilityHash), []byte(capabilityHash)) != 1 {
 		return UploadStagingScope{}, sql.ErrNoRows
 	}
 	return scope, nil
@@ -244,15 +235,15 @@ func (s *Store) GetStagingOwnedUpload(ctx context.Context, endpointID, ownerUser
 	}
 	var rec UploadRecord
 	if err := scanUploadRow(s.db.QueryRowContext(ctxOrBackground(ctx), `
-SELECT u.upload_id, u.endpoint_id, u.owner_scope_kind, u.owner_user_hash, u.storage_relpath, u.name,
-       u.declared_media_type, u.detected_media_type, u.size_bytes, u.content_sha256,
+SELECT u.upload_id, u.endpoint_id, u.owner_user_hash, u.storage_relpath, u.name,
+       u.detected_media_type, u.size_bytes, u.content_sha256,
        u.unicode_code_points, u.logical_line_count, u.source, u.state,
-       u.created_at_unix_ms, u.claimed_at_unix_ms, u.delete_after_unix_ms
+       u.created_at_unix_ms, u.delete_after_unix_ms
 FROM ai_uploads u
 JOIN ai_upload_refs r ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
-WHERE u.endpoint_id = ? AND u.owner_scope_kind = ? AND u.owner_user_hash = ?
+WHERE u.endpoint_id = ? AND u.owner_user_hash = ?
 	  AND u.upload_id = ? AND u.state = ? AND r.ref_kind = ? AND r.ref_id = ?
-`, strings.TrimSpace(endpointID), UploadOwnerScopeUser, strings.ToLower(strings.TrimSpace(ownerUserHash)), strings.TrimSpace(uploadID), UploadStateStaged, UploadRefKindStaging, refID), &rec); err != nil {
+`, strings.TrimSpace(endpointID), strings.ToLower(strings.TrimSpace(ownerUserHash)), strings.TrimSpace(uploadID), UploadStateStaged, UploadRefKindStaging, refID), &rec); err != nil {
 		return nil, err
 	}
 	return &rec, nil
@@ -273,10 +264,10 @@ func (s *Store) ReleaseUploadStagingScope(ctx context.Context, scope UploadStagi
 	}
 	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctxOrBackground(ctx), `
-SELECT u.upload_id, u.endpoint_id, u.owner_scope_kind, u.owner_user_hash, u.storage_relpath, u.name,
-       u.declared_media_type, u.detected_media_type, u.size_bytes, u.content_sha256,
+SELECT u.upload_id, u.endpoint_id, u.owner_user_hash, u.storage_relpath, u.name,
+       u.detected_media_type, u.size_bytes, u.content_sha256,
        u.unicode_code_points, u.logical_line_count, u.source, u.state,
-       u.created_at_unix_ms, u.claimed_at_unix_ms, u.delete_after_unix_ms
+       u.created_at_unix_ms, u.delete_after_unix_ms
 FROM ai_uploads u
 JOIN ai_upload_refs r ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
 WHERE r.endpoint_id = ? AND r.ref_kind = ? AND r.ref_id = ?
@@ -300,7 +291,7 @@ ORDER BY u.upload_id
 	if _, err := tx.ExecContext(ctxOrBackground(ctx), `DELETE FROM ai_upload_refs WHERE endpoint_id = ? AND ref_kind = ? AND ref_id = ?`, scope.EndpointID, UploadRefKindStaging, refID); err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctxOrBackground(ctx), `UPDATE ai_upload_staging_scopes SET released_at_unix_ms = ? WHERE staging_scope_id = ? AND released_at_unix_ms = 0`, nowUnixMs, scope.StagingScopeID); err != nil {
+	if _, err := tx.ExecContext(ctxOrBackground(ctx), `DELETE FROM ai_upload_staging_scopes WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND capability_hash = ?`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.CapabilityHash); err != nil {
 		return nil, err
 	}
 	var cleanup []UploadRecord
@@ -340,15 +331,15 @@ func (s *Store) ReleaseUploadStagingScopeUpload(ctx context.Context, scope Uploa
 	defer func() { _ = tx.Rollback() }()
 	var rec UploadRecord
 	if err := scanUploadRow(tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT u.upload_id, u.endpoint_id, u.owner_scope_kind, u.owner_user_hash, u.storage_relpath, u.name,
-       u.declared_media_type, u.detected_media_type, u.size_bytes, u.content_sha256,
+SELECT u.upload_id, u.endpoint_id, u.owner_user_hash, u.storage_relpath, u.name,
+       u.detected_media_type, u.size_bytes, u.content_sha256,
        u.unicode_code_points, u.logical_line_count, u.source, u.state,
-       u.created_at_unix_ms, u.claimed_at_unix_ms, u.delete_after_unix_ms
+       u.created_at_unix_ms, u.delete_after_unix_ms
 FROM ai_uploads u
 JOIN ai_upload_refs r ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
-WHERE u.endpoint_id = ? AND u.upload_id = ? AND u.owner_scope_kind = ? AND u.owner_user_hash = ?
+WHERE u.endpoint_id = ? AND u.upload_id = ? AND u.owner_user_hash = ?
   AND r.ref_kind = ? AND r.ref_id = ?
-`, scope.EndpointID, uploadID, UploadOwnerScopeUser, scope.OwnerUserHash, UploadRefKindStaging, refID), &rec); err != nil {
+`, scope.EndpointID, uploadID, scope.OwnerUserHash, UploadRefKindStaging, refID), &rec); err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctxOrBackground(ctx), `DELETE FROM ai_upload_refs WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?`, scope.EndpointID, uploadID, UploadRefKindStaging, refID); err != nil {
@@ -387,9 +378,9 @@ func (s *Store) ReleaseExpiredUploadStagingScopes(ctx context.Context, nowUnixMs
 	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctxOrBackground(ctx), `
 SELECT staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash,
-       created_at_unix_ms, expires_at_unix_ms, released_at_unix_ms
+       expires_at_unix_ms
 FROM ai_upload_staging_scopes
-WHERE released_at_unix_ms = 0 AND expires_at_unix_ms <= ?
+WHERE expires_at_unix_ms <= ?
 ORDER BY expires_at_unix_ms, staging_scope_id
 LIMIT ?
 `, nowUnixMs, limit)
@@ -399,7 +390,7 @@ LIMIT ?
 	var scopes []UploadStagingScope
 	for rows.Next() {
 		var scope UploadStagingScope
-		if err := rows.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.TargetID, &scope.CapabilityHash, &scope.CreatedAtUnixMs, &scope.ExpiresAtUnixMs, &scope.ReleasedAtUnixMs); err != nil {
+		if err := rows.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.TargetID, &scope.CapabilityHash, &scope.ExpiresAtUnixMs); err != nil {
 			_ = rows.Close()
 			return nil, 0, err
 		}
@@ -418,10 +409,10 @@ LIMIT ?
 			return nil, 0, errors.New("expired upload staging scope is malformed")
 		}
 		uploadRows, err := tx.QueryContext(ctxOrBackground(ctx), `
-SELECT u.upload_id, u.endpoint_id, u.owner_scope_kind, u.owner_user_hash, u.storage_relpath, u.name,
-       u.declared_media_type, u.detected_media_type, u.size_bytes, u.content_sha256,
+SELECT u.upload_id, u.endpoint_id, u.owner_user_hash, u.storage_relpath, u.name,
+       u.detected_media_type, u.size_bytes, u.content_sha256,
        u.unicode_code_points, u.logical_line_count, u.source, u.state,
-       u.created_at_unix_ms, u.claimed_at_unix_ms, u.delete_after_unix_ms
+       u.created_at_unix_ms, u.delete_after_unix_ms
 FROM ai_uploads u
 JOIN ai_upload_refs r ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
 WHERE r.endpoint_id = ? AND r.ref_kind = ? AND r.ref_id = ?
@@ -444,7 +435,7 @@ ORDER BY u.upload_id
 		if _, err := tx.ExecContext(ctxOrBackground(ctx), `DELETE FROM ai_upload_refs WHERE endpoint_id = ? AND ref_kind = ? AND ref_id = ?`, scope.EndpointID, UploadRefKindStaging, refID); err != nil {
 			return nil, 0, err
 		}
-		if _, err := tx.ExecContext(ctxOrBackground(ctx), `UPDATE ai_upload_staging_scopes SET released_at_unix_ms = ? WHERE staging_scope_id = ? AND released_at_unix_ms = 0`, nowUnixMs, scope.StagingScopeID); err != nil {
+		if _, err := tx.ExecContext(ctxOrBackground(ctx), `DELETE FROM ai_upload_staging_scopes WHERE staging_scope_id = ?`, scope.StagingScopeID); err != nil {
 			return nil, 0, err
 		}
 	}

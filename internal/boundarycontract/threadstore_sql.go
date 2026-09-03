@@ -120,6 +120,10 @@ func ScanThreadstoreSQL(root string) ([]ThreadstoreQueryContract, error) {
 	for _, column := range []string{
 		"id", "request_id", "text_content", "attachments_json", "context_action_json",
 		"options_json", "session_meta_json", "imported_at_unix_ms", "error_message",
+		"created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id",
+		"updated_by_user_email", "owner_scope_kind", "declared_media_type", "claimed_at_unix_ms",
+		"released_at_unix_ms", "home_runtime_id", "home_runtime_kind", "origin_env_public_id",
+		"primary_target_id", "active_target_ids_json",
 	} {
 		knownColumns[column] = struct{}{}
 	}
@@ -471,7 +475,9 @@ func RefreshThreadstorePhysicalContracts(manifest ThreadstoreBoundaryManifest, c
 	for index := range manifest.Tables {
 		contract := &manifest.Tables[index]
 		contracts[contract.Table] = contract
-		contract.Columns = uniqueSorted(columns[contract.Table])
+		if currentColumns, ok := columns[contract.Table]; ok {
+			contract.Columns = uniqueSorted(currentColumns)
+		}
 		contract.Indexes = nil
 		contract.Triggers = nil
 	}
@@ -496,6 +502,13 @@ func RefreshThreadstorePhysicalContracts(manifest ThreadstoreBoundaryManifest, c
 		contract.Indexes = uniqueSorted(contract.Indexes)
 		contract.Triggers = uniqueSorted(contract.Triggers)
 	}
+	current := make([]ThreadstoreTableContract, 0, len(columns))
+	for _, contract := range manifest.Tables {
+		if _, ok := columns[contract.Table]; ok {
+			current = append(current, contract)
+		}
+	}
+	manifest.Tables = current
 	return manifest, nil
 }
 
@@ -627,7 +640,71 @@ func reviewedMigrationTable(query ThreadstoreQueryContract, table string) (colum
 	if table == "ai_upload_refs_v4" && query.Function == "rebuildUploadRefsV5" {
 		return []string{"id", "endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id", "created_at_unix_ms"}, nil, true
 	}
+	if table == "ai_thread_delete_authority" && query.Function == "createThreadDeleteAuthorityTableTx" {
+		return []string{"endpoint_id", "thread_id", "deleted_at_unix_ms"}, nil, true
+	}
+	if query.Function == "pendingInputMigrationSource.GetThreadOwnedUpload" {
+		switch table {
+		case "ai_uploads":
+			return legacyUploadColumnsV5(), []string{"endpoint_id", "owner_scope_kind", "state", "upload_id"}, true
+		case "ai_upload_refs":
+			return []string{"endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id", "created_at_unix_ms"}, []string{"endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id"}, true
+		}
+	}
+	if query.Function == "pendingInputMigrationSource.LegacyPrimaryTargetID" && table == "ai_flower_thread_routing" {
+		return legacyFlowerThreadRoutingColumnsV5(), []string{"endpoint_id", "thread_id"}, true
+	}
+	if query.Function == "migrateThreadstoreV5ToV6" {
+		switch table {
+		case "ai_thread_settings_v5":
+			return legacyThreadSettingsColumnsV5(), nil, true
+		case "ai_uploads_v5":
+			return legacyUploadColumnsV5(), nil, true
+		case "ai_upload_refs_v5":
+			return []string{"endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id", "created_at_unix_ms"}, nil, true
+		case "ai_upload_staging_scopes", "ai_upload_staging_scopes_v5":
+			return legacyUploadStagingScopeColumnsV5(), []string{"expires_at_unix_ms", "released_at_unix_ms"}, true
+		case "provider_capabilities":
+			return []string{"provider_id", "model_name", "capability_json", "updated_at_unix_ms"}, nil, true
+		case "ai_flower_thread_routing":
+			return legacyFlowerThreadRoutingColumnsV5(), nil, true
+		case "ai_thread_delete_authority":
+			return []string{"endpoint_id", "thread_id", "deleted_at_unix_ms"}, nil, true
+		}
+	}
 	return nil, nil, false
+}
+
+func legacyThreadSettingsColumnsV5() []string {
+	return []string{
+		"thread_id", "parent_thread_id", "endpoint_id", "namespace_public_id", "model_id",
+		"reasoning_selection_json", "permission_type", "working_dir", "pinned_at_unix_ms",
+		"created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id",
+		"updated_by_user_email", "settings_created_at_unix_ms", "settings_updated_at_unix_ms",
+	}
+}
+
+func legacyUploadColumnsV5() []string {
+	return []string{
+		"upload_id", "endpoint_id", "owner_scope_kind", "owner_user_hash", "storage_relpath",
+		"name", "declared_media_type", "detected_media_type", "size_bytes", "content_sha256",
+		"unicode_code_points", "logical_line_count", "source", "state", "created_at_unix_ms",
+		"claimed_at_unix_ms", "delete_after_unix_ms",
+	}
+}
+
+func legacyUploadStagingScopeColumnsV5() []string {
+	return []string{
+		"staging_scope_id", "endpoint_id", "owner_user_hash", "target_id", "capability_hash",
+		"created_at_unix_ms", "expires_at_unix_ms", "released_at_unix_ms",
+	}
+}
+
+func legacyFlowerThreadRoutingColumnsV5() []string {
+	return []string{
+		"endpoint_id", "thread_id", "updated_at_unix_ms", "home_runtime_id", "home_runtime_kind",
+		"origin_env_public_id", "primary_target_id", "active_target_ids_json",
+	}
 }
 
 func RefreshThreadstoreQueries(existing ThreadstoreBoundaryManifest, scanned []ThreadstoreQueryContract) ThreadstoreBoundaryManifest {
@@ -724,7 +801,7 @@ func reviewedDynamicThreadstoreQuery(query ThreadstoreQueryContract) string {
 }
 
 func reviewedThreadstoreConsumerKind(query ThreadstoreQueryContract) string {
-	if query.Action == "schema" || strings.Contains(query.Path, "/sqliteutil/") || strings.Contains(query.Path, "/pending_input_migration.go") {
+	if query.Action == "schema" || strings.HasPrefix(query.Function, "migrateThreadstore") || strings.Contains(query.Path, "/sqliteutil/") || strings.Contains(query.Path, "/pending_input_migration.go") {
 		return "schema_maintenance"
 	}
 	return "product_operation"
@@ -750,12 +827,12 @@ func applyReviewedDynamicInventory(query *ThreadstoreQueryContract) {
 		write  []string
 	}
 	inventories := map[string]inventory{
-		"threadstore.06b73535a1ce4063": {[]string{"ai_thread_settings"}, []string{"pinned_at_unix_ms", "settings_created_at_unix_ms", "thread_id"}, []string{"created_by_user_email", "created_by_user_public_id", "endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "updated_by_user_email", "updated_by_user_public_id", "working_dir"}, nil},
-		"threadstore.2c98775a07b4d6a1": {[]string{"ai_thread_settings"}, []string{"endpoint_id", "thread_id"}, []string{"created_by_user_email", "created_by_user_public_id", "endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "updated_by_user_email", "updated_by_user_public_id", "working_dir"}, nil},
+		"threadstore.06b73535a1ce4063": {[]string{"ai_thread_settings"}, []string{"pinned_at_unix_ms", "settings_created_at_unix_ms", "thread_id"}, []string{"endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "working_dir"}, nil},
+		"threadstore.2c98775a07b4d6a1": {[]string{"ai_thread_settings"}, []string{"endpoint_id", "thread_id"}, []string{"endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "working_dir"}, nil},
 		"threadstore.d0f67f8765bb2a81": {[]string{"ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, []string{"delete_after_unix_ms", "state"}},
 		"threadstore.d8b5ab2c0ba41c63": {[]string{"ai_upload_refs", "ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, nil},
 		"threadstore.fa59a5e9f6bba496": {
-			[]string{"ai_flower_thread_routing", "ai_upload_staging_scopes"},
+			[]string{"ai_flower_execution_authority", "ai_upload_staging_scopes"},
 			[]string{"endpoint_id", "target_id", "thread_id"},
 			[]string{"endpoint_id", "target_id", "thread_id"},
 			nil,

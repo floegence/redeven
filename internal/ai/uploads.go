@@ -555,9 +555,9 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 	createdAt := time.Now().UnixMilli()
 	rec := threadstore.UploadRecord{
 		UploadID: attempt.UploadID, EndpointID: owner.EndpointID,
-		OwnerScopeKind: threadstore.UploadOwnerScopeUser, OwnerUserHash: owner.OwnerUserHash,
+		OwnerUserHash:  owner.OwnerUserHash,
 		StorageRelPath: filepath.Base(dataPath), Name: name,
-		DeclaredMediaType: normalizeMediaType(req.DeclaredMediaType), DetectedMediaType: detected, MimeType: detected,
+		DetectedMediaType: detected, MimeType: detected,
 		SizeBytes: written, ContentSHA256: inspector.digest(), UnicodeCodePoints: points, LogicalLineCount: lines,
 		Source: req.Source, State: threadstore.UploadStateStaged,
 		CreatedAtUnixMs: createdAt, DeleteAfterUnixMs: createdAt + uploadStagedTTL.Milliseconds(),
@@ -626,9 +626,9 @@ func (s *Service) completeRenamedUploadAttempt(
 	}
 	rec := threadstore.UploadRecord{
 		UploadID: attempt.UploadID, EndpointID: req.Owner.EndpointID,
-		OwnerScopeKind: threadstore.UploadOwnerScopeUser, OwnerUserHash: req.Owner.OwnerUserHash,
+		OwnerUserHash:  req.Owner.OwnerUserHash,
 		StorageRelPath: filepath.Base(dataPath), Name: name,
-		DeclaredMediaType: normalizeMediaType(req.DeclaredMediaType), DetectedMediaType: detected, MimeType: detected,
+		DetectedMediaType: detected, MimeType: detected,
 		SizeBytes: written, ContentSHA256: inspector.digest(), UnicodeCodePoints: points, LogicalLineCount: lines,
 		Source: req.Source, State: threadstore.UploadStateStaged,
 		CreatedAtUnixMs: createdAt, DeleteAfterUnixMs: createdAt + uploadStagedTTL.Milliseconds(),
@@ -678,7 +678,7 @@ func (s *Service) OpenLiveUpload(ctx context.Context, owner UploadOwner, threadI
 	if err != nil || rec == nil || rec.State != threadstore.UploadStateLive {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
-	if rec.OwnerScopeKind != threadstore.UploadOwnerScopeUser || rec.OwnerUserHash != owner.OwnerUserHash {
+	if rec.OwnerUserHash != owner.OwnerUserHash {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
 	if strings.TrimSpace(membership.Name) != rec.Name || normalizeMediaType(membership.DetectedMediaType) != normalizeMediaType(rec.DetectedMediaType) || membership.SizeBytes != rec.SizeBytes {
@@ -717,7 +717,7 @@ func (s *Service) OpenQueuedUpload(ctx context.Context, owner UploadOwner, threa
 	if err != nil || rec == nil || rec.State != threadstore.UploadStateLive {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
-	if rec.OwnerScopeKind != threadstore.UploadOwnerScopeUser || rec.OwnerUserHash != owner.OwnerUserHash {
+	if rec.OwnerUserHash != owner.OwnerUserHash {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
 	filePath := filepath.Join(dir, filepath.Base(rec.StorageRelPath))

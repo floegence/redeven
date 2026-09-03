@@ -87,7 +87,7 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		if db == nil {
 			return fail(initialTurnPhasePrepareAtomic, errors.New("threads store not ready"))
 		}
-		if err := db.ClaimStagedUploadsToThread(ctxOrBackground(ctx), settings.EndpointID, thread.ThreadID, prepared.UploadIDs, prepared.CreatedAtUnixMs, prepared.AttachmentClaimPolicy, *prepared.StagingScope); err != nil {
+		if err := db.ClaimStagedUploadsToThread(ctxOrBackground(ctx), settings.EndpointID, thread.ThreadID, prepared.UploadIDs, prepared.AttachmentClaimPolicy, *prepared.StagingScope); err != nil {
 			return fail(initialTurnPhasePrepareAtomic, err)
 		}
 	}

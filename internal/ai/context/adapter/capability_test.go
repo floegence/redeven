@@ -2,125 +2,16 @@ package adapter
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai/context/model"
-	contextstore "github.com/floegence/redeven/internal/ai/context/store"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 )
-
-func TestResolver_ResolveAndCache(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	db, err := threadstore.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	repo := contextstore.NewRepository(db)
-	resolver := NewResolver(repo)
-
-	provider := config.AIProvider{ID: "openai", Type: "openai"}
-	cap, err := resolver.Resolve(context.Background(), provider, "openai/gpt-5-mini")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if cap.ProviderID != "openai" {
-		t.Fatalf("ProviderID=%q, want openai", cap.ProviderID)
-	}
-	if cap.ModelName != "gpt-5-mini" {
-		t.Fatalf("ModelName=%q, want gpt-5-mini", cap.ModelName)
-	}
-	if cap.MaxContextTokens <= 0 {
-		t.Fatalf("MaxContextTokens=%d, want > 0", cap.MaxContextTokens)
-	}
-
-	cached, ok, err := repo.GetCapability(context.Background(), "openai", "gpt-5-mini")
-	if err != nil {
-		t.Fatalf("GetCapability: %v", err)
-	}
-	if !ok {
-		t.Fatalf("expected cached capability")
-	}
-	if cached.ModelName != "gpt-5-mini" {
-		t.Fatalf("cached.ModelName=%q, want gpt-5-mini", cached.ModelName)
-	}
-}
-
-func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	db, err := threadstore.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	repo := contextstore.NewRepository(db)
-	resolver := NewResolver(repo)
-
-	ctx := context.Background()
-
-	// Seed a stale cached capability (e.g., provider type changed from openai_compatible to moonshot).
-	if err := repo.UpsertCapability(ctx, model.ModelCapability{
-		ProviderID:               "prov_1",
-		ProviderType:             "openai_compatible",
-		ResolverVersion:          0,
-		ModelName:                "kimi-k2.6",
-		SupportsTools:            true,
-		SupportsStrictJSONSchema: false,
-		SupportsImageInput:       true,
-		SupportsFileInput:        true,
-		SupportsReasoningTokens:  true,
-		MaxContextTokens:         64000,
-		MaxOutputTokens:          4096,
-		PreferredToolSchemaMode:  "relaxed_json",
-	}); err != nil {
-		t.Fatalf("UpsertCapability: %v", err)
-	}
-
-	cap, err := resolver.Resolve(ctx, config.AIProvider{ID: "prov_1", Type: "moonshot"}, "prov_1/kimi-k2.6")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if cap.ProviderType != "moonshot" {
-		t.Fatalf("ProviderType=%q, want moonshot", cap.ProviderType)
-	}
-	if cap.ResolverVersion != capabilityResolverVersion {
-		t.Fatalf("ResolverVersion=%d, want %d", cap.ResolverVersion, capabilityResolverVersion)
-	}
-	if cap.MaxContextTokens != 256000 {
-		t.Fatalf("MaxContextTokens=%d, want 256000", cap.MaxContextTokens)
-	}
-	if cap.MaxOutputTokens != 96000 {
-		t.Fatalf("MaxOutputTokens=%d, want 96000", cap.MaxOutputTokens)
-	}
-
-	cached, ok, err := repo.GetCapability(ctx, "prov_1", "kimi-k2.6")
-	if err != nil {
-		t.Fatalf("GetCapability: %v", err)
-	}
-	if !ok {
-		t.Fatalf("expected cached capability")
-	}
-	cached = model.NormalizeCapability(cached)
-	if cached.ProviderType != "moonshot" {
-		t.Fatalf("cached.ProviderType=%q, want moonshot", cached.ProviderType)
-	}
-	if cached.MaxContextTokens != 256000 {
-		t.Fatalf("cached.MaxContextTokens=%d, want 256000", cached.MaxContextTokens)
-	}
-}
 
 func TestResolver_Resolve_UsesCuratedNativeModelMetadata(t *testing.T) {
 	t.Parallel()
 
-	resolver := NewResolver(nil)
+	resolver := NewResolver()
 	tests := []struct {
 		name       string
 		provider   config.AIProvider
@@ -193,7 +84,7 @@ func TestResolver_Resolve_UsesCuratedNativeModelMetadata(t *testing.T) {
 func TestResolver_Resolve_UsesProviderModelContextWindow(t *testing.T) {
 	t.Parallel()
 
-	resolver := NewResolver(nil)
+	resolver := NewResolver()
 	provider := config.AIProvider{
 		ID:   "compat",
 		Type: "openai_compatible",
@@ -226,7 +117,7 @@ func TestResolver_Resolve_UsesProviderModelContextWindow(t *testing.T) {
 func TestResolver_Resolve_UsesProviderModelWireNameForReasoningCatalog(t *testing.T) {
 	t.Parallel()
 
-	resolver := NewResolver(nil)
+	resolver := NewResolver()
 	provider := config.AIProvider{
 		ID:   "groq",
 		Type: "groq",
@@ -257,7 +148,7 @@ func TestResolver_Resolve_UsesProviderModelWireNameForReasoningCatalog(t *testin
 func TestResolver_Resolve_UsesExplicitProviderModelModalities(t *testing.T) {
 	t.Parallel()
 
-	resolver := NewResolver(nil)
+	resolver := NewResolver()
 	provider := config.AIProvider{
 		ID:   "compat",
 		Type: "openai_compatible",
@@ -286,7 +177,7 @@ func TestResolver_Resolve_UsesExplicitProviderModelModalities(t *testing.T) {
 func TestResolver_Resolve_DoesNotUseModelNameSubstringHeuristics(t *testing.T) {
 	t.Parallel()
 
-	resolver := NewResolver(nil)
+	resolver := NewResolver()
 	cap, err := resolver.Resolve(context.Background(), config.AIProvider{ID: "openai", Type: "openai"}, "openai/acme-mini-vision")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)

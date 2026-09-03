@@ -5,6 +5,14 @@
   private application manifest and passes the same explicit prefix and hoisted
   layout to install and lifecycle rebuild. Package metadata and executable
   identity must verify both before and after third-party scripts run.
+* **Compact Flower product storage**: Threadstore schema v6 now keeps exactly
+  seven product tables and removes persisted provider capability, thread
+  routing, delete tombstone, and unused audit/resource columns through one
+  automatic migration. Capability and canonical target authority use current
+  configuration only. Upload attempts and ordinary execution authority have a
+  seven-day idempotency window, active recovery facts remain protected by
+  Floret `ThreadView`, staging scopes delete immediately, and bounded
+  maintenance schedules threshold-based incremental vacuum.
 * **Recoverable Managed Service release picker**: Version browsing now keeps
   every close path available during source work, aborts one generation-scoped
   request on close or service switch, and ignores late results. OCI discovery

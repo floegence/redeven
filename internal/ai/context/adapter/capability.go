@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/ai/context/model"
-	contextstore "github.com/floegence/redeven/internal/ai/context/store"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -53,16 +52,14 @@ var explicitModelCapabilityMetadata = map[string]map[string]explicitCapabilityMe
 	},
 }
 
-// Resolver builds and caches provider/model capability descriptors.
-type Resolver struct {
-	repo *contextstore.Repository
+// Resolver computes provider/model capability descriptors from current config.
+type Resolver struct{}
+
+func NewResolver() *Resolver {
+	return &Resolver{}
 }
 
-func NewResolver(repo *contextstore.Repository) *Resolver {
-	return &Resolver{repo: repo}
-}
-
-func (r *Resolver) Resolve(ctx context.Context, provider config.AIProvider, modelID string) (model.ModelCapability, error) {
+func (r *Resolver) Resolve(_ context.Context, provider config.AIProvider, modelID string) (model.ModelCapability, error) {
 	providerID := strings.TrimSpace(provider.ID)
 	modelName := modelNameFromID(modelID)
 	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
@@ -84,38 +81,7 @@ func (r *Resolver) Resolve(ctx context.Context, provider config.AIProvider, mode
 	cap.ModelName = modelName
 	cap.WireModelName = wireModelName
 	cap = model.NormalizeCapability(cap)
-	if r != nil && r.repo != nil && r.repo.Ready() {
-		if cached, ok, err := r.repo.GetCapability(ctx, providerID, modelName); err == nil && ok {
-			cached = model.NormalizeCapability(cached)
-			if !capabilitiesEquivalent(cached, cap) {
-				_ = r.repo.UpsertCapability(ctx, cap)
-			}
-		} else {
-			_ = r.repo.UpsertCapability(ctx, cap)
-		}
-	}
 	return cap, nil
-}
-
-func capabilitiesEquivalent(a model.ModelCapability, b model.ModelCapability) bool {
-	a = model.NormalizeCapability(a)
-	b = model.NormalizeCapability(b)
-
-	return a.ProviderID == b.ProviderID &&
-		a.ModelName == b.ModelName &&
-		a.WireModelName == b.WireModelName &&
-		a.ProviderType == b.ProviderType &&
-		a.ResolverVersion == b.ResolverVersion &&
-		a.SupportsTools == b.SupportsTools &&
-		a.SupportsStrictJSONSchema == b.SupportsStrictJSONSchema &&
-		a.SupportsImageInput == b.SupportsImageInput &&
-		a.SupportsFileInput == b.SupportsFileInput &&
-		a.SupportsReasoningTokens == b.SupportsReasoningTokens &&
-		reasoningCapabilitiesEquivalent(a.ReasoningCapability, b.ReasoningCapability) &&
-		a.SupportsAskUserQuestionBatches == b.SupportsAskUserQuestionBatches &&
-		a.MaxContextTokens == b.MaxContextTokens &&
-		a.MaxOutputTokens == b.MaxOutputTokens &&
-		a.PreferredToolSchemaMode == b.PreferredToolSchemaMode
 }
 
 func modelNameFromID(modelID string) string {
@@ -221,46 +187,6 @@ func defaultCapability(provider config.AIProvider, modelName string, wireModelNa
 		cap.ReasoningCapability = config.AIReasoningCapabilityForModel(providerType, wireModelName)
 	}
 	return cap
-}
-
-func reasoningCapabilitiesEquivalent(a config.AIReasoningCapability, b config.AIReasoningCapability) bool {
-	a = a.Normalize()
-	b = b.Normalize()
-	if a.Kind != b.Kind ||
-		a.DefaultLevel != b.DefaultLevel ||
-		a.DisableSupported != b.DisableSupported ||
-		a.WireShape != b.WireShape ||
-		a.DisableShape != b.DisableShape ||
-		a.BudgetShape != b.BudgetShape ||
-		a.MinBudgetTokens != b.MinBudgetTokens ||
-		a.MaxBudgetTokens != b.MaxBudgetTokens ||
-		a.DynamicProviderMetadata != b.DynamicProviderMetadata ||
-		a.SourceCheckedAt != b.SourceCheckedAt ||
-		a.Fixture != b.Fixture {
-		return false
-	}
-	if (a.DefaultEnabled == nil) != (b.DefaultEnabled == nil) {
-		return false
-	}
-	if a.DefaultEnabled != nil && b.DefaultEnabled != nil && *a.DefaultEnabled != *b.DefaultEnabled {
-		return false
-	}
-	return equalStringSlices(a.SupportedLevels, b.SupportedLevels) &&
-		equalStringSlices(a.ResponseReasoningFields, b.ResponseReasoningFields) &&
-		equalStringSlices(a.HistoryReplayRequirements, b.HistoryReplayRequirements) &&
-		equalStringSlices(a.SourceURLs, b.SourceURLs)
-}
-
-func equalStringSlices(a []string, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func explicitCapabilityFor(providerType string, modelName string) (explicitCapabilityMetadata, bool) {

@@ -26,8 +26,6 @@ const (
 	UploadRefKindThread  = "thread"
 	UploadRefKindStaging = "staging"
 
-	UploadOwnerScopeUser = "user"
-
 	UploadSourceFile     = "uploaded_file"
 	UploadSourceLongText = "long_text"
 
@@ -71,11 +69,9 @@ func (e *UploadQuotaError) Unwrap() error { return ErrUploadQuotaExceeded }
 type UploadRecord struct {
 	UploadID          string `json:"upload_id"`
 	EndpointID        string `json:"endpoint_id"`
-	OwnerScopeKind    string `json:"owner_scope_kind"`
 	OwnerUserHash     string `json:"owner_user_hash,omitempty"`
 	StorageRelPath    string `json:"storage_relpath"`
 	Name              string `json:"name"`
-	DeclaredMediaType string `json:"declared_media_type,omitempty"`
 	DetectedMediaType string `json:"detected_media_type"`
 	MimeType          string `json:"mime_type"`
 	SizeBytes         int64  `json:"size_bytes"`
@@ -85,7 +81,6 @@ type UploadRecord struct {
 	Source            string `json:"source"`
 	State             string `json:"state"`
 	CreatedAtUnixMs   int64  `json:"created_at_unix_ms"`
-	ClaimedAtUnixMs   int64  `json:"claimed_at_unix_ms"`
 	DeleteAfterUnixMs int64  `json:"delete_after_unix_ms"`
 }
 
@@ -99,6 +94,13 @@ type UploadAttemptRecord struct {
 	ErrorCode          string
 	CreatedAtUnixMs    int64
 	UpdatedAtUnixMs    int64
+}
+
+type UploadAttemptPruneCursor struct {
+	UpdatedAtUnixMs int64
+	EndpointID      string
+	OwnerUserHash   string
+	UploadRequestID string
 }
 
 type SQLitePageStats struct {
@@ -153,14 +155,9 @@ func sanitizeUploadStorageRelPath(raw string) string {
 func normalizeUploadRecord(rec UploadRecord) UploadRecord {
 	rec.UploadID = strings.TrimSpace(rec.UploadID)
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.OwnerScopeKind = strings.ToLower(strings.TrimSpace(rec.OwnerScopeKind))
-	if rec.OwnerScopeKind == "" {
-		rec.OwnerScopeKind = UploadOwnerScopeUser
-	}
 	rec.OwnerUserHash = strings.ToLower(strings.TrimSpace(rec.OwnerUserHash))
 	rec.StorageRelPath = sanitizeUploadStorageRelPath(rec.StorageRelPath)
 	rec.Name = strings.TrimSpace(rec.Name)
-	rec.DeclaredMediaType = strings.TrimSpace(rec.DeclaredMediaType)
 	rec.DetectedMediaType = strings.TrimSpace(rec.DetectedMediaType)
 	if rec.DetectedMediaType == "" {
 		rec.DetectedMediaType = strings.TrimSpace(rec.MimeType)
@@ -181,9 +178,6 @@ func normalizeUploadRecord(rec UploadRecord) UploadRecord {
 	if rec.CreatedAtUnixMs <= 0 {
 		rec.CreatedAtUnixMs = time.Now().UnixMilli()
 	}
-	if rec.ClaimedAtUnixMs < 0 {
-		rec.ClaimedAtUnixMs = 0
-	}
 	if rec.DeleteAfterUnixMs < 0 {
 		rec.DeleteAfterUnixMs = 0
 	}
@@ -194,17 +188,14 @@ func scanUploadRow(scan rowScanner, rec *UploadRecord) error {
 	if rec == nil {
 		return errors.New("nil upload record")
 	}
-	var ownerHash sql.NullString
 	var unicodePoints sql.NullInt64
 	var logicalLines sql.NullInt64
 	if err := scan.Scan(
 		&rec.UploadID,
 		&rec.EndpointID,
-		&rec.OwnerScopeKind,
-		&ownerHash,
+		&rec.OwnerUserHash,
 		&rec.StorageRelPath,
 		&rec.Name,
-		&rec.DeclaredMediaType,
 		&rec.DetectedMediaType,
 		&rec.SizeBytes,
 		&rec.ContentSHA256,
@@ -213,13 +204,9 @@ func scanUploadRow(scan rowScanner, rec *UploadRecord) error {
 		&rec.Source,
 		&rec.State,
 		&rec.CreatedAtUnixMs,
-		&rec.ClaimedAtUnixMs,
 		&rec.DeleteAfterUnixMs,
 	); err != nil {
 		return err
-	}
-	if ownerHash.Valid {
-		rec.OwnerUserHash = ownerHash.String
 	}
 	if unicodePoints.Valid {
 		value := unicodePoints.Int64
@@ -246,12 +233,12 @@ func (s *Store) InsertUpload(ctx context.Context, rec UploadRecord) error {
 	}
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO ai_uploads(
-  upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-  declared_media_type, detected_media_type, size_bytes, content_sha256,
+  upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+  detected_media_type, size_bytes, content_sha256,
   unicode_code_points, logical_line_count, source, state,
-  created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+  created_at_unix_ms, delete_after_unix_ms
 )
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, uploadRecordArgs(rec)...)
 	return err
 }
@@ -260,21 +247,17 @@ func validateUploadRecordForWrite(rec UploadRecord) error {
 	if rec.UploadID == "" || rec.EndpointID == "" || rec.StorageRelPath == "" {
 		return errors.New("invalid request")
 	}
-	if rec.OwnerScopeKind != UploadOwnerScopeUser || len(rec.OwnerUserHash) != 64 || len(rec.ContentSHA256) != 64 {
+	if len(rec.OwnerUserHash) != 64 || len(rec.ContentSHA256) != 64 {
 		return errors.New("user-owned upload requires owner and content digests")
 	}
 	return nil
 }
 
 func uploadRecordArgs(rec UploadRecord) []any {
-	var ownerHash any
-	if rec.OwnerUserHash != "" {
-		ownerHash = rec.OwnerUserHash
-	}
-	return []any{rec.UploadID, rec.EndpointID, rec.OwnerScopeKind, ownerHash, rec.StorageRelPath, rec.Name,
-		rec.DeclaredMediaType, rec.DetectedMediaType, rec.SizeBytes, rec.ContentSHA256,
+	return []any{rec.UploadID, rec.EndpointID, rec.OwnerUserHash, rec.StorageRelPath, rec.Name,
+		rec.DetectedMediaType, rec.SizeBytes, rec.ContentSHA256,
 		rec.UnicodeCodePoints, rec.LogicalLineCount, rec.Source, rec.State,
-		rec.CreatedAtUnixMs, rec.ClaimedAtUnixMs, rec.DeleteAfterUnixMs}
+		rec.CreatedAtUnixMs, rec.DeleteAfterUnixMs}
 }
 
 func (s *Store) EnsureUpload(ctx context.Context, rec UploadRecord) error {
@@ -290,12 +273,12 @@ func (s *Store) EnsureUpload(ctx context.Context, rec UploadRecord) error {
 	}
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO ai_uploads(
-  upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-  declared_media_type, detected_media_type, size_bytes, content_sha256,
+  upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+  detected_media_type, size_bytes, content_sha256,
   unicode_code_points, logical_line_count, source, state,
-  created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+  created_at_unix_ms, delete_after_unix_ms
 )
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(upload_id) DO NOTHING
 `, uploadRecordArgs(rec)...)
 	return err
@@ -315,10 +298,10 @@ func (s *Store) GetUpload(ctx context.Context, endpointID string, uploadID strin
 	}
 	var rec UploadRecord
 	if err := scanUploadRow(s.db.QueryRowContext(ctx, `
-SELECT upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-       declared_media_type, detected_media_type, size_bytes, content_sha256,
+SELECT upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+       detected_media_type, size_bytes, content_sha256,
        unicode_code_points, logical_line_count, source, state,
-       created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+       created_at_unix_ms, delete_after_unix_ms
 FROM ai_uploads
 WHERE endpoint_id = ? AND upload_id = ?
 `, endpointID, uploadID), &rec); err != nil {
@@ -339,13 +322,13 @@ func (s *Store) GetUserOwnedUpload(ctx context.Context, endpointID string, owner
 	}
 	var rec UploadRecord
 	if err := scanUploadRow(s.db.QueryRowContext(ctxOrBackground(ctx), `
-SELECT upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-       declared_media_type, detected_media_type, size_bytes, content_sha256,
+SELECT upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+       detected_media_type, size_bytes, content_sha256,
        unicode_code_points, logical_line_count, source, state,
-       created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+       created_at_unix_ms, delete_after_unix_ms
 FROM ai_uploads
-WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND upload_id = ?
-`, endpointID, UploadOwnerScopeUser, ownerUserHash, uploadID), &rec); err != nil {
+WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_id = ?
+`, endpointID, ownerUserHash, uploadID), &rec); err != nil {
 		return nil, err
 	}
 	return &rec, nil
@@ -371,24 +354,24 @@ func (s *Store) PrepareUserStagedUploadDeletion(ctx context.Context, endpointID 
 	defer func() { _ = tx.Rollback() }()
 	var rec UploadRecord
 	if err := scanUploadRow(tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-       declared_media_type, detected_media_type, size_bytes, content_sha256,
+SELECT upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+       detected_media_type, size_bytes, content_sha256,
        unicode_code_points, logical_line_count, source, state,
-       created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+       created_at_unix_ms, delete_after_unix_ms
 FROM ai_uploads u
-WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND upload_id = ?
+WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_id = ?
   AND state = ?
   AND NOT EXISTS (
     SELECT 1 FROM ai_upload_refs r
     WHERE r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
   )
-`, endpointID, UploadOwnerScopeUser, ownerUserHash, uploadID, UploadStateStaged), &rec); err != nil {
+`, endpointID, ownerUserHash, uploadID, UploadStateStaged), &rec); err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
 UPDATE ai_uploads SET state = ?, delete_after_unix_ms = ?
-WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND upload_id = ? AND state = ?
-`, UploadStateDeleting, nowUnixMs, endpointID, UploadOwnerScopeUser, ownerUserHash, uploadID, UploadStateStaged); err != nil {
+WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_id = ? AND state = ?
+`, UploadStateDeleting, nowUnixMs, endpointID, ownerUserHash, uploadID, UploadStateStaged); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -561,6 +544,94 @@ WHERE status = ? AND updated_at_unix_ms < ?
 	return result.RowsAffected()
 }
 
+// PruneTerminalUploadAttemptsPage removes one bounded page whose idempotency
+// window has elapsed. Receiving attempts are handled by recovery first.
+func (s *Store) PruneTerminalUploadAttemptsPage(ctx context.Context, cutoffUnixMs int64, cursor UploadAttemptPruneCursor, limit int) (UploadAttemptPruneCursor, int64, bool, error) {
+	if s == nil || s.db == nil {
+		return cursor, 0, false, errors.New("store not initialized")
+	}
+	if cutoffUnixMs <= 0 || limit <= 0 || limit > 500 {
+		return cursor, 0, false, errors.New("invalid upload attempt pruning request")
+	}
+	ctx = ctxOrBackground(ctx)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return cursor, 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `
+SELECT endpoint_id, owner_user_hash, upload_request_id, updated_at_unix_ms
+FROM ai_upload_attempts
+WHERE status IN (?, ?) AND updated_at_unix_ms <= ?
+  AND (
+    updated_at_unix_ms > ? OR
+    (updated_at_unix_ms = ? AND endpoint_id > ?) OR
+    (updated_at_unix_ms = ? AND endpoint_id = ? AND owner_user_hash > ?) OR
+    (updated_at_unix_ms = ? AND endpoint_id = ? AND owner_user_hash = ? AND upload_request_id > ?)
+  )
+ORDER BY updated_at_unix_ms, endpoint_id, owner_user_hash, upload_request_id
+LIMIT ?
+`, UploadAttemptComplete, UploadAttemptFailed, cutoffUnixMs,
+		cursor.UpdatedAtUnixMs,
+		cursor.UpdatedAtUnixMs, cursor.EndpointID,
+		cursor.UpdatedAtUnixMs, cursor.EndpointID, cursor.OwnerUserHash,
+		cursor.UpdatedAtUnixMs, cursor.EndpointID, cursor.OwnerUserHash, cursor.UploadRequestID,
+		limit)
+	if err != nil {
+		return cursor, 0, false, err
+	}
+	type attemptKey struct {
+		endpointID, ownerUserHash, uploadRequestID string
+		updatedAtUnixMs                            int64
+	}
+	keys := make([]attemptKey, 0, limit)
+	for rows.Next() {
+		var key attemptKey
+		if err := rows.Scan(&key.endpointID, &key.ownerUserHash, &key.uploadRequestID, &key.updatedAtUnixMs); err != nil {
+			_ = rows.Close()
+			return cursor, 0, false, err
+		}
+		keys = append(keys, key)
+	}
+	if err := rows.Close(); err != nil {
+		return cursor, 0, false, err
+	}
+	var removed int64
+	for _, key := range keys {
+		result, err := tx.ExecContext(ctx, `
+DELETE FROM ai_upload_attempts
+WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_request_id = ?
+  AND status IN (?, ?) AND updated_at_unix_ms <= ?
+`, key.endpointID, key.ownerUserHash, key.uploadRequestID, UploadAttemptComplete, UploadAttemptFailed, cutoffUnixMs)
+		if err != nil {
+			return cursor, removed, false, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return cursor, removed, false, err
+		}
+		removed += count
+	}
+	if err := tx.Commit(); err != nil {
+		return cursor, 0, false, err
+	}
+	complete := len(keys) < limit
+	if len(keys) == 0 {
+		return UploadAttemptPruneCursor{}, 0, true, nil
+	}
+	last := keys[len(keys)-1]
+	next := UploadAttemptPruneCursor{
+		UpdatedAtUnixMs: last.updatedAtUnixMs,
+		EndpointID:      last.endpointID,
+		OwnerUserHash:   last.ownerUserHash,
+		UploadRequestID: last.uploadRequestID,
+	}
+	if complete {
+		next = UploadAttemptPruneCursor{}
+	}
+	return next, removed, complete, nil
+}
+
 func (s *Store) ProtectedUploadArtifactNames(ctx context.Context) (map[string]struct{}, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
@@ -632,52 +703,20 @@ func (s *Store) getOwnedUpload(ctx context.Context, endpointID string, threadID 
 	}
 	var rec UploadRecord
 	if err := scanUploadRow(s.db.QueryRowContext(ctx, `
-SELECT u.upload_id, u.endpoint_id, u.owner_scope_kind, u.owner_user_hash, u.storage_relpath, u.name,
-       u.declared_media_type, u.detected_media_type, u.size_bytes, u.content_sha256,
+SELECT u.upload_id, u.endpoint_id, u.owner_user_hash, u.storage_relpath, u.name,
+       u.detected_media_type, u.size_bytes, u.content_sha256,
        u.unicode_code_points, u.logical_line_count, u.source, u.state,
-       u.created_at_unix_ms, u.claimed_at_unix_ms, u.delete_after_unix_ms
+       u.created_at_unix_ms, u.delete_after_unix_ms
 FROM ai_uploads u
 JOIN ai_upload_refs r
   ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
 WHERE u.endpoint_id = ? AND u.upload_id = ? AND u.state = ?
-  AND r.thread_id = ? AND r.ref_kind = ? AND r.ref_id = ?
+  AND r.target_id = ? AND r.ref_kind = ? AND r.ref_id = ?
 LIMIT 1
 `, endpointID, uploadID, UploadStateLive, threadID, refKind, refID), &rec); err != nil {
 		return nil, err
 	}
 	return &rec, nil
-}
-
-func (s *Store) BindUploadsToRef(ctx context.Context, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	refKind = normalizeUploadRefKind(refKind)
-	refID = strings.TrimSpace(refID)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || threadID == "" || refKind == "" || refID == "" {
-		return errors.New("invalid request")
-	}
-	if len(uploadIDs) == 0 {
-		return nil
-	}
-	if claimedAtUnixMs <= 0 {
-		claimedAtUnixMs = time.Now().UnixMilli()
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, refKind, refID, uploadIDs, claimedAtUnixMs, "", "", ""); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 type AttachmentClaimPolicy struct {
@@ -703,13 +742,13 @@ func validateAttachmentClaimPolicyTx(ctx context.Context, tx *sql.Tx, endpointID
 	for _, uploadID := range uploadIDs {
 		var rec UploadRecord
 		if err := scanUploadRow(tx.QueryRowContext(ctx, `
-SELECT upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-       declared_media_type, detected_media_type, size_bytes, content_sha256,
+SELECT upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+       detected_media_type, size_bytes, content_sha256,
        unicode_code_points, logical_line_count, source, state,
-       created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+       created_at_unix_ms, delete_after_unix_ms
 FROM ai_uploads
-WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND state IN (?, ?)
-`, endpointID, uploadID, UploadOwnerScopeUser, admission.OwnerUserHash, UploadStateStaged, UploadStateLive), &rec); err != nil {
+WHERE endpoint_id = ? AND upload_id = ? AND owner_user_hash = ? AND state IN (?, ?)
+`, endpointID, uploadID, admission.OwnerUserHash, UploadStateStaged, UploadStateLive), &rec); err != nil {
 			return errors.New("attachment admission resource changed")
 		}
 		if rec.SizeBytes < 0 || rec.SizeBytes > admission.MaxTurnBytes-totalBytes {
@@ -728,9 +767,9 @@ WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND owner_user_
 	return nil
 }
 
-func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64, sourceRefKind string, sourceRefID string, expectedOwnerUserHash string) error {
+func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, targetID string, refKind string, refID string, uploadIDs []string, sourceRefKind string, sourceRefID string, expectedOwnerUserHash string) error {
 	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
+	targetID = strings.TrimSpace(targetID)
 	refKind = normalizeUploadRefKind(refKind)
 	refID = strings.TrimSpace(refID)
 	sourceRefKind = normalizeUploadRefKind(sourceRefKind)
@@ -740,66 +779,60 @@ func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, thre
 		return errors.New("invalid source upload reference")
 	}
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || threadID == "" || refKind == "" || refID == "" {
+	if endpointID == "" || targetID == "" || refKind == "" || refID == "" {
 		return errors.New("invalid request")
 	}
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+	if err := requireThreadWritableTx(ctx, tx, endpointID, targetID); err != nil {
 		return err
 	}
 	if len(uploadIDs) == 0 {
 		return nil
 	}
-	if claimedAtUnixMs <= 0 {
-		claimedAtUnixMs = time.Now().UnixMilli()
-	}
 	for _, uploadID := range uploadIDs {
-		var ownerScopeKind string
-		var ownerUserHash sql.NullString
+		var ownerUserHash string
 		var state string
 		var sizeBytes int64
 		if err := tx.QueryRowContext(ctx, `
-SELECT owner_scope_kind, owner_user_hash, state, size_bytes
+SELECT owner_user_hash, state, size_bytes
 FROM ai_uploads
 WHERE endpoint_id = ? AND upload_id = ? AND LOWER(COALESCE(state, '')) <> ?
-`, endpointID, uploadID, UploadStateDeleting).Scan(&ownerScopeKind, &ownerUserHash, &state, &sizeBytes); err != nil {
+`, endpointID, uploadID, UploadStateDeleting).Scan(&ownerUserHash, &state, &sizeBytes); err != nil {
 			return err
 		}
-		if ownerScopeKind == UploadOwnerScopeUser {
-			if state == UploadStateStaged {
-				if sourceRefKind == "" || len(expectedOwnerUserHash) != 64 || expectedOwnerUserHash != ownerUserHash.String {
-					return errors.New("staged attachment requires exact source ownership")
-				}
-				var sourceRef int
-				if err := tx.QueryRowContext(ctx, `
-SELECT COUNT(1) FROM ai_upload_refs
-WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?
-				`, endpointID, uploadID, sourceRefKind, sourceRefID).Scan(&sourceRef); err != nil || sourceRef != 1 {
-					return errors.New("staged attachment is not owned by the exact source")
-				}
+		if state == UploadStateStaged {
+			if sourceRefKind == "" || len(expectedOwnerUserHash) != 64 || expectedOwnerUserHash != ownerUserHash {
+				return errors.New("staged attachment requires exact source ownership")
 			}
-			if state != UploadStateLive {
-				if err := enforceUploadQuotaTx(ctx, tx, endpointID, ownerUserHash.String, "", UploadStateLive, sizeBytes); err != nil {
-					return err
-				}
-			}
-			var threadAlreadyOwns int
+			var sourceRef int
 			if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1) FROM ai_upload_refs
-			WHERE endpoint_id = ? AND thread_id = ? AND upload_id = ? AND ref_kind = ?
-		`, endpointID, threadID, uploadID, UploadRefKindThread).Scan(&threadAlreadyOwns); err != nil {
+WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?
+			`, endpointID, uploadID, sourceRefKind, sourceRefID).Scan(&sourceRef); err != nil || sourceRef != 1 {
+				return errors.New("staged attachment is not owned by the exact source")
+			}
+		}
+		if state != UploadStateLive {
+			if err := enforceUploadQuotaTx(ctx, tx, endpointID, ownerUserHash, "", UploadStateLive, sizeBytes); err != nil {
 				return err
 			}
-			if threadAlreadyOwns == 0 {
-				if err := enforceUploadQuotaTx(ctx, tx, endpointID, "", threadID, UploadStateLive, sizeBytes); err != nil {
-					return err
-				}
+		}
+		var targetAlreadyOwns int
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(1) FROM ai_upload_refs
+		WHERE endpoint_id = ? AND target_id = ? AND upload_id = ? AND ref_kind = ?
+		`, endpointID, targetID, uploadID, UploadRefKindThread).Scan(&targetAlreadyOwns); err != nil {
+			return err
+		}
+		if targetAlreadyOwns == 0 {
+			if err := enforceUploadQuotaTx(ctx, tx, endpointID, "", targetID, UploadStateLive, sizeBytes); err != nil {
+				return err
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
-VALUES(?, ?, ?, ?, ?, ?)
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, target_id, ref_kind, ref_id)
+VALUES(?, ?, ?, ?, ?)
 ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING
-`, endpointID, uploadID, threadID, refKind, refID, claimedAtUnixMs); err != nil {
+`, endpointID, uploadID, targetID, refKind, refID); err != nil {
 			return err
 		}
 		if sourceRefKind != "" {
@@ -813,10 +846,9 @@ DELETE FROM ai_upload_refs
 		if _, err := tx.ExecContext(ctx, `
 UPDATE ai_uploads
 SET state = ?,
-    claimed_at_unix_ms = CASE WHEN claimed_at_unix_ms <= 0 THEN ? ELSE claimed_at_unix_ms END,
     delete_after_unix_ms = 0
 WHERE endpoint_id = ? AND upload_id = ?
-`, UploadStateLive, claimedAtUnixMs, endpointID, uploadID); err != nil {
+`, UploadStateLive, endpointID, uploadID); err != nil {
 			return err
 		}
 	}
@@ -834,8 +866,8 @@ func enforceUploadQuotaTx(ctx context.Context, tx *sql.Tx, endpointID string, ow
 		byteLimit = UploadStagedOwnerByteLimit
 		if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1), COALESCE(SUM(size_bytes), 0) FROM ai_uploads
-WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND state = ?
-`, endpointID, UploadOwnerScopeUser, ownerUserHash, UploadStateStaged).Scan(&count, &bytes); err != nil {
+WHERE endpoint_id = ? AND owner_user_hash = ? AND state = ?
+`, endpointID, ownerUserHash, UploadStateStaged).Scan(&count, &bytes); err != nil {
 			return err
 		}
 	case state == UploadStateLive && ownerUserHash != "" && threadID == "":
@@ -844,8 +876,8 @@ WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND state
 		byteLimit = UploadLiveOwnerByteLimit
 		if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1), COALESCE(SUM(size_bytes), 0) FROM ai_uploads
-WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND state = ?
-`, endpointID, UploadOwnerScopeUser, ownerUserHash, UploadStateLive).Scan(&count, &bytes); err != nil {
+WHERE endpoint_id = ? AND owner_user_hash = ? AND state = ?
+`, endpointID, ownerUserHash, UploadStateLive).Scan(&count, &bytes); err != nil {
 			return err
 		}
 	case state == UploadStateLive && threadID != "":
@@ -857,7 +889,7 @@ SELECT COUNT(1), COALESCE(SUM(size_bytes), 0)
 FROM ai_uploads u
 WHERE u.endpoint_id = ? AND u.state = ? AND u.upload_id IN (
   SELECT DISTINCT r.upload_id FROM ai_upload_refs r
-	  WHERE r.endpoint_id = ? AND r.thread_id = ? AND r.ref_kind = ?
+	  WHERE r.endpoint_id = ? AND r.target_id = ? AND r.ref_kind = ?
 	)
 	`, endpointID, UploadStateLive, endpointID, threadID, UploadRefKindThread).Scan(&count, &bytes); err != nil {
 			return err
@@ -884,7 +916,7 @@ func prepareUploadCleanupForThreadTx(ctx context.Context, tx *sql.Tx, endpointID
 	}
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM ai_upload_refs
-WHERE endpoint_id = ? AND thread_id = ?
+WHERE endpoint_id = ? AND target_id = ?
 `, endpointID, threadID); err != nil {
 		return nil, err
 	}
@@ -895,7 +927,7 @@ func listUploadIDsForThreadTx(ctx context.Context, tx *sql.Tx, endpointID string
 	rows, err := tx.QueryContext(ctx, `
 SELECT DISTINCT upload_id
 FROM ai_upload_refs
-WHERE endpoint_id = ? AND thread_id = ?
+WHERE endpoint_id = ? AND target_id = ?
 `, endpointID, threadID)
 	if err != nil {
 		return nil, err
@@ -928,10 +960,10 @@ func collectUnreferencedUploadsTx(ctx context.Context, tx *sql.Tx, endpointID st
 		deleteAfterUnixMs = time.Now().UnixMilli()
 	}
 	query, args := uploadRowsByIDQuery(`
-SELECT upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-       declared_media_type, detected_media_type, size_bytes, content_sha256,
+SELECT upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+       detected_media_type, size_bytes, content_sha256,
        unicode_code_points, logical_line_count, source, state,
-       created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+       created_at_unix_ms, delete_after_unix_ms
 FROM ai_uploads u
 WHERE endpoint_id = ?
   AND NOT EXISTS (
@@ -1011,10 +1043,10 @@ func (s *Store) PrepareExpiredUploadsForDeletion(ctx context.Context, nowUnixMs 
 	}
 	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctx, `
-SELECT upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-       declared_media_type, detected_media_type, size_bytes, content_sha256,
+SELECT upload_id, endpoint_id, owner_user_hash, storage_relpath, name,
+       detected_media_type, size_bytes, content_sha256,
        unicode_code_points, logical_line_count, source, state,
-       created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+       created_at_unix_ms, delete_after_unix_ms
 FROM ai_uploads
 WHERE LOWER(COALESCE(state, '')) IN (?, ?)
   AND delete_after_unix_ms > 0

@@ -28,7 +28,7 @@ type PendingInputMigrationRecord struct {
 // convert a retired queue item into Floret's canonical input contract.
 type PendingInputMigrationSource interface {
 	GetThreadSettings(context.Context, string, string) (*ThreadSettings, error)
-	GetFlowerThreadRouting(context.Context, string, string) (*FlowerThreadRouting, error)
+	LegacyPrimaryTargetID(context.Context, string, string) (string, error)
 	GetThreadOwnedUpload(context.Context, string, string, string) (*UploadRecord, error)
 }
 
@@ -64,35 +64,25 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return &settings, nil
 }
 
-func (source pendingInputMigrationSource) GetFlowerThreadRouting(ctx context.Context, endpointID, threadID string) (*FlowerThreadRouting, error) {
+func (source pendingInputMigrationSource) LegacyPrimaryTargetID(ctx context.Context, endpointID, threadID string) (string, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if source.tx == nil || endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid pending input migration routing")
+		return "", errors.New("invalid pending input migration routing")
 	}
-	var routing FlowerThreadRouting
+	var primaryTargetID string
 	err := source.tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT endpoint_id, thread_id, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
-       origin_env_public_id, primary_target_id, active_target_ids_json
+SELECT primary_target_id
 FROM ai_flower_thread_routing
 WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(
-		&routing.EndpointID,
-		&routing.ThreadID,
-		&routing.UpdatedAtUnixMs,
-		&routing.HomeRuntimeID,
-		&routing.HomeRuntimeKind,
-		&routing.OriginEnvPublicID,
-		&routing.PrimaryTargetID,
-		&routing.ActiveTargetIDsJSON,
-	)
+`, endpointID, threadID).Scan(&primaryTargetID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return "", nil
 	}
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return &routing, nil
+	return strings.TrimSpace(primaryTargetID), nil
 }
 
 func (source pendingInputMigrationSource) GetThreadOwnedUpload(ctx context.Context, endpointID, threadID, uploadID string) (*UploadRecord, error) {
@@ -103,7 +93,7 @@ func (source pendingInputMigrationSource) GetThreadOwnedUpload(ctx context.Conte
 		return nil, errors.New("invalid pending input migration upload")
 	}
 	var record UploadRecord
-	err := scanUploadRow(source.tx.QueryRowContext(ctxOrBackground(ctx), `
+	err := scanLegacyUploadRowV5(source.tx.QueryRowContext(ctxOrBackground(ctx), `
 SELECT u.upload_id, u.endpoint_id, u.owner_scope_kind, u.owner_user_hash, u.storage_relpath, u.name,
        u.declared_media_type, u.detected_media_type, u.size_bytes, u.content_sha256,
        u.unicode_code_points, u.logical_line_count, u.source, u.state,
@@ -119,6 +109,49 @@ LIMIT 1
 		return nil, err
 	}
 	return &record, nil
+}
+
+func scanLegacyUploadRowV5(scan rowScanner, record *UploadRecord) error {
+	if record == nil {
+		return errors.New("nil legacy upload record")
+	}
+	var ownerScopeKind, declaredMediaType string
+	var claimedAtUnixMs int64
+	var unicodePoints, logicalLines sql.NullInt64
+	if err := scan.Scan(
+		&record.UploadID,
+		&record.EndpointID,
+		&ownerScopeKind,
+		&record.OwnerUserHash,
+		&record.StorageRelPath,
+		&record.Name,
+		&declaredMediaType,
+		&record.DetectedMediaType,
+		&record.SizeBytes,
+		&record.ContentSHA256,
+		&unicodePoints,
+		&logicalLines,
+		&record.Source,
+		&record.State,
+		&record.CreatedAtUnixMs,
+		&claimedAtUnixMs,
+		&record.DeleteAfterUnixMs,
+	); err != nil {
+		return err
+	}
+	if ownerScopeKind != "user" {
+		return errors.New("legacy upload owner scope is invalid")
+	}
+	if unicodePoints.Valid {
+		value := unicodePoints.Int64
+		record.UnicodeCodePoints = &value
+	}
+	if logicalLines.Valid {
+		value := logicalLines.Int64
+		record.LogicalLineCount = &value
+	}
+	*record = normalizeUploadRecord(*record)
+	return nil
 }
 
 func migrateThreadstoreV4ToV5(ctx context.Context, tx *sql.Tx, migrate PendingInputMigrationHandler) error {

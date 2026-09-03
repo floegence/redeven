@@ -12,6 +12,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	_ "modernc.org/sqlite"
@@ -64,5 +65,18 @@ func TestDeleteThreadRetriesProductCleanupAfterCanonicalDelete(t *testing.T) {
 	}
 	if err := svc.DeleteThread(context.Background(), meta, thread.ThreadID, false); err != nil {
 		t.Fatalf("delete absent product catalog should be idempotent: %v", err)
+	}
+}
+
+func TestDeleteThreadWithoutSettingsDoesNotReadFloret(t *testing.T) {
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := &Service{threadsDB: store, threadRuntime: nil}
+	meta := &session.Meta{EndpointID: "env_absent", UserPublicID: "user", CanRead: true, CanWrite: true, CanExecute: true}
+	if err := svc.DeleteThread(t.Context(), meta, "thread_absent", false); err != nil {
+		t.Fatalf("absent DELETE with unavailable Floret runtime: %v", err)
 	}
 }

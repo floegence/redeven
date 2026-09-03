@@ -117,18 +117,10 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 	if !flowerCanonicalReferenceLocatorBelongsToEndpoint(locator, endpointID) {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceDenied
 	}
-	routing, err := s.GetFlowerThreadRouting(ctxOrBackground(ctx), endpointID, threadID)
-	if err != nil {
-		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceUnavailable
-	}
 	s.mu.Lock()
 	policy := s.toolTargetPolicy
-	policyForRun := s.toolTargetPolicyForRun
 	s.mu.Unlock()
-	if policyForRun != nil {
-		policy = normalizeToolTargetPolicy(policyForRun(meta, *settings, routing))
-	}
-	authority, err := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, policy, routing)
+	authority, err := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, policy)
 	if err != nil {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceDenied
 	}

@@ -112,7 +112,7 @@ func migratePendingInputGroup(ctx context.Context, opts Options, runtime flrunti
 	if _, err := threadPermissionType(settings); err != nil {
 		return nil, err
 	}
-	routing, err := source.GetFlowerThreadRouting(ctxOrBackground(ctx), endpointID, threadID)
+	legacyPrimaryTargetID, err := source.LegacyPrimaryTargetID(ctxOrBackground(ctx), endpointID, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,12 +147,12 @@ func migratePendingInputGroup(ctx context.Context, opts Options, runtime flrunti
 		}
 		input := RunInput{Text: strings.TrimSpace(record.TextContent), Attachments: attachments, ContextAction: contextAction}
 		policy := normalizeToolTargetPolicy(opts.ToolTargetPolicy)
-		if opts.ToolTargetPolicyForRun != nil {
-			policy = normalizeToolTargetPolicy(opts.ToolTargetPolicyForRun(&meta, *settings, routing))
+		if policy.requiresExplicitTarget() && strings.TrimSpace(policy.DefaultTargetID) == "" {
+			policy.DefaultTargetID = legacyPrimaryTargetID
 		}
 		var referenceAuthority *flowerCanonicalReferenceTargetAuthority
 		if flowerContextActionRequiresCanonicalReferenceAuthority(input.ContextAction) {
-			resolved, err := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, policy, routing)
+			resolved, err := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, policy)
 			if err != nil {
 				return nil, fmt.Errorf("resolve pending input %q context authority: %w", record.RequestID, err)
 			}

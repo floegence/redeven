@@ -18,7 +18,6 @@ import (
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	redevenconfig "github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
@@ -177,18 +176,9 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 	aiOptions := ai.Options{
 		Logger: logger, StateDir: stateDir, AgentHomeDir: home, FilesystemScope: scope, Shell: "/bin/sh", Config: appserverTestAIConfig(),
 		ToolTargetPolicy: ai.ToolTargetPolicy{
-			Mode: ai.ToolTargetModeExplicitTarget, AllowedTargetIDs: []string{"target_before", "target_after"},
+			Mode: ai.ToolTargetModeExplicitTarget, DefaultTargetID: "target_before", AllowedTargetIDs: []string{"target_before", "target_after"},
 		},
 		TargetToolExecutor: referenceOpenTargetToolExecutor{},
-		ToolTargetPolicyForRun: func(_ *session.Meta, _ threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ai.ToolTargetPolicy {
-			policy := ai.ToolTargetPolicy{
-				Mode: ai.ToolTargetModeExplicitTarget, AllowedTargetIDs: []string{"target_before", "target_after"},
-			}
-			if routing != nil {
-				policy.DefaultTargetID = routing.PrimaryTargetID
-			}
-			return policy
-		},
 	}
 	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
@@ -202,11 +192,6 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := aiSvc.UpsertFlowerThreadRouting(context.Background(), threadstore.FlowerThreadRouting{
-		EndpointID: meta.EndpointID, ThreadID: thread.ThreadID, PrimaryTargetID: "target_before",
-	}); err != nil {
-		t.Fatalf("set initial target: %v", err)
-	}
 	locator := referenceOpenTargetLocatorForTest(t, meta.EndpointID, "target_before", filePath)
 	if err := aiSvc.Close(); err != nil {
 		t.Fatalf("close AI service before canonical fixture: %v", err)
@@ -214,12 +199,10 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 	seedFloretReferenceOpenTurn(t, stateDir, thread.ThreadID, "turn_reference_target_change", []flruntime.MessageReference{{
 		ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "target-bound.txt", ResourceRef: locator,
 	}})
+	aiOptions.ToolTargetPolicy.DefaultTargetID = "target_before"
 	aiSvc, err = ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("reopen AI service after canonical fixture: %v", err)
-	}
-	if routing, err := aiSvc.GetFlowerThreadRouting(context.Background(), meta.EndpointID, thread.ThreadID); err != nil || routing == nil || routing.PrimaryTargetID != "target_before" {
-		t.Fatalf("initial routing=%#v err=%v", routing, err)
 	}
 	if target, err := aiSvc.ResolveFlowerCanonicalReferenceOpenTarget(context.Background(), &meta, ai.FlowerCanonicalReferenceOpenRequest{
 		ThreadID: thread.ThreadID, TurnID: "turn_reference_target_change", ReferenceID: "context:0",
@@ -243,11 +226,15 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 	if rr := performServerRequest(srv, http.MethodPost, endpoint, origin, body); rr.Code != http.StatusOK {
 		t.Fatalf("reference open before target change status=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if err := aiSvc.UpsertFlowerThreadRouting(context.Background(), threadstore.FlowerThreadRouting{
-		EndpointID: meta.EndpointID, ThreadID: thread.ThreadID, PrimaryTargetID: "target_after",
-	}); err != nil {
-		t.Fatalf("change target: %v", err)
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before target policy change: %v", err)
 	}
+	aiOptions.ToolTargetPolicy.DefaultTargetID = "target_after"
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after target policy change: %v", err)
+	}
+	srv.aiProvider = newStaticAIServiceProvider(aiSvc)
 	rr := performServerRequest(srv, http.MethodPost, endpoint, origin, body)
 	if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), ai.FlowerCanonicalReferenceDeniedErrorCode) {
 		t.Fatalf("reference open after target change status=%d body=%s", rr.Code, rr.Body.String())
