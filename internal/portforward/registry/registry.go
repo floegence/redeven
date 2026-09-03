@@ -5,9 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,75 +37,11 @@ type Registry struct {
 }
 
 func Open(path string) (*Registry, error) {
-	if err := preflightExistingRegistry(path); err != nil {
-		return nil, err
-	}
 	db, err := sqliteutil.Open(path, registrySchemaSpec())
 	if err != nil {
 		return nil, err
 	}
 	return &Registry{db: db}, nil
-}
-
-// preflightExistingRegistry validates an existing file through a read-only
-// connection. Rejected legacy, future, or drifted databases must remain
-// byte-for-byte unchanged; writable pragmas are applied only after this gate.
-func preflightExistingRegistry(path string) error {
-	path = filepath.Clean(strings.TrimSpace(path))
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) || (err == nil && info.Size() == 0) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	u := url.URL{Scheme: "file", Path: path}
-	query := u.Query()
-	query.Set("mode", "ro")
-	u.RawQuery = query.Encode()
-	db, err := sql.Open("sqlite", u.String())
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	var kind string
-	if err := tx.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton=1`).Scan(&kind); err != nil {
-		tables, _ := sqliteutil.ListUserTablesTx(tx)
-		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: registrySchemaKind, Existing: tables}
-	}
-	if kind != registrySchemaKind {
-		tables, _ := sqliteutil.ListUserTablesTx(tx)
-		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: registrySchemaKind, ActualKind: kind, Existing: tables}
-	}
-	var version int
-	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
-		return err
-	}
-	if version > registryCurrentSchemaVersion {
-		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: registryCurrentSchemaVersion}
-	}
-	var verifyErr error
-	switch version {
-	case 1:
-		verifyErr = verifyRegistryV1(tx)
-	case 2:
-		verifyErr = verifyRegistryV2(tx)
-	case 3:
-		verifyErr = verifyRegistryV3(tx)
-	case registryCurrentSchemaVersion:
-		verifyErr = verifyRegistryV4(tx)
-	default:
-		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
-	}
-	if verifyErr != nil {
-		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: verifyErr}
-	}
-	return nil
 }
 
 func (r *Registry) Close() error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
@@ -11,6 +12,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
+	threadstoreMinimumSchemaVersion = 1
 	threadstoreCurrentSchemaVersion = 6
 )
 
@@ -25,11 +27,12 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 
 func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate PendingInputMigrationHandler) sqliteutil.Spec {
 	return sqliteutil.Spec{
-		Kind:           threadstoreSchemaKind,
-		CurrentVersion: threadstoreCurrentSchemaVersion,
-		MinimumVersion: 1,
-		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA auto_vacuum=INCREMENTAL;`},
-		Initialize:     createThreadstoreSchema,
+		Kind:             threadstoreSchemaKind,
+		CurrentVersion:   threadstoreCurrentSchemaVersion,
+		MinimumVersion:   threadstoreMinimumSchemaVersion,
+		Pragmas:          []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA auto_vacuum=INCREMENTAL;`},
+		ValidateExisting: validateExistingThreadstore,
+		Initialize:       createThreadstoreSchema,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 1, ToVersion: 2, Apply: migrateThreadstoreV1ToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateThreadstoreV2ToV3},
@@ -41,6 +44,46 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 		},
 		Verify: verifyThreadstoreSchema,
 	}
+}
+
+func validateExistingThreadstore(tx *sql.Tx) error {
+	var version int
+	if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read threadstore preflight version: %w", err)
+	}
+	var metaTableCount int
+	if err := tx.QueryRow("SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = '__redeven_db_meta'").Scan(&metaTableCount); err != nil {
+		return fmt.Errorf("inspect threadstore metadata table: %w", err)
+	}
+	if metaTableCount != 1 {
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: threadstoreSchemaKind}
+	}
+	var kind string
+	if err := tx.QueryRow("SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1").Scan(&kind); err != nil {
+		return fmt.Errorf("read threadstore database kind: %w", err)
+	}
+	kind = strings.TrimSpace(kind)
+	if kind != threadstoreSchemaKind {
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: threadstoreSchemaKind, ActualKind: kind}
+	}
+	if version > threadstoreCurrentSchemaVersion {
+		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: threadstoreCurrentSchemaVersion}
+	}
+	if version < threadstoreMinimumSchemaVersion {
+		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: threadstoreMinimumSchemaVersion}
+	}
+	expected, err := reviewedProductSchemaContract(version)
+	if err != nil {
+		return err
+	}
+	actual, err := inspectReviewedSchemaTx(tx)
+	if err != nil {
+		return fmt.Errorf("inspect threadstore reviewed schema: %w", err)
+	}
+	if err := compareReviewedSchemas(actual, expected); err != nil {
+		return &sqliteutil.SchemaVerifyError{Kind: threadstoreSchemaKind, Err: err}
+	}
+	return nil
 }
 
 func createThreadstoreSchema(tx *sql.Tx) error {

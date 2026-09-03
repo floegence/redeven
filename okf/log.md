@@ -7,6 +7,11 @@
   only the legacy RPC adapter allocates one before using that core path. This
   keeps accepted messages, composer settlement, and transport outbox
   reconciliation on one identity without false failure feedback or duplicates.
+* **WAL-aware product database preflight**: Redeven's shared SQLite opener now
+  validates existing Threadstore and Port Forward databases through the complete
+  read-only main-plus-WAL view before writable migration. It no longer uses
+  immutable mode, restores SHM bytes and temporary sidecar existence on
+  rejection, and is the only production owner of direct SQLite connections.
 * **Deterministic npm Host installation**: npm Host staging now owns one exact
   private application manifest and passes the same explicit prefix and hoisted
   layout to install and lifecycle rebuild. Package metadata and executable

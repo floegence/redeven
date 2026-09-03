@@ -240,15 +240,20 @@ func createReviewedV1DatabaseForTest(t *testing.T, path string) {
 
 func createReviewedVersionDatabaseForTest(t *testing.T, path string, version int) {
 	t.Helper()
-	snapshot, err := reviewedProductSchemaContract(version)
-	if err != nil {
-		t.Fatal(err)
-	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	createReviewedVersionOnConnectionForTest(t, db, version)
+}
+
+func createReviewedVersionOnConnectionForTest(t *testing.T, db *sql.DB, version int) {
+	t.Helper()
+	snapshot, err := reviewedProductSchemaContract(version)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)

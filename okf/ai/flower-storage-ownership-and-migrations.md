@@ -3,15 +3,17 @@ type: Storage Contract
 title: Flower storage ownership and migrations
 description: Floret v7 canonical journal ownership and contiguous Redeven product migrations.
 tags: [ai, storage, sqlite, migrations, floret]
-timestamp: 2026-08-14T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 # Summary
 
-Floret owns its opaque two-table backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 6. Its contiguous migrations import retired queue data, retain only durable product facts, and remove obsolete physical storage. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.
+Floret owns its opaque two-table backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 6. Its contiguous migrations import retired queue data, retain only durable product facts, and remove obsolete physical storage. Existing product validation reads the complete SQLite main-plus-WAL view. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.
 
 # Contract
 
 Fresh product databases initialize directly at version 6 with exactly seven tables: schema metadata, thread settings, execution authority, uploads, upload attempts, upload references, and upload staging scopes. There is no product queue, migration staging, provider-capability cache, thread-routing record, or delete tombstone. Version 1 upgrades atomically to version 2: queued inputs are copied to `ai_pending_input_imports` using their stable request IDs, retired lifecycle tables are dropped, `queue_revision` is removed, and the exact target shape is verified. Version 2 to 3 adds the minimum submitting-user authority needed for restart redispatch. Version 3 to 4 historically adds endpoint-scoped delete authority.
+
+For an existing non-empty product database, the shared Redeven SQLite opener runs the exact historical-schema validator through `mode=ro` before any writable pragma or migration. Immutable mode is forbidden here because it ignores valid uncheckpointed WAL content and can misclassify a real v4 database as empty v0. Rejection preserves main, WAL, and SHM bytes and their original existence; a temporary inspection SHM or WAL is removed. Missing and zero-length files continue through fresh initialization. Threadstore owns only its kind, version, and reviewed shape rules, while `sqliteutil` owns path, connection, transaction, and sidecar handling.
 
 Version 4 to 5 is the removal edge. While the product migration transaction still owns the exact retired source, a migration-only callback converts every pending row into typed Floret queue input through the public idempotent import API. The same product transaction records restart authority, rebuilds `ai_upload_refs` around its natural `(endpoint_id, upload_id, ref_kind, ref_id)` identity, preserves every live reference field, and drops `ai_pending_input_imports`. This removes the unused surrogate `id`, its redundant indexes, and the resulting SQLite sequence metadata. A verified post-migration vacuum removes SQLite's otherwise-retained internal sequence table; repeated current-version startup is clean and idempotent.
 
@@ -34,6 +36,7 @@ Every future product schema change appends a contiguous automatic migration and 
 # Evidence
 
 - `redeven:internal/ai/threadstore/schema.go` - Version 6 initializer and the complete contiguous migration registration.
+- `redeven:internal/ai/threadstore/wal_preflight_test.go` - Covers WAL-only v4 migration, durable-record preservation, typed rejection, idempotent reopen, and sidecar restoration.
 - `redeven:internal/ai/threadstore/pending_input_migration.go` - Closed v4-to-v5 conversion, authority persistence, retired-table removal, and upload-reference rebuild.
 - `redeven:internal/ai/pending_input_migration.go` - Migration-only decoding and typed public Floret import.
 - `redeven:internal/ai/service.go` - Supplies the migration callback before subscriptions and maintenance.
@@ -43,5 +46,6 @@ Every future product schema change appends a contiguous automatic migration and 
 - `redeven:internal/ai/execution_authority_maintenance_test.go` - Covers canonical retention, missing threads, read failures, and keyset paging.
 - `redeven:internal/ai/threadstore/reviewed_schema_manifest.json` - Reviewed product schema source.
 - `redeven:internal/boundarycontract/threadstore_sql.go` - Closed product SQL ownership inventory.
+- `redeven:internal/persistence/sqliteutil/engine.go` - Owns the single WAL-aware physical preflight and writable migration path.
 - `redeven:go.mod` - Pins the released Floret v7.1.2 module without local source wiring.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects replacement or retired imports.

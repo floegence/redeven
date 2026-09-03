@@ -21,9 +21,10 @@ const (
 
 func registrySchemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
-		Kind:           registrySchemaKind,
-		CurrentVersion: registryCurrentSchemaVersion,
-		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
+		Kind:             registrySchemaKind,
+		CurrentVersion:   registryCurrentSchemaVersion,
+		Pragmas:          []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
+		ValidateExisting: validateExistingRegistry,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
@@ -32,6 +33,42 @@ func registrySchemaSpec() sqliteutil.Spec {
 		},
 		Verify: verifyRegistryV4,
 	}
+}
+
+func validateExistingRegistry(tx *sql.Tx) error {
+	var kind string
+	if err := tx.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton=1`).Scan(&kind); err != nil {
+		tables, _ := sqliteutil.ListUserTablesTx(tx)
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: registrySchemaKind, Existing: tables}
+	}
+	if kind != registrySchemaKind {
+		tables, _ := sqliteutil.ListUserTablesTx(tx)
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: registrySchemaKind, ActualKind: kind, Existing: tables}
+	}
+	var version int
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version > registryCurrentSchemaVersion {
+		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: registryCurrentSchemaVersion}
+	}
+	var verifyErr error
+	switch version {
+	case 1:
+		verifyErr = verifyRegistryV1(tx)
+	case 2:
+		verifyErr = verifyRegistryV2(tx)
+	case 3:
+		verifyErr = verifyRegistryV3(tx)
+	case registryCurrentSchemaVersion:
+		verifyErr = verifyRegistryV4(tx)
+	default:
+		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
+	}
+	if verifyErr != nil {
+		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: verifyErr}
+	}
+	return nil
 }
 
 func initializeRegistryV1(tx *sql.Tx) error {
