@@ -60,6 +60,7 @@
 .flower-surface-companion-collapsed .flower-chat-header,
 .flower-surface-companion-collapsed .flower-chat-transcript,
 .flower-surface-companion-collapsed .flower-model-status-lane,
+.flower-surface-companion-collapsed .flower-thread-sync-error,
 .flower-surface-companion-collapsed .flower-chat-bottom-dock::before,
 .flower-surface-companion-collapsed :is(.flower-composer-command-menu) {
   display: none;
@@ -2839,6 +2840,10 @@ html.dark .flower-component-shell {
   position: relative;
   width: min(100%, var(--flower-chat-text-column-width));
   margin: 0 auto;
+}
+
+.flower-thread-sync-error {
+  margin-bottom: 0.5rem;
 }
 
 .flower-message-row {

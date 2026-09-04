@@ -6,7 +6,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.19.0
-	github.com/floegence/floret/v7 v7.1.2
+	github.com/floegence/floret/v7 v7.1.3
 	github.com/floegence/flowersec/flowersec-go/v5 v5.0.1
 	github.com/floegence/redeven-service-templates v0.3.0
 	github.com/floegence/redevplugin/v3 v3.0.22

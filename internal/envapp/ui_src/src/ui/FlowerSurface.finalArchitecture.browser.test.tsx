@@ -1726,7 +1726,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
   });
 
-  it('keeps existing content and offers manual retry after a detail refresh fails', async () => {
+  it('keeps a detail sync error actionable above the composer until retry succeeds', async () => {
     const completed = completedTerminalThread();
     const running = thread({
       ...completed,
@@ -1738,19 +1738,24 @@ describe('Flower final thread cache and workspace transport', () => {
       messages: completed.messages.slice(0, 1),
     });
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);
+    const recoveryRequest = deferred<ReturnType<typeof liveBootstrap>>();
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => launchReceipt(
+      input.thread_id ?? running.thread_id,
+      'turn-unexpected',
+    ));
     let loadCount = 0;
     let failedRecoveryCount = 0;
-    let recoveryAvailable = false;
     const surfaceAdapter = {
       ...adapter(true),
       listThreads: vi.fn(async () => [running]),
       loadThread: vi.fn(async () => {
         loadCount += 1;
         if (loadCount === 1) return liveBootstrap(running, 795);
-        if (recoveryAvailable) return liveBootstrap(completed, 796);
+        if (loadCount >= 3) return recoveryRequest.promise;
         failedRecoveryCount += 1;
         throw new TypeError("Cannot read properties of null (reading 'length')");
       }),
+      launchTurn,
       connectLiveStream: stream.connect,
     };
     const runtime = renderSurfaceWithAdapter(surfaceAdapter);
@@ -1764,10 +1769,75 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelectorAll('[data-flower-message-id]')).toHaveLength(1);
     expect(runtime.textContent).not.toContain("Cannot read properties of null");
     expect(failedRecoveryCount).toBe(1);
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+    Object.defineProperties(transcript, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1_600 },
+      scrollTop: { configurable: true, writable: true, value: 1_200 },
+    });
+    transcript.dispatchEvent(new Event('scroll'));
+    expect(runtime.querySelector('.flower-chat-bottom-dock .flower-error-card')).not.toBeNull();
+    expect(runtime.querySelector('.flower-chat-transcript .flower-error-card')).toBeNull();
 
-    recoveryAvailable = true;
-    (runtime.querySelector('.flower-error-actions button') as HTMLButtonElement).click();
+    const textarea = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
+    textarea.value = 'Keep this draft while Flower resyncs';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => runtime.querySelector('[data-flower-primary-action="send"]') !== null);
+    expect(textarea.disabled).toBe(false);
+    expect((runtime.querySelector('[data-flower-primary-action="send"]') as HTMLButtonElement).disabled).toBe(true);
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    textarea.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+    expect(launchTurn).not.toHaveBeenCalled();
+    const stop = runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement;
+    expect(stop).not.toBeNull();
+    expect(stop.disabled).toBe(false);
+    expect((runtime.querySelector(`[data-thread-id="${running.thread_id}"] button`) as HTMLButtonElement).disabled).toBe(false);
+
+    (runtime.querySelector('.flower-chat-bottom-dock .flower-error-actions button') as HTMLButtonElement).click();
+    await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 3);
+    expect(runtime.querySelector('.flower-chat-bottom-dock .flower-error-card')).not.toBeNull();
+    expect((runtime.querySelector('[data-flower-primary-action="send"]') as HTMLButtonElement).disabled).toBe(true);
+
+    recoveryRequest.resolve(liveBootstrap(completed, 796));
     await waitFor(() => runtime.querySelectorAll('[data-flower-message-id]').length === 6);
     expect(runtime.textContent).toContain('Redeven 是一个本地开发环境产品。');
+    expect(runtime.querySelector('.flower-chat-bottom-dock .flower-error-card')).toBeNull();
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while Flower resyncs');
+  });
+
+  it('presents a failed Floret control contract with retry reply', async () => {
+    const failed = thread({
+      thread_id: 'thread-control-contract-failed',
+      title: 'Control contract failed',
+      status: 'failed',
+      error: {
+        code: 'floret_control_contract_failed',
+        message: 'private invalid control payload',
+      },
+    });
+    const retryThread = vi.fn(async () => liveBootstrap(thread({
+      ...failed,
+      status: 'running',
+      error: undefined,
+      active_run_id: 'run-retry',
+    })));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [failed]),
+      loadThread: vi.fn(async () => liveBootstrap(failed)),
+      retryThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${failed.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${failed.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
+
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('invalid interaction control signal');
+    expect(runtime.querySelector('.flower-error-card')?.textContent).not.toContain('private invalid control payload');
+    const retry = runtime.querySelector('.flower-error-actions button') as HTMLButtonElement;
+    expect(retry.textContent).toContain('Retry reply');
+    retry.click();
+    await waitFor(() => retryThread.mock.calls.length === 1);
   });
 });

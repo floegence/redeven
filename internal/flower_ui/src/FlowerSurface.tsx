@@ -2301,7 +2301,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadRunErrorMessage = createMemo(() => {
     const thread = selectedThread();
     const error = thread?.error;
-    if (trimString(error?.code) === 'control_error') return '';
     if (trimString(error?.code) === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(thread)) return '';
     return presentRunError(error);
   });
@@ -3459,7 +3458,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return state.inFlight;
     }
 
-    if (selectedThreadID() === tid && !detail) setThreadLoadError('');
     setThreadDetailLoading(tid, true);
     state.inFlightTarget = target;
     const request = (async () => {
@@ -3496,7 +3494,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             throw error;
           }
         }
-        if (selectedThreadID() === tid) setThreadLoadError('');
       } catch (error) {
         if (target.cycle === state.cycle) state.failedRevision = target.revision;
         reportThreadDetailDiagnostic(tid, 'request_or_mapping', source, error);
@@ -5145,6 +5142,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       await stopSelectedThreadFromComposer();
       return;
     }
+    if (threadLoadError()) return;
     const sessionKey = currentComposerSessionKey();
     if (launchChatTurnInFlight.has(sessionKey)) return;
     launchChatTurnInFlight.add(sessionKey);
@@ -5407,6 +5405,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // Context compaction is a thread operation; never create a new thread for
     // a slash command entered while the composer is in its empty state.
     if (!trimString(selectedThreadID())) return;
+    if (threadLoadError()) return;
     if (composerHasAttachments() || composerHasReferences()) {
       notifyComposerError(copy().chat.compactContextBlocked);
       return;
@@ -5475,6 +5474,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
       }
+    }
+    if (threadLoadError() && shouldSubmitOnEnterKeydown(event)) {
+      event.preventDefault();
+      return;
     }
     const command = composerSlashCommand();
     if (command.kind === 'suggest') {
@@ -5729,8 +5732,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
     const code = trimString(error?.code);
     const continuationFailure = createMemo(() => (
-      flowerTimelineHasUserRejectedTool(selectedTimelineEntries())
-      && (code === 'provider_unreachable' || code === 'provider_stream_interrupted')
+      code === 'floret_control_contract_failed'
+      || (
+        flowerTimelineHasUserRejectedTool(selectedTimelineEntries())
+        && (code === 'provider_unreachable' || code === 'provider_stream_interrupted')
+      )
     ));
     const actionable = code === 'provider_auth_failed'
       || code === 'provider_missing_key'
@@ -6832,6 +6838,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (longTextPreparing()) return false;
     if (selectedThreadStopPending()) return true;
     if (selectedThreadReadOnly()) return true;
+    if (threadLoadError() && !composerPrimaryActionIsStop()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (composerPrimaryActionIsCommand()) {
       return composerHasAttachments() || composerHasReferences() || !readyForChat() || !selectedThreadID();
@@ -9111,7 +9118,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const failed = createMemo(() => (
       message().status === 'error'
-      && trimString(selectedThread()?.error?.code) !== 'control_error'
       && !messageHasUserRejectedTool(message())
       && !threadHasUserRejectedTool(selectedThread(), message().run_id, message().turn_id)
     ));
@@ -9488,7 +9494,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const code = trimString(value().code);
           if (code === 'runtime_restarted') return runtimeRestartedDivider();
           if (code === 'floret_turn_interrupted') return null;
-          if (code === 'control_error') return null;
           if (code === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(selectedThread())) return null;
           return runErrorNotice(value());
         }}
@@ -9787,7 +9792,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = trimString(selectedThreadID());
     if (!threadID || retiredThreadIDs.has(threadID)) return;
     beginThreadDetailDisplayCycle(threadID);
-    setThreadLoadError('');
     void requestThreadDetail(
       threadID,
       threadSnapshotRevision(threadCache().summaries.get(threadID)),
@@ -10621,20 +10625,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={loadError()}>
               {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
             </Show>
-            <Show when={selectedThread() ? threadLoadError() : ''}>
-              {(message) => errorNotice(
-                copy().chat.threadLoadErrorTitle,
-                message(),
-                <Button
-                  size="sm"
-                  variant="outline"
-                  icon={Refresh}
-                  onClick={retrySelectedThreadDetail}
-                >
-                  {copy().chat.handlerRetry}
-                </Button>,
-              )}
-            </Show>
             <Show when={selectedThreadTerminalSyncing() && !threadLoadError()}>
               {threadSyncingLatestState()}
             </Show>
@@ -10683,6 +10673,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind) : ''}
               />
             </div>
+            <Show when={selectedThread() ? threadLoadError() : ''}>
+              {(message) => (
+                <div class="flower-thread-sync-error">
+                  {errorNotice(
+                    copy().chat.threadLoadErrorTitle,
+                    message(),
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={Refresh}
+                      onClick={retrySelectedThreadDetail}
+                    >
+                      {copy().chat.handlerRetry}
+                    </Button>,
+                  )}
+                </div>
+              )}
+            </Show>
             <div class="flower-composer-anchor">
               <Show when={bottomActionMode() !== 'approval'}>
                 {composerReferenceMenu()}

@@ -331,15 +331,17 @@ function runtimeInputRequest(
   ));
   if (!interaction?.input) return undefined;
   const identity = runtimeInteractionIdentity(interaction);
-  if (interaction.input.questions.length === 0) {
+  const rawQuestions: unknown = interaction.input.questions;
+  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
     throw new Error('Flower contract error: typed current input interaction requires at least one question.');
   }
-  for (const question of interaction.input.questions) {
+  const questions = rawQuestions as NonNullable<FlowerRuntimeInteraction['input']>['questions'];
+  for (const question of questions) {
     if (!trim(question.id) || !trim(question.prompt) || !trim(question.kind)) {
       throw new Error('Flower contract error: typed current input question requires id, prompt, and kind.');
     }
   }
-  const reasonCode = interaction.input.questions
+  const reasonCode = questions
     .map((question) => trim(question.kind))
     .find(Boolean);
   return {
@@ -347,8 +349,8 @@ function runtimeInputRequest(
     message_id: identity.turnID,
     tool_id: trim(interaction.id),
     tool_name: 'ask_user',
-    required_from_user: interaction.input.questions.map((question) => trim(question.id)).filter(Boolean),
-    questions: interaction.input.questions.map((question) => {
+    required_from_user: questions.map((question) => trim(question.id)).filter(Boolean),
+    questions: questions.map((question) => {
       const options = (question.options ?? []).map(trim).filter(Boolean);
       return {
         id: trim(question.id),
@@ -369,7 +371,7 @@ function runtimeInputRequest(
     }),
     ...(reasonCode ? { reason_code: reasonCode } : {}),
     public_summary: trim(interaction.input.summary),
-    contains_secret: interaction.input.questions.some((question) => question.secret === true),
+    contains_secret: questions.some((question) => question.secret === true),
   };
 }
 
