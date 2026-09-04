@@ -427,7 +427,31 @@ func TestDeleteServiceWorkspaceTreatsMissingDirectoryAsSuccess(t *testing.T) {
 	}
 }
 
-func TestUninstallKeepsUserWorkspaceUnlessExplicitlySelected(t *testing.T) {
+func TestOperateDeleteDataAlsoDeletesUserSelectedWorkspace(t *testing.T) {
+	manager, registry, home := newWorkspaceTestManager(t)
+	target := filepath.Join(home, "user-selected-delete-data-workspace")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	service := persistWorkspaceTestService(t, registry, "mws-user-selected-delete-data", target, workspaceOwnershipUserSelected)
+	manager.host = &uninstallOwnershipDriver{}
+
+	op, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{
+		RequestID: "request-user-selected-delete-data", Action: ActionUninstall, DeleteData: true, Administrator: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !op.DeleteWorkspace {
+		t.Fatalf("delete-data operation did not include workspace deletion: %+v", op)
+	}
+	manager.workers.Wait()
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("delete-data operation did not delete workspace: %v", err)
+	}
+}
+
+func TestRunUninstallUsesPersistedWorkspaceDeletionIntent(t *testing.T) {
 	manager, registry, home := newWorkspaceTestManager(t)
 	for _, test := range []struct {
 		name            string
@@ -435,7 +459,7 @@ func TestUninstallKeepsUserWorkspaceUnlessExplicitlySelected(t *testing.T) {
 		deleteWorkspace bool
 		wantDeleted     bool
 	}{
-		{name: "user-retained", ownership: workspaceOwnershipUserSelected},
+		{name: "historical-user-retained", ownership: workspaceOwnershipUserSelected},
 		{name: "user-deleted", ownership: workspaceOwnershipUserSelected, deleteWorkspace: true, wantDeleted: true},
 		{name: "redeven-deleted", ownership: workspaceOwnershipRedevenCreated, deleteWorkspace: true, wantDeleted: true},
 	} {
