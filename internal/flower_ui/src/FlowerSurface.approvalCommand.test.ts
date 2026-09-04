@@ -64,6 +64,7 @@ describe('Flower approval command presentation', () => {
     const surface = readFile(surfacePath);
     const capsuleRule = cssRule(css, '.flower-approval-decision-group');
     const decisionRule = cssRule(css, '.flower-approval-decision-group .flower-composer-approval-decision');
+    const decisionFocusRule = cssRule(css, '.flower-approval-decision-group .flower-composer-approval-decision:focus-visible');
     const singleActionsRule = cssRule(css, '.flower-approval-single .flower-approval-actions');
 
     expect(surface).toContain('const FlowerApprovalDecisionCapsule: Component<FlowerApprovalDecisionCapsuleProps>');
@@ -76,6 +77,9 @@ describe('Flower approval command presentation', () => {
     expect(capsuleRule).toContain('overflow: hidden');
     expect(decisionRule).toContain('border: 0');
     expect(decisionRule).toContain('border-radius: 0');
+    expect(decisionFocusRule).toContain('outline: none');
+    expect(decisionFocusRule).toContain('box-shadow: none !important');
+    expect(decisionFocusRule).not.toContain('inset');
     expect(singleActionsRule).toContain('justify-content: flex-end');
     expect(css).not.toContain('.flower-approval-single .flower-composer-stop-thread {');
     expect(css).not.toContain('.flower-approval-action-pill');

@@ -59,6 +59,14 @@ describe('Flower restrained selection and focus treatments', () => {
     expect(textareaFocusRule).toContain('box-shadow: none');
   });
 
+  it('keeps approval and input request surfaces on the composer radius', () => {
+    const composerRule = lastCssRule('.flower-composer {');
+    const decisionRule = cssRule('.flower-composer.flower-decision-surface {');
+
+    expect(composerRule).toContain('border-radius: 1rem');
+    expect(decisionRule).not.toContain('border-radius:');
+  });
+
   it('keeps one disclosure guide without nested SubAgent rails', () => {
     const subagentItemRule = lastCssRule('.flower-activity-subagents-item {');
 
