@@ -492,6 +492,30 @@ func TestManagedNodeRuntimeDigestExcludesApplicationButDetectsRuntimeMutation(t 
 	if err != nil || afterApp != before {
 		t.Fatalf("application changed runtime digest: before=%s after=%s err=%v", before, afterApp, err)
 	}
+	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "bin", "managed-service"), []byte("launcher"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	afterLauncher, err := managedNodeRuntimeDigest(root)
+	if err != nil || afterLauncher != before {
+		t.Fatalf("managed launcher changed runtime digest: before=%s after=%s err=%v", before, afterLauncher, err)
+	}
+	unexpected := filepath.Join(root, "bin", "unexpected")
+	if err := os.WriteFile(unexpected, []byte("unexpected"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	afterUnexpected, err := managedNodeRuntimeDigest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterUnexpected == before {
+		t.Fatal("unexpected managed bin content was not detected")
+	}
+	if err := os.Remove(unexpected); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "runtime", "node"), []byte("mutated"), 0o700); err != nil {
 		t.Fatal(err)
 	}

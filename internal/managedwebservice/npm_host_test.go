@@ -2,6 +2,7 @@ package managedwebservice
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,6 +30,73 @@ func TestVerifyInstalledNPMPackageUsesScopedPackageDirectory(t *testing.T) {
 
 	if err := verifyInstalledNPMPackage(appRoot, NPMHostPackageSpec{PackageName: "@scope/package", Version: "1.2.3", Executable: "package-cli"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestVerifyNPMRuntimeAcceptsFinalInstalledLayout(t *testing.T) {
+	root := t.TempDir()
+	artifact, ok := auditedNodeRuntimeArtifact(currentPlatformKey())
+	if !ok {
+		t.Skip("managed Node.js Runtime is unavailable on this platform")
+	}
+	nodePath := filepath.Join(root, filepath.FromSlash(artifact.NodeRelPath))
+	if err := os.MkdirAll(filepath.Dir(nodePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nodePath, []byte("node"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	nodeDigest, err := fileSHA256(nodePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeDigest, err := managedNodeRuntimeDigest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spec := NPMHostPackageSpec{PackageName: "@scope/package", Version: "1.2.3", RegistryURL: "https://registry.npmjs.org/", Executable: "package-cli"}
+	appRoot := filepath.Join(root, "app")
+	packageRoot := filepath.Join(appRoot, "node_modules", "@scope", "package")
+	binRoot := filepath.Join(appRoot, "node_modules", ".bin")
+	if err := os.MkdirAll(packageRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(binRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeNPMApplicationManifest(appRoot, spec); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageRoot, "package.json"), []byte(`{"name":"@scope/package","version":"1.2.3"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binRoot, spec.Executable), []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	launcherPath := filepath.Join(root, "bin", "managed-service")
+	if err := os.MkdirAll(filepath.Dir(launcherPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(launcherPath, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	identity := ReleaseIdentity{Integrity: testNPMIntegrity("installed")}
+	manifest := npmRuntimeManifest{
+		SchemaVersion: 1, PackageName: spec.PackageName, PackageVersion: spec.Version,
+		PackageIntegrity: identity.Integrity, Registry: normalizedRegistryURL(spec.RegistryURL),
+		Executable: spec.Executable, Platform: currentPlatformKey(), NodeSHA256: nodeDigest, RuntimeSHA256: runtimeDigest,
+	}
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "redeven-npm-runtime.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := verifyNPMRuntime(root, spec, identity); err != nil {
+		t.Fatalf("final installed layout was not reusable: %v", err)
 	}
 }
 
