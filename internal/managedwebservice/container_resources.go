@@ -23,9 +23,9 @@ type ContainerResourceOwner struct {
 	Name      string `json:"name"`
 }
 
-func containerResourceLinks(service pfregistry.ManagedService) []ContainerResourceLink {
+func containerResourceLinks(service pfregistry.ManagedService, deployment Deployment) []ContainerResourceLink {
 	identity := strings.TrimSpace(service.RuntimeIdentity)
-	switch Deployment(service.Deployment) {
+	switch deployment {
 	case DeploymentContainer:
 		links := make([]ContainerResourceLink, 0, 2)
 		if identity != "" {
@@ -92,7 +92,12 @@ func (m *Manager) serviceOwnsContainerResource(ctx context.Context, service *pfr
 	if service == nil {
 		return false, nil
 	}
-	deployment := Deployment(service.Deployment)
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
+	if err != nil {
+		return false, err
+	}
+	resolved.applyTo(service)
+	deployment := resolved.Template.Deployment
 	switch kind {
 	case ContainerResourceContainer:
 		if deployment == DeploymentContainer && strings.TrimSpace(service.RuntimeIdentity) == identity {
@@ -122,17 +127,17 @@ func (m *Manager) serviceOwnsContainerResource(ctx context.Context, service *pfr
 		}
 		return identity == containerengine.ComposeProjectID(driver.projectName(service)), nil
 	case ContainerResourceVolume:
-		return m.serviceOwnsVolume(ctx, service, identity)
+		return m.serviceOwnsVolume(ctx, service, deployment, identity)
 	default:
 		return false, nil
 	}
 }
 
-func (m *Manager) serviceOwnsVolume(ctx context.Context, service *pfregistry.ManagedService, identity string) (bool, error) {
+func (m *Manager) serviceOwnsVolume(ctx context.Context, service *pfregistry.ManagedService, deployment Deployment, identity string) (bool, error) {
 	if service == nil || strings.TrimSpace(identity) == "" {
 		return false, nil
 	}
-	switch Deployment(service.Deployment) {
+	switch deployment {
 	case DeploymentContainer:
 		driver := &containerTemplateDriver{manager: m, adapter: m.containers}
 		marker, err := driver.loadVolumeSet(ctx, service)

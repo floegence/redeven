@@ -127,6 +127,27 @@ func (m *Manager) UpdateTemplate(ctx context.Context, templateID string, req Tem
 	if err != nil {
 		return nil, err
 	}
+	if Deployment(record.Deployment) != req.Spec.Kind || record.SpecSHA256 != specHash {
+		services, listErr := m.registry.ListManagedServices(ctx)
+		if listErr != nil {
+			return nil, listErr
+		}
+		for _, service := range services {
+			if service.TemplateID != record.TemplateID {
+				continue
+			}
+			if Deployment(record.Deployment) != req.Spec.Kind {
+				return nil, serviceError("TEMPLATE_DEPLOYMENT_IN_USE", "Uninstall the managed Web Service before changing this template's deployment type.", 409, false, nil)
+			}
+			active, activeErr := m.registry.GetActiveManagedOperation(ctx, service.ServiceID)
+			if activeErr != nil {
+				return nil, activeErr
+			}
+			if active != nil {
+				return nil, serviceError("TEMPLATE_OPERATION_CONFLICT", "Wait for the managed Web Service operation to finish before changing this template's Runtime definition.", 409, true, nil)
+			}
+		}
+	}
 	record.Name, record.Description = strings.TrimSpace(req.Name), strings.TrimSpace(req.Description)
 	record.Deployment, record.SpecJSON, record.SpecSHA256 = string(req.Spec.Kind), specJSON, specHash
 	record.Revision++
@@ -791,18 +812,4 @@ func (m *Manager) serviceSecretDocument(serviceID string) (serviceSecrets, error
 		return serviceSecrets{}, serviceError("SERVICE_SECRETS_VERSION_UNSUPPORTED", "The managed-service secret file version is unsupported.", 409, false, nil)
 	}
 	return values, nil
-}
-
-func templateSpecFromService(service *pfregistry.ManagedService) (TemplateSpec, error) {
-	if service == nil || strings.TrimSpace(service.TemplateSnapshotJSON) == "" || service.TemplateSnapshotJSON == "{}" {
-		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_MISSING", "The managed service has no usable template snapshot.", 409, false, nil)
-	}
-	spec, err := verifiedTemplateSpec(service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256)
-	if errors.Is(err, errTemplateSpecIdentityMismatch) {
-		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH", "The managed service template snapshot identity has changed.", 409, false, err)
-	}
-	if err != nil {
-		return TemplateSpec{}, serviceError("TEMPLATE_SNAPSHOT_INVALID", "The managed service template snapshot is invalid or no longer satisfies the runtime policy.", 409, false, err)
-	}
-	return spec, nil
 }

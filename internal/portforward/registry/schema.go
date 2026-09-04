@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"slices"
 	"strings"
 
@@ -15,8 +16,8 @@ import (
 )
 
 const (
-	registrySchemaKind           = "portforward_registry_v1"
-	registryCurrentSchemaVersion = 5
+	registrySchemaKind           = "portforward_registry_v2"
+	registryCurrentSchemaVersion = 1
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -27,12 +28,8 @@ func registrySchemaSpec() sqliteutil.Spec {
 		ValidateExisting: validateExistingRegistry,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
-			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
-			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
-			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryV3ToV4},
-			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryV4ToV5},
 		},
-		Verify: verifyRegistryV5,
+		Verify: verifyRegistryV1,
 	}
 }
 
@@ -53,23 +50,11 @@ func validateExistingRegistry(tx *sql.Tx) error {
 	if version > registryCurrentSchemaVersion {
 		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: registryCurrentSchemaVersion}
 	}
-	var verifyErr error
-	switch version {
-	case 1:
-		verifyErr = verifyRegistryV1(tx)
-	case 2:
-		verifyErr = verifyRegistryV2(tx)
-	case 3:
-		verifyErr = verifyRegistryV3(tx)
-	case 4:
-		verifyErr = verifyRegistryV4(tx)
-	case registryCurrentSchemaVersion:
-		verifyErr = verifyRegistryV5(tx)
-	default:
-		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
+	if version < registryCurrentSchemaVersion {
+		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: registryCurrentSchemaVersion}
 	}
-	if verifyErr != nil {
-		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: verifyErr}
+	if err := verifyRegistryV1(tx); err != nil {
+		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: err}
 	}
 	return nil
 }
@@ -100,7 +85,6 @@ CREATE TABLE managed_web_service_templates (
   description TEXT NOT NULL DEFAULT '',
   source TEXT NOT NULL,
   deployment TEXT NOT NULL CHECK(deployment IN ('host','container','compose')),
-  version TEXT NOT NULL DEFAULT '',
   revision INTEGER NOT NULL CHECK(revision > 0),
   spec_json TEXT NOT NULL,
   spec_sha256 TEXT NOT NULL,
@@ -122,13 +106,9 @@ CREATE TABLE managed_web_service_template_requests (
 CREATE TABLE managed_web_services (
   service_id TEXT PRIMARY KEY,
   template_id TEXT NOT NULL UNIQUE,
-  template_source TEXT NOT NULL,
-  template_revision INTEGER NOT NULL CHECK(template_revision > 0),
-  template_snapshot_json TEXT NOT NULL,
-  template_snapshot_sha256 TEXT NOT NULL,
-  service_family_id TEXT NOT NULL UNIQUE,
-  deployment TEXT NOT NULL CHECK(deployment IN ('host','container','compose')),
   workspace_path TEXT NOT NULL,
+  workspace_ownership TEXT NOT NULL
+    CHECK(workspace_ownership IN ('pending','redeven_created','user_selected')),
   configuration_json TEXT NOT NULL,
   configuration_revision INTEGER NOT NULL CHECK(configuration_revision > 0),
   configuration_sha256 TEXT NOT NULL,
@@ -136,11 +116,11 @@ CREATE TABLE managed_web_services (
   release_identity_sha256 TEXT NOT NULL,
   runtime_binding_json TEXT NOT NULL,
   runtime_binding_sha256 TEXT NOT NULL,
-  version TEXT NOT NULL,
   desired_state TEXT NOT NULL,
   observed_state TEXT NOT NULL,
   forward_id TEXT NOT NULL UNIQUE REFERENCES port_forwards(forward_id) ON DELETE RESTRICT,
   runtime_identity TEXT NOT NULL DEFAULT '',
+  runtime_spec_sha256 TEXT NOT NULL DEFAULT '',
   runtime_manifest_json TEXT NOT NULL DEFAULT '{}',
   runtime_port INTEGER NOT NULL DEFAULT 0,
   artifact_reference TEXT NOT NULL DEFAULT '',
@@ -167,6 +147,7 @@ CREATE TABLE managed_web_service_operations (
   retry_of_operation_id TEXT NOT NULL DEFAULT '',
   action TEXT NOT NULL,
   delete_data INTEGER NOT NULL DEFAULT 0,
+  delete_workspace INTEGER NOT NULL DEFAULT 0 CHECK(delete_workspace IN (0,1)),
   state TEXT NOT NULL,
   stage TEXT NOT NULL,
   progress_current INTEGER NOT NULL DEFAULT 0,
@@ -177,55 +158,9 @@ CREATE TABLE managed_web_service_operations (
   created_at_unix_ms INTEGER NOT NULL,
   updated_at_unix_ms INTEGER NOT NULL,
   finished_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  progress_detail_json TEXT NOT NULL DEFAULT '{"schema_version":1}'
+  progress_detail_json TEXT NOT NULL DEFAULT '{"schema_version":2}'
 );
-`)
-	return err
-}
 
-func migrateRegistryV1ToV2(tx *sql.Tx) error {
-	if err := verifyRegistryV1(tx); err != nil {
-		return fmt.Errorf("verify port forward registry v1 before migration: %w", err)
-	}
-	for _, document := range []struct {
-		table, idColumn, jsonColumn, digestColumn string
-	}{
-		{"managed_web_service_templates", "template_id", "spec_json", "spec_sha256"},
-		{"managed_web_services", "service_id", "template_snapshot_json", "template_snapshot_sha256"},
-	} {
-		rows, err := tx.Query(`SELECT ` + document.idColumn + `,` + document.jsonColumn + ` FROM ` + document.table + ` ORDER BY ` + document.idColumn)
-		if err != nil {
-			return err
-		}
-		updates := [][3]string{}
-		for rows.Next() {
-			var id, raw string
-			if err := rows.Scan(&id, &raw); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			migrated, digest, err := migrateTemplateSpecV3ToV4(raw)
-			if err != nil {
-				_ = rows.Close()
-				return fmt.Errorf("migrate TemplateSpec %s: %w", id, err)
-			}
-			updates = append(updates, [3]string{id, migrated, digest})
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		for _, update := range updates {
-			if _, err := tx.Exec(`UPDATE `+document.table+` SET `+document.jsonColumn+`=?,`+document.digestColumn+`=? WHERE `+document.idColumn+`=?`, update[1], update[2], update[0]); err != nil {
-				return err
-			}
-		}
-	}
-	if _, err := tx.Exec(`
-ALTER TABLE managed_web_service_templates DROP COLUMN version;
-ALTER TABLE managed_web_services DROP COLUMN version;
 CREATE TABLE managed_web_service_release_checks (
   service_id TEXT PRIMARY KEY REFERENCES managed_web_services(service_id) ON DELETE CASCADE,
   summary_json TEXT NOT NULL,
@@ -236,208 +171,8 @@ CREATE TABLE managed_web_service_release_checks (
   last_error_code TEXT NOT NULL DEFAULT '',
   updated_at_unix_ms INTEGER NOT NULL
 );
-`); err != nil {
-		return err
-	}
-	return verifyRegistryV2(tx)
-}
-
-func migrateTemplateSpecV3ToV4(raw string) (string, string, error) {
-	var document map[string]any
-	if err := decodeStrictRegistryJSON(raw, &document); err != nil {
-		return "", "", err
-	}
-	version, ok := document["schema_version"].(float64)
-	if !ok || version != 3 {
-		return "", "", fmt.Errorf("expected schema_version 3")
-	}
-	document["schema_version"] = 4
-	if container, ok := document["container"].(map[string]any); ok {
-		delete(container, "release_policy")
-	}
-	migrated, err := json.Marshal(document)
-	if err != nil {
-		return "", "", err
-	}
-	sum := sha256.Sum256(migrated)
-	return string(migrated), hex.EncodeToString(sum[:]), nil
-}
-
-func migrateRegistryV2ToV3(tx *sql.Tx) error {
-	if err := verifyRegistryV2(tx); err != nil {
-		return fmt.Errorf("verify port forward registry v2 before migration: %w", err)
-	}
-	if _, err := tx.Exec(`
-ALTER TABLE managed_web_services ADD COLUMN workspace_ownership TEXT NOT NULL DEFAULT 'user_selected'
-  CHECK(workspace_ownership IN ('pending','redeven_created','user_selected'));
-ALTER TABLE managed_web_service_operations ADD COLUMN delete_workspace INTEGER NOT NULL DEFAULT 0
-  CHECK(delete_workspace IN (0,1));
-`); err != nil {
-		return err
-	}
-	return verifyRegistryV3(tx)
-}
-
-func migrateRegistryV3ToV4(tx *sql.Tx) error {
-	if err := verifyRegistryV3(tx); err != nil {
-		return fmt.Errorf("verify port forward registry v3 before migration: %w", err)
-	}
-	type releaseCheckV1 struct {
-		SchemaVersion        int             `json:"schema_version"`
-		LatestStableRelease  json.RawMessage `json:"latest_stable_release,omitempty"`
-		LatestPreviewRelease json.RawMessage `json:"latest_preview_release,omitempty"`
-	}
-	type releaseCheckV2 struct {
-		SchemaVersion        int             `json:"schema_version"`
-		CatalogStatus        string          `json:"catalog_status"`
-		Candidates           []any           `json:"candidates"`
-		LatestStableRelease  json.RawMessage `json:"latest_stable_release,omitempty"`
-		LatestPreviewRelease json.RawMessage `json:"latest_preview_release,omitempty"`
-	}
-	rows, err := tx.Query(`SELECT service_id,summary_json FROM managed_web_service_release_checks ORDER BY service_id`)
-	if err != nil {
-		return err
-	}
-	updates := [][3]string{}
-	for rows.Next() {
-		var serviceID, raw string
-		if err := rows.Scan(&serviceID, &raw); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		var legacy releaseCheckV1
-		if err := decodeStrictRegistryJSON(raw, &legacy); err != nil || legacy.SchemaVersion != 1 {
-			_ = rows.Close()
-			return fmt.Errorf("release check %s is not schema v1", serviceID)
-		}
-		migrated, err := json.Marshal(releaseCheckV2{
-			SchemaVersion: 2, CatalogStatus: "stale", Candidates: []any{},
-			LatestStableRelease: legacy.LatestStableRelease, LatestPreviewRelease: legacy.LatestPreviewRelease,
-		})
-		if err != nil {
-			_ = rows.Close()
-			return err
-		}
-		sum := sha256.Sum256(migrated)
-		updates = append(updates, [3]string{serviceID, string(migrated), hex.EncodeToString(sum[:])})
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, update := range updates {
-		if _, err := tx.Exec(`UPDATE managed_web_service_release_checks SET summary_json=?,summary_sha256=?,stale=1 WHERE service_id=?`, update[1], update[2], update[0]); err != nil {
-			return err
-		}
-	}
-	return verifyRegistryV4(tx)
-}
-
-func migrateRegistryV4ToV5(tx *sql.Tx) error {
-	if err := verifyRegistryV4(tx); err != nil {
-		return fmt.Errorf("verify port forward registry v4 before migration: %w", err)
-	}
-	for _, document := range []struct {
-		table, idColumn, jsonColumn, digestColumn string
-	}{
-		{"managed_web_service_templates", "template_id", "spec_json", "spec_sha256"},
-		{"managed_web_services", "service_id", "template_snapshot_json", "template_snapshot_sha256"},
-	} {
-		rows, err := tx.Query(`SELECT ` + document.idColumn + `,` + document.jsonColumn + ` FROM ` + document.table + ` ORDER BY ` + document.idColumn)
-		if err != nil {
-			return err
-		}
-		updates := [][3]string{}
-		for rows.Next() {
-			var id, raw string
-			if err := rows.Scan(&id, &raw); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			migrated, digest, err := migrateTemplateSpecV4ToV5(raw)
-			if err != nil {
-				_ = rows.Close()
-				return fmt.Errorf("migrate TemplateSpec %s: %w", id, err)
-			}
-			updates = append(updates, [3]string{id, migrated, digest})
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		for _, update := range updates {
-			if _, err := tx.Exec(`UPDATE `+document.table+` SET `+document.jsonColumn+`=?,`+document.digestColumn+`=? WHERE `+document.idColumn+`=?`, update[1], update[2], update[0]); err != nil {
-				return err
-			}
-		}
-	}
-
-	type progressDetailV1 struct {
-		SchemaVersion        int                               `json:"schema_version"`
-		StageStartedAtUnixMs int64                             `json:"stage_started_at_unix_ms,omitempty"`
-		UpdatedAtUnixMs      int64                             `json:"updated_at_unix_ms,omitempty"`
-		Transfer             *ManagedOperationTransferProgress `json:"transfer,omitempty"`
-	}
-	rows, err := tx.Query(`SELECT operation_id,progress_detail_json FROM managed_web_service_operations ORDER BY operation_id`)
-	if err != nil {
-		return err
-	}
-	updates := [][2]string{}
-	for rows.Next() {
-		var operationID, raw string
-		if err := rows.Scan(&operationID, &raw); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		var legacy progressDetailV1
-		if err := decodeStrictRegistryJSON(raw, &legacy); err != nil || legacy.SchemaVersion != 1 {
-			_ = rows.Close()
-			return fmt.Errorf("operation %s progress detail is not schema v1", operationID)
-		}
-		migrated, err := json.Marshal(ManagedOperationProgressDetail{
-			SchemaVersion: 2, StageStartedAtUnixMs: legacy.StageStartedAtUnixMs,
-			UpdatedAtUnixMs: legacy.UpdatedAtUnixMs, Transfer: legacy.Transfer,
-		})
-		if err != nil {
-			_ = rows.Close()
-			return err
-		}
-		updates = append(updates, [2]string{operationID, string(migrated)})
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, update := range updates {
-		if _, err := tx.Exec(`UPDATE managed_web_service_operations SET progress_detail_json=? WHERE operation_id=?`, update[1], update[0]); err != nil {
-			return err
-		}
-	}
-	return verifyRegistryV5(tx)
-}
-
-func migrateTemplateSpecV4ToV5(raw string) (string, string, error) {
-	var document map[string]any
-	if err := decodeStrictRegistryJSON(raw, &document); err != nil {
-		return "", "", err
-	}
-	version, ok := document["schema_version"].(float64)
-	if !ok || version != 4 {
-		return "", "", fmt.Errorf("expected schema_version 4")
-	}
-	document["schema_version"] = 5
-	migrated, err := json.Marshal(document)
-	if err != nil {
-		return "", "", err
-	}
-	sum := sha256.Sum256(migrated)
-	return string(migrated), hex.EncodeToString(sum[:]), nil
+`)
+	return err
 }
 
 func verifyRegistryV1(tx *sql.Tx) error {
@@ -446,45 +181,20 @@ func verifyRegistryV1(tx *sql.Tx) error {
 		return err
 	}
 	wantTables := []string{
-		"managed_web_service_operations",
-		"managed_web_service_resources",
-		"managed_web_service_template_requests",
-		"managed_web_service_templates",
-		"managed_web_services",
-		"port_forwards",
+		"managed_web_service_operations", "managed_web_service_release_checks", "managed_web_service_resources",
+		"managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards",
 	}
 	if !slices.Equal(tables, wantTables) {
-		return fmt.Errorf("port forward registry v1 table mismatch: got %v, want %v", tables, wantTables)
+		return fmt.Errorf("port forward registry v2 table mismatch: got %v, want %v", tables, wantTables)
 	}
 	wantColumns := map[string][]string{
-		"port_forwards": {
-			"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify",
-			"created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode",
-		},
-		"managed_web_service_templates": {
-			"template_id", "name", "description", "source", "deployment", "version", "revision", "spec_json",
-			"spec_sha256", "derived_from_template_id", "derived_from_revision", "service_family_id",
-			"created_at_unix_ms", "updated_at_unix_ms",
-		},
-		"managed_web_service_template_requests": {
-			"request_id", "request_fingerprint", "template_id", "action", "created_at_unix_ms",
-		},
-		"managed_web_services": {
-			"service_id", "template_id", "template_source", "template_revision", "template_snapshot_json",
-			"template_snapshot_sha256", "service_family_id", "deployment", "workspace_path", "configuration_json",
-			"configuration_revision", "configuration_sha256", "release_identity_json", "release_identity_sha256",
-			"runtime_binding_json", "runtime_binding_sha256", "version", "desired_state", "observed_state", "forward_id",
-			"runtime_identity", "runtime_manifest_json", "runtime_port", "artifact_reference", "last_error_code",
-			"last_error_message", "created_at_unix_ms", "updated_at_unix_ms",
-		},
-		"managed_web_service_resources": {
-			"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms",
-		},
-		"managed_web_service_operations": {
-			"operation_id", "service_id", "request_id", "request_fingerprint", "retry_of_operation_id", "action",
-			"delete_data", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code",
-			"error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms", "progress_detail_json",
-		},
+		"port_forwards":                         {"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode"},
+		"managed_web_service_templates":         {"template_id", "name", "description", "source", "deployment", "revision", "spec_json", "spec_sha256", "derived_from_template_id", "derived_from_revision", "service_family_id", "created_at_unix_ms", "updated_at_unix_ms"},
+		"managed_web_service_template_requests": {"request_id", "request_fingerprint", "template_id", "action", "created_at_unix_ms"},
+		"managed_web_services":                  {"service_id", "template_id", "workspace_path", "workspace_ownership", "configuration_json", "configuration_revision", "configuration_sha256", "release_identity_json", "release_identity_sha256", "runtime_binding_json", "runtime_binding_sha256", "desired_state", "observed_state", "forward_id", "runtime_identity", "runtime_spec_sha256", "runtime_manifest_json", "runtime_port", "artifact_reference", "last_error_code", "last_error_message", "created_at_unix_ms", "updated_at_unix_ms"},
+		"managed_web_service_resources":         {"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms"},
+		"managed_web_service_operations":        {"operation_id", "service_id", "request_id", "request_fingerprint", "retry_of_operation_id", "action", "delete_data", "delete_workspace", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code", "error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms", "progress_detail_json"},
+		"managed_web_service_release_checks":    {"service_id", "summary_json", "summary_sha256", "checked_at_unix_ms", "next_check_at_unix_ms", "stale", "last_error_code", "updated_at_unix_ms"},
 	}
 	for table, want := range wantColumns {
 		got, err := sqliteutil.TableColumnNamesTx(tx, table)
@@ -492,7 +202,7 @@ func verifyRegistryV1(tx *sql.Tx) error {
 			return err
 		}
 		if !slices.Equal(got, want) {
-			return fmt.Errorf("port forward registry v1 %s column mismatch: got %v, want %v", table, got, want)
+			return fmt.Errorf("port forward registry v2 %s column mismatch: got %v, want %v", table, got, want)
 		}
 	}
 	indexes, err := sqliteutil.ListUserIndexesTx(tx)
@@ -500,44 +210,34 @@ func verifyRegistryV1(tx *sql.Tx) error {
 		return err
 	}
 	if len(indexes) != 0 {
-		return fmt.Errorf("port forward registry v1 has unexpected indexes %v", indexes)
+		return fmt.Errorf("port forward registry v2 has unexpected indexes %v", indexes)
 	}
-	if err := verifyRegistryDocuments(tx, 1); err != nil {
+	if err := verifyRegistryDocuments(tx); err != nil {
 		return err
 	}
-	if err := verifyTemplateSpecDocuments(tx, 3); err != nil {
+	if err := verifyTemplateSpecDocuments(tx); err != nil {
 		return err
 	}
-	var invalid int
-	if err := tx.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE access_mode NOT IN ('unified_proxy','desktop_loopback')`).Scan(&invalid); err != nil {
+	if err := verifyReleaseCheckSchemaV2(tx); err != nil {
 		return err
 	}
-	if invalid != 0 {
-		return fmt.Errorf("port forward registry v1 has %d invalid access modes", invalid)
+	checks := []struct{ query, message string }{
+		{`SELECT COUNT(1) FROM port_forwards WHERE access_mode NOT IN ('unified_proxy','desktop_loopback')`, "invalid access modes"},
+		{`SELECT COUNT(1) FROM port_forwards WHERE length(forward_id) NOT BETWEEN 1 AND 48 OR forward_id GLOB '*[^a-z0-9-]*' OR substr(forward_id,1,1)='-' OR substr(forward_id,-1,1)='-'`, "invalid forward identities"},
+		{`SELECT COUNT(1) FROM managed_web_services WHERE workspace_ownership NOT IN ('pending','redeven_created','user_selected')`, "invalid workspace ownership values"},
+		{`SELECT COUNT(1) FROM managed_web_service_operations WHERE delete_workspace NOT IN (0,1)`, "invalid workspace deletion values"},
+		{`SELECT COUNT(1) FROM managed_web_services WHERE runtime_spec_sha256 <> '' AND (length(runtime_spec_sha256) <> 64 OR runtime_spec_sha256 GLOB '*[^0-9a-f]*')`, "invalid runtime specification digests"},
 	}
-	if err := tx.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE length(forward_id) NOT BETWEEN 1 AND 48 OR forward_id GLOB '*[^a-z0-9-]*' OR substr(forward_id,1,1)='-' OR substr(forward_id,-1,1)='-'`).Scan(&invalid); err != nil {
-		return err
-	}
-	if invalid != 0 {
-		return fmt.Errorf("port forward registry v1 has %d invalid forward identities", invalid)
+	for _, check := range checks {
+		var invalid int
+		if err := tx.QueryRow(check.query).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid != 0 {
+			return fmt.Errorf("port forward registry v2 has %d %s", invalid, check.message)
+		}
 	}
 	return nil
-}
-
-func verifyRegistryV2(tx *sql.Tx) error {
-	return verifyRegistryVersion(tx, 2)
-}
-
-func verifyRegistryV3(tx *sql.Tx) error {
-	return verifyRegistryVersion(tx, 3)
-}
-
-func verifyRegistryV4(tx *sql.Tx) error {
-	return verifyRegistryVersion(tx, 4)
-}
-
-func verifyRegistryV5(tx *sql.Tx) error {
-	return verifyRegistryVersion(tx, 5)
 }
 
 type registryReleaseIdentityV1 struct {
@@ -592,124 +292,28 @@ type registryReleaseCheckV2 struct {
 	LatestPreviewRelease *registryReleaseIdentityV1   `json:"latest_preview_release,omitempty"`
 }
 
-func verifyRegistryVersion(tx *sql.Tx, version int) error {
-	tables, err := sqliteutil.ListUserTablesTx(tx)
-	if err != nil {
-		return err
-	}
-	wantTables := []string{
-		"managed_web_service_operations",
-		"managed_web_service_release_checks",
-		"managed_web_service_resources",
-		"managed_web_service_template_requests",
-		"managed_web_service_templates",
-		"managed_web_services",
-		"port_forwards",
-	}
-	if !slices.Equal(tables, wantTables) {
-		return fmt.Errorf("port forward registry v%d table mismatch: got %v, want %v", version, tables, wantTables)
-	}
-	wantColumns := map[string][]string{
-		"port_forwards": {
-			"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify",
-			"created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms", "access_mode",
-		},
-		"managed_web_service_templates": {
-			"template_id", "name", "description", "source", "deployment", "revision", "spec_json",
-			"spec_sha256", "derived_from_template_id", "derived_from_revision", "service_family_id",
-			"created_at_unix_ms", "updated_at_unix_ms",
-		},
-		"managed_web_service_template_requests": {
-			"request_id", "request_fingerprint", "template_id", "action", "created_at_unix_ms",
-		},
-		"managed_web_services": {
-			"service_id", "template_id", "template_source", "template_revision", "template_snapshot_json",
-			"template_snapshot_sha256", "service_family_id", "deployment", "workspace_path", "configuration_json",
-			"configuration_revision", "configuration_sha256", "release_identity_json", "release_identity_sha256",
-			"runtime_binding_json", "runtime_binding_sha256", "desired_state", "observed_state", "forward_id",
-			"runtime_identity", "runtime_manifest_json", "runtime_port", "artifact_reference", "last_error_code",
-			"last_error_message", "created_at_unix_ms", "updated_at_unix_ms",
-		},
-		"managed_web_service_resources": {
-			"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms",
-		},
-		"managed_web_service_operations": {
-			"operation_id", "service_id", "request_id", "request_fingerprint", "retry_of_operation_id", "action",
-			"delete_data", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code",
-			"error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms", "progress_detail_json",
-		},
-		"managed_web_service_release_checks": {
-			"service_id", "summary_json", "summary_sha256", "checked_at_unix_ms", "next_check_at_unix_ms", "stale",
-			"last_error_code", "updated_at_unix_ms",
-		},
-	}
-	if version >= 3 {
-		wantColumns["managed_web_services"] = append(wantColumns["managed_web_services"], "workspace_ownership")
-		wantColumns["managed_web_service_operations"] = append(wantColumns["managed_web_service_operations"], "delete_workspace")
-	}
-	for table, want := range wantColumns {
-		got, err := sqliteutil.TableColumnNamesTx(tx, table)
-		if err != nil {
-			return err
-		}
-		if !slices.Equal(got, want) {
-			return fmt.Errorf("port forward registry v%d %s column mismatch: got %v, want %v", version, table, got, want)
-		}
-	}
-	indexes, err := sqliteutil.ListUserIndexesTx(tx)
-	if err != nil {
-		return err
-	}
-	if len(indexes) != 0 {
-		return fmt.Errorf("port forward registry v%d has unexpected indexes %v", version, indexes)
-	}
-	progressSchemaVersion := 1
-	if version >= 5 {
-		progressSchemaVersion = 2
-	}
-	if err := verifyRegistryDocuments(tx, progressSchemaVersion); err != nil {
-		return err
-	}
-	templateSpecVersion := 4
-	if version >= 5 {
-		templateSpecVersion = 5
-	}
-	if err := verifyTemplateSpecDocuments(tx, templateSpecVersion); err != nil {
-		return err
-	}
-	var invalid int
-	if err := tx.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE access_mode NOT IN ('unified_proxy','desktop_loopback')`).Scan(&invalid); err != nil {
-		return err
-	}
-	if invalid != 0 {
-		return fmt.Errorf("port forward registry v%d has %d invalid access modes", version, invalid)
-	}
-	if err := tx.QueryRow(`SELECT COUNT(1) FROM port_forwards WHERE length(forward_id) NOT BETWEEN 1 AND 48 OR forward_id GLOB '*[^a-z0-9-]*' OR substr(forward_id,1,1)='-' OR substr(forward_id,-1,1)='-'`).Scan(&invalid); err != nil {
-		return err
-	}
-	if invalid != 0 {
-		return fmt.Errorf("port forward registry v%d has %d invalid forward identities", version, invalid)
-	}
-	if version >= 3 {
-		if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_services WHERE workspace_ownership NOT IN ('pending','redeven_created','user_selected')`).Scan(&invalid); err != nil {
-			return err
-		}
-		if invalid != 0 {
-			return fmt.Errorf("port forward registry v%d has %d invalid workspace ownership values", version, invalid)
-		}
-		if err := tx.QueryRow(`SELECT COUNT(1) FROM managed_web_service_operations WHERE delete_workspace NOT IN (0,1)`).Scan(&invalid); err != nil {
-			return err
-		}
-		if invalid != 0 {
-			return fmt.Errorf("port forward registry v%d has %d invalid workspace deletion values", version, invalid)
-		}
-	}
-	if version >= 4 {
-		if err := verifyReleaseCheckSchemaV2(tx); err != nil {
-			return err
-		}
-	}
-	return nil
+type registryRuntimeBindingV2 struct {
+	SchemaVersion   int                                `json:"schema_version"`
+	ServiceFamilyID string                             `json:"service_family_id"`
+	Deployment      string                             `json:"deployment"`
+	Host            *registryHostRuntimeBindingV2      `json:"host,omitempty"`
+	Container       *registryContainerRuntimeBindingV2 `json:"container,omitempty"`
+	Compose         *registryComposeRuntimeBindingV2   `json:"compose,omitempty"`
+}
+
+type registryHostRuntimeBindingV2 struct {
+	InstallRoot string `json:"install_root"`
+	DataRoot    string `json:"data_root"`
+	LogPath     string `json:"log_path"`
+}
+
+type registryContainerRuntimeBindingV2 struct {
+	Name string `json:"name"`
+}
+
+type registryComposeRuntimeBindingV2 struct {
+	ProjectName string `json:"project_name"`
+	ConfigRoot  string `json:"config_root"`
 }
 
 func verifyReleaseCheckSchemaV2(tx *sql.Tx) error {
@@ -748,47 +352,34 @@ func verifyReleaseCheckSchemaV2(tx *sql.Tx) error {
 	return rows.Err()
 }
 
-func verifyTemplateSpecDocuments(tx *sql.Tx, schemaVersion int) error {
-	for _, document := range []struct{ table, idColumn, jsonColumn string }{
-		{"managed_web_service_templates", "template_id", "spec_json"},
-		{"managed_web_services", "service_id", "template_snapshot_json"},
-	} {
-		rows, err := tx.Query(`SELECT ` + document.idColumn + `,` + document.jsonColumn + ` FROM ` + document.table + ` ORDER BY ` + document.idColumn)
-		if err != nil {
+func verifyTemplateSpecDocuments(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT template_id,spec_json FROM managed_web_service_templates ORDER BY template_id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
 			return err
 		}
-		for rows.Next() {
-			var id, raw string
-			if err := rows.Scan(&id, &raw); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			var value struct {
-				SchemaVersion int `json:"schema_version"`
-				Container     *struct {
-					ReleasePolicy json.RawMessage `json:"release_policy"`
-				} `json:"container,omitempty"`
-			}
-			if err := json.Unmarshal([]byte(raw), &value); err != nil || value.SchemaVersion != schemaVersion {
-				_ = rows.Close()
-				return fmt.Errorf("TemplateSpec %s schema version is invalid", id)
-			}
-			if schemaVersion >= 4 && value.Container != nil && len(value.Container.ReleasePolicy) != 0 {
-				_ = rows.Close()
-				return fmt.Errorf("TemplateSpec %s contains retired release policy", id)
-			}
+		var value struct {
+			SchemaVersion int `json:"schema_version"`
+			Container     *struct {
+				ReleasePolicy json.RawMessage `json:"release_policy"`
+			} `json:"container,omitempty"`
 		}
-		if err := rows.Close(); err != nil {
-			return err
+		if err := json.Unmarshal([]byte(raw), &value); err != nil || value.SchemaVersion != 5 {
+			return fmt.Errorf("TemplateSpec %s schema version is invalid", id)
 		}
-		if err := rows.Err(); err != nil {
-			return err
+		if value.Container != nil && len(value.Container.ReleasePolicy) != 0 {
+			return fmt.Errorf("TemplateSpec %s contains retired release policy", id)
 		}
 	}
-	return nil
+	return rows.Err()
 }
 
-func verifyRegistryDocuments(tx *sql.Tx, progressSchemaVersion int) error {
+func verifyRegistryDocuments(tx *sql.Tx) error {
 	templateRows, err := tx.Query(`SELECT template_id,spec_json,spec_sha256 FROM managed_web_service_templates ORDER BY template_id`)
 	if err != nil {
 		return err
@@ -811,47 +402,25 @@ func verifyRegistryDocuments(tx *sql.Tx, progressSchemaVersion int) error {
 		return err
 	}
 
-	serviceRows, err := tx.Query(`
-SELECT service_id,deployment,
-       template_snapshot_json,template_snapshot_sha256,
-       configuration_json,configuration_sha256,
-       release_identity_json,release_identity_sha256,
-       runtime_binding_json,runtime_binding_sha256
-FROM managed_web_services ORDER BY service_id`)
+	serviceRows, err := tx.Query(`SELECT service_id,configuration_json,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256 FROM managed_web_services ORDER BY service_id`)
 	if err != nil {
 		return err
 	}
 	defer serviceRows.Close()
 	for serviceRows.Next() {
-		var owner, deployment string
-		var documents [4][2]string
-		if err := serviceRows.Scan(
-			&owner, &deployment,
-			&documents[0][0], &documents[0][1],
-			&documents[1][0], &documents[1][1],
-			&documents[2][0], &documents[2][1],
-			&documents[3][0], &documents[3][1],
-		); err != nil {
+		var owner string
+		var documents [3][2]string
+		if err := serviceRows.Scan(&owner, &documents[0][0], &documents[0][1], &documents[1][0], &documents[1][1], &documents[2][0], &documents[2][1]); err != nil {
 			return err
 		}
-		labels := []string{"template snapshot", "configuration", "release identity", "runtime binding"}
+		labels := []string{"configuration", "release identity", "runtime binding"}
 		for index := range documents {
 			if err := verifyDocumentDigest(labels[index], owner, documents[index][0], documents[index][1]); err != nil {
 				return err
 			}
 		}
-		var binding struct {
-			SchemaVersion int    `json:"schema_version"`
-			Deployment    string `json:"deployment"`
-			Host          any    `json:"host,omitempty"`
-			Container     any    `json:"container,omitempty"`
-			Compose       any    `json:"compose,omitempty"`
-		}
-		if err := decodeStrictRegistryJSON(documents[3][0], &binding); err != nil {
-			return fmt.Errorf("runtime binding %s: %w", owner, err)
-		}
-		if binding.SchemaVersion != 1 || binding.Deployment != deployment {
-			return fmt.Errorf("runtime binding %s does not match service deployment", owner)
+		if err := verifyRuntimeBindingV2(owner, documents[2][0]); err != nil {
+			return err
 		}
 	}
 	if err := serviceRows.Err(); err != nil {
@@ -868,19 +437,12 @@ FROM managed_web_services ORDER BY service_id`)
 		if err := operationRows.Scan(&operationID, &raw); err != nil {
 			return err
 		}
-		if _, _, err := decodeManagedOperationProgressDetailVersion(raw, progressSchemaVersion); err != nil {
+		if _, _, err := decodeManagedOperationProgressDetailVersion(raw, 2); err != nil {
 			return fmt.Errorf("operation %s progress detail: %w", operationID, err)
 		}
 	}
 	if err := operationRows.Err(); err != nil {
 		return err
-	}
-	var releaseChecksExist int
-	if err := tx.QueryRow(`SELECT COUNT(1) FROM sqlite_schema WHERE type='table' AND name='managed_web_service_release_checks'`).Scan(&releaseChecksExist); err != nil {
-		return err
-	}
-	if releaseChecksExist == 0 {
-		return nil
 	}
 	releaseRows, err := tx.Query(`SELECT service_id,summary_json,summary_sha256 FROM managed_web_service_release_checks ORDER BY service_id`)
 	if err != nil {
@@ -897,6 +459,64 @@ FROM managed_web_services ORDER BY service_id`)
 		}
 	}
 	return releaseRows.Err()
+}
+
+func verifyRuntimeBindingV2(serviceID, raw string) error {
+	binding := registryRuntimeBindingV2{}
+	if err := decodeStrictRegistryJSON(raw, &binding); err != nil {
+		return fmt.Errorf("runtime binding %s: %w", serviceID, err)
+	}
+	if binding.SchemaVersion != 2 || binding.ServiceFamilyID == "" || binding.ServiceFamilyID != strings.TrimSpace(binding.ServiceFamilyID) {
+		return fmt.Errorf("runtime binding %s ownership is invalid", serviceID)
+	}
+	switch binding.Deployment {
+	case "host":
+		instanceRoot := path.Join("instances", serviceID)
+		if binding.Host == nil || binding.Container != nil || binding.Compose != nil ||
+			binding.Host.InstallRoot != path.Join(instanceRoot, "install") ||
+			binding.Host.DataRoot != path.Join("families", binding.ServiceFamilyID, "data") ||
+			binding.Host.LogPath != path.Join(instanceRoot, "logs", "service.log") {
+			return fmt.Errorf("runtime binding %s host identity is invalid", serviceID)
+		}
+	case "container":
+		if binding.Host != nil || binding.Container == nil || binding.Compose != nil ||
+			binding.Container.Name != registryContainerName(serviceID) {
+			return fmt.Errorf("runtime binding %s container identity is invalid", serviceID)
+		}
+	case "compose":
+		if binding.Host != nil || binding.Container != nil || binding.Compose == nil ||
+			binding.Compose.ProjectName != "redeven_"+registryResourceNameSuffix(serviceID) ||
+			binding.Compose.ConfigRoot != path.Join("instances", serviceID, "compose") {
+			return fmt.Errorf("runtime binding %s compose identity is invalid", serviceID)
+		}
+	default:
+		return fmt.Errorf("runtime binding %s deployment is invalid", serviceID)
+	}
+	return nil
+}
+
+func registryContainerName(serviceID string) string {
+	return "redeven-mws-" + strings.TrimPrefix(strings.TrimSpace(serviceID), "mws_")
+}
+
+func registryResourceNameSuffix(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var builder strings.Builder
+	for _, char := range value {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-' || char == '_' {
+			builder.WriteRune(char)
+		} else {
+			builder.WriteByte('-')
+		}
+	}
+	result := strings.Trim(builder.String(), "-_")
+	if result == "" {
+		return "service"
+	}
+	if len(result) > 48 {
+		return result[:48]
+	}
+	return result
 }
 
 func verifyDocumentDigest(kind, owner, raw, expected string) error {

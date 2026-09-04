@@ -26,20 +26,18 @@ const (
 )
 
 type containerUpdateRelease struct {
-	TemplateRevision       int64  `json:"template_revision"`
-	TemplateSnapshotJSON   string `json:"template_snapshot_json"`
-	TemplateSnapshotSHA256 string `json:"template_snapshot_sha256"`
-	ConfigurationJSON      string `json:"configuration_json"`
-	ConfigurationRevision  int64  `json:"configuration_revision"`
-	ConfigurationSHA256    string `json:"configuration_sha256"`
-	DesiredState           string `json:"desired_state"`
-	ObservedState          string `json:"observed_state"`
-	RuntimeIdentity        string `json:"runtime_identity,omitempty"`
-	ArtifactReference      string `json:"artifact_reference,omitempty"`
-	ReleaseIdentityJSON    string `json:"release_identity_json,omitempty"`
-	ReleaseIdentitySHA256  string `json:"release_identity_sha256,omitempty"`
-	RuntimeBindingJSON     string `json:"runtime_binding_json"`
-	RuntimeBindingSHA256   string `json:"runtime_binding_sha256"`
+	ConfigurationJSON     string `json:"configuration_json"`
+	ConfigurationRevision int64  `json:"configuration_revision"`
+	ConfigurationSHA256   string `json:"configuration_sha256"`
+	DesiredState          string `json:"desired_state"`
+	ObservedState         string `json:"observed_state"`
+	RuntimeIdentity       string `json:"runtime_identity,omitempty"`
+	RuntimeSpecSHA256     string `json:"runtime_spec_sha256,omitempty"`
+	ArtifactReference     string `json:"artifact_reference,omitempty"`
+	ReleaseIdentityJSON   string `json:"release_identity_json"`
+	ReleaseIdentitySHA256 string `json:"release_identity_sha256"`
+	RuntimeBindingJSON    string `json:"runtime_binding_json"`
+	RuntimeBindingSHA256  string `json:"runtime_binding_sha256"`
 }
 
 type containerUpdateJournal struct {
@@ -63,45 +61,54 @@ type updateExecutionError struct {
 	RollbackErr error
 }
 
-func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, accepted map[string]int64, candidate cachedReleaseCandidate, driver deploymentDriver) (runErr error) {
-	if candidate.Spec.Kind != DeploymentHost || candidate.Spec.Host == nil || candidate.Spec.Host.NPM == nil {
-		return serviceError("UPDATE_UNSUPPORTED", "The selected release is not a compatible npm Host release.", 409, false, nil)
+func updateReleaseFromService(service pfregistry.ManagedService) containerUpdateRelease {
+	return containerUpdateRelease{
+		ConfigurationJSON: service.ConfigurationJSON, ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
+		DesiredState: service.DesiredState, ObservedState: service.ObservedState, RuntimeIdentity: service.RuntimeIdentity,
+		RuntimeSpecSHA256: service.RuntimeSpecSHA256, ArtifactReference: service.ArtifactReference,
+		ReleaseIdentityJSON: service.ReleaseIdentityJSON, ReleaseIdentitySHA256: service.ReleaseIdentitySHA256,
+		RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
 	}
+}
+
+func (m *Manager) releaseUpdateTarget(ctx context.Context, service *pfregistry.ManagedService, identity ReleaseIdentity, accepted map[string]int64) (pfregistry.ManagedService, *resolvedRuntime, error) {
+	target := *service
+	configurationJSON, configurationSHA256, err := configurationWithAcceptedNotices(service.ConfigurationJSON, accepted)
+	if err != nil {
+		return pfregistry.ManagedService{}, nil, err
+	}
+	if configurationJSON != service.ConfigurationJSON {
+		target.ConfigurationRevision++
+	}
+	target.ConfigurationJSON, target.ConfigurationSHA256 = configurationJSON, configurationSHA256
+	target.ReleaseIdentityJSON, target.ReleaseIdentitySHA256, err = canonicalReleaseIdentity(identity)
+	if err != nil {
+		return pfregistry.ManagedService{}, nil, err
+	}
+	target.RuntimeIdentity, target.ArtifactReference = "", ""
+	resolved, err := m.resolveCurrentRuntime(ctx, &target)
+	if err != nil {
+		return pfregistry.ManagedService{}, nil, err
+	}
+	resolved.applyTo(&target)
+	target.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
+	return target, resolved, nil
+}
+
+func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, accepted map[string]int64, candidate cachedReleaseCandidate, driver deploymentDriver) (runErr error) {
 	if (service.DesiredState != "running" || service.ObservedState != "running") && (service.DesiredState != "stopped" || service.ObservedState != "stopped") {
 		return serviceError("UPDATE_STATE_INVALID", "Stop or fully start the service before updating it.", 409, false, nil)
 	}
-	targetSnapshotJSON, targetSnapshotHash, err := canonicalTemplateSpec(candidate.Spec)
+	targetService, targetRuntime, err := m.releaseUpdateTarget(ctx, service, candidate.Identity, accepted)
 	if err != nil {
 		return err
 	}
-	targetReleaseJSON, targetReleaseHash, err := canonicalReleaseIdentity(candidate.Identity)
-	if err != nil {
-		return err
-	}
-	targetConfiguration, targetConfigurationHash, err := configurationWithAcceptedNotices(service.ConfigurationJSON, accepted)
-	if err != nil {
-		return err
-	}
-	targetConfigurationRevision := service.ConfigurationRevision
-	if targetConfiguration != service.ConfigurationJSON {
-		targetConfigurationRevision++
+	if targetRuntime.Spec.Kind != DeploymentHost || targetRuntime.Spec.Host == nil || targetRuntime.Spec.Host.NPM == nil {
+		return serviceError("UPDATE_UNSUPPORTED", "The selected release is not a compatible npm Host release.", 409, false, nil)
 	}
 	journal := containerUpdateJournal{
 		Kind: managedServiceUpdateJournalKind, Phase: updatePhasePreparing,
-		Old: containerUpdateRelease{
-			TemplateRevision: service.TemplateRevision, TemplateSnapshotJSON: service.TemplateSnapshotJSON, TemplateSnapshotSHA256: service.TemplateSnapshotSHA256,
-			ConfigurationJSON: service.ConfigurationJSON, ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
-			DesiredState: service.DesiredState, ObservedState: service.ObservedState, RuntimeIdentity: service.RuntimeIdentity,
-			ArtifactReference: service.ArtifactReference, ReleaseIdentityJSON: service.ReleaseIdentityJSON, ReleaseIdentitySHA256: service.ReleaseIdentitySHA256,
-			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
-		},
-		Target: containerUpdateRelease{
-			TemplateRevision: candidate.TemplateRevision, TemplateSnapshotJSON: targetSnapshotJSON, TemplateSnapshotSHA256: targetSnapshotHash,
-			ConfigurationJSON: targetConfiguration, ConfigurationRevision: targetConfigurationRevision, ConfigurationSHA256: targetConfigurationHash,
-			DesiredState: service.DesiredState, ObservedState: service.ObservedState,
-			ReleaseIdentityJSON: targetReleaseJSON, ReleaseIdentitySHA256: targetReleaseHash,
-			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
-		},
+		Old: updateReleaseFromService(*service), Target: updateReleaseFromService(targetService),
 	}
 	journalPersisted, committed := false, false
 	defer func() {
@@ -116,8 +123,7 @@ func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.
 		return err
 	}
 	journalPersisted = true
-	targetService := serviceFromUpdateRelease(*service, journal.Target)
-	targetService.RuntimeIdentity, targetService.ArtifactReference = "", ""
+	targetService.ArtifactReference = ""
 	m.progress(op, "downloading", 2)
 	_, artifact, err := driver.Install(ctx, &targetService, m.operationProgress(op))
 	if err != nil {
@@ -189,11 +195,18 @@ func (m *Manager) rollbackHostReleaseUpdate(ctx context.Context, service *pfregi
 	}
 	old := serviceFromUpdateRelease(*service, journal.Old)
 	if journal.Old.DesiredState == "running" && phaseAtLeast(journal.Phase, updatePhaseOldStopped) {
+		resolved, err := m.resolveCurrentRuntime(ctx, &old)
+		if err != nil {
+			return err
+		}
+		resolved.applyTo(&old)
+		old.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
 		runtimeID, err := m.startRuntime(ctx, &old, driver)
 		if err != nil {
 			return err
 		}
 		old.RuntimeIdentity, journal.Old.RuntimeIdentity = runtimeID, runtimeID
+		journal.Old.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
 		if err := m.waitHealthy(ctx, &old); err != nil {
 			return err
 		}
@@ -237,51 +250,25 @@ func (e *updateExecutionError) Unwrap() error {
 }
 
 func (m *Manager) runContainerReleaseUpdate(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, accepted map[string]int64, candidate cachedReleaseCandidate, driver containerUpdateDriver) error {
-	target := Template{TemplateID: service.TemplateID, Source: service.TemplateSource, Deployment: DeploymentContainer, Revision: candidate.TemplateRevision, ServiceFamilyID: service.ServiceFamilyID, Spec: &candidate.Spec}
-	return m.runContainerUpdateTarget(ctx, service, op, target, candidate.Identity, accepted, true, driver)
-}
-
-func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, target Template, identity ReleaseIdentity, accepted map[string]int64, updateNotices bool, driver containerUpdateDriver) (runErr error) {
-	if target.Spec == nil || target.Spec.Container == nil {
+	target, resolved, err := m.releaseUpdateTarget(ctx, service, candidate.Identity, accepted)
+	if err != nil {
+		return err
+	}
+	if resolved.Spec.Kind != DeploymentContainer || resolved.Spec.Container == nil {
 		return serviceError("UPDATE_NOT_AVAILABLE", "The selected release has no single-container Runtime definition.", 409, false, nil)
 	}
-	targetConfiguration, targetConfigurationHash := service.ConfigurationJSON, service.ConfigurationSHA256
-	targetConfigurationRevision := service.ConfigurationRevision
-	var err error
-	if updateNotices {
-		targetConfiguration, targetConfigurationHash, err = configurationWithAcceptedNotices(service.ConfigurationJSON, accepted)
-		targetConfigurationRevision++
-	}
-	if err != nil {
-		return err
-	}
-	targetReleaseJSON, targetReleaseHash, err := canonicalReleaseIdentity(identity)
-	if err != nil {
-		return err
-	}
-	targetSnapshotJSON, targetSnapshotHash, err := canonicalTemplateSpec(*target.Spec)
-	if err != nil {
-		return err
+	return m.runContainerUpdateTarget(ctx, service, op, target, resolved, driver)
+}
+
+func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, targetService pfregistry.ManagedService, targetRuntime *resolvedRuntime, driver containerUpdateDriver) (runErr error) {
+	if targetRuntime == nil || targetRuntime.Spec.Container == nil {
+		return serviceError("UPDATE_NOT_AVAILABLE", "The selected release has no single-container Runtime definition.", 409, false, nil)
 	}
 	journal := containerUpdateJournal{
-		Kind:  managedServiceUpdateJournalKind,
-		Phase: updatePhasePreparing,
-		Old: containerUpdateRelease{
-			TemplateRevision: service.TemplateRevision, TemplateSnapshotJSON: service.TemplateSnapshotJSON,
-			TemplateSnapshotSHA256: service.TemplateSnapshotSHA256, ConfigurationJSON: service.ConfigurationJSON,
-			ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
-			DesiredState: service.DesiredState, ObservedState: service.ObservedState,
-			RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference,
-			ReleaseIdentityJSON: service.ReleaseIdentityJSON, ReleaseIdentitySHA256: service.ReleaseIdentitySHA256,
-			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
-		},
-		Target: containerUpdateRelease{
-			TemplateRevision: target.Revision, TemplateSnapshotJSON: targetSnapshotJSON, TemplateSnapshotSHA256: targetSnapshotHash,
-			ConfigurationJSON: targetConfiguration, ConfigurationRevision: targetConfigurationRevision, ConfigurationSHA256: targetConfigurationHash,
-			DesiredState: service.DesiredState, ObservedState: service.ObservedState,
-			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
-			ReleaseIdentityJSON: targetReleaseJSON, ReleaseIdentitySHA256: targetReleaseHash,
-		},
+		Kind:   managedServiceUpdateJournalKind,
+		Phase:  updatePhasePreparing,
+		Old:    updateReleaseFromService(*service),
+		Target: updateReleaseFromService(targetService),
 	}
 	if (journal.Old.DesiredState != "running" || journal.Old.ObservedState != "running") && (journal.Old.DesiredState != "stopped" || journal.Old.ObservedState != "stopped") {
 		return serviceError("UPDATE_STATE_INVALID", "Stop or fully start the service before updating it.", 409, false, nil)
@@ -303,7 +290,7 @@ func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregis
 	journalPersisted = true
 
 	m.progress(op, "pulling", 2)
-	artifact, err := driver.PrepareUpdateArtifact(ctx, *target.Spec, m.operationProgress(op))
+	artifact, err := driver.PrepareUpdateArtifact(ctx, targetRuntime.Spec, m.operationProgress(op))
 	if err != nil {
 		return err
 	}
@@ -332,17 +319,12 @@ func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregis
 		return err
 	}
 
-	targetService := serviceFromUpdateRelease(*service, journal.Target)
-	targetEffectiveSpec, _, err := effectiveSpecFromService(&targetService)
-	if err != nil {
-		return serviceError("TEMPLATE_UPDATE_CONFIGURATION_CONFLICT", "The saved service overrides conflict with the updated template. Review service settings before updating.", 409, false, err)
-	}
 	journal.Phase = updatePhaseTargetCreating
 	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
 		return err
 	}
 	m.progress(op, "installing", 4)
-	runtimeID, err := driver.CreateRuntime(ctx, &targetService, targetEffectiveSpec, artifact)
+	runtimeID, err := driver.CreateRuntime(ctx, &targetService, targetRuntime.Spec, artifact)
 	if err != nil {
 		return err
 	}
@@ -377,133 +359,6 @@ func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregis
 	return nil
 }
 
-func (m *Manager) runComposeTemplateUpdate(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, candidate cachedReleaseCandidate, driver deploymentDriver) (runErr error) {
-	runtimeDriver, ok := driver.(reconfigureRuntimeDriver)
-	if !ok || candidate.Spec.Kind != DeploymentCompose || candidate.Spec.Compose == nil || candidate.Identity.Kind != "none" {
-		return serviceError("UPDATE_UNSUPPORTED", "This Compose template update cannot be applied by the current Runtime.", 409, false, nil)
-	}
-	if (service.DesiredState != "running" || service.ObservedState != "running") && (service.DesiredState != "stopped" || service.ObservedState != "stopped") {
-		return serviceError("UPDATE_STATE_INVALID", "Stop or fully start the service before updating it.", 409, false, nil)
-	}
-	targetSnapshotJSON, targetSnapshotHash, err := canonicalTemplateSpec(candidate.Spec)
-	if err != nil {
-		return err
-	}
-	targetReleaseJSON, targetReleaseHash, err := canonicalReleaseIdentity(candidate.Identity)
-	if err != nil {
-		return err
-	}
-	journal := containerUpdateJournal{
-		Kind: managedServiceUpdateJournalKind, Phase: updatePhasePreparing,
-		Old: containerUpdateRelease{
-			TemplateRevision: service.TemplateRevision, TemplateSnapshotJSON: service.TemplateSnapshotJSON, TemplateSnapshotSHA256: service.TemplateSnapshotSHA256,
-			ConfigurationJSON: service.ConfigurationJSON, ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
-			DesiredState: service.DesiredState, ObservedState: service.ObservedState, RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference,
-			ReleaseIdentityJSON: service.ReleaseIdentityJSON, ReleaseIdentitySHA256: service.ReleaseIdentitySHA256, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
-		},
-		Target: containerUpdateRelease{
-			TemplateRevision: candidate.TemplateRevision, TemplateSnapshotJSON: targetSnapshotJSON, TemplateSnapshotSHA256: targetSnapshotHash,
-			ConfigurationJSON: service.ConfigurationJSON, ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
-			DesiredState: service.DesiredState, ObservedState: service.ObservedState, ReleaseIdentityJSON: targetReleaseJSON, ReleaseIdentitySHA256: targetReleaseHash,
-			RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256,
-		},
-	}
-	journalPersisted, committed := false, false
-	defer func() {
-		if runErr == nil || committed || !journalPersisted {
-			return
-		}
-		rollbackErr := m.rollbackComposeTemplateUpdate(context.Background(), service, journal, runtimeDriver)
-		runErr = &updateExecutionError{Cause: runErr, RollbackErr: rollbackErr}
-	}()
-	m.progress(op, "update_preparing", 1)
-	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
-		return err
-	}
-	journalPersisted = true
-	oldSpec, _, err := effectiveSpecFromService(service)
-	if err != nil {
-		return err
-	}
-	if service.RuntimeIdentity != "" {
-		if err := runtimeDriver.VerifyRuntime(ctx, service, oldSpec); err != nil {
-			return err
-		}
-		if service.DesiredState == "running" {
-			m.progress(op, "stopping", 2)
-			if err := driver.Stop(ctx, service); err != nil {
-				return err
-			}
-		}
-		if err := runtimeDriver.RemoveRuntime(ctx, service); err != nil {
-			return err
-		}
-	}
-	journal.Phase = updatePhaseOldRemoved
-	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
-		return err
-	}
-	target := serviceFromUpdateRelease(*service, journal.Target)
-	target.RuntimeIdentity = ""
-	m.progress(op, "installing", 4)
-	runtimeID, artifact, err := runtimeDriver.RebuildStoppedRuntime(ctx, &target, candidate.Spec, service.ArtifactReference)
-	if err != nil {
-		return err
-	}
-	target.RuntimeIdentity, target.ArtifactReference = runtimeID, artifact
-	journal.Target.RuntimeIdentity, journal.Target.ArtifactReference = runtimeID, artifact
-	journal.Phase = updatePhaseTargetCreated
-	if err := m.writeContainerUpdateJournal(ctx, service.ServiceID, journal); err != nil {
-		return err
-	}
-	if journal.Old.DesiredState == "running" {
-		m.progress(op, "starting", 5)
-		if runtimeID, err = m.startRuntime(ctx, &target, driver); err != nil {
-			return err
-		}
-		target.RuntimeIdentity, journal.Target.RuntimeIdentity = runtimeID, runtimeID
-		if err := m.waitHealthy(ctx, &target); err != nil {
-			return err
-		}
-	}
-	m.progress(op, "verifying", 6)
-	if err := runtimeDriver.VerifyRuntime(ctx, &target, candidate.Spec); err != nil {
-		return err
-	}
-	if err := m.commitContainerUpdate(ctx, service, journal.Target); err != nil {
-		return err
-	}
-	committed = true
-	return nil
-}
-
-func (m *Manager) rollbackComposeTemplateUpdate(ctx context.Context, service *pfregistry.ManagedService, journal containerUpdateJournal, driver reconfigureRuntimeDriver) error {
-	target := serviceFromUpdateRelease(*service, journal.Target)
-	if target.RuntimeIdentity != "" {
-		_ = driver.RemoveRuntime(ctx, &target)
-	}
-	old := serviceFromUpdateRelease(*service, journal.Old)
-	old.RuntimeIdentity = ""
-	oldSpec, _, err := effectiveSpecFromService(&old)
-	if err != nil {
-		return err
-	}
-	runtimeID, artifact, err := driver.RebuildStoppedRuntime(ctx, &old, oldSpec, journal.Old.ArtifactReference)
-	if err != nil {
-		return err
-	}
-	journal.Old.RuntimeIdentity, journal.Old.ArtifactReference = runtimeID, artifact
-	old.RuntimeIdentity, old.ArtifactReference = runtimeID, artifact
-	if journal.Old.DesiredState == "running" {
-		runtimeID, err = m.startRuntime(ctx, &old, driver)
-		if err != nil {
-			return err
-		}
-		journal.Old.RuntimeIdentity = runtimeID
-	}
-	return m.commitContainerUpdate(ctx, service, journal.Old)
-}
-
 func configurationWithAcceptedNotices(raw string, accepted map[string]int64) (string, string, error) {
 	configuration, err := decodeServiceConfiguration(raw)
 	if err != nil {
@@ -527,46 +382,42 @@ func decodeContainerUpdateJournal(raw string) (containerUpdateJournal, error) {
 	if err := decodeStrictJSON([]byte(raw), &journal); err != nil {
 		return journal, err
 	}
-	if journal.Kind != managedServiceUpdateJournalKind || journal.Phase == "" || journal.Old.TemplateSnapshotJSON == "" || journal.Target.TemplateSnapshotJSON == "" ||
-		journal.Old.RuntimeBindingJSON == "" || journal.Old.RuntimeBindingSHA256 == "" || journal.Target.RuntimeBindingJSON == "" || journal.Target.RuntimeBindingSHA256 == "" {
+	if journal.Kind != managedServiceUpdateJournalKind || journal.Phase == "" || journal.Old.ConfigurationJSON == "" || journal.Target.ConfigurationJSON == "" ||
+		journal.Old.ReleaseIdentityJSON == "" || journal.Old.ReleaseIdentitySHA256 == "" || journal.Target.ReleaseIdentityJSON == "" || journal.Target.ReleaseIdentitySHA256 == "" ||
+		journal.Old.RuntimeBindingJSON == "" || journal.Old.RuntimeBindingSHA256 == "" || journal.Target.RuntimeBindingJSON == "" || journal.Target.RuntimeBindingSHA256 == "" ||
+		(journal.Old.RuntimeSpecSHA256 != "" && !validRuntimeSpecSHA256(journal.Old.RuntimeSpecSHA256)) ||
+		(journal.Target.RuntimeSpecSHA256 != "" && !validRuntimeSpecSHA256(journal.Target.RuntimeSpecSHA256)) {
 		return journal, errors.New("invalid managed container update journal")
 	}
 	return journal, nil
 }
 
 func serviceFromUpdateRelease(base pfregistry.ManagedService, release containerUpdateRelease) pfregistry.ManagedService {
-	base.TemplateRevision = release.TemplateRevision
-	base.TemplateSnapshotJSON = release.TemplateSnapshotJSON
-	base.TemplateSnapshotSHA256 = release.TemplateSnapshotSHA256
 	base.ConfigurationJSON = release.ConfigurationJSON
 	base.ConfigurationRevision = release.ConfigurationRevision
 	base.ConfigurationSHA256 = release.ConfigurationSHA256
 	base.DesiredState = release.DesiredState
 	base.ObservedState = release.ObservedState
 	base.RuntimeIdentity = release.RuntimeIdentity
+	base.RuntimeSpecSHA256 = release.RuntimeSpecSHA256
 	base.ArtifactReference = release.ArtifactReference
 	base.RuntimeBindingJSON = release.RuntimeBindingJSON
 	base.RuntimeBindingSHA256 = release.RuntimeBindingSHA256
-	if release.ReleaseIdentityJSON != "" {
-		base.ReleaseIdentityJSON = release.ReleaseIdentityJSON
-		base.ReleaseIdentitySHA256 = release.ReleaseIdentitySHA256
-	}
+	base.ReleaseIdentityJSON = release.ReleaseIdentityJSON
+	base.ReleaseIdentitySHA256 = release.ReleaseIdentitySHA256
 	return base
 }
 
 func (m *Manager) commitContainerUpdate(ctx context.Context, service *pfregistry.ManagedService, release containerUpdateRelease) error {
 	emptyManifest, blank := "{}", ""
 	patch := pfregistry.ManagedServicePatch{
-		TemplateRevision: &release.TemplateRevision, TemplateSnapshotJSON: &release.TemplateSnapshotJSON,
-		TemplateSnapshotSHA256: &release.TemplateSnapshotSHA256, ConfigurationJSON: &release.ConfigurationJSON,
+		ConfigurationJSON:     &release.ConfigurationJSON,
 		ConfigurationRevision: &release.ConfigurationRevision, ConfigurationSHA256: &release.ConfigurationSHA256,
 		DesiredState: &release.DesiredState, ObservedState: &release.ObservedState,
-		RuntimeIdentity: &release.RuntimeIdentity, ArtifactReference: &release.ArtifactReference,
+		RuntimeIdentity: &release.RuntimeIdentity, RuntimeSpecSHA256: &release.RuntimeSpecSHA256, ArtifactReference: &release.ArtifactReference,
 		RuntimeBindingJSON: &release.RuntimeBindingJSON, RuntimeBindingSHA256: &release.RuntimeBindingSHA256,
+		ReleaseIdentityJSON: &release.ReleaseIdentityJSON, ReleaseIdentitySHA256: &release.ReleaseIdentitySHA256,
 		RuntimeManifestJSON: &emptyManifest, LastErrorCode: &blank, LastErrorMessage: &blank,
-	}
-	if release.ReleaseIdentityJSON != "" {
-		patch.ReleaseIdentityJSON, patch.ReleaseIdentitySHA256 = &release.ReleaseIdentityJSON, &release.ReleaseIdentitySHA256
 	}
 	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, patch); err != nil {
 		return err
@@ -587,55 +438,89 @@ func (m *Manager) rollbackContainerUpdate(ctx context.Context, service *pfregist
 		target.RuntimeIdentity = identity
 	}
 	if target.RuntimeIdentity != "" {
-		targetSpec, _, err := effectiveSpecFromService(&target)
+		exists, _, err := m.journaledContainerRuntimeExists(ctx, &target, journal.Target.RuntimeSpecSHA256, driver)
 		if err != nil {
 			return err
 		}
-		if err := driver.VerifyRuntime(ctx, &target, targetSpec); err != nil {
-			return err
-		}
-		if err := driver.RemoveRuntime(ctx, &target); err != nil {
-			return err
+		if exists {
+			if err := driver.RemoveRuntime(ctx, &target); err != nil {
+				return err
+			}
 		}
 	}
 
 	old := serviceFromUpdateRelease(*service, journal.Old)
-	oldSpec, _, err := effectiveSpecFromService(&old)
+	oldExists, oldMatchesCurrent, err := m.journaledContainerRuntimeExists(ctx, &old, journal.Old.RuntimeSpecSHA256, driver)
 	if err != nil {
 		return err
 	}
-	oldExists := false
-	if old.RuntimeIdentity != "" {
-		if err := driver.VerifyRuntime(ctx, &old, oldSpec); err == nil {
-			oldExists = true
-		} else if code, _, _, _ := ErrorDetails(err); code != "CONTAINER_IDENTITY_MISSING" {
-			return err
-		}
-	}
-	if !oldExists {
+	needsRebuild := !oldExists || (!oldMatchesCurrent && journal.Old.DesiredState == "running" && phaseAtLeast(journal.Phase, updatePhaseOldStopped))
+	if needsRebuild {
 		if old.ArtifactReference == "" {
 			return errors.New("the previous container artifact is unavailable")
 		}
+		if oldExists {
+			if err := driver.RemoveRuntime(ctx, &old); err != nil {
+				return err
+			}
+		}
+		resolvedOld, err := m.resolveCurrentRuntime(ctx, &old)
+		if err != nil {
+			return err
+		}
+		resolvedOld.applyTo(&old)
 		old.RuntimeIdentity = ""
-		runtimeID, err := driver.CreateRuntime(ctx, &old, oldSpec, old.ArtifactReference)
+		runtimeID, err := driver.CreateRuntime(ctx, &old, resolvedOld.Spec, old.ArtifactReference)
 		if err != nil {
 			return err
 		}
 		old.RuntimeIdentity = runtimeID
+		old.RuntimeSpecSHA256 = resolvedOld.RuntimeSpecSHA256
 		journal.Old.RuntimeIdentity = runtimeID
+		journal.Old.RuntimeSpecSHA256 = resolvedOld.RuntimeSpecSHA256
 	}
 	if journal.Old.DesiredState == "running" {
-		if _, err := m.startRuntime(ctx, &old, driver); err != nil {
-			return err
-		}
-		if err := m.waitHealthy(ctx, &old); err != nil {
-			return err
+		if oldMatchesCurrent || needsRebuild {
+			if _, err := m.startRuntime(ctx, &old, driver); err != nil {
+				return err
+			}
+			if err := m.waitHealthy(ctx, &old); err != nil {
+				return err
+			}
 		}
 	} else if err := driver.Stop(ctx, &old); err != nil {
 		return err
 	}
 	journal.Old.RuntimeIdentity = old.RuntimeIdentity
 	return m.commitContainerUpdate(ctx, service, journal.Old)
+}
+
+func (m *Manager) journaledContainerRuntimeExists(ctx context.Context, service *pfregistry.ManagedService, runtimeSpecSHA256 string, driver containerUpdateDriver) (bool, bool, error) {
+	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
+		return false, false, nil
+	}
+	resolved, resolveErr := m.resolveCurrentRuntime(ctx, service)
+	if resolveErr == nil && resolved.RuntimeSpecSHA256 == runtimeSpecSHA256 {
+		resolved.applyTo(service)
+		if err := driver.VerifyRuntime(ctx, service, resolved.Spec); err != nil {
+			if code, _, _, _ := ErrorDetails(err); code == "CONTAINER_IDENTITY_MISSING" {
+				return false, true, nil
+			}
+			return false, true, err
+		}
+		return true, true, nil
+	}
+	found, err := driver.FindRuntime(ctx, service.ServiceID)
+	if err != nil {
+		return false, false, err
+	}
+	if found == "" {
+		return false, false, nil
+	}
+	if found != service.RuntimeIdentity {
+		return false, false, errors.New("the journaled managed container identity is unavailable")
+	}
+	return true, false, nil
 }
 
 func phaseAtLeast(actual, expected string) bool {
@@ -652,6 +537,9 @@ func (m *Manager) recoverInterruptedContainerUpdate(service *pfregistry.ManagedS
 		return serviceError("UPDATE_JOURNAL_INVALID", "The interrupted update journal is invalid; Redeven will not guess which runtime is authoritative.", 409, false, err)
 	}
 	if journal.Phase == updatePhaseTargetVerified {
+		if !validRuntimeSpecSHA256(journal.Target.RuntimeSpecSHA256) {
+			return serviceError("UPDATE_JOURNAL_INVALID", "The verified update journal has no valid runtime digest.", 409, false, nil)
+		}
 		target := serviceFromUpdateRelease(*service, journal.Target)
 		if target.RuntimeIdentity == "" {
 			target.RuntimeIdentity, err = driver.FindRuntime(context.Background(), service.ServiceID)
@@ -659,15 +547,17 @@ func (m *Manager) recoverInterruptedContainerUpdate(service *pfregistry.ManagedS
 				return err
 			}
 		}
-		spec, _, specErr := effectiveSpecFromService(&target)
-		if specErr == nil {
-			specErr = driver.VerifyRuntime(context.Background(), &target, spec)
+		exists, matchesCurrent, specErr := m.journaledContainerRuntimeExists(context.Background(), &target, journal.Target.RuntimeSpecSHA256, driver)
+		if specErr == nil && !exists {
+			specErr = errors.New("the verified updated runtime identity is unavailable")
 		}
 		if specErr == nil {
-			if journal.Old.DesiredState == "running" {
+			if journal.Old.DesiredState == "running" && matchesCurrent {
 				_, specErr = m.startRuntime(context.Background(), &target, driver)
 			} else {
-				specErr = driver.Stop(context.Background(), &target)
+				if journal.Old.DesiredState == "stopped" {
+					specErr = driver.Stop(context.Background(), &target)
+				}
 			}
 		}
 		if specErr == nil {
@@ -699,6 +589,13 @@ func (m *Manager) recoverInterruptedHostUpdate(service *pfregistry.ManagedServic
 	}
 	if journal.Phase == updatePhaseTargetVerified {
 		target := serviceFromUpdateRelease(*service, journal.Target)
+		resolved, resolveErr := m.resolveCurrentRuntime(context.Background(), &target)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		resolved.applyTo(&target)
+		target.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
+		journal.Target.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
 		// The staged target identity was never committed, so it cannot authorize
 		// restart adoption. Start that exact release afresh and verify it before
 		// making the journal target authoritative.

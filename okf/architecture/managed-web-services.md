@@ -1,13 +1,13 @@
 ---
 type: Runtime Contract
 title: Managed Web Services
-description: Operate generic Host, Container, and Compose services from verified external template snapshots.
+description: Operate generic Host, Container, and Compose services from the current verified external template definitions.
 tags: [architecture, web-services, runtime, containers, security]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 # Summary
 
-- Authority: Redeven owns installed snapshots, Runtime bindings, resource identities, operations, and protected forwards; the released template catalog owns every built-in service definition and presentation asset.
+- Authority: Redeven owns installed instance state, applied Runtime digests, bindings, resource identities, operations, and protected forwards; the current verified template record owns Runtime behavior, while the released catalog owns every built-in definition and presentation asset.
 - Outcome: any valid template follows one install, start, stop, restart, update, reconfigure, retry, and uninstall engine without template-specific branches.
 - Invariants: Runtime state has one Registry authority, external resources are accepted only by exact identity, failures require an explicit user action, and Renderer consumes backend capabilities rather than inferring recovery.
 - Failure boundary: invalid catalogs, bindings, resources, releases, permissions, or health checks fail closed without adopting or mutating unknown resources.
@@ -18,15 +18,17 @@ timestamp: 2026-09-03T00:00:00Z
 
 Redeven loads the released `github.com/floegence/redeven-service-templates` bundle before opening the Registry or starting the Manager. Bundle schema, module version, manifest, SHA-256, template documents, localization coverage, icons, platforms, HTTPS sources, and exact OCI artifacts are strictly validated. Startup stops on any mismatch; there is no built-in fallback catalog.
 
-Install accepts one exact template ID and persists its immutable TemplateSpec v5 snapshot, digest, localized identity, configuration, selected release identity, RuntimeBinding v1, workspace ownership, and first operation in the Registry transaction. With no version choice it installs the template's recommended/default release; an explicit compatible source candidate overrides that default. A default workspace path is only a recommendation: Catalog and template reads are filesystem-free. Manager validates the selected path, persists the service, and creates a missing leaf during the install environment-check stage. The resulting ownership is `redeven_created` only when that worker created the leaf; existing or raced-in directories are `user_selected`. Install retry may recreate a missing saved directory but never changes established ownership. Host, Container, and Compose drivers consume the typed snapshot only. They do not inspect a template ID, family, package name, image name, display name, or asset to select behavior.
+Install accepts one exact template ID and persists that ID, instance configuration, the selected release identity, RuntimeBinding v2, workspace ownership, the applied Runtime digest, and the first operation in the Registry transaction. It does not copy a template revision or snapshot into the service. With no version choice it installs the template's recommended/default release; an explicit compatible source candidate overrides that default, and later template edits never replace the installed release identity. A default workspace path is only a recommendation: Catalog and template reads are filesystem-free. Manager validates the selected path, persists the service, and creates a missing leaf during the install environment-check stage. The resulting ownership is `redeven_created` only when that worker created the leaf; existing or raced-in directories are `user_selected`. Install retry may recreate a missing saved directory but never changes established ownership.
 
-Host supports a verified HTTPS software archive or a declarative exact npm release. npm installation uses a Redeven-managed Node Runtime, an exact `package@version`, no package lock, temporary 0600 Registry configuration, explicit lifecycle-script execution, and post-install identity checks. The start script remains the only launch entry and receives the verified executable through `REDEVEN_INSTALL_EXECUTABLE`. A Host may declare `startup_output_url` with one exact line prefix instead of using the static endpoint path for Open. Runtime accepts only one prefixed URL whose scheme matches the endpoint and whose host and port match that service's loopback listener. Its path and query are stored in a mode-0600 private file bound to service, template digest, and v2 process identity; it is never Registry, log, operation-output, diagnostic, or audit data. Missing or invalid output fails startup and stops the process. Stop, restart, update, exit, and uninstall invalidate the private entry. The Runtime-derived lifecycle plan is read-only and uses safe placeholders rather than private paths, credentials, or source URL queries.
+One resolver combines the current verified TemplateSpec, persisted instance configuration and secrets, selected release, RuntimeBinding, and workspace parameters before every install, start, restart, update, reconfigure, recovery, verification, settings, and Open decision. That resolved specification is the only executable behavior source. Host, Container, and Compose drivers do not inspect a template ID, family, package name, image name, display name, or asset to select behavior. A canonical Runtime digest identifies the behavior actually applied to the managed resource. Template name, description, revision, and other metadata-only edits do not change that digest; an executable template change does. Runtime-changing custom-template edits wait until every referencing instance has no active operation, while metadata-only edits remain independent. A verified journal target retains the digest of the Runtime it actually built even when the template changes before database commit, and the next explicit lifecycle or Open action reconciles the resulting stale digest through the ordinary Runtime path.
+
+Host supports a verified HTTPS software archive or a declarative exact npm release. npm installation uses a Redeven-managed Node Runtime, an exact `package@version`, no package lock, temporary 0600 Registry configuration, explicit lifecycle-script execution, and post-install identity checks. The start script remains the only launch entry and receives the verified executable through `REDEVEN_INSTALL_EXECUTABLE`. A Host may declare `startup_output_url` with one exact line prefix instead of using the static endpoint path for Open. Runtime accepts only one prefixed URL whose scheme matches the endpoint and whose host and port match that service's loopback listener. Its path and query are stored in a mode-0600 private file bound to service, applied Runtime digest, and v2 process identity; it is never Registry, log, operation-output, diagnostic, or audit data. Missing or invalid output fails startup and stops the process. Stop, restart, update, exit, and uninstall invalidate the private entry. The Runtime-derived lifecycle plan is read-only and uses safe placeholders rather than private paths, credentials, or source URL queries.
 
 Container pulls an exact current-platform digest and validates the standard `redeven-mws-*` name, container ID, service labels, image reference, digest, mounts, ports, and runtime configuration. `managed_web_service_resources` is the sole durable authority for volumes and other owned engine resources. Compose similarly validates its deterministic project, private configuration, service membership, images, and entry forward. No file marker, historical resource importer, alternate name, or product-specific driver exists.
 
 ## Runtime identity and operations
 
-Every service has one canonical RuntimeBinding v1 plus SHA-256:
+Every service has one canonical RuntimeBinding v2 plus SHA-256:
 
 - Host records only standard relative installation, family-data, and log locations plus the v2 process-identity contract.
 - Container records the one standard managed container name and exact resource IDs.
@@ -53,9 +55,9 @@ Every retry records its real action and `retry_of_operation_id`. A current failu
 
 ## Persistence baseline
 
-`portforward_registry_v1` schema version 5 is the current lineage. Fresh initialization retains the reviewed `0 -> 1` baseline and then applies every contiguous migration through `4 -> 5`. Version 2 migrates TemplateSpec v3 documents to v4, removes duplicated template and service `version` columns, and adds digest-verified release-check summaries. Version 3 adds non-null workspace ownership and the operation's delete-workspace intent. Version 4 upgrades release-check documents to schema v2. Version 5 migrates persisted TemplateSpec v4 documents to v5 and operation progress v1 documents to v2 in one transaction. Every edge preserves services, releases, configuration, secrets, resources, operations, RuntimeBinding, forwards, user data, and timestamps. Existing workspaces remain conservatively `user_selected`; no existing directory is claimed or removed.
+`portforward_registry_v2` schema version 1 is the user-approved one-time pre-release baseline for current-template resolution. A service row stores template ID, configuration, selected release, RuntimeBinding, workspace ownership, desired and observed state, protected Forward identity, managed Runtime identity, applied Runtime digest, artifact reference, and failure state; it stores no template revision, template snapshot, duplicated deployment, or service-family projection. The baseline also contains exact current TemplateSpec v5, release-check v2, operation-progress v2, resource, operation, and retry-lineage state.
 
-An existing file with another kind, a future version, or exact structure drift is rejected read-only and remains byte-for-byte unchanged. After this pre-release baseline, every persistent change must retain the kind and append a contiguous transactional migration; another reset is not permitted.
+Every `portforward_registry_v1` version and any other discarded kind, future version, or exact structure drift is rejected read-only and remains byte-for-byte unchanged. Once v2 version 1 is merged and released or distributed, the kind is permanent: every persistent change must append a contiguous transactional migration that preserves user state and verifies the exact source and target shape. Another reset is not permitted.
 
 # Boundaries
 
@@ -64,12 +66,13 @@ Redeven does not contain built-in service names, descriptions, notices, icons, t
 # Evidence
 
 - `redeven:internal/managedwebservice/builtin_templates.go` - Loads and strictly maps the released external catalog.
+- `redeven:internal/managedwebservice/runtime_resolution.go` - Resolves the current template with persisted instance state and computes the applied Runtime digest.
 - `redeven:internal/managedwebservice/runtime_binding.go` - Defines and validates the sole current RuntimeBinding format.
 - `redeven:internal/managedwebservice/manager.go` - Serializes lifecycle operations, capabilities, manual retry, recovery, and failure state.
 - `redeven:internal/managedwebservice/custom_host.go` - Owns generic Host execution and v2 process identity.
 - `redeven:internal/managedwebservice/host_runtime_output.go` - Captures redacted Host output and validates process-bound private opening paths.
 - `redeven:internal/managedwebservice/custom_container.go` - Owns exact current container identity and generic resource validation.
 - `redeven:internal/managedwebservice/update.go` - Commits or restores release and binding state around health validation.
-- `redeven:internal/portforward/registry/schema.go` - Defines exact v1-v5 shapes plus every contiguous atomic migration.
+- `redeven:internal/portforward/registry/schema.go` - Defines the exact `portforward_registry_v2` version-1 baseline and strict existing-file validation.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Renders backend capabilities, localized catalog content, progress, and safe diagnostics.
 - `redeven:scripts/check_managed_service_catalog_boundary.mjs` - Prevents service-specific catalog content from returning to Redeven runtime and Renderer source.

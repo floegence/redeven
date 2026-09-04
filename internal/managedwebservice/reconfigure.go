@@ -27,6 +27,7 @@ type reconfigureRelease struct {
 	ConfigurationSHA256  string `json:"configuration_sha256"`
 	Revision             int64  `json:"revision"`
 	RuntimeIdentity      string `json:"runtime_identity,omitempty"`
+	RuntimeSpecSHA256    string `json:"runtime_spec_sha256,omitempty"`
 	ArtifactReference    string `json:"artifact_reference,omitempty"`
 	RuntimeBindingJSON   string `json:"runtime_binding_json"`
 	RuntimeBindingSHA256 string `json:"runtime_binding_sha256"`
@@ -78,10 +79,28 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 	if err != nil {
 		return err
 	}
+	binding, bindingErr := decodeRuntimeBinding(service)
+	if bindingErr != nil {
+		return bindingErr
+	}
 	journal := reconfigureJournal{
 		Kind: reconfigureJournalKind, OperationID: op.OperationID, Phase: reconfigurePhasePrepared,
-		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
+		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity, RuntimeSpecSHA256: service.RuntimeSpecSHA256, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
 		Target: reconfigureRelease{ConfigurationJSON: candidate.JSON, ConfigurationSHA256: candidate.SHA256, Revision: service.ConfigurationRevision + 1, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
+	}
+	var oldResolved *resolvedRuntime
+	if binding.Deployment != DeploymentHost {
+		oldResolved, err = m.resolveCurrentRuntime(ctx, service)
+		if err != nil {
+			return err
+		}
+		target := *service
+		target.ConfigurationJSON, target.ConfigurationSHA256 = candidate.JSON, candidate.SHA256
+		target.ConfigurationRevision = service.ConfigurationRevision + 1
+		journal.Target.RuntimeSpecSHA256, err = currentRuntimeSpecDigest(candidate.Spec, candidate.Configuration, oldResolved.Release, oldResolved.Binding, candidate.Secrets, &target)
+		if err != nil {
+			return err
+		}
 	}
 	if err := m.stageReconfigureSecrets(service.ServiceID, op.OperationID, oldSecrets, candidate.Secrets); err != nil {
 		return err
@@ -107,12 +126,12 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 
 	// Host services have no persistent Runtime resource to rebuild. Their
 	// scripts become authoritative only for the next matching lifecycle action.
-	if Deployment(service.Deployment) == DeploymentHost {
+	if binding.Deployment == DeploymentHost {
 		m.progress(op, "applying_configuration", 5)
 		if err := m.writeServiceSecretDocument(service.ServiceID, candidate.Secrets); err != nil {
 			return err
 		}
-		if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, service.RuntimeIdentity, service.ArtifactReference, "{}"); err != nil {
+		if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, service.RuntimeIdentity, service.RuntimeSpecSHA256, service.ArtifactReference, "{}"); err != nil {
 			return err
 		}
 		committed = true
@@ -124,10 +143,7 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 	if !ok {
 		return serviceError("RECONFIGURE_UNSUPPORTED", "This managed Web Service deployment cannot be rebuilt from instance settings.", 409, false, nil)
 	}
-	oldSpec, _, err := effectiveSpecFromService(service)
-	if err != nil {
-		return err
-	}
+	oldSpec := oldResolved.Spec
 	if strings.TrimSpace(service.RuntimeIdentity) != "" {
 		m.progress(op, "verifying_runtime", 2)
 		if err := runtimeDriver.VerifyRuntime(ctx, service, oldSpec); err != nil {
@@ -148,7 +164,7 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 	target := *service
 	target.ConfigurationJSON, target.ConfigurationSHA256 = candidate.JSON, candidate.SHA256
 	target.ConfigurationRevision = service.ConfigurationRevision + 1
-	target.RuntimeIdentity = ""
+	target.RuntimeIdentity, target.RuntimeSpecSHA256 = "", journal.Target.RuntimeSpecSHA256
 	journal.Phase = reconfigurePhaseTargetCreating
 	if err := m.writeReconfigureJournal(ctx, service.ServiceID, journal); err != nil {
 		return err
@@ -172,12 +188,12 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 	if err := m.writeReconfigureJournal(ctx, service.ServiceID, journal); err != nil {
 		return err
 	}
-	if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, runtimeID, artifact, "{}"); err != nil {
+	if _, err := m.registry.CommitManagedServiceReconfiguration(ctx, service.ServiceID, service.ConfigurationRevision, candidate.JSON, candidate.SHA256, runtimeID, journal.Target.RuntimeSpecSHA256, artifact, "{}"); err != nil {
 		return err
 	}
 	service.ConfigurationJSON, service.ConfigurationSHA256 = candidate.JSON, candidate.SHA256
 	service.ConfigurationRevision++
-	service.RuntimeIdentity, service.ArtifactReference, service.RuntimeManifestJSON = runtimeID, artifact, "{}"
+	service.RuntimeIdentity, service.RuntimeSpecSHA256, service.ArtifactReference, service.RuntimeManifestJSON = runtimeID, journal.Target.RuntimeSpecSHA256, artifact, "{}"
 	committed = true
 	m.removeReconfigureStage(service.ServiceID, op.OperationID)
 	return nil
@@ -198,7 +214,9 @@ func decodeReconfigureJournal(raw string) (reconfigureJournal, error) {
 		return journal, err
 	}
 	if journal.Kind != reconfigureJournalKind || journal.OperationID == "" || journal.Phase == "" || journal.Old.Revision <= 0 || journal.Target.Revision != journal.Old.Revision+1 ||
-		journal.Old.RuntimeBindingJSON == "" || journal.Old.RuntimeBindingSHA256 == "" || journal.Target.RuntimeBindingJSON == "" || journal.Target.RuntimeBindingSHA256 == "" {
+		journal.Old.RuntimeBindingJSON == "" || journal.Old.RuntimeBindingSHA256 == "" || journal.Target.RuntimeBindingJSON == "" || journal.Target.RuntimeBindingSHA256 == "" ||
+		(journal.Old.RuntimeSpecSHA256 != "" && !validRuntimeSpecSHA256(journal.Old.RuntimeSpecSHA256)) ||
+		(journal.Target.RuntimeSpecSHA256 != "" && !validRuntimeSpecSHA256(journal.Target.RuntimeSpecSHA256)) {
 		return journal, errors.New("invalid managed service reconfigure journal")
 	}
 	return journal, nil
@@ -246,7 +264,11 @@ func (m *Manager) rollbackReconfigure(ctx context.Context, service *pfregistry.M
 	if err := m.writeServiceSecretDocument(service.ServiceID, oldSecrets); err != nil {
 		return err
 	}
-	if Deployment(service.Deployment) == DeploymentHost {
+	binding, bindingErr := decodeRuntimeBinding(service)
+	if bindingErr != nil {
+		return bindingErr
+	}
+	if binding.Deployment == DeploymentHost {
 		empty := "{}"
 		if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeManifestJSON: &empty}); err != nil {
 			return err
@@ -271,14 +293,15 @@ func (m *Manager) rollbackReconfigure(ctx context.Context, service *pfregistry.M
 		}
 	}
 	old := serviceFromReconfigureRelease(*service, journal.Old)
-	oldSpec, _, err := effectiveSpecFromService(&old)
+	resolved, err := m.resolveCurrentRuntime(ctx, &old)
 	if err != nil {
 		return err
 	}
+	oldSpec := resolved.Spec
 	if journal.Phase == reconfigurePhasePrepared {
 		if err := runtimeDriver.VerifyRuntime(ctx, &old, oldSpec); err == nil {
 			empty := "{}"
-			_ = m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeManifestJSON: &empty})
+			_ = m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeSpecSHA256: &journal.Old.RuntimeSpecSHA256, RuntimeManifestJSON: &empty})
 			m.removeReconfigureStage(service.ServiceID, journal.OperationID)
 			return nil
 		}
@@ -292,10 +315,11 @@ func (m *Manager) rollbackReconfigure(ctx context.Context, service *pfregistry.M
 		return err
 	}
 	empty := "{}"
-	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &runtimeID, ArtifactReference: &artifact, RuntimeManifestJSON: &empty}); err != nil {
+	journal.Old.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
+	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &runtimeID, RuntimeSpecSHA256: &journal.Old.RuntimeSpecSHA256, ArtifactReference: &artifact, RuntimeManifestJSON: &empty}); err != nil {
 		return err
 	}
-	service.RuntimeIdentity, service.ArtifactReference, service.RuntimeManifestJSON = runtimeID, artifact, empty
+	service.RuntimeIdentity, service.RuntimeSpecSHA256, service.ArtifactReference, service.RuntimeManifestJSON = runtimeID, journal.Old.RuntimeSpecSHA256, artifact, empty
 	m.removeReconfigureStage(service.ServiceID, journal.OperationID)
 	return nil
 }
@@ -305,6 +329,7 @@ func serviceFromReconfigureRelease(base pfregistry.ManagedService, release recon
 	base.ConfigurationSHA256 = release.ConfigurationSHA256
 	base.ConfigurationRevision = release.Revision
 	base.RuntimeIdentity = release.RuntimeIdentity
+	base.RuntimeSpecSHA256 = release.RuntimeSpecSHA256
 	base.ArtifactReference = release.ArtifactReference
 	base.RuntimeBindingJSON = release.RuntimeBindingJSON
 	base.RuntimeBindingSHA256 = release.RuntimeBindingSHA256
@@ -327,6 +352,9 @@ func (m *Manager) recoverInterruptedReconfigure(service *pfregistry.ManagedServi
 		return errors.New("managed service reconfigure journal belongs to another operation")
 	}
 	if journal.Phase == reconfigurePhaseTargetVerified {
+		if !validRuntimeSpecSHA256(journal.Target.RuntimeSpecSHA256) {
+			return errors.New("verified managed service reconfigure journal has no valid runtime digest")
+		}
 		targetSecrets, err := m.stagedReconfigureSecrets(service.ServiceID, journal.OperationID, "target")
 		if err != nil {
 			return err
@@ -335,16 +363,25 @@ func (m *Manager) recoverInterruptedReconfigure(service *pfregistry.ManagedServi
 			return err
 		}
 		target := serviceFromReconfigureRelease(*service, journal.Target)
-		if runtimeDriver, ok := driver.(reconfigureRuntimeDriver); ok {
-			targetSpec, _, err := effectiveSpecFromService(&target)
-			if err != nil {
+		runtimeDriver, ok := driver.(reconfigureRuntimeDriver)
+		if !ok {
+			return errors.New("reconfigure runtime recovery is unsupported")
+		}
+		resolved, err := m.resolveCurrentRuntime(context.Background(), &target)
+		if err == nil && resolved.RuntimeSpecSHA256 == journal.Target.RuntimeSpecSHA256 {
+			if err := runtimeDriver.VerifyRuntime(context.Background(), &target, resolved.Spec); err != nil {
 				return err
 			}
-			if err := runtimeDriver.VerifyRuntime(context.Background(), &target, targetSpec); err != nil {
-				return err
+		} else {
+			found, findErr := runtimeDriver.FindReconfiguredRuntime(context.Background(), &target)
+			if findErr != nil {
+				return findErr
+			}
+			if found == "" || found != target.RuntimeIdentity {
+				return errors.New("the verified reconfigured runtime identity is unavailable")
 			}
 		}
-		if _, err := m.registry.CommitManagedServiceReconfiguration(context.Background(), service.ServiceID, journal.Old.Revision, journal.Target.ConfigurationJSON, journal.Target.ConfigurationSHA256, journal.Target.RuntimeIdentity, journal.Target.ArtifactReference, "{}"); err != nil {
+		if _, err := m.registry.CommitManagedServiceReconfiguration(context.Background(), service.ServiceID, journal.Old.Revision, journal.Target.ConfigurationJSON, journal.Target.ConfigurationSHA256, journal.Target.RuntimeIdentity, journal.Target.RuntimeSpecSHA256, journal.Target.ArtifactReference, "{}"); err != nil {
 			return err
 		}
 		m.removeReconfigureStage(service.ServiceID, journal.OperationID)

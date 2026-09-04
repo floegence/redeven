@@ -163,13 +163,20 @@ func (m *Manager) Close() error {
 	services, _ := m.registry.ListManagedServices(context.Background())
 	for i := range services {
 		if services[i].ObservedState == "running" {
-			driver := m.driver(Deployment(services[i].Deployment))
-			if driver == nil {
-				m.log.Warn("skip invalid managed Web Service deployment during runtime shutdown", "service_id", services[i].ServiceID, "deployment", services[i].Deployment)
+			binding, bindingErr := decodeRuntimeBinding(&services[i])
+			if bindingErr != nil {
+				m.log.Warn("skip unowned managed Web Service during runtime shutdown", "service_id", services[i].ServiceID, "cause", safeManagedFailureCause(bindingErr))
 				continue
 			}
-			if err := driver.Stop(context.Background(), &services[i]); err != nil {
-				m.log.Warn("stop managed Web Service during runtime shutdown", "service_id", services[i].ServiceID, "cause", safeManagedFailureCause(err))
+			driver := m.driver(binding.Deployment)
+			var stopErr error
+			if shutdown, ok := driver.(runtimeShutdownDriver); ok {
+				stopErr = shutdown.Shutdown(context.Background(), &services[i])
+			} else {
+				stopErr = driver.Stop(context.Background(), &services[i])
+			}
+			if stopErr != nil {
+				m.log.Warn("stop managed Web Service during runtime shutdown", "service_id", services[i].ServiceID, "cause", safeManagedFailureCause(stopErr))
 				continue
 			}
 			stopped := "stopped"
@@ -306,32 +313,46 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			lastFailure = serviceFailureView(service, latestFailure)
 		}
 		name, description := m.serviceDisplayMetadata(ctx, service)
+		binding, _ := decodeRuntimeBinding(&service)
+		resolved, _ := m.resolveCurrentRuntime(ctx, &service)
+		currentTemplate, templateErr := m.Template(ctx, service.TemplateID)
+		deployment := Deployment("")
+		templateSource := ""
+		if binding != nil {
+			deployment = binding.Deployment
+		}
+		if templateErr == nil {
+			templateSource = currentTemplate.Source
+		}
+		if resolved != nil {
+			deployment = resolved.Template.Deployment
+			templateSource = resolved.Template.Source
+		}
 		view := ServiceView{
 			ManagedService:     service,
 			Name:               name,
 			Description:        description,
+			TemplateSource:     templateSource,
+			Deployment:         deployment,
 			ActiveOperation:    active,
 			LastFailure:        lastFailure,
 			AccessMode:         forward.AccessMode,
-			ContainerResources: containerResourceLinks(service),
-			Actions:            serviceActionCapabilities(service, active, latestFailure),
+			ContainerResources: containerResourceLinks(service, deployment),
+			Actions:            serviceActionCapabilities(service, resolved, active, latestFailure),
 		}
 		identity, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
 		if identityErr != nil {
 			return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, identityErr)
 		}
-		view.ReleaseStatus = ReleaseStatus{SchemaVersion: 1, CurrentRelease: identity, CurrentTemplateRevision: service.TemplateRevision, CheckStatus: "pending"}
+		view.ReleaseStatus = ReleaseStatus{SchemaVersion: 2, CurrentRelease: identity, CheckStatus: "pending"}
 		if m.catalog != nil {
 			if definition, ok := m.catalog.definition(service.TemplateID); ok {
 				icon := definition.Icon
 				view.Icon, view.Localizations = &icon, cloneLocalizations(definition.Localizations)
 			}
 		}
-		if template, templateErr := m.Template(ctx, service.TemplateID); templateErr == nil {
-			view.ReleaseStatus.RecommendedRelease = template.RecommendedRelease
-			if template.Revision > service.TemplateRevision {
-				view.ReleaseStatus.AvailableTemplateRevision = template.Revision
-			}
+		if templateErr == nil {
+			view.ReleaseStatus.RecommendedRelease = currentTemplate.RecommendedRelease
 		}
 		if releaseView, ok := m.releaseView("service:" + service.ServiceID); ok {
 			view.ReleaseStatus.CheckStatus = releaseView.CheckStatus
@@ -395,7 +416,7 @@ func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry
 	return service.TemplateID, ""
 }
 
-func serviceActionCapabilities(service pfregistry.ManagedService, active, failure *pfregistry.ManagedOperation) ServiceActions {
+func serviceActionCapabilities(service pfregistry.ManagedService, runtime *resolvedRuntime, active, failure *pfregistry.ManagedOperation) ServiceActions {
 	unavailable := func(code string) ActionCapability { return ActionCapability{ReasonCode: code} }
 	actions := ServiceActions{
 		Start: unavailable("SERVICE_STATE_UNAVAILABLE"), Stop: unavailable("SERVICE_STATE_UNAVAILABLE"),
@@ -405,10 +426,9 @@ func serviceActionCapabilities(service pfregistry.ManagedService, active, failur
 		busy := unavailable("OPERATION_ACTIVE")
 		return ServiceActions{Start: busy, Stop: busy, Restart: busy, Retry: busy}
 	}
-	_, bindingErr := decodeRuntimeBinding(&service)
-	bindingReady := bindingErr == nil
+	bindingReady := runtime != nil
 	runtimeReady := strings.TrimSpace(service.RuntimeIdentity) != ""
-	if Deployment(service.Deployment) == DeploymentHost {
+	if runtime != nil && runtime.Template.Deployment == DeploymentHost {
 		runtimeReady = strings.TrimSpace(service.ArtifactReference) != ""
 	}
 	if bindingReady && runtimeReady && service.ObservedState == "stopped" && service.LastErrorCode == "" {
@@ -536,10 +556,6 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		return nil, err
 	}
 	now := time.Now().UnixMilli()
-	snapshotJSON, snapshotHash, err := canonicalTemplateSpec(*template.Spec)
-	if err != nil {
-		return nil, err
-	}
 	releaseIdentity := defaultReleaseIdentity(*template)
 	if selectedRelease != nil {
 		releaseIdentity = selectedRelease.Identity
@@ -552,7 +568,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
-	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, TemplateSource: template.Source, TemplateRevision: template.Revision, TemplateSnapshotJSON: snapshotJSON, TemplateSnapshotSHA256: snapshotHash, ServiceFamilyID: template.ServiceFamilyID, Deployment: string(template.Deployment), WorkspacePath: resolved.RealAbs, WorkspaceOwnership: workspaceOwnership, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
+	service := pfregistry.ManagedService{ServiceID: serviceID, TemplateID: template.TemplateID, WorkspacePath: resolved.RealAbs, WorkspaceOwnership: workspaceOwnership, ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationHash, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseHash, RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingHash, DesiredState: "running", ObservedState: "installing", ForwardID: forwardID, RuntimeManifestJSON: "{}", RuntimePort: port, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	forward := pfregistry.Forward{ForwardID: forwardID, TargetURL: fmt.Sprintf("%s://127.0.0.1:%d", template.Spec.Endpoint.Scheme, port), Name: template.Name, Description: "Managed by Redeven", HealthPath: template.Spec.Endpoint.HealthPath, AccessMode: accessMode, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	op := pfregistry.ManagedOperation{OperationID: operationID, ServiceID: serviceID, RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, Action: string(ActionInstall), State: "pending", Stage: "environment_check", ProgressTotal: operationProgressTotal, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, StageStartedAtUnixMs: now, UpdatedAtUnixMs: now}, CreatedAtUnixMs: now, UpdatedAtUnixMs: now}
 	if err := m.writeServiceSecrets(serviceID, secretValues); err != nil {
@@ -624,7 +640,11 @@ func releaseImageTag(reference string) string {
 
 func validateServiceFamilyAvailability(existingServices []pfregistry.ManagedService, template Template) error {
 	for _, existing := range existingServices {
-		if existing.ServiceFamilyID == template.ServiceFamilyID {
+		binding, err := decodeRuntimeBinding(&existing)
+		if err != nil {
+			return err
+		}
+		if binding.ServiceFamilyID == template.ServiceFamilyID {
 			return serviceError("INSTANCE_ALREADY_EXISTS", "This service template family already has an instance in the Environment.", 409, false, nil)
 		}
 	}
@@ -839,39 +859,37 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 	}()
 	op.State = "running"
 	m.saveAndPublish(&op)
-	driver := m.driver(Deployment(service.Deployment))
-	if driver == nil {
-		m.fail(&service, &op, "DEPLOYMENT_INVALID", "The saved deployment type is invalid.", nil)
-		return
-	}
-	if _, err := decodeRuntimeBinding(&service); err != nil {
+	resolved, err := m.resolveCurrentRuntime(ctx, &service)
+	if err != nil {
 		code, message, _, _ := ErrorDetails(err)
 		m.fail(&service, &op, code, message, err)
 		return
 	}
+	resolved.applyTo(&service)
+	driver := m.driver(resolved.Template.Deployment)
 	if err := m.prepareOperationWorkspace(&service, &op); err != nil {
 		code, message, _, _ := ErrorDetails(err)
 		m.fail(&service, &op, code, message, err)
 		return
 	}
-	var err error
+	err = nil
 	switch OperationAction(op.Action) {
 	case ActionInstall, ActionRetryInstall:
-		err = m.runInstall(ctx, &service, &op, driver)
+		err = m.runInstall(ctx, &service, &op, driver, resolved)
 	case ActionStart:
-		err = m.runStart(ctx, &service, &op, driver)
+		err = m.runStart(ctx, &service, &op, driver, resolved)
 	case ActionStop:
 		err = m.runStop(ctx, &service, &op, driver)
 	case ActionRestart:
 		if err = m.runStop(ctx, &service, &op, driver); err == nil {
-			err = m.runStart(ctx, &service, &op, driver)
+			err = m.runStart(ctx, &service, &op, driver, resolved)
 		}
 	case ActionUpdate:
 		if inputs.Release == nil {
 			err = serviceError("UPDATE_PLAN_REQUIRED", "Create and review an update plan before updating this managed Web Service.", 409, false, nil)
 			break
 		}
-		switch Deployment(service.Deployment) {
+		switch resolved.Template.Deployment {
 		case DeploymentHost:
 			err = m.runHostReleaseUpdate(ctx, &service, &op, inputs.AcceptedNoticeRevisions, *inputs.Release, driver)
 		case DeploymentContainer:
@@ -881,7 +899,7 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 				err = serviceError("UPDATE_UNSUPPORTED", "This single-container service does not support transactional release replacement.", 409, false, nil)
 			}
 		case DeploymentCompose:
-			err = m.runComposeTemplateUpdate(ctx, &service, &op, *inputs.Release, driver)
+			err = serviceError("UPDATE_UNSUPPORTED", "Compose services do not expose a single application release to update.", 409, false, nil)
 		default:
 			err = serviceError("UPDATE_UNSUPPORTED", "This managed Web Service deployment cannot be updated in place.", 409, false, nil)
 		}
@@ -954,12 +972,12 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 	}
 }
 
-func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
+func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, resolved *resolvedRuntime) error {
 	m.progress(op, "environment_check", 1)
 	if err := m.ensureInstallWorkspace(ctx, service); err != nil {
 		return err
 	}
-	stage := map[Deployment]string{DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[Deployment(service.Deployment)]
+	stage := map[Deployment]string{DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[resolved.Template.Deployment]
 	m.progress(op, stage, 2)
 	runtimeID, artifact, err := driver.Install(ctx, service, m.operationProgress(op))
 	if err != nil {
@@ -974,6 +992,7 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 		return err
 	}
 	m.progress(op, "starting", 5)
+	service.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
 	runtimeID, err = m.startRuntime(ctx, service, driver)
 	if err != nil {
 		return err
@@ -989,15 +1008,33 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 	}
 	running, blank := "running", ""
 	service.DesiredState, service.ObservedState = running, running
-	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running, ObservedState: &running, LastErrorCode: &blank, LastErrorMessage: &blank})
+	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running, ObservedState: &running, RuntimeSpecSHA256: &resolved.RuntimeSpecSHA256, LastErrorCode: &blank, LastErrorMessage: &blank})
 }
 
-func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
+func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, resolved *resolvedRuntime) error {
 	running := "running"
 	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running}); err != nil {
 		return err
 	}
+	if service.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256 {
+		stage := map[Deployment]string{DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[resolved.Template.Deployment]
+		m.progress(op, stage, 2)
+		if service.RuntimeIdentity != "" {
+			if err := driver.Stop(ctx, service); err != nil {
+				return err
+			}
+		}
+		runtimeID, artifact, err := driver.Install(ctx, service, m.operationProgress(op))
+		if err != nil {
+			return err
+		}
+		service.RuntimeIdentity, service.ArtifactReference = runtimeID, artifact
+		if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &runtimeID, ArtifactReference: &artifact}); err != nil {
+			return err
+		}
+	}
 	m.progress(op, "starting", 5)
+	service.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
 	runtimeID, err := m.startRuntime(ctx, service, driver)
 	if err != nil {
 		return err
@@ -1012,7 +1049,8 @@ func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedServi
 		return serviceError("HEALTH_CHECK_FAILED", "The managed Web Service did not become healthy on its loopback port.", 502, true, err)
 	}
 	blank := ""
-	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &running, LastErrorCode: &blank, LastErrorMessage: &blank})
+	service.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
+	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &running, RuntimeSpecSHA256: &resolved.RuntimeSpecSHA256, LastErrorCode: &blank, LastErrorMessage: &blank})
 }
 
 func (m *Manager) prepareOperationWorkspace(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation) error {
@@ -1161,7 +1199,14 @@ func (m *Manager) finishReconfigureFailure(service *pfregistry.ManagedService, o
 }
 
 func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService, operation pfregistry.ManagedOperation) {
-	driver := m.driver(Deployment(service.Deployment))
+	binding, bindingErr := decodeRuntimeBinding(service)
+	if bindingErr != nil {
+		code, message, _, _ := ErrorDetails(bindingErr)
+		desired, observed := "stopped", "error"
+		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+		return
+	}
+	driver := m.driver(binding.Deployment)
 	if driver == nil {
 		code, message := "DEPLOYMENT_INVALID", "The interrupted managed Web Service has an invalid deployment type."
 		desired, observed := "stopped", "error"
@@ -1169,7 +1214,7 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 		return
 	}
 	if OperationAction(operation.Action) == ActionUpdate {
-		if Deployment(service.Deployment) == DeploymentHost {
+		if binding.Deployment == DeploymentHost {
 			if strings.TrimSpace(service.RuntimeManifestJSON) == "" || strings.TrimSpace(service.RuntimeManifestJSON) == "{}" {
 				// Host template metadata updates commit atomically and do not write a
 				// Runtime journal, so there is no process transition to recover.
@@ -1439,7 +1484,12 @@ func (m *Manager) Logs(ctx context.Context, serviceID string, tail int) (*LogRes
 	if tail <= 0 || tail > 1000 {
 		tail = 200
 	}
-	driver := m.driver(Deployment(service.Deployment))
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
+	if err != nil {
+		return nil, err
+	}
+	resolved.applyTo(service)
+	driver := m.driver(resolved.Template.Deployment)
 	if driver == nil {
 		return nil, serviceError("DEPLOYMENT_INVALID", "The saved deployment type is invalid.", 409, false, nil)
 	}
@@ -1453,6 +1503,10 @@ type deploymentDriver interface {
 	Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error
 	CleanupPartial(context.Context, *pfregistry.ManagedService) error
 	Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error)
+}
+
+type runtimeShutdownDriver interface {
+	Shutdown(context.Context, *pfregistry.ManagedService) error
 }
 
 func (m *Manager) driver(deployment Deployment) deploymentDriver {
@@ -1481,8 +1535,8 @@ func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedSe
 		return m.healthCheck(ctx, service)
 	}
 	endpoint := WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 45}
-	if spec, _, err := effectiveSpecFromService(service); err == nil {
-		endpoint = spec.Endpoint
+	if resolved, err := m.resolveCurrentRuntime(ctx, service); err == nil {
+		endpoint = resolved.Spec.Endpoint
 	}
 	if endpoint.Scheme == "" {
 		endpoint.Scheme = "http"

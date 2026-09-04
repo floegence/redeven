@@ -3,6 +3,7 @@ package managedwebservice
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -21,7 +22,8 @@ func TestUpdateJournalAcceptsOnlyCurrentKindAndCarriesRuntimeBinding(t *testing.
 		t.Fatal(err)
 	}
 	release := containerUpdateRelease{
-		TemplateSnapshotJSON: `{"schema_version":4}`, TemplateSnapshotSHA256: strings.Repeat("a", 64),
+		ConfigurationJSON: `{"schema_version":2}`, ConfigurationSHA256: strings.Repeat("a", 64),
+		ReleaseIdentityJSON: `{"schema_version":1,"kind":"oci"}`, ReleaseIdentitySHA256: strings.Repeat("b", 64),
 		RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingDigest,
 	}
 	journal := containerUpdateJournal{Kind: managedServiceUpdateJournalKind, Phase: updatePhasePreparing, Old: release, Target: release}
@@ -38,6 +40,12 @@ func TestUpdateJournalAcceptsOnlyCurrentKindAndCarriesRuntimeBinding(t *testing.
 	if _, err := decodeContainerUpdateJournal(string(raw)); err == nil {
 		t.Fatal("retired update journal kind was accepted")
 	}
+	journal.Kind = managedServiceUpdateJournalKind
+	journal.Target.RuntimeSpecSHA256 = "not-a-runtime-digest"
+	raw, _ = json.Marshal(journal)
+	if _, err := decodeContainerUpdateJournal(string(raw)); err == nil {
+		t.Fatal("malformed runtime digest was accepted")
+	}
 }
 
 func TestServiceFromUpdateReleaseCommitsRuntimeBinding(t *testing.T) {
@@ -50,7 +58,7 @@ func TestServiceFromUpdateReleaseCommitsRuntimeBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := pfregistry.ManagedService{ServiceID: "mws_update", Deployment: string(DeploymentContainer), RuntimeBindingJSON: oldBinding, RuntimeBindingSHA256: oldDigest}
+	service := pfregistry.ManagedService{ServiceID: "mws_update", RuntimeBindingJSON: oldBinding, RuntimeBindingSHA256: oldDigest}
 	updated := serviceFromUpdateRelease(service, containerUpdateRelease{RuntimeBindingJSON: targetBinding, RuntimeBindingSHA256: targetDigest})
 	if updated.RuntimeBindingJSON != targetBinding || updated.RuntimeBindingSHA256 != targetDigest {
 		t.Fatalf("updated Runtime binding = %q %q", updated.RuntimeBindingJSON, updated.RuntimeBindingSHA256)
@@ -68,6 +76,170 @@ func TestMaterializeReleaseSpecKeepsSelectedVersionOnNewTemplateRevision(t *test
 	if materialized.Host == nil || materialized.Host.NPM == nil || materialized.Host.NPM.Version != "1.0.0" || materialized.Host.StartScript != template.Host.StartScript {
 		t.Fatalf("materialized spec = %+v", materialized)
 	}
+}
+
+func TestRecoverInterruptedVerifiedContainerUpdateKeepsBuiltDigestAfterTemplateEdit(t *testing.T) {
+	t.Parallel()
+	manager, service, operation := reconfigureManagerForTest(t)
+	target := *service
+	target.DesiredState, target.ObservedState = "running", "running"
+	target.RuntimeIdentity = "runtime-target"
+	built, err := manager.resolveCurrentRuntime(context.Background(), &target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.RuntimeSpecSHA256 = built.RuntimeSpecSHA256
+	journal := containerUpdateJournal{
+		Kind: managedServiceUpdateJournalKind, Phase: updatePhaseTargetVerified,
+		Old: updateReleaseFromService(*service), Target: updateReleaseFromService(target),
+	}
+
+	record, err := manager.registry.GetManagedTemplate(context.Background(), service.TemplateID)
+	if err != nil || record == nil {
+		t.Fatalf("template = %+v, err=%v", record, err)
+	}
+	spec, err := verifiedTemplateSpec(record.SpecJSON, record.SpecSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec.Container.Command = []string{"edited-after-verification"}
+	record.SpecJSON, record.SpecSHA256, err = canonicalTemplateSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Revision++
+	if err := manager.registry.UpdateManagedTemplate(context.Background(), *record); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(journal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := string(raw)
+	service.RuntimeManifestJSON = manifest
+	if err := manager.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{RuntimeManifestJSON: &manifest}); err != nil {
+		t.Fatal(err)
+	}
+	operation.State = "interrupted"
+	driver := &recordingContainerRollbackDriver{foundRuntime: target.RuntimeIdentity}
+	if err := manager.recoverInterruptedContainerUpdate(service, operation, driver); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := manager.registry.GetManagedService(context.Background(), service.ServiceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := manager.resolveCurrentRuntime(context.Background(), stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.RuntimeSpecSHA256 != built.RuntimeSpecSHA256 || stored.RuntimeSpecSHA256 == current.RuntimeSpecSHA256 {
+		t.Fatalf("recovered digest=%q built=%q current=%q", stored.RuntimeSpecSHA256, built.RuntimeSpecSHA256, current.RuntimeSpecSHA256)
+	}
+	if stored.RuntimeIdentity != target.RuntimeIdentity || stored.ObservedState != "running" || stored.RuntimeManifestJSON != "{}" || driver.found != 1 || driver.verified != 0 || driver.started != 0 {
+		t.Fatalf("recovered service=%+v, driver=%+v", stored, driver)
+	}
+}
+
+func TestContainerUpdateRollbackRecordsTheRuntimeThatActuallyExists(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		runtimeExists bool
+		desiredState  string
+		phase         string
+		wantRebuilt   int
+		wantRemoved   int
+		wantStarted   int
+		wantOldDigest bool
+	}{
+		{name: "preserve existing stopped runtime digest", runtimeExists: true, desiredState: "stopped", phase: updatePhasePreparing, wantOldDigest: true},
+		{name: "record rebuilt stopped runtime digest", runtimeExists: false, desiredState: "stopped", phase: updatePhasePreparing, wantRebuilt: 1},
+		{name: "preserve running runtime before it was stopped", runtimeExists: true, desiredState: "running", phase: updatePhaseArtifactReady, wantOldDigest: true},
+		{name: "rebuild running runtime after it was stopped", runtimeExists: true, desiredState: "running", phase: updatePhaseOldStopped, wantRebuilt: 1, wantRemoved: 1, wantStarted: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			manager, service, _ := reconfigureManagerForTest(t)
+			manager.healthCheck = func(context.Context, *pfregistry.ManagedService) error { return nil }
+			service.DesiredState, service.ObservedState = test.desiredState, test.desiredState
+			oldDigest := service.RuntimeSpecSHA256
+			record, err := manager.registry.GetManagedTemplate(context.Background(), service.TemplateID)
+			if err != nil || record == nil {
+				t.Fatalf("template = %+v, err=%v", record, err)
+			}
+			spec, err := verifiedTemplateSpec(record.SpecJSON, record.SpecSHA256)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec.Container.Command = []string{"current-template"}
+			record.SpecJSON, record.SpecSHA256, err = canonicalTemplateSpec(spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			record.Revision++
+			if err := manager.registry.UpdateManagedTemplate(context.Background(), *record); err != nil {
+				t.Fatal(err)
+			}
+			current, err := manager.resolveCurrentRuntime(context.Background(), service)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if current.RuntimeSpecSHA256 == oldDigest {
+				t.Fatal("template runtime edit did not change the resolved digest")
+			}
+
+			journal := containerUpdateJournal{
+				Kind: managedServiceUpdateJournalKind, Phase: test.phase,
+				Old: updateReleaseFromService(*service), Target: updateReleaseFromService(*service),
+			}
+			journal.Target.RuntimeIdentity = ""
+			if !test.runtimeExists {
+				journal.Old.RuntimeIdentity = ""
+			}
+			driver := &recordingContainerRollbackDriver{}
+			if test.runtimeExists {
+				driver.foundRuntime = service.RuntimeIdentity
+			}
+			if err := manager.rollbackContainerUpdate(context.Background(), service, journal, driver); err != nil {
+				t.Fatal(err)
+			}
+			stored, err := manager.registry.GetManagedService(context.Background(), service.ServiceID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantDigest := current.RuntimeSpecSHA256
+			if test.wantOldDigest {
+				wantDigest = oldDigest
+			}
+			if stored.RuntimeSpecSHA256 != wantDigest || driver.created != test.wantRebuilt || driver.removed != test.wantRemoved || driver.started != test.wantStarted {
+				t.Fatalf("rollback runtime digest=%q create=%d remove=%d start=%d, want digest=%q create=%d remove=%d start=%d", stored.RuntimeSpecSHA256, driver.created, driver.removed, driver.started, wantDigest, test.wantRebuilt, test.wantRemoved, test.wantStarted)
+			}
+		})
+	}
+}
+
+type recordingContainerRollbackDriver struct {
+	recordingReconfigureDriver
+	created      int
+	found        int
+	foundRuntime string
+}
+
+func (*recordingContainerRollbackDriver) PrepareUpdateArtifact(context.Context, TemplateSpec, operationProgress) (string, error) {
+	return "", errors.New("unexpected artifact preparation")
+}
+
+func (d *recordingContainerRollbackDriver) CreateRuntime(context.Context, *pfregistry.ManagedService, TemplateSpec, string) (string, error) {
+	d.created++
+	return "runtime-rollback", nil
+}
+
+func (d *recordingContainerRollbackDriver) FindRuntime(context.Context, string) (string, error) {
+	d.found++
+	return d.foundRuntime, nil
+}
+
+func (*recordingContainerRollbackDriver) Stop(context.Context, *pfregistry.ManagedService) error {
+	return nil
 }
 
 type updatePlanFixture struct {
@@ -119,11 +291,7 @@ func newUpdatePlanFixture(t *testing.T) updatePlanFixture {
 			},
 		}
 	}
-	currentSpec, targetSpec := makeSpec("1.0.0"), makeSpec("2.0.0")
-	currentSnapshot, currentSnapshotDigest, err := canonicalTemplateSpec(currentSpec)
-	if err != nil {
-		t.Fatal(err)
-	}
+	targetSpec := makeSpec("2.0.0")
 	targetSnapshot, targetSnapshotDigest, err := canonicalTemplateSpec(targetSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -151,9 +319,8 @@ func newUpdatePlanFixture(t *testing.T) updatePlanFixture {
 		t.Fatal(err)
 	}
 	service := pfregistry.ManagedService{
-		ServiceID: "mws-release-plan", TemplateID: "template-release-plan", TemplateSource: "custom", TemplateRevision: 1,
-		TemplateSnapshotJSON: currentSnapshot, TemplateSnapshotSHA256: currentSnapshotDigest, ServiceFamilyID: "family-release-plan",
-		Deployment: string(DeploymentHost), WorkspacePath: filepath.Join(home, "workspace"), WorkspaceOwnership: workspaceOwnershipUserSelected, ConfigurationJSON: configurationJSON,
+		ServiceID: "mws-release-plan", TemplateID: "template-release-plan",
+		WorkspacePath: filepath.Join(home, "workspace"), WorkspaceOwnership: workspaceOwnershipUserSelected, ConfigurationJSON: configurationJSON,
 		ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest, ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseDigest,
 		RuntimeBindingJSON: bindingJSON, RuntimeBindingSHA256: bindingDigest, DesiredState: "running", ObservedState: "running",
 		ForwardID: "pf-release-plan", RuntimeManifestJSON: "{}", RuntimePort: 3080,
@@ -175,19 +342,12 @@ func candidateByVersion(t *testing.T, result *ReleaseCandidateResult, version st
 	return ReleaseCandidate{}
 }
 
-func TestUpdatePlanKeepsCurrentReleaseUnlessUserSelectsAnotherVersion(t *testing.T) {
+func TestUpdatePlanRequiresUserToSelectAnotherApplicationRelease(t *testing.T) {
 	fixture := newUpdatePlanFixture(t)
 	ctx := context.Background()
 
-	plan, err := fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if plan.TargetRelease.Version != "1.0.0" || plan.CurrentTemplateRevision != 1 || plan.TargetTemplateRevision != 2 {
-		t.Fatalf("template-only plan = %+v", plan)
-	}
-	if plan.SchemaVersion != 2 || !slicesContain(plan.RiskIDs, releaseRiskNPMScripts) || slicesContain(plan.RiskIDs, releaseRiskNonDefault) {
-		t.Fatalf("template-only risk hints = %+v", plan)
+	if _, err := fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{}); managedErrorCode(err) != "UPDATE_NOT_REQUIRED" {
+		t.Fatalf("empty update error = %v", err)
 	}
 
 	candidates, err := fixture.manager.ServiceReleaseCandidates(ctx, fixture.service.ServiceID, ReleaseCandidateRequest{})
@@ -198,11 +358,11 @@ func TestUpdatePlanKeepsCurrentReleaseUnlessUserSelectsAnotherVersion(t *testing
 	if !target.IsRecommended || !target.IsLatestStable || target.Relation != "newer" {
 		t.Fatalf("recommended candidate markers = %+v", target)
 	}
-	plan, err = fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{TargetCandidateID: target.CandidateID})
+	plan, err := fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{TargetCandidateID: target.CandidateID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.TargetRelease.Version != "2.0.0" || plan.RequiresStopped || slicesContain(plan.RiskIDs, releaseRiskNonDefault) {
+	if plan.SchemaVersion != updatePlanSchemaVersion || plan.TargetRelease.Version != "2.0.0" || plan.RequiresStopped || slicesContain(plan.RiskIDs, releaseRiskNonDefault) {
 		t.Fatalf("recommended update plan = %+v", plan)
 	}
 	if !slicesContain(plan.RiskIDs, releaseRiskNPMScripts) {
@@ -245,18 +405,15 @@ func TestUpdatePlanAllowsDeprecatedDowngradeWithAdvisoryRisksButRequiresStoppedS
 func TestUpdatePlanRejectsEmptyAndExpiredPlans(t *testing.T) {
 	fixture := newUpdatePlanFixture(t)
 	ctx := context.Background()
-	currentRevision := int64(2)
-	if err := fixture.registry.UpdateManagedService(ctx, fixture.service.ServiceID, pfregistry.ManagedServicePatch{TemplateRevision: &currentRevision}); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{}); managedErrorCode(err) != "UPDATE_NOT_REQUIRED" {
 		t.Fatalf("empty update error = %v", err)
 	}
-	oldRevision := int64(1)
-	if err := fixture.registry.UpdateManagedService(ctx, fixture.service.ServiceID, pfregistry.ManagedServicePatch{TemplateRevision: &oldRevision}); err != nil {
+	candidates, err := fixture.manager.ServiceReleaseCandidates(ctx, fixture.service.ServiceID, ReleaseCandidateRequest{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{})
+	target := candidateByVersion(t, candidates, "2.0.0")
+	plan, err := fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{TargetCandidateID: target.CandidateID})
 	if err != nil {
 		t.Fatal(err)
 	}

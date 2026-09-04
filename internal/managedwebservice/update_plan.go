@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	updatePlanSchemaVersion = 2
+	updatePlanSchemaVersion = 3
 	updatePlanTTL           = 15 * time.Minute
 
 	releaseRiskNonRecommended = "non_recommended_release"
@@ -23,7 +23,7 @@ type cachedUpdatePlan struct {
 	Plan                UpdatePlan
 	ServiceID           string
 	TemplateID          string
-	TemplateSource      string
+	TemplateSpecSHA256  string
 	SelectedCandidateID string
 	Release             cachedReleaseCandidate
 	ExpiresAt           time.Time
@@ -41,43 +41,39 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 	if err != nil {
 		return nil, serviceError("RELEASE_IDENTITY_INVALID", "The managed Web Service release identity is invalid.", 409, false, err)
 	}
-	targetTemplate, err := m.Template(ctx, service.TemplateID)
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
 	}
-	if targetTemplate.Source != service.TemplateSource || targetTemplate.Deployment != Deployment(service.Deployment) || targetTemplate.ServiceFamilyID != service.ServiceFamilyID || targetTemplate.Spec == nil {
-		return nil, serviceError("UPDATE_TEMPLATE_INCOMPATIBLE", "The current template no longer matches this managed Web Service.", 409, false, nil)
-	}
+	targetTemplate := resolved.Template
 	if !targetTemplate.Available {
 		return nil, serviceError(targetTemplate.ReasonCode, targetTemplate.Reason, 409, true, nil)
 	}
 
 	selectedCandidateID := strings.TrimSpace(request.TargetCandidateID)
-	targetIdentity := *current
-	var selected *cachedReleaseCandidate
-	if selectedCandidateID != "" {
-		parameters, parameterErr := m.serviceParameters(service)
-		if parameterErr != nil {
-			return nil, parameterErr
-		}
-		selected, err = m.resolveReleaseCandidate(ctx, "service:"+service.ServiceID, selectedCandidateID, parameters, current, service.TemplateSource)
-		if err != nil {
-			return nil, err
-		}
-		targetIdentity = selected.Identity
+	if selectedCandidateID == "" {
+		return nil, serviceError("UPDATE_NOT_REQUIRED", "Choose a different application release before creating an update plan.", 409, false, nil)
+	}
+	selected, err := m.resolveReleaseCandidate(ctx, "service:"+service.ServiceID, selectedCandidateID, resolved.Parameters, current, targetTemplate.Source)
+	if err != nil {
+		return nil, err
+	}
+	targetIdentity := selected.Identity
+	if sameReleaseIdentity(*current, targetIdentity) {
+		return nil, serviceError("UPDATE_NOT_REQUIRED", "The selected application release is already installed.", 409, false, nil)
 	}
 	targetSpec, err := materializeReleaseSpec(*targetTemplate.Spec, targetIdentity)
 	if err != nil {
 		return nil, err
 	}
-	releaseChanged := !sameReleaseIdentity(*current, targetIdentity)
-	if !releaseChanged && targetTemplate.Revision == service.TemplateRevision {
-		return nil, serviceError("UPDATE_NOT_REQUIRED", "The selected release and template revision are already installed.", 409, false, nil)
+	_, templateSpecSHA256, err := canonicalTemplateSpec(*targetTemplate.Spec)
+	if err != nil {
+		return nil, err
 	}
 
 	relation := releaseRelation(current, targetIdentity)
-	riskHints := updatePlanRiskHints(*targetTemplate, selected, current, targetIdentity, releaseChanged, relation)
-	requiresStopped := releaseChanged && (relation == "older" || relation == "unknown")
+	riskHints := updatePlanRiskHints(targetTemplate, selected, current, targetIdentity, true, relation)
+	requiresStopped := relation == "older" || relation == "unknown"
 	id, err := randomID("upl")
 	if err != nil {
 		return nil, err
@@ -85,18 +81,15 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 	expiresAt := time.Now().Add(updatePlanTTL)
 	plan := UpdatePlan{
 		SchemaVersion: updatePlanSchemaVersion, UpdatePlanID: id, CurrentRelease: *current, TargetRelease: targetIdentity,
-		CurrentTemplateRevision: service.TemplateRevision, TargetTemplateRevision: targetTemplate.Revision,
 		Notices: append([]TemplateNotice(nil), targetTemplate.Notices...), RiskIDs: riskHints,
 		RequiresStopped: requiresStopped, ExpiresAtUnixMs: expiresAt.UnixMilli(),
 	}
 	release := cachedReleaseCandidate{
-		Scope: "service:" + service.ServiceID, TemplateID: service.TemplateID, TemplateRevision: targetTemplate.Revision,
+		Scope: "service:" + service.ServiceID, TemplateID: service.TemplateID,
 		Notices: append([]TemplateNotice(nil), targetTemplate.Notices...), Identity: targetIdentity, Spec: targetSpec, ExpiresAt: expiresAt,
 	}
-	if selected != nil {
-		release.Candidate = selected.Candidate
-	}
-	cached := cachedUpdatePlan{Plan: plan, ServiceID: service.ServiceID, TemplateID: service.TemplateID, TemplateSource: service.TemplateSource, SelectedCandidateID: selectedCandidateID, Release: release, ExpiresAt: expiresAt}
+	release.Candidate = selected.Candidate
+	cached := cachedUpdatePlan{Plan: plan, ServiceID: service.ServiceID, TemplateID: service.TemplateID, TemplateSpecSHA256: templateSpecSHA256, SelectedCandidateID: selectedCandidateID, Release: release, ExpiresAt: expiresAt}
 	m.releaseMu.Lock()
 	for key, existing := range m.updatePlans {
 		if existing.ServiceID == service.ServiceID || time.Now().After(existing.ExpiresAt) {
@@ -195,23 +188,24 @@ func (m *Manager) resolveUpdatePlan(ctx context.Context, service *pfregistry.Man
 		return nil, serviceError("UPDATE_PLAN_EXPIRED", "The update plan expired. Review the current versions again.", 409, true, nil)
 	}
 	current, err := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
-	if err != nil || !sameReleaseIdentity(*current, cached.Plan.CurrentRelease) || service.TemplateRevision != cached.Plan.CurrentTemplateRevision {
+	if err != nil || !sameReleaseIdentity(*current, cached.Plan.CurrentRelease) {
 		return nil, serviceError("UPDATE_PLAN_STALE", "The managed Web Service changed after this update plan was created.", 409, true, err)
 	}
-	template, err := m.Template(ctx, service.TemplateID)
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
 	}
-	if template.Revision != cached.Plan.TargetTemplateRevision || template.Spec == nil {
+	template := resolved.Template
+	_, templateSpecSHA256, err := canonicalTemplateSpec(*template.Spec)
+	if err != nil {
+		return nil, err
+	}
+	if templateSpecSHA256 != cached.TemplateSpecSHA256 {
 		return nil, serviceError("UPDATE_PLAN_STALE", "The service template changed after this update plan was created.", 409, true, nil)
 	}
 	targetIdentity := cached.Plan.TargetRelease
 	if cached.SelectedCandidateID != "" {
-		parameters, parameterErr := m.serviceParameters(service)
-		if parameterErr != nil {
-			return nil, parameterErr
-		}
-		fresh, freshErr := m.resolveReleaseCandidate(ctx, "service:"+service.ServiceID, cached.SelectedCandidateID, parameters, current, service.TemplateSource)
+		fresh, freshErr := m.resolveReleaseCandidate(ctx, "service:"+service.ServiceID, cached.SelectedCandidateID, resolved.Parameters, current, template.Source)
 		if freshErr != nil {
 			return nil, freshErr
 		}
@@ -228,7 +222,6 @@ func (m *Manager) resolveUpdatePlan(ctx context.Context, service *pfregistry.Man
 	}
 	cached.Release.Spec = targetSpec
 	cached.Release.Identity = targetIdentity
-	cached.Release.TemplateRevision = template.Revision
 	cached.Release.Notices = append([]TemplateNotice(nil), template.Notices...)
 	return &cached, nil
 }

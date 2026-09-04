@@ -29,10 +29,9 @@ async function settle(): Promise<void> {
 
 function releaseStatus(kind: 'npm' | 'oci', version: string) {
   return {
-    schema_version: 1 as const,
+    schema_version: 2 as const,
     current_release: { schema_version: 1 as const, kind, source: 'example/source', ...(kind === 'npm' ? { version } : { tag: version, digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }) },
     check_status: 'pending' as const,
-    current_template_revision: 1,
   };
 }
 
@@ -333,7 +332,6 @@ describe('EnvPortForwardsPage browser presentation', () => {
           service={{
             service_id: 'mws-desktop',
             template_id: 'example-desktop-a',
-            service_family_id: 'example-desktop-a',
             name: 'Example Desktop A',
             description: 'Run an Ubuntu-based KDE Plasma desktop in an isolated Docker container.',
             template_source: 'builtin',
@@ -438,7 +436,6 @@ describe('EnvPortForwardsPage browser presentation', () => {
         service={{
           service_id: 'mws-failed',
           template_id: 'example-container',
-          service_family_id: 'example-service',
           name: 'Example Service',
           description: 'Run Example Service in an isolated container.',
           template_source: 'builtin',
@@ -493,7 +490,6 @@ describe('EnvPortForwardsPage browser presentation', () => {
         service={{
           service_id: 'mws-failed',
           template_id: 'example-container',
-          service_family_id: 'example-service',
           name: 'Example Service',
           description: 'Run Example Service in an isolated container.',
           template_source: 'builtin',
@@ -601,7 +597,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     dispose = render(() => (
       <ManagedServiceRowComponent
         service={{
-          service_id: 'mws-output', template_id: 'example-host', service_family_id: 'example-host', name: 'Example Service',
+          service_id: 'mws-output', template_id: 'example-host', name: 'Example Service',
           template_source: 'custom', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected',
           release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'installing',
           forward_id: 'pf-output', runtime_port: 3000,
@@ -661,7 +657,6 @@ describe('EnvPortForwardsPage browser presentation', () => {
         service={{
           service_id: 'mws-native',
           template_id: 'example-host',
-          service_family_id: 'example-host',
           name: 'Example Service',
           template_source: 'builtin',
           deployment: 'host',
@@ -732,7 +727,6 @@ describe('EnvPortForwardsPage browser presentation', () => {
         service={{
           service_id: 'mws-cached',
           template_id: 'example-desktop-b',
-          service_family_id: 'example-desktop-b',
           name: 'Example Desktop B',
           template_source: 'builtin',
           deployment: 'container',

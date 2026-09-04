@@ -31,12 +31,14 @@ type hostProcess struct {
 }
 
 func (d *hostScriptDriver) Install(ctx context.Context, service *pfregistry.ManagedService, progress operationProgress) (string, string, error) {
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return "", "", err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	if spec.Kind != DeploymentHost || spec.Host == nil {
-		return "", "", serviceError("TEMPLATE_SNAPSHOT_INVALID", "The service does not contain a host template snapshot.", 409, false, nil)
+		return "", "", serviceError("CURRENT_TEMPLATE_INVALID", "The current template is not a Host deployment.", 409, false, nil)
 	}
 	root := d.instanceRoot(service)
 	installRoot := filepath.Join(root, "install")
@@ -112,12 +114,14 @@ func validateCustomHostArtifact(artifact verifiedPackageArtifact, executableRelP
 }
 
 func (d *hostScriptDriver) Start(ctx context.Context, service *pfregistry.ManagedService) (string, error) {
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return "", err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	if spec.Host == nil {
-		return "", serviceError("TEMPLATE_SNAPSHOT_INVALID", "The service does not contain a host template snapshot.", 409, false, nil)
+		return "", serviceError("CURRENT_TEMPLATE_INVALID", "The current template is not a Host deployment.", 409, false, nil)
 	}
 	dynamicOpenTarget := spec.Host.OpenTarget != nil
 	d.processMu.Lock()
@@ -160,7 +164,7 @@ func (d *hostScriptDriver) Start(ctx context.Context, service *pfregistry.Manage
 	// identity stored below.
 	cmd := exec.Command("/bin/sh", "-eu", "-c", spec.Host.StartScript)
 	cmd.Dir = service.WorkspacePath
-	cmd.Env, err = d.serviceEnvironment(service, service.ArtifactReference)
+	cmd.Env, err = d.serviceEnvironment(ctx, service, service.ArtifactReference)
 	if err != nil {
 		_ = logFile.Close()
 		return "", err
@@ -273,6 +277,14 @@ func (d *hostScriptDriver) Start(ctx context.Context, service *pfregistry.Manage
 }
 
 func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.ManagedService) error {
+	return d.stop(ctx, service, true)
+}
+
+func (d *hostScriptDriver) Shutdown(ctx context.Context, service *pfregistry.ManagedService) error {
+	return d.stop(ctx, service, false)
+}
+
+func (d *hostScriptDriver) stop(ctx context.Context, service *pfregistry.ManagedService, runTemplateScript bool) error {
 	if service == nil {
 		return nil
 	}
@@ -296,17 +308,20 @@ func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.Managed
 	if service.RuntimeIdentity != "" && current.identity != service.RuntimeIdentity {
 		return serviceError("RUNTIME_IDENTITY_MISMATCH", "Redeven will not stop a custom host process whose identity changed.", 409, false, nil)
 	}
-	spec, _, err := effectiveSpecFromService(service)
-	if err != nil {
-		return err
-	}
 	var stopScriptErr error
-	if strings.TrimSpace(spec.Host.StopScript) != "" {
-		stopCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		err := d.runOneShot(stopCtx, service, spec.Host.StopScript, service.ArtifactReference, "stop")
-		cancel()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			stopScriptErr = serviceError("STOP_SCRIPT_FAILED", "The custom host stop script failed.", 502, true, err)
+	if runTemplateScript {
+		resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
+		if err != nil {
+			return err
+		}
+		resolved.applyTo(service)
+		if strings.TrimSpace(resolved.Spec.Host.StopScript) != "" {
+			stopCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			err := d.runOneShot(stopCtx, service, resolved.Spec.Host.StopScript, service.ArtifactReference, "stop")
+			cancel()
+			if err != nil && !errors.Is(err, context.Canceled) {
+				stopScriptErr = serviceError("STOP_SCRIPT_FAILED", "The custom host stop script failed.", 502, true, err)
+			}
 		}
 	}
 	if err := terminateHostProcess(current); err != nil {
@@ -348,10 +363,12 @@ func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.Ma
 		return err
 	}
 	progress("uninstalling", 5)
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	if strings.TrimSpace(spec.Host.UninstallScript) != "" {
 		if err := d.runOneShot(context.Background(), service, spec.Host.UninstallScript, service.ArtifactReference, "uninstall"); err != nil {
 			return serviceError("UNINSTALL_SCRIPT_FAILED", "The custom host uninstall script failed.", 502, true, err)
@@ -395,7 +412,7 @@ func (d *hostScriptDriver) runOneShot(ctx context.Context, service *pfregistry.M
 	defer logFile.Close()
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-eu", "-c", script)
 	cmd.Dir = service.WorkspacePath
-	cmd.Env, err = d.serviceEnvironment(service, executable)
+	cmd.Env, err = d.serviceEnvironment(ctx, service, executable)
 	if err != nil {
 		return err
 	}
@@ -430,11 +447,13 @@ func (d *hostScriptDriver) runOneShot(ctx context.Context, service *pfregistry.M
 	return runErr
 }
 
-func (d *hostScriptDriver) serviceEnvironment(service *pfregistry.ManagedService, executable string) ([]string, error) {
-	spec, _, err := effectiveSpecFromService(service)
+func (d *hostScriptDriver) serviceEnvironment(ctx context.Context, service *pfregistry.ManagedService, executable string) ([]string, error) {
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	parameters, err := d.manager.serviceParameters(service)
 	if err != nil {
 		return nil, err

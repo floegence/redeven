@@ -320,96 +320,12 @@ volumes:
 	}
 }
 
-func TestTemplateSpecFromServiceRejectsSnapshotIdentityDrift(t *testing.T) {
-	t.Parallel()
-	spec := TemplateSpec{
-		SchemaVersion: templateSpecSchemaVersion,
-		Kind:          DeploymentHost,
-		Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/health"},
-		Host:          &HostTemplateSpec{StartScript: `exec preview --port "$REDEVEN_SERVICE_PORT"`},
-	}
-	encoded, digest, err := canonicalTemplateSpec(spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := &pfregistry.ManagedService{TemplateSnapshotJSON: encoded, TemplateSnapshotSHA256: digest}
-	if _, err := templateSpecFromService(service); err != nil {
-		t.Fatalf("valid snapshot error = %v", err)
-	}
-	service.TemplateSnapshotSHA256 = "tampered"
-	_, err = templateSpecFromService(service)
-	var managedErr *Error
-	if !errors.As(err, &managedErr) || managedErr.Code != "TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH" {
-		t.Fatalf("identity drift error = %v", err)
-	}
-	service.TemplateSnapshotJSON = encoded + "\n"
-	service.TemplateSnapshotSHA256 = digest
-	_, err = templateSpecFromService(service)
-	if !errors.As(err, &managedErr) || managedErr.Code != "TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH" {
-		t.Fatalf("raw document identity drift error = %v", err)
-	}
-}
-
 func TestVerifiedTemplateSpecRejectsNonCurrentSchema(t *testing.T) {
 	t.Parallel()
 	raw := `{"schema_version":2,"kind":"host","endpoint":{"scheme":"http","health_path":"/health"},"host":{"start_script":"exec preview --port $REDEVEN_SERVICE_PORT","npm":{"package_name":"example-package","version":"1.0.0","registry_url":"https://registry.npmjs.org/","executable":"preview"}}}`
 	digest := sha256.Sum256([]byte(raw))
 	if _, err := verifiedTemplateSpec(raw, hex.EncodeToString(digest[:])); err == nil {
 		t.Fatal("non-current TemplateSpec unexpectedly accepted")
-	}
-}
-
-func TestTemplateSpecFromServiceAcceptsPersistedDocumentIdentity(t *testing.T) {
-	t.Parallel()
-	spec := TemplateSpec{
-		SchemaVersion: templateSpecSchemaVersion,
-		Kind:          DeploymentHost,
-		Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/health"},
-		Host:          &HostTemplateSpec{StartScript: `exec preview --port "$REDEVEN_SERVICE_PORT"`},
-	}
-	canonical, _, err := canonicalTemplateSpec(spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var document map[string]any
-	if err := json.Unmarshal([]byte(canonical), &document); err != nil {
-		t.Fatal(err)
-	}
-	persisted, err := json.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(persisted) == canonical {
-		t.Fatal("test fixture must use a different valid JSON field order")
-	}
-	sum := sha256.Sum256(persisted)
-	service := &pfregistry.ManagedService{TemplateSnapshotJSON: string(persisted), TemplateSnapshotSHA256: hex.EncodeToString(sum[:])}
-	loaded, err := templateSpecFromService(service)
-	if err != nil {
-		t.Fatalf("migrated snapshot error = %v", err)
-	}
-	if loaded.Kind != DeploymentHost || loaded.Host == nil || loaded.Host.StartScript != spec.Host.StartScript {
-		t.Fatalf("loaded migrated snapshot = %+v", loaded)
-	}
-}
-
-func TestTemplateSpecFromServiceRejectsInvalidHashedDocument(t *testing.T) {
-	t.Parallel()
-	tests := map[string]string{
-		"unknown field":  `{"schema_version":1,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":"exec preview"},"future":true}`,
-		"invalid policy": `{"schema_version":1,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":""}}`,
-	}
-	for name, raw := range tests {
-		raw := raw
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			sum := sha256.Sum256([]byte(raw))
-			_, err := templateSpecFromService(&pfregistry.ManagedService{TemplateSnapshotJSON: raw, TemplateSnapshotSHA256: hex.EncodeToString(sum[:])})
-			var managedErr *Error
-			if !errors.As(err, &managedErr) || managedErr.Code != "TEMPLATE_SNAPSHOT_INVALID" {
-				t.Fatalf("invalid hashed snapshot error = %v", err)
-			}
-		})
 	}
 }
 

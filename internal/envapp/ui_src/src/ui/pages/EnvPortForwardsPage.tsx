@@ -108,7 +108,6 @@ type ForwardMetadataTarget = Readonly<
 type ManagedService = Readonly<{
   service_id: string;
   template_id: string;
-  service_family_id: string;
   name: string;
   description?: string;
   template_source: 'builtin' | 'custom';
@@ -203,7 +202,7 @@ type ManagedReleaseCandidateResult = Readonly<{
 }>;
 
 type ManagedReleaseStatus = Readonly<{
-  schema_version: 1;
+	schema_version: 2;
   current_release?: ManagedReleaseIdentity;
   recommended_release?: ManagedReleaseIdentity;
   latest_stable_release?: ManagedReleaseIdentity;
@@ -213,22 +212,25 @@ type ManagedReleaseStatus = Readonly<{
   check_status: 'fresh' | 'stale' | 'error' | 'pending';
   checked_at_unix_ms?: number;
   next_check_at_unix_ms?: number;
-  last_error_code?: string;
-  current_template_revision: number;
-  available_template_revision?: number;
+	last_error_code?: string;
 }>;
 
 type ManagedUpdatePlan = Readonly<{
-  schema_version: 2;
-  update_plan_id: string;
-  current_release: ManagedReleaseIdentity;
-  target_release: ManagedReleaseIdentity;
-  current_template_revision: number;
-  target_template_revision: number;
+	schema_version: 3;
+	update_plan_id: string;
+	current_release: ManagedReleaseIdentity;
+	target_release: ManagedReleaseIdentity;
   notices?: ReadonlyArray<ManagedTemplateNotice>;
   risk_ids?: ReadonlyArray<string>;
   requires_stopped?: boolean;
   expires_at_unix_ms: number;
+}>;
+
+type ManagedOpenSession = Readonly<{
+	state: 'ready' | 'preparing';
+	forward?: PortForward;
+	app_path?: string;
+	operation?: ManagedOperation;
 }>;
 
 type ManagedReleasePickerTarget = Readonly<{
@@ -1443,7 +1445,7 @@ function managedActionUnavailableReason(capability: ManagedActionCapability, i18
   return i18n.t(`webServices.managed.actionUnavailable.${code}` as EnvAppTranslationKey);
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; operationExpanded: boolean; busy: boolean; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const [failureDiagnosticCopied, setFailureDiagnosticCopied] = createSignal(false);
   let failureDiagnosticResetTimer: number | undefined;
@@ -1522,7 +1524,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
           ? i18n.t('containers.views.compose-projects')
           : i18n.t('containers.views.containers'),
     })),
-		...(props.service.release_status.current_release?.kind === 'npm' || props.service.release_status.current_release?.kind === 'oci' || props.service.release_status.available_template_revision ? [{
+		...(props.service.release_status.current_release?.kind === 'npm' || props.service.release_status.current_release?.kind === 'oci' ? [{
 			id: 'versions',
 			label: i18n.t('webServices.managed.versions'),
 			disabled: busy() || !props.canManage,
@@ -1645,7 +1647,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
         </div>
 
         <div class={serviceRowActionsClass} data-testid="managed-service-actions">
-          <Tooltip content={props.openUnavailableReason || (props.busy ? i18n.t('webServices.status.opening') : i18n.t('webServices.actions.openServiceTooltip'))} placement="top" anchorClass="w-full">
+          <Tooltip content={props.openUnavailableReason || (props.busy ? props.busyText || i18n.t('webServices.status.opening') : i18n.t('webServices.actions.openServiceTooltip'))} placement="top" anchorClass="w-full">
             <Button
               size="sm"
               variant="default"
@@ -2321,9 +2323,32 @@ export function EnvPortForwardsPage() {
 
   const selectedTemplate = createMemo(() => managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
 
-  const resolveManagedForwardSession = async (service: ManagedService): Promise<Pick<ForwardSession, 'forward' | 'app_path'>> => {
-    return fetchLocalApiJSON<Pick<ForwardSession, 'forward' | 'app_path'>>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/open-session`, { method: 'POST' });
-  };
+	const requestManagedOpenSession = (service: ManagedService) => fetchLocalApiJSON<ManagedOpenSession>(
+		`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/open-session`,
+		{ method: 'POST', body: JSON.stringify({ request_id: managedRequestID() }) },
+	);
+
+	const resolveManagedForwardSession = async (service: ManagedService): Promise<Pick<ForwardSession, 'forward' | 'app_path'>> => {
+		let result = await requestManagedOpenSession(service);
+		if (result.state === 'preparing') {
+			if (!result.operation) throw new Error(i18n.t('webServices.managed.openPreparationFailed'));
+			const preparingOperation = result.operation;
+			setBusyText(i18n.t('webServices.managed.preparingService'));
+			let operation: ManagedOperation;
+			try {
+				operation = await managedOperations.track(preparingOperation);
+				await loadManaged(false);
+			} finally {
+				managedOperations.clear(preparingOperation.operation_id);
+			}
+			if (operation.state !== 'succeeded') throw new Error(managedOperationFailureMessage(operation, i18n));
+			result = await requestManagedOpenSession(service);
+		}
+		if (result.state !== 'ready' || !result.forward || !result.app_path) {
+			throw new Error(i18n.t('webServices.managed.openPreparationFailed'));
+		}
+		return { forward: result.forward, app_path: result.app_path };
+	};
 
   const closeTemplateDrawer = () => {
     setTemplateDrawerOpen(false);
@@ -2719,8 +2744,7 @@ export function EnvPortForwardsPage() {
 		if (target?.kind !== 'service' || !canManageManagedService()) return false;
 		const candidate = selectedReleaseCandidate();
 		if (selectedReleaseID() && (!candidate || !candidate.selectable)) return false;
-		const templateChanged = Boolean(target.service?.release_status.available_template_revision && target.service.release_status.available_template_revision !== target.service.release_status.current_template_revision);
-		return templateChanged || Boolean(candidate && !candidate.is_current && candidate.relation !== 'same');
+		return Boolean(candidate && !candidate.is_current && candidate.relation !== 'same');
 	});
 
 	const createManagedUpdatePlan = async () => {
@@ -2736,7 +2760,7 @@ export function EnvPortForwardsPage() {
 			const plan = await fetchLocalApiJSON<ManagedUpdatePlan>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(target.id)}/update-plans`, {
 				method: 'POST',
 				signal: request.controller.signal,
-				body: JSON.stringify(candidateID ? { target_candidate_id: candidateID } : {}),
+				body: JSON.stringify({ target_candidate_id: candidateID }),
 			});
 			if (request.isCurrent()) setManagedUpdatePlan(plan);
 		} catch (error) {
@@ -2773,9 +2797,7 @@ export function EnvPortForwardsPage() {
 
 	const beginTemplateInstall = (template: ManagedCatalogTemplate, preserveRelease = false) => {
     if (!template.available || installedServiceForTemplate(template)) return;
-		if (!preserveRelease) {
-			setSelectedTemplateRelease(null);
-		}
+		if (!preserveRelease) setSelectedTemplateRelease(null);
     setSelectedTemplateID(template.template_id);
     setWorkspacePath(template.default_workspace_path);
     setManagedAccessMode(template.default_access_mode || 'unified_proxy');
@@ -3416,6 +3438,7 @@ export function EnvPortForwardsPage() {
                           operation={managedRowOperation(service.service_id)}
                           operationExpanded={Boolean(expandedManagedOperations()[managedRowOperation(service.service_id)?.operation_id ?? ''])}
                           busy={busyID() === `managed:${service.service_id}`}
+                          busyText={busyID() === `managed:${service.service_id}` ? busyText() : undefined}
                           canOpen={canExecute() && (service.access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
                           openUnavailableReason={service.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
                             ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
@@ -3906,13 +3929,7 @@ export function EnvPortForwardsPage() {
 						void loadReleaseCandidates(releasePickerTarget(), 'continue', { cursorID: result.cursor_id });
 					}
 				  }}
-                  leadingItem={<Show when={releasePickerTarget()?.kind === 'service'}>
-                    <button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring', selectedReleaseID() === '' && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]')} aria-pressed={selectedReleaseID() === ''} onClick={() => { setSelectedReleaseID(''); setManagedUpdatePlanError(''); }} data-testid="managed-release-keep-current">
-                      <div class="min-w-0"><div class="truncate text-sm font-semibold text-foreground">{i18n.t('webServices.managed.keepCurrentVersion')}</div><div class="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{releasePickerTarget()?.service?.release_status.current_release ? releaseIdentityLabel(releasePickerTarget()!.service!.release_status.current_release!) : '—'}</div><p class="mt-0.5 truncate text-[10px] text-muted-foreground" title={i18n.t('webServices.managed.keepCurrentVersionDescription')}>{i18n.t('webServices.managed.keepCurrentVersionDescription')}</p></div>
-                      <Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag>
-                    </button>
-                  </Show>}
-                  showRiskHints={releasePickerTarget()?.kind === 'template'}
+				  showRiskHints={releasePickerTarget()?.kind === 'template'}
                   defaultKind={selectedReleaseDefaultKind()}
                 />
               </div>
@@ -3925,8 +3942,7 @@ export function EnvPortForwardsPage() {
             <div class="grid gap-3 text-xs sm:grid-cols-2">
               <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</div><div class="mt-1 font-mono text-foreground">{releaseIdentityLabel(plan.current_release)}</div></div>
               <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</div><div class="mt-1 font-mono text-foreground">{releaseIdentityLabel(plan.target_release)}</div></div>
-              <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.templateRevision')}</div><div class="mt-1 text-foreground">{plan.current_template_revision === plan.target_template_revision ? i18n.t('webServices.managed.templateRevisionUnchanged', { revision: plan.current_template_revision }) : `${plan.current_template_revision} → ${plan.target_template_revision}`}</div></div>
-              <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.updatePlanExpires')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(plan.expires_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div></div>
+			  <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.updatePlanExpires')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(plan.expires_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div></div>
             </div>
             <Show when={managedUpdatePlanRequiresStopped()}><div class="rounded-md border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.downgradeRequiresStopped')}</div></Show>
             <Show when={(plan.notices?.length ?? 0) > 0}><ManagedTemplateNotices notices={localizedManagedNotices(plan.notices, releasePickerTarget()?.service?.localizations, i18n.locale())} accepted={updateNoticeAcceptances()} disabled={false} onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))} /></Show>

@@ -19,11 +19,11 @@ import (
 const hostOpenSessionSchemaVersion = 1
 
 type hostOpenSessionState struct {
-	SchemaVersion          int    `json:"schema_version"`
-	ServiceID              string `json:"service_id"`
-	TemplateSnapshotSHA256 string `json:"template_snapshot_sha256"`
-	RuntimeIdentity        string `json:"runtime_identity"`
-	AppPath                string `json:"app_path"`
+	SchemaVersion     int    `json:"schema_version"`
+	ServiceID         string `json:"service_id"`
+	RuntimeSpecSHA256 string `json:"runtime_spec_sha256"`
+	RuntimeIdentity   string `json:"runtime_identity"`
+	AppPath           string `json:"app_path"`
 }
 
 type hostStartupTargetResult struct {
@@ -126,10 +126,7 @@ func (d *hostScriptDriver) openSessionPath(service *pfregistry.ManagedService) s
 }
 
 func (d *hostScriptDriver) writeOpenSession(service *pfregistry.ManagedService, runtimeIdentity, appPath string) error {
-	state := hostOpenSessionState{
-		SchemaVersion: hostOpenSessionSchemaVersion, ServiceID: service.ServiceID,
-		TemplateSnapshotSHA256: service.TemplateSnapshotSHA256, RuntimeIdentity: runtimeIdentity, AppPath: appPath,
-	}
+	state := hostOpenSessionState{SchemaVersion: hostOpenSessionSchemaVersion, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: runtimeIdentity, AppPath: appPath}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -171,7 +168,7 @@ func (d *hostScriptDriver) readOpenSession(service *pfregistry.ManagedService, r
 	}
 	var state hostOpenSessionState
 	if err := decodeStrictJSON(raw, &state); err != nil || state.SchemaVersion != hostOpenSessionSchemaVersion ||
-		state.ServiceID != service.ServiceID || state.TemplateSnapshotSHA256 != service.TemplateSnapshotSHA256 ||
+		state.ServiceID != service.ServiceID || state.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 ||
 		state.RuntimeIdentity != strings.TrimSpace(runtimeIdentity) || !validHostOpenSessionPath(state.AppPath) {
 		return "", serviceError("HOST_OPEN_TARGET_INVALID", "The saved Host service startup URL identity is invalid.", 409, true, err)
 	}
