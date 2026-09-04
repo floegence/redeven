@@ -133,7 +133,7 @@ func projectRunFailure(raw string, fallbackCode string) (string, string) {
 }
 
 // projectFloretTurnFailure is the only product presentation boundary for
-// canonical Floret turn failures. Floret v6 always supplies typed failures.
+// canonical Floret turn failures. Floret v7 always supplies typed failures.
 func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode string) (string, string) {
 	if failure == nil {
 		return fallbackCode, userFacingRunError(fallbackCode, "")

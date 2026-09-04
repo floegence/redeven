@@ -328,6 +328,36 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(applyFlowerRuntimeCurrentView(summary(), current).status).toBe('waiting_user');
   });
 
+  it.each([
+    { name: 'null', questions: null },
+    { name: 'missing', questions: undefined },
+    { name: 'empty', questions: [] },
+  ])('rejects a pending input interaction with $name questions', ({ questions }) => {
+    const input = {
+      summary: 'Choose a deployment target',
+      ...(questions === undefined ? {} : { questions }),
+    };
+    const current = {
+      thread_id: 'thread-a',
+      view_version: 9,
+      activity: 'active',
+      run_id: 'run-a',
+      turn_id: 'turn-a',
+      interactions: [{
+        id: 'input-a',
+        turn_id: 'turn-a',
+        run_id: 'run-a',
+        kind: 'input',
+        resolved: false,
+        input,
+      }],
+    } as unknown as FlowerRuntimeCurrentView;
+
+    expect(() => applyFlowerRuntimeCurrentView(summary(), current)).toThrow(
+      'Flower contract error: typed current input interaction requires at least one question.',
+    );
+  });
+
   it('renders accepted busy input only in the typed runtime queue', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a',
