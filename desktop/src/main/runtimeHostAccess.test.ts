@@ -74,7 +74,7 @@ describe('runtimeHostAccess', () => {
       linux_user: 'dev user',
     }, { wslBinary: wslPath });
 
-    await executor.run(['redeven', 'desktop-bridge'], {
+    await executor.run(['redeven', '', 'desktop-bridge'], {
       env: {
         REDEVEN_TEST_CONTEXT: 'value with spaces',
         'BAD-NAME': 'ignored',
@@ -90,6 +90,7 @@ describe('runtimeHostAccess', () => {
       'env',
       'REDEVEN_TEST_CONTEXT=value with spaces',
       'redeven',
+      '',
       'desktop-bridge',
     ]);
   });
@@ -104,6 +105,18 @@ describe('runtimeHostAccess', () => {
       command_name: 'redeven-missing-host-command-for-test',
       message: 'redeven-missing-host-command-for-test was not found. Install it or make it available to Redeven Desktop, then try again.',
     });
+  });
+
+  it('preserves empty positional arguments for local host commands', async () => {
+    const result = await createLocalRuntimeHostExecutor().run([
+      process.execPath,
+      '-e',
+      'process.stdout.write(JSON.stringify(process.argv.slice(1)))',
+      '',
+      'session-token',
+    ]);
+
+    expect(JSON.parse(result.stdout)).toEqual(['', 'session-token']);
   });
 
   it('fails a local host command that does not return before its deadline', async () => {

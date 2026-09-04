@@ -73,8 +73,8 @@ import {
 import {
   MANAGED_RUNTIME_DIRECTORY_MODE,
   MANAGED_RUNTIME_EXECUTABLE_MODE,
-  MANAGED_RUNTIME_LINUX_COMPANION_FILENAMES,
-  MANAGED_RUNTIME_LINUX_EVIDENCE_FILENAMES,
+  MANAGED_RUNTIME_COMPANION_FILENAMES,
+  MANAGED_RUNTIME_EVIDENCE_FILENAMES,
   MANAGED_RUNTIME_METADATA_MODE,
   MANAGED_RUNTIME_STAMP_FILENAME,
   MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
@@ -655,7 +655,7 @@ function buildManagedSSHRuntimeSwitchShell(): string {
 }
 
 function buildManagedRuntimeMetadataShell(): string {
-  const evidenceFilenames = MANAGED_RUNTIME_LINUX_EVIDENCE_FILENAMES.join(' ');
+  const evidenceFilenames = MANAGED_RUNTIME_EVIDENCE_FILENAMES.join(' ');
   return [
     'normalize_managed_runtime_metadata() {',
     `  chmod ${MANAGED_RUNTIME_DIRECTORY_MODE} "$staging_root" "$staging_root/bin"`,
@@ -785,7 +785,7 @@ export function buildManagedSSHUploadedInstallScript(): string {
     // Runtime packages carry the verified ReDevPlugin release evidence next
     // to the binary. Keep those files in the managed slot so a fresh daemon
     // can validate its plugin runtime before opening the environment.
-    `for companion in ${MANAGED_RUNTIME_LINUX_COMPANION_FILENAMES.join(' ')}; do`,
+    `for companion in ${MANAGED_RUNTIME_COMPANION_FILENAMES.join(' ')}; do`,
     '  if [ "$companion" = "redevplugin-runtime" ]; then',
     '    [ -x "${extract_dir}/$companion" ] || { echo "uploaded Runtime archive is missing $companion" >&2; exit 1; }',
     '    cp "${extract_dir}/$companion" "${staging_root}/bin/$companion"',
