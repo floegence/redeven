@@ -2401,11 +2401,12 @@ describe('EnvPortForwardsPage', () => {
       .find((button) => button.textContent?.trim() === 'Uninstall');
     uninstall?.click();
 
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false, delete_workspace: false }));
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false }));
+    expect(operationBody).not.toHaveProperty('delete_workspace');
     await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service uninstalled', expect.any(String)));
   });
 
-  it('requires the second destructive confirmation before deleting managed data', async () => {
+  it('uses one destructive choice to delete managed data and the workspace', async () => {
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
       { state: 'ready', loading: false, error: null },
@@ -2432,10 +2433,8 @@ describe('EnvPortForwardsPage', () => {
     expect(checkbox?.disabled).toBe(false);
     checkbox?.click();
     await flushPage();
-    expect(host.textContent).toContain('The workspace and everything in it will be retained.');
-    const workspaceCheckbox = host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1];
-    expect(workspaceCheckbox?.checked).toBe(false);
-    workspaceCheckbox?.click();
+    expect(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(1);
+    expect(host.textContent).toContain('The workspace directory and everything in it will also be deleted: /workspace');
     const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
       .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
     Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
@@ -2443,12 +2442,13 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     expect(operationBody).toBeNull();
     expect(host.textContent).toContain('This permanently deletes');
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data and workspace')?.click();
 
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true, delete_workspace: true }));
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true }));
+    expect(operationBody).not.toHaveProperty('delete_workspace');
   });
 
-  it('automatically deletes a Redeven-created workspace with managed data', async () => {
+  it('uses the same single deletion choice for a Redeven-created workspace', async () => {
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
       { state: 'ready', loading: false, error: null },
@@ -2478,16 +2478,17 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
     await flushPage();
-    expect(host.textContent).toContain('The dedicated workspace and everything in it will also be deleted');
+    expect(host.textContent).toContain('The workspace directory and everything in it will also be deleted');
     expect(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(1);
     const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
       .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
     Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
       .find((button) => button.textContent?.trim() === 'Uninstall')?.click();
     await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data and workspace')?.click();
 
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true, delete_workspace: true }));
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true }));
+    expect(operationBody).not.toHaveProperty('delete_workspace');
   });
 
   it('uses Web Services copy for the product surface', async () => {

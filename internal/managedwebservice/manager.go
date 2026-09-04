@@ -653,6 +653,9 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	if err := validateRequestID(req.RequestID); err != nil {
 		return nil, err
 	}
+	if req.Action == ActionUninstall && req.DeleteData {
+		req.DeleteWorkspace = true
+	}
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
@@ -703,9 +706,6 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	}
 	if (req.DeleteData || req.DeleteWorkspace) && !req.Administrator {
 		return nil, serviceError("ADMIN_REQUIRED", "Administrator permission is required to delete managed service data.", 403, false, nil)
-	}
-	if req.Action == ActionUninstall && req.DeleteData && service.WorkspaceOwnership == "redeven_created" {
-		req.DeleteWorkspace = true
 	}
 	var reconfigure *reconfigureCandidate
 	if req.Action == ActionReconfigure {
