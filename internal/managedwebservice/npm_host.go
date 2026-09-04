@@ -199,11 +199,12 @@ func (d *hostScriptDriver) installNPMRuntime(ctx context.Context, service *pfreg
 	identityKey := sha256.Sum256([]byte(spec.PackageName + "\x00" + release.Version + "\x00" + release.Integrity + "\x00" + currentPlatformKey()))
 	installRoot := filepath.Join(d.instanceRoot(service), "releases", hex.EncodeToString(identityKey[:16]))
 	executable := filepath.Join(installRoot, "bin", "managed-service")
-	if err := verifyNPMRuntime(installRoot, spec, identity); err == nil {
+	verificationErr := verifyNPMRuntime(installRoot, spec, identity)
+	if verificationErr == nil {
 		return executable, identity, nil
 	}
 	if _, err := os.Stat(installRoot); err == nil {
-		return "", ReleaseIdentity{}, serviceError("INSTALL_IDENTITY_CONFLICT", "An unexpected npm installation occupies the selected release directory.", 409, false, nil)
+		return "", ReleaseIdentity{}, serviceError("INSTALL_IDENTITY_CONFLICT", "An unexpected npm installation occupies the selected release directory.", 409, false, verificationErr)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", ReleaseIdentity{}, err
 	}
@@ -267,6 +268,9 @@ func (d *hostScriptDriver) installNPMRuntime(ctx context.Context, service *pfreg
 	}
 	if err := os.WriteFile(filepath.Join(extractRoot, "redeven-npm-runtime.json"), raw, 0o600); err != nil {
 		return "", ReleaseIdentity{}, err
+	}
+	if err := verifyNPMRuntime(extractRoot, spec, identity); err != nil {
+		return "", ReleaseIdentity{}, serviceError("INSTALL_VERIFICATION_FAILED", "The installed npm Runtime did not pass final identity verification.", 502, false, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(installRoot), 0o700); err != nil {
 		return "", ReleaseIdentity{}, err
@@ -523,7 +527,7 @@ func managedNodeRuntimeDigest(root string) (string, error) {
 		if rel == "app" && entry.IsDir() {
 			return filepath.SkipDir
 		}
-		if rel == "bin/managed-service" || rel == "redeven-npm-runtime.json" {
+		if rel == "bin" || rel == "bin/managed-service" || rel == "redeven-npm-runtime.json" {
 			return nil
 		}
 		info, err := entry.Info()
