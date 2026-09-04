@@ -942,13 +942,13 @@ async function createFakeSourceRuntimeRoot(root: string): Promise<Readonly<{
     '',
     'go 1.24.0',
     '',
-    'require github.com/floegence/redevplugin/v3 v3.0.22',
+    'require github.com/floegence/redevplugin/v3 v3.0.24',
     '',
   ].join('\n'));
-  const manifestPath = path.join(root, 'asset-cache', 'redevplugin-manifests', 'v3.0.22', 'platform-release-manifest.json');
+  const manifestPath = path.join(root, 'asset-cache', 'redevplugin-manifests', 'v3.0.24', 'platform-release-manifest.json');
   await fs.mkdir(path.dirname(manifestPath), { recursive: true });
   await fs.writeFile(manifestPath, `${JSON.stringify({
-    platform_version: '3.0.22',
+    platform_version: '3.0.24',
     plugin_api: 1,
     internal_wire: 1,
     artifacts: [

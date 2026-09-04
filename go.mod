@@ -10,7 +10,7 @@ require (
 	github.com/floegence/floret/v7 v7.1.3
 	github.com/floegence/flowersec/flowersec-go/v5 v5.0.1
 	github.com/floegence/redeven-service-templates v0.3.0
-	github.com/floegence/redevplugin/v3 v3.0.22
+	github.com/floegence/redevplugin/v3 v3.0.24
 	github.com/gorilla/websocket v1.5.3
 	github.com/mholt/archives v0.1.5
 	github.com/nwaples/rardecode/v2 v2.2.0
