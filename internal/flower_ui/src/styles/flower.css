@@ -7048,7 +7048,6 @@ html.dark .flower-component-shell {
 }
 
 .flower-composer.flower-decision-surface {
-  border-radius: 0.5rem;
   background: var(--flower-chat-surface-elevated, var(--card));
   box-shadow: 0 8px 22px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 42%, transparent);
   backdrop-filter: none;
@@ -7883,7 +7882,8 @@ button.flower-attachment-preview-trigger:disabled {
   white-space: nowrap;
 }
 
-.flower-approval-decision-group .flower-composer-approval-decision:hover:not(:disabled) {
+.flower-approval-decision-group .flower-composer-approval-decision:hover:not(:disabled),
+.flower-approval-decision-group .flower-composer-approval-decision:focus-visible:not(:disabled) {
   z-index: 1;
   background: color-mix(in srgb, var(--muted) 72%, transparent);
 }
@@ -7893,14 +7893,14 @@ button.flower-attachment-preview-trigger:disabled {
   color: var(--primary-foreground);
 }
 
-.flower-approval-decision-group .flower-approval-decision-approve:hover:not(:disabled) {
+.flower-approval-decision-group .flower-approval-decision-approve:hover:not(:disabled),
+.flower-approval-decision-group .flower-approval-decision-approve:focus-visible:not(:disabled) {
   background: color-mix(in srgb, var(--primary) 88%, var(--foreground) 12%);
 }
 
 .flower-approval-decision-group .flower-composer-approval-decision:focus-visible {
-  position: relative;
-  z-index: 2;
-  box-shadow: inset 0 0 0 1px var(--primary);
+  outline: none;
+  box-shadow: none !important;
 }
 
 .flower-approval-decision-divider {
@@ -7908,11 +7908,6 @@ button.flower-attachment-preview-trigger:disabled {
   flex: 0 0 1px;
   align-self: stretch;
   background: color-mix(in srgb, var(--flower-chat-surface-border) 84%, var(--foreground) 16%);
-}
-
-.flower-approval-surface .flower-composer-approval-decision:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 62%, transparent);
 }
 
 .flower-approval-surface .flower-composer-approval-decision:disabled {

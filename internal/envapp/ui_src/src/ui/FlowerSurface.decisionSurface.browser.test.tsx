@@ -1,6 +1,8 @@
 import '../index.css';
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
+
+import flowerFeatureStyles from './flower-feature.css?inline';
 
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import {
@@ -186,6 +188,11 @@ describe('Flower bottom decision surface', () => {
   });
 
   it('prioritizes input over approval, then advances to approval before chat', async () => {
+    const featureStyle = document.createElement('style');
+    featureStyle.textContent = flowerFeatureStyles;
+    document.head.append(featureStyle);
+    onTestFinished(() => featureStyle.remove());
+
     const request = inputRequest({ prompt_id: 'prompt-input-before-approval' });
     const action = approval('approval-after-input');
     const waitingThread = thread({
@@ -240,7 +247,9 @@ describe('Flower bottom decision surface', () => {
     (runtime.querySelector(`[data-thread-id="${waitingThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="input_request"]')));
     expect(runtime.querySelectorAll('[data-flower-bottom-mode]')).toHaveLength(1);
-    expect(runtime.querySelector('[data-flower-bottom-mode="input_request"] textarea')).toBeNull();
+    const inputSurface = runtime.querySelector('[data-flower-bottom-mode="input_request"]') as HTMLElement;
+    const inputRadius = getComputedStyle(inputSurface).borderRadius;
+    expect(inputSurface.querySelector('textarea')).toBeNull();
     const choice = runtime.querySelector('[data-flower-input-answer-kind="choice"]') as HTMLButtonElement;
     choice.click();
     const continueButton = runtime.querySelector('.flower-composer-continue') as HTMLButtonElement;
@@ -249,12 +258,21 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => submitInput.mock.calls.length === 1);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
     expect(runtime.querySelectorAll('[data-flower-bottom-mode]')).toHaveLength(1);
-    expect(runtime.querySelector('[data-flower-bottom-mode="approval"] textarea')).toBeNull();
+    const approvalSurface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
+    const approvalRadius = getComputedStyle(approvalSurface).borderRadius;
+    expect(approvalSurface.querySelector('textarea')).toBeNull();
     await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="approval"] .flower-composer-approval-decision:not([disabled])') === document.activeElement);
-    (runtime.querySelector('.flower-composer-approval-decision:not([disabled])') as HTMLButtonElement).click();
+    const focusedDecision = document.activeElement as HTMLButtonElement;
+    const focusedDecisionStyle = getComputedStyle(focusedDecision);
+    expect(focusedDecisionStyle.boxShadow).toBe('none');
+    expect(focusedDecisionStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    focusedDecision.click();
     await waitFor(() => submitApproval.mock.calls.length === 1);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
     expect(runtime.querySelectorAll('[data-flower-bottom-mode]')).toHaveLength(1);
+    const chatRadius = getComputedStyle(runtime.querySelector('[data-flower-bottom-mode="chat"]') as HTMLElement).borderRadius;
+    expect(inputRadius).toBe(chatRadius);
+    expect(approvalRadius).toBe(chatRadius);
   });
 
   it('navigates multiple input questions without losing per-question answers', async () => {
