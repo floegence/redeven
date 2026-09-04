@@ -14,6 +14,8 @@ import { parseLaunchReport } from './launchReport';
 import {
   MANAGED_RUNTIME_DIRECTORY_MODE,
   MANAGED_RUNTIME_EXECUTABLE_MODE,
+  MANAGED_RUNTIME_COMPANION_FILENAMES,
+  MANAGED_RUNTIME_EVIDENCE_FILENAMES,
   MANAGED_RUNTIME_METADATA_MODE,
   MANAGED_RUNTIME_STAMP_FILENAME,
   MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
@@ -155,7 +157,13 @@ describe('reinstall Runtime package', () => {
     }
   });
 
-  it('installs the standard managed slot and preserves a historical Gateway directory', async () => {
+  it.each([
+    { platform: 'linux', architecture: 'amd64' },
+    { platform: 'darwin', architecture: 'arm64' },
+  ])('installs the standard $platform managed slot and preserves a historical Gateway directory', async ({
+    platform,
+    architecture,
+  }) => {
     const root = await tempRoot();
     const targetRoot = path.join(root, 'redeven');
     const placement = { kind: 'host_process' as const, runtime_root: targetRoot };
@@ -170,11 +178,11 @@ describe('reinstall Runtime package', () => {
         executor,
         placement,
         target_root: targetRoot,
-        operation_id: 'op-preserve',
+        operation_id: `op-preserve-${platform}`,
         release_tag: 'v1',
         commit: 'abc',
-        platform: 'linux',
-        architecture: 'amd64',
+        platform,
+        architecture,
         strategy: 'desktop_upload',
         archive,
         archive_sha256: createHash('sha256').update(archive).digest('hex'),
@@ -194,8 +202,13 @@ describe('reinstall Runtime package', () => {
       expect((await fs.stat(path.join(managedRoot, 'bin', 'redeven'))).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_EXECUTABLE_MODE, 8));
       expect((await fs.stat(path.join(managedRoot, 'bin', 'redevplugin-runtime'))).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_EXECUTABLE_MODE, 8));
       expect((await fs.stat(stampPath)).mode & 0o777).toBe(Number.parseInt(MANAGED_RUNTIME_METADATA_MODE, 8));
-      expect((await fs.stat(path.join(managedRoot, 'bin', 'redevplugin-runtime.provenance.json'))).mode & 0o777)
-        .toBe(Number.parseInt(MANAGED_RUNTIME_METADATA_MODE, 8));
+      await Promise.all(MANAGED_RUNTIME_COMPANION_FILENAMES.map(async (filename) => {
+        await expect(fs.stat(path.join(managedRoot, 'bin', filename))).resolves.toBeDefined();
+      }));
+      await Promise.all(MANAGED_RUNTIME_EVIDENCE_FILENAMES.map(async (filename) => {
+        expect((await fs.stat(path.join(managedRoot, 'bin', filename))).mode & 0o777)
+          .toBe(Number.parseInt(MANAGED_RUNTIME_METADATA_MODE, 8));
+      }));
       const normalProbe = await executor.run([
         'sh',
         '-c',

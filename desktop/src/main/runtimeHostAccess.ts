@@ -104,7 +104,7 @@ function wslGuestCommand(
   env: NodeJS.ProcessEnv | undefined,
 ): readonly string[] {
   const command = argv.map((part) => compact(part));
-  if (command.length === 0 || command.some((part) => part === '')) {
+  if (command.length === 0 || command[0] === '') {
     throw new Error('Runtime host command argv must be non-empty.');
   }
   const guestEnvironment = Object.entries(env ?? {})
@@ -238,7 +238,7 @@ function spawnCommand(
   options: RuntimeHostCommandOptions,
   failureContext: RuntimeHostFailureContext,
 ): Promise<RuntimeHostCommandResult> {
-  if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
+  if (compact(command) === '') {
     return Promise.reject(new Error('Runtime host command argv must be non-empty.'));
   }
   let prepared: SpawnPreparation;
@@ -318,7 +318,7 @@ function spawnStreamingCommand(
   options: RuntimeHostCommandOptions,
   failureContext: RuntimeHostFailureContext,
 ): RuntimeHostStreamingCommand {
-  if (compact(command) === '' || args.some((arg) => compact(arg) === '')) {
+  if (compact(command) === '') {
     throw new Error('Runtime host command argv must be non-empty.');
   }
   const prepared = prepareSpawnCommand(command, args, options);
