@@ -10,15 +10,12 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
 const serviceConfigurationSchemaVersion = 2
 
-// serviceConfiguration is the only persisted instance override document. The
-// template snapshot remains the immutable baseline; every lifecycle path must
-// resolve this document through effectiveSpecFromService before acting.
+// serviceConfiguration is the only persisted instance override document.
+// Runtime behavior is always resolved against the current template definition.
 type serviceConfiguration struct {
 	SchemaVersion           int                                  `json:"schema_version"`
 	Parameters              map[string]string                    `json:"parameters,omitempty"`
@@ -107,22 +104,7 @@ func canonicalServiceConfiguration(configuration serviceConfiguration) (string, 
 	return string(raw), hex.EncodeToString(digest[:]), nil
 }
 
-func effectiveSpecFromService(service *pfregistry.ManagedService) (TemplateSpec, serviceConfiguration, error) {
-	baseline, err := templateSpecFromService(service)
-	if err != nil {
-		return TemplateSpec{}, serviceConfiguration{}, err
-	}
-	configuration, err := decodeServiceConfiguration(service.ConfigurationJSON)
-	if err != nil {
-		return TemplateSpec{}, serviceConfiguration{}, err
-	}
-	encoded, digest, err := canonicalServiceConfiguration(configuration)
-	if err != nil {
-		return TemplateSpec{}, serviceConfiguration{}, err
-	}
-	if encoded != strings.TrimSpace(service.ConfigurationJSON) || digest != strings.TrimSpace(service.ConfigurationSHA256) {
-		return TemplateSpec{}, serviceConfiguration{}, serviceError("SERVICE_CONFIGURATION_IDENTITY_MISMATCH", "The managed-service configuration identity has changed.", 409, false, nil)
-	}
+func applyServiceConfiguration(baseline TemplateSpec, configuration serviceConfiguration, templateSource string) (TemplateSpec, error) {
 	if baseline.Container != nil {
 		normalizeContainerTemplateDefaults(baseline.Container)
 		if configuration.Container != nil {
@@ -134,13 +116,13 @@ func effectiveSpecFromService(service *pfregistry.ManagedService) (TemplateSpec,
 	}
 	if baseline.Compose != nil {
 		if err := applyComposeOverridesToSpec(&baseline, configuration.Compose); err != nil {
-			return TemplateSpec{}, serviceConfiguration{}, err
+			return TemplateSpec{}, err
 		}
 	}
-	if err := validateEffectiveSpec(baseline, service.TemplateSource); err != nil {
-		return TemplateSpec{}, serviceConfiguration{}, err
+	if err := validateEffectiveSpec(baseline, templateSource); err != nil {
+		return TemplateSpec{}, err
 	}
-	return baseline, configuration, nil
+	return baseline, nil
 }
 
 func normalizeContainerTemplateDefaults(spec *ContainerTemplateSpec) {

@@ -16,10 +16,10 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
 - [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.
-- [Managed Web Services](architecture/managed-web-services.md) - Operate generic Host, Container, and Compose snapshots with exact bindings and explicit failure recovery.
+- [Managed Web Services](architecture/managed-web-services.md) - Resolve current templates with fixed releases, exact bindings, applied Runtime digests, and explicit failure recovery.
 - [Managed Service operation progress](architecture/managed-service-operation-progress.md) - Persist and stream bounded, redacted command output without losing user-controlled disclosure state.
 - [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md) - Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
-- [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine immutable templates with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
+- [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine current template definitions with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.

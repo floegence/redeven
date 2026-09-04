@@ -42,7 +42,11 @@ func (d *composeTemplateDriver) RemoveRuntime(ctx context.Context, service *pfre
 	if strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return nil
 	}
-	if _, err := d.verifyProject(ctx, service); err != nil {
+	expectedImages, err := d.expectedImages(service)
+	if err != nil {
+		return err
+	}
+	if _, err := d.verifyOwnedProject(ctx, service, expectedImages); err != nil {
 		return err
 	}
 	return d.adapter.RemoveComposeDeployment(ctx, d.request(service), false)
@@ -74,12 +78,14 @@ func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker Compose is not available in this Environment.", 409, true, nil)
 	}
-	spec, configuration, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return "", "", err
 	}
+	resolved.applyTo(service)
+	spec, configuration := resolved.Spec, resolved.Configuration
 	if spec.Kind != DeploymentCompose || spec.Compose == nil {
-		return "", "", serviceError("TEMPLATE_SNAPSHOT_INVALID", "The service does not contain a Compose template snapshot.", 409, false, nil)
+		return "", "", serviceError("CURRENT_TEMPLATE_INVALID", "The current template is not a Compose deployment.", 409, false, nil)
 	}
 	progress("pulling", 2)
 	secrets, err := d.manager.serviceSecretDocument(service.ServiceID)
@@ -278,10 +284,12 @@ func (d *composeTemplateDriver) verifyIdentity(service *pfregistry.ManagedServic
 }
 
 func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfregistry.ManagedService) (containerengine.ComposeProjectDetails, error) {
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return containerengine.ComposeProjectDetails{}, err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	expectedImages, err := d.expectedImages(service)
 	if err != nil {
 		return containerengine.ComposeProjectDetails{}, err
@@ -528,7 +536,11 @@ func (d *composeTemplateDriver) Stop(ctx context.Context, service *pfregistry.Ma
 	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return nil
 	}
-	if _, err := d.verifyProject(ctx, service); err != nil {
+	expectedImages, err := d.expectedImages(service)
+	if err != nil {
+		return err
+	}
+	if _, err := d.verifyOwnedProject(ctx, service, expectedImages); err != nil {
 		return err
 	}
 	if err := d.adapter.StopComposeDeployment(ctx, d.request(service)); err != nil {

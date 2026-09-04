@@ -11,14 +11,15 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-const runtimeBindingSchemaVersion = 1
+const runtimeBindingSchemaVersion = 2
 
 type runtimeBinding struct {
-	SchemaVersion int                      `json:"schema_version"`
-	Deployment    Deployment               `json:"deployment"`
-	Host          *hostRuntimeBinding      `json:"host,omitempty"`
-	Container     *containerRuntimeBinding `json:"container,omitempty"`
-	Compose       *composeRuntimeBinding   `json:"compose,omitempty"`
+	SchemaVersion   int                      `json:"schema_version"`
+	ServiceFamilyID string                   `json:"service_family_id"`
+	Deployment      Deployment               `json:"deployment"`
+	Host            *hostRuntimeBinding      `json:"host,omitempty"`
+	Container       *containerRuntimeBinding `json:"container,omitempty"`
+	Compose         *composeRuntimeBinding   `json:"compose,omitempty"`
 }
 
 type hostRuntimeBinding struct {
@@ -37,7 +38,10 @@ type composeRuntimeBinding struct {
 }
 
 func newRuntimeBinding(serviceID, familyID string, deployment Deployment) (string, string, error) {
-	binding := runtimeBinding{SchemaVersion: runtimeBindingSchemaVersion, Deployment: deployment}
+	binding := runtimeBinding{SchemaVersion: runtimeBindingSchemaVersion, ServiceFamilyID: strings.TrimSpace(familyID), Deployment: deployment}
+	if binding.ServiceFamilyID == "" {
+		return "", "", serviceError("SERVICE_FAMILY_INVALID", "The managed Web Service family identity is invalid.", 400, false, nil)
+	}
 	switch deployment {
 	case DeploymentHost:
 		instanceRoot := path.Join("instances", serviceID)
@@ -77,13 +81,16 @@ func decodeRuntimeBinding(service *pfregistry.ManagedService) (*runtimeBinding, 
 	if err := decodeStrictJSON([]byte(raw), &binding); err != nil {
 		return nil, serviceError("RUNTIME_BINDING_INVALID", "The managed Runtime binding is invalid.", 409, false, err)
 	}
-	if binding.SchemaVersion != runtimeBindingSchemaVersion || binding.Deployment != Deployment(service.Deployment) {
-		return nil, serviceError("RUNTIME_BINDING_INVALID", "The managed Runtime binding does not match the service deployment.", 409, false, nil)
+	if binding.SchemaVersion != runtimeBindingSchemaVersion || strings.TrimSpace(binding.ServiceFamilyID) == "" {
+		return nil, serviceError("RUNTIME_BINDING_INVALID", "The managed Runtime binding ownership is invalid.", 409, false, nil)
 	}
 	switch binding.Deployment {
 	case DeploymentHost:
+		instanceRoot := path.Join("instances", service.ServiceID)
 		if binding.Host == nil || binding.Container != nil || binding.Compose != nil ||
-			!validBindingPath(binding.Host.InstallRoot) || !validBindingPath(binding.Host.DataRoot) || !validBindingPath(binding.Host.LogPath) {
+			binding.Host.InstallRoot != path.Join(instanceRoot, "install") ||
+			binding.Host.DataRoot != path.Join("families", binding.ServiceFamilyID, "data") ||
+			binding.Host.LogPath != path.Join(instanceRoot, "logs", "service.log") {
 			return nil, serviceError("RUNTIME_BINDING_INVALID", "The managed Host Runtime binding is invalid.", 409, false, nil)
 		}
 	case DeploymentContainer:
@@ -92,7 +99,8 @@ func decodeRuntimeBinding(service *pfregistry.ManagedService) (*runtimeBinding, 
 		}
 	case DeploymentCompose:
 		if binding.Host != nil || binding.Container != nil || binding.Compose == nil ||
-			binding.Compose.ProjectName != "redeven_"+resourceNameSuffix(service.ServiceID) || !validBindingPath(binding.Compose.ConfigRoot) {
+			binding.Compose.ProjectName != "redeven_"+resourceNameSuffix(service.ServiceID) ||
+			binding.Compose.ConfigRoot != path.Join("instances", service.ServiceID, "compose") {
 			return nil, serviceError("RUNTIME_BINDING_INVALID", "The managed Compose Runtime binding is invalid.", 409, false, nil)
 		}
 	default:
@@ -101,10 +109,11 @@ func decodeRuntimeBinding(service *pfregistry.ManagedService) (*runtimeBinding, 
 	return &binding, nil
 }
 
-func validBindingPath(value string) bool {
-	value = strings.TrimSpace(value)
-	clean := path.Clean(value)
-	return value != "" && value == clean && clean != "." && clean != ".." && !strings.HasPrefix(clean, "../") && !strings.HasPrefix(clean, "/")
+func validateRuntimeBindingTemplate(binding *runtimeBinding, template *Template) error {
+	if binding == nil || template == nil || binding.Deployment != template.Deployment || binding.ServiceFamilyID != template.ServiceFamilyID {
+		return serviceError("RUNTIME_TEMPLATE_INCOMPATIBLE", "The current template no longer matches this managed Web Service deployment.", 409, false, nil)
+	}
+	return nil
 }
 
 func (m *Manager) resolveBindingPath(value string) string {

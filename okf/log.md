@@ -1,5 +1,18 @@
 # Redeven OKF Update Log
 
+## 2026-09-04
+* **Current-template Managed Service Runtime**: Installed services now persist
+  only template ID, instance configuration, selected application release,
+  RuntimeBinding, workspace and resource state, and the digest of the Runtime
+  actually applied. Every lifecycle, settings, recovery, and Open path resolves
+  the current verified template through one typed boundary; presentation-only
+  or revision-only edits preserve the Runtime digest, while executable changes
+  become stale and rebuild through the ordinary explicit lifecycle. Open starts
+  or joins one Restart for a stale digest or missing dynamic Host URL. The
+  user-approved `portforward_registry_v2` version-1 pre-release baseline removes
+  installed snapshots and duplicated projections, rejects every v1 shape
+  read-only, and becomes the permanent migration lineage once distributed.
+
 ## 2026-09-03
 * **Coherent Flower permission controls**: The shared preference-editability
   projection now disables permission mutation while a thread is active, queued,

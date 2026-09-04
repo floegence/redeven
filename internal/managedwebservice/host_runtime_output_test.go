@@ -56,7 +56,7 @@ func TestHostDynamicOpenTargetPersistsPrivateRedactedSessionAndRecovers(t *testi
 	}
 	root := t.TempDir()
 	const token = "must-not-leak-token"
-	service := hostTestService(t, root, TemplateSpec{
+	manager, service := hostTestService(t, root, TemplateSpec{
 		SchemaVersion: templateSpecSchemaVersion,
 		Kind:          DeploymentHost,
 		Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 2},
@@ -65,7 +65,7 @@ func TestHostDynamicOpenTargetPersistsPrivateRedactedSessionAndRecovers(t *testi
 			StartScript: fmt.Sprintf("printf \"ready: http://127.0.0.1:$REDEVEN_SERVICE_PORT/app?token=%s\\n\"; exec sleep 60", token),
 		},
 	})
-	first := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	first := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	identity, err := first.Start(context.Background(), service)
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestHostDynamicOpenTargetPersistsPrivateRedactedSessionAndRecovers(t *testi
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	second := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	second := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	recovered, err := second.Start(context.Background(), service)
 	if err != nil || recovered != identity {
 		t.Fatalf("recovered identity = %q, err=%v, want %q", recovered, err, identity)
@@ -134,7 +134,7 @@ func TestHostDynamicOpenTargetRejectsInvalidOrMissingOutput(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
-			service := hostTestService(t, root, TemplateSpec{
+			manager, service := hostTestService(t, root, TemplateSpec{
 				SchemaVersion: templateSpecSchemaVersion,
 				Kind:          DeploymentHost,
 				Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 1},
@@ -142,7 +142,7 @@ func TestHostDynamicOpenTargetRejectsInvalidOrMissingOutput(t *testing.T) {
 					OpenTarget: &HostOpenTargetSpec{Mode: "startup_output_url", LinePrefix: "ready: "}, StartScript: test.script,
 				},
 			})
-			driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+			driver := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 			if _, err := driver.Start(context.Background(), service); managedErrorCode(err) != test.wantCode {
 				t.Fatalf("Start() error = %v, want code %s", err, test.wantCode)
 			}

@@ -46,34 +46,29 @@ type ManagedTemplateRequest struct {
 }
 
 type ManagedService struct {
-	ServiceID              string `json:"service_id"`
-	TemplateID             string `json:"template_id"`
-	TemplateSource         string `json:"template_source"`
-	TemplateRevision       int64  `json:"template_revision"`
-	TemplateSnapshotJSON   string `json:"-"`
-	TemplateSnapshotSHA256 string `json:"template_snapshot_sha256"`
-	ServiceFamilyID        string `json:"service_family_id"`
-	Deployment             string `json:"deployment"`
-	WorkspacePath          string `json:"workspace_path"`
-	WorkspaceOwnership     string `json:"workspace_ownership"`
-	ConfigurationJSON      string `json:"-"`
-	ConfigurationRevision  int64  `json:"configuration_revision"`
-	ConfigurationSHA256    string `json:"configuration_sha256"`
-	ReleaseIdentityJSON    string `json:"-"`
-	ReleaseIdentitySHA256  string `json:"release_identity_sha256"`
-	RuntimeBindingJSON     string `json:"-"`
-	RuntimeBindingSHA256   string `json:"runtime_binding_sha256"`
-	DesiredState           string `json:"desired_state"`
-	ObservedState          string `json:"observed_state"`
-	ForwardID              string `json:"forward_id"`
-	RuntimeIdentity        string `json:"runtime_identity,omitempty"`
-	RuntimeManifestJSON    string `json:"-"`
-	RuntimePort            int    `json:"runtime_port,omitempty"`
-	ArtifactReference      string `json:"artifact_reference,omitempty"`
-	LastErrorCode          string `json:"last_error_code,omitempty"`
-	LastErrorMessage       string `json:"last_error_message,omitempty"`
-	CreatedAtUnixMs        int64  `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs        int64  `json:"updated_at_unix_ms"`
+	ServiceID             string `json:"service_id"`
+	TemplateID            string `json:"template_id"`
+	WorkspacePath         string `json:"workspace_path"`
+	WorkspaceOwnership    string `json:"workspace_ownership"`
+	ConfigurationJSON     string `json:"-"`
+	ConfigurationRevision int64  `json:"configuration_revision"`
+	ConfigurationSHA256   string `json:"configuration_sha256"`
+	ReleaseIdentityJSON   string `json:"-"`
+	ReleaseIdentitySHA256 string `json:"release_identity_sha256"`
+	RuntimeBindingJSON    string `json:"-"`
+	RuntimeBindingSHA256  string `json:"runtime_binding_sha256"`
+	DesiredState          string `json:"desired_state"`
+	ObservedState         string `json:"observed_state"`
+	ForwardID             string `json:"forward_id"`
+	RuntimeIdentity       string `json:"runtime_identity,omitempty"`
+	RuntimeSpecSHA256     string `json:"runtime_spec_sha256,omitempty"`
+	RuntimeManifestJSON   string `json:"-"`
+	RuntimePort           int    `json:"runtime_port,omitempty"`
+	ArtifactReference     string `json:"artifact_reference,omitempty"`
+	LastErrorCode         string `json:"last_error_code,omitempty"`
+	LastErrorMessage      string `json:"last_error_message,omitempty"`
+	CreatedAtUnixMs       int64  `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs       int64  `json:"updated_at_unix_ms"`
 }
 
 type ManagedOperation struct {
@@ -243,26 +238,26 @@ func decodeManagedOperationProgressDetailVersion(raw string, schemaVersion int) 
 }
 
 type ManagedServicePatch struct {
-	TemplateRevision       *int64
-	TemplateSnapshotJSON   *string
-	TemplateSnapshotSHA256 *string
-	ConfigurationJSON      *string
-	ConfigurationRevision  *int64
-	ConfigurationSHA256    *string
-	ReleaseIdentityJSON    *string
-	ReleaseIdentitySHA256  *string
-	RuntimeBindingJSON     *string
-	RuntimeBindingSHA256   *string
-	WorkspaceOwnership     *string
-	DesiredState           *string
-	ObservedState          *string
-	RuntimeIdentity        *string
-	RuntimePort            *int
-	ArtifactReference      *string
-	RuntimeManifestJSON    *string
-	LastErrorCode          *string
-	LastErrorMessage       *string
+	ConfigurationJSON     *string
+	ConfigurationRevision *int64
+	ConfigurationSHA256   *string
+	ReleaseIdentityJSON   *string
+	ReleaseIdentitySHA256 *string
+	RuntimeBindingJSON    *string
+	RuntimeBindingSHA256  *string
+	WorkspaceOwnership    *string
+	DesiredState          *string
+	ObservedState         *string
+	RuntimeIdentity       *string
+	RuntimeSpecSHA256     *string
+	RuntimePort           *int
+	ArtifactReference     *string
+	RuntimeManifestJSON   *string
+	LastErrorCode         *string
+	LastErrorMessage      *string
 }
+
+const managedServiceSelectColumns = "service_id,template_id,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_spec_sha256,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms"
 
 type ManagedServiceResource struct {
 	ServiceID       string `json:"service_id"`
@@ -433,7 +428,7 @@ func (r *Registry) ListManagedServices(ctx context.Context) ([]ManagedService, e
 	if r == nil || r.db == nil {
 		return nil, errors.New("registry not initialized")
 	}
-	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
+	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT `+managedServiceSelectColumns+` FROM managed_web_services ORDER BY created_at_unix_ms ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +449,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 		return nil, errors.New("registry not initialized")
 	}
 	value := ManagedService{}
-	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
+	err := scanManagedService(r.db.QueryRowContext(nonNilContext(ctx), `SELECT `+managedServiceSelectColumns+` FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)), &value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -467,7 +462,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 type rowScanner interface{ Scan(dest ...any) error }
 
 func scanManagedService(row rowScanner, value *ManagedService) error {
-	return row.Scan(&value.ServiceID, &value.TemplateID, &value.TemplateSource, &value.TemplateRevision, &value.TemplateSnapshotJSON, &value.TemplateSnapshotSHA256, &value.ServiceFamilyID, &value.Deployment, &value.WorkspacePath, &value.WorkspaceOwnership, &value.ConfigurationJSON, &value.ConfigurationRevision, &value.ConfigurationSHA256, &value.ReleaseIdentityJSON, &value.ReleaseIdentitySHA256, &value.RuntimeBindingJSON, &value.RuntimeBindingSHA256, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
+	return row.Scan(&value.ServiceID, &value.TemplateID, &value.WorkspacePath, &value.WorkspaceOwnership, &value.ConfigurationJSON, &value.ConfigurationRevision, &value.ConfigurationSHA256, &value.ReleaseIdentityJSON, &value.ReleaseIdentitySHA256, &value.RuntimeBindingJSON, &value.RuntimeBindingSHA256, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeSpecSHA256, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
 }
 
 func (r *Registry) CreateManagedService(ctx context.Context, service ManagedService, forward Forward) error {
@@ -550,7 +545,7 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 	if _, err = tx.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,description,health_path,insecure_skip_verify,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms,access_mode) VALUES(?,?,?,?,?,?,?,?,?,?)`, forward.ForwardID, forward.TargetURL, forward.Name, forward.Description, forward.HealthPath, boolToInt(forward.InsecureSkipVerify), forward.CreatedAtUnixMs, forward.UpdatedAtUnixMs, forward.LastOpenedAtUnixMs, forward.AccessMode); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,template_source,template_revision,template_snapshot_json,template_snapshot_sha256,service_family_id,deployment,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.TemplateSource, service.TemplateRevision, service.TemplateSnapshotJSON, service.TemplateSnapshotSHA256, service.ServiceFamilyID, service.Deployment, service.WorkspacePath, service.WorkspaceOwnership, service.ConfigurationJSON, service.ConfigurationRevision, service.ConfigurationSHA256, service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256, service.RuntimeBindingJSON, service.RuntimeBindingSHA256, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs); err != nil {
+	if _, err = tx.Exec(`INSERT INTO managed_web_services(service_id,template_id,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_spec_sha256,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, service.ServiceID, service.TemplateID, service.WorkspacePath, service.WorkspaceOwnership, service.ConfigurationJSON, service.ConfigurationRevision, service.ConfigurationSHA256, service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256, service.RuntimeBindingJSON, service.RuntimeBindingSHA256, service.DesiredState, service.ObservedState, service.ForwardID, service.RuntimeIdentity, service.RuntimeSpecSHA256, service.RuntimeManifestJSON, service.RuntimePort, service.ArtifactReference, service.LastErrorCode, service.LastErrorMessage, service.CreatedAtUnixMs, service.UpdatedAtUnixMs); err != nil {
 		return err
 	}
 	if operation != nil {
@@ -567,15 +562,6 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 	}
 	sets, args := []string{}, []any{}
 	add := func(column string, value any) { sets = append(sets, column+" = ?"); args = append(args, value) }
-	if patch.TemplateRevision != nil {
-		add("template_revision", *patch.TemplateRevision)
-	}
-	if patch.TemplateSnapshotJSON != nil {
-		add("template_snapshot_json", strings.TrimSpace(*patch.TemplateSnapshotJSON))
-	}
-	if patch.TemplateSnapshotSHA256 != nil {
-		add("template_snapshot_sha256", strings.TrimSpace(*patch.TemplateSnapshotSHA256))
-	}
 	if patch.ConfigurationJSON != nil {
 		add("configuration_json", strings.TrimSpace(*patch.ConfigurationJSON))
 	}
@@ -608,6 +594,9 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 	}
 	if patch.RuntimeIdentity != nil {
 		add("runtime_identity", strings.TrimSpace(*patch.RuntimeIdentity))
+	}
+	if patch.RuntimeSpecSHA256 != nil {
+		add("runtime_spec_sha256", strings.TrimSpace(*patch.RuntimeSpecSHA256))
 	}
 	if patch.RuntimePort != nil {
 		add("runtime_port", *patch.RuntimePort)
@@ -675,7 +664,7 @@ func (r *Registry) UpdateManagedServiceConfiguration(ctx context.Context, servic
 	return nextRevision, nil
 }
 
-func (r *Registry) CommitManagedServiceReconfiguration(ctx context.Context, serviceID string, expectedRevision int64, configurationJSON, configurationSHA256, runtimeIdentity, artifactReference, runtimeManifestJSON string) (int64, error) {
+func (r *Registry) CommitManagedServiceReconfiguration(ctx context.Context, serviceID string, expectedRevision int64, configurationJSON, configurationSHA256, runtimeIdentity, runtimeSpecSHA256, artifactReference, runtimeManifestJSON string) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, errors.New("registry not initialized")
 	}
@@ -684,7 +673,7 @@ func (r *Registry) CommitManagedServiceReconfiguration(ctx context.Context, serv
 	}
 	nextRevision := expectedRevision + 1
 	blank := ""
-	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_services SET configuration_json=?,configuration_revision=?,configuration_sha256=?,runtime_identity=?,artifact_reference=?,runtime_manifest_json=?,last_error_code=?,last_error_message=?,updated_at_unix_ms=? WHERE service_id=? AND configuration_revision=?`, strings.TrimSpace(configurationJSON), nextRevision, strings.TrimSpace(configurationSHA256), strings.TrimSpace(runtimeIdentity), strings.TrimSpace(artifactReference), strings.TrimSpace(runtimeManifestJSON), blank, blank, time.Now().UnixMilli(), strings.TrimSpace(serviceID), expectedRevision)
+	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_services SET configuration_json=?,configuration_revision=?,configuration_sha256=?,runtime_identity=?,runtime_spec_sha256=?,artifact_reference=?,runtime_manifest_json=?,last_error_code=?,last_error_message=?,updated_at_unix_ms=? WHERE service_id=? AND configuration_revision=?`, strings.TrimSpace(configurationJSON), nextRevision, strings.TrimSpace(configurationSHA256), strings.TrimSpace(runtimeIdentity), strings.TrimSpace(runtimeSpecSHA256), strings.TrimSpace(artifactReference), strings.TrimSpace(runtimeManifestJSON), blank, blank, time.Now().UnixMilli(), strings.TrimSpace(serviceID), expectedRevision)
 	if err != nil {
 		return 0, err
 	}
@@ -995,15 +984,6 @@ func (r *Registry) FinalizeManagedOperation(ctx context.Context, op ManagedOpera
 	}
 	sets, args := []string{}, []any{}
 	add := func(column string, value any) { sets = append(sets, column+" = ?"); args = append(args, value) }
-	if patch.TemplateRevision != nil {
-		add("template_revision", *patch.TemplateRevision)
-	}
-	if patch.TemplateSnapshotJSON != nil {
-		add("template_snapshot_json", strings.TrimSpace(*patch.TemplateSnapshotJSON))
-	}
-	if patch.TemplateSnapshotSHA256 != nil {
-		add("template_snapshot_sha256", strings.TrimSpace(*patch.TemplateSnapshotSHA256))
-	}
 	if patch.ReleaseIdentityJSON != nil {
 		add("release_identity_json", strings.TrimSpace(*patch.ReleaseIdentityJSON))
 	}
@@ -1027,6 +1007,9 @@ func (r *Registry) FinalizeManagedOperation(ctx context.Context, op ManagedOpera
 	}
 	if patch.RuntimeIdentity != nil {
 		add("runtime_identity", strings.TrimSpace(*patch.RuntimeIdentity))
+	}
+	if patch.RuntimeSpecSHA256 != nil {
+		add("runtime_spec_sha256", strings.TrimSpace(*patch.RuntimeSpecSHA256))
 	}
 	if patch.RuntimeManifestJSON != nil {
 		add("runtime_manifest_json", strings.TrimSpace(*patch.RuntimeManifestJSON))

@@ -354,19 +354,17 @@ type ReleaseCandidateResult struct {
 }
 
 type ReleaseStatus struct {
-	SchemaVersion             int              `json:"schema_version"`
-	CurrentRelease            *ReleaseIdentity `json:"current_release,omitempty"`
-	RecommendedRelease        *ReleaseIdentity `json:"recommended_release,omitempty"`
-	LatestStableRelease       *ReleaseIdentity `json:"latest_stable_release,omitempty"`
-	LatestPreviewRelease      *ReleaseIdentity `json:"latest_preview_release,omitempty"`
-	LatestStableRelation      string           `json:"latest_stable_relation,omitempty"`
-	LatestPreviewRelation     string           `json:"latest_preview_relation,omitempty"`
-	CheckStatus               string           `json:"check_status"`
-	CheckedAtUnixMs           int64            `json:"checked_at_unix_ms,omitempty"`
-	NextCheckAtUnixMs         int64            `json:"next_check_at_unix_ms,omitempty"`
-	LastErrorCode             string           `json:"last_error_code,omitempty"`
-	CurrentTemplateRevision   int64            `json:"current_template_revision"`
-	AvailableTemplateRevision int64            `json:"available_template_revision,omitempty"`
+	SchemaVersion         int              `json:"schema_version"`
+	CurrentRelease        *ReleaseIdentity `json:"current_release,omitempty"`
+	RecommendedRelease    *ReleaseIdentity `json:"recommended_release,omitempty"`
+	LatestStableRelease   *ReleaseIdentity `json:"latest_stable_release,omitempty"`
+	LatestPreviewRelease  *ReleaseIdentity `json:"latest_preview_release,omitempty"`
+	LatestStableRelation  string           `json:"latest_stable_relation,omitempty"`
+	LatestPreviewRelation string           `json:"latest_preview_relation,omitempty"`
+	CheckStatus           string           `json:"check_status"`
+	CheckedAtUnixMs       int64            `json:"checked_at_unix_ms,omitempty"`
+	NextCheckAtUnixMs     int64            `json:"next_check_at_unix_ms,omitempty"`
+	LastErrorCode         string           `json:"last_error_code,omitempty"`
 }
 
 type UpdatePlanRequest struct {
@@ -374,16 +372,14 @@ type UpdatePlanRequest struct {
 }
 
 type UpdatePlan struct {
-	SchemaVersion           int              `json:"schema_version"`
-	UpdatePlanID            string           `json:"update_plan_id"`
-	CurrentRelease          ReleaseIdentity  `json:"current_release"`
-	TargetRelease           ReleaseIdentity  `json:"target_release"`
-	CurrentTemplateRevision int64            `json:"current_template_revision"`
-	TargetTemplateRevision  int64            `json:"target_template_revision"`
-	Notices                 []TemplateNotice `json:"notices,omitempty"`
-	RiskIDs                 []string         `json:"risk_ids,omitempty"`
-	RequiresStopped         bool             `json:"requires_stopped,omitempty"`
-	ExpiresAtUnixMs         int64            `json:"expires_at_unix_ms"`
+	SchemaVersion   int              `json:"schema_version"`
+	UpdatePlanID    string           `json:"update_plan_id"`
+	CurrentRelease  ReleaseIdentity  `json:"current_release"`
+	TargetRelease   ReleaseIdentity  `json:"target_release"`
+	Notices         []TemplateNotice `json:"notices,omitempty"`
+	RiskIDs         []string         `json:"risk_ids,omitempty"`
+	RequiresStopped bool             `json:"requires_stopped,omitempty"`
+	ExpiresAtUnixMs int64            `json:"expires_at_unix_ms"`
 }
 
 type ServiceMetadataPatch struct {
@@ -495,6 +491,8 @@ type ServiceView struct {
 	pfregistry.ManagedService
 	Name               string                          `json:"name"`
 	Description        string                          `json:"description,omitempty"`
+	TemplateSource     string                          `json:"template_source"`
+	Deployment         Deployment                      `json:"deployment"`
 	Localizations      map[string]TemplateLocalization `json:"localizations,omitempty"`
 	Icon               *TemplateIcon                   `json:"icon,omitempty"`
 	ReleaseStatus      ReleaseStatus                   `json:"release_status"`
@@ -539,9 +537,15 @@ type LogResult struct {
 	Lines []string `json:"lines"`
 }
 
+type OpenSessionRequest struct {
+	RequestID string `json:"request_id"`
+}
+
 type OpenSession struct {
-	Forward pfregistry.Forward `json:"forward"`
-	AppPath string             `json:"app_path"`
+	State     string                       `json:"state"`
+	Forward   *pfregistry.Forward          `json:"forward,omitempty"`
+	AppPath   string                       `json:"app_path,omitempty"`
+	Operation *pfregistry.ManagedOperation `json:"operation,omitempty"`
 }
 
 type Error struct {
@@ -601,5 +605,5 @@ type Backend interface {
 	Operation(context.Context, string) (*pfregistry.ManagedOperation, error)
 	Subscribe(string) (<-chan pfregistry.ManagedOperation, func(), error)
 	Logs(context.Context, string, int) (*LogResult, error)
-	OpenSession(context.Context, string) (*OpenSession, error)
+	OpenSession(context.Context, string, OpenSessionRequest) (*OpenSession, error)
 }

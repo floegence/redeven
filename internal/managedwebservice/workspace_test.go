@@ -2,8 +2,6 @@ package managedwebservice
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -74,23 +72,51 @@ func newWorkspaceTestManager(t *testing.T) (*Manager, *pfregistry.Registry, stri
 
 func persistWorkspaceTestService(t *testing.T, registry *pfregistry.Registry, serviceID, workspace, ownership string) pfregistry.ManagedService {
 	t.Helper()
-	snapshot := `{"schema_version":4,"kind":"host","endpoint":{"scheme":"http"},"host":{"start_script":"true"}}`
+	templateID := "template-" + serviceID
+	familyID := "family-" + serviceID
+	spec := TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost,
+		Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{StartScript: "true"},
+	}
+	specJSON, specDigest, err := canonicalTemplateSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.CreateManagedTemplate(context.Background(), pfregistry.ManagedTemplate{
+		TemplateID: templateID, Name: "Workspace " + serviceID, Source: "custom", Deployment: string(DeploymentHost), Revision: 1,
+		SpecJSON: specJSON, SpecSHA256: specDigest, ServiceFamilyID: familyID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	configuration := newServiceConfiguration(nil, nil)
+	configurationJSON, configurationDigest, err := canonicalServiceConfiguration(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release := ReleaseIdentity{SchemaVersion: 1, Kind: "none"}
+	releaseJSON, releaseDigest, err := canonicalReleaseIdentity(release)
+	if err != nil {
+		t.Fatal(err)
+	}
 	service := pfregistry.ManagedService{
-		ServiceID: serviceID, TemplateID: "template-" + serviceID, TemplateSource: "custom", TemplateRevision: 1,
-		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: workspaceTestDigest(snapshot), ServiceFamilyID: "family-" + serviceID,
-		Deployment: string(DeploymentHost), WorkspacePath: workspace, WorkspaceOwnership: ownership,
+		ServiceID: serviceID, TemplateID: templateID, WorkspacePath: workspace, WorkspaceOwnership: ownership,
+		ConfigurationJSON: configurationJSON, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
+		ReleaseIdentityJSON: releaseJSON, ReleaseIdentitySHA256: releaseDigest,
 		DesiredState: "stopped", ObservedState: "installing", ForwardID: "pf-" + serviceID, RuntimeManifestJSON: "{}", RuntimePort: 3080,
 	}
-	setTestRuntimeBinding(t, &service)
+	setTestRuntimeBinding(t, &service, familyID, DeploymentHost)
+	binding, err := decodeRuntimeBinding(&service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.RuntimeSpecSHA256, err = currentRuntimeSpecDigest(spec, configuration, release, *binding, serviceSecrets{SchemaVersion: serviceConfigurationSchemaVersion}, &service)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}); err != nil {
 		t.Fatal(err)
 	}
 	return service
-}
-
-func workspaceTestDigest(raw string) string {
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:])
 }
 
 func TestResolveInstallWorkspaceKeepsInvalidRequestStatus(t *testing.T) {

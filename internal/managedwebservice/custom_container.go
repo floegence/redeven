@@ -50,12 +50,14 @@ func (d *containerTemplateDriver) Install(ctx context.Context, service *pfregist
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker is not available in this Environment.", 409, true, nil)
 	}
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return "", "", err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	if spec.Kind != DeploymentContainer || spec.Container == nil {
-		return "", "", serviceError("TEMPLATE_SNAPSHOT_INVALID", "The service does not contain a single-container template snapshot.", 409, false, nil)
+		return "", "", serviceError("CURRENT_TEMPLATE_INVALID", "The current template is not a single-container deployment.", 409, false, nil)
 	}
 	if strings.TrimSpace(service.RuntimeIdentity) != "" {
 		if err := d.removeExactContainer(ctx, service); err != nil {
@@ -341,7 +343,11 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 			if resourceID == "" {
 				return nil, serviceError("TEMPLATE_RESOURCE_ID_INVALID", "A managed volume must declare a stable resource identity.", 400, false, nil)
 			}
-			name := fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(service.ServiceFamilyID), resourceNameSuffix(resourceID))
+			binding, err := decodeRuntimeBinding(service)
+			if err != nil {
+				return nil, err
+			}
+			name := fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(binding.ServiceFamilyID), resourceNameSuffix(resourceID))
 			identity, ok := volumeByResourceID[resourceID]
 			if ok {
 				name = identity.Name
@@ -412,7 +418,11 @@ func (d *containerTemplateDriver) containerMountsForPreflight(ctx context.Contex
 		case "volume":
 			name := volumeNames[mount.ResourceID]
 			if name == "" {
-				name = fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(service.ServiceFamilyID), resourceNameSuffix(mount.ResourceID))
+				binding, err := decodeRuntimeBinding(service)
+				if err != nil {
+					return nil, err
+				}
+				name = fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(binding.ServiceFamilyID), resourceNameSuffix(mount.ResourceID))
 			}
 			result = append(result, containerengine.ContainerMount{Type: containerengine.MountTypeVolume, Source: name, Target: mount.Target, ReadOnly: mount.ReadOnly})
 		default:
@@ -589,10 +599,12 @@ func privateNamespaceMode(value string) bool {
 }
 
 func (d *containerTemplateDriver) Start(ctx context.Context, service *pfregistry.ManagedService) (string, error) {
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return "", err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
 		return "", err
 	}
@@ -614,32 +626,16 @@ func (d *containerTemplateDriver) Stop(ctx context.Context, service *pfregistry.
 	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return nil
 	}
-	spec, _, err := effectiveSpecFromService(service)
-	if err != nil {
-		return err
-	}
-	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
-		return err
-	}
-	response, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
-	if err != nil {
-		return err
-	}
-	if response.Container.State != containerengine.ContainerStateRunning && response.Container.State != containerengine.ContainerStateRestarting && response.Container.State != containerengine.ContainerStatePaused {
-		return nil
-	}
-	stopped, err := d.adapter.Stop(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity, TimeoutSec: 10})
-	if err != nil || !stopped.Completed || stopped.ContainerID != service.RuntimeIdentity {
-		return serviceError("STOP_FAILED", "The exact managed template container could not be stopped.", 502, true, err)
-	}
-	return nil
+	_, err := d.stopOwnedContainer(ctx, service)
+	return err
 }
 
 func (d *containerTemplateDriver) removeExactContainer(ctx context.Context, service *pfregistry.ManagedService) error {
 	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return nil
 	}
-	if err := d.Stop(ctx, service); err != nil {
+	exists, err := d.stopOwnedContainer(ctx, service)
+	if err != nil || !exists {
 		return err
 	}
 	removed, err := d.adapter.Remove(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
@@ -693,10 +689,12 @@ func (d *containerTemplateDriver) CleanupPartial(ctx context.Context, service *p
 }
 
 func (d *containerTemplateDriver) Logs(ctx context.Context, service *pfregistry.ManagedService, tail int) (*LogResult, error) {
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
 	}
+	resolved.applyTo(service)
+	spec := resolved.Spec
 	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
 		return nil, err
 	}

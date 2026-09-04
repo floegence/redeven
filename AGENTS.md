@@ -414,6 +414,21 @@ Rules:
   not reset the kind, raise the minimum version, delete a required migration, or
   claim pre-launch status to avoid upgrading an already distributed database.
 
+- The `portforward_registry_v2` schema version 1 is a user-approved, one-time
+  pre-release baseline reset for current-template Managed Service resolution.
+  Redeven had not been released or distributed with the discarded
+  `portforward_registry_v1` lineage, so every v1 version and any other discarded
+  kind, unknown kind, future version, or schema drift must be rejected read-only
+  and left byte-for-byte unchanged instead of being migrated or repaired.
+- Once `portforward_registry_v2` is merged and released or distributed, it is
+  the permanent Port Forward Registry lineage. Every version 2 and later change
+  must retain the same database kind, append every contiguous `n -> n+1`
+  automatic migration, verify the exact reviewed source and target shape at
+  each edge, and commit schema, data, version metadata, and final verification
+  atomically. A later change must not reset the kind, raise the minimum version,
+  delete a required migration, or claim pre-release status to avoid upgrading
+  an already distributed database.
+
 - Redeven-owned persistent database schemas must migrate automatically during
   application startup, before the service that uses them accepts requests. An
   upgrade must not require users to delete state, run a manual SQL command, or

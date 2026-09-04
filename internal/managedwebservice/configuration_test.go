@@ -5,25 +5,7 @@ import (
 	"testing"
 
 	"github.com/floegence/redeven/internal/containerengine"
-	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
-
-func configuredServiceForTest(t *testing.T, spec TemplateSpec, configuration serviceConfiguration, source string) *pfregistry.ManagedService {
-	t.Helper()
-	snapshot, snapshotDigest, err := canonicalTemplateSpec(spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, configurationDigest, err := canonicalServiceConfiguration(configuration)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &pfregistry.ManagedService{
-		ServiceID: "mws_config", TemplateID: "template", TemplateSource: source, TemplateRevision: 1,
-		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: snapshotDigest, ServiceFamilyID: "family",
-		Deployment: string(spec.Kind), ConfigurationJSON: encoded, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
-	}
-}
 
 func TestEffectiveSpecAppliesOneTypedInstanceOverride(t *testing.T) {
 	t.Parallel()
@@ -40,9 +22,7 @@ func TestEffectiveSpecAppliesOneTypedInstanceOverride(t *testing.T) {
 	cpus := 1.5
 	configuration := newServiceConfiguration(nil, nil)
 	configuration.Container = &containerSettingsOverride{Command: &command, Environment: &environment, CPUs: &cpus}
-	service := configuredServiceForTest(t, spec, configuration, "custom")
-
-	effective, decoded, err := effectiveSpecFromService(service)
+	effective, err := applyServiceConfiguration(spec, configuration, "custom")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,8 +32,8 @@ func TestEffectiveSpecAppliesOneTypedInstanceOverride(t *testing.T) {
 	if effective.Container.PIDsLimit != 512 || !effective.Container.ReadOnlyRoot || !sameStrings(effective.Container.CapDrop, []string{"ALL"}) {
 		t.Fatalf("normalized security defaults = %+v", effective.Container)
 	}
-	if decoded.Container == nil || decoded.Container.CPUs == nil {
-		t.Fatalf("decoded override = %+v", decoded)
+	if configuration.Container == nil || configuration.Container.CPUs == nil {
+		t.Fatalf("typed override = %+v", configuration)
 	}
 }
 
@@ -64,8 +44,7 @@ func TestComposeEffectiveSpecNormalizesEveryServiceWithoutAnOverride(t *testing.
 		Endpoint: WebEndpointSpec{Scheme: "http", ContainerPort: 3000},
 		Compose:  &ComposeTemplateSpec{MainService: "web", YAML: "services:\n  web:\n    image: example.invalid/app@sha256:" + strings.Repeat("b", 64) + "\n    volumes:\n      - data:/data\n"},
 	}
-	service := configuredServiceForTest(t, spec, newServiceConfiguration(nil, nil), "custom")
-	effective, _, err := effectiveSpecFromService(service)
+	effective, err := applyServiceConfiguration(spec, newServiceConfiguration(nil, nil), "custom")
 	if err != nil {
 		t.Fatal(err)
 	}

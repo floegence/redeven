@@ -205,7 +205,7 @@ func TestManagedOpenSessionRequiresExecutionAndKeepsPrivatePathOutOfAudit(t *tes
 	backend := &managedBackendStub{}
 	channelID := "ch_managed_open"
 	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
-	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_private/open-session", nil)
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_private/open-session", strings.NewReader(`{"request_id":"request-open-read"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response := httptest.NewRecorder()
 	readServer.handleManagedWebServicesAPI(response, request)
@@ -218,11 +218,11 @@ func TestManagedOpenSessionRequiresExecutionAndKeepsPrivatePathOutOfAudit(t *tes
 		t.Fatal(err)
 	}
 	fullServer := &Server{managed: backend, audit: auditStore, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_private/open-session", nil)
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_private/open-session", strings.NewReader(`{"request_id":"request-open-private"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	fullServer.handleManagedWebServicesAPI(response, request)
-	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || backend.openSessionCalls != 1 {
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" || backend.openSessionCalls != 1 || backend.lastOpenRequest.RequestID != "request-open-private" {
 		t.Fatalf("open response status=%d cache=%q calls=%d body=%s", response.Code, response.Header().Get("Cache-Control"), backend.openSessionCalls, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), `"app_path":"/session?token=secret"`) {
@@ -243,6 +243,36 @@ func TestManagedOpenSessionRequiresExecutionAndKeepsPrivatePathOutOfAudit(t *tes
 	}
 	if entries[0].Action != "managed_web_service_open" || entries[0].Detail["service_id"] != "mws_private" || entries[0].Detail["forward_id"] != "pf_mws_private" {
 		t.Fatalf("open audit = %+v", entries[0])
+	}
+}
+
+func TestManagedOpenSessionReturnsPreparingOperationWithoutPrivateTarget(t *testing.T) {
+	t.Parallel()
+	backend := &managedBackendStub{openSession: &managedwebservice.OpenSession{
+		State: "preparing",
+		Operation: &pfregistry.ManagedOperation{
+			OperationID: "mop_prepare_open", ServiceID: "mws_private", Action: string(managedwebservice.ActionRestart), State: "pending",
+		},
+	}}
+	channelID := "ch_managed_open_preparing"
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{managed: backend, audit: auditStore, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_private/open-session", strings.NewReader(`{"request_id":"request-prepare-open"}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response := httptest.NewRecorder()
+	server.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusAccepted || backend.openSessionCalls != 1 || backend.lastOpenRequest.RequestID != "request-prepare-open" {
+		t.Fatalf("preparing response status=%d calls=%d request=%+v body=%s", response.Code, backend.openSessionCalls, backend.lastOpenRequest, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"state":"preparing"`) || !strings.Contains(response.Body.String(), `"operation_id":"mop_prepare_open"`) || strings.Contains(response.Body.String(), "app_path") || strings.Contains(response.Body.String(), "forward") {
+		t.Fatalf("unexpected preparing response: %s", response.Body.String())
+	}
+	entries, err := auditStore.List(10)
+	if err != nil || len(entries) != 1 || entries[0].Detail["operation_id"] != "mop_prepare_open" || entries[0].Detail["state"] != "preparing" {
+		t.Fatalf("preparing audit entries=%+v err=%v", entries, err)
 	}
 }
 
@@ -290,6 +320,8 @@ type managedBackendStub struct {
 	lastReleaseRequest    managedwebservice.ReleaseCandidateRequest
 	lastUpdatePlanRequest managedwebservice.UpdatePlanRequest
 	openSessionCalls      int
+	lastOpenRequest       managedwebservice.OpenSessionRequest
+	openSession           *managedwebservice.OpenSession
 }
 
 func (b *managedBackendStub) Catalog(context.Context) ([]managedwebservice.Template, error) {
@@ -375,9 +407,13 @@ func (b *managedBackendStub) Subscribe(string) (<-chan pfregistry.ManagedOperati
 func (b *managedBackendStub) Logs(context.Context, string, int) (*managedwebservice.LogResult, error) {
 	return &managedwebservice.LogResult{}, nil
 }
-func (b *managedBackendStub) OpenSession(_ context.Context, serviceID string) (*managedwebservice.OpenSession, error) {
+func (b *managedBackendStub) OpenSession(_ context.Context, serviceID string, request managedwebservice.OpenSessionRequest) (*managedwebservice.OpenSession, error) {
 	b.openSessionCalls++
-	return &managedwebservice.OpenSession{Forward: pfregistry.Forward{ForwardID: "pf_" + serviceID}, AppPath: "/session?token=secret"}, nil
+	b.lastOpenRequest = request
+	if b.openSession != nil {
+		return b.openSession, nil
+	}
+	return &managedwebservice.OpenSession{State: "ready", Forward: &pfregistry.Forward{ForwardID: "pf_" + serviceID}, AppPath: "/session?token=secret"}, nil
 }
 
 func managedwebserviceTestError(code string, status int) error {

@@ -20,10 +20,12 @@ func (m *Manager) Settings(ctx context.Context, serviceID string) (*ServiceSetti
 	if err != nil {
 		return nil, err
 	}
-	spec, configuration, err := effectiveSpecFromService(service)
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
 	}
+	resolved.applyTo(service)
+	spec, configuration := resolved.Spec, resolved.Configuration
 	secrets, err := m.serviceSecretDocument(service.ServiceID)
 	if err != nil {
 		return nil, err
@@ -34,7 +36,7 @@ func (m *Manager) Settings(ctx context.Context, serviceID string) (*ServiceSetti
 	}
 	view := &ServiceSettingsView{
 		ServiceID: service.ServiceID, Name: forward.Name, Description: forward.Description, AccessMode: forward.AccessMode,
-		Deployment: Deployment(service.Deployment), TemplateSource: service.TemplateSource, ObservedState: service.ObservedState,
+		Deployment: resolved.Template.Deployment, TemplateSource: resolved.Template.Source, ObservedState: service.ObservedState,
 		ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
 		Parameters: cloneStringMap(configuration.Parameters),
 	}
@@ -53,7 +55,7 @@ func (m *Manager) Settings(ctx context.Context, serviceID string) (*ServiceSetti
 		}
 		view.Runtime.Compose = settings
 	}
-	view.Locked = lockedSettings(*service, spec)
+	view.Locked = lockedSettings(resolved.Template.Source, spec)
 	return view, nil
 }
 
@@ -82,10 +84,11 @@ func (m *Manager) UpdateSettings(ctx context.Context, serviceID string, patch Se
 	if mode != pfregistry.AccessModeUnifiedProxy && mode != pfregistry.AccessModeDesktopLoopback {
 		return nil, serviceError("ACCESS_MODE_INVALID", "The Web Service access mode is invalid.", 400, false, nil)
 	}
-	spec, _, err := effectiveSpecFromService(service)
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
 	}
+	spec := resolved.Spec
 	if mode == pfregistry.AccessModeDesktopLoopback && spec.Endpoint.Scheme != "http" {
 		return nil, serviceError("ACCESS_MODE_UNAVAILABLE", "Desktop local compatibility requires an HTTP service.", 409, false, nil)
 	}
@@ -139,10 +142,11 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 	if draft.ConfigurationRevision != service.ConfigurationRevision {
 		return reconfigureCandidate{}, serviceError("CONFIGURATION_REVISION_CONFLICT", "Service settings changed after this drawer was opened. Reload the latest settings.", 409, true, nil)
 	}
-	baseline, err := templateSpecFromService(service)
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return reconfigureCandidate{}, err
 	}
+	baseline := cloneTemplateSpec(resolved.BaseSpec)
 	if baseline.Container != nil {
 		normalizeContainerTemplateDefaults(baseline.Container)
 	}
@@ -160,7 +164,7 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		secretDocument.Environment = map[string]string{}
 	}
 	changed := []string{}
-	switch Deployment(service.Deployment) {
+	switch resolved.Template.Deployment {
 	case DeploymentContainer:
 		if baseline.Container == nil || draft.Runtime.Container == nil {
 			return reconfigureCandidate{}, serviceError("CONTAINER_CONFIGURATION_REQUIRED", "Container settings are required for this service.", 400, false, nil)
@@ -180,7 +184,7 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		if baseline.Host == nil || draft.Runtime.Host == nil {
 			return reconfigureCandidate{}, serviceError("HOST_CONFIGURATION_REQUIRED", "Host lifecycle settings are required for this service.", 400, false, nil)
 		}
-		if service.TemplateSource == "builtin" {
+		if resolved.Template.Source == "builtin" {
 			return reconfigureCandidate{}, serviceError("BUILTIN_LIFECYCLE_LOCKED", "Duplicate this built-in template before editing lifecycle scripts.", 409, false, nil)
 		}
 		override := diffHostSettings(*baseline.Host, *draft.Runtime.Host)
@@ -202,9 +206,7 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 	if err != nil {
 		return reconfigureCandidate{}, err
 	}
-	candidateService := *service
-	candidateService.ConfigurationJSON, candidateService.ConfigurationSHA256 = encoded, digest
-	spec, _, err := effectiveSpecFromService(&candidateService)
+	spec, err := applyServiceConfiguration(cloneTemplateSpec(baseline), configuration, resolved.Template.Source)
 	if err != nil {
 		return reconfigureCandidate{}, err
 	}
@@ -213,8 +215,8 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		return reconfigureCandidate{}, err
 	}
 	secretHash := sha256.Sum256(secretRaw)
-	risks := reconfigureRisks(baseline, spec, service.TemplateSource)
-	if service.TemplateSource == "builtin" {
+	risks := reconfigureRisks(baseline, spec, resolved.Template.Source)
+	if resolved.Template.Source == "builtin" {
 		for _, risk := range risks {
 			if risk.RequiresAdmin {
 				return reconfigureCandidate{}, serviceError("BUILTIN_RUNTIME_POLICY_LOCKED", "Duplicate this built-in template before enabling high-risk runtime capabilities.", 409, false, nil)
@@ -437,12 +439,12 @@ func containsPort(original []ContainerPortSpec, candidate ContainerPortSpec) boo
 	return false
 }
 
-func lockedSettings(service pfregistry.ManagedService, spec TemplateSpec) []LockedSetting {
+func lockedSettings(templateSource string, spec TemplateSpec) []LockedSetting {
 	locked := []LockedSetting{{Path: "runtime.image", Reason: "The reviewed image and digest are owned by the template."}, {Path: "network.primary_web_port", Reason: "The primary Web port is bound to 127.0.0.1 and owned by Redeven."}, {Path: "runtime.identity", Reason: "Container and Compose identities are owned by Redeven."}}
-	if service.TemplateSource == "builtin" {
+	if templateSource == "builtin" {
 		locked = append(locked, LockedSetting{Path: "security.high_risk", Reason: "Built-in security boundaries are reviewed and locked.", Duplicate: true})
 	}
-	if spec.Host != nil && service.TemplateSource == "builtin" {
+	if spec.Host != nil && templateSource == "builtin" {
 		locked = append(locked, LockedSetting{Path: "lifecycle.scripts", Reason: "Built-in lifecycle scripts are release-locked.", Duplicate: true})
 	}
 	return locked

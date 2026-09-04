@@ -286,15 +286,30 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		if !ok {
 			return true
 		}
+		var req managedwebservice.OpenSessionRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
 		w.Header().Set("Cache-Control", "no-store")
-		session, err := g.managed.OpenSession(r.Context(), serviceID)
+		session, err := g.managed.OpenSession(r.Context(), serviceID, req)
 		if err != nil {
 			g.appendAudit(meta, "managed_web_service_open", "failure", map[string]any{"service_id": serviceID}, err)
 			writeManagedWebServiceError(w, err)
 			return true
 		}
-		g.appendAudit(meta, "managed_web_service_open", "success", map[string]any{"service_id": serviceID, "forward_id": session.Forward.ForwardID}, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: session})
+		detail := map[string]any{"service_id": serviceID, "state": session.State}
+		status := http.StatusOK
+		if session.State == "preparing" {
+			status = http.StatusAccepted
+			if session.Operation != nil {
+				detail["operation_id"] = session.Operation.OperationID
+			}
+		} else if session.Forward != nil {
+			detail["forward_id"] = session.Forward.ForwardID
+		}
+		g.appendAudit(meta, "managed_web_service_open", "success", detail, nil)
+		writeJSON(w, status, apiResp{OK: true, Data: session})
 		return true
 	}
 	if r.Method == http.MethodPost && action == "release-candidates" {

@@ -116,13 +116,9 @@ func TestComposeTemplateUninstallUsesOwnedProjectIdentityWithoutTemplateExecutio
 	stateDir := t.TempDir()
 	manager := &Manager{stateDir: stateDir}
 	service := &pfregistry.ManagedService{
-		ServiceID:              "mws_compose_uninstall",
-		ServiceFamilyID:        "compose-uninstall",
-		Deployment:             string(DeploymentCompose),
-		TemplateSnapshotJSON:   `{"schema_version":1,"kind":"compose","endpoint":{}}`,
-		TemplateSnapshotSHA256: "intentionally-invalid",
+		ServiceID: "mws_compose_uninstall",
 	}
-	setTestRuntimeBinding(t, service)
+	setTestRuntimeBinding(t, service, "compose-uninstall", DeploymentCompose)
 	driver := &composeTemplateDriver{manager: manager}
 	const image = "registry.example/redeven/compose@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	config := []byte("services:\n  app:\n    image: " + image + "\n")
@@ -175,8 +171,8 @@ func TestComposeTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
 	manager := &Manager{stateDir: stateDir}
-	service := &pfregistry.ManagedService{ServiceID: "mws_compose_mismatch", ServiceFamilyID: "compose-mismatch", Deployment: string(DeploymentCompose)}
-	setTestRuntimeBinding(t, service)
+	service := &pfregistry.ManagedService{ServiceID: "mws_compose_mismatch"}
+	setTestRuntimeBinding(t, service, "compose-mismatch", DeploymentCompose)
 	driver := &composeTemplateDriver{manager: manager}
 	const image = "registry.example/redeven/compose@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 	config := []byte("services:\n  app:\n    image: " + image + "\n")
@@ -217,19 +213,14 @@ func TestComposeTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 	}
 }
 
-func TestHostUninstallRejectsInvalidExecutableDefinition(t *testing.T) {
+func TestHostUninstallRejectsMissingCurrentTemplate(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
-	manager := &Manager{stateDir: stateDir}
+	manager, service := hostTestService(t, stateDir, TemplateSpec{
+		SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost,
+		Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{StartScript: "true"},
+	})
 	driver := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
-	service := &pfregistry.ManagedService{
-		ServiceID:              "mws_host_invalid_uninstall",
-		ServiceFamilyID:        "host-invalid-uninstall",
-		Deployment:             string(DeploymentHost),
-		TemplateSnapshotJSON:   `{"schema_version":1,"kind":"host","endpoint":{"scheme":"http"},"host":{"uninstall_script":"touch should-not-run"}}`,
-		TemplateSnapshotSHA256: "invalid",
-	}
-	setTestRuntimeBinding(t, service)
 	instanceRoot := driver.instanceRoot(service)
 	if err := os.MkdirAll(filepath.Join(instanceRoot, "install"), 0o700); err != nil {
 		t.Fatal(err)
@@ -238,9 +229,12 @@ func TestHostUninstallRejectsInvalidExecutableDefinition(t *testing.T) {
 	if err := os.WriteFile(sentinel, []byte("preserved"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.registry.DeleteManagedTemplate(context.Background(), service.TemplateID); err != nil {
+		t.Fatal(err)
+	}
 	err := driver.Uninstall(context.Background(), service, true, discardOperationProgress)
-	if managedErrorCode(err) != "TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH" {
-		t.Fatalf("invalid host uninstall error = %v", err)
+	if managedErrorCode(err) != "TEMPLATE_NOT_FOUND" {
+		t.Fatalf("missing current template error = %v", err)
 	}
 	if _, err := os.Stat(sentinel); err != nil {
 		t.Fatalf("invalid host definition changed service files: %v", err)
@@ -250,15 +244,10 @@ func TestHostUninstallRejectsInvalidExecutableDefinition(t *testing.T) {
 func uninstallContainerService() *pfregistry.ManagedService {
 	const digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	service := &pfregistry.ManagedService{
-		ServiceID:              "mws_uninstall_identity",
-		ServiceFamilyID:        "family-uninstall-identity",
-		Deployment:             string(DeploymentContainer),
-		RuntimeIdentity:        "container_uninstall_identity",
-		ArtifactReference:      "registry.example/redeven/service@" + digest,
-		TemplateSnapshotJSON:   `{"schema_version":1,"kind":"container","endpoint":{}}`,
-		TemplateSnapshotSHA256: "intentionally-invalid",
+		ServiceID: "mws_uninstall_identity", RuntimeIdentity: "container_uninstall_identity",
+		ArtifactReference: "registry.example/redeven/service@" + digest,
 	}
-	service.RuntimeBindingJSON, service.RuntimeBindingSHA256, _ = newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, DeploymentContainer)
+	service.RuntimeBindingJSON, service.RuntimeBindingSHA256, _ = newRuntimeBinding(service.ServiceID, "family-uninstall-identity", DeploymentContainer)
 	return service
 }
 

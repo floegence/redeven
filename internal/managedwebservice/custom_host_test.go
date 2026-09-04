@@ -9,29 +9,63 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-func hostTestService(t *testing.T, root string, spec TemplateSpec) *pfregistry.ManagedService {
+func hostTestService(t *testing.T, root string, spec TemplateSpec) (*Manager, *pfregistry.ManagedService) {
 	t.Helper()
-	snapshot, digest, err := canonicalTemplateSpec(spec)
+	specJSON, specDigest, err := canonicalTemplateSpec(spec)
 	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = registry.Close() })
+	catalog, err := LoadBuiltinCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := filesystemscope.NewDefaultRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const templateID = "template-host-test"
+	const familyID = "family-host-test"
+	if err := registry.CreateManagedTemplate(context.Background(), pfregistry.ManagedTemplate{
+		TemplateID: templateID, Name: "Host test", Source: "custom", Deployment: string(DeploymentHost), Revision: 1,
+		SpecJSON: specJSON, SpecSHA256: specDigest, ServiceFamilyID: familyID,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	configuration, configurationDigest, err := canonicalServiceConfiguration(newServiceConfiguration(nil, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := &pfregistry.ManagedService{
-		ServiceID: "mws_host_test", TemplateSource: "custom", ServiceFamilyID: "family_host_test", Deployment: string(DeploymentHost), WorkspacePath: root, RuntimePort: 39191,
-		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest, ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
+	releaseIdentity := ReleaseIdentity{Kind: "none"}
+	if spec.Host != nil && spec.Host.NPM != nil {
+		releaseIdentity = ReleaseIdentity{
+			Kind: "npm", Source: spec.Host.NPM.PackageName, Registry: normalizedRegistryURL(spec.Host.NPM.RegistryURL),
+			Version: spec.Host.NPM.Version, Platform: currentPlatformKey(),
+		}
 	}
-	raw, digest, err := newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, DeploymentHost)
+	release, releaseDigest, err := canonicalReleaseIdentity(releaseIdentity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &pfregistry.ManagedService{
+		ServiceID: "mws_host_test", TemplateID: templateID, WorkspacePath: root, WorkspaceOwnership: workspaceOwnershipUserSelected, RuntimePort: 39191,
+		ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
+		ReleaseIdentityJSON: release, ReleaseIdentitySHA256: releaseDigest,
+	}
+	raw, digest, err := newRuntimeBinding(service.ServiceID, familyID, DeploymentHost)
 	if err != nil {
 		t.Fatal(err)
 	}
 	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = raw, digest
-	return service
+	return &Manager{stateDir: root, registry: registry, catalog: catalog, scope: scope}, service
 }
 
 func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
@@ -49,24 +83,8 @@ func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
 			StopScript:  `false`,
 		},
 	}
-	snapshot, digest, err := canonicalTemplateSpec(spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	configuration, configurationDigest, err := canonicalServiceConfiguration(newServiceConfiguration(nil, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := &pfregistry.ManagedService{
-		ServiceID: "mws_host_cleanup", ServiceFamilyID: "family_host_cleanup", Deployment: string(DeploymentHost), WorkspacePath: root, RuntimePort: 39191,
-		TemplateSnapshotJSON: snapshot, TemplateSnapshotSHA256: digest, ConfigurationJSON: configuration, ConfigurationRevision: 1, ConfigurationSHA256: configurationDigest,
-	}
-	binding, bindingDigest, err := newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, DeploymentHost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = binding, bindingDigest
-	driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	manager, service := hostTestService(t, root, spec)
+	driver := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	if _, _, err := driver.Install(context.Background(), service, discardOperationProgress); err != nil {
 		t.Fatal(err)
 	}
@@ -100,17 +118,17 @@ func TestHostRuntimeRestartAdoptsExactProcessIdentity(t *testing.T) {
 		t.Skip("custom host lifecycle is Unix-only")
 	}
 	root := t.TempDir()
-	service := hostTestService(t, root, TemplateSpec{
+	manager, service := hostTestService(t, root, TemplateSpec{
 		SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", HealthPath: "/"},
 		Host: &HostTemplateSpec{StartScript: `exec sleep 60`},
 	})
-	first := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	first := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	identity, err := first.Start(context.Background(), service)
 	if err != nil {
 		t.Fatal(err)
 	}
 	service.RuntimeIdentity = identity
-	second := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	second := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	recovered, err := second.Start(context.Background(), service)
 	if err != nil {
 		t.Fatalf("Start() after Runtime restart error = %v", err)
@@ -132,18 +150,18 @@ func TestHostRuntimeRestartRejectsChangedProcessFingerprint(t *testing.T) {
 		t.Skip("custom host lifecycle is Unix-only")
 	}
 	root := t.TempDir()
-	service := hostTestService(t, root, TemplateSpec{
+	manager, service := hostTestService(t, root, TemplateSpec{
 		SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", HealthPath: "/"},
 		Host: &HostTemplateSpec{StartScript: `exec sleep 60`},
 	})
-	first := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	first := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	identity, err := first.Start(context.Background(), service)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
 	service.RuntimeIdentity = strings.TrimSuffix(identity, parseHostIdentity(identity).fingerprint) + strings.Repeat("0", 64)
-	second := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	second := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	if _, err := second.Start(context.Background(), service); managedErrorCode(err) != "HOST_PROCESS_IDENTITY_MISMATCH" {
 		t.Fatalf("changed process fingerprint error = %v", err)
 	}
@@ -166,15 +184,14 @@ func TestHostRuntimeRestartRejectsChangedProcessFingerprint(t *testing.T) {
 
 func TestHostStartClassifiesManagedDirectoryFailure(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join(t.TempDir(), "state-file")
-	if err := os.WriteFile(root, []byte("not a directory"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	service := hostTestService(t, t.TempDir(), TemplateSpec{
+	manager, service := hostTestService(t, t.TempDir(), TemplateSpec{
 		SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http", HealthPath: "/"},
 		Host: &HostTemplateSpec{StartScript: `exec sleep 60`},
 	})
-	driver := &hostScriptDriver{manager: &Manager{stateDir: root}, processes: map[string]hostProcess{}}
+	if err := os.WriteFile(filepath.Join(manager.stateDir, "instances"), []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	driver := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
 	if _, err := driver.Start(context.Background(), service); managedErrorCode(err) != "HOST_RUNTIME_PREPARE_FAILED" {
 		t.Fatalf("managed directory failure = %v", err)
 	}
@@ -183,7 +200,7 @@ func TestHostStartClassifiesManagedDirectoryFailure(t *testing.T) {
 func TestHostServiceEnvironmentRemovesInheritedRegistryToken(t *testing.T) {
 	t.Setenv("HOST_AUTH_TOKEN", "must-not-reach-lifecycle-script")
 	root := t.TempDir()
-	service := hostTestService(t, root, TemplateSpec{
+	manager, service := hostTestService(t, root, TemplateSpec{
 		SchemaVersion: templateSpecSchemaVersion,
 		Kind:          DeploymentHost,
 		Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/"},
@@ -196,8 +213,8 @@ func TestHostServiceEnvironmentRemovesInheritedRegistryToken(t *testing.T) {
 			},
 		},
 	})
-	driver := &hostScriptDriver{manager: &Manager{stateDir: root}}
-	environment, err := driver.serviceEnvironment(service, "/managed/executable")
+	driver := &hostScriptDriver{manager: manager}
+	environment, err := driver.serviceEnvironment(context.Background(), service, "/managed/executable")
 	if err != nil {
 		t.Fatal(err)
 	}

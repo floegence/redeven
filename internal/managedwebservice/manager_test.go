@@ -39,28 +39,33 @@ func newManagedServiceTestScope(t *testing.T) (*filesystemscope.Registry, string
 	return scope, filepath.Join(home, ".redeven", "local-environment", "apps", "managed-web-services")
 }
 
-func setTestRuntimeBinding(t *testing.T, service *pfregistry.ManagedService) {
+func setTestRuntimeBinding(t *testing.T, service *pfregistry.ManagedService, familyID string, deployment Deployment) {
 	t.Helper()
-	if service.TemplateRevision <= 0 {
-		service.TemplateRevision = 1
-	}
 	if service.TemplateID == "" {
 		service.TemplateID = "template-test"
-	}
-	if service.TemplateSource == "" {
-		service.TemplateSource = "custom"
-	}
-	if service.ServiceFamilyID == "" {
-		service.ServiceFamilyID = "family-test"
 	}
 	if service.WorkspaceOwnership == "" {
 		service.WorkspaceOwnership = workspaceOwnershipUserSelected
 	}
-	raw, digest, err := newRuntimeBinding(service.ServiceID, service.ServiceFamilyID, Deployment(service.Deployment))
+	raw, digest, err := newRuntimeBinding(service.ServiceID, familyID, deployment)
 	if err != nil {
 		t.Fatal(err)
 	}
 	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = raw, digest
+}
+
+func setTestServiceIdentity(t *testing.T, service *pfregistry.ManagedService, release ReleaseIdentity) {
+	t.Helper()
+	configuration, configurationDigest, err := canonicalServiceConfiguration(newServiceConfiguration(nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseJSON, releaseDigest, err := canonicalReleaseIdentity(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.ConfigurationJSON, service.ConfigurationRevision, service.ConfigurationSHA256 = configuration, 1, configurationDigest
+	service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256 = releaseJSON, releaseDigest
 }
 
 func TestCatalogReturnsDedicatedManagedWorkspaceWithoutCreatingIt(t *testing.T) {
@@ -122,8 +127,9 @@ func TestCatalogReturnsDedicatedManagedWorkspaceWithoutCreatingIt(t *testing.T) 
 func TestTemplateFamiliesCanCoexistButCannotDuplicate(t *testing.T) {
 	t.Parallel()
 	existing := []pfregistry.ManagedService{{
-		ServiceID: "mws_first", TemplateID: "template-one", ServiceFamilyID: "family-one",
+		ServiceID: "mws_first", TemplateID: "template-one",
 	}}
+	setTestRuntimeBinding(t, &existing[0], "family-one", DeploymentHost)
 	if err := validateServiceFamilyAvailability(existing, Template{TemplateID: "template-two", ServiceFamilyID: "family-two"}); err != nil {
 		t.Fatalf("independent template family was rejected: %v", err)
 	}
@@ -173,17 +179,17 @@ func TestRetryActionForFailureUsesOneGenericPolicy(t *testing.T) {
 func TestServiceActionCapabilitiesComeFromRuntimeState(t *testing.T) {
 	t.Parallel()
 	service := pfregistry.ManagedService{
-		ServiceID: "mws_actions", TemplateID: "template-actions", TemplateSource: "custom", ServiceFamilyID: "family-actions",
-		Deployment: string(DeploymentContainer), ObservedState: "error", RuntimeIdentity: "container-current", LastErrorCode: "START_FAILED",
+		ServiceID: "mws_actions", TemplateID: "template-actions", ObservedState: "error", RuntimeIdentity: "container-current", LastErrorCode: "START_FAILED",
 	}
-	setTestRuntimeBinding(t, &service)
+	setTestRuntimeBinding(t, &service, "family-actions", DeploymentContainer)
+	runtime := &resolvedRuntime{Template: Template{Deployment: DeploymentContainer}}
 	failure := &pfregistry.ManagedOperation{Action: string(ActionStart), State: "failed", ErrorCode: "START_FAILED"}
-	actions := serviceActionCapabilities(service, nil, failure)
+	actions := serviceActionCapabilities(service, runtime, nil, failure)
 	if actions.Start.Available || actions.Stop.Available || !actions.Restart.Available || !actions.Retry.Available {
 		t.Fatalf("error-state actions = %+v", actions)
 	}
 	active := &pfregistry.ManagedOperation{Action: string(ActionRestart), State: "running"}
-	actions = serviceActionCapabilities(service, active, failure)
+	actions = serviceActionCapabilities(service, runtime, active, failure)
 	if actions.Start.Available || actions.Stop.Available || actions.Restart.Available || actions.Retry.Available || actions.Retry.ReasonCode != "OPERATION_ACTIVE" {
 		t.Fatalf("busy actions = %+v", actions)
 	}
@@ -304,13 +310,31 @@ func TestOperateIsIdempotentAndRejectsConcurrentLifecycleChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-host", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), DesiredState: "running", ObservedState: "running", ForwardID: "pf-one", RuntimeIdentity: "host:v2:mws_one:boot:4242:" + strings.Repeat("a", 64), ArtifactReference: "/managed/executable", RuntimePort: 3080}
-	setTestRuntimeBinding(t, &service)
+	home := t.TempDir()
+	service := pfregistry.ManagedService{ServiceID: "mws_one", TemplateID: "template-host", WorkspacePath: home, WorkspaceOwnership: workspaceOwnershipUserSelected, DesiredState: "running", ObservedState: "running", ForwardID: "pf-one", RuntimeIdentity: "host:v2:mws_one:boot:4242:" + strings.Repeat("a", 64), ArtifactReference: "/managed/executable", RuntimePort: 3080}
+	setTestRuntimeBinding(t, &service, "family-host", DeploymentHost)
+	setTestServiceIdentity(t, &service, ReleaseIdentity{Kind: "none"})
+	specJSON, specDigest, err := canonicalTemplateSpec(TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{StartScript: "true"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.CreateManagedTemplate(context.Background(), pfregistry.ManagedTemplate{TemplateID: service.TemplateID, Name: "Host", Source: "custom", Deployment: string(DeploymentHost), Revision: 1, SpecJSON: specJSON, SpecSHA256: specDigest, ServiceFamilyID: "family-host"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}); err != nil {
 		t.Fatal(err)
 	}
+	scope, err := filesystemscope.NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := New(ManagerOptions{StateDir: filepath.Join(home, ".redeven", "local-environment"), Registry: registry, Scope: scope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
 	driver := &blockingStopDriver{started: make(chan struct{})}
-	manager := &Manager{registry: registry, host: driver, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	manager.host = driver
 
 	op, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{RequestID: "request-stop-one", Action: ActionStop})
 	if err != nil {
@@ -381,11 +405,11 @@ func TestRunStopClearsPreviousSnapshotError(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = registry.Close() })
 	service := pfregistry.ManagedService{
-		ServiceID: "mws_stop_clears_error", Deployment: string(DeploymentContainer),
+		ServiceID:    "mws_stop_clears_error",
 		DesiredState: "running", ObservedState: "error", ForwardID: "pf-stop-clears-error",
-		LastErrorCode: "TEMPLATE_SNAPSHOT_IDENTITY_MISMATCH", LastErrorMessage: "stale snapshot error",
+		LastErrorCode: "CURRENT_TEMPLATE_INVALID", LastErrorMessage: "stale template error",
 	}
-	setTestRuntimeBinding(t, &service)
+	setTestRuntimeBinding(t, &service, "family-test", DeploymentContainer)
 	if err := registry.CreateManagedService(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3000"}); err != nil {
 		t.Fatal(err)
 	}
@@ -411,11 +435,10 @@ func TestListProjectsTheCurrentOperationDetail(t *testing.T) {
 	}
 	defer registry.Close()
 	service := pfregistry.ManagedService{
-		ServiceID: "mws_artifact", TemplateID: "template-container", TemplateSource: "custom", ServiceFamilyID: "family-container",
-		Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(),
+		ServiceID: "mws_artifact", TemplateID: "template-container", WorkspacePath: t.TempDir(),
 		DesiredState: "stopped", ObservedState: "error", ForwardID: "pf-artifact", RuntimePort: 3080,
 	}
-	setTestRuntimeBinding(t, &service)
+	setTestRuntimeBinding(t, &service, "family-container", DeploymentContainer)
 	artifact := "registry.example.invalid/project/service:1.0.0@sha256:" + strings.Repeat("a", 64)
 	operation := pfregistry.ManagedOperation{
 		OperationID: "mop_artifact", ServiceID: service.ServiceID, RequestID: "request-artifact",
@@ -446,9 +469,8 @@ func TestListProjectsStructuredLastFailureFromPersistedOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_failed", TemplateID: "template", TemplateSource: "custom", Deployment: string(DeploymentContainer), WorkspacePath: t.TempDir(), DesiredState: "stopped", ObservedState: "error", ForwardID: "pf-failed", RuntimePort: 3080, LastErrorCode: "IMAGE_PULL_FAILED", LastErrorMessage: "The container image could not be pulled."}
-	service.ServiceFamilyID = "family-failed"
-	setTestRuntimeBinding(t, &service)
+	service := pfregistry.ManagedService{ServiceID: "mws_failed", TemplateID: "template", WorkspacePath: t.TempDir(), DesiredState: "stopped", ObservedState: "error", ForwardID: "pf-failed", RuntimePort: 3080, LastErrorCode: "IMAGE_PULL_FAILED", LastErrorMessage: "The container image could not be pulled."}
+	setTestRuntimeBinding(t, &service, "family-failed", DeploymentContainer)
 	operation := pfregistry.ManagedOperation{OperationID: "mop_failed", ServiceID: service.ServiceID, RequestID: "request-failed", RequestFingerprint: "fingerprint", Action: "install", State: "failed", Stage: "pulling", ProgressCurrent: 2, ProgressTotal: 7, ErrorCode: service.LastErrorCode, ErrorMessage: service.LastErrorMessage, FinishedAtUnixMs: 123, ProgressDetail: &pfregistry.ManagedOperationProgressDetail{SchemaVersion: pfregistry.ManagedOperationProgressDetailSchemaVersion, Transfer: &pfregistry.ManagedOperationTransferProgress{ArtifactReference: "example.invalid/app:1"}}}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, operation); err != nil {
 		t.Fatal(err)
@@ -488,9 +510,10 @@ func TestServiceFailureViewOmitsUnprovenHistoricalContext(t *testing.T) {
 func TestServiceFailureViewNeverExposesHostArtifactPath(t *testing.T) {
 	t.Parallel()
 	service := pfregistry.ManagedService{
-		Deployment: string(DeploymentHost), LastErrorCode: "HOST_LOG_PREPARE_FAILED",
+		ServiceID: "mws_host_failure", LastErrorCode: "HOST_LOG_PREPARE_FAILED",
 		LastErrorMessage: "The managed Host log could not be prepared.", UpdatedAtUnixMs: 20,
 	}
+	setTestRuntimeBinding(t, &service, "family-host-failure", DeploymentHost)
 	operation := &pfregistry.ManagedOperation{
 		OperationID: "mop_host", Action: "start", Stage: "failed", ErrorCode: service.LastErrorCode,
 		ErrorMessage: service.LastErrorMessage, UpdatedAtUnixMs: service.UpdatedAtUnixMs,
@@ -562,14 +585,32 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer registry.Close()
-	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: "template-host", TemplateSource: "custom", ServiceFamilyID: "family-interrupted", Deployment: string(DeploymentHost), WorkspacePath: t.TempDir(), DesiredState: "running", ObservedState: "installing", ForwardID: "pf-interrupted", RuntimeIdentity: "host:v2:mws_interrupted:boot:99:" + strings.Repeat("a", 64), RuntimePort: 3080}
-	setTestRuntimeBinding(t, &service)
+	home := t.TempDir()
+	service := pfregistry.ManagedService{ServiceID: "mws_interrupted", TemplateID: "template-host", WorkspacePath: home, WorkspaceOwnership: workspaceOwnershipUserSelected, DesiredState: "running", ObservedState: "installing", ForwardID: "pf-interrupted", RuntimeIdentity: "host:v2:mws_interrupted:boot:99:" + strings.Repeat("a", 64), RuntimePort: 3080}
+	setTestRuntimeBinding(t, &service, "family-interrupted", DeploymentHost)
+	setTestServiceIdentity(t, &service, ReleaseIdentity{Kind: "none"})
+	specJSON, specDigest, err := canonicalTemplateSpec(TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{StartScript: "true"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.CreateManagedTemplate(context.Background(), pfregistry.ManagedTemplate{TemplateID: service.TemplateID, Name: "Interrupted Host", Source: "custom", Deployment: string(DeploymentHost), Revision: 1, SpecJSON: specJSON, SpecSHA256: specDigest, ServiceFamilyID: "family-interrupted"}); err != nil {
+		t.Fatal(err)
+	}
+	scope, err := filesystemscope.NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := New(ManagerOptions{StateDir: filepath.Join(home, ".redeven", "local-environment"), Registry: registry, Scope: scope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	manager.host = &recoveryDriver{}
 	op := pfregistry.ManagedOperation{OperationID: "mop_interrupted", ServiceID: service.ServiceID, RequestID: "request-interrupted", RequestFingerprint: "fingerprint", Action: string(ActionInstall), State: "running", Stage: "downloading"}
 	if err := registry.CreateManagedServiceWithOperation(context.Background(), service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080"}, op); err != nil {
 		t.Fatal(err)
 	}
 
-	manager := &Manager{registry: registry, host: &recoveryDriver{}, cancelByOp: map[string]context.CancelFunc{}, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
 	views, err := manager.List(context.Background())
 	if err != nil || len(views) != 1 || views[0].ActiveOperation == nil || views[0].ActiveOperation.OperationID != op.OperationID {
 		t.Fatalf("active operation view = %+v, err=%v", views, err)

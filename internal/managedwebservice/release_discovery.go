@@ -30,14 +30,13 @@ const (
 )
 
 type cachedReleaseCandidate struct {
-	Scope            string
-	TemplateID       string
-	TemplateRevision int64
-	Notices          []TemplateNotice
-	Candidate        ReleaseCandidate
-	Identity         ReleaseIdentity
-	Spec             TemplateSpec
-	ExpiresAt        time.Time
+	Scope      string
+	TemplateID string
+	Notices    []TemplateNotice
+	Candidate  ReleaseCandidate
+	Identity   ReleaseIdentity
+	Spec       TemplateSpec
+	ExpiresAt  time.Time
 }
 
 type cachedReleaseCursor struct {
@@ -87,10 +86,11 @@ func (m *Manager) ServiceReleaseCandidates(ctx context.Context, serviceID string
 	if service == nil {
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
-	spec, err := templateSpecFromService(service)
+	resolved, err := m.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
 	}
+	spec := resolved.Spec
 	parameters, err := m.serviceParameters(service)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (m *Manager) ServiceReleaseCandidates(ctx context.Context, serviceID string
 	}
 	return m.browseReleaseCandidates(ctx, releaseBrowseContext{
 		Scope: "service:" + service.ServiceID, ServiceID: service.ServiceID, TemplateID: service.TemplateID,
-		Spec: spec, Parameters: parameters, Current: current, TemplateSource: service.TemplateSource, Recommended: recommended,
+		Spec: spec, Parameters: parameters, Current: current, TemplateSource: resolved.Template.Source, Recommended: recommended,
 	}, request)
 }
 

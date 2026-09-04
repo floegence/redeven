@@ -27,7 +27,8 @@ func serviceFailureView(service pfregistry.ManagedService, operation *pfregistry
 	}
 	// Host artifact references are managed executable paths. They must never be
 	// projected into a user-copyable failure diagnostic.
-	if (service.Deployment == string(DeploymentContainer) || service.Deployment == string(DeploymentCompose)) && operation.ProgressDetail != nil && operation.ProgressDetail.Transfer != nil {
+	binding, bindingErr := decodeRuntimeBinding(&service)
+	if bindingErr == nil && binding.Deployment != DeploymentHost && operation.ProgressDetail != nil && operation.ProgressDetail.Transfer != nil {
 		failure.ArtifactReference = strings.TrimSpace(operation.ProgressDetail.Transfer.ArtifactReference)
 	}
 	return failure
