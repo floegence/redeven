@@ -10016,6 +10016,146 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
 }
 
+/* Flower visual direction: use space and tonal surfaces for structure, reserving
+   borders for controls and state that needs an explicit boundary. */
+.flower-component-shell {
+  --flower-thread-rail-border: transparent;
+  --flower-thread-rail-control-border: transparent;
+  --flower-thread-rail-surface: color-mix(in srgb, var(--flower-thread-rail-base) 96%, var(--background) 4%);
+}
+
+.flower-component-thread-rail {
+  border-right: 0;
+}
+
+.flower-sidebar-actions {
+  margin: 0.75rem 0.625rem 0.5rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.flower-new-chat-button {
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.flower-new-chat-button:hover,
+.flower-new-chat-button:focus-visible {
+  box-shadow: none;
+  transform: none;
+}
+
+.flower-thread-search-input {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--flower-thread-rail-foreground) 5%, transparent);
+  box-shadow: none;
+}
+
+.flower-component-thread-rail .flower-thread-empty {
+  border: 0;
+  background: transparent;
+}
+
+.flower-chat-header {
+  min-height: 3.25rem;
+  border-bottom: 0;
+  background: var(--flower-chat-surface);
+  padding: 0.625rem 1.125rem;
+}
+
+.flower-chat-bottom-dock::before {
+  box-shadow: none;
+}
+
+.flower-empty-hero-badge {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.flower-empty-suggestions {
+  max-width: 44rem;
+  gap: 0.25rem 1.5rem;
+}
+
+.flower-empty-suggestion {
+  border: 0;
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 38%, transparent);
+  padding: 0.875rem;
+  backdrop-filter: none;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.flower-empty-suggestion:hover,
+.flower-empty-suggestion:focus-visible {
+  border: 0;
+  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated) 56%);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.flower-empty-suggestion:active {
+  transform: translateY(0);
+}
+
+.flower-empty-suggestion > div:first-child {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+.flower-empty-hint kbd {
+  border: 0;
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+}
+
+.flower-surface .flower-composer {
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 46%, transparent);
+  border-color: color-mix(in srgb, var(--flower-chat-surface-border) 46%, transparent);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 92%, var(--flower-chat-surface) 8%);
+  box-shadow: 0 10px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 44%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.flower-surface .flower-composer:focus-within {
+  border-color: color-mix(in srgb, var(--ring) 52%, var(--flower-chat-surface-border) 48%);
+  box-shadow: 0 10px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
+}
+
+.flower-working-dir-chip,
+.flower-permission-trigger,
+.flower-model-reasoning-control,
+.flower-model-select-trigger,
+.flower-composer-readonly-chip {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.flower-working-dir-chip-interactive:hover,
+.flower-working-dir-chip-interactive:focus-visible,
+.flower-permission-trigger:hover,
+.flower-permission-trigger:focus-visible,
+.flower-permission-trigger[aria-expanded='true'] {
+  border-color: transparent;
+}
+
+@media (max-width: 640px) {
+  .flower-component-thread-rail {
+    border-bottom: 0;
+  }
+
+  .flower-chat-header {
+    padding-inline: 0.75rem;
+  }
+
+  .flower-empty-suggestions {
+    gap: 0.25rem;
+  }
+}
+
 @container (max-width: 760px) {
   .flower-settings-title-row,
   .flower-settings-current-model {
