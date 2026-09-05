@@ -3340,6 +3340,7 @@
       "releaseSelectionDescription": "구성된 패키지 또는 이미지 Registry에서 버전을 직접 읽습니다. Redeven은 선택한 정확한 버전만 설치합니다.",
 	  "currentRelease": "현재 설치된 버전",
 	  "releaseCheckedAt": "마지막 확인",
+	  "releasePublishedAt": "게시일: {date}",
 	  "releaseDirectSource": "구성된 Registry에서 직접 읽음",
 	  "releaseCheckStale": "최근 확인에 실패하여 마지막 성공 결과를 표시합니다.",
 	  "releaseLoadingProgress": "버전 {count}개를 불러왔습니다. 소스를 확인하는 중…",

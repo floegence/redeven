@@ -99,7 +99,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
 		catalog_status: 'complete', has_more: false, loaded_count: 3,
         checked_at_unix_ms: Date.now(),
         candidates: [
-          { schema_version: 2, candidate_id: 'preview', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview', relation: 'newer', is_latest_preview: true, verification_status: 'verified' },
+          { schema_version: 2, candidate_id: 'preview', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.2-alpha.3', channel: 'preview', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-preview', published_at_unix_ms: Date.UTC(2022, 9, 23), relation: 'newer', is_latest_preview: true, verification_status: 'verified' },
           { schema_version: 2, candidate_id: 'stable', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.1-rc.2', channel: 'stable', trust: 'upstream_registry', selectable: true, platform: 'darwin-arm64', integrity: 'sha512-stable', relation: 'same', is_current: true, is_recommended: true, is_latest_stable: true, verification_status: 'verified' },
           { schema_version: 2, candidate_id: 'deprecated', source_kind: 'npm', source: '@example/service-cli', registry: 'https://registry.npmjs.org/', version: '0.1.0', channel: 'stable', trust: 'upstream_registry', selectable: true, deprecated: true, relation: 'older', verification_status: 'verified' },
         ],
@@ -121,6 +121,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(surface.textContent).toContain('Current installed release');
     expect(surface.textContent).toContain('sha512-current');
     expect(surface.textContent).toContain('0.1.2-alpha.3');
+    expect(surface.textContent).toContain('Published');
     expect(surface.textContent).toContain('Deprecated');
     expect(document.querySelector<HTMLButtonElement>('[data-release-id="deprecated"]')?.disabled).toBe(false);
     expect(scrollViewport.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');

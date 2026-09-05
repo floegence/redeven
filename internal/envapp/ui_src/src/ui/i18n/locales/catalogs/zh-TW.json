@@ -3340,6 +3340,7 @@
       "releaseSelectionDescription": "版本直接從設定的套件或映像 Registry 讀取。Redeven 只會安裝你選擇的確切版本。",
 	  "currentRelease": "目前已安裝版本",
 	  "releaseCheckedAt": "最近檢查時間",
+	  "releasePublishedAt": "發佈時間：{date}",
 	  "releaseDirectSource": "直接從設定的 Registry 讀取",
 	  "releaseCheckStale": "最近一次檢查失敗，目前顯示上次成功結果。",
 	  "releaseLoadingProgress": "已載入 {count} 個版本，正在檢查來源…",

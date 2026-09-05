@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -96,7 +97,7 @@ func TestOCIReleaseDiscoveryUsesBearerChallengeAndVerifiesSingleManifestPlatform
 			response.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
 			_ = json.NewEncoder(response).Encode(map[string]any{"schemaVersion": 2, "config": map[string]string{"digest": testConfigDigest}})
 		case "/v2/team/app/blobs/" + testConfigDigest:
-			_ = json.NewEncoder(response).Encode(map[string]string{"os": "linux", "architecture": "amd64"})
+			_ = json.NewEncoder(response).Encode(map[string]string{"os": "linux", "architecture": "amd64", "created": "2026-01-02T03:04:05.000Z"})
 		default:
 			t.Fatalf("unexpected request %s", request.URL)
 		}
@@ -108,12 +109,15 @@ func TestOCIReleaseDiscoveryUsesBearerChallengeAndVerifiesSingleManifestPlatform
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := discovery.VerifyTags(context.Background(), OCIReleaseVerificationRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64", Tags: page.Tags})
+	items, err := discovery.VerifyTags(context.Background(), OCIReleaseVerificationRequest{Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64", Tags: page.Tags, ResolvePublishedAt: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 || !items[0].Compatible || !registryDigestPattern.MatchString(items[0].PlatformDigest) {
 		t.Fatalf("unexpected releases: %#v", items)
+	}
+	if items[0].PublishedAtUnixMs != time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).UnixMilli() {
+		t.Fatalf("published timestamp = %d", items[0].PublishedAtUnixMs)
 	}
 }
 

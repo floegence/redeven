@@ -3340,6 +3340,7 @@
       "releaseSelectionDescription": "Les versions sont lues directement depuis le Registry de paquets ou d’images configuré. Redeven installe uniquement la version exacte sélectionnée.",
 	  "currentRelease": "Version actuellement installée",
 	  "releaseCheckedAt": "Dernière vérification",
+	  "releasePublishedAt": "Publié le {date}",
 	  "releaseDirectSource": "Lu directement depuis le Registry configuré",
 	  "releaseCheckStale": "La dernière vérification a échoué. Le dernier résultat valide est affiché.",
 	  "releaseLoadingProgress": "{count} versions chargées. Vérification de la source…",

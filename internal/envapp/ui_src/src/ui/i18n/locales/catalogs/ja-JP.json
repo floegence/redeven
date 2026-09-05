@@ -3340,6 +3340,7 @@
       "releaseSelectionDescription": "設定されたパッケージまたはイメージ Registry からバージョンを直接取得します。Redeven は選択した正確なバージョンのみをインストールします。",
 	  "currentRelease": "現在インストール済みのバージョン",
 	  "releaseCheckedAt": "最終確認日時",
+	  "releasePublishedAt": "公開日: {date}",
 	  "releaseDirectSource": "設定された Registry から直接取得",
 	  "releaseCheckStale": "最新の確認に失敗したため、前回成功時の結果を表示しています。",
 	  "releaseLoadingProgress": "{count} 件のバージョンを読み込みました。配布元を確認しています…",

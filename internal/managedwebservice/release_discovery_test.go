@@ -130,6 +130,27 @@ func TestPendingReleaseVerificationPrioritizesBuiltInRecommendation(t *testing.T
 	}
 }
 
+func TestReleaseCatalogSortsCandidatesByPublishedAtDescending(t *testing.T) {
+	result := ReleaseCandidateResult{
+		CatalogStatus: "complete",
+		Candidates: []ReleaseCandidate{
+			{CandidateID: "semantic-newer", SourceKind: "oci", Source: "registry.example/team/app", Tag: "9.0.0", Channel: "stable", Selectable: true, VerificationStatus: "verified", PublishedAtUnixMs: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()},
+			{CandidateID: "published-newer", SourceKind: "oci", Source: "registry.example/team/app", Tag: "1.0.0", Channel: "stable", Selectable: true, VerificationStatus: "verified", PublishedAtUnixMs: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()},
+			{CandidateID: "date-tag", SourceKind: "oci", Source: "registry.example/team/app", Tag: "2024.12.31", Channel: "stable", Selectable: true, VerificationStatus: "verified"},
+		},
+	}
+	manager := &Manager{}
+	manager.recomputeReleaseViewLocked(&result)
+	got := []string{result.Candidates[0].CandidateID, result.Candidates[1].CandidateID, result.Candidates[2].CandidateID}
+	want := []string{"published-newer", "semantic-newer", "date-tag"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("published order = %v, want %v", got, want)
+	}
+	if result.LatestStableRelease == nil || result.LatestStableRelease.CandidateID != "published-newer" {
+		t.Fatalf("latest stable = %#v", result.LatestStableRelease)
+	}
+}
+
 type releaseCredentialClient struct {
 	credential    containerengine.RegistryCredential
 	credentialErr error
@@ -177,6 +198,8 @@ func TestDiscoverOCICandidatesFallsBackToAnonymousForPublicRegistry(t *testing.T
 		case "/v2/team/app/manifests/1.2.3":
 			response.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
 			_ = json.NewEncoder(response).Encode(map[string]any{"schemaVersion": 2, "manifests": []map[string]any{{"digest": platformDigest, "platform": map[string]string{"os": "linux", "architecture": runtime.GOARCH}}}})
+		case "/v2/team/app/manifests/" + platformDigest:
+			response.WriteHeader(http.StatusNotFound)
 		default:
 			t.Fatalf("unexpected Registry request %s", request.URL)
 		}
@@ -288,20 +311,27 @@ func TestOCIReleaseCatalogPinsAndVerifiesCurrentAndRecommendedTags(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Candidates) != 4 || !result.Candidates[0].IsCurrent {
-		t.Fatalf("pinned release order = %#v", result.Candidates)
+	if len(result.Candidates) != 4 {
+		t.Fatalf("release order = %#v", result.Candidates)
+	}
+	currentIndex := slices.IndexFunc(result.Candidates, func(candidate ReleaseCandidate) bool { return candidate.IsCurrent })
+	if currentIndex < 0 {
+		t.Fatalf("current release missing from catalog = %#v", result.Candidates)
 	}
 	recommendedIndex := slices.IndexFunc(result.Candidates, func(candidate ReleaseCandidate) bool { return candidate.Tag == "2.0.0" })
 	if recommendedIndex < 0 || result.Candidates[recommendedIndex].IsRecommended || result.Candidates[recommendedIndex].RecommendationStatus != "pending" {
 		t.Fatalf("pending recommendation = %#v", result.Candidates)
 	}
-	ids := []string{result.Candidates[0].CandidateID, result.Candidates[recommendedIndex].CandidateID}
+	ids := []string{result.Candidates[currentIndex].CandidateID, result.Candidates[recommendedIndex].CandidateID}
 	result, err = manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "verify", CandidateIDs: ids})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Candidates[0].Selectable || !result.Candidates[1].Selectable || result.Candidates[0].VerificationStatus != "verified" || result.Candidates[1].VerificationStatus != "verified" {
-		t.Fatalf("verified pinned releases = %#v", result.Candidates[:2])
+	for _, candidateID := range ids {
+		candidate := slices.IndexFunc(result.Candidates, func(candidate ReleaseCandidate) bool { return candidate.CandidateID == candidateID })
+		if candidate < 0 || !result.Candidates[candidate].Selectable || result.Candidates[candidate].VerificationStatus != "verified" {
+			t.Fatalf("verified selected release = %#v", result.Candidates)
+		}
 	}
 }
 
@@ -326,6 +356,15 @@ func TestOCIRecommendationIsNotSelectableOrBadgedWhenThePinnedTagDisappears(t *t
 	moved := verifiedOCIReleaseCandidate(browse, pending, containerengine.OCIRelease{Tag: "recommended", PlatformDigest: testReleaseDigest("b"), Compatible: true})
 	if moved.Candidate.IsRecommended || !moved.Candidate.Selectable || moved.Candidate.RecommendationStatus != "unavailable" {
 		t.Fatalf("moved recommendation = %+v", moved.Candidate)
+	}
+	legacy := pending
+	legacy.Candidate.IsRecommended = true
+	legacy.Candidate.RecommendationStatus = ""
+	legacy.Candidate.VerificationStatus = "verified"
+	legacy.Candidate.Selectable = true
+	legacy = verifiedOCIReleaseCandidate(browse, legacy, containerengine.OCIRelease{Tag: "recommended", ReasonCode: "RELEASE_NOT_FOUND"})
+	if legacy.Candidate.IsRecommended || legacy.Candidate.RecommendationStatus != "unavailable" {
+		t.Fatalf("legacy recommendation marker = %+v", legacy.Candidate)
 	}
 }
 

@@ -50,31 +50,34 @@ type OCIReleaseTagPage struct {
 }
 
 type OCIReleaseVerificationRequest struct {
-	Reference    string
-	PlatformOS   string
-	PlatformArch string
-	Credential   RegistryCredential
-	Tags         []string
+	Reference          string
+	PlatformOS         string
+	PlatformArch       string
+	Credential         RegistryCredential
+	Tags               []string
+	ResolvePublishedAt bool
 }
 
 type OCIReleaseDigestVerificationRequest struct {
-	Reference    string
-	PlatformOS   string
-	PlatformArch string
-	Credential   RegistryCredential
-	Digests      []string
+	Reference          string
+	PlatformOS         string
+	PlatformArch       string
+	Credential         RegistryCredential
+	Digests            []string
+	ResolvePublishedAt bool
 }
 
 type OCIRelease struct {
-	Tag            string
-	IndexDigest    string
-	PlatformDigest string
-	PlatformOS     string
-	PlatformArch   string
-	Compatible     bool
-	DigestVerified bool
-	ReasonCode     string
-	Reason         string
+	Tag               string
+	IndexDigest       string
+	PlatformDigest    string
+	PublishedAtUnixMs int64
+	PlatformOS        string
+	PlatformArch      string
+	Compatible        bool
+	DigestVerified    bool
+	ReasonCode        string
+	Reason            string
 }
 
 type OCIReleaseDiscovery struct {
@@ -181,7 +184,7 @@ func (d OCIReleaseDiscovery) VerifyTags(ctx context.Context, request OCIReleaseV
 	resolved := make([]OCIRelease, len(tags))
 	present := make([]bool, len(tags))
 	token := ""
-	first, refreshed, err := d.resolveTag(ctx, client, reference, tags[0], request.PlatformOS, request.PlatformArch, request.Credential, token)
+	first, refreshed, err := d.resolveTag(ctx, client, reference, tags[0], request.PlatformOS, request.PlatformArch, request.Credential, token, request.ResolvePublishedAt)
 	if refreshed != "" {
 		token = refreshed
 	}
@@ -203,7 +206,7 @@ func (d OCIReleaseDiscovery) VerifyTags(ctx context.Context, request OCIReleaseV
 		go func() {
 			defer workers.Done()
 			for index := range indexes {
-				item, _, discoverErr := d.resolveTag(ctx, client, reference, tags[index], request.PlatformOS, request.PlatformArch, request.Credential, token)
+				item, _, discoverErr := d.resolveTag(ctx, client, reference, tags[index], request.PlatformOS, request.PlatformArch, request.Credential, token, request.ResolvePublishedAt)
 				if discoverErr != nil {
 					if unavailable, ok := unavailableOCIRelease(tags[index], request.PlatformOS, request.PlatformArch, discoverErr); ok {
 						resolved[index], present[index] = unavailable, true
@@ -258,7 +261,7 @@ func (d OCIReleaseDiscovery) VerifyDigests(ctx context.Context, request OCIRelea
 	items := make([]OCIRelease, 0, len(digests))
 	token := ""
 	for _, digest := range digests {
-		item, refreshed, resolveErr := d.resolveDigest(ctx, client, reference, digest, request.PlatformOS, request.PlatformArch, request.Credential, token)
+		item, refreshed, resolveErr := d.resolveDigest(ctx, client, reference, digest, request.PlatformOS, request.PlatformArch, request.Credential, token, request.ResolvePublishedAt)
 		if refreshed != "" {
 			token = refreshed
 		}
@@ -380,7 +383,7 @@ func uniqueRegistryDigests(values []string) []string {
 	return result
 }
 
-func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client, reference parsedRegistryReference, tag, platformOS, platformArch string, credential RegistryCredential, token string) (OCIRelease, string, error) {
+func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client, reference parsedRegistryReference, tag, platformOS, platformArch string, credential RegistryCredential, token string, resolvePublishedAt bool) (OCIRelease, string, error) {
 	accept := strings.Join([]string{
 		"application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json",
 		"application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json",
@@ -413,6 +416,16 @@ func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client
 		for _, manifest := range index.Manifests {
 			if manifest.Platform.OS == platformOS && manifest.Platform.Architecture == platformArch && registryDigestPattern.MatchString(manifest.Digest) {
 				item.PlatformDigest, item.Compatible = manifest.Digest, true
+				if resolvePublishedAt {
+					publishedAt, metadataToken, metadataErr := d.resolvePublishedAt(ctx, client, reference, manifest.Digest, credential, refreshed)
+					if metadataToken != "" {
+						refreshed = metadataToken
+					}
+					if metadataErr != nil && errors.Is(metadataErr, context.Canceled) {
+						return OCIRelease{}, refreshed, metadataErr
+					}
+					item.PublishedAtUnixMs = publishedAt
+				}
 				return item, refreshed, nil
 			}
 		}
@@ -441,11 +454,17 @@ func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client
 	if err != nil {
 		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: err}
 	}
-	var config struct{ OS, Architecture string }
+	var config struct {
+		OS, Architecture string
+		Created          string `json:"created"`
+	}
 	if err := json.Unmarshal(configRaw, &config); err != nil {
 		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: fmt.Errorf("invalid OCI image configuration")}
 	}
 	item.PlatformDigest = digest
+	if resolvePublishedAt {
+		item.PublishedAtUnixMs = parseOCIPublishedAt(config.Created)
+	}
 	item.Compatible = config.OS == platformOS && config.Architecture == platformArch
 	if !item.Compatible {
 		item.ReasonCode, item.Reason = "PLATFORM_UNAVAILABLE", "This tag does not publish an image for the current platform."
@@ -453,8 +472,8 @@ func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client
 	return item, refreshed, nil
 }
 
-func (d OCIReleaseDiscovery) resolveDigest(ctx context.Context, client *http.Client, reference parsedRegistryReference, digest, platformOS, platformArch string, credential RegistryCredential, token string) (OCIRelease, string, error) {
-	item, refreshed, err := d.resolveTag(ctx, client, reference, digest, platformOS, platformArch, credential, token)
+func (d OCIReleaseDiscovery) resolveDigest(ctx context.Context, client *http.Client, reference parsedRegistryReference, digest, platformOS, platformArch string, credential RegistryCredential, token string, resolvePublishedAt bool) (OCIRelease, string, error) {
+	item, refreshed, err := d.resolveTag(ctx, client, reference, digest, platformOS, platformArch, credential, token, resolvePublishedAt)
 	if err != nil {
 		return OCIRelease{}, refreshed, err
 	}
@@ -464,6 +483,57 @@ func (d OCIReleaseDiscovery) resolveDigest(ctx context.Context, client *http.Cli
 	item.Tag = digest
 	item.DigestVerified = item.Compatible
 	return item, refreshed, nil
+}
+
+func (d OCIReleaseDiscovery) resolvePublishedAt(ctx context.Context, client *http.Client, reference parsedRegistryReference, platformDigest string, credential RegistryCredential, token string) (int64, string, error) {
+	response, refreshed, err := registryRequest(ctx, client, http.MethodGet, reference.APIBase+"/manifests/"+url.PathEscape(platformDigest), reference.Repository, credential, token, strings.Join([]string{
+		"application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json",
+	}, ", "))
+	if err != nil {
+		return 0, refreshed, err
+	}
+	raw, err := readRegistryBody(response, maxRegistryManifestBytes)
+	if err != nil {
+		return 0, refreshed, err
+	}
+	var manifest struct {
+		Config struct {
+			Digest string `json:"digest"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil || !registryDigestPattern.MatchString(manifest.Config.Digest) {
+		return 0, refreshed, fmt.Errorf("invalid OCI platform image manifest")
+	}
+	configResponse, refreshedConfig, err := registryRequest(ctx, client, http.MethodGet, reference.APIBase+"/blobs/"+manifest.Config.Digest, reference.Repository, credential, refreshed, "application/octet-stream")
+	if refreshedConfig != "" {
+		refreshed = refreshedConfig
+	}
+	if err != nil {
+		return 0, refreshed, err
+	}
+	configRaw, err := readRegistryBody(configResponse, maxRegistryManifestBytes)
+	if err != nil {
+		return 0, refreshed, err
+	}
+	var config struct {
+		Created string `json:"created"`
+	}
+	if err := json.Unmarshal(configRaw, &config); err != nil {
+		return 0, refreshed, err
+	}
+	return parseOCIPublishedAt(config.Created), refreshed, nil
+}
+
+func parseOCIPublishedAt(value string) int64 {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return 0
+	}
+	return parsed.UnixMilli()
 }
 
 func registryRequest(ctx context.Context, client *http.Client, method, endpoint, repository string, credential RegistryCredential, token, accept string) (*http.Response, string, error) {

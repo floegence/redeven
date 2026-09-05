@@ -3430,6 +3430,7 @@
       "releaseSelectionDescription": "Версии считываются напрямую из настроенного Registry пакетов или образов. Redeven устанавливает только точно выбранную версию.",
 	  "currentRelease": "Текущая установленная версия",
 	  "releaseCheckedAt": "Последняя проверка",
+	  "releasePublishedAt": "Опубликовано: {date}",
 	  "releaseDirectSource": "Получено напрямую из настроенного Registry",
 	  "releaseCheckStale": "Последняя проверка завершилась ошибкой. Показан последний успешный результат.",
 	  "releaseLoadingProgress": "Загружено версий: {count}. Проверка источника…",
