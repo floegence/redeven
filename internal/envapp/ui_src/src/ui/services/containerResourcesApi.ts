@@ -247,6 +247,10 @@ export type ContainerStatsCollection = Readonly<{
 }>;
 
 export type ContainerImageBuildHistoryEntry = Readonly<{
+	step: number;
+	operation: string;
+	summary?: string;
+	filesystem_effect: 'filesystem' | 'metadata_only' | 'unknown';
 	intermediate_image_id?: string;
 	created_at_unix_ms?: number;
 	size_bytes?: number;

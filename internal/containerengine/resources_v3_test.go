@@ -600,7 +600,7 @@ func TestCLIClientUsesCanonicalIDsForMultipleDanglingImages(t *testing.T) {
 
 func TestCLIClientBuildHistoryNeverProjectsLayerCommands(t *testing.T) {
 	runner := &fakeCommandRunner{outputs: map[string]string{
-		"docker history --no-trunc --format json ghcr.io/acme/api:latest": "{\"ID\":\"sha256:layer\",\"Size\":\"4KB\",\"CreatedBy\":\"ENV API_TOKEN=raw-secret\"}\n{\"ID\":\"<missing>\",\"Size\":\"0B\"}\n{\"ID\":\"<none>\",\"Size\":\"1KB\"}",
+		"docker history --no-trunc --format json ghcr.io/acme/api:latest": "{\"ID\":\"sha256:layer\",\"Size\":\"4KB\",\"CreatedBy\":\"/bin/sh -c bazel build @bookworm//base-files/amd64\"}\n{\"ID\":\"<missing>\",\"Size\":\"0B\",\"CreatedBy\":\"/bin/sh -c #(nop) ENV API_TOKEN=raw-secret\"}\n{\"ID\":\"<none>\",\"Size\":\"1KB\",\"CreatedBy\":\"/bin/sh -c #(nop) COPY file:abc in /app\"}",
 	}}
 	history, err := (&CLIClient{Runner: runner}).BuildHistoryImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest")
 	if err != nil {
@@ -615,6 +615,15 @@ func TestCLIClientBuildHistoryNeverProjectsLayerCommands(t *testing.T) {
 	}
 	if history[1].IntermediateImageID != "" || history[2].IntermediateImageID != "" {
 		t.Fatalf("special history IDs were not normalized: %#v", history)
+	}
+	if history[0].Step != 0 || history[0].Operation != ImageBuildHistoryOperationRun || history[0].Summary != "bazel build @bookworm//base-files/amd64" || history[0].FilesystemEffect != ImageBuildHistoryEffectFilesystem {
+		t.Fatalf("run history metadata = %#v", history[0])
+	}
+	if history[1].Operation != ImageBuildHistoryOperationEnv || history[1].Summary != "" || history[1].FilesystemEffect != ImageBuildHistoryEffectMetadataOnly {
+		t.Fatalf("env history metadata = %#v", history[1])
+	}
+	if history[2].Operation != ImageBuildHistoryOperationCopy || history[2].FilesystemEffect != ImageBuildHistoryEffectFilesystem {
+		t.Fatalf("copy history metadata = %#v", history[2])
 	}
 }
 
