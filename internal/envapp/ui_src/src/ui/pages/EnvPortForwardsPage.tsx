@@ -1129,54 +1129,56 @@ function ManagedOperationDisclosure(props: Readonly<{
               return <li class="flex items-center gap-2 text-xs" data-managed-operation-step data-state={state()}><span data-state={state()} class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] data-[state=complete]:border-success data-[state=complete]:bg-success/10 data-[state=complete]:text-success data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=failed]:border-destructive data-[state=failed]:bg-destructive/10 data-[state=failed]:text-destructive">{state() === 'complete' ? '✓' : index() + 1}</span><span class={state() === 'pending' ? 'text-muted-foreground' : 'font-medium text-foreground'}>{managedStageLabel(stage, i18n)}</span></li>;
             }}</For>
           </ol>
-          <div class="min-w-0 rounded-lg border border-border/70 bg-background/70 p-3">
-            <Show when={transfer()} fallback={(
+          <div class="min-w-0 rounded-lg border border-border/70 bg-background/70 p-3" data-testid="managed-operation-stage-detail" data-stage={props.operation.stage}>
+            <h4 class="mb-3 text-xs font-semibold text-foreground">{managedStageLabel(props.operation.stage, i18n)}</h4>
+            <Show when={transfer()} keyed>{(item) => (
+              <div>
+                <div class="flex min-w-0 items-start gap-2"><div class="min-w-0 flex-1"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t(hostTransfer() ? 'webServices.managed.softwarePackage' : 'webServices.managed.containerImage')}</div><div class="mt-1 truncate font-mono text-xs text-foreground" title={item.artifact_reference}>{item.artifact_reference || '—'}</div></div><Show when={(item.artifact_total ?? 0) > 1}><Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.managed.operationImageSequence', { current: item.artifact_index ?? 0, total: item.artifact_total ?? 0 })}</Tag></Show></div>
+                <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={i18n.t('webServices.managed.operationTransferProgress')} aria-valuemin="0" aria-valuemax={progress().total || undefined} aria-valuenow={progress().total ? Math.min(progress().current, progress().total) : undefined} data-indeterminate={progress().total === 0 ? 'true' : undefined}><div class={cn('h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none', progress().total === 0 && 'w-1/3 animate-pulse motion-reduce:animate-none')} style={progress().total ? { width: `${percent()}%` } : undefined} /></div>
+                <dl class={cn('mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs', hostTransfer() ? 'sm:grid-cols-3' : 'sm:grid-cols-4')}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationDownloaded')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_bytes ?? 0) > 0 ? `${formatManagedBytes(item.downloaded_bytes)} / ${formatManagedBytes(item.total_bytes)}` : item.phase === 'cached' ? formatManagedBytes(0) : '—'}</dd></div><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationSpeed')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.bytes_per_second ?? 0) > 0 || item.phase === 'cached' ? `${formatManagedBytes(item.bytes_per_second)}/s` : '—'}</dd></div><Show when={!hostTransfer()}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationLayers')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_layers ?? 0) > 0 ? `${item.completed_layers ?? 0} / ${item.total_layers}` : '—'}</dd></div></Show><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}</dt><dd class="mt-0.5 font-medium text-foreground" data-testid="managed-operation-elapsed">{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, terminal() ? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs())}</dd></div></dl>
+              </div>
+            )}</Show>
+            <Show when={commands().length > 0 || output().length > 0}>
+              <div class={cn(transfer() && 'mt-4 border-t border-border/60 pt-4')} data-testid="managed-operation-command-output">
+                <div class="flex items-center justify-between gap-3">
+                  <h4 class="text-xs font-semibold text-foreground">{i18n.t('webServices.managed.operationCommandOutput')}</h4>
+                  <Show when={props.operation.progress_detail?.output_truncated}><span class="text-[10px] text-warning">{i18n.t('webServices.managed.operationOutputTruncated')}</span></Show>
+                </div>
+                <div class="mt-2 space-y-1.5">
+                  <For each={commands()}>{(command) => (
+                    <div class="flex min-w-0 items-center gap-2 text-[10px]">
+                      <code class="min-w-0 flex-1 truncate text-foreground" title={command.display}>{command.display}</code>
+                      <span class="shrink-0 text-muted-foreground">{i18n.t(`webServices.managed.operationCommandState.${command.state}` as EnvAppTranslationKey)}</span>
+                    </div>
+                  )}</For>
+                </div>
+                <div
+                  {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+                  ref={outputViewport}
+                  class="mt-2 max-h-52 min-h-16 overflow-y-auto overscroll-contain rounded-md bg-muted/35 px-2.5 py-2 font-mono text-[10px] leading-4 [scrollbar-gutter:stable]"
+                  role="log"
+                  aria-label={i18n.t('webServices.managed.operationOutput')}
+                  data-testid="managed-operation-output"
+                  onScroll={() => {
+                    if (!outputViewport) return;
+                    followOutput = outputViewport.scrollHeight - outputViewport.scrollTop - outputViewport.clientHeight <= 24;
+                  }}
+                >
+                  <For each={output()} fallback={<div class="text-muted-foreground">{i18n.t('webServices.managed.operationNoOutput')}</div>}>{(line) => (
+                    <div class={cn('whitespace-pre-wrap break-all text-foreground/85', line.stream === 'stderr' && 'text-warning')} data-sequence={line.sequence}>
+                      <span class="sr-only">{i18n.t(`webServices.managed.operationStream.${line.stream}` as EnvAppTranslationKey)}: </span>{line.text}
+                    </div>
+                  )}</For>
+                </div>
+              </div>
+            </Show>
+            <Show when={!transfer() && commands().length === 0 && output().length === 0}>
               <div class="space-y-3">
                 <p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.operationPreparingDetails')}</p>
                 <dl class="text-xs"><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}</dt><dd class="mt-0.5 font-medium text-foreground" data-testid="managed-operation-elapsed">{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, terminal() ? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs())}</dd></div></dl>
               </div>
-            )} keyed>{(item) => (
-              <>
-                <div class="flex min-w-0 items-start gap-2"><div class="min-w-0 flex-1"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{i18n.t(hostTransfer() ? 'webServices.managed.softwarePackage' : 'webServices.managed.containerImage')}</div><div class="mt-1 truncate font-mono text-xs text-foreground" title={item.artifact_reference}>{item.artifact_reference || '—'}</div></div><Show when={(item.artifact_total ?? 0) > 1}><Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.managed.operationImageSequence', { current: item.artifact_index ?? 0, total: item.artifact_total ?? 0 })}</Tag></Show></div>
-                <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={i18n.t('webServices.managed.operationTransferProgress')} aria-valuemin="0" aria-valuemax={progress().total || undefined} aria-valuenow={progress().total ? Math.min(progress().current, progress().total) : undefined} data-indeterminate={progress().total === 0 ? 'true' : undefined}><div class={cn('h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none', progress().total === 0 && 'w-1/3 animate-pulse motion-reduce:animate-none')} style={progress().total ? { width: `${percent()}%` } : undefined} /></div>
-                <dl class={cn('mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs', hostTransfer() ? 'sm:grid-cols-3' : 'sm:grid-cols-4')}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationDownloaded')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_bytes ?? 0) > 0 ? `${formatManagedBytes(item.downloaded_bytes)} / ${formatManagedBytes(item.total_bytes)}` : item.phase === 'cached' ? formatManagedBytes(0) : '—'}</dd></div><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationSpeed')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.bytes_per_second ?? 0) > 0 || item.phase === 'cached' ? `${formatManagedBytes(item.bytes_per_second)}/s` : '—'}</dd></div><Show when={!hostTransfer()}><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationLayers')}</dt><dd class="mt-0.5 font-medium text-foreground">{(item.total_layers ?? 0) > 0 ? `${item.completed_layers ?? 0} / ${item.total_layers}` : '—'}</dd></div></Show><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}</dt><dd class="mt-0.5 font-medium text-foreground" data-testid="managed-operation-elapsed">{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, terminal() ? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs())}</dd></div></dl>
-              </>
-            )}</Show>
+            </Show>
           </div>
-          <Show when={commands().length > 0 || output().length > 0}>
-            <div class="col-span-full min-w-0 rounded-lg border border-border/70 bg-background/70 p-3" data-testid="managed-operation-command-output">
-              <div class="flex items-center justify-between gap-3">
-                <h4 class="text-xs font-semibold text-foreground">{i18n.t('webServices.managed.operationCommandOutput')}</h4>
-                <Show when={props.operation.progress_detail?.output_truncated}><span class="text-[10px] text-warning">{i18n.t('webServices.managed.operationOutputTruncated')}</span></Show>
-              </div>
-              <div class="mt-2 space-y-1.5">
-                <For each={commands()}>{(command) => (
-                  <div class="flex min-w-0 items-center gap-2 text-[10px]">
-                    <code class="min-w-0 flex-1 truncate text-foreground" title={command.display}>{command.display}</code>
-                    <span class="shrink-0 text-muted-foreground">{i18n.t(`webServices.managed.operationCommandState.${command.state}` as EnvAppTranslationKey)}</span>
-                  </div>
-                )}</For>
-              </div>
-              <div
-                {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-                ref={outputViewport}
-                class="mt-2 max-h-52 min-h-16 overflow-y-auto overscroll-contain rounded-md bg-muted/35 px-2.5 py-2 font-mono text-[10px] leading-4 [scrollbar-gutter:stable]"
-                role="log"
-                aria-label={i18n.t('webServices.managed.operationOutput')}
-                data-testid="managed-operation-output"
-                onScroll={() => {
-                  if (!outputViewport) return;
-                  followOutput = outputViewport.scrollHeight - outputViewport.scrollTop - outputViewport.clientHeight <= 24;
-                }}
-              >
-                <For each={output()} fallback={<div class="text-muted-foreground">{i18n.t('webServices.managed.operationNoOutput')}</div>}>{(line) => (
-                  <div class={cn('whitespace-pre-wrap break-all text-foreground/85', line.stream === 'stderr' && 'text-warning')} data-sequence={line.sequence}>
-                    <span class="sr-only">{i18n.t(`webServices.managed.operationStream.${line.stream}` as EnvAppTranslationKey)}: </span>{line.text}
-                  </div>
-                )}</For>
-              </div>
-            </div>
-          </Show>
         </div>
         </Show>
       </div>

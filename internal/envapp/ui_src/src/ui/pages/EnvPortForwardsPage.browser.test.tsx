@@ -703,8 +703,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await settle();
 
     const details = document.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
+    const stageDetail = details.querySelector<HTMLElement>('[data-testid="managed-operation-stage-detail"]')!;
     expect(details).toBeTruthy();
     expect(details.textContent).toContain('ghcr.io/runzhliu/example-service@sha256:reviewed');
+    expect(stageDetail.dataset.stage).toBe('pulling');
+    expect(stageDetail.querySelector('[role="progressbar"]')).toBeTruthy();
+    expect(stageDetail.querySelector('[data-testid="managed-operation-command-output"]')).toBeNull();
     expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
     expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
     expect(details.closest('[role="dialog"]')).toBeNull();
@@ -784,6 +788,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await settle();
 
     const output = host.querySelector<HTMLElement>('[data-testid="managed-operation-output"]')!;
+    const stageDetail = host.querySelector<HTMLElement>('[data-testid="managed-operation-stage-detail"]')!;
+    const commandOutput = host.querySelector<HTMLElement>('[data-testid="managed-operation-command-output"]')!;
+    expect(stageDetail.dataset.stage).toBe('installing');
+    expect(commandOutput.parentElement).toBe(stageDetail);
+    expect(commandOutput.getBoundingClientRect().left).toBeGreaterThanOrEqual(stageDetail.getBoundingClientRect().left);
+    expect(commandOutput.getBoundingClientRect().right).toBeLessThanOrEqual(stageDetail.getBoundingClientRect().right);
     expect(output.scrollHeight).toBeGreaterThan(output.clientHeight);
     expect(output.scrollHeight - output.scrollTop - output.clientHeight).toBeLessThanOrEqual(2);
     expect(host.querySelector('[data-testid="managed-operation-command-output"]')?.textContent).toContain('<managed-node> <managed-npm-cli> install package@1.0.0');
