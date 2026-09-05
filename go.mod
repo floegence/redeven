@@ -10,7 +10,7 @@ require (
 	github.com/floegence/floret/v7 v7.1.4
 	github.com/floegence/flowersec/flowersec-go/v5 v5.0.1
 	github.com/floegence/redeven-service-templates v0.4.1
-	github.com/floegence/redevplugin/v3 v3.0.26
+	github.com/floegence/redevplugin/v3 v3.0.27
 	github.com/gorilla/websocket v1.5.3
 	github.com/mholt/archives v0.1.5
 	github.com/nwaples/rardecode/v2 v2.2.0
@@ -25,7 +25,7 @@ require (
 	golang.org/x/term v0.45.0
 	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.56.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (

@@ -203,6 +203,56 @@ describe('PluginSurfaceBody', () => {
     expect(coordinator.setVisible).toHaveBeenLastCalledWith(expect.anything(), true);
   });
 
+  it('keeps both Activity surface hosts mounted while visibility alternates', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const hosts = [createHost(), { ...createHost(), surfaceInstanceId: 'surface_instance_2' }];
+    const coordinators = hosts.map((host) => {
+      const coordinator = createCoordinator(host);
+      vi.mocked(coordinator.open).mockImplementation(async (slot) => {
+        slot.element.append(host.element);
+        return host;
+      });
+      return coordinator;
+    });
+    const confirmationQueue = createConfirmationQueue();
+    const [active, setActive] = createSignal(0);
+
+    dispose = render(() => (
+      <>{hosts.map((_host, index) => (
+        <PluginSurfaceBody
+          coordinator={coordinators[index]!}
+          confirmationQueue={confirmationQueue}
+          target={{ ...target, pluginInstanceID: `plugin_instance_${index}` }}
+          visible={active() === index}
+          onRetirementError={vi.fn()}
+        />
+      ))}</>
+    ), mount);
+    await flushAsync();
+
+    for (let cycle = 0; cycle < 20; cycle += 1) {
+      for (const selected of [1, 0]) {
+        setActive(selected);
+        await flushAsync();
+        hosts.forEach((host, index) => {
+          expect(host.element.isConnected).toBe(true);
+          expect(host.sendLifecycle).toHaveBeenLastCalledWith({ type: index === selected ? 'visible' : 'hidden' });
+        });
+      }
+    }
+
+    coordinators.forEach((coordinator) => {
+      expect(coordinator.open).toHaveBeenCalledOnce();
+      expect(coordinator.release).not.toHaveBeenCalled();
+      expect(coordinator.fail).not.toHaveBeenCalled();
+    });
+    hosts.forEach((host) => {
+      expect(host.close).not.toHaveBeenCalled();
+      expect(host.dispose).not.toHaveBeenCalled();
+    });
+  });
+
   it('updates the existing iframe title when display metadata changes', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);

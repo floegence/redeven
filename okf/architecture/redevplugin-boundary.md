@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.26` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.27` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -43,12 +43,12 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.26` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.27` set:
 
-- `github.com/floegence/redevplugin/v3 v3.0.26`;
-- `@floegence/redevplugin-contracts@3.0.26` and
-  `@floegence/redevplugin-ui@3.0.26`;
-- `redevplugin-runtime@3.0.26` and `redevplugin-worker-sdk@3.0.26` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.27`;
+- `@floegence/redevplugin-contracts@3.0.27` and
+  `@floegence/redevplugin-ui@3.0.27`;
+- `redevplugin-runtime@3.0.27` and `redevplugin-worker-sdk@3.0.27` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
@@ -95,7 +95,7 @@ carries its exact permission id, required status, and stable
 facts, but it must not parse the package, derive permissions itself, show method
 inventories in the primary UI, or treat the declaration as final verification.
 
-Worker activation remains ReDevPlugin work. The `v3.0.26` Host starts and
+Worker activation remains ReDevPlugin work. The `v3.0.27` Host starts and
 health-checks the runtime and prewarms the exact worker module after fresh
 install, update, downgrade, enable, and startup recovery. It revalidates the
 installed package identity, SHA-256 hashes, Ed25519 status, revocation, grants,
@@ -191,7 +191,7 @@ affected authority, then the SDK tears down the shared scope for committed or
 unknown outcomes. Redeven must not issue a second close against those disposed
 slots or treat local disposal as the server-side revoke.
 
-The `v3.0.26` bridge delivers `keydown` and `keyup` from the focused plugin
+The `v3.0.27` bridge delivers `keydown` and `keyup` from the focused plugin
 Surface, including canvas, editable, control, and surface targets. Exact
 declarative bindings are evaluated synchronously inside the sandbox when a
 plugin must prevent a matching browser default; composition input never
@@ -203,6 +203,13 @@ Button click actions preserve the owning button's value when the pointer lands
 on a nested label or icon. ReDevPlugin owns this DOM dispatch behavior, including
 keyboard activation; Redeven consumes the released fix without intercepting or
 reconstructing plugin actions.
+
+Retained hidden surfaces keep their existing iframe and canvas instances.
+ReDevPlugin measures canvas CSS layout independently from backing pixels and
+waits for nonzero layout before opening or resizing a canvas. Hidden canvases
+retain their last valid pixel reservation, and the existing dimension and total
+pixel limits remain enforced. Redeven supplies placement visibility only; it
+does not infer canvas sizes or compensate for device pixel ratio.
 
 The same bridge accepts a file export only within the bounded user-action
 window and validates its filename, media type, and byte limit before delivering
