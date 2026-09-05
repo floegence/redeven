@@ -49,6 +49,13 @@ that runtime's size cells; refreshing retries the observation. A new inventory
 generation cancels older measurements. Disk usage never authorizes cleanup or
 overrides the reference preflight.
 
+# Boundaries
+
+Volume usage is an observation, not a capacity, quota, free-space, billing, or
+cleanup contract. Redeven does not infer safety from an unavailable size or an
+incomplete reference scan, and it does not bypass the authoritative mutation
+preflight when deleting a volume.
+
 # Evidence
 
 - `redeven:internal/containerengine/volume_usage.go` - Reads bounded engine statistics and preserves unavailable sizes.
