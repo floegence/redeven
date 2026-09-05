@@ -3260,6 +3260,7 @@ export const enUS = defineDictionary({
       releaseSelectionDescription: 'Versions are read directly from the configured package or image registry. Redeven installs only the exact version you select.',
 	  currentRelease: 'Current installed release',
 	  releaseCheckedAt: 'Last checked',
+	  releasePublishedAt: 'Published {date}',
 	  releaseDirectSource: 'Read directly from the configured registry',
 	  releaseCheckStale: 'The latest check failed. Showing the last successful result.',
 	  releaseLoadingProgress: '{count} versions loaded. Checking the source…',

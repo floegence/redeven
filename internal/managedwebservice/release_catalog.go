@@ -246,7 +246,7 @@ func (m *Manager) listOCIReleaseTags(ctx context.Context, spec TemplateSpec, cur
 func (m *Manager) verifyOCIReleaseTags(ctx context.Context, spec TemplateSpec, tags []string) ([]containerengine.OCIRelease, error) {
 	discovery := containerengine.OCIReleaseDiscovery{Client: m.releaseHTTPClient()}
 	request := containerengine.OCIReleaseVerificationRequest{
-		Reference: releaseImageRepository(spec.Container.Image), PlatformOS: "linux", PlatformArch: runtime.GOARCH, Tags: tags,
+		Reference: releaseImageRepository(spec.Container.Image), PlatformOS: "linux", PlatformArch: runtime.GOARCH, Tags: tags, ResolvePublishedAt: true,
 	}
 	items, err := discovery.VerifyTags(ctx, request)
 	if err == nil {
@@ -348,6 +348,7 @@ func verifiedOCIReleaseCandidate(browse releaseBrowseContext, cached cachedRelea
 	candidate := cached.Candidate
 	candidate.IndexDigest = item.IndexDigest
 	candidate.Digest = item.PlatformDigest
+	candidate.PublishedAtUnixMs = item.PublishedAtUnixMs
 	candidate.DigestVerified = item.DigestVerified
 	if candidate.Digest == "" && browse.Recommended != nil && browse.Recommended.Kind == "oci" && browse.Recommended.Source == candidate.Source && browse.Recommended.Tag == item.Tag {
 		candidate.Digest = browse.Recommended.Digest
@@ -359,14 +360,18 @@ func verifiedOCIReleaseCandidate(browse releaseBrowseContext, cached cachedRelea
 	if !item.Compatible {
 		candidate.VerificationStatus = "unavailable"
 	}
-	if candidate.RecommendationStatus != "" {
-		digestMatches := browse.Recommended == nil || browse.Recommended.Digest == "" || browse.Recommended.Digest == item.PlatformDigest
+	isRecommendation := browse.Recommended != nil && browse.Recommended.Kind == "oci" && browse.Recommended.Source == candidate.Source && browse.Recommended.Tag == item.Tag
+	if isRecommendation {
+		digestMatches := browse.Recommended.Digest == "" || browse.Recommended.Digest == item.PlatformDigest
 		candidate.IsRecommended = candidate.Selectable && digestMatches && !item.DigestVerified
 		if candidate.IsRecommended {
 			candidate.RecommendationStatus = "available"
 		} else {
 			candidate.RecommendationStatus = "unavailable"
 		}
+	} else {
+		candidate.IsRecommended = false
+		candidate.RecommendationStatus = ""
 	}
 	if browse.Current != nil && browse.Current.Kind == "oci" && browse.Current.Tag == item.Tag && browse.Current.Digest != "" && browse.Current.Digest != item.PlatformDigest {
 		candidate.TagMoved = true
@@ -530,33 +535,8 @@ func (m *Manager) commitReleaseView(ctx context.Context, browse releaseBrowseCon
 
 func (m *Manager) recomputeReleaseViewLocked(result *ReleaseCandidateResult) {
 	sort.SliceStable(result.Candidates, func(i, j int) bool {
-		if result.Candidates[i].IsCurrent != result.Candidates[j].IsCurrent {
-			return result.Candidates[i].IsCurrent
-		}
-		if result.Candidates[i].IsRecommended != result.Candidates[j].IsRecommended {
-			return result.Candidates[i].IsRecommended
-		}
-		left := result.Candidates[i].Version
-		if left == "" {
-			left = result.Candidates[i].Tag
-		}
-		right := result.Candidates[j].Version
-		if right == "" {
-			right = result.Candidates[j].Tag
-		}
-		leftSemantic := strings.TrimPrefix(left, "v")
-		rightSemantic := strings.TrimPrefix(right, "v")
-		_, leftOK := parseSemanticVersion(leftSemantic)
-		_, rightOK := parseSemanticVersion(rightSemantic)
-		leftOK = leftOK && exactSemverPattern.MatchString(leftSemantic)
-		rightOK = rightOK && exactSemverPattern.MatchString(rightSemantic)
-		if leftOK != rightOK {
-			return leftOK
-		}
-		if leftOK {
-			return compareReleaseVersions(leftSemantic, rightSemantic) > 0
-		}
-		return left < right
+		return releaseCandidatePublishedAt(result.Candidates[i]) > releaseCandidatePublishedAt(result.Candidates[j]) ||
+			(releaseCandidatePublishedAt(result.Candidates[i]) == releaseCandidatePublishedAt(result.Candidates[j]) && releaseCandidateFallbackLess(result.Candidates[i], result.Candidates[j]))
 	})
 	result.LatestStableRelease, result.LatestPreviewRelease = nil, nil
 	for index := range result.Candidates {
@@ -593,19 +573,84 @@ func latestReleaseCandidateIndex(candidates []ReleaseCandidate, channel string) 
 		if _, ok := parseSemanticVersion(semantic); !ok || !exactSemverPattern.MatchString(semantic) {
 			continue
 		}
-		if latest < 0 {
-			latest = index
-			continue
-		}
-		latestValue := candidates[latest].Version
-		if latestValue == "" {
-			latestValue = candidates[latest].Tag
-		}
-		if compareReleaseVersions(semantic, strings.TrimPrefix(latestValue, "v")) > 0 {
+		if latest < 0 || releaseCandidateNewer(candidate, candidates[latest]) {
 			latest = index
 		}
 	}
 	return latest
+}
+
+func releaseCandidatePublishedAt(candidate ReleaseCandidate) int64 {
+	if candidate.PublishedAtUnixMs > 0 {
+		return candidate.PublishedAtUnixMs
+	}
+	value := candidate.Version
+	if value == "" {
+		value = candidate.Tag
+	}
+	if len(value) < len("2006.01.02") || value[4] != '.' || value[7] != '.' {
+		return 0
+	}
+	if len(value) > len("2006.01.02") && value[10] != '-' && value[10] != '_' {
+		return 0
+	}
+	parsed, err := time.Parse("2006.01.02", value[:10])
+	if err != nil {
+		return 0
+	}
+	return parsed.UnixMilli()
+}
+
+func releaseCandidateMatchesRecommendation(candidate ReleaseCandidate, recommended *ReleaseIdentity) bool {
+	if recommended == nil || candidate.SourceKind != recommended.Kind || candidate.Source != recommended.Source {
+		return false
+	}
+	switch candidate.SourceKind {
+	case "oci":
+		return candidate.Tag != "" && candidate.Tag == recommended.Tag
+	case "npm":
+		return candidate.Version != "" && candidate.Version == recommended.Version
+	default:
+		return false
+	}
+}
+
+func releaseCandidateFallbackLess(left, right ReleaseCandidate) bool {
+	leftValue := left.Version
+	if leftValue == "" {
+		leftValue = left.Tag
+	}
+	rightValue := right.Version
+	if rightValue == "" {
+		rightValue = right.Tag
+	}
+	leftSemantic := strings.TrimPrefix(leftValue, "v")
+	rightSemantic := strings.TrimPrefix(rightValue, "v")
+	_, leftOK := parseSemanticVersion(leftSemantic)
+	_, rightOK := parseSemanticVersion(rightSemantic)
+	leftOK = leftOK && exactSemverPattern.MatchString(leftSemantic)
+	rightOK = rightOK && exactSemverPattern.MatchString(rightSemantic)
+	if leftOK != rightOK {
+		return leftOK
+	}
+	if leftOK && leftSemantic != rightSemantic {
+		return compareReleaseVersions(leftSemantic, rightSemantic) > 0
+	}
+	if leftValue != rightValue {
+		return leftValue > rightValue
+	}
+	if left.IsCurrent != right.IsCurrent {
+		return left.IsCurrent
+	}
+	return left.IsRecommended && !right.IsRecommended
+}
+
+func releaseCandidateNewer(candidate, current ReleaseCandidate) bool {
+	candidatePublishedAt, currentPublishedAt := releaseCandidatePublishedAt(candidate), releaseCandidatePublishedAt(current)
+	if candidatePublishedAt != currentPublishedAt {
+		return candidatePublishedAt > currentPublishedAt
+	}
+	return releaseCandidateFallbackLess(candidate, current)
 }
 
 func (m *Manager) removeReleaseScopeLocked(scope string) {
@@ -700,6 +745,14 @@ func (m *Manager) restoreReleaseView(ctx context.Context, browse releaseBrowseCo
 	items := make([]cachedReleaseCandidate, 0, len(summary.Candidates))
 	for _, snapshot := range summary.Candidates {
 		snapshot.CandidateID = ""
+		if releaseCandidateMatchesRecommendation(snapshot, browse.Recommended) {
+			snapshot.IsRecommended = false
+			if snapshot.VerificationStatus == "unavailable" || !snapshot.Selectable {
+				snapshot.RecommendationStatus = "unavailable"
+			} else {
+				snapshot.RecommendationStatus = "pending"
+			}
+		}
 		cached := cachedReleaseCandidate{Scope: browse.Scope, TemplateID: browse.TemplateID, Candidate: snapshot, Spec: cloneTemplateSpec(browse.Spec)}
 		if snapshot.VerificationStatus == "verified" && snapshot.Selectable {
 			cached.Identity = releaseIdentityFromCandidate(snapshot)
@@ -714,11 +767,13 @@ func (m *Manager) restoreReleaseView(ctx context.Context, browse releaseBrowseCo
 	}
 	restoreBrowse := browse
 	restoreBrowse.ServiceID = ""
+	restoreBrowse.Recommended = nil
 	result, err := m.replaceReleaseView(ctx, restoreBrowse, items, "stale", "", true)
 	if err != nil {
 		return nil, false
 	}
 	result.CheckStatus = "stale"
+	result.RecommendedRelease = browse.Recommended
 	result.CheckedAtUnixMs = record.CheckedAtUnixMs
 	result.NextCheckAtUnixMs = record.NextCheckAtUnixMs
 	result.LastErrorCode = record.LastErrorCode
