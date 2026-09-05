@@ -15,6 +15,7 @@ import {
   createAuthenticatedReDevPluginFetch,
   createPluginSurfacePlacementCoordinator,
   createRedevenPluginPlatform,
+  downloadPluginSurfaceFile,
   redevPluginAPIPath,
   redevPluginCSRFHeader,
   redevPluginCSRFProof,
@@ -80,6 +81,58 @@ function createClient(
 }
 
 describe('createPluginSurfacePlacementCoordinator', () => {
+  it('downloads Surface file exports through a transient object URL by default', async () => {
+    const order: string[] = [];
+    const slot = createSlot(order, 'export');
+    let openOptions: PluginOpenSurfaceInSlotOptions | undefined;
+    const coordinator = createPluginSurfacePlacementCoordinator(createClient(async (_slot, _request, options) => {
+      openOptions = options;
+      return createHost('surface_export', order);
+    }));
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mind-map-export');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.isConnected).toBe(true);
+    });
+
+    await coordinator.open(slot, request);
+    await openOptions?.onFileExport?.({
+      fileName: 'project-map.svg',
+      mediaType: 'image/svg+xml',
+      bytes: new TextEncoder().encode('<svg/>'),
+      signal: new AbortController().signal,
+    });
+
+    const exportedBlob = createObjectURL.mock.calls[0]?.[0] as Blob;
+    const anchor = click.mock.instances[0] as HTMLAnchorElement;
+    expect(exportedBlob.type).toBe('image/svg+xml');
+    await expect(new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener('load', () => resolve(String(reader.result)));
+      reader.addEventListener('error', () => reject(reader.error));
+      reader.readAsText(exportedBlob);
+    })).resolves.toBe('<svg/>');
+    expect(anchor.download).toBe('project-map.svg');
+    expect(anchor.href).toBe('blob:mind-map-export');
+    expect(anchor.isConnected).toBe(false);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mind-map-export');
+  });
+
+  it('preserves an explicit Surface file export handler', async () => {
+    const order: string[] = [];
+    const slot = createSlot(order, 'custom-export');
+    let openOptions: PluginOpenSurfaceInSlotOptions | undefined;
+    const coordinator = createPluginSurfacePlacementCoordinator(createClient(async (_slot, _request, options) => {
+      openOptions = options;
+      return createHost('surface_custom_export', order);
+    }));
+    const onFileExport = vi.fn();
+
+    await coordinator.open(slot, request, { onFileExport });
+
+    expect(openOptions?.onFileExport).toBe(onFileExport);
+  });
+
   it('keeps independent slots alive until each placement retires', async () => {
     const order: string[] = [];
     const firstSlot = createSlot(order, 'first');
@@ -408,6 +461,29 @@ describe('createPluginSurfacePlacementCoordinator', () => {
 
     expect(slot.close).not.toHaveBeenCalled();
     expect(slot.dispose).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('downloadPluginSurfaceFile', () => {
+  it('does not create a download after the Surface export is cancelled', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL');
+    const controller = new AbortController();
+    controller.abort();
+
+    let failure: unknown;
+    try {
+      downloadPluginSurfaceFile({
+        fileName: 'cancelled.png',
+        mediaType: 'image/png',
+        bytes: new Uint8Array([1, 2, 3]),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({ name: 'AbortError' });
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 });
 

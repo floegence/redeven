@@ -8,6 +8,7 @@ import {
   type PluginOpenSurfaceInSlotOptions,
   type PluginOpenSurfaceRequest,
   type PluginSurfaceHost,
+  type PluginSurfaceFileExport,
   type PluginSurfaceInteractionEvent,
 } from '@floegence/redevplugin-ui';
 import { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
@@ -26,6 +27,25 @@ export type RedevenPluginPlatform = Readonly<{
 }>;
 
 export type { PluginSurfaceInteractionEvent };
+
+export function downloadPluginSurfaceFile(request: PluginSurfaceFileExport): void {
+  request.signal.throwIfAborted();
+  const exportedBytes = new Uint8Array(request.bytes.byteLength);
+  exportedBytes.set(request.bytes);
+  const objectURL = URL.createObjectURL(new Blob([exportedBytes.buffer], { type: request.mediaType }));
+  const anchor = document.createElement('a');
+  anchor.href = objectURL;
+  anchor.download = request.fileName;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  try {
+    request.signal.throwIfAborted();
+    anchor.click();
+  } finally {
+    anchor.remove();
+    URL.revokeObjectURL(objectURL);
+  }
+}
 
 type RedevenPluginOpenSurfaceOptions = Omit<PluginOpenSurfaceInSlotOptions, 'signal'> & Readonly<{
   onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
@@ -202,6 +222,7 @@ export function createPluginSurfacePlacementCoordinator(
       const { onCleanupError, ...openOptions } = options;
       try {
         const host = await client.openSurfaceInSlot(slot, request, {
+          onFileExport: downloadPluginSurfaceFile,
           ...openOptions,
           signal: entry.opening.signal,
         });
