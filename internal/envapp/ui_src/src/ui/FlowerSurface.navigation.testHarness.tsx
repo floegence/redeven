@@ -606,6 +606,8 @@ export function approvalCommandResult(
       view_version: version,
       activity: 'active',
       run_id: `run:${interactionID}`,
+      turn_id: 'turn-fixture',
+      run_progress: { phase: 'finalizing' },
       interactions: [{ id: interactionID, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval', resolved: true, approved }],
     },
   };
