@@ -7,10 +7,10 @@ timestamp: 2026-09-03T00:00:00Z
 ---
 # Summary
 
-- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.
-- Outcome: users can keep an operation expanded through list and stream refreshes, inspect real safely bounded lifecycle output, and see a brief operation finish without the progress surface flashing away.
-- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure and presentation state, terminal feedback remains readable, and output never becomes a source of Runtime identity or application behavior.
-- Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.
+- Authority: a Manager-owned Reporter publishes each active operation; the Registry owns durable history.
+- Outcome: users can inspect bounded lifecycle output and keep a brief completion visible while list and stream refreshes preserve the expanded row.
+- Invariants: safe command templates, pre-persistence redaction, one operation ID for disclosure, readable terminal feedback, and no Runtime identity derived from output.
+- Failure boundary: persistence, streaming, capture, and validation failures never expose raw output, secrets, credentials, sensitive URL queries, private paths, or control characters.
 
 # Contract
 

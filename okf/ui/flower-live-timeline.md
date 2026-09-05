@@ -4,6 +4,7 @@ title: Flower live current state
 description: One workspace stream, typed current views, and bounded browser caches.
 tags: [ui, flower, live, threads]
 timestamp: 2026-08-18T00:00:00Z
+quality_exception: Cross-domain Flower live-state contract spanning transport, cache ownership, current-view publication, lifecycle identity, routing, and reconnect recovery.
 ---
 # Summary
 

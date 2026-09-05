@@ -152,7 +152,7 @@
               "security",
               "web-services"
             ],
-            "summary": "- Authority: Redeven owns installed instance state, applied Runtime digests, bindings, resource identities, operations, and protected forwards; the current verified template record owns Runtime behavior, while the released catalog owns every built-in definition and presentation asset.\n- Outcome: any valid template follows one install, start, stop, restart, update, reconfigure, retry, and uninstall engine without template-specific branches.\n- Invariants: Runtime state has one Registry authority, external resources are accepted only by exact identity, failures require an explicit user action, and Renderer consumes backend capabilities rather than inferring recovery.\n- Failure boundary: invalid catalogs, bindings, resources, releases, permissions, or health checks fail closed without adopting or mutating unknown resources.",
+            "summary": "- Authority: Redeven owns instance state, Runtime digests, bindings, resources, operations, and forwards; verified templates define behavior and the released catalog defines built-ins and assets.\n- Outcome: every valid template uses one generic install, lifecycle, recovery, and uninstall engine without template-specific branches.\n- Invariants: one Registry state authority, exact external-resource identity, explicit recovery actions, and Renderer use of backend capabilities.\n- Failure boundary: invalid catalogs, bindings, resources, releases, permissions, and health checks fail closed without adopting or mutating unknown resources.",
             "section_count": 2
           },
           {
@@ -169,7 +169,7 @@
               "security",
               "ui"
             ],
-            "summary": "- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.\n- Outcome: users can keep an operation expanded through list and stream refreshes, inspect real safely bounded lifecycle output, and see a brief operation finish without the progress surface flashing away.\n- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure and presentation state, terminal feedback remains readable, and output never becomes a source of Runtime identity or application behavior.\n- Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.",
+            "summary": "- Authority: a Manager-owned Reporter publishes each active operation; the Registry owns durable history.\n- Outcome: users can inspect bounded lifecycle output and keep a brief completion visible while list and stream refreshes preserve the expanded row.\n- Invariants: safe command templates, pre-persistence redaction, one operation ID for disclosure, readable terminal feedback, and no Runtime identity derived from output.\n- Failure boundary: persistence, streaming, capture, and validation failures never expose raw output, secrets, credentials, sensitive URL queries, private paths, or control characters.",
             "section_count": 2
           },
           {
@@ -838,7 +838,7 @@
               "flower",
               "ui"
             ],
-            "summary": "Flower sends ordinary input through one stable request ID. A launcher allocates that ID once when an intent opens and reuses it for every retry of the frozen intent. New-thread HTTP commands carry it only in `create.client_request_id`; existing-thread HTTP commands carry it only in top-level `client_request_id`, while the URL owns ThreadID. The core service rejects missing, redundant, invalid, or conflicting identities; only the legacy RPC adapter may allocate a missing ID before entering the same core path. A successful command receipt must echo both the exact request ID and authoritative ThreadID. The composer, thread rail, Stop, interaction controls, and thread switching remain usable while provider work continues. A short-lived IndexedDB outbox retains ordinary launch input and the effective new-thread settings needed for provisional presentation until the canonical view confirms its request ID; secret interaction answers never enter it.",
+            "summary": "Flower assigns one request ID to an input intent and reuses it for retries. New-thread HTTP puts it in `create.client_request_id`; existing-thread HTTP uses top-level `client_request_id`, with ThreadID owned by the URL. The core rejects missing, duplicate, invalid, or conflicting identities, while the legacy RPC adapter may fill only a missing ID. Accepted receipts echo the exact request and Thread IDs. Composer, rail, Stop, interactions, and switching remain usable during provider work. A short-lived outbox retains non-secret input and provisional new-thread settings until canonical confirmation; secret answers never enter it.",
             "section_count": 2
           },
           {
@@ -4040,6 +4040,7 @@
       "timestamp": "2026-09-05T00:00:00Z",
       "frontmatter": {
         "description": "Present aggregated container resources with stable loading, exact-target navigation, and structured Compose input.",
+        "quality_exception": "Cross-surface native container contract spanning aggregated resources, target-scoped navigation, operations, and Compose workflows.",
         "tags": [
           "architecture",
           "containers",
@@ -5118,8 +5119,8 @@
         "title": "Managed Service operation progress",
         "type": "Runtime Contract"
       },
-      "body_length": 6907,
-      "summary": "- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.\n- Outcome: users can keep an operation expanded through list and stream refreshes, inspect real safely bounded lifecycle output, and see a brief operation finish without the progress surface flashing away.\n- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure and presentation state, terminal feedback remains readable, and output never becomes a source of Runtime identity or application behavior.\n- Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.",
+      "body_length": 6670,
+      "summary": "- Authority: a Manager-owned Reporter publishes each active operation; the Registry owns durable history.\n- Outcome: users can inspect bounded lifecycle output and keep a brief completion visible while list and stream refreshes preserve the expanded row.\n- Invariants: safe command templates, pre-persistence redaction, one operation ID for disclosure, readable terminal feedback, and no Runtime identity derived from output.\n- Failure boundary: persistence, streaming, capture, and validation failures never expose raw output, secrets, credentials, sensitive URL queries, private paths, or control characters.",
       "sections": [
         {
           "id": "contract",
@@ -5188,7 +5189,7 @@
           "description": "Verifies stable output DOM, truncation, stream semantics, and user-controlled following in a real browser."
         }
       ],
-      "snippet": "- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority. - Outcome: users can keep an operation expanded through list and stream",
+      "snippet": "- Authority: a Manager-owned Reporter publishes each active operation; the Registry owns durable history. - Outcome: users can inspect bounded lifecycle output and keep a brief completion visible while list and stream refreshes preserve the",
       "backlinks": [
         {
           "label": "Managed Web Services",
@@ -5454,8 +5455,8 @@
         "title": "Managed Web Services",
         "type": "Runtime Contract"
       },
-      "body_length": 11534,
-      "summary": "- Authority: Redeven owns installed instance state, applied Runtime digests, bindings, resource identities, operations, and protected forwards; the current verified template record owns Runtime behavior, while the released catalog owns every built-in definition and presentation asset.\n- Outcome: any valid template follows one install, start, stop, restart, update, reconfigure, retry, and uninstall engine without template-specific branches.\n- Invariants: Runtime state has one Registry authority, external resources are accepted only by exact identity, failures require an explicit user action, and Renderer consumes backend capabilities rather than inferring recovery.\n- Failure boundary: invalid catalogs, bindings, resources, releases, permissions, or health checks fail closed without adopting or mutating unknown resources.",
+      "body_length": 11341,
+      "summary": "- Authority: Redeven owns instance state, Runtime digests, bindings, resources, operations, and forwards; verified templates define behavior and the released catalog defines built-ins and assets.\n- Outcome: every valid template uses one generic install, lifecycle, recovery, and uninstall engine without template-specific branches.\n- Invariants: one Registry state authority, exact external-resource identity, explicit recovery actions, and Renderer use of backend capabilities.\n- Failure boundary: invalid catalogs, bindings, resources, releases, permissions, and health checks fail closed without adopting or mutating unknown resources.",
       "sections": [
         {
           "id": "contract",
@@ -5529,7 +5530,7 @@
           "description": "Prevents service-specific catalog content from returning to Redeven runtime and Renderer source."
         }
       ],
-      "snippet": "- Authority: Redeven owns installed instance state, applied Runtime digests, bindings, resource identities, operations, and protected forwards; the current verified template record owns Runtime behavior, while the released catalog owns ever",
+      "snippet": "- Authority: Redeven owns instance state, Runtime digests, bindings, resources, operations, and forwards; verified templates define behavior and the released catalog defines built-ins and assets. - Outcome: every valid template uses one gen",
       "links": [
         {
           "label": "Managed Service operation progress",
@@ -10166,6 +10167,7 @@
       "timestamp": "2026-08-18T00:00:00Z",
       "frontmatter": {
         "description": "One workspace stream, typed current views, and bounded browser caches.",
+        "quality_exception": "Cross-domain Flower live-state contract spanning transport, cache ownership, current-view publication, lifecycle identity, routing, and reconnect recovery.",
         "tags": [
           "flower",
           "live",
@@ -10767,8 +10769,8 @@
         "title": "Flower command and composer flow",
         "type": "UI Contract"
       },
-      "body_length": 5961,
-      "summary": "Flower sends ordinary input through one stable request ID. A launcher allocates that ID once when an intent opens and reuses it for every retry of the frozen intent. New-thread HTTP commands carry it only in `create.client_request_id`; existing-thread HTTP commands carry it only in top-level `client_request_id`, while the URL owns ThreadID. The core service rejects missing, redundant, invalid, or conflicting identities; only the legacy RPC adapter may allocate a missing ID before entering the same core path. A successful command receipt must echo both the exact request ID and authoritative ThreadID. The composer, thread rail, Stop, interaction controls, and thread switching remain usable while provider work continues. A short-lived IndexedDB outbox retains ordinary launch input and the effective new-thread settings needed for provisional presentation until the canonical view confirms its request ID; secret interaction answers never enter it.",
+      "body_length": 5641,
+      "summary": "Flower assigns one request ID to an input intent and reuses it for retries. New-thread HTTP puts it in `create.client_request_id`; existing-thread HTTP uses top-level `client_request_id`, with ThreadID owned by the URL. The core rejects missing, duplicate, invalid, or conflicting identities, while the legacy RPC adapter may fill only a missing ID. Accepted receipts echo the exact request and Thread IDs. Composer, rail, Stop, interactions, and switching remain usable during provider work. A short-lived outbox retains non-secret input and provisional new-thread settings until canonical confirmation; secret answers never enter it.",
       "sections": [
         {
           "id": "contract",
@@ -10822,7 +10824,7 @@
           "description": "Desktop HTTP mapping for stable new-thread and existing-thread request identities."
         }
       ],
-      "snippet": "Flower sends ordinary input through one stable request ID. A launcher allocates that ID once when an intent opens and reuses it for every retry of the frozen intent. New-thread HTTP commands carry it only in `create.client_request_id`; exis",
+      "snippet": "Flower assigns one request ID to an input intent and reuses it for retries. New-thread HTTP puts it in `create.client_request_id`; existing-thread HTTP uses top-level `client_request_id`, with ThreadID owned by the URL. The core rejects mis",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -11939,5 +11941,5 @@
       ]
     }
   ],
-  "source_sha256": "94395ac97d2b1070e4435a2d92e01b6e2ad6a5e88305488132db451fc03d6961"
+  "source_sha256": "f1e82cad20043d9f11f3b3036b96a85748e72bbba22be7817477fac3c0134429"
 }

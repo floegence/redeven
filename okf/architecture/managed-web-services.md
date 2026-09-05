@@ -7,10 +7,10 @@ timestamp: 2026-09-04T00:00:00Z
 ---
 # Summary
 
-- Authority: Redeven owns installed instance state, applied Runtime digests, bindings, resource identities, operations, and protected forwards; the current verified template record owns Runtime behavior, while the released catalog owns every built-in definition and presentation asset.
-- Outcome: any valid template follows one install, start, stop, restart, update, reconfigure, retry, and uninstall engine without template-specific branches.
-- Invariants: Runtime state has one Registry authority, external resources are accepted only by exact identity, failures require an explicit user action, and Renderer consumes backend capabilities rather than inferring recovery.
-- Failure boundary: invalid catalogs, bindings, resources, releases, permissions, or health checks fail closed without adopting or mutating unknown resources.
+- Authority: Redeven owns instance state, Runtime digests, bindings, resources, operations, and forwards; verified templates define behavior and the released catalog defines built-ins and assets.
+- Outcome: every valid template uses one generic install, lifecycle, recovery, and uninstall engine without template-specific branches.
+- Invariants: one Registry state authority, exact external-resource identity, explicit recovery actions, and Renderer use of backend capabilities.
+- Failure boundary: invalid catalogs, bindings, resources, releases, permissions, and health checks fail closed without adopting or mutating unknown resources.
 
 # Contract
 

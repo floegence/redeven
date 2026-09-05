@@ -7,7 +7,7 @@ timestamp: 2026-09-05T00:00:00Z
 ---
 # Summary
 
-Flower sends ordinary input through one stable request ID. A launcher allocates that ID once when an intent opens and reuses it for every retry of the frozen intent. New-thread HTTP commands carry it only in `create.client_request_id`; existing-thread HTTP commands carry it only in top-level `client_request_id`, while the URL owns ThreadID. The core service rejects missing, redundant, invalid, or conflicting identities; only the legacy RPC adapter may allocate a missing ID before entering the same core path. A successful command receipt must echo both the exact request ID and authoritative ThreadID. The composer, thread rail, Stop, interaction controls, and thread switching remain usable while provider work continues. A short-lived IndexedDB outbox retains ordinary launch input and the effective new-thread settings needed for provisional presentation until the canonical view confirms its request ID; secret interaction answers never enter it.
+Flower assigns one request ID to an input intent and reuses it for retries. New-thread HTTP puts it in `create.client_request_id`; existing-thread HTTP uses top-level `client_request_id`, with ThreadID owned by the URL. The core rejects missing, duplicate, invalid, or conflicting identities, while the legacy RPC adapter may fill only a missing ID. Accepted receipts echo the exact request and Thread IDs. Composer, rail, Stop, interactions, and switching remain usable during provider work. A short-lived outbox retains non-secret input and provisional new-thread settings until canonical confirmation; secret answers never enter it.
 
 # Contract
 
