@@ -598,11 +598,11 @@ func TestCLIClientUsesCanonicalIDsForMultipleDanglingImages(t *testing.T) {
 	}
 }
 
-func TestCLIClientImageHistoryNeverProjectsLayerCommands(t *testing.T) {
+func TestCLIClientBuildHistoryNeverProjectsLayerCommands(t *testing.T) {
 	runner := &fakeCommandRunner{outputs: map[string]string{
-		"docker history --no-trunc --format json ghcr.io/acme/api:latest": "{\"ID\":\"sha256:layer\",\"Size\":\"4KB\",\"CreatedBy\":\"ENV API_TOKEN=raw-secret\"}",
+		"docker history --no-trunc --format json ghcr.io/acme/api:latest": "{\"ID\":\"sha256:layer\",\"Size\":\"4KB\",\"CreatedBy\":\"ENV API_TOKEN=raw-secret\"}\n{\"ID\":\"<missing>\",\"Size\":\"0B\"}\n{\"ID\":\"<none>\",\"Size\":\"1KB\"}",
 	}}
-	history, err := (&CLIClient{Runner: runner}).HistoryImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest")
+	history, err := (&CLIClient{Runner: runner}).BuildHistoryImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -610,8 +610,25 @@ func TestCLIClientImageHistoryNeverProjectsLayerCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "raw-secret") || strings.Contains(string(raw), "created_by") {
+	if strings.Contains(string(raw), "raw-secret") || strings.Contains(string(raw), "created_by") || strings.Contains(string(raw), "missing") {
 		t.Fatalf("image history leaked layer command: %s", raw)
+	}
+	if history[1].IntermediateImageID != "" || history[2].IntermediateImageID != "" {
+		t.Fatalf("special history IDs were not normalized: %#v", history)
+	}
+}
+
+func TestCLIClientInspectImageReturnsOrderedFilesystemLayers(t *testing.T) {
+	runner := &fakeCommandRunner{outputs: map[string]string{
+		"docker image inspect ghcr.io/acme/api:latest": "[{\"Id\":\"sha256:image\",\"RootFS\":{\"Layers\":[\"sha256:first\",\"sha256:second\"]},\"Config\":{}}]",
+		"docker ps -a --no-trunc --format json":        "",
+	}}
+	image, err := (&CLIClient{Runner: runner}).InspectImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(image.Layers) != 2 || image.Layers[0].Digest != "sha256:first" || image.Layers[1].Digest != "sha256:second" {
+		t.Fatalf("inspect layers = %#v", image.Layers)
 	}
 }
 
@@ -636,8 +653,8 @@ func TestCLIClientRejectsOptionLikeImageTargetsBeforeExecution(t *testing.T) {
 			_, err := client.InspectImage(context.Background(), EngineDocker, "--help")
 			return err
 		},
-		"history": func() error {
-			_, err := client.HistoryImage(context.Background(), EngineDocker, "--help")
+		"build history": func() error {
+			_, err := client.BuildHistoryImage(context.Background(), EngineDocker, "--help")
 			return err
 		},
 		"tag source": func() error {
@@ -763,7 +780,7 @@ func (c *resourceAuditEngineClient) InspectImage(context.Context, Engine, string
 	return c.inspectImage, nil
 }
 
-func (c *resourceAuditEngineClient) HistoryImage(context.Context, Engine, string) ([]ImageHistoryEntry, error) {
+func (c *resourceAuditEngineClient) BuildHistoryImage(context.Context, Engine, string) ([]ImageBuildHistoryEntry, error) {
 	return nil, nil
 }
 

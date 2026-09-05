@@ -22,7 +22,10 @@ import (
 )
 
 type appserverContainerEngine struct {
-	volumes map[string]containerengine.VolumeRecord
+	volumes      map[string]containerengine.VolumeRecord
+	imagePresent bool
+	image        containerengine.ImageRecord
+	buildHistory []containerengine.ImageBuildHistoryEntry
 }
 
 const appserverContainerServiceID = "container_service_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -148,11 +151,14 @@ func (f *appserverContainerEngine) ListImages(context.Context, containerengine.E
 }
 
 func (f *appserverContainerEngine) InspectImage(context.Context, containerengine.Engine, string) (containerengine.ImageRecord, error) {
-	return containerengine.ImageRecord{}, containerengine.ErrImageNotFound
+	if !f.imagePresent {
+		return containerengine.ImageRecord{}, containerengine.ErrImageNotFound
+	}
+	return f.image, nil
 }
 
-func (f *appserverContainerEngine) HistoryImage(context.Context, containerengine.Engine, string) ([]containerengine.ImageHistoryEntry, error) {
-	return nil, nil
+func (f *appserverContainerEngine) BuildHistoryImage(context.Context, containerengine.Engine, string) ([]containerengine.ImageBuildHistoryEntry, error) {
+	return append([]containerengine.ImageBuildHistoryEntry(nil), f.buildHistory...), nil
 }
 
 func (f *appserverContainerEngine) TagImage(context.Context, containerengine.ImageTagRequest) error {
@@ -296,6 +302,35 @@ func serveContainerAPI(t *testing.T, server *Server, channelID, method, target, 
 		t.Fatal("container API route was not handled")
 	}
 	return response
+}
+
+func TestContainerImageBuildHistoryRouteIsSeparateFromLegacyHistory(t *testing.T) {
+	client := &appserverContainerEngine{
+		volumes:      map[string]containerengine.VolumeRecord{},
+		imagePresent: true,
+		image:        containerengine.ImageRecord{ID: "sha256:image", Layers: []containerengine.ImageLayer{{Digest: "sha256:layer"}}},
+		buildHistory: []containerengine.ImageBuildHistoryEntry{{IntermediateImageID: "sha256:step", SizeBytes: 1024}},
+	}
+	adapter, err := containerengine.NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := containerresource.Open(containerresource.Options{DatabasePath: filepath.Join(t.TempDir(), "containers.sqlite"), Engine: adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	channelID := "ch_container_image_history"
+	server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, UserPublicID: "user-image"})}
+
+	response := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/images/sha256%3Aimage/build-history?engine=docker", "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"build_history"`) || !strings.Contains(response.Body.String(), `sha256:step`) {
+		t.Fatalf("build history response status=%d body=%s", response.Code, response.Body.String())
+	}
+	legacy := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/images/sha256%3Aimage/history?engine=docker", "")
+	if legacy.Code != http.StatusNotFound {
+		t.Fatalf("legacy history route status=%d body=%s", legacy.Code, legacy.Body.String())
+	}
 }
 
 type appserverExecTerminalManager struct {

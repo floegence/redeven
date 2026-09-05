@@ -50,7 +50,7 @@ import {
   deleteContainerExecSession,
   deleteComposeProjectDefinition,
   getComposeProjectDefinition,
-  getContainerImageHistory,
+  getContainerImageBuildHistory,
   getContainerServiceConfiguration,
   getRawContainerInspect,
   getContainerResourceDetails,
@@ -85,7 +85,8 @@ import {
   type ContainerServiceConfiguration,
   type ContainerServiceConfigurationSource,
   type ContainerServiceConfigurationSourceID,
-  type ContainerImageHistoryEntry,
+  type ContainerImageBuildHistoryEntry,
+  type ContainerImageLayer,
   type ReadyContainerRuntime,
   type ContainerResourceFileEntry,
   type ImageInventoryItem,
@@ -221,7 +222,7 @@ type ReviewState = Readonly<{
 }>;
 
 type ResourceFilter = 'all' | 'active' | 'inactive' | 'managed';
-type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'used-by' | 'containers';
+type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'build-history' | 'used-by' | 'containers';
 type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created';
 type ResourceSortDirection = 'ascending' | 'descending';
 
@@ -940,9 +941,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [logsWrap, setLogsWrap] = createSignal(true);
   const [rawInspect, setRawInspect] = createSignal<unknown>(null);
   const [rawInspectLoading, setRawInspectLoading] = createSignal(false);
-  const [imageHistory, setImageHistory] = createSignal<ContainerImageHistoryEntry[]>([]);
-  const [imageHistoryLoading, setImageHistoryLoading] = createSignal(false);
-  const [imageHistoryError, setImageHistoryError] = createSignal('');
+  const [imageBuildHistory, setImageBuildHistory] = createSignal<ContainerImageBuildHistoryEntry[]>([]);
+  const [imageBuildHistoryLoading, setImageBuildHistoryLoading] = createSignal(false);
+  const [imageBuildHistoryError, setImageBuildHistoryError] = createSignal('');
   const [statsLoading, setStatsLoading] = createSignal(false);
   const [statsError, setStatsError] = createSignal('');
   const [filePath, setFilePath] = createSignal('/');
@@ -1355,9 +1356,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setCollectionStats(new Map());
     setRawInspect(null);
     setRawInspectLoading(false);
-    setImageHistory([]);
-    setImageHistoryLoading(false);
-    setImageHistoryError('');
+    setImageBuildHistory([]);
+    setImageBuildHistoryLoading(false);
+    setImageBuildHistoryError('');
     setStatsLoading(false);
     setStatsError('');
     setFilePath('/');
@@ -1761,20 +1762,20 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   createEffect(() => {
     const ready = readyConsole();
     const entry = selectedEntry();
-    if (!ready || !entry || detailTab() !== 'layers' || ready.target.view !== 'images') return;
+    if (!ready || !entry || detailTab() !== 'build-history' || ready.target.view !== 'images') return;
     const identity = resourceIdentity('images', entry.item);
     let active = true;
-    setImageHistory([]);
-    setImageHistoryLoading(true);
-    setImageHistoryError('');
-    void getContainerImageHistory(identity, entry.target.engine, entry.target.endpoint_id)
-      .then((history) => active && setImageHistory(history))
+    setImageBuildHistory([]);
+    setImageBuildHistoryLoading(true);
+    setImageBuildHistoryError('');
+    void getContainerImageBuildHistory(identity, entry.target.engine, entry.target.endpoint_id)
+      .then((history) => active && setImageBuildHistory(history))
       .catch((cause) => {
         if (!active) return;
-        setImageHistory([]);
-        setImageHistoryError(cause instanceof Error ? cause.message : String(cause));
+        setImageBuildHistory([]);
+        setImageBuildHistoryError(cause instanceof Error ? cause.message : String(cause));
       })
-      .finally(() => active && setImageHistoryLoading(false));
+      .finally(() => active && setImageBuildHistoryLoading(false));
     onCleanup(() => { active = false; });
   });
 
@@ -1860,8 +1861,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setLogs(null);
     setStats(null);
     setRawInspect(null);
-    setImageHistory([]);
-    setImageHistoryError('');
+    setImageBuildHistory([]);
+    setImageBuildHistoryError('');
     setFilePath('/');
     setFileEntries([]);
   };
@@ -2894,6 +2895,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             <Show when={view() === 'images'}>
               <DetailRow label={i18n.t('containers.columns.size')} value={formatBytes(detailNumber(record, 'size_bytes') ?? (item as ImageInventoryItem).size_bytes)} />
               <DetailRow label={i18n.t('containers.columns.usage')} value={detailNumber(record, 'referenced_containers') ?? (item as ImageInventoryItem).referenced_containers} />
+              <Show when={Array.isArray(record.layers)}><DetailRow label={i18n.t('containers.detail.layerCount')} value={String(detailArray(record, 'layers').length)} /></Show>
               <Show when={detailString(record, 'digest') || (item as ImageInventoryItem).digest}>{(digest) => <DetailRow label={i18n.t('containers.columns.digest')} value={digest()} mono />}</Show>
             </Show>
             <Show when={view() === 'volumes'}>
@@ -3054,7 +3056,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       tabs.push('stats');
       return tabs;
     }
-    if (view() === 'images') return ['overview', 'layers', 'used-by'];
+    if (view() === 'images') return ['overview', 'layers', 'build-history', 'used-by'];
     if (view() === 'volumes') return selectedTarget()?.capabilities?.volume_files ? ['overview', 'files', 'used-by'] : ['overview', 'used-by'];
     return ['overview', 'containers'];
   });
@@ -3174,7 +3176,13 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </Show>
       </Show>;
     }
-    if (tab === 'layers') return <div class="container-layer-list"><Show when={!imageHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><Show when={!imageHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.layersUnavailable')}</strong></div>}><Show when={imageHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}><For each={imageHistory()}>{(layer, index) => <div class="container-layer-row"><span>{index() + 1}</span><span class="font-mono">{layer.id?.slice(0, 18) || `${i18n.t('containers.detail.layer')} ${index() + 1}`}</span><span>{formatBytes(layer.size_bytes)}</span><span>{formatDate(layer.created_at_unix_ms)}</span></div>}</For></Show></Show></Show></div>;
+    if (tab === 'layers') {
+      const detailsLoaded = Object.keys(detailRecord(details())).length > 0;
+      if (!detailsLoaded) return <div class="container-empty-inline">{i18n.t('containers.loading')}</div>;
+      const layers = Array.isArray(record.layers) ? record.layers as readonly ContainerImageLayer[] : [];
+      return <div class="container-layer-list"><Show when={layers.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}><For each={layers}>{(layer, index) => { const digest = compact(layer.digest); return <div class="container-layer-row container-layer-row--filesystem"><span>{index() + 1}</span><span class="font-mono" title={digest || undefined}>{digest || i18n.t('containers.detail.layerUnavailable')}</span></div>; }}</For></Show></div>;
+    }
+    if (tab === 'build-history') return <div class="container-layer-list"><Show when={!imageBuildHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><Show when={!imageBuildHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.buildHistoryUnavailable')}</strong></div>}><Show when={imageBuildHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyBuildHistory')}</div>}><For each={imageBuildHistory()}>{(entry, index) => <div class="container-layer-row container-layer-row--history"><span>{index() + 1}</span><span class="font-mono" title={entry.intermediate_image_id || undefined}>{entry.intermediate_image_id || i18n.t('containers.detail.noIntermediateImage')}</span><span>{formatBytes(entry.size_bytes)}</span><span>{formatDate(entry.created_at_unix_ms)}</span></div>}</For></Show></Show></Show></div>;
     if (tab === 'used-by' || tab === 'containers') return renderReferences();
     return null;
   };

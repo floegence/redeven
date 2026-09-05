@@ -113,12 +113,12 @@ func (s *Service) Image(ctx context.Context, req containerengine.ImageInspectReq
 	return s.engine.InspectImage(bound, req)
 }
 
-func (s *Service) ImageHistory(ctx context.Context, req containerengine.ImageHistoryRequest) ([]containerengine.ImageHistoryEntry, error) {
+func (s *Service) ImageBuildHistory(ctx context.Context, req containerengine.ImageBuildHistoryRequest) ([]containerengine.ImageBuildHistoryEntry, error) {
 	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
 	if err != nil {
 		return nil, err
 	}
-	return s.engine.HistoryImage(bound, req)
+	return s.engine.BuildHistoryImage(bound, req)
 }
 
 func (s *Service) Volumes(ctx context.Context, req containerengine.VolumeListRequest) ([]VolumeItem, error) {

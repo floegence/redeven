@@ -29,7 +29,7 @@ const harness = vi.hoisted(() => ({
   updateComposeDefinition: vi.fn(),
   getComposeDefinition: vi.fn(),
   deleteComposeDefinition: vi.fn(),
-  imageHistory: vi.fn(),
+  imageBuildHistory: vi.fn(),
   rawInspect: vi.fn(),
   listFiles: vi.fn(),
   readFile: vi.fn(),
@@ -202,7 +202,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   updateComposeProjectDefinition: harness.updateComposeDefinition,
   getComposeProjectDefinition: harness.getComposeDefinition,
   deleteComposeProjectDefinition: harness.deleteComposeDefinition,
-  getContainerImageHistory: harness.imageHistory,
+  getContainerImageBuildHistory: harness.imageBuildHistory,
   getRawContainerInspect: harness.rawInspect,
   listContainerResourceFiles: harness.listFiles,
   readContainerResourceFile: harness.readFile,
@@ -304,7 +304,7 @@ describe('native Containers page', () => {
       config_paths: ['/workspace/compose.yaml'], profiles: [], created_at_unix_ms: 1, updated_at_unix_ms: 1,
     });
     harness.deleteComposeDefinition.mockReset().mockResolvedValue(undefined);
-    harness.imageHistory.mockReset().mockResolvedValue([]);
+    harness.imageBuildHistory.mockReset().mockResolvedValue([]);
     harness.rawInspect.mockReset().mockResolvedValue({});
     harness.listFiles.mockReset().mockResolvedValue({ path: '/', entries: [], truncated: false });
     harness.readFile.mockReset().mockResolvedValue(new Blob());
@@ -1088,7 +1088,7 @@ describe('native Containers page', () => {
     expect(harness.listFiles).not.toHaveBeenCalled();
   });
 
-  it('uses the stable image ID to load sanitized layer history for dangling images', async () => {
+  it('renders inspect filesystem layers separately from build history', async () => {
     harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
       id: 'sha256:image-layered',
       reference: 'ghcr.io/floegence/flowersec-runtime',
@@ -1098,9 +1098,13 @@ describe('native Containers page', () => {
     }] : [{
       container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false },
     }]));
-    harness.resourceDetails.mockResolvedValue({ id: 'sha256:image-layered', reference: 'ghcr.io/floegence/flowersec-runtime' });
-    harness.imageHistory.mockResolvedValue([
-      { id: 'sha256:top-layer', size_bytes: 10_400_000, created_at_unix_ms: 1_700_000_000_000 },
+    harness.resourceDetails.mockResolvedValue({
+      id: 'sha256:image-layered',
+      reference: 'ghcr.io/floegence/flowersec-runtime',
+      layers: [{ digest: 'sha256:root-layer' }, { digest: 'sha256:top-layer' }],
+    });
+    harness.imageBuildHistory.mockResolvedValue([
+      { intermediate_image_id: 'sha256:history-layer', size_bytes: 10_400_000, created_at_unix_ms: 1_700_000_000_000 },
       { size_bytes: 582_000, created_at_unix_ms: 0 },
     ]);
     const host = document.createElement('div');
@@ -1119,8 +1123,15 @@ describe('native Containers page', () => {
       ?.click();
     await settle();
 
-    expect(harness.imageHistory).toHaveBeenCalledWith('sha256:image-layered', 'docker', 'docker-primary');
     expect(host.querySelectorAll('.container-layer-row')).toHaveLength(2);
+    expect(harness.imageBuildHistory).not.toHaveBeenCalled();
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.build-history'))
+      ?.click();
+    await settle();
+    expect(harness.imageBuildHistory).toHaveBeenCalledWith('sha256:image-layered', 'docker', 'docker-primary');
+    expect(host.textContent).toContain('containers.detail.noIntermediateImage');
   });
 
   it.each([

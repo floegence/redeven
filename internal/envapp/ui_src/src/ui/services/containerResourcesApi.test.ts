@@ -12,7 +12,7 @@ import {
   createContainerOperation,
   deleteComposeProjectDefinition,
   getComposeProjectDefinition,
-  getContainerImageHistory,
+  getContainerImageBuildHistory,
   getContainerServiceConfiguration,
   getRawContainerInspect,
   listContainerRuntimes,
@@ -254,9 +254,13 @@ describe('native container resources API', () => {
     );
   });
 
-  it('keeps image history safe and observes endpoint-wide stats from one SSE stream', async () => {
-    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ history: [{ id: 'layer-1', size_bytes: 1024, created_at_unix_ms: 1 }] });
-    await expect(getContainerImageHistory('alpine:3.22', 'podman', 'rootless')).resolves.toHaveLength(1);
+  it('keeps build history safe and observes endpoint-wide stats from one SSE stream', async () => {
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ build_history: [{ intermediate_image_id: 'layer-1', size_bytes: 1024, created_at_unix_ms: 1 }] });
+    await expect(getContainerImageBuildHistory('alpine:3.22', 'podman', 'rootless')).resolves.toHaveLength(1);
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/container-resources/images/alpine%3A3.22/build-history?engine=podman&endpoint_id=rootless',
+      { method: 'GET' },
+    );
 
     const encoded = new TextEncoder().encode('event: stats\ndata: {"sampled_at_unix_ms":10,"samples":[{"container_id":"one","cpu_percent":3,"memory_bytes":1024}]}\n\n');
     localApiMocks.fetchLocalApi.mockResolvedValue(new Response(new ReadableStream({
