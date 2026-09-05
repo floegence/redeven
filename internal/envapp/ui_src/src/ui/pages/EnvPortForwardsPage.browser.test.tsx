@@ -426,6 +426,87 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(new Set(actionButtons.map((button) => button.getBoundingClientRect().height)).size).toBe(1);
   });
 
+  it('keeps the managed service information band height stable while an operation changes state', async () => {
+    await page.viewport(1200, 800);
+    const host = document.createElement('div');
+    host.style.width = '1024px';
+    document.body.appendChild(host);
+    type ManagedServiceRowService = Parameters<typeof ManagedServiceRowComponent>[0]['service'];
+    const initialService: ManagedServiceRowService = {
+      service_id: 'mws-stable-band',
+      template_id: 'example-desktop-a',
+      name: 'Example Desktop A',
+      description: 'Run an Ubuntu-based KDE Plasma desktop in an isolated Docker container.',
+      template_source: 'builtin',
+      deployment: 'container',
+      workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a',
+      workspace_ownership: 'redeven_created',
+      release_status: {
+        ...releaseStatus('oci', '654ea8e3-ls177'),
+        latest_preview_release: { schema_version: 1, kind: 'oci', source: 'example/source', tag: '0.1.2-rc.1', digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+        latest_preview_relation: 'newer',
+      },
+      desired_state: 'running',
+      observed_state: 'running',
+      forward_id: 'pf-stable-band',
+      runtime_port: 54945,
+      actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } },
+    };
+    const [service, setService] = createSignal(initialService);
+    const [operation, setOperation] = createSignal<ManagedOperation | null>(null);
+    dispose = render(() => (
+      <ManagedServiceRowComponent
+        service={service()}
+        operation={operation()}
+        operationExpanded={false}
+        busy={false}
+        canOpen
+        canManage
+        onOpen={() => undefined}
+        onOpenResource={() => undefined}
+        onAction={() => undefined}
+        onOperationExpandedChange={() => undefined}
+        onLogs={() => undefined}
+        onUninstall={() => undefined}
+      />
+    ), host);
+    await settle();
+
+    const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
+    const band = row.firstElementChild as HTMLElement;
+    const heights: number[] = [band.getBoundingClientRect().height];
+    const update = (next: ManagedOperation, nextObservedState: string, targetHeights = heights) => {
+      setService((current) => ({
+        ...current,
+        observed_state: nextObservedState,
+        actions: { start: { available: false }, stop: { available: false }, restart: { available: false }, retry: { available: false } },
+      }));
+      setOperation(next);
+      return settle().then(() => targetHeights.push(band.getBoundingClientRect().height));
+    };
+
+    await update({ operation_id: 'mop-stable-band', service_id: 'mws-stable-band', action: 'start', state: 'submitting', stage: 'starting', progress_current: 0, progress_total: 3 }, 'starting');
+    await update({ operation_id: 'mop-stable-band', service_id: 'mws-stable-band', action: 'start', state: 'running', stage: 'starting', progress_current: 1, progress_total: 3 }, 'starting');
+    await update({ operation_id: 'mop-stable-band', service_id: 'mws-stable-band', action: 'start', state: 'succeeded', stage: 'completed', progress_current: 3, progress_total: 3 }, 'running');
+    await update({ operation_id: 'mop-stable-band-stop', service_id: 'mws-stable-band', action: 'stop', state: 'submitting', stage: 'stopping', progress_current: 0, progress_total: 2 }, 'stopping');
+    await update({ operation_id: 'mop-stable-band-stop', service_id: 'mws-stable-band', action: 'stop', state: 'running', stage: 'stopping', progress_current: 1, progress_total: 2 }, 'stopping');
+    await update({ operation_id: 'mop-stable-band-stop', service_id: 'mws-stable-band', action: 'stop', state: 'succeeded', stage: 'completed', progress_current: 2, progress_total: 2 }, 'stopped');
+
+    expect(heights).toEqual([72, 72, 72, 72, 72, 72, 72]);
+
+    await page.viewport(720, 800);
+    host.style.width = '680px';
+    setService((current) => ({ ...current, observed_state: 'running', actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } } }));
+    setOperation(null);
+    await settle();
+    const narrowHeights: number[] = [band.getBoundingClientRect().height];
+    await update({ operation_id: 'mop-stable-band-narrow', service_id: 'mws-stable-band', action: 'start', state: 'submitting', stage: 'starting', progress_current: 0, progress_total: 3 }, 'starting', narrowHeights);
+    await update({ operation_id: 'mop-stable-band-narrow', service_id: 'mws-stable-band', action: 'start', state: 'running', stage: 'starting', progress_current: 1, progress_total: 3 }, 'starting', narrowHeights);
+    await update({ operation_id: 'mop-stable-band-narrow', service_id: 'mws-stable-band', action: 'start', state: 'succeeded', stage: 'completed', progress_current: 3, progress_total: 3 }, 'running', narrowHeights);
+
+    expect(new Set(narrowHeights).size).toBe(1);
+  });
+
   it('keeps a failed managed service dense and its retry action on one line', async () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');
@@ -551,7 +632,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(progress.textContent).toContain('Pulling image');
     expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
     expect(row.textContent).not.toContain('Error');
-    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(120);
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(128);
     expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
 
     await userEvent.click(progress);

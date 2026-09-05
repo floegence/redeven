@@ -764,7 +764,8 @@ function EmptyState(props: { onCreateClick: () => void; disabled?: boolean }) {
   );
 }
 
-const serviceRowGridClass = 'group grid min-h-16 min-w-0 grid-cols-[minmax(0,1fr)_13.5rem] items-center gap-x-4 gap-y-1.5 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/25 lg:grid-cols-[minmax(0,1.15fr)_minmax(10rem,0.72fr)_6rem_13.5rem]';
+const serviceRowGridClass = 'group grid min-h-16 min-w-0 grid-cols-[minmax(0,1fr)_13.5rem] items-center gap-x-4 gap-y-1.5 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/25 lg:h-[4.5rem] lg:min-h-[4.5rem] lg:grid-cols-[minmax(0,1.15fr)_minmax(10rem,0.72fr)_6rem_13.5rem]';
+const managedServiceRowGridClass = `${serviceRowGridClass} grid-rows-[2.5rem_3.125rem] lg:grid-rows-[4.5rem]`;
 const serviceRowActionsClass = 'col-start-2 row-start-1 grid w-[13.5rem] shrink-0 grid-cols-[4.75rem_4.75rem_2rem] items-center justify-end gap-2 lg:col-start-4';
 
 export function PortForwardRow(props: {
@@ -1600,7 +1601,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       data-testid="managed-service-row"
       data-managed-service-id={props.service.service_id}
     >
-      <div class={serviceRowGridClass}>
+      <div class={managedServiceRowGridClass}>
         <div class="min-w-0"><ServiceTemplateIdentity template={presentation()} compact /></div>
 
         <div class="col-start-1 row-start-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="managed-service-secondary">
@@ -1671,8 +1672,8 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
               <span class="shrink-0 font-mono text-muted-foreground">{Math.min(activeOperation.progress_current, activeOperation.progress_total)}/{activeOperation.progress_total}</span>
             </div>
           )}</Show>
-		  <Show when={props.service.release_status.latest_stable_relation === 'newer' && props.service.release_status.latest_stable_release}>{(latest) => <span class="text-[10px] font-medium text-warning">{releaseIdentityLabel(props.service.release_status.current_release!)} → {releaseIdentityLabel(latest())}</span>}</Show>
-		  <Show when={props.service.release_status.latest_stable_relation !== 'newer' && props.service.release_status.latest_preview_relation === 'newer' && props.service.release_status.latest_preview_release}>{(latest) => <span class="text-[10px] font-medium text-warning">{i18n.t('webServices.managed.releaseChannel.preview')}: {releaseIdentityLabel(latest())}</span>}</Show>
+		  <Show when={props.service.release_status.latest_stable_relation === 'newer' && props.service.release_status.latest_stable_release}>{(latest) => <span class="max-w-full truncate text-[10px] font-medium text-warning">{releaseIdentityLabel(props.service.release_status.current_release!)} → {releaseIdentityLabel(latest())}</span>}</Show>
+		  <Show when={props.service.release_status.latest_stable_relation !== 'newer' && props.service.release_status.latest_preview_relation === 'newer' && props.service.release_status.latest_preview_release}>{(latest) => <span class="max-w-full truncate text-[10px] font-medium text-warning">{i18n.t('webServices.managed.releaseChannel.preview')}: {releaseIdentityLabel(latest())}</span>}</Show>
         </div>
 
         <div class={serviceRowActionsClass} data-testid="managed-service-actions">
