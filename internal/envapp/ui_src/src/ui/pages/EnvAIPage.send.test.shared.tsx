@@ -137,7 +137,7 @@ const mocks = vi.hoisted(() => {
     }
     if (url.endsWith('/_redeven_proxy/api/ai/turns') && init?.method === 'POST') {
       const body = typeof init.body === 'string'
-        ? JSON.parse(init.body) as { create?: { client_request_id?: string } }
+        ? JSON.parse(init.body) as { create?: { client_request_id?: string }; input?: { text?: string } }
         : {};
       return {
         client_request_id: body.create?.client_request_id,
@@ -145,6 +145,22 @@ const mocks = vi.hoisted(() => {
         turn_id: `turn_${'7'.repeat(24)}`,
         run_id: `run_${'8'.repeat(24)}`,
         kind: 'start',
+        current: {
+          thread_id: `th_${'6'.repeat(24)}`,
+          view_version: 1,
+          activity: 'active',
+          turn_id: `turn_${'7'.repeat(24)}`,
+          run_id: `run_${'8'.repeat(24)}`,
+          items: [{
+            id: `user:${body.create?.client_request_id ?? ''}`,
+            turn_id: `turn_${'7'.repeat(24)}`,
+            run_id: `run_${'8'.repeat(24)}`,
+            kind: 'user',
+            text: String(body.input?.text ?? ''),
+          }],
+          queue: [],
+          interactions: [],
+        },
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads') && init?.method === 'POST') {

@@ -4283,7 +4283,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
 	createEffect(() => {
 		outboxRetryTick();
-		if (!props.adapter.launchTurn) return;
+		if (surfaceDisposed || !props.adapter.launchTurn) return;
 		for (const entry of transportOutbox().entries.values()) {
 			if (outboxResendInFlight.has(entry.requestId)) continue;
 			if (entry.terminalError) continue;
@@ -5028,6 +5028,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return durableOutbox;
         });
         await durableOutbox.flushPersistence();
+        if (!submissionCurrent()) return;
         // The original command and recovery resend share one request-id fence.
         // Otherwise persisting the outbox entry can immediately trigger a
         // duplicate send before this command has returned its current view.
@@ -5189,7 +5190,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       await stopSelectedThreadFromComposer();
       return;
     }
-    if (threadLoadError()) return;
+    if (threadLoadError() && selectedThreadID()) return;
     const sessionKey = currentComposerSessionKey();
     if (launchChatTurnInFlight.has(sessionKey)) return;
     launchChatTurnInFlight.add(sessionKey);
@@ -5522,7 +5523,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
       }
     }
-    if (threadLoadError() && shouldSubmitOnEnterKeydown(event)) {
+    if (threadLoadError() && selectedThreadID() && shouldSubmitOnEnterKeydown(event)) {
       event.preventDefault();
       return;
     }
@@ -6886,7 +6887,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (longTextPreparing()) return false;
     if (selectedThreadStopPending()) return true;
     if (selectedThreadReadOnly()) return true;
-    if (threadLoadError() && !composerPrimaryActionIsStop()) return true;
+    // A detail-sync error belongs to the selected conversation. New chats
+    // have no detail to recover and must remain admissible through the same
+    // workspace transport while it reconnects.
+    if (threadLoadError() && selectedThreadID() && !composerPrimaryActionIsStop()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (composerPrimaryActionIsCommand()) {
       return composerHasAttachments() || composerHasReferences() || !readyForChat() || !selectedThreadID();

@@ -35,6 +35,7 @@ const connectArtifactEntryMock = vi.fn();
 const createLocalDirectArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: mintLocalDirectConnectArtifactMock }));
 const createEnvProxyArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: connectArtifactEntryMock }));
 const flowerLaunchTurnMock = vi.fn(async () => ({
+  client_request_id: 'client_launcher_request',
   thread_id: 'thread-launched',
   turn_id: 'turn-launched',
   run_id: 'run-launched',
@@ -803,7 +804,11 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
         <button
           type="button"
           data-testid="flower-turn-launcher-send"
-          onClick={() => void props.onSubmit({ prompt: 'inspect from launcher', intent: props.intent })}
+          onClick={() => void props.onSubmit({
+            client_request_id: 'client_launcher_request',
+            prompt: 'inspect from launcher',
+            intent: props.intent,
+          })}
         >
           Send
         </button>
@@ -1112,6 +1117,7 @@ beforeEach(() => {
   uiStorageItems.clear();
   flowerLaunchTurnMock.mockReset();
   flowerLaunchTurnMock.mockResolvedValue({
+    client_request_id: 'client_launcher_request',
     thread_id: 'thread-launched',
     turn_id: 'turn-launched',
     run_id: 'run-launched',
