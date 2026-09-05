@@ -1,6 +1,18 @@
-import type { FlowerRuntimeCurrentView, FlowerTurnLaunchInput } from './contracts/flowerSurfaceContracts';
+import type {
+  FlowerPermissionType,
+  FlowerReasoningSelection,
+  FlowerRuntimeCurrentView,
+  FlowerTurnLaunchInput,
+} from './contracts/flowerSurfaceContracts';
 
 export type TransportOutboxInput = FlowerTurnLaunchInput;
+
+export type TransportOutboxProvisionalThreadSettings = Readonly<{
+  model_id: string;
+  working_dir: string;
+  permission_type: FlowerPermissionType;
+  reasoning_selection?: FlowerReasoningSelection;
+}>;
 
 export type TransportOutboxEntry = Readonly<{
   requestId: string;
@@ -8,6 +20,8 @@ export type TransportOutboxEntry = Readonly<{
   input: TransportOutboxInput;
   attachmentLabels: readonly string[];
   createdAtMs: number;
+  /** Frozen effective settings for provisional UI only; never authorization evidence. */
+  provisionalThreadSettings?: TransportOutboxProvisionalThreadSettings;
   /** A durable terminal state that must not be retried automatically. */
   terminalError?: 'attachments_unavailable_after_restart';
 }>;
@@ -32,6 +46,10 @@ export type TransportOutbox = Readonly<{
     current: FlowerRuntimeCurrentView,
     options?: TransportOutboxReconciliationOptions,
   ): TransportOutboxReconciliation;
+  matchCurrent(
+    current: FlowerRuntimeCurrentView,
+    options?: TransportOutboxReconciliationOptions,
+  ): readonly TransportOutboxEntry[];
   forThread(threadId: string): readonly TransportOutboxEntry[];
   persistenceError(): Error | null;
   flushPersistence(): Promise<void>;
@@ -119,6 +137,32 @@ function persist(entries: ReadonlyMap<string, TransportOutboxEntry>, tracker: pe
 function pruneEntries(entries: ReadonlyMap<string, TransportOutboxEntry>, nowMs: number): Map<string, TransportOutboxEntry> {
   const cutoff = nowMs - OUTBOX_ENTRY_TTL_MS;
   return new Map([...entries].filter(([, entry]) => Number.isFinite(entry.createdAtMs) && entry.createdAtMs >= cutoff));
+}
+
+function matchingEntries(
+  entries: ReadonlyMap<string, TransportOutboxEntry>,
+  current: FlowerRuntimeCurrentView,
+  options?: TransportOutboxReconciliationOptions,
+): readonly TransportOutboxEntry[] {
+  const threadId = clean(current.thread_id);
+  if (!threadId || entries.size === 0) return [];
+  const confirmed = new Set<string>();
+  for (const item of current.items ?? []) {
+    if (item.kind !== 'user') continue;
+    const id = clean(item.id);
+    if (id.startsWith('user:')) confirmed.add(id.slice('user:'.length));
+  }
+  for (const queued of current.queue ?? []) confirmed.add(clean(queued.request_key));
+  const matched: TransportOutboxEntry[] = [];
+  for (const requestId of confirmed) {
+    const entry = entries.get(requestId);
+    if (!entry) continue;
+    const admittedThreadId = clean(entry.input.thread_id);
+    if (admittedThreadId && admittedThreadId !== threadId) continue;
+    if (options?.canConfirm && !options.canConfirm(entry)) continue;
+    matched.push(entry);
+  }
+  return matched;
 }
 
 function create(
@@ -218,29 +262,14 @@ function create(
       return replace(next);
     },
     reconcile(current, options) {
-      const threadId = clean(current.thread_id);
-      if (!threadId || currentEntries.size === 0) return { outbox: this, admitted: [] };
-      const confirmed = new Set<string>();
-      for (const item of current.items ?? []) {
-        if (item.kind !== 'user') continue;
-        const id = clean(item.id);
-        if (id.startsWith('user:')) confirmed.add(id.slice('user:'.length));
-      }
-      for (const queued of current.queue ?? []) confirmed.add(clean(queued.request_key));
-      if (confirmed.size === 0) return { outbox: this, admitted: [] };
+      const admitted = matchingEntries(currentEntries, current, options);
+      if (admitted.length === 0) return { outbox: this, admitted: [] };
       const next = new Map(currentEntries);
-      const admitted: TransportOutboxEntry[] = [];
-      for (const requestId of confirmed) {
-        const entry = next.get(requestId);
-        if (!entry) continue;
-        const admittedThreadId = clean(entry.input.thread_id);
-        if (admittedThreadId && admittedThreadId !== threadId) continue;
-        if (options?.canConfirm && !options.canConfirm(entry)) continue;
-        admitted.push(entry);
-        next.delete(requestId);
-      }
-      if (next.size === currentEntries.size) return { outbox: this, admitted: [] };
+      for (const entry of admitted) next.delete(entry.requestId);
       return { outbox: replace(next), admitted };
+    },
+    matchCurrent(current, options) {
+      return matchingEntries(currentEntries, current, options);
     },
     forThread(threadId) {
       const id = clean(threadId);

@@ -54,13 +54,51 @@ describe('TransportOutbox', () => {
       input: { client_request_id: 'req-new', prompt: 'hello' },
       attachmentLabels: [],
       createdAtMs: 1,
+      provisionalThreadSettings: {
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        permission_type: 'approval_required',
+      },
     }).bindAcceptedThread('req-new', 'thread-created');
 
     expect(pending.entries.get('req-new')).toMatchObject({
       threadId: 'thread-created',
       input: { thread_id: 'thread-created' },
+      provisionalThreadSettings: { permission_type: 'approval_required' },
     });
     expect(pending.forThread('thread-created').map((entry) => entry.requestId)).toEqual(['req-new']);
+  });
+
+  it('finds an admitted request without consuming its provisional settings', () => {
+    const pending = createTransportOutbox().put({
+      requestId: 'req-provisional',
+      threadId: '__new_thread__',
+      input: { client_request_id: 'req-provisional', prompt: 'hello' },
+      attachmentLabels: [],
+      createdAtMs: 1,
+      provisionalThreadSettings: {
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        permission_type: 'approval_required',
+      },
+    });
+
+    const matched = pending.matchCurrent({
+      thread_id: 'thread-created',
+      view_version: 1,
+      items: [{
+        id: 'user:req-provisional',
+        turn_id: 'turn-fixture',
+        run_id: 'run-fixture',
+        ordinal: 1,
+        kind: 'user',
+        text: 'hello',
+      }],
+    });
+
+    expect(matched).toEqual([pending.entries.get('req-provisional')]);
+    expect(pending.entries.get('req-provisional')?.provisionalThreadSettings?.permission_type)
+      .toBe('approval_required');
   });
 
   it('retains a new-thread request until its presentation handoff can commit', () => {

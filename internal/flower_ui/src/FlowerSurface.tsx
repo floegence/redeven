@@ -154,7 +154,13 @@ import {
   type ThreadView,
   type ThreadViewAcceptance,
 } from './threadCache';
-import { createTransportOutbox, restoreTransportOutbox, type TransportOutbox } from './transportOutbox';
+import {
+  createTransportOutbox,
+  restoreTransportOutbox,
+  type TransportOutbox,
+  type TransportOutboxEntry,
+  type TransportOutboxProvisionalThreadSettings,
+} from './transportOutbox';
 import { createLiveTransport } from './liveTransport';
 import { flowerThreadActivityRevision } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
@@ -779,6 +785,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [companionRunReceipt, setCompanionRunReceipt] = createSignal<FlowerCompanionTerminalTransition>();
 	const outboxResendInFlight = new Set<string>();
 	const pendingAdmissionHandoffs = new Map<string, PendingAdmissionHandoff>();
+	const canConfirmOutboxEntry = (entry: TransportOutboxEntry): boolean => (
+		entry.threadId !== PENDING_NEW_THREAD_ID
+		|| pendingAdmissionHandoffs.has(entry.requestId)
+	);
 	let transportOutboxDisposed = false;
 	onMount(() => {
 		void restoreTransportOutbox().then((restored) => {
@@ -1584,18 +1594,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     composerSessionDraftFromValue(reactiveDraftSnapshotFor(currentComposerSessionKey()).value)
   ));
   const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.defaults.permission_type ?? 'approval_required');
-  const selectedThreadPermissionType = createMemo<FlowerPermissionType>(() => {
+  const selectedThreadPermissionType = createMemo<FlowerPermissionType | undefined>(() => {
     const pending = pendingPermissionPatch();
     const threadID = trimString(selectedThreadID());
     if (pending && threadID && pending.threadID === threadID) return pending.requested;
-    return selectedThread()?.permission_type ?? defaultComposerPermissionType();
+    return selectedThread()?.permission_type;
   });
-  const composerPermissionType = createMemo<FlowerPermissionType>(() => {
-    const thread = selectedThread();
-    if (thread) return selectedThreadPermissionType();
+  const composerPermissionType = createMemo<FlowerPermissionType | undefined>(() => {
+    if (selectedThreadID()) return selectedThreadPermissionType();
     return currentComposerSessionDraft().permissionTypeOverride ?? defaultComposerPermissionType();
   });
-  const composerPermissionCopy = createMemo(() => copy().settings.permissionTypes[composerPermissionType()]);
+  const composerPermissionCopy = createMemo(() => {
+    const permissionType = composerPermissionType();
+    return permissionType ? copy().settings.permissionTypes[permissionType] : undefined;
+  });
   const selectedThreadPreferenceEditable = createMemo(() => {
     if (selectedThreadDetailPending()) return false;
     if (selectedThreadReadOnly()) return false;
@@ -1612,11 +1624,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = selectedThreadID();
     return threadID ? pending.threadID === threadID : pending.threadID === PENDING_NEW_THREAD_ID;
   });
-  const permissionSelectorTitle = createMemo(() => (
-    permissionPatchPending()
-      ? copy().chat.permissionSelectorSaving
-      : `${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`
-  ));
+  const permissionSelectorTitle = createMemo(() => {
+    if (permissionPatchPending()) return copy().chat.permissionSelectorSaving;
+    const permissionCopy = composerPermissionCopy();
+    return permissionCopy
+      ? `${copy().chat.permissionSelectorLabel}: ${permissionCopy.label}`
+      : copy().chat.permissionSelectorLabel;
+  });
   const updateComposerSessionDraft = (sessionKey: string, updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
     if (key !== PENDING_NEW_THREAD_ID && retiredThreadIDs.has(key)) return;
@@ -1705,6 +1719,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && (Boolean(selectedThreadID()) || snapshot() !== null)
+    && (!selectedThreadID() || selectedThreadPermissionType() !== undefined)
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
   ));
   const composerPermissionInteractive = createMemo(() => (
@@ -2043,7 +2058,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const openPermissionMenu = () => {
     if (!composerPermissionInteractive() || permissionPatchPending()) return;
-    setPermissionMenuIndexForType(composerPermissionType());
+    const permissionType = composerPermissionType();
+    if (!permissionType) return;
+    setPermissionMenuIndexForType(permissionType);
     setPermissionMenuOpen(true);
     queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
   };
@@ -2173,6 +2190,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (!props.adapter.setThreadPermissionType || !composerPermissionInteractive()) return;
     const previous = selectedThreadPermissionType();
+    if (!previous) return;
     if (previous === permissionType) return;
     setPendingPermissionPatch({ threadID, requested: permissionType, previous });
     try {
@@ -2901,7 +2919,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void displayedWorkingDirectoryLabel();
     void workingDirectoryChipTitle();
     void composerPermissionType();
-    void composerPermissionCopy().label;
+    void composerPermissionCopy()?.label;
     void selectedThreadModelLabel();
     void composerReasoningEnabled();
     void composerReasoningSelection();
@@ -3167,12 +3185,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const retained = result.cache.views.get(threadID)?.thread ?? candidate.thread;
     const currentOutbox = transportOutbox();
     const reconciliation = current
-      ? currentOutbox.reconcile(current, {
-        canConfirm: (entry) => (
-          entry.threadId !== PENDING_NEW_THREAD_ID
-          || pendingAdmissionHandoffs.has(entry.requestId)
-        ),
-      })
+      ? currentOutbox.reconcile(current, { canConfirm: canConfirmOutboxEntry })
       : { outbox: currentOutbox, admitted: [] };
     let nextCache = result.cache;
     let selectionTransferred = false;
@@ -4119,9 +4132,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     contextCompactions?: FlowerLiveStreamEnvelope['context_compactions'],
     timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
     source: ThreadDetailSource = 'live_current',
+    admissionSettings?: TransportOutboxProvisionalThreadSettings,
   ): boolean => {
     const threadID = trimString(current.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) return false;
+    const matchingAdmission = transportOutbox()
+      .matchCurrent(current, { canConfirm: canConfirmOutboxEntry })
+      .find((entry) => entry.provisionalThreadSettings);
+    const provisionalSettings = admissionSettings ?? matchingAdmission?.provisionalThreadSettings;
     const now = Date.now();
     const base = threadCache().views.get(threadID)?.thread ?? threadCache().summaries.get(threadID) ?? {
       thread_id: threadID,
@@ -4151,6 +4169,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : base.context_usage;
     const contextualBase = {
       ...base,
+      ...(provisionalSettings ? {
+        model_id: provisionalSettings.model_id || base.model_id,
+        working_dir: provisionalSettings.working_dir || base.working_dir,
+        permission_type: provisionalSettings.permission_type,
+        ...(provisionalSettings.reasoning_selection
+          ? { reasoning_selection: provisionalSettings.reasoning_selection }
+          : {}),
+      } : {}),
       ...(mergedContextUsage ? { context_usage: mergedContextUsage } : {}),
       ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
       ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
@@ -4232,7 +4258,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const applyAcceptedTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt): void => {
-    if (receipt.current) applyRuntimeCurrent(receipt.current);
+    const entry = transportOutbox().entries.get(trimString(receipt.client_request_id));
+    if (receipt.current) {
+      applyRuntimeCurrent(
+        receipt.current,
+        undefined,
+        undefined,
+        undefined,
+        'live_current',
+        entry?.provisionalThreadSettings,
+      );
+    }
     const waitingForCanonicalDetail = acceptTurnLaunchReceipt(receipt);
     const threadID = trimString(receipt.thread_id);
     if (waitingForCanonicalDetail && selectedThreadID() === threadID) {
@@ -4690,8 +4726,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'ordinary' as const;
     const selectedID = trimString(selectedThreadID());
     const frozenModelID = selectedComposerModelID();
+    const frozenPermissionType = composerPermissionType();
     const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
     const frozenWorkingDir = draftWorkingDirectory();
+    const frozenDisplayedWorkingDir = displayedWorkingDirectory();
     const frozenCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
     const operationClaim = operation.session.mutate((value) => (
       value.client_request_id && value.client_request_id !== clientRequestID
@@ -4960,6 +4998,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
           ...(!selectedID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
         };
+        const provisionalThreadSettings = !selectedID && frozenPermissionType
+          ? {
+            model_id: launchModelID,
+            working_dir: frozenDisplayedWorkingDir,
+            permission_type: frozenPermissionType,
+            ...(draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
+          } satisfies TransportOutboxProvisionalThreadSettings
+          : undefined;
         // Fence before publishing the outbox entry because Solid effects may
         // observe the new entry synchronously.
         outboxResendInFlight.add(clientRequestID);
@@ -4977,6 +5023,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             input: launchInput,
             attachmentLabels: readyItems.map((attachment) => attachment.name),
             createdAtMs: Date.now(),
+            ...(provisionalThreadSettings ? { provisionalThreadSettings } : {}),
           });
           return durableOutbox;
         });
@@ -5636,6 +5683,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const permissionSelector = () => {
     const canUseMenu = createMemo(() => composerPermissionAvailable());
     const interactive = createMemo(() => composerPermissionInteractive() && !permissionPatchPending());
+    const permissionLabel = createMemo(() => composerPermissionCopy()?.label ?? copy().chat.permissionSelectorLabel);
     return (
       <div
         class="flower-permission-selector"
@@ -5648,11 +5696,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <span
               class="flower-permission-trigger flower-permission-trigger-static"
               data-permission-type={composerPermissionType()}
-              title={`${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`}
-              aria-label={`${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`}
+              title={permissionSelectorTitle()}
+              aria-label={permissionSelectorTitle()}
             >
               <Shield class="flower-permission-icon" />
-              <span class="flower-permission-label">{composerPermissionCopy().label}</span>
+              <span class="flower-permission-label">{permissionLabel()}</span>
             </span>
           )}
         >
@@ -5661,7 +5709,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             type="button"
             class={cn('flower-permission-trigger', !interactive() && 'flower-permission-trigger-readonly')}
             data-permission-type={composerPermissionType()}
-            aria-label={`${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`}
+            aria-label={permissionSelectorTitle()}
             aria-haspopup="listbox"
             aria-expanded={permissionMenuOpen()}
             aria-controls="flower-composer-permission-menu"
@@ -5677,7 +5725,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             onKeyDown={handlePermissionTriggerKeyDown}
           >
             <Shield class="flower-permission-icon" />
-            <span class="flower-permission-label">{composerPermissionCopy().label}</span>
+            <span class="flower-permission-label">{permissionLabel()}</span>
             <Show when={permissionPatchPending()}>
               <span class="flower-permission-saving-dot" aria-hidden="true" />
             </Show>
@@ -5691,7 +5739,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             class="flower-permission-menu"
             role="listbox"
             aria-label={copy().chat.permissionSelectorLabel}
-            aria-activedescendant={permissionOptionID(FLOWER_PERMISSION_TYPES[permissionMenuActiveIndex()] ?? composerPermissionType())}
+            aria-activedescendant={permissionOptionID(FLOWER_PERMISSION_TYPES[permissionMenuActiveIndex()] ?? composerPermissionType() ?? 'readonly')}
             onKeyDown={handlePermissionMenuKeyDown}
           >
             <For each={FLOWER_PERMISSION_TYPES}>
@@ -10126,7 +10174,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return (
           <span class="flower-permission-trigger flower-composer-control-measure" data-permission-type={composerPermissionType()}>
             <Shield class="flower-permission-icon" />
-            <span class="flower-permission-label">{composerPermissionCopy().label}</span>
+            <span class="flower-permission-label">{composerPermissionCopy()?.label ?? copy().chat.permissionSelectorLabel}</span>
             <ChevronDown class="flower-permission-chevron" aria-hidden="true" />
           </span>
         );
