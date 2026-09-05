@@ -162,7 +162,7 @@ export function toWireFsExtractRequest(req: FsExtractRequest): wire_fs_extract_r
     source_path: req.sourcePath,
     destination_parent_path: req.destinationParentPath,
     destination_name: req.destinationName,
-    password: req.password || undefined,
+    ...(req.password ? { password: req.password } : {}),
   };
 }
 

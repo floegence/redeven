@@ -18,7 +18,17 @@ describe('fs codec', () => {
       source_path: '/workspace/bundle.zip',
       destination_parent_path: '/workspace',
       destination_name: 'bundle',
-      password: undefined,
+    });
+    expect(toWireFsExtractRequest({
+      sourcePath: '/workspace/bundle.zip',
+      destinationParentPath: '/workspace',
+      destinationName: 'bundle',
+      password: 'secret',
+    })).toEqual({
+      source_path: '/workspace/bundle.zip',
+      destination_parent_path: '/workspace',
+      destination_name: 'bundle',
+      password: 'secret',
     });
     expect(fromWireFsExtractResponse({
       destination_path: '/workspace/bundle (2)',

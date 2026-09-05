@@ -159,6 +159,19 @@ describe('ArchiveExtractionDialog', () => {
     expect(onExtract).toHaveBeenLastCalledWith(expect.objectContaining({ password: 'correct' }), expect.anything());
   });
 
+  it('maps structured RPC errors without relying on the RpcError prototype', async () => {
+    const onExtract = vi.fn().mockRejectedValue({
+      cause: { code: '42217', message: 'archive is corrupt' },
+    });
+    const { host } = renderDialog({ onExtract });
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Extract')!.click();
+    await flush();
+
+    expect(host.textContent).toContain('The archive is damaged or incomplete.');
+    expect(host.textContent).not.toContain('archive is corrupt');
+  });
+
   it('aborts extraction but stays open until the request settles', async () => {
     const pending = deferred<{ destinationPath: string; resultKind: 'directory'; archiveFormat: string }>();
     const onExtract = vi.fn().mockReturnValue(pending.promise);

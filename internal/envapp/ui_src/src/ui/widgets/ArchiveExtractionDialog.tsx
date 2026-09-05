@@ -6,7 +6,6 @@ import {
 } from '@floegence/floe-webapp-core/file-browser';
 import { FolderOpen } from '@floegence/floe-webapp-core/icons';
 import { Button, DirectoryPicker } from '@floegence/floe-webapp-core/ui';
-import { RpcError } from '@floegence/floe-webapp-protocol';
 
 import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
 import { toPickerTreeAbsolutePath } from '../../../../../flower_ui/src/filePicker/directoryPickerTree';
@@ -36,6 +35,32 @@ export type ArchiveExtractionDialogProps = {
 };
 
 type ExtractionStatus = 'idle' | 'extracting' | 'canceling' | 'finishing';
+
+function readRpcErrorCode(error: unknown): number | undefined {
+  const pending: unknown[] = [error];
+  const visited = new Set<object>();
+
+  while (pending.length > 0) {
+    const current = pending.shift();
+    if (!current || typeof current !== 'object') continue;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const candidate = current as { code?: unknown; cause?: unknown; error?: unknown };
+    const rawCode = candidate.code;
+    const code = typeof rawCode === 'number'
+      ? rawCode
+      : typeof rawCode === 'string' && /^\d+$/.test(rawCode.trim())
+        ? Number(rawCode)
+        : undefined;
+    if (code !== undefined && Number.isSafeInteger(code) && code > 0) return code;
+
+    if (candidate.error !== undefined) pending.push(candidate.error);
+    if (candidate.cause !== undefined) pending.push(candidate.cause);
+  }
+
+  return undefined;
+}
 
 export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
   const i18n = useI18n();
@@ -103,35 +128,33 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
   });
 
   const messageForError = (error: unknown): string => {
-    if (error instanceof RpcError) {
-      switch (error.code) {
-        case 400:
-          return i18n.t('files.archiveExtraction.invalidRequest');
-        case 403:
-          return i18n.t('files.archiveExtraction.permissionDenied');
-        case 404:
-          return i18n.t('files.archiveExtraction.sourceMissing');
-        case 42211:
-          return i18n.t('files.archiveExtraction.unsupportedFormat');
-        case 42212:
-          return i18n.t('files.archiveExtraction.multipartUnsupported');
-        case 42213:
-          return i18n.t('files.archiveExtraction.passwordRequired');
-        case 42214:
-          return i18n.t('files.archiveExtraction.wrongPassword');
-        case 42215:
-          return i18n.t('files.archiveExtraction.unsafeArchive');
-        case 42216:
-          return i18n.t('files.archiveExtraction.unsupportedEntry');
-        case 42217:
-          return i18n.t('files.archiveExtraction.corruptArchive');
-        case 50311:
-          return i18n.t('files.archiveExtraction.insufficientResources');
-        case 50711:
-          return i18n.t('files.archiveExtraction.insufficientSpace');
-        case 50011:
-          return i18n.t('files.archiveExtraction.cleanupFailed');
-      }
+    switch (readRpcErrorCode(error)) {
+      case 400:
+        return i18n.t('files.archiveExtraction.invalidRequest');
+      case 403:
+        return i18n.t('files.archiveExtraction.permissionDenied');
+      case 404:
+        return i18n.t('files.archiveExtraction.sourceMissing');
+      case 42211:
+        return i18n.t('files.archiveExtraction.unsupportedFormat');
+      case 42212:
+        return i18n.t('files.archiveExtraction.multipartUnsupported');
+      case 42213:
+        return i18n.t('files.archiveExtraction.passwordRequired');
+      case 42214:
+        return i18n.t('files.archiveExtraction.wrongPassword');
+      case 42215:
+        return i18n.t('files.archiveExtraction.unsafeArchive');
+      case 42216:
+        return i18n.t('files.archiveExtraction.unsupportedEntry');
+      case 42217:
+        return i18n.t('files.archiveExtraction.corruptArchive');
+      case 50311:
+        return i18n.t('files.archiveExtraction.insufficientResources');
+      case 50711:
+        return i18n.t('files.archiveExtraction.insufficientSpace');
+      case 50011:
+        return i18n.t('files.archiveExtraction.cleanupFailed');
     }
     return i18n.t('files.archiveExtraction.genericFailure');
   };
@@ -190,7 +213,8 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
         props.onClose();
         return;
       }
-      if (error instanceof RpcError && (error.code === 42213 || error.code === 42214)) {
+      const errorCode = readRpcErrorCode(error);
+      if (errorCode === 42213 || errorCode === 42214) {
         setPasswordVisible(true);
       }
       setErrorMessage(messageForError(error));
