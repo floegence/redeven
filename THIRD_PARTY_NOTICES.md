@@ -27,9 +27,14 @@ Redeven downloads the following generic Host runtime only after an authorized us
 
 | Component | Version | License | Used by | Source | Notes |
 | --- | --- | --- | --- | --- | --- |
+| github.com/andybalholm/brotli | v1.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/andybalholm/brotli@v1.2.0 | Detected from LICENSE. |
 | github.com/anthropics/anthropic-sdk-go | v1.22.1 | MIT | Runtime | https://pkg.go.dev/github.com/anthropics/anthropic-sdk-go@v1.22.1 | Detected from LICENSE. |
+| github.com/bodgit/plumbing | v1.3.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/plumbing@v1.3.0 | Detected from LICENSE. |
+| github.com/bodgit/sevenzip | v1.6.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/sevenzip@v1.6.1 | Detected from LICENSE. |
+| github.com/bodgit/windows | v1.0.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/windows@v1.0.1 | Detected from LICENSE. |
 | github.com/coder/websocket | v1.8.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/coder/websocket@v1.8.15 | coder/websocket is distributed under a BSD-style license. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
+| github.com/dsnet/compress | v0.0.2-0.20230904184137-39efe44ab707 | BSD-style | Runtime | https://pkg.go.dev/github.com/dsnet/compress@v0.0.2-0.20230904184137-39efe44ab707 | Detected from LICENSE.md. |
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
@@ -41,15 +46,23 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
+| github.com/hashicorp/golang-lru/v2 | v2.0.7 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/hashicorp/golang-lru/v2@v2.0.7 | Detected from LICENSE. |
 | github.com/JohannesKaufmann/dom | v0.3.1 | MIT | Runtime | https://pkg.go.dev/github.com/JohannesKaufmann/dom@v0.3.1 | Detected from LICENSE. |
 | github.com/JohannesKaufmann/html-to-markdown/v2 | v2.5.2 | MIT | Runtime | https://pkg.go.dev/github.com/JohannesKaufmann/html-to-markdown/v2@v2.5.2 | Detected from LICENSE. |
+| github.com/klauspost/compress | v1.18.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/klauspost/compress@v1.18.0 | Detected from LICENSE. |
+| github.com/klauspost/pgzip | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/klauspost/pgzip@v1.2.6 | Detected from LICENSE. |
 | github.com/libp2p/go-buffer-pool | v0.0.2 | MIT | Runtime | https://pkg.go.dev/github.com/libp2p/go-buffer-pool@v0.0.2 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/libp2p/go-yamux/v5 | v5.1.0 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/libp2p/go-yamux/v5@v5.1.0 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/lufia/plan9stats | v0.0.0-20211012122336-39d0f177ccd0 | BSD-style | Runtime | https://pkg.go.dev/github.com/lufia/plan9stats@v0.0.0-20211012122336-39d0f177ccd0 | Detected from LICENSE. |
 | github.com/mattn/go-isatty | v0.0.24 | MIT | Runtime | https://pkg.go.dev/github.com/mattn/go-isatty@v0.0.24 | Detected from LICENSE. |
+| github.com/mholt/archives | v0.1.5 | MIT | Runtime | https://pkg.go.dev/github.com/mholt/archives@v0.1.5 | Detected from LICENSE. |
+| github.com/mikelolasagasti/xz | v1.0.1 | ISC | Runtime | https://pkg.go.dev/github.com/mikelolasagasti/xz@v1.0.1 | Detected from LICENSE. |
+| github.com/minio/minlz | v1.0.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/minio/minlz@v1.0.1 | Detected from LICENSE. |
 | github.com/ncruces/go-strftime | v1.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.0.0 | Detected from LICENSE. |
+| github.com/nwaples/rardecode/v2 | v2.2.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/nwaples/rardecode/v2@v2.2.0 | Detected from LICENSE. |
 | github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
 | github.com/pelletier/go-toml/v2 | v2.4.3 | MIT | Runtime | https://pkg.go.dev/github.com/pelletier/go-toml/v2@v2.4.3 | Detected from LICENSE. |
+| github.com/pierrec/lz4/v4 | v4.1.22 | BSD-style | Runtime | https://pkg.go.dev/github.com/pierrec/lz4/v4@v4.1.22 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
 | github.com/quic-go/qpack | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/qpack@v0.6.0 | Detected from LICENSE.md. |
 | github.com/quic-go/quic-go | v0.62.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.62.0 | Detected from LICENSE. |
@@ -57,6 +70,9 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | BSD-style | Runtime | https://pkg.go.dev/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec | Detected from LICENSE. |
 | github.com/santhosh-tekuri/jsonschema/v5 | v5.3.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 | Detected from LICENSE. |
 | github.com/shirou/gopsutil/v4 | v4.25.12 | BSD-style | Runtime | https://pkg.go.dev/github.com/shirou/gopsutil/v4@v4.25.12 | Detected from LICENSE. |
+| github.com/sorairolake/lzip-go | v0.3.8 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/sorairolake/lzip-go@v0.3.8 | Detected from LICENSE-APACHE, LICENSE-MIT. |
+| github.com/spf13/afero | v1.15.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/spf13/afero@v1.15.0 | Detected from LICENSE.txt. |
+| github.com/STARRY-S/zip | v0.2.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/STARRY-S/zip@v0.2.3 | Detected from LICENSE. |
 | github.com/tdewolff/parse/v2 | v2.8.16 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.16 | Detected from LICENSE.md. |
 | github.com/tetratelabs/wazero | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tetratelabs/wazero@v1.12.0 | Detected from LICENSE. |
 | github.com/tidwall/gjson | v1.18.0 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/gjson@v1.18.0 | Detected from LICENSE. |
@@ -65,7 +81,10 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | github.com/tidwall/sjson | v1.2.5 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/sjson@v1.2.5 | Detected from LICENSE. |
 | github.com/tklauser/go-sysconf | v0.3.16 | BSD-style | Runtime | https://pkg.go.dev/github.com/tklauser/go-sysconf@v0.3.16 | Detected from LICENSE. |
 | github.com/tklauser/numcpus | v0.11.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tklauser/numcpus@v0.11.0 | Detected from LICENSE. |
+| github.com/ulikunitz/xz | v0.5.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/ulikunitz/xz@v0.5.15 | Detected from LICENSE. |
+| github.com/yeka/zip | v0.0.0-20231116150916-03d6312748a9 | MIT | Runtime | https://pkg.go.dev/github.com/yeka/zip@v0.0.0-20231116150916-03d6312748a9 | Detected from LICENSE. |
 | github.com/yusufpapurcu/wmi | v1.2.4 | MIT | Runtime | https://pkg.go.dev/github.com/yusufpapurcu/wmi@v1.2.4 | Detected from LICENSE. |
+| go4.org | v0.0.0-20230225012048-214862532bf5 | Apache-2.0 | Runtime | https://pkg.go.dev/go4.org@v0.0.0-20230225012048-214862532bf5 | Detected from LICENSE. |
 | golang.org/x/crypto | v0.55.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.55.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.45.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.40.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.40.0 | Detected from LICENSE. |
@@ -187,9 +206,11 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.48.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.48.4 |  |
-| @floegence/floe-webapp-core | 0.48.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.48.4 |  |
-| @floegence/floe-webapp-protocol | 0.48.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.48.4 |  |
+| @floegence/floe-webapp-boot | 0.48.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.48.4 |  |
+| @floegence/floe-webapp-boot | 0.48.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.48.5 |  |
+| @floegence/floe-webapp-core | 0.48.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.48.4 |  |
+| @floegence/floe-webapp-core | 0.48.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.48.5 |  |
+| @floegence/floe-webapp-protocol | 0.48.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.48.5 |  |
 | @floegence/floeterm-terminal-web | 0.19.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.0 package. |
 | @floegence/flowersec-core | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.0.1 |  |
 | @floegence/flowersec-node-native-darwin-arm64 | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.0.1 |  |

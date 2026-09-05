@@ -8,6 +8,7 @@ export const redevenV1TypeIds = {
     delete: 1006,
     mkdir: 1007,
     getPathContext: 1010,
+    extract: 1011,
   },
   git: {
     resolveRepo: 1101,

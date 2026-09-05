@@ -5,6 +5,8 @@ import type {
   wire_fs_copy_resp,
   wire_fs_delete_req,
   wire_fs_delete_resp,
+  wire_fs_extract_req,
+  wire_fs_extract_resp,
   wire_fs_get_path_context_resp,
   wire_fs_list_req,
   wire_fs_list_resp,
@@ -22,6 +24,8 @@ import type {
   FsCopyResponse,
   FsDeleteRequest,
   FsDeleteResponse,
+  FsExtractRequest,
+  FsExtractResponse,
   FsEntryType,
   FsRootKind,
   FsPathContextResponse,
@@ -150,6 +154,23 @@ export function fromWireFsCopyResponse(resp: wire_fs_copy_resp): FsCopyResponse 
   return {
     success: Boolean(resp?.success ?? false),
     newPath: String(resp?.new_path ?? ''),
+  };
+}
+
+export function toWireFsExtractRequest(req: FsExtractRequest): wire_fs_extract_req {
+  return {
+    source_path: req.sourcePath,
+    destination_parent_path: req.destinationParentPath,
+    destination_name: req.destinationName,
+    password: req.password || undefined,
+  };
+}
+
+export function fromWireFsExtractResponse(resp: wire_fs_extract_resp): FsExtractResponse {
+  return {
+    destinationPath: String(resp?.destination_path ?? ''),
+    resultKind: resp?.result_kind === 'file' ? 'file' : 'directory',
+    archiveFormat: String(resp?.archive_format ?? ''),
   };
 }
 

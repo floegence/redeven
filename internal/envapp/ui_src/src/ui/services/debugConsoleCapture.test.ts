@@ -88,6 +88,38 @@ describe('debugConsoleCapture', () => {
     unsubscribe();
   });
 
+  it('redacts archive passwords while retaining non-sensitive extraction fields', async () => {
+    const secret = 'archive-password-secret-1b87';
+    const events: any[] = [];
+    const unsubscribe = subscribeDebugConsoleClientEvents((event) => events.push(event));
+    setDebugConsoleCaptureEnabled(true);
+
+    await captureDebugConsoleProtocolCall({
+      typeID: redevenV1TypeIds.fs.extract,
+      payload: {
+        source_path: '/workspace/bundle.zip',
+        destination_parent_path: '/workspace/output',
+        destination_name: 'bundle',
+        password: secret,
+      },
+      execute: async () => ({
+        destination_path: '/workspace/output/bundle',
+        result_kind: 'directory',
+        archive_format: 'zip',
+      }),
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.detail?.request?.payload).toEqual({
+      source_path: '/workspace/bundle.zip',
+      destination_parent_path: '/workspace/output',
+      destination_name: 'bundle',
+      password: '[redacted]',
+    });
+    expect(JSON.stringify(events[0])).not.toContain(secret);
+    unsubscribe();
+  });
+
   it('projects terminal history to recovery metadata without retaining output chunks', async () => {
     const secret = 'terminal-history-secret-5e427';
     const events: any[] = [];

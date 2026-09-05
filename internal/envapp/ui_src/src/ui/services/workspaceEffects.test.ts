@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const UI_ROOT = path.resolve(process.cwd(), 'src/ui');
 const FACADE_PATH = path.resolve(UI_ROOT, 'services/workspaceEffects.ts');
-const DIRECT_EFFECT_PATTERN = /\brpc\.(?:fs\.(?:writeFile|mkdir|rename|copy|delete)|git\.(?:stageWorkspace|unstageWorkspace|discardWorkspace|commitWorkspace|saveStash|applyStash|dropStash|fetchRepo|pullRepo|pushRepo|checkoutBranch|switchDetached|mergeBranch|deleteBranch))\s*\(/;
+const DIRECT_EFFECT_PATTERN = /\brpc\.(?:fs\.(?:writeFile|mkdir|rename|copy|delete|extract)|git\.(?:stageWorkspace|unstageWorkspace|discardWorkspace|commitWorkspace|saveStash|applyStash|dropStash|fetchRepo|pullRepo|pushRepo|checkoutBranch|switchDetached|mergeBranch|deleteBranch))\s*\(/;
 
 function productionSources(root: string): string[] {
   const files: string[] = [];

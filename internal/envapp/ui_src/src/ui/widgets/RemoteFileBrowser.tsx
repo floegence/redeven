@@ -2,6 +2,9 @@ import { Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Settings, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import {
+  ArchiveFileIcon,
+  classifyArchiveFileName,
+  type ArchiveFileClassification,
   type ContextMenuCallbacks,
   type ContextMenuEvent,
   type ContextMenuItem,
@@ -13,6 +16,7 @@ import { ConfirmDialog } from '../primitives/EnvAppModal';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import {
   useRedevenRpc,
+  type FsExtractResponse,
   type GitBranchSummary,
   type GitCommitSummary,
   type GitListBranchesResponse,
@@ -82,6 +86,7 @@ import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashWindow } from './GitStashWindow';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { ArchiveExtractionDialog, type ArchiveExtractionRequest } from './ArchiveExtractionDialog';
 import { GitWorkspace } from './GitWorkspace';
 import { useI18n } from '../i18n';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
@@ -251,7 +256,7 @@ type CreateEntryDraft = {
   initialName: string;
 };
 
-let createdEntryRevealSeq = 0;
+let entryRevealSeq = 0;
 
 const GIT_COMMIT_PAGE_SIZE = 50;
 const GIT_WORKSPACE_PAGE_SIZE = 200;
@@ -744,7 +749,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createDialogDraft, setCreateDialogDraft] = createSignal<CreateEntryDraft | null>(null);
   const [createLoading, setCreateLoading] = createSignal(false);
-  const [pendingCreatedEntryReveal, setPendingCreatedEntryReveal] = createSignal<FileBrowserRevealRequest | null>(null);
+  const [pendingEntryReveal, setPendingEntryReveal] = createSignal<FileBrowserRevealRequest | null>(null);
+  const [archiveExtractionRequest, setArchiveExtractionRequest] = createSignal<ArchiveExtractionRequest | null>(null);
 
   const [duplicateLoading, setDuplicateLoading] = createSignal(false);
 
@@ -3693,7 +3699,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     resetGitCommitSidebar();
     resetGitWorkbenchData();
     setDragMoveLoading(false);
-    setPendingCreatedEntryReveal(null);
+    setPendingEntryReveal(null);
+    setArchiveExtractionRequest(null);
     setDirectedNavigationFailure(null);
     resetFileBrowser();
 
@@ -4477,10 +4484,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     };
   };
 
-  const buildCreatedEntryReveal = (itemPath: string, parentDir: string): FileBrowserRevealRequest => {
+  const buildEntryReveal = (itemPath: string, parentDir: string): FileBrowserRevealRequest => {
     const targetPath = normalizePath(itemPath);
     return {
-      requestId: `created-entry-${++createdEntryRevealSeq}`,
+      requestId: `entry-reveal-${++entryRevealSeq}`,
       targetId: targetPath,
       targetPath,
       parentPath: normalizePath(parentDir),
@@ -4633,12 +4640,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
 
       const newItem = buildCreatedItem(draft.kind, draft.parentDir, nextName);
-      const revealRequest = buildCreatedEntryReveal(newItem.path, draft.parentDir);
+      const revealRequest = buildEntryReveal(newItem.path, draft.parentDir);
       insertCreatedItemIntoState(draft.parentDir, newItem);
       batch(() => {
         setCreateDialogOpen(false);
         setCreateDialogDraft(null);
-        setPendingCreatedEntryReveal(revealRequest);
+        setPendingEntryReveal(revealRequest);
       });
 
       if (normalizePath(activeDirectoryPath()) !== normalizePath(draft.parentDir)) {
@@ -4650,7 +4657,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         });
 
         if (normalizePath(activeDirectoryPath()) !== normalizePath(draft.parentDir)) {
-          setPendingCreatedEntryReveal((current) => current?.requestId === revealRequest.requestId ? null : current);
+          setPendingEntryReveal((current) => current?.requestId === revealRequest.requestId ? null : current);
         }
       }
 
@@ -5414,6 +5421,53 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const rootForPath = (path: string) => matchFilesystemRoot(path, filesystemRoots());
   const canMutatePath = (path: string) => Boolean(rootForPath(path)?.permissions.write);
+  const canExtractToPath = (path: string) => (
+    Boolean(ctx.env()?.permissions?.can_write) && canMutatePath(path)
+  );
+
+  const archiveClassificationForItem = (item: FileItem): ArchiveFileClassification | null => (
+    item.type === 'file' ? classifyArchiveFileName(item.name) ?? null : null
+  );
+
+  const openArchiveExtraction = (item: FileItem, classification: ArchiveFileClassification) => {
+    const parentPath = getParentDir(item.path);
+    const root = rootForPath(parentPath);
+    setArchiveExtractionRequest({
+      item,
+      classification,
+      pickerRootPath: root?.pathAbs ?? parentPath,
+      pickerRootLabel: root?.label,
+    });
+  };
+
+  const openFileItem = (item: FileItem) => {
+    const classification = archiveClassificationForItem(item);
+    if (classification) {
+      openArchiveExtraction(item, classification);
+      return;
+    }
+    void filePreview.openPreview(item);
+  };
+
+  const handleArchiveExtractionComplete = async (response: FsExtractResponse) => {
+    const destinationParent = getParentDir(response.destinationPath);
+    const revealRequest = buildEntryReveal(response.destinationPath, destinationParent);
+    setPendingEntryReveal(revealRequest);
+    const navigationResult = await requestDirectoryNavigation(destinationParent, {
+      fallbackPath: lastStableDirectoryPath() || defaultRootPath(),
+      persistEnvId: envId(),
+      persistOnReady: true,
+      intent: 'refresh',
+    });
+    if (navigationResult.status !== 'ready') {
+      setPendingEntryReveal((current) => current?.requestId === revealRequest.requestId ? null : current);
+    }
+    notification.success(
+      i18n.t('files.archiveExtraction.completedTitle'),
+      i18n.t('files.archiveExtraction.completedMessage', { name: fileNameFromPath(response.destinationPath) }),
+    );
+  };
+
   const canMutateContext = (event: ContextMenuEvent | null): boolean => {
     const paths = event?.items?.length
       ? event.items.map((item) => item.path)
@@ -5617,6 +5671,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   });
 
+  const buildExtractArchiveMenuItem = (
+    item: FileItem,
+    classification: ArchiveFileClassification,
+  ): ContextMenuItem => ({
+    id: 'extract-archive',
+    label: i18n.t('files.archiveExtraction.menuExtract'),
+    type: 'custom',
+    icon: (props) => <ArchiveFileIcon class={props.class} />,
+    onAction: () => openArchiveExtraction(item, classification),
+  });
+
   const buildNewContextMenuItem = (separator = false, disabled = false): ContextMenuItem => ({
     id: 'new',
     label: i18n.t('files.menuNew'),
@@ -5689,8 +5754,18 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const viewDiffItem = scope === 'single-file'
       ? buildViewDiffMenuItem(filesGitDiffableChangesForItem(event.items[0]))
       : null;
+    const archiveItem = scope === 'single-file' ? event.items[0] : undefined;
+    const archiveClassification = archiveItem ? archiveClassificationForItem(archiveItem) : null;
+    const extractItem = archiveItem && archiveClassification && canExtractToPath(getParentDir(archiveItem.path))
+      ? buildExtractArchiveMenuItem(archiveItem, archiveClassification)
+      : null;
     const primaryFileItems = event.items.length > 0 && event.items.every((item) => item.type === 'file')
-      ? [buildAskFlowerMenuItem(), ...(viewDiffItem ? [viewDiffItem] : []), buildDownloadMenuItem(true)]
+      ? [
+          buildAskFlowerMenuItem(),
+          ...(viewDiffItem ? [viewDiffItem] : []),
+          ...(extractItem ? [extractItem] : []),
+          buildDownloadMenuItem(true),
+        ]
       : [buildAskFlowerMenuItem({ separator: true })];
     return [
       ...primaryFileItems,
@@ -5751,9 +5826,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onRootWritePermissionChange={handleRootWritePermissionChange}
                       pathEditRequestKey={pathEditorRequestKey()}
                       toolbarEndActions={fileBrowserToolbarEndActions()}
-                      revealRequest={pendingCreatedEntryReveal()}
+                      revealRequest={pendingEntryReveal()}
                       onRevealRequestConsumed={(requestId) => {
-                        setPendingCreatedEntryReveal((current) => current?.requestId === requestId ? null : current);
+                        setPendingEntryReveal((current) => current?.requestId === requestId ? null : current);
                       }}
                       onNavigate={(path) => {
                         const targetPath = normalizePath(path);
@@ -5793,7 +5868,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                             };
                         }
                       }}
-                      onOpen={(item) => void filePreview.openPreview(item)}
+                      onOpen={openFileItem}
                       onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
                       contextMenuCallbacks={ctxMenu}
                       resolveOverrideContextMenuItems={resolveOverrideContextMenuItems}
@@ -5918,6 +5993,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
       <RedevenLoadingCurtain visible={pageMode() === 'files' && directoryBlocking()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
       <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.moving')} />
+
+      <ArchiveExtractionDialog
+        open={Boolean(archiveExtractionRequest())}
+        request={archiveExtractionRequest()}
+        listDirectory={async (path) => {
+          const response = await rpc.fs.list({ path, showHidden: false });
+          return response.entries ?? [];
+        }}
+        isWritablePath={canExtractToPath}
+        onExtract={(request, options) => (
+          createWorkspaceEffectRpc(requireProtocolSession(), rpc).fs.extract(request, options)
+        )}
+        onComplete={handleArchiveExtractionComplete}
+        onClose={() => setArchiveExtractionRequest(null)}
+      />
 
       <GitDiffDialog
         open={filesGitDiffDialogOpen()}

@@ -1,8 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
-import { fromWireFsListResponse, fromWireFsPathContextResponse } from './fs';
+import {
+  fromWireFsExtractResponse,
+  fromWireFsListResponse,
+  fromWireFsPathContextResponse,
+  toWireFsExtractRequest,
+} from './fs';
 
 describe('fs codec', () => {
+  it('maps archive extraction without retaining an empty password', () => {
+    expect(toWireFsExtractRequest({
+      sourcePath: '/workspace/bundle.zip',
+      destinationParentPath: '/workspace',
+      destinationName: 'bundle',
+      password: '',
+    })).toEqual({
+      source_path: '/workspace/bundle.zip',
+      destination_parent_path: '/workspace',
+      destination_name: 'bundle',
+      password: undefined,
+    });
+    expect(fromWireFsExtractResponse({
+      destination_path: '/workspace/bundle (2)',
+      result_kind: 'directory',
+      archive_format: 'zip',
+    })).toEqual({
+      destinationPath: '/workspace/bundle (2)',
+      resultKind: 'directory',
+      archiveFormat: 'zip',
+    });
+  });
+
   it('decodes symlink metadata from list responses without flattening it into is_directory alone', () => {
     const resp = fromWireFsListResponse({
       entries: [
