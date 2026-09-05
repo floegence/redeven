@@ -2443,7 +2443,10 @@ export function EnvPortForwardsPage() {
         });
       });
     } catch (error) {
-      notify.error(i18n.t('webServices.notifications.failedToAddTitle'), error instanceof Error ? error.message : String(error));
+      const message = error instanceof LocalApiError && error.code === 'RECOMMENDED_RELEASE_UNAVAILABLE'
+        ? releaseSourceErrorLabel(error, i18n)
+        : error instanceof Error ? error.message : String(error);
+      notify.error(i18n.t('webServices.notifications.failedToAddTitle'), message);
     } finally {
       setManagedInstallSubmitting(false);
     }
