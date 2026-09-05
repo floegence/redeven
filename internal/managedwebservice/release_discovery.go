@@ -535,18 +535,30 @@ func (m *Manager) refreshServiceReleaseCatalog(ctx context.Context, serviceID st
 	if result.HasMore {
 		return serviceError("RELEASE_SOURCE_RESPONSE_INVALID", "The Container Registry pagination exceeded its safe limit.", 502, true, nil)
 	}
-	verifyIDs := []string{}
-	channels := map[string]bool{}
-	for _, candidate := range result.Candidates {
-		if candidate.VerificationStatus == "pending" && !channels[candidate.Channel] && (candidate.Channel == "stable" || candidate.Channel == "preview") {
-			verifyIDs = append(verifyIDs, candidate.CandidateID)
-			channels[candidate.Channel] = true
-		}
-	}
+	verifyIDs := pendingReleaseVerificationIDs(result.Candidates)
 	if len(verifyIDs) > 0 {
 		_, err = m.ServiceReleaseCandidates(ctx, serviceID, ReleaseCandidateRequest{Action: "verify", CandidateIDs: verifyIDs})
 	}
 	return err
+}
+
+func pendingReleaseVerificationIDs(candidates []ReleaseCandidate) []string {
+	verifyIDs := make([]string, 0, 3)
+	channels := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate.VerificationStatus != "pending" {
+			continue
+		}
+		if candidate.RecommendationStatus == "pending" {
+			verifyIDs = append(verifyIDs, candidate.CandidateID)
+			continue
+		}
+		if !channels[candidate.Channel] && (candidate.Channel == "stable" || candidate.Channel == "preview") {
+			verifyIDs = append(verifyIDs, candidate.CandidateID)
+			channels[candidate.Channel] = true
+		}
+	}
+	return verifyIDs
 }
 
 func (m *Manager) releaseView(scope string) (ReleaseCandidateResult, bool) {
