@@ -7,7 +7,7 @@ timestamp: 2026-08-14T00:00:00Z
 ---
 # Summary
 
-Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist or recover a second approval lifecycle. Resolve commits the canonical interaction-result batch before updating and publishing the current view. Persistence failure returns an error and leaves the live interaction unresolved. Rejection and cancellation are row-local outcomes, never global message failures.
+Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist or recover a second approval lifecycle. Resolve commits the canonical interaction-result batch before updating and publishing the current view. Floret v7.1.4 publishes the unresolved interaction and its matching active projection in one transition: waiting interactions clear `run_progress`, while other active summaries retain it. Redeven therefore never receives an active summary with an invalid combination. Persistence failure returns an error and leaves the live interaction unresolved. Rejection and cancellation are row-local outcomes, never global message failures.
 
 # Contract
 
@@ -23,7 +23,7 @@ Floret owns canonical interaction identity, atomic answer settlement, effect-att
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v7.1.3 typed runtime.
+- `redeven:go.mod` - Pins the released Floret v7.1.4 typed runtime.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces published-v7 adoption without local replacement.
 - `redeven:internal/ai/approval_command.go` - Product approval authorization and typed mapping.
 - `redeven:internal/ai/floret_effect_authorization.go` - Revalidates product policy and transfers an invocation-bound proof exactly once.
