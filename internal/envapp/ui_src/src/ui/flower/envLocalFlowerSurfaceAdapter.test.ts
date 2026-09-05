@@ -70,7 +70,11 @@ function liveBootstrap(threadID: string, status = 'canceled') {
     title_status: 'ready',
     model_id: 'default/gpt-4.1',
     status,
+    run_status: status,
     ...(status === 'running' ? { active_run_id: runID } : {}),
+    ...(status === 'running' ? {
+      run_progress: { phase: 'preparing' as const, run_id: runID, turn_id: `turn:${threadID}` },
+    } : {}),
     permission_type: 'approval_required' as FlowerPermissionType,
     created_at_unix_ms: 1,
     updated_at_unix_ms: 2,
@@ -84,6 +88,8 @@ function liveBootstrap(threadID: string, status = 'canceled') {
       view_version: 3,
       activity: status === 'running' ? 'active' : 'idle',
       ...(status === 'running' ? { run_id: runID } : {}),
+      ...(status === 'running' ? { turn_id: `turn:${threadID}` } : {}),
+      ...(status === 'running' ? { run_progress: { phase: 'preparing' as const } } : {}),
       ...(status === 'canceled' ? { last_outcome: 'cancelled' } : {}),
       items: [],
       queue: [],
@@ -107,6 +113,7 @@ function typedCommandResponse(
       activity: 'active',
       run_id: `run:${turnID}`,
       turn_id: turnID,
+      run_progress: { phase: 'preparing' as const },
       items: [{
         id: `user:${clientRequestID}`,
         turn_id: turnID,

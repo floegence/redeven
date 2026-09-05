@@ -40,6 +40,7 @@ function orderedCurrent(stage: 'waiting' | 'running' | 'completed'): FlowerRunti
     run_id: 'run-ordered-dom',
     view_version: stage === 'waiting' ? 1 : stage === 'running' ? 2 : 3,
     activity: terminal ? 'idle' : 'active',
+    ...(stage === 'running' ? { run_progress: { phase: 'streaming' as const } } : {}),
     ...(terminal ? { last_outcome: 'completed' as const } : {}),
     items: [
       { id: 'user:ordered', turn_id: 'turn-ordered-dom', run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Run one tool' },

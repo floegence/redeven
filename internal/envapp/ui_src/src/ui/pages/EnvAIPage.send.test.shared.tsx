@@ -107,7 +107,14 @@ const mocks = vi.hoisted(() => {
         created_at_unix_ms: 1,
         updated_at_unix_ms: 2,
         read_status: readStatus(2_000, waitingPromptID),
-        ...((waitingPromptID || active) ? { active_run_id: activeRunID } : {}),
+        ...((waitingPromptID || active) ? {
+          active_run_id: activeRunID,
+          run_progress: {
+            run_id: activeRunID,
+            turn_id: `turn-${threadID}`,
+            phase: active ? 'streaming' : 'waiting_response',
+          },
+        } : {}),
       };
       return {
         thread,
@@ -117,6 +124,7 @@ const mocks = vi.hoisted(() => {
           activity: waitingPromptID || active ? 'active' : 'idle',
           turn_id: `turn-${threadID}`,
           ...((waitingPromptID || active) ? { run_id: activeRunID } : {}),
+          ...((waitingPromptID || active) ? { run_progress: { phase: active ? 'streaming' as const : 'waiting_response' as const } } : {}),
           ...(!active && !waitingPromptID ? { last_outcome: 'completed' } : {}),
           items,
           interactions: state.currentInteractions,
@@ -151,6 +159,7 @@ const mocks = vi.hoisted(() => {
           activity: 'active',
           turn_id: `turn_${'7'.repeat(24)}`,
           run_id: `run_${'8'.repeat(24)}`,
+          run_progress: { phase: 'preparing' as const },
           items: [{
             id: `user:${body.create?.client_request_id ?? ''}`,
             turn_id: `turn_${'7'.repeat(24)}`,

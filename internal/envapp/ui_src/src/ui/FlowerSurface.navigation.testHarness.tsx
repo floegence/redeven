@@ -408,8 +408,18 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
     ...overrides,
     title_status: overrides.title_status ?? 'ready',
   };
-  if ((value.status === 'running' || value.status === 'waiting_approval' || value.status === 'waiting_user') && !value.active_run_id) {
-    return { ...value, active_run_id: `run:${value.thread_id}` };
+  if (value.status === 'running' || value.status === 'waiting_approval' || value.status === 'waiting_user') {
+    const activeRunID = value.active_run_id ?? value.run_progress?.run_id ?? `run:${value.thread_id}`;
+    const activeTurnID = [...value.messages].reverse().find((message) => Boolean(message.turn_id))?.turn_id
+      ?? value.run_progress?.turn_id
+      ?? `turn:${value.thread_id}`;
+    return {
+      ...value,
+      active_run_id: activeRunID,
+      ...(value.status === 'running' && value.run_progress === undefined
+        ? { run_progress: { phase: 'streaming', run_id: activeRunID, turn_id: activeTurnID } }
+        : {}),
+    };
   }
   return value;
 }
