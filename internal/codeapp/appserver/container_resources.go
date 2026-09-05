@@ -1079,6 +1079,10 @@ func parseBoundedInt64(raw string, fallback, minimum, maximum int64) (int64, err
 func writeContainerResourceError(w http.ResponseWriter, err error) {
 	status := http.StatusBadRequest
 	switch {
+	case errors.Is(err, containerengine.ErrComposeProjectNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, containerengine.ErrComposeConfigurationUnavailable):
+		status = http.StatusConflict
 	case errors.Is(err, containerengine.ErrResourceFileLimit), errors.Is(err, containerengine.ErrCommandOutputLimit):
 		status = http.StatusRequestEntityTooLarge
 	case errors.Is(err, containerresource.ErrOperationNotFound), errors.Is(err, containerresource.ErrComposeProjectDefinitionNotFound), errors.Is(err, containerengine.ErrContainerNotFound), errors.Is(err, containerengine.ErrImageNotFound), errors.Is(err, containerengine.ErrEndpointNotFound), errors.Is(err, containerengine.ErrContainerServiceNotFound):
@@ -1097,6 +1101,10 @@ func writeContainerResourceError(w http.ResponseWriter, err error) {
 
 func publicContainerResourceCode(err error) string {
 	switch {
+	case errors.Is(err, containerengine.ErrComposeProjectNotFound):
+		return "COMPOSE_PROJECT_NOT_FOUND"
+	case errors.Is(err, containerengine.ErrComposeConfigurationUnavailable):
+		return "COMPOSE_CONFIGURATION_UNAVAILABLE"
 	case errors.Is(err, containerresource.ErrInvalidRequest):
 		return "REQUEST_INVALID"
 	case errors.Is(err, containerresource.ErrPreflightStale), errors.Is(err, containerengine.ErrResourcePlanStale):
@@ -1165,7 +1173,9 @@ func publicContainerResourceMessage(err error) string {
 	case "OPERATION_NOT_FOUND":
 		return "The container operation was not found."
 	case "COMPOSE_PROJECT_NOT_FOUND":
-		return "The saved Compose project was not found."
+		return "The Compose project was not found. Refresh and try again."
+	case "COMPOSE_CONFIGURATION_UNAVAILABLE":
+		return "The Compose configuration files are missing or unreadable. Restore access to the files before trying this action again."
 	case "OPERATION_TERMINAL":
 		return "The container operation has already finished."
 	case "MANAGED_BY_WEB_SERVICE":

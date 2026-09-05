@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/containerengine"
@@ -47,5 +48,27 @@ func TestWriteContainerResourceErrorUsesActionablePruneCodes(t *testing.T) {
 				t.Fatalf("response = %#v, want code=%q message=%q", body, tc.wantCode, tc.wantMessage)
 			}
 		})
+	}
+}
+
+func TestComposeResourceErrorsAreTypedAndRedacted(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		err    error
+		code   string
+		status int
+	}{
+		{containerengine.ErrComposeProjectNotFound, "COMPOSE_PROJECT_NOT_FOUND", http.StatusNotFound},
+		{containerengine.ErrComposeConfigurationUnavailable, "COMPOSE_CONFIGURATION_UNAVAILABLE", http.StatusConflict},
+	} {
+		rr := httptest.NewRecorder()
+		writeContainerResourceError(rr, fmt.Errorf("private /workspace/secret.yaml: %w", tc.err))
+		var body apiResp
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if rr.Code != tc.status || body.ErrorCode != tc.code || strings.Contains(rr.Body.String(), "secret.yaml") {
+			t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+		}
 	}
 }

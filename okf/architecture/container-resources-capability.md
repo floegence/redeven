@@ -47,6 +47,14 @@ Docker-only methods reject Podman targets and Podman-only methods reject Docker
 targets. Compose configuration paths and engine connection details remain
 private. Compose down never removes volumes implicitly.
 
+Compose project observation is derived from one bound Docker container query
+filtered by the Compose project label. Project status, counts, and members use
+that same observation and do not require the original Compose files; missing
+files remain a configuration-operation error. Automatic projects with no
+observed containers are absent, while saved definitions remain as stopped
+projects with zero members. Observation failures are returned as errors and
+must never be converted into an empty project or a successful removal.
+
 ## Native service boundary
 
 `containerresource` strictly decodes every mutation request and rejects unknown

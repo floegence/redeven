@@ -167,6 +167,7 @@ type engineWorkspaceClient interface {
 	ListEndpoints(context.Context, Engine) ([]EngineEndpoint, error)
 	ListComposeProjects(context.Context) ([]ComposeProject, error)
 	InspectComposeProject(context.Context, string) (ComposeProjectDetails, error)
+	ValidateComposeProjectConfiguration(context.Context, string) error
 	ComposeProjectAction(context.Context, Method, string) error
 	ListPods(context.Context) ([]PodRecord, error)
 	InspectPod(context.Context, string) (PodRecord, error)
@@ -394,6 +395,26 @@ func (a *Adapter) ComposeProjectPreflight(ctx context.Context, method Method, re
 		return ResourcePlan{}, fmt.Errorf("%w: %q", ErrInvalidMethod, method)
 	}
 	project, err := a.InspectComposeProject(ctx, req)
+	if err != nil {
+		return ResourcePlan{}, err
+	}
+	if req.Deployment != nil {
+		paths := append([]string(nil), composeDeploymentConfigPaths(*req.Deployment)...)
+		if req.Deployment.EnvFilePath != "" {
+			paths = append(paths, req.Deployment.EnvFilePath)
+		}
+		err = validateComposeFiles(paths)
+	} else {
+		var bound context.Context
+		bound, _, err = a.BindEndpoint(ctx, req.Engine, req.EndpointID)
+		if err == nil {
+			var client engineWorkspaceClient
+			client, err = a.workspaceClient()
+			if err == nil {
+				err = client.ValidateComposeProjectConfiguration(bound, req.ProjectID)
+			}
+		}
+	}
 	if err != nil {
 		return ResourcePlan{}, err
 	}

@@ -167,18 +167,18 @@ func (s *Service) ComposeProjects(ctx context.Context, req containerengine.Compo
 		return nil, err
 	}
 	savedNames := make(map[string]struct{}, len(definitions))
+	observed := make(map[string]containerengine.ComposeProject, len(items))
+	for _, item := range items {
+		observed[item.Name] = item
+	}
 	result := make([]ComposeProjectItem, 0, len(items)+len(definitions))
 	for _, definition := range definitions {
 		savedNames[definition.Name] = struct{}{}
-		request := containerengine.ComposeProjectRequest{Engine: definition.Engine, EndpointID: definition.EndpointID, ProjectID: definition.ProjectID}
-		if err := s.hydrateSavedComposeRequest(ctx, &request); err != nil {
-			return nil, err
+		project, present := observed[definition.Name]
+		if !present {
+			project = containerengine.ComposeProject{Name: definition.Name, Status: "stopped"}
 		}
-		details, inspectErr := s.engine.InspectComposeProject(ctx, request)
-		project := details.ComposeProject
-		if inspectErr != nil {
-			project = containerengine.ComposeProject{ProjectID: definition.ProjectID, Name: definition.Name, Status: "unavailable"}
-		}
+		project.ProjectID = definition.ProjectID
 		management, err := s.management(ctx, req.Engine, req.EndpointID, ResourceComposeProject, containerengine.ComposeProjectID(definition.Name), nil)
 		if err != nil {
 			return nil, err

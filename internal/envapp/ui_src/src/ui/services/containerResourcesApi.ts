@@ -325,10 +325,11 @@ export async function getContainerResourceDetails(
   identity: string,
   engine: ContainerEngine,
   endpointID: string,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   return fetchLocalApiJSON<unknown>(
     `/_redeven_proxy/api/container-resources/${view}/${encodeURIComponent(identity)}?${query(engine, endpointID)}`,
-    { method: 'GET' },
+    { method: 'GET', signal },
   );
 }
 

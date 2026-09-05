@@ -228,6 +228,12 @@ type ResourceSortDirection = 'ascending' | 'descending';
 
 type DetailRecord = Readonly<Record<string, unknown>>;
 
+type ResourceDetailState =
+  | Readonly<{ phase: 'idle' }>
+  | Readonly<{ phase: 'loading'; key: string }>
+  | Readonly<{ phase: 'ready'; key: string; value: unknown }>
+  | Readonly<{ phase: 'error'; key: string; code: string }>;
+
 const jsonObject = (value: unknown): Record<string, unknown> | null => (
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 );
@@ -592,7 +598,8 @@ function resourceActive(view: ContainerResourceView, item: ContainerResourceInve
   if (view === 'images' || view === 'volumes') {
     return Number(resourceStatus(view, item)) > 0;
   }
-  return ['running', 'restarting', 'paused', 'up', 'healthy', 'partial'].includes(resourceStatus(view, item).toLowerCase());
+  if (view === 'compose-projects' && (item as ComposeProjectInventoryItem).running_count > 0) return true;
+  return ['running', 'restarting', 'paused', 'up', 'healthy', 'partial', 'degraded'].includes(resourceStatus(view, item).toLowerCase());
 }
 
 function runtimeIssueFromError(cause: unknown): Exclude<ContainerRuntimeState, 'ready'> {
@@ -843,7 +850,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     target: restoredTarget,
     runtimes: [],
   });
-  const [details, setDetails] = createSignal<unknown>(null);
+  const [detailState, setDetailState] = createSignal<ResourceDetailState>({ phase: 'idle' });
+  const [detailRetry, setDetailRetry] = createSignal(0);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>(defaultResourceFilter(restored.view));
   const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
@@ -1118,9 +1126,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     });
   });
   const selectedDetailRecord = createMemo(() => {
-    const loaded = detailRecord(details());
+    const state = detailState();
+    if (state.phase !== 'ready' || state.key !== selectedResourceKey()) return {};
+    const loaded = detailRecord(state.value);
     const projected = detailRecord(loaded.project);
-    return Object.keys(projected).length > 0 ? projected : Object.keys(loaded).length > 0 ? loaded : detailRecord(selected());
+    return Object.keys(projected).length > 0 ? projected : loaded;
   });
   const runtimeBadgeVisible = (entry: ContainerResourceEntry): boolean => inventory().some((candidate) => (
     candidate.key !== entry.key
@@ -1184,7 +1194,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const openContainerServices = () => {
     setServicesOpen(true);
     setSelectedResourceKey('');
-    setDetails(null);
+    setDetailState({ phase: 'idle' });
     void loadContainerServices();
   };
 
@@ -1349,7 +1359,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   const resetResourceContext = () => {
-    setDetails(null);
+    setDetailState({ phase: 'idle' });
     setLogs(null);
     setStats(null);
     setStatsHistory([]);
@@ -1636,18 +1646,20 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   });
 
   createEffect(() => {
+    detailRetry();
     const ready = readyConsole();
     const entry = selectedEntry();
     if (!ready || !entry) {
-      setDetails(null);
+      setDetailState({ phase: 'idle' });
       return;
     }
     const identity = resourceIdentity(ready.target.view, entry.item);
-    let active = true;
-    getContainerResourceDetails(ready.target.view, identity, entry.target.engine, entry.target.endpoint_id)
-      .then((value) => active && setDetails(value))
-      .catch(() => active && setDetails(null));
-    onCleanup(() => { active = false; });
+    const controller = new AbortController();
+    setDetailState({ phase: 'loading', key: entry.key });
+    getContainerResourceDetails(ready.target.view, identity, entry.target.engine, entry.target.endpoint_id, controller.signal)
+      .then((value) => !controller.signal.aborted && setDetailState({ phase: 'ready', key: entry.key, value }))
+      .catch((cause) => !controller.signal.aborted && setDetailState({ phase: 'error', key: entry.key, code: cause instanceof LocalApiError ? cause.code : '' }));
+    onCleanup(() => controller.abort());
   });
 
   createEffect(() => {
@@ -2209,6 +2221,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           void reloadConsole();
         } else if (cause instanceof LocalApiError && cause.code === 'REFERENCE_STATE_INCOMPLETE') {
           notify.error(i18n.t('containers.prune.referenceIncompleteTitle'), i18n.t('containers.prune.referenceIncompleteMessage'));
+          void reloadConsole();
+        } else if (cause instanceof LocalApiError && cause.code === 'COMPOSE_CONFIGURATION_UNAVAILABLE') {
+          notify.error(i18n.t('containers.notifications.preflightFailedTitle'), i18n.t('containers.compose.configurationUnavailable'));
+        } else if (cause instanceof LocalApiError && cause.code === 'COMPOSE_PROJECT_NOT_FOUND') {
+          notify.error(i18n.t('containers.notifications.preflightFailedTitle'), i18n.t('containers.compose.notFound'));
           void reloadConsole();
         } else {
           notify.error(i18n.t('containers.notifications.preflightFailedTitle'), cause instanceof Error ? cause.message : String(cause));
@@ -3122,6 +3139,19 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const renderDetailContent = () => {
     const tab = detailTab();
+    if (['overview', 'inspect', 'mounts', 'used-by', 'containers'].includes(tab)) {
+      const state = detailState();
+      if (state.phase === 'error' && state.key === selectedResourceKey()) return (
+        <div class="container-empty-inline" role="alert" data-container-detail-error>
+          <AlertTriangle class="h-5 w-5" />
+          <strong>{i18n.t(state.code === 'COMPOSE_PROJECT_NOT_FOUND' ? 'containers.compose.notFound' : 'containers.detail.loadFailed')}</strong>
+          <Button size="sm" variant="outline" onClick={() => setDetailRetry((value) => value + 1)}><Refresh class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.actions.retry')}</Button>
+        </div>
+      );
+      if (state.phase !== 'ready' || state.key !== selectedResourceKey()) return (
+        <div class="container-empty-inline" role="status" aria-busy="true" data-container-detail-loading>{i18n.t('containers.loading')}</div>
+      );
+    }
     const record = selectedDetailRecord();
     if (tab === 'overview') return renderStructuredDetails();
     if (tab === 'logs') return (
@@ -3177,7 +3207,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       </Show>;
     }
     if (tab === 'layers') {
-      const detailsLoaded = Object.keys(detailRecord(details())).length > 0;
+      const detailsLoaded = Object.keys(selectedDetailRecord()).length > 0;
       if (!detailsLoaded) return <div class="container-empty-inline">{i18n.t('containers.loading')}</div>;
       const layers = Array.isArray(record.layers) ? record.layers as readonly ContainerImageLayer[] : [];
       return <div class="container-layer-list"><Show when={layers.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}><For each={layers}>{(layer, index) => { const digest = compact(layer.digest); return <div class="container-layer-row container-layer-row--filesystem"><span>{index() + 1}</span><span class="font-mono" title={digest || undefined}>{digest || i18n.t('containers.detail.layerUnavailable')}</span></div>; }}</For></Show></div>;
