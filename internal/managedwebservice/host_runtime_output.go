@@ -180,7 +180,7 @@ func validHostOpenSessionPath(value string) bool {
 		return false
 	}
 	parsed, err := url.Parse(value)
-	return err == nil && parsed.IsAbs() == false && parsed.Host == "" && parsed.Fragment == ""
+	return err == nil && !parsed.IsAbs() && parsed.Host == "" && parsed.Fragment == ""
 }
 
 func (d *hostScriptDriver) removeOpenSession(service *pfregistry.ManagedService) {

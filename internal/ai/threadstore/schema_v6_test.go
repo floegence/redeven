@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+func TestThreadstoreSchemaSpecUsesCurrentLineage(t *testing.T) {
+	spec := threadstoreSchemaSpec()
+	if spec.Kind != threadstoreSchemaKind || spec.CurrentVersion != threadstoreCurrentSchemaVersion || spec.MinimumVersion != threadstoreMinimumSchemaVersion {
+		t.Fatalf("schema lineage = %s v%d (minimum v%d)", spec.Kind, spec.CurrentVersion, spec.MinimumVersion)
+	}
+	if len(spec.Migrations) != threadstoreCurrentSchemaVersion-threadstoreMinimumSchemaVersion {
+		t.Fatalf("migration count=%d, want %d", len(spec.Migrations), threadstoreCurrentSchemaVersion-threadstoreMinimumSchemaVersion)
+	}
+}
+
 func TestEverySupportedThreadstoreVersionMigratesToV6(t *testing.T) {
 	for version := 1; version < threadstoreCurrentSchemaVersion; version++ {
 		version := version

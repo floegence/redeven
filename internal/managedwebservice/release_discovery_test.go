@@ -244,9 +244,10 @@ func TestOCIReleaseCatalogPinsAndVerifiesCurrentAndRecommendedTags(t *testing.T)
 		case strings.HasPrefix(request.URL.Path, "/v2/team/app/manifests/"):
 			tag := strings.TrimPrefix(request.URL.Path, "/v2/team/app/manifests/")
 			digest := testReleaseDigest("c")
-			if tag == "1.0.0" {
+			switch tag {
+			case "1.0.0":
 				digest = currentDigest
-			} else if tag == "2.0.0" {
+			case "2.0.0":
 				digest = recommendedDigest
 			}
 			response.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
