@@ -128,7 +128,7 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v3.0.24` release manifest. The
+Redeven consumes only the coordinated ReDevPlugin `v3.0.25` release manifest. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree. Local-wiring scans cover maintained source, scripts,
@@ -275,11 +275,12 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction is releasable only through the `v3.0.24`
+Workbench plugin interaction and file export are releasable only through the `v3.0.25`
 source/port-bound interaction ownership and exact-surface close contracts. The
 gate rejects overlays, pointer-event switching, copied interaction DTOs, a
 second bridge, session-wide close fallback, placement persistence before close,
-or local disposal presented as server revocation.
+local disposal presented as server revocation, or an export path that bypasses
+the released action-window, payload, cancellation, and cleanup contracts.
 
 ## Other published boundaries
 

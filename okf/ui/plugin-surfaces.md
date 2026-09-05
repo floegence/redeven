@@ -510,6 +510,13 @@ for the four-hash drain. Local disposal alone is never revocation evidence.
 Browser reads retain same-origin Origin, CSRF, closed route action, and query-
 effect authorization; Redeven adds no alternate endpoint or relaxed guard.
 
+A user-initiated Surface file export stays inside the current placement and
+uses the released bridge's bounded filename, media-type, byte, and action-window
+validation. Redeven starts one browser download with the plugin-provided name,
+then removes the transient link and revokes its object URL. Retired Surfaces
+cannot start a download, and exported bytes are neither uploaded nor retained by
+the Shell.
+
 # Boundaries
 
 Manifest surface kinds remain `view|command|background` with semantic roles.
