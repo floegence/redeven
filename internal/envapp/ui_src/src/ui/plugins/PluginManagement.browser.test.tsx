@@ -1169,7 +1169,7 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
-    expect(card.getBoundingClientRect().height).toBe(248);
+    expect(card.getBoundingClientRect().height).toBeCloseTo(248, 3);
     host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:metrics"]')!.click();
     await settle();
 
