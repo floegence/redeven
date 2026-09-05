@@ -2,7 +2,9 @@ package containerengine
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -112,6 +114,34 @@ func TestOCIReleaseDiscoveryUsesBearerChallengeAndVerifiesSingleManifestPlatform
 	}
 	if len(items) != 1 || !items[0].Compatible || !registryDigestPattern.MatchString(items[0].PlatformDigest) {
 		t.Fatalf("unexpected releases: %#v", items)
+	}
+}
+
+func TestOCIReleaseDiscoveryVerifiesAnExactPlatformDigest(t *testing.T) {
+	manifest := []byte(`{"schemaVersion":2,"config":{"digest":"` + testConfigDigest + `"}}`)
+	sum := sha256.Sum256(manifest)
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v2/team/app/manifests/" + digest:
+			response.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+			_, _ = response.Write(manifest)
+		case "/v2/team/app/blobs/" + testConfigDigest:
+			_ = json.NewEncoder(response).Encode(map[string]string{"os": "linux", "architecture": "amd64"})
+		default:
+			response.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	items, err := (OCIReleaseDiscovery{Client: server.Client()}).VerifyDigests(context.Background(), OCIReleaseDigestVerificationRequest{
+		Reference: host + "/team/app", PlatformOS: "linux", PlatformArch: "amd64", Digests: []string{digest},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || !items[0].Compatible || !items[0].DigestVerified || items[0].PlatformDigest != digest {
+		t.Fatalf("exact digest verification = %#v", items)
 	}
 }
 

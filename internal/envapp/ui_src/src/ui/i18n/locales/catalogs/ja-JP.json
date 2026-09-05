@@ -3354,6 +3354,7 @@
 		"RELEASE_SOURCE_NETWORK_UNAVAILABLE": "Redeven から Registry に接続できません。ネットワーク接続を確認してから更新してください。",
 		"RELEASE_SOURCE_RESPONSE_INVALID": "Registry から無効なバージョン情報が返されました。後でもう一度更新するか、設定された取得元を確認してください。",
 		"RELEASE_SOURCE_UNAVAILABLE": "Redeven が Registry からバージョンを取得できませんでした。ネットワークと設定された取得元を確認してから更新してください。",
+		"RECOMMENDED_RELEASE_UNAVAILABLE": "推奨バージョンを利用できません。更新して利用可能なバージョンを選択してください。",
 		"unavailable": "Redeven が利用可能なバージョンを読み込めませんでした。ネットワークを確認してから更新してください。"
 	  },
 	  "releaseVerification": { "pending": "確認中" },
@@ -3369,8 +3370,8 @@
       "registryTokenDescription": "この Registry リクエストにのみ使用されます。テンプレートには保存されず、Redeven サーバーにも送信されません。",
 	  "releaseTokenRefreshPrompt": "トークンを入力して更新すると、利用可能なバージョンを取得できます。",
 	  "releaseTrust": { "catalog_reviewed_source": "検証済みカタログソース", "upstream_registry": "アップストリーム Registry", "user_configured_registry": "ユーザー設定の Registry", "registry_verified": "Registry で同一性を確認済み", "registry": "Registry ソース" },
-	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "このバージョンの Node.js 要件を Redeven で安全に確認できません。", "NODE_VERSION_UNAVAILABLE": "このバージョンは Redeven 管理の Node.js 実行環境と互換性がありません。", "PLATFORM_UNAVAILABLE": "このタグには現在のプラットフォーム向けイメージがありません。", "RELEASE_IDENTITY_UNVERIFIABLE": "この正確なバージョンについて、ソースから検証可能な同一性情報が提供されませんでした。", "RELEASE_DEPRECATED": "npm Registry でこのバージョンは非推奨に指定されています。", "RELEASE_NOT_FOUND": "このバージョンは Registry で提供されなくなりました。", "unavailable": "このバージョンは選択できません。" },
-	  "releaseBadge": { "current": "現在", "recommended": "Redeven 推奨", "latestStable": "最新安定版", "latestPreview": "最新プレビュー" },
+	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "このバージョンの Node.js 要件を Redeven で安全に確認できません。", "NODE_VERSION_UNAVAILABLE": "このバージョンは Redeven 管理の Node.js 実行環境と互換性がありません。", "PLATFORM_UNAVAILABLE": "このタグには現在のプラットフォーム向けイメージがありません。", "RELEASE_IDENTITY_UNVERIFIABLE": "この正確なバージョンについて、ソースから検証可能な同一性情報が提供されませんでした。", "RELEASE_DEPRECATED": "npm Registry でこのバージョンは非推奨に指定されています。", "RELEASE_NOT_FOUND": "このバージョンは Registry で提供されなくなりました。", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "タグは利用できませんが、この正確なイメージダイジェストは検証済みです。固定イメージをデプロイするには明示的に選択してください。", "unavailable": "このバージョンは選択できません。" },
+	  "releaseBadge": { "current": "現在", "recommended": "Redeven 推奨", "recommendedUnavailable": "推奨バージョンは利用できません", "verifiedDigest": "検証済み固定イメージ", "latestStable": "最新安定版", "latestPreview": "最新プレビュー" },
       "deploySelectedRelease": "選択したバージョンをデプロイ",
       "downgradeRequiresStopped": "古いバージョンを選ぶ前にサービスを停止してください。",
       "releaseRisk": {

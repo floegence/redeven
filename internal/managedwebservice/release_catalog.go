@@ -189,6 +189,15 @@ func (m *Manager) verifyOCIReleaseCandidates(ctx context.Context, browse release
 		if !ok {
 			continue
 		}
+		if item.ReasonCode == "RELEASE_NOT_FOUND" && browse.Recommended != nil && cached.Candidate.Tag == browse.Recommended.Tag && cached.Candidate.Source == browse.Recommended.Source && cached.Candidate.Digest != "" {
+			if fixed, fixedErr := m.verifyOCIReleaseDigests(ctx, browse.Spec, []string{cached.Candidate.Digest}); fixedErr == nil && len(fixed) == 1 && fixed[0].Compatible && fixed[0].PlatformDigest == cached.Candidate.Digest {
+				fixed[0].Tag = item.Tag
+				fixed[0].DigestVerified = true
+				fixed[0].ReasonCode = "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED"
+				fixed[0].Reason = "The recommended tag is unavailable, but the exact reviewed image digest is still verifiable. Select this fixed image explicitly to deploy it."
+				item = fixed[0]
+			}
+		}
 		updated := verifiedOCIReleaseCandidate(browse, cached, item)
 		m.updateReleaseCandidate(updated)
 	}
@@ -264,6 +273,36 @@ func (m *Manager) verifyOCIReleaseTags(ctx context.Context, spec TemplateSpec, t
 	return items, nil
 }
 
+func (m *Manager) verifyOCIReleaseDigests(ctx context.Context, spec TemplateSpec, digests []string) ([]containerengine.OCIRelease, error) {
+	discovery := containerengine.OCIReleaseDiscovery{Client: m.releaseHTTPClient()}
+	request := containerengine.OCIReleaseDigestVerificationRequest{
+		Reference: releaseImageRepository(spec.Container.Image), PlatformOS: "linux", PlatformArch: runtime.GOARCH, Digests: digests,
+	}
+	items, err := discovery.VerifyDigests(ctx, request)
+	if err == nil {
+		return items, nil
+	}
+	if !errors.Is(err, containerengine.ErrImageAccessDenied) {
+		return items, mapOCIReleaseSourceError(err, nil)
+	}
+	credential, credentialErr := m.releaseRegistryCredential(ctx, spec)
+	if ctx.Err() != nil {
+		return items, ctx.Err()
+	}
+	if credentialErr != nil {
+		return items, mapOCIReleaseSourceError(err, credentialErr)
+	}
+	if credential.Username == "" && credential.Secret == "" {
+		return items, mapOCIReleaseSourceError(err, nil)
+	}
+	request.Credential = credential
+	items, err = discovery.VerifyDigests(ctx, request)
+	if err != nil {
+		return items, mapOCIReleaseSourceError(err, nil)
+	}
+	return items, nil
+}
+
 func mapOCIReleaseSourceError(err, credentialErr error) error {
 	switch {
 	case errors.Is(err, context.Canceled):
@@ -298,7 +337,10 @@ func pendingOCIReleaseCandidate(browse releaseBrowseContext, tag string) cachedR
 		VerificationStatus: "pending",
 	}
 	candidate.IsCurrent = browse.Current != nil && browse.Current.Kind == "oci" && browse.Current.Source == reference && browse.Current.Tag == tag
-	candidate.IsRecommended = browse.Recommended != nil && browse.Recommended.Kind == "oci" && browse.Recommended.Source == reference && browse.Recommended.Tag == tag
+	if browse.Recommended != nil && browse.Recommended.Kind == "oci" && browse.Recommended.Source == reference && browse.Recommended.Tag == tag {
+		candidate.RecommendationStatus = "pending"
+		candidate.Digest = browse.Recommended.Digest
+	}
 	return cachedReleaseCandidate{Scope: browse.Scope, TemplateID: browse.TemplateID, Candidate: candidate, Spec: cloneTemplateSpec(browse.Spec)}
 }
 
@@ -306,12 +348,25 @@ func verifiedOCIReleaseCandidate(browse releaseBrowseContext, cached cachedRelea
 	candidate := cached.Candidate
 	candidate.IndexDigest = item.IndexDigest
 	candidate.Digest = item.PlatformDigest
+	candidate.DigestVerified = item.DigestVerified
+	if candidate.Digest == "" && browse.Recommended != nil && browse.Recommended.Kind == "oci" && browse.Recommended.Source == candidate.Source && browse.Recommended.Tag == item.Tag {
+		candidate.Digest = browse.Recommended.Digest
+	}
 	candidate.ReasonCode = item.ReasonCode
 	candidate.Reason = item.Reason
 	candidate.Selectable = item.Compatible
 	candidate.VerificationStatus = "verified"
 	if !item.Compatible {
 		candidate.VerificationStatus = "unavailable"
+	}
+	if candidate.RecommendationStatus != "" {
+		digestMatches := browse.Recommended == nil || browse.Recommended.Digest == "" || browse.Recommended.Digest == item.PlatformDigest
+		candidate.IsRecommended = candidate.Selectable && digestMatches && !item.DigestVerified
+		if candidate.IsRecommended {
+			candidate.RecommendationStatus = "available"
+		} else {
+			candidate.RecommendationStatus = "unavailable"
+		}
 	}
 	if browse.Current != nil && browse.Current.Kind == "oci" && browse.Current.Tag == item.Tag && browse.Current.Digest != "" && browse.Current.Digest != item.PlatformDigest {
 		candidate.TagMoved = true
@@ -398,7 +453,15 @@ func (m *Manager) replaceReleaseView(ctx context.Context, browse releaseBrowseCo
 		item.Candidate.SchemaVersion = releaseCandidateSchemaVersion
 		if item.Identity.Kind != "" {
 			item.Candidate.IsCurrent = browse.Current != nil && sameReleaseSelection(*browse.Current, item.Identity)
-			item.Candidate.IsRecommended = browse.Recommended != nil && sameReleaseSelection(*browse.Recommended, item.Identity)
+			if browse.Recommended != nil && sameReleaseSelection(*browse.Recommended, item.Identity) {
+				if item.Candidate.Selectable && item.Candidate.VerificationStatus != "unavailable" && !item.Candidate.DigestVerified {
+					item.Candidate.IsRecommended = true
+					item.Candidate.RecommendationStatus = "available"
+				} else {
+					item.Candidate.IsRecommended = false
+					item.Candidate.RecommendationStatus = "unavailable"
+				}
+			}
 			item.Candidate.Relation = releaseRelation(browse.Current, item.Identity)
 		}
 		item.Scope, item.TemplateID, item.ExpiresAt = browse.Scope, browse.TemplateID, now.Add(releaseCandidateTTL)

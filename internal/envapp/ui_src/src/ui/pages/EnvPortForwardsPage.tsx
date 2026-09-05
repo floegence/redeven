@@ -182,6 +182,8 @@ type ManagedReleaseCandidate = Readonly<{
 	tag_moved?: boolean;
 	is_current?: boolean;
 	is_recommended?: boolean;
+	recommendation_status?: 'pending' | 'available' | 'unavailable';
+	digest_verified?: boolean;
 	is_latest_stable?: boolean;
 	is_latest_preview?: boolean;
 	relation: 'newer' | 'same' | 'older' | 'unknown';
@@ -1310,7 +1312,7 @@ function releaseTrustLabel(trust: string, i18n: WebServicesI18n): string {
 }
 
 function releaseReasonLabel(candidate: ManagedReleaseCandidate, i18n: WebServicesI18n): string {
-	const known = new Set(['NODE_RANGE_UNSUPPORTED', 'NODE_VERSION_UNAVAILABLE', 'PLATFORM_UNAVAILABLE', 'RELEASE_IDENTITY_UNVERIFIABLE', 'RELEASE_DEPRECATED', 'RELEASE_NOT_FOUND']);
+	const known = new Set(['NODE_RANGE_UNSUPPORTED', 'NODE_VERSION_UNAVAILABLE', 'PLATFORM_UNAVAILABLE', 'RELEASE_IDENTITY_UNVERIFIABLE', 'RELEASE_DEPRECATED', 'RELEASE_NOT_FOUND', 'RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED']);
 	if (candidate.reason_code && known.has(candidate.reason_code)) {
 		return i18n.t(`webServices.managed.releaseReason.${candidate.reason_code}` as EnvAppTranslationKey);
 	}
@@ -1328,6 +1330,7 @@ function releaseSourceErrorLabel(error: unknown, i18n: WebServicesI18n): string 
 		'RELEASE_SOURCE_NETWORK_UNAVAILABLE',
 		'RELEASE_SOURCE_RESPONSE_INVALID',
 		'RELEASE_SOURCE_UNAVAILABLE',
+		'RECOMMENDED_RELEASE_UNAVAILABLE',
 	]);
 	return i18n.t(`webServices.managed.releaseSourceError.${known.has(code) ? code : 'unavailable'}` as EnvAppTranslationKey);
 }
@@ -1426,9 +1429,9 @@ export function ManagedReleaseCandidates(props: Readonly<{
 							<button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', props.selectedID === candidate.candidate_id && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', candidate.verification_status === 'unavailable' && 'cursor-not-allowed opacity-65')} disabled={candidate.verification_status === 'unavailable'} aria-pressed={props.selectedID === candidate.candidate_id} onClick={() => candidate.verification_status === 'pending' ? props.onVerify?.(candidate.candidate_id) : props.onSelect(candidate.candidate_id)} data-release-id={candidate.candidate_id} data-verification-status={candidate.verification_status}>
 								<div class="min-w-0"><div class="truncate font-mono text-sm font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div>
 								<div class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"><div class="truncate text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.formatDateTime(published(), { dateStyle: 'medium' })}`}</Show></div><Show when={candidate.integrity || candidate.digest}>{(exactIdentity) => <code class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show></div>
-								<div class="col-start-2 row-start-1 flex min-w-0 flex-wrap justify-end gap-1 sm:col-start-3 sm:max-w-52"><Show when={candidate.verification_status === 'pending'}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseVerification.pending')}</Tag></Show><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.is_latest_stable}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
+								<div class="col-start-2 row-start-1 flex min-w-0 flex-wrap justify-end gap-1 sm:col-start-3 sm:max-w-52"><Show when={candidate.verification_status === 'pending'}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseVerification.pending')}</Tag></Show><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.recommendation_status === 'unavailable'}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.recommendedUnavailable')}</Tag></Show><Show when={candidate.digest_verified}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.verifiedDigest')}</Tag></Show><Show when={candidate.is_latest_stable}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
 								<Show when={candidate.tag_moved}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
-								<Show when={candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
+								<Show when={candidate.digest_verified || candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
 							</button>
 						)}</For>
 						<Show when={props.result?.has_more}><div class="py-3 text-center text-[11px] text-muted-foreground" data-testid="managed-release-more-sentinel">{i18n.t('webServices.managed.releaseLoadingProgress', { count: props.result?.loaded_count ?? 0 })}</div></Show>
@@ -2254,6 +2257,7 @@ export function EnvPortForwardsPage() {
 	const [releaseCandidates, setReleaseCandidates] = createSignal<ManagedReleaseCandidateResult | null>(null);
 	const [releaseCandidatesLoading, setReleaseCandidatesLoading] = createSignal(false);
 	const [releaseCandidatesError, setReleaseCandidatesError] = createSignal('');
+	const [templateRecommendationUnavailable, setTemplateRecommendationUnavailable] = createSignal(false);
 	const [releaseQuery, setReleaseQuery] = createSignal('');
 	const [releaseFilter, setReleaseFilter] = createSignal<'all' | 'stable' | 'preview'>('all');
 	const [selectedReleaseID, setSelectedReleaseID] = createSignal('');
@@ -2394,11 +2398,12 @@ export function EnvPortForwardsPage() {
     setInstallNoticeAcceptances({});
 		setTemplateValidationVisible(false);
 		setSelectedTemplateRelease(null);
+		setTemplateRecommendationUnavailable(false);
   };
 
   const installManaged = async () => {
     const template = selectedTemplate();
-	if (!template || managedInstallSubmitting() || !template.available || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.template_id === template.template_id) || !canManageManagedService()) return;
+    if (!template || managedInstallSubmitting() || !template.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances()) || managedState().some((service) => service.template_id === template.template_id) || !canManageManagedService()) return;
     setManagedInstallSubmitting(true);
     try {
 		const selectedRelease = selectedTemplateRelease();
@@ -2416,7 +2421,10 @@ export function EnvPortForwardsPage() {
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === 'AbortError') return;
-          notify.error(i18n.t('webServices.notifications.failedToAddTitle'), error instanceof Error ? error.message : String(error));
+		const message = error instanceof LocalApiError && error.code === 'RECOMMENDED_RELEASE_UNAVAILABLE'
+			? releaseSourceErrorLabel(error, i18n)
+			: error instanceof Error ? error.message : String(error);
+		notify.error(i18n.t('webServices.notifications.failedToAddTitle'), message);
         })
         .finally(() => managedOperations.clear(result.operation.operation_id));
 
@@ -2726,6 +2734,11 @@ export function EnvPortForwardsPage() {
 			});
 			if (!request.isCurrent()) return;
 			setReleaseCandidates(result);
+			if (target.kind === 'template') {
+				const recommendation = result.candidates.find((candidate) => candidate.recommendation_status === 'unavailable' || candidate.recommendation_status === 'available');
+				if (recommendation?.recommendation_status === 'unavailable') setTemplateRecommendationUnavailable(true);
+				if (recommendation?.recommendation_status === 'available') setTemplateRecommendationUnavailable(false);
+			}
 			if (explicitlyVerifiedCandidateID && result.candidates.some((candidate) => candidate.candidate_id === explicitlyVerifiedCandidateID && candidate.verification_status === 'verified' && candidate.selectable)) {
 				setSelectedReleaseID(explicitlyVerifiedCandidateID);
 			}
@@ -2833,7 +2846,10 @@ export function EnvPortForwardsPage() {
 
 	const beginTemplateInstall = (template: ManagedCatalogTemplate, preserveRelease = false) => {
     if (!template.available || installedServiceForTemplate(template)) return;
-		if (!preserveRelease) setSelectedTemplateRelease(null);
+		if (!preserveRelease) {
+			setSelectedTemplateRelease(null);
+			setTemplateRecommendationUnavailable(false);
+		}
     setSelectedTemplateID(template.template_id);
     setWorkspacePath(template.default_workspace_path);
     setManagedAccessMode(template.default_access_mode || 'unified_proxy');
@@ -2848,6 +2864,7 @@ export function EnvPortForwardsPage() {
 		const template = templateByID(target.id);
 		if (!template) return;
 		setSelectedTemplateRelease({ candidate, parameters: releaseSecretParameters() });
+		setTemplateRecommendationUnavailable(false);
 		closeReleasePicker();
 		beginTemplateInstall(template, true);
 	};
@@ -3582,11 +3599,11 @@ export function EnvPortForwardsPage() {
         description={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.templateCenterDescription') : undefined}
         footer={templateDrawerView() === 'catalog' ? undefined : (
           <div class="flex w-full items-center justify-between gap-2">
-            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); }} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setTemplateDrawerView('catalog'); setSelectedTemplateID(null); setTemplateDraft(null); setTemplateValidationVisible(false); setInstallNoticeAcceptances({}); setTemplateRecommendationUnavailable(false); }} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <div class="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{templateDrawerView() === 'install' ? i18n.t('common.actions.close') : i18n.t('webServices.actions.cancel')}</Button>
               <Show when={templateDrawerView() === 'install'}>
-				<Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : i18n.t('webServices.managed.installStart')}</Button>
+              <Button size="sm" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !canManageManagedService() || !workspacePath().trim() || !selectedTemplate()?.available || templateRecommendationUnavailable() || !requiredNoticesAccepted(selectedTemplate()?.notices, installNoticeAcceptances())}>{managedInstallSubmitting() ? i18n.t('webServices.managed.operationStarting') : i18n.t('webServices.managed.installStart')}</Button>
               </Show>
               <Show when={templateDrawerView() === 'editor'}>
                 <Button size="sm" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</Button>
@@ -3630,6 +3647,7 @@ export function EnvPortForwardsPage() {
 					<Button size="sm" variant="outline" onClick={() => openTemplateReleasePicker(template.template_id)} disabled={managedInstallSubmitting()}>{i18n.t('webServices.managed.chooseVersion')}</Button>
 				</div>
 				<div class="mt-3 rounded-lg border bg-muted/20 p-3"><div class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{template.source === 'builtin' ? i18n.t('webServices.managed.recommendedVersion') : i18n.t('webServices.managed.defaultVersion')}</div><div class="mt-1 font-mono text-sm text-foreground">{selectedTemplateRelease()?.candidate.version || selectedTemplateRelease()?.candidate.tag || (template.recommended_release ? releaseIdentityLabel(template.recommended_release) : '—')}</div></div>
+				<Show when={templateRecommendationUnavailable()}><p class="mt-2 text-xs text-warning">{i18n.t('webServices.managed.releaseSourceError.RECOMMENDED_RELEASE_UNAVAILABLE')}</p></Show>
 				<Show when={installReleaseRiskHints().length > 0}><div class="mt-3"><ManagedReleaseRiskHints riskIDs={installReleaseRiskHints()} /></div></Show>
 			  </section>
               <section class="service-template-install-section border-t pt-4">

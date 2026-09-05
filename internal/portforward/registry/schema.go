@@ -255,32 +255,34 @@ type registryReleaseIdentityV1 struct {
 }
 
 type registryReleaseCandidateV2 struct {
-	SchemaVersion      int    `json:"schema_version"`
-	CandidateID        string `json:"candidate_id"`
-	SourceKind         string `json:"source_kind"`
-	Source             string `json:"source"`
-	Registry           string `json:"registry,omitempty"`
-	Version            string `json:"version,omitempty"`
-	Tag                string `json:"tag,omitempty"`
-	PublishedAtUnixMs  int64  `json:"published_at_unix_ms,omitempty"`
-	Channel            string `json:"channel"`
-	Deprecated         bool   `json:"deprecated,omitempty"`
-	DeprecationMessage string `json:"deprecation_message,omitempty"`
-	Trust              string `json:"trust"`
-	Selectable         bool   `json:"selectable"`
-	ReasonCode         string `json:"reason_code,omitempty"`
-	Reason             string `json:"reason,omitempty"`
-	Platform           string `json:"platform,omitempty"`
-	IndexDigest        string `json:"index_digest,omitempty"`
-	Digest             string `json:"digest,omitempty"`
-	Integrity          string `json:"integrity,omitempty"`
-	TagMoved           bool   `json:"tag_moved,omitempty"`
-	IsCurrent          bool   `json:"is_current,omitempty"`
-	IsRecommended      bool   `json:"is_recommended,omitempty"`
-	IsLatestStable     bool   `json:"is_latest_stable,omitempty"`
-	IsLatestPreview    bool   `json:"is_latest_preview,omitempty"`
-	Relation           string `json:"relation"`
-	VerificationStatus string `json:"verification_status"`
+	SchemaVersion        int    `json:"schema_version"`
+	CandidateID          string `json:"candidate_id"`
+	SourceKind           string `json:"source_kind"`
+	Source               string `json:"source"`
+	Registry             string `json:"registry,omitempty"`
+	Version              string `json:"version,omitempty"`
+	Tag                  string `json:"tag,omitempty"`
+	PublishedAtUnixMs    int64  `json:"published_at_unix_ms,omitempty"`
+	Channel              string `json:"channel"`
+	Deprecated           bool   `json:"deprecated,omitempty"`
+	DeprecationMessage   string `json:"deprecation_message,omitempty"`
+	Trust                string `json:"trust"`
+	Selectable           bool   `json:"selectable"`
+	ReasonCode           string `json:"reason_code,omitempty"`
+	Reason               string `json:"reason,omitempty"`
+	Platform             string `json:"platform,omitempty"`
+	IndexDigest          string `json:"index_digest,omitempty"`
+	Digest               string `json:"digest,omitempty"`
+	Integrity            string `json:"integrity,omitempty"`
+	TagMoved             bool   `json:"tag_moved,omitempty"`
+	IsCurrent            bool   `json:"is_current,omitempty"`
+	IsRecommended        bool   `json:"is_recommended,omitempty"`
+	RecommendationStatus string `json:"recommendation_status,omitempty"`
+	DigestVerified       bool   `json:"digest_verified,omitempty"`
+	IsLatestStable       bool   `json:"is_latest_stable,omitempty"`
+	IsLatestPreview      bool   `json:"is_latest_preview,omitempty"`
+	Relation             string `json:"relation"`
+	VerificationStatus   string `json:"verification_status"`
 }
 
 type registryReleaseCheckV2 struct {
@@ -339,7 +341,8 @@ func verifyReleaseCheckSchemaV2(tx *sql.Tx) error {
 				(candidate.SourceKind != "npm" && candidate.SourceKind != "oci") ||
 				(candidate.Channel != "stable" && candidate.Channel != "preview" && candidate.Channel != "special") ||
 				(candidate.Relation != "newer" && candidate.Relation != "same" && candidate.Relation != "older" && candidate.Relation != "unknown") ||
-				(candidate.VerificationStatus != "pending" && candidate.VerificationStatus != "verified" && candidate.VerificationStatus != "unavailable") {
+				(candidate.VerificationStatus != "pending" && candidate.VerificationStatus != "verified" && candidate.VerificationStatus != "unavailable") ||
+				(candidate.RecommendationStatus != "" && candidate.RecommendationStatus != "pending" && candidate.RecommendationStatus != "available" && candidate.RecommendationStatus != "unavailable") {
 				return fmt.Errorf("release check %s candidate schema v2 is invalid", serviceID)
 			}
 		}

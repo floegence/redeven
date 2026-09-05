@@ -2,8 +2,10 @@ package managedwebservice
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -270,16 +273,113 @@ func TestOCIReleaseCatalogPinsAndVerifiesCurrentAndRecommendedTags(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Candidates) != 4 || !result.Candidates[0].IsCurrent || !result.Candidates[1].IsRecommended {
+	if len(result.Candidates) != 4 || !result.Candidates[0].IsCurrent {
 		t.Fatalf("pinned release order = %#v", result.Candidates)
 	}
-	ids := []string{result.Candidates[0].CandidateID, result.Candidates[1].CandidateID}
+	recommendedIndex := slices.IndexFunc(result.Candidates, func(candidate ReleaseCandidate) bool { return candidate.Tag == "2.0.0" })
+	if recommendedIndex < 0 || result.Candidates[recommendedIndex].IsRecommended || result.Candidates[recommendedIndex].RecommendationStatus != "pending" {
+		t.Fatalf("pending recommendation = %#v", result.Candidates)
+	}
+	ids := []string{result.Candidates[0].CandidateID, result.Candidates[recommendedIndex].CandidateID}
 	result, err = manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "verify", CandidateIDs: ids})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !result.Candidates[0].Selectable || !result.Candidates[1].Selectable || result.Candidates[0].VerificationStatus != "verified" || result.Candidates[1].VerificationStatus != "verified" {
 		t.Fatalf("verified pinned releases = %#v", result.Candidates[:2])
+	}
+}
+
+func TestOCIRecommendationIsNotSelectableOrBadgedWhenThePinnedTagDisappears(t *testing.T) {
+	browse := releaseBrowseContext{
+		Scope: "template:webtop", TemplateID: "webtop", TemplateSource: "builtin",
+		Spec:        TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: "registry.example/team/webtop:recommended@" + testReleaseDigest("a")}},
+		Recommended: &ReleaseIdentity{SchemaVersion: 1, Kind: "oci", Source: "registry.example/team/webtop", Tag: "recommended", Digest: testReleaseDigest("a")},
+	}
+	pending := pendingOCIReleaseCandidate(browse, "recommended")
+	if pending.Candidate.IsRecommended || pending.Candidate.RecommendationStatus != "pending" {
+		t.Fatalf("pending recommendation = %+v", pending.Candidate)
+	}
+	unavailable := verifiedOCIReleaseCandidate(browse, pending, containerengine.OCIRelease{Tag: "recommended", ReasonCode: "RELEASE_NOT_FOUND", Reason: "missing", Compatible: false})
+	if unavailable.Candidate.IsRecommended || unavailable.Candidate.Selectable || unavailable.Candidate.RecommendationStatus != "unavailable" || unavailable.Candidate.VerificationStatus != "unavailable" || unavailable.Candidate.Digest != testReleaseDigest("a") {
+		t.Fatalf("unavailable recommendation = %+v", unavailable.Candidate)
+	}
+	available := verifiedOCIReleaseCandidate(browse, pending, containerengine.OCIRelease{Tag: "recommended", PlatformDigest: testReleaseDigest("a"), Compatible: true})
+	if !available.Candidate.IsRecommended || !available.Candidate.Selectable || available.Candidate.RecommendationStatus != "available" {
+		t.Fatalf("available recommendation = %+v", available.Candidate)
+	}
+	moved := verifiedOCIReleaseCandidate(browse, pending, containerengine.OCIRelease{Tag: "recommended", PlatformDigest: testReleaseDigest("b"), Compatible: true})
+	if moved.Candidate.IsRecommended || !moved.Candidate.Selectable || moved.Candidate.RecommendationStatus != "unavailable" {
+		t.Fatalf("moved recommendation = %+v", moved.Candidate)
+	}
+}
+
+func TestOCIRecommendationKeepsVerifiedDigestSelectableWhenItsTagDisappears(t *testing.T) {
+	manifest := []byte(`{"schemaVersion":2,"config":{"digest":"` + testReleaseDigest("c") + `"}}`)
+	sum := sha256.Sum256(manifest)
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v2/team/webtop/manifests/recommended":
+			response.WriteHeader(http.StatusNotFound)
+		case "/v2/team/webtop/manifests/" + digest:
+			response.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+			_, _ = response.Write(manifest)
+		case "/v2/team/webtop/blobs/" + testReleaseDigest("c"):
+			_ = json.NewEncoder(response).Encode(map[string]string{"os": "linux", "architecture": runtime.GOARCH})
+		default:
+			response.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	manager := &Manager{releaseClient: server.Client(), releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, releaseCursors: map[string]cachedReleaseCursor{}}
+	browse := releaseBrowseContext{
+		Scope: "template:webtop", TemplateID: "webtop", TemplateSource: "builtin",
+		Spec:        TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: host + "/team/webtop:recommended@" + digest}},
+		Recommended: &ReleaseIdentity{SchemaVersion: 1, Kind: "oci", Source: host + "/team/webtop", Tag: "recommended", Digest: digest, Platform: "linux/" + runtime.GOARCH},
+	}
+	result, err := manager.replaceReleaseView(context.Background(), browse, []cachedReleaseCandidate{pendingOCIReleaseCandidate(browse, "recommended")}, "complete", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = manager.browseReleaseCandidates(context.Background(), browse, ReleaseCandidateRequest{Action: "verify", CandidateIDs: []string{result.Candidates[0].CandidateID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := result.Candidates[0]
+	if !candidate.Selectable || !candidate.DigestVerified || candidate.IsRecommended || candidate.RecommendationStatus != "unavailable" || candidate.ReasonCode != "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED" || candidate.Digest != digest {
+		t.Fatalf("verified fixed recommendation = %+v", candidate)
+	}
+	selected, err := manager.resolveReleaseCandidate(context.Background(), browse.Scope, candidate.CandidateID, nil, nil, "builtin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected.Identity.Tag != "recommended" || selected.Identity.Digest != digest || selected.Identity.ArtifactReference != host+"/team/webtop:recommended@"+digest {
+		t.Fatalf("selected fixed identity = %+v", selected.Identity)
+	}
+}
+
+func TestEnsureDefaultReleaseAvailableRejectsAStaleBuiltinOCIRecommendation(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v2/team/webtop/manifests/recommended" {
+			t.Fatalf("unexpected Registry request %s", request.URL)
+		}
+		response.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "https://")
+	digest := testReleaseDigest("a")
+	manager := &Manager{releaseClient: server.Client()}
+	template := Template{
+		Source:             "builtin",
+		Spec:               &TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: host + "/team/webtop:recommended@" + digest}},
+		RecommendedRelease: &ReleaseIdentity{SchemaVersion: 1, Kind: "oci", Source: host + "/team/webtop", Tag: "recommended", Digest: digest},
+	}
+	if err := manager.ensureDefaultReleaseAvailable(context.Background(), template, nil); err == nil {
+		t.Fatal("stale built-in recommendation was accepted")
+	} else if code, _, _, retryable := ErrorDetails(err); code != "RECOMMENDED_RELEASE_UNAVAILABLE" || !retryable {
+		t.Fatalf("error = (%q, retryable=%t), want RECOMMENDED_RELEASE_UNAVAILABLE", code, retryable)
 	}
 }
 

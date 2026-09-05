@@ -3354,6 +3354,7 @@
 		"RELEASE_SOURCE_NETWORK_UNAVAILABLE": "Redeven이 Registry에 연결할 수 없습니다. 네트워크 연결을 확인한 후 새로 고치세요.",
 		"RELEASE_SOURCE_RESPONSE_INVALID": "Registry가 잘못된 버전 정보를 반환했습니다. 나중에 새로 고치거나 구성된 소스를 확인하세요.",
 		"RELEASE_SOURCE_UNAVAILABLE": "Redeven이 Registry에서 버전을 읽지 못했습니다. 네트워크와 구성된 소스를 확인한 후 새로 고치세요.",
+		"RECOMMENDED_RELEASE_UNAVAILABLE": "권장 버전을 사용할 수 없습니다. 새로 고친 후 사용 가능한 버전을 선택하세요.",
 		"unavailable": "Redeven이 사용 가능한 버전을 불러오지 못했습니다. 네트워크를 확인한 후 새로 고치세요."
 	  },
 	  "releaseVerification": { "pending": "확인 중" },
@@ -3369,8 +3370,8 @@
       "registryTokenDescription": "이 Registry 요청에만 사용됩니다. 템플릿에 저장되거나 Redeven 서버로 전송되지 않습니다.",
 	  "releaseTokenRefreshPrompt": "토큰을 입력한 후 새로 고쳐 사용 가능한 버전을 확인하세요.",
 	  "releaseTrust": { "catalog_reviewed_source": "검증된 카탈로그 소스", "upstream_registry": "업스트림 Registry", "user_configured_registry": "사용자 구성 Registry", "registry_verified": "Registry에서 신원 확인됨", "registry": "Registry 소스" },
-	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven에서 이 버전의 Node.js 요구 사항을 안전하게 확인할 수 없습니다.", "NODE_VERSION_UNAVAILABLE": "이 버전은 Redeven 관리형 Node.js 실행 환경과 호환되지 않습니다.", "PLATFORM_UNAVAILABLE": "이 태그에는 현재 플랫폼용 이미지가 없습니다.", "RELEASE_IDENTITY_UNVERIFIABLE": "소스에서 이 정확한 버전에 대한 검증 가능한 신원 정보를 제공하지 않았습니다.", "RELEASE_DEPRECATED": "npm Registry에서 이 버전을 더 이상 권장하지 않는 버전으로 표시했습니다.", "RELEASE_NOT_FOUND": "이 버전은 더 이상 Registry에서 제공되지 않습니다.", "unavailable": "이 버전은 선택할 수 없습니다." },
-	  "releaseBadge": { "current": "현재", "recommended": "Redeven 권장", "latestStable": "최신 안정", "latestPreview": "최신 미리 보기" },
+	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven에서 이 버전의 Node.js 요구 사항을 안전하게 확인할 수 없습니다.", "NODE_VERSION_UNAVAILABLE": "이 버전은 Redeven 관리형 Node.js 실행 환경과 호환되지 않습니다.", "PLATFORM_UNAVAILABLE": "이 태그에는 현재 플랫폼용 이미지가 없습니다.", "RELEASE_IDENTITY_UNVERIFIABLE": "소스에서 이 정확한 버전에 대한 검증 가능한 신원 정보를 제공하지 않았습니다.", "RELEASE_DEPRECATED": "npm Registry에서 이 버전을 더 이상 권장하지 않는 버전으로 표시했습니다.", "RELEASE_NOT_FOUND": "이 버전은 더 이상 Registry에서 제공되지 않습니다.", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "태그를 사용할 수 없지만 이 정확한 이미지 다이제스트는 검증되었습니다. 고정 이미지를 배포하려면 명시적으로 선택하세요.", "unavailable": "이 버전은 선택할 수 없습니다." },
+	  "releaseBadge": { "current": "현재", "recommended": "Redeven 권장", "recommendedUnavailable": "권장 버전을 사용할 수 없음", "verifiedDigest": "검증된 고정 이미지", "latestStable": "최신 안정", "latestPreview": "최신 미리 보기" },
       "deploySelectedRelease": "선택한 버전 배포",
       "downgradeRequiresStopped": "이전 버전을 선택하기 전에 서비스를 중지하세요.",
       "releaseRisk": {
