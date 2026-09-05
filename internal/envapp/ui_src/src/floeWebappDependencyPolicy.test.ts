@@ -11,9 +11,9 @@ const FLOE_WEBAPP_DEPENDENCIES = [
 ] as const;
 
 const FLOE_WEBAPP_RELEASE_SET = {
-  '@floegence/floe-webapp-boot': '0.48.3',
-  '@floegence/floe-webapp-core': '0.48.3',
-  '@floegence/floe-webapp-protocol': '0.48.3',
+  '@floegence/floe-webapp-boot': '0.48.4',
+  '@floegence/floe-webapp-core': '0.48.4',
+  '@floegence/floe-webapp-protocol': '0.48.4',
 } as const;
 
 const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
@@ -181,7 +181,7 @@ describe('published npm dependency policy', () => {
       'node_modules/@floegence/floe-webapp-core/package.json',
     );
 
-    expect(packageManifest.version).toBe('0.48.3');
+    expect(packageManifest.version).toBe('0.48.4');
     expect(readInstalledFloeWebappCoreDeclaration('dist/components/file-browser/index.d.ts'))
       .toMatch(/export \{ FileBrowserStatusBar, type FileBrowserStatusBarProps \}/);
     expect(readInstalledFloeWebappCoreDeclaration('dist/components/file-browser/FileBrowserStatusBar.d.ts'))
