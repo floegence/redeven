@@ -2874,6 +2874,7 @@
     "filters": { "label": "Filtrar recursos", "all": "Todos", "active": "Ativos", "inactive": "Inativos", "managed": "Gerenciados", "inUse": "Em uso", "unused": "Não usados" },
     "summary": { "showing": "Exibindo {visible} de {total}", "total": "Total", "managed": "Gerenciados" },
     "usage": { "containers": "Contêineres: {count}" },
+    "volumeUsage": {"size":"Espaço ocupado","calculating":"Calculando…","unavailable":"Indisponível","referencesIncomplete":"Não foi possível verificar todas as referências dos contêineres.","includesStopped":"Inclui contêineres parados."},
     "empty": { "title": "Nenhum recurso encontrado", "description": "Nenhum serviço de contêiner ativo oferece recursos desta categoria no momento.", "filteredTitle": "Nenhum recurso correspondente", "filteredDescription": "Ajuste a pesquisa ou os filtros para ver mais recursos." },
     "actions": { "refresh": "Atualizar", "start": "Iniciar", "stop": "Parar", "restart": "Reiniciar", "pause": "Pausar", "resume": "Retomar", "kill": "Forçar encerramento", "remove": "Remover", "down": "Parar e remover", "tag": "Adicionar tag", "prune": "Limpar não usados", "cancel": "Cancelar", "close": "Fechar", "retry": "Tentar novamente", "review": "Revisar", "run": "Executar operação", "clearFilters": "Limpar filtros" },
     "create": { "title": "Criar recurso", "tagTitle": "Adicionar tag à imagem", "advanced": "Configurações de execução", "container": "Criar contêiner", "image": "Baixar imagem", "volume": "Criar volume", "pod": "Criar pod" },

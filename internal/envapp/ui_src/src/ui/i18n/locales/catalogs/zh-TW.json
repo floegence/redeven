@@ -2874,6 +2874,7 @@
     "filters": { "label": "篩選資源", "all": "全部", "active": "作用中", "inactive": "非作用中", "managed": "受管理", "inUse": "使用中", "unused": "未使用" },
     "summary": { "showing": "顯示 {visible} / {total}", "total": "總計", "managed": "受管理" },
     "usage": { "containers": "容器：{count}" },
+    "volumeUsage": {"size":"佔用空間","calculating":"計算中…","unavailable":"無法取得","referencesIncomplete":"無法完整檢查容器參照。","includesStopped":"包含已停止的容器。"},
     "empty": { "title": "找不到資源", "description": "目前沒有可用的容器服務提供此類資源。", "filteredTitle": "沒有符合的資源", "filteredDescription": "調整搜尋字詞或篩選條件，以查看更多資源。" },
     "actions": { "refresh": "重新整理", "start": "啟動", "stop": "停止", "restart": "重新啟動", "pause": "暫停", "resume": "繼續", "kill": "強制終止", "remove": "移除", "down": "停止並移除", "tag": "新增標籤", "prune": "清理未使用項目", "cancel": "取消", "close": "關閉", "retry": "重試", "review": "檢閱", "run": "執行操作", "clearFilters": "清除篩選" },
     "create": { "title": "建立資源", "tagTitle": "新增映像檔標籤", "advanced": "執行設定", "container": "建立容器", "image": "提取映像檔", "volume": "建立磁碟區", "pod": "建立 Pod" },

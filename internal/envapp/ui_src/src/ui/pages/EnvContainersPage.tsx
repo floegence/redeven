@@ -92,6 +92,7 @@ import {
   type ImageInventoryItem,
   type PodInventoryItem,
   type VolumeInventoryItem,
+  getVolumeDiskUsage,
 } from '../services/containerResourcesApi';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { LocalApiError } from '../services/localApi';
@@ -223,7 +224,8 @@ type ReviewState = Readonly<{
 
 type ResourceFilter = 'all' | 'active' | 'inactive' | 'managed';
 type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'used-by' | 'containers';
-type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created';
+type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created' | 'size';
+type VolumeSizeState = Readonly<{ phase: 'loading' | 'unavailable' }> | Readonly<{ phase: 'ready'; sizes: ReadonlyMap<string, number> }>;
 type ResourceSortDirection = 'ascending' | 'descending';
 
 type DetailRecord = Readonly<Record<string, unknown>>;
@@ -595,6 +597,7 @@ function resourceStatus(view: ContainerResourceView, item: ContainerResourceInve
 }
 
 function resourceActive(view: ContainerResourceView, item: ContainerResourceInventoryItem): boolean {
+  if (view === 'volumes' && !(item as VolumeInventoryItem).references_complete) return false;
   if (view === 'images' || view === 'volumes') {
     return Number(resourceStatus(view, item)) > 0;
   }
@@ -819,11 +822,11 @@ function DetailSection(props: { title: string; icon: JSX.Element; children: JSX.
   );
 }
 
-function DetailRow(props: { label: string; value: string | number; mono?: boolean }) {
+function DetailRow(props: { label: string; value: JSX.Element; mono?: boolean }) {
   return (
     <div class="container-detail-row">
       <dt>{props.label}</dt>
-      <dd class={props.mono ? 'font-mono' : undefined} title={String(props.value)}>{props.value}</dd>
+      <dd class={props.mono ? 'font-mono' : undefined} title={typeof props.value === 'string' || typeof props.value === 'number' ? String(props.value) : undefined}>{props.value}</dd>
     </div>
   );
 }
@@ -939,6 +942,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [collectionStats, setCollectionStats] = createSignal<ReadonlyMap<string, ContainerStats>>(new Map());
   const [chartsOpen, setChartsOpen] = createSignal(false);
   const [showSecondaryColumn, setShowSecondaryColumn] = createSignal(true);
+  const [showVolumeSizeColumn, setShowVolumeSizeColumn] = createSignal(true);
+  const [volumeSizes, setVolumeSizes] = createSignal<ReadonlyMap<string, VolumeSizeState>>(new Map());
   const [showPortsColumn, setShowPortsColumn] = createSignal(true);
   const [showCreatedColumn, setShowCreatedColumn] = createSignal(true);
   const [sortKey, setSortKey] = createSignal<ResourceSortKey>('name');
@@ -1093,6 +1098,26 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const activeOperationCount = createMemo(() => operations().filter(operationActive).length);
   const activeResourceCount = createMemo(() => inventory().filter((entry) => resourceActive(view(), entry.item)).length);
   const managedResourceCount = createMemo(() => inventory().filter((entry) => resourceManagement(entry.item)?.managed).length);
+  function volumeSize(entry: ContainerResourceEntry): number | undefined {
+    const state = volumeSizes().get(runtimeKey(entry.target));
+    return state?.phase === 'ready' ? state.sizes.get((entry.item as VolumeInventoryItem).name) : undefined;
+  }
+  const volumeSizeLabel = (entry: ContainerResourceEntry): string => {
+    const size = volumeSize(entry);
+    if (size !== undefined) return size === 0 ? '0 B' : formatBytes(size);
+    return i18n.t(volumeSizes().get(runtimeKey(entry.target))?.phase === 'loading'
+      ? 'containers.volumeUsage.calculating' : 'containers.volumeUsage.unavailable');
+  };
+  const volumeUsageLabel = (item: VolumeInventoryItem): string => {
+    if (!item.references_complete) return i18n.t('containers.states.unknown');
+    return i18n.t(item.referenced_containers > 0 ? 'containers.filters.inUse' : 'containers.filters.unused');
+  };
+  const renderVolumeUsage = (item: VolumeInventoryItem) => (
+    <span class="container-volume-usage" data-unknown={!item.references_complete} title={i18n.t(item.references_complete ? 'containers.volumeUsage.includesStopped' : 'containers.volumeUsage.referencesIncomplete')}>
+      <span><span class="container-usage-dot" data-active={item.references_complete && item.referenced_containers > 0} aria-hidden="true" />{volumeUsageLabel(item)}</span>
+      <Show when={item.references_complete && item.referenced_containers > 0}><small>{i18n.t('containers.usage.containers', { count: item.referenced_containers })}</small></Show>
+    </span>
+  );
   const filteredInventory = createMemo(() => {
     const query = searchQuery().trim().toLocaleLowerCase();
     const filter = resourceFilter();
@@ -1100,12 +1125,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       if (query && !resourceSearchText(view(), entry.item).includes(query)) return false;
       if (filter === 'active' && !resourceActive(view(), entry.item)) return false;
       if (filter === 'inactive' && resourceActive(view(), entry.item)) return false;
+      if (view() === 'volumes' && (filter === 'active' || filter === 'inactive') && !(entry.item as VolumeInventoryItem).references_complete) return false;
       if (filter === 'managed' && !resourceManagement(entry.item)?.managed) return false;
       return true;
     });
     const valueForSort = (entry: ContainerResourceEntry): string | number => {
       const item = entry.item;
       switch (sortKey()) {
+        case 'size': return volumeSize(entry) ?? -1;
         case 'status': return resourceStatus(view(), item);
         case 'name': return resourceName(view(), item);
         case 'created': return (item as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms ?? 0;
@@ -1117,6 +1144,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
     };
     return [...items].sort((left, right) => {
+      if (sortKey() === 'size') {
+        const leftUnknown = volumeSize(left) === undefined;
+        const rightUnknown = volumeSize(right) === undefined;
+        if (leftUnknown !== rightUnknown) return leftUnknown ? 1 : -1;
+      }
       const leftValue = valueForSort(left);
       const rightValue = valueForSort(right);
       const result = typeof leftValue === 'number' && typeof rightValue === 'number'
@@ -1415,6 +1447,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     const controller = new AbortController();
     consoleLoadAbort = controller;
     const generation = ++consoleLoadGeneration;
+    setVolumeSizes(new Map());
     const selectionRevision = consoleSelectionRevision;
     const current = () => generation === consoleLoadGeneration && !controller.signal.aborted;
     const targetWithCurrentSelection = (candidate: ContainerConsoleTarget): ContainerConsoleTarget => {
@@ -1472,6 +1505,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setConsoleState(pendingConsoleState(nextRuntimes, initialCached));
     resetResourceContext();
     if (options.resetListControls) {
+      if (sortKey() === 'size' && target.view !== 'volumes') setSortKey('name');
       setSearchQuery('');
       setResourceFilter(defaultResourceFilter(target.view));
       setDetailTab('overview');
@@ -1578,6 +1612,24 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       }
       const readyTarget = { ...target, selectedResourceKey: selectedStillExists ? nextSelectedResourceKey : '' };
       setConsoleState({ phase: 'ready', target: readyTarget, runtimes: nextRuntimes, inventory: entries, refreshing: false });
+      if (target.view === 'volumes') {
+        const volumeTargets = results.filter((result) => !('cause' in result) && result.items.length > 0).map((result) => result.runtime);
+        setVolumeSizes(new Map(volumeTargets.map((runtime) => [runtimeKey(runtime), { phase: 'loading' }])));
+        for (const runtime of volumeTargets) {
+          const commitUsage = (state: VolumeSizeState) => {
+            if (current()) setVolumeSizes((values) => new Map(values).set(runtimeKey(runtime), state));
+          };
+          void getVolumeDiskUsage(runtime.engine, runtime.endpoint_id, controller.signal)
+            .then((response) => {
+              const sizes = new Map<string, number>();
+              for (const volume of response.volumes) {
+                if (typeof volume.size_bytes === 'number' && Number.isSafeInteger(volume.size_bytes) && volume.size_bytes >= 0) sizes.set(volume.name, volume.size_bytes);
+              }
+              commitUsage({ phase: 'ready', sizes });
+            })
+            .catch(() => commitUsage({ phase: 'unavailable' }));
+        }
+      }
       if ((navigationSelectionMissing || !selectedStillExists) && options.notifyIfSelectionMissing) {
         notify.info(i18n.t('containers.notifications.inventoryChangedTitle'), i18n.t('containers.notifications.inventoryChangedMessage'));
       }
@@ -2918,7 +2970,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             <Show when={view() === 'volumes'}>
               <DetailRow label={i18n.t('containers.columns.driver')} value={detailString(record, 'driver') || (item as VolumeInventoryItem).driver || '—'} />
               <DetailRow label={i18n.t('containers.columns.scope')} value={detailString(record, 'scope') || (item as VolumeInventoryItem).scope || '—'} />
-              <DetailRow label={i18n.t('containers.columns.usage')} value={detailNumber(record, 'referenced_containers') ?? (item as VolumeInventoryItem).referenced_containers} />
+              <DetailRow label={i18n.t('containers.columns.status')} value={renderVolumeUsage(record as VolumeInventoryItem)} />
+              <Show when={selectedEntry()}>{(entry) => <DetailRow label={i18n.t('containers.volumeUsage.size')} value={volumeSizeLabel(entry())} />}</Show>
             </Show>
             <Show when={view() === 'compose-projects'}>
               <DetailRow label={i18n.t('containers.columns.running')} value={`${detailNumber(record, 'running_count') ?? (item as ComposeProjectInventoryItem).running_count} / ${detailNumber(record, 'container_count') ?? (item as ComposeProjectInventoryItem).container_count}`} />
@@ -3109,7 +3162,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     const raw = detailArray(record, view() === 'compose-projects' || view() === 'pods' ? 'containers' : 'used_by');
     return (
       <div class="container-reference-list">
-        <Show when={raw.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyReferences')}</div>}>
+        <Show when={view() === 'volumes' && record.references_complete !== true}><div class="container-empty-inline" role="status">{i18n.t('containers.volumeUsage.referencesIncomplete')}</div></Show>
+        <Show when={raw.length > 0} fallback={<Show when={view() !== 'volumes' || record.references_complete === true}><div class="container-empty-inline">{i18n.t('containers.detail.emptyReferences')}</div></Show>}>
           <For each={raw}>{(value) => {
             const reference = detailRecord(value);
             const identity = detailString(reference, 'container_id');
@@ -3402,6 +3456,10 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
             align="end"
             disabled={pending}
             items={[
+              ...(view() === 'volumes' ? [{
+                id: 'volume-size', label: i18n.t('containers.volumeUsage.size'), keepOpen: true,
+                icon: () => showVolumeSizeColumn() ? <Check class="h-3.5 w-3.5" /> : <span class="h-3.5 w-3.5" />,
+              }] : []),
               {
                 id: 'secondary',
                 label: secondaryColumnLabel(),
@@ -3423,6 +3481,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                   },
             ]}
             onSelect={(column) => {
+              if (column === 'volume-size') setShowVolumeSizeColumn((visible) => !visible);
               if (column === 'secondary') setShowSecondaryColumn((visible) => !visible);
               if (column === 'ports') setShowPortsColumn((visible) => !visible);
               if (column === 'created') setShowCreatedColumn((visible) => !visible);
@@ -3471,6 +3530,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     <thead><tr>
       <th aria-sort={pending ? 'none' : sortKey() === 'status' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{i18n.t('containers.columns.status')}</span>}><SortControl sort="status" label={i18n.t('containers.columns.status')} /></Show></th>
       <th aria-sort={pending ? 'none' : sortKey() === 'name' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{i18n.t('containers.columns.name')}</span>}><SortControl sort="name" label={i18n.t('containers.columns.name')} /></Show></th>
+      <Show when={view() === 'volumes' && showVolumeSizeColumn()}><th aria-sort={pending ? 'none' : sortKey() === 'size' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{i18n.t('containers.volumeUsage.size')}</span>}><SortControl sort="size" label={i18n.t('containers.volumeUsage.size')} /></Show></th></Show>
       <Show when={showSecondaryColumn()}><th aria-sort={pending ? 'none' : sortKey() === 'secondary' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{secondaryColumnLabel()}</span>}><SortControl sort="secondary" label={secondaryColumnLabel()} /></Show></th></Show>
       <Show when={view() === 'containers'}><Show when={showPortsColumn()}><th>{i18n.t('containers.detail.ports')}</th></Show><Show when={chartsOpen()}><th>{i18n.t('containers.stats.cpu')}</th><th>{i18n.t('containers.stats.memory')}</th></Show></Show>
       <Show when={view() !== 'containers' && showCreatedColumn()}><th aria-sort={pending ? 'none' : sortKey() === 'created' ? sortDirection() : 'none'}><Show when={!pending} fallback={<span class="container-sort-control">{i18n.t('containers.columns.created')}</span>}><SortControl sort="created" label={i18n.t('containers.columns.created')} /></Show></th></Show>
@@ -3486,6 +3546,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
           <tbody><For each={[0, 1, 2, 3, 4]}>{(row) => <tr data-container-skeleton-row aria-hidden="true">
             <td><span class={`container-skeleton ${view() === 'images' || view() === 'volumes' ? 'container-skeleton--dot' : 'container-skeleton--status'}`} /></td>
             <td><div class="container-name-cell"><span class="container-skeleton container-skeleton--resource-icon" /><span class="container-skeleton container-skeleton--name" data-row={row % 3} /></div></td>
+            <Show when={view() === 'volumes' && showVolumeSizeColumn()}><td><span class="container-skeleton container-skeleton--metric" /></td></Show>
             <Show when={showSecondaryColumn()}><td><span class="container-skeleton container-skeleton--secondary" data-row={row % 2} /></td></Show>
             <Show when={view() === 'containers'}><Show when={showPortsColumn()}><td><span class="container-skeleton container-skeleton--port" data-row={row % 2} /></td></Show><Show when={chartsOpen()}><td><span class="container-skeleton container-skeleton--metric" /></td><td><span class="container-skeleton container-skeleton--metric" /></td></Show></Show>
             <Show when={view() !== 'containers' && showCreatedColumn()}><td><span class="container-skeleton container-skeleton--created" /></td></Show>
@@ -3695,8 +3756,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                         const container = () => entry.item as ContainerInventoryItem;
                         const sample = () => view() === 'containers' ? statsForContainer(entry) : undefined;
                         return <tr tabindex={0} data-container-resource-row data-container-resource-row-index={index()} onClick={() => selectResource(entry)} onKeyDown={(event) => handleTableKey(event, index())}>
-                          <td><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), item()))}><span class="container-usage-dot" data-active={resourceActive(view(), item())} /></Show></td>
+                          <td><Show when={view() === 'volumes'} fallback={<Show when={view() === 'images'} fallback={renderStatus(resourceStatus(view(), item()))}><span class="container-usage-dot" data-active={resourceActive(view(), item())} /></Show>}><button type="button" class="container-volume-usage-link" onKeyDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); selectResource(entry); setDetailTab('used-by'); }}>{renderVolumeUsage(item() as VolumeInventoryItem)}</button></Show></td>
                           <td><div class="container-name-cell"><ViewIcon view={view()} class="h-4 w-4" /><span class="truncate">{resourceName(view(), item())}</span><Show when={view() === 'compose-projects' && (item() as ComposeProjectInventoryItem).saved}><span class="container-saved-project" title={(item() as ComposeProjectInventoryItem).source || i18n.t('containers.compose.saved')}><Check class="h-3 w-3" />{i18n.t('containers.compose.saved')}</span></Show><Show when={runtimeBadgeVisible(entry)}><span class="container-runtime-badge">{runtimeName(entry.target.engine)}</span></Show><Show when={resourceManagement(item())?.managed}><span class="container-managed-label" title={i18n.t('containers.managed.badge')}><Layers class="h-3.5 w-3.5" /></span></Show></div></td>
+                          <Show when={view() === 'volumes' && showVolumeSizeColumn()}><td class="container-volume-size">{volumeSizeLabel(entry)}</td></Show>
                           <Show when={showSecondaryColumn()}><td class="container-secondary-cell"><Show when={view() === 'containers'}><Show when={container().image_id || container().image?.reference || container().image?.digest} fallback="—"><button type="button" class="container-resource-link" onClick={(event) => { event.stopPropagation(); openContainerImage(entry); }}>{container().image?.reference || container().image?.digest || container().image_id}</button></Show></Show><Show when={view() === 'images'}>{formatBytes((item() as ImageInventoryItem).size_bytes)}</Show><Show when={view() === 'volumes'}>{(item() as VolumeInventoryItem).driver || '—'}</Show><Show when={view() === 'compose-projects' || view() === 'pods'}>{(item() as ComposeProjectInventoryItem | PodInventoryItem).running_count} / {(item() as ComposeProjectInventoryItem | PodInventoryItem).container_count}</Show></td></Show>
                           <Show when={view() === 'containers'}><Show when={showPortsColumn()}><td class="container-port-cell">{container().ports?.map(formatPort).filter(Boolean).slice(0, 2).join(', ') || '—'}</td></Show><Show when={chartsOpen()}><td class="tabular-nums">{sample() ? `${sample()!.cpu_percent.toFixed(1)}%` : '—'}</td><td class="tabular-nums">{formatBytes(sample()?.memory_bytes)}</td></Show></Show>
                           <Show when={view() !== 'containers' && showCreatedColumn()}><td>{formatDate((item() as ImageInventoryItem | VolumeInventoryItem | PodInventoryItem).created_at_unix_ms)}</td></Show>
@@ -3705,7 +3767,14 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                       }}</For></tbody>
                     </table>
                   </div>
-                  <div class="container-mobile-list" data-container-mobile-list><For each={filteredInventory()}>{(entry) => <button type="button" class="container-mobile-card" onClick={() => selectResource(entry)}><span class="container-resource-icon" data-tone={resourceStatusTone(resourceStatus(view(), entry.item))}><ViewIcon view={view()} class="h-4 w-4" /></span><span class="min-w-0 flex-1"><strong>{resourceName(view(), entry.item)}</strong><small>{view() === 'containers' ? (entry.item as ContainerInventoryItem).image?.reference || '—' : secondaryColumnLabel()}</small></span><Show when={view() === 'images' || view() === 'volumes'} fallback={renderStatus(resourceStatus(view(), entry.item))}><span class="text-xs">{Number(resourceStatus(view(), entry.item))}</span></Show><ChevronRight class="h-4 w-4" /></button>}</For></div>
+                  <div class="container-mobile-list" data-container-mobile-list><For each={filteredInventory()}>{(entry) => (
+                    <button type="button" class="container-mobile-card" onClick={() => selectResource(entry)}>
+                      <span class="container-resource-icon" data-tone={resourceStatusTone(resourceStatus(view(), entry.item))}><ViewIcon view={view()} class="h-4 w-4" /></span>
+                      <span class="min-w-0 flex-1"><strong>{resourceName(view(), entry.item)}</strong><small>{view() === 'volumes' ? volumeSizeLabel(entry) : view() === 'containers' ? (entry.item as ContainerInventoryItem).image?.reference || '—' : secondaryColumnLabel()}</small></span>
+                      <Show when={view() === 'volumes'} fallback={<Show when={view() === 'images'} fallback={renderStatus(resourceStatus(view(), entry.item))}><span class="text-xs">{Number(resourceStatus(view(), entry.item))}</span></Show>}>{renderVolumeUsage(entry.item as VolumeInventoryItem)}</Show>
+                      <ChevronRight class="h-4 w-4" />
+                    </button>
+                  )}</For></div>
               </Show>
             </div>
           </div>

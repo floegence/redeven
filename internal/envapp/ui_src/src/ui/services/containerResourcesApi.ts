@@ -125,8 +125,21 @@ export type VolumeInventoryItem = Readonly<{
   scope?: string;
   created_at_unix_ms?: number;
   referenced_containers: number;
+  references_complete: boolean;
   management: ContainerManagement;
 }>;
+
+export type VolumeDiskUsageResponse = Readonly<{
+  sampled_at_unix_ms: number;
+  volumes: readonly Readonly<{ name: string; size_bytes?: number }>[];
+}>;
+
+export async function getVolumeDiskUsage(engine: ContainerEngine, endpointID: string, signal?: AbortSignal): Promise<VolumeDiskUsageResponse> {
+  return fetchLocalApiJSON<VolumeDiskUsageResponse>(
+    `/_redeven_proxy/api/container-resources/volume-disk-usage?${query(engine, endpointID)}`,
+    { method: 'GET', signal },
+  );
+}
 
 export type ComposeProjectInventoryItem = Readonly<{
   project_id: string;

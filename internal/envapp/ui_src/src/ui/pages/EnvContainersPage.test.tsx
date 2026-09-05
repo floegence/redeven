@@ -30,6 +30,7 @@ const harness = vi.hoisted(() => ({
   getComposeDefinition: vi.fn(),
   deleteComposeDefinition: vi.fn(),
   imageBuildHistory: vi.fn(),
+  volumeDiskUsage: vi.fn(),
   rawInspect: vi.fn(),
   listFiles: vi.fn(),
   readFile: vi.fn(),
@@ -203,6 +204,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   getComposeProjectDefinition: harness.getComposeDefinition,
   deleteComposeProjectDefinition: harness.deleteComposeDefinition,
   getContainerImageBuildHistory: harness.imageBuildHistory,
+  getVolumeDiskUsage: harness.volumeDiskUsage,
   getRawContainerInspect: harness.rawInspect,
   listContainerResourceFiles: harness.listFiles,
   readContainerResourceFile: harness.readFile,
@@ -293,6 +295,7 @@ describe('native Containers page', () => {
       state: 'running',
       management: { managed: true, owner: { kind: 'web_service', service_id: 'service-1', name: 'API' } },
     }]);
+    harness.volumeDiskUsage.mockReset().mockResolvedValue({ sampled_at_unix_ms: 1, volumes: [] });
     harness.resourceDetails.mockReset().mockResolvedValue({ container_id: 'container-1', state: 'running' });
     harness.listOperations.mockReset().mockResolvedValue([]);
     harness.listOperationEvents.mockReset().mockResolvedValue([]);
@@ -353,6 +356,73 @@ describe('native Containers page', () => {
     expect(host.querySelectorAll('.container-touch-target')).toHaveLength(0);
     expect(harness.listResources).toHaveBeenCalledWith('containers', 'docker', 'docker-primary', expect.anything());
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:widget-1')).toBe(true);
+  });
+
+  it('loads volume sizes without blocking inventory and keeps unknown references out of unused', async () => {
+    const usage = deferred<unknown>();
+    harness.volumeDiskUsage.mockReturnValue(usage.promise);
+    const volumes = [
+      { name: 'a-data', driver: 'local', referenced_containers: 2, references_complete: true },
+      { name: 'b-empty', driver: 'local', referenced_containers: 0, references_complete: true },
+      { name: 'c-unknown', driver: 'local', referenced_containers: 0, references_complete: false },
+    ];
+    harness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'volumes' ? volumes : []));
+    harness.resourceDetails.mockResolvedValue({ ...volumes[0], used_by: [{ container_id: 'stopped-1', name: 'Stopped API', state: 'exited' }] });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('containers.views.volumes'))!.click();
+    await settle();
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(3);
+    expect(host.querySelector('tbody')?.textContent).toContain('containers.volumeUsage.calculating');
+    expect(host.querySelector('.container-volume-usage-link')?.textContent).toContain('containers.filters.inUse');
+    expect(host.querySelector('[data-unknown="true"]')?.textContent).toContain('containers.states.unknown');
+    expect(host.querySelector('[data-container-page]')?.getAttribute('aria-busy')).not.toBe('true');
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-filter-switch button')).find((button) => button.textContent === 'containers.filters.unused')!.click();
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(host.querySelector('tbody')?.textContent).toContain('b-empty');
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-filter-switch button')).find((button) => button.textContent === 'containers.filters.all')!.click();
+    usage.resolve({ sampled_at_unix_ms: 1, volumes: [{ name: 'a-data', size_bytes: 2048 }, { name: 'b-empty', size_bytes: 0 }, { name: 'c-unknown' }] });
+    await settle();
+    expect(Array.from(host.querySelectorAll('.container-volume-size')).map((cell) => cell.textContent)).toEqual(['2.0 KB', '0 B', 'containers.volumeUsage.unavailable']);
+    const sizeSort = Array.from(host.querySelectorAll<HTMLButtonElement>('thead button')).find((button) => button.textContent?.includes('containers.volumeUsage.size'))!;
+    sizeSort.click();
+    expect(Array.from(host.querySelectorAll('tbody .container-name-cell')).map((cell) => cell.textContent)).toEqual(['b-empty', 'a-data', 'c-unknown']);
+    sizeSort.click();
+    expect(Array.from(host.querySelectorAll('tbody .container-name-cell')).map((cell) => cell.textContent)).toEqual(['a-data', 'b-empty', 'c-unknown']);
+    host.querySelector<HTMLButtonElement>('.container-volume-usage-link')!.click();
+    await settle();
+    expect(host.querySelector('.container-detail-tabs [aria-selected="true"]')?.textContent).toContain('used');
+    expect(host.querySelector('.container-reference-list')?.textContent).toContain('Stopped API');
+    expect(harness.volumeDiskUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates same-name volume sizes by runtime and ignores an aborted refresh result', async () => {
+    const stale = deferred<unknown>();
+    harness.listRuntimes.mockResolvedValue([
+      { engine: 'docker', endpoint_id: 'docker-primary', state: 'ready' },
+      { engine: 'podman', endpoint_id: 'podman-primary', state: 'ready' },
+    ]);
+    harness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'volumes' ? [{ name: 'data', referenced_containers: 0, references_complete: true }] : []));
+    harness.volumeDiskUsage.mockImplementation((engine: string) => engine === 'docker' ? stale.promise : Promise.resolve({ volumes: [{ name: 'data', size_bytes: 1024 }] }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    const openVolumes = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('containers.views.volumes'))!.click();
+    openVolumes();
+    await settle();
+    expect(Array.from(host.querySelectorAll('.container-volume-size')).map((cell) => cell.textContent)).toEqual(['containers.volumeUsage.calculating', '1.0 KB']);
+    const oldSignal = harness.volumeDiskUsage.mock.calls[0][2] as AbortSignal;
+    harness.volumeDiskUsage.mockRejectedValue(new Error('unavailable'));
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.actions.refresh"]')!.click();
+    await settle();
+    expect(oldSignal.aborted).toBe(true);
+    stale.resolve({ volumes: [{ name: 'data', size_bytes: 99999 }] });
+    await settle();
+    expect(Array.from(host.querySelectorAll('.container-volume-size')).map((cell) => cell.textContent)).toEqual(['containers.volumeUsage.unavailable', 'containers.volumeUsage.unavailable']);
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
   });
 
   it('opens one service-management surface and loads configuration on demand', async () => {

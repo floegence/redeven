@@ -319,6 +319,15 @@
 
 .container-usage-dot[data-active="true"] { background: var(--redeven-status-success); }
 
+.container-volume-usage { display: inline-flex; flex: none; flex-direction: column; gap: 3px; text-align: left; font-size: 12px; line-height: 1.4; }
+.container-volume-usage > span { display: flex; align-items: center; gap: 7px; }
+.container-volume-usage small { color: var(--muted-foreground); font-size: 10px; }
+.container-volume-usage[data-unknown="true"] .container-usage-dot { background: var(--redeven-status-warning); }
+.container-volume-usage-link { display: inline-flex; min-width: 100px; padding: 4px 0; cursor: pointer; border-radius: 4px; }
+.container-volume-usage-link:hover { color: var(--primary); }
+.container-volume-usage-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.container-volume-size { min-width: 105px; font-variant-numeric: tabular-nums; }
+
 .container-icon-action {
   position: relative;
   width: 38px;
@@ -1057,7 +1066,7 @@
   .container-list-page { padding: 12px; }
   .container-filter-switch { max-width: 100%; overflow-x: auto; }
   .container-resource-table-shell { display: none; }
-  .container-mobile-list { display: grid; gap: 1px; }
+  .container-mobile-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
   .redeven-containers .container-mobile-card { display: flex; width: 100%; min-height: 66px; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--border) 58%, transparent); text-align: left; }
   .container-mobile-list--loading .container-skeleton--name { width: min(180px, 46cqw); }
   .container-mobile-list--loading .container-skeleton--name[data-row="1"] { width: min(145px, 38cqw); }

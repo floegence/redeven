@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Native container resources
 description: Aggregate the active Docker and Podman runtimes behind one Redeven-owned execution and operation boundary.
 tags: [architecture, containers, docker, podman]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-06T00:00:00Z
 ---
 # Summary
 
@@ -64,6 +64,10 @@ projects with zero members. Observation failures are returned as errors and
 must never be converted into an empty project or a successful removal.
 
 ## Native service boundary
+
+Volume reference completeness and the independent disk usage read are owned by
+[Volume usage observation](container-volume-usage.md). They reuse this concept's
+endpoint, Read permission, and CLI execution boundaries.
 
 `containerresource` strictly decodes every mutation request and rejects unknown
 fields. It recomputes a structured preflight immediately before admission and

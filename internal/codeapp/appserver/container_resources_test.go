@@ -118,6 +118,42 @@ func (f *appserverContainerEngine) StatsMany(context.Context, containerengine.En
 	return []containerengine.ContainerStats{{ContainerID: "container-one", CPUPercent: 1.5, MemoryBytes: 1024}}, nil
 }
 
+func (f *appserverContainerEngine) VolumeDiskUsage(context.Context, containerengine.Engine) ([]containerengine.VolumeDiskUsage, error) {
+	size := int64(0)
+	return []containerengine.VolumeDiskUsage{{Name: "empty", SizeBytes: &size}, {Name: "unknown"}}, nil
+}
+
+func TestVolumeDiskUsageReadPermissionAndResponse(t *testing.T) {
+	service := newContainerAPITestService(t)
+	channelID := "ch_volume_usage"
+	for _, canRead := range []bool{false, true} {
+		server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: canRead})}
+		response := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/volume-disk-usage?engine=docker", "")
+		if !canRead {
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("read permission status=%d", response.Code)
+			}
+			continue
+		}
+		if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("usage status=%d body=%s", response.Code, response.Body.String())
+		}
+		var body struct {
+			Data containerengine.VolumeDiskUsageResponse `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Data.SampledAtUnixMs <= 0 || len(body.Data.Volumes) != 2 || body.Data.Volumes[0].SizeBytes == nil || *body.Data.Volumes[0].SizeBytes != 0 || body.Data.Volumes[1].SizeBytes != nil {
+			t.Fatalf("usage body=%s", response.Body.String())
+		}
+		invalid := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/volume-disk-usage?engine=docker&path=/", "")
+		if invalid.Code != http.StatusBadRequest {
+			t.Fatalf("unexpected query accepted: %d", invalid.Code)
+		}
+	}
+}
+
 func (f *appserverContainerEngine) RawInspectContainer(context.Context, containerengine.Engine, string) (json.RawMessage, error) {
 	return json.RawMessage(`[{"Id":"container-one","Config":{"Secret":"raw-secret-value"}}]`), nil
 }

@@ -2874,6 +2874,7 @@
     "filters": { "label": "리소스 필터링", "all": "전체", "active": "활성", "inactive": "비활성", "managed": "관리됨", "inUse": "사용 중", "unused": "미사용" },
     "summary": { "showing": "전체 {total}개 중 {visible}개 표시", "total": "전체", "managed": "관리됨" },
     "usage": { "containers": "컨테이너: {count}" },
+    "volumeUsage": {"size":"디스크 사용량","calculating":"계산 중…","unavailable":"확인할 수 없음","referencesIncomplete":"컨테이너 참조를 모두 확인하지 못했습니다.","includesStopped":"중지된 컨테이너도 포함합니다."},
     "empty": { "title": "리소스가 없습니다", "description": "현재 이 범주의 리소스를 제공하는 활성 컨테이너 서비스가 없습니다.", "filteredTitle": "일치하는 리소스가 없습니다", "filteredDescription": "검색어나 필터를 조정하여 더 많은 리소스를 확인하세요." },
     "actions": { "refresh": "새로 고침", "start": "시작", "stop": "중지", "restart": "재시작", "pause": "일시 중지", "resume": "계속", "kill": "강제 종료", "remove": "제거", "down": "중지 후 제거", "tag": "태그 추가", "prune": "미사용 항목 정리", "cancel": "취소", "close": "닫기", "retry": "다시 시도", "review": "검토", "run": "작업 실행", "clearFilters": "필터 지우기" },
     "create": { "title": "리소스 만들기", "tagTitle": "이미지 태그 추가", "advanced": "실행 설정", "container": "컨테이너 만들기", "image": "이미지 가져오기", "volume": "볼륨 만들기", "pod": "Pod 만들기" },

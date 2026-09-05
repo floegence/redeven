@@ -176,7 +176,8 @@ type ContainerDetails struct {
 
 type VolumeItem struct {
 	containerengine.VolumeRecord
-	Management Management `json:"management"`
+	Management         Management `json:"management"`
+	ReferencesComplete bool       `json:"references_complete"`
 }
 
 type ComposeProjectItem struct {

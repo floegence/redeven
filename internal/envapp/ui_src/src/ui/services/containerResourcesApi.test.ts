@@ -15,6 +15,7 @@ import {
   getContainerImageBuildHistory,
   getContainerServiceConfiguration,
   getRawContainerInspect,
+  getVolumeDiskUsage,
   listContainerRuntimes,
   listContainerOperationEvents,
   listContainerResourceFiles,
@@ -72,6 +73,13 @@ beforeEach(() => {
 });
 
 describe('native container resources API', () => {
+  it('binds volume disk usage to the exact runtime and cancellation signal', async () => {
+    const signal = new AbortController().signal;
+    const response = { sampled_at_unix_ms: 1, volumes: [{ name: 'empty', size_bytes: 0 }, { name: 'unknown' }] };
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue(response);
+    await expect(getVolumeDiskUsage('podman', 'endpoint/primary', signal)).resolves.toEqual(response);
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/container-resources/volume-disk-usage?engine=podman&endpoint_id=endpoint%2Fprimary', { method: 'GET', signal });
+  });
   it('discovers all active runtime states without endpoint selection parameters', async () => {
     const signal = new AbortController().signal;
     localApiMocks.fetchLocalApiJSON.mockResolvedValue({

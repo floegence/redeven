@@ -2874,6 +2874,7 @@
     "filters": { "label": "筛选资源", "all": "全部", "active": "活跃", "inactive": "非活跃", "managed": "托管资源", "inUse": "使用中", "unused": "未使用" },
     "summary": { "showing": "显示 {visible} / {total}", "total": "总计", "managed": "托管" },
     "usage": { "containers": "容器：{count}" },
+    "volumeUsage": {"size":"占用空间","calculating":"计算中…","unavailable":"不可用","referencesIncomplete":"未能完整检查容器引用。","includesStopped":"包含已停止的容器。"},
     "empty": { "title": "未找到资源", "description": "当前没有可用的容器服务提供此类资源。", "filteredTitle": "没有匹配的资源", "filteredDescription": "调整搜索词或筛选条件，查看更多资源。" },
     "actions": { "refresh": "刷新", "start": "启动", "stop": "停止", "restart": "重启", "pause": "暂停", "resume": "恢复", "kill": "强制终止", "remove": "删除", "down": "停止并移除", "tag": "添加标签", "prune": "清理未使用项", "cancel": "取消", "close": "关闭", "retry": "重试", "review": "审查", "run": "执行操作", "clearFilters": "清除筛选" },
     "create": { "title": "创建资源", "tagTitle": "添加镜像标签", "advanced": "运行设置", "container": "创建容器", "image": "拉取镜像", "volume": "创建卷", "pod": "创建 Pod" },
