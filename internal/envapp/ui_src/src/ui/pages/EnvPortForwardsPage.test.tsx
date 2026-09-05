@@ -1746,7 +1746,8 @@ describe('EnvPortForwardsPage', () => {
       streamController?.close();
       await waitForAssertion(() => {
         const updatedRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
-        expect(updatedRow.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
+        expect(updatedRow.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Completed');
+        expect(updatedRow.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
         expect(updatedRow.textContent).toContain('Running');
       });
       expect(openWindow).not.toHaveBeenCalled();
@@ -2174,9 +2175,13 @@ describe('EnvPortForwardsPage', () => {
       await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-operation-output"]')?.textContent).toContain('server preparation started'));
       expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
       expect(host.querySelector('[data-testid="managed-operation-command-output"]')?.textContent).toContain('<managed-executable> serve');
+      const stableRow = host.querySelector('[data-managed-service-id="mws-stable-details"]');
+      const stableDisclosure = host.querySelector('[data-testid="managed-operation-disclosure"]');
 
       host.querySelector<HTMLButtonElement>('[data-testid="web-services-refresh"]')!.click();
       await flushPage();
+      expect(host.querySelector('[data-managed-service-id="mws-stable-details"]')).toBe(stableRow);
+      expect(host.querySelector('[data-testid="managed-operation-disclosure"]')).toBe(stableDisclosure);
       expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.getAttribute('aria-expanded')).toBe('true');
 
       const secondSnapshot = {
@@ -2306,7 +2311,11 @@ describe('EnvPortForwardsPage', () => {
         controller.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ ...operation, state: 'succeeded', stage: 'completed', progress_current: 7 })}\n\n`));
         controller.close();
       }
-      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(0));
+      await waitForAssertion(() => {
+        const triggers = host.querySelectorAll('[data-testid="managed-service-operation-trigger"]');
+        expect(triggers).toHaveLength(2);
+        for (const trigger of triggers) expect(trigger.textContent).toContain('Completed');
+      });
     } finally {
       dispose();
     }
@@ -2413,6 +2422,8 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Retry')?.click();
 
     await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith('Service retry failed', 'The image registry is unavailable. Check the network connection, then retry.'));
+    expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Failed');
+    expect(host.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
     expect(notificationMocks.error).not.toHaveBeenCalledWith('Failed to open service', expect.anything());
   });
 

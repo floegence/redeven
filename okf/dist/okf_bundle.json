@@ -160,7 +160,7 @@
             "path": "architecture/managed-service-operation-progress.md",
             "type": "Runtime Contract",
             "title": "Managed Service operation progress",
-            "description": "Persist and stream bounded, redacted lifecycle command output while preserving user-controlled detail state.",
+            "description": "Persist and stream bounded, redacted lifecycle command output while preserving stable, user-controlled progress presentation.",
             "tags": [
               "architecture",
               "managed-services",
@@ -169,7 +169,7 @@
               "security",
               "ui"
             ],
-            "summary": "- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.\n- Outcome: users can keep an operation expanded through list and stream refreshes and inspect real, safely bounded lifecycle output while work is running.\n- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure state, and output never becomes a source of Runtime identity or application behavior.\n- Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.",
+            "summary": "- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.\n- Outcome: users can keep an operation expanded through list and stream refreshes, inspect real safely bounded lifecycle output, and see a brief operation finish without the progress surface flashing away.\n- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure and presentation state, terminal feedback remains readable, and output never becomes a source of Runtime identity or application behavior.\n- Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.",
             "section_count": 2
           },
           {
@@ -5094,7 +5094,7 @@
       "concept_id": "architecture.managed-service-operation-progress",
       "type": "Runtime Contract",
       "title": "Managed Service operation progress",
-      "description": "Persist and stream bounded, redacted lifecycle command output while preserving user-controlled detail state.",
+      "description": "Persist and stream bounded, redacted lifecycle command output while preserving stable, user-controlled progress presentation.",
       "tags": [
         "architecture",
         "managed-services",
@@ -5105,7 +5105,7 @@
       ],
       "timestamp": "2026-09-03T00:00:00Z",
       "frontmatter": {
-        "description": "Persist and stream bounded, redacted lifecycle command output while preserving user-controlled detail state.",
+        "description": "Persist and stream bounded, redacted lifecycle command output while preserving stable, user-controlled progress presentation.",
         "tags": [
           "architecture",
           "managed-services",
@@ -5118,15 +5118,15 @@
         "title": "Managed Service operation progress",
         "type": "Runtime Contract"
       },
-      "body_length": 5341,
-      "summary": "- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.\n- Outcome: users can keep an operation expanded through list and stream refreshes and inspect real, safely bounded lifecycle output while work is running.\n- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure state, and output never becomes a source of Runtime identity or application behavior.\n- Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.",
+      "body_length": 6907,
+      "summary": "- Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.\n- Outcome: users can keep an operation expanded through list and stream refreshes, inspect real safely bounded lifecycle output, and see a brief operation finish without the progress surface flashing away.\n- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure and presentation state, terminal feedback remains readable, and output never becomes a source of Runtime identity or application behavior.\n- Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Reporter and persisted detail\n\n`ManagedOperationProgressDetail` schema v2 is the sole progress document. It retains stage timing and structured transfer facts, then adds ordered commands and output lines. A command has a stable operation-local ID, safe display template, state, and start and finish times. An output line has a monotonic sequence, owning command ID, `stdout` or `stderr` source, and redacted text. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.\n\nThe concurrent Reporter owns every mutation to an in-flight progress document. Host, Container, and Compose continue to report the facts they genuinely possess: npm install, npm rebuild, and Host Hooks stream command output; image pulling retains structured layer and byte progress when no command stream exists. Ordinary output is persisted and broadcast no more often than every 500 milliseconds and no later than 500 milliseconds after a quiet burst. Command transitions, stage transitions, failure, cancellation, completion, and Reporter close flush immediately. Terminal state is written only after the Reporter closes, so delayed output cannot overwrite completion.\n\nThe retained tail is at most 400 lines and 128 KiB, with at most 4 KiB per line and at most 64 commands. ANSI sequences and unsafe control characters are removed. Known Secret values, authorization fields, credential-shaped values, sensitive URL query values, the Manager state root, and the service workspace are replaced before any persistence, event publication, or service-log write. A truncation fact tells the UI that older content was removed; it does not reconstruct discarded output.\n\nUninstall keeps operation metadata, command templates, state, timing, error code, and retry lineage for audit, but clears output text for every operation owned by that service in the same transaction that finalizes uninstall. Failed uninstall retains the current records and output so explicit retry has the same observable context.\n\n## Service-row interaction\n\nThe owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. The submitting placeholder transfers its explicit state once to the accepted backend operation ID. SSE snapshots and service-list replacements update the existing disclosure in place. A later operation defaults collapsed, and an operation removed from both page state and service state releases its disclosure entry.\n\nThe details surface shows stages, transfer facts, command templates, stream semantics, live tail, and truncation state inline below the service row. The output viewport is the only local scroll owner. It follows new output while the user remains at the bottom, stops following when the user scrolls upward, and resumes only after the user returns to the bottom. Output changes do not open the disclosure, move page focus, or create a dialog.",
-          "char_count": 2955
+          "body": "## Reporter and persisted detail\n\n`ManagedOperationProgressDetail` schema v2 is the sole progress document. It retains stage timing and structured transfer facts, then adds ordered commands and output lines. A command has a stable operation-local ID, safe display template, state, and start and finish times. An output line has a monotonic sequence, owning command ID, `stdout` or `stderr` source, and redacted text. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.\n\nThe concurrent Reporter owns every mutation to an in-flight progress document. Host, Container, and Compose continue to report the facts they genuinely possess: npm install, npm rebuild, and Host Hooks stream command output; image pulling retains structured layer and byte progress when no command stream exists. Ordinary output is persisted and broadcast no more often than every 500 milliseconds and no later than 500 milliseconds after a quiet burst. Command transitions, stage transitions, failure, cancellation, completion, and Reporter close flush immediately. Terminal state is written only after the Reporter closes, so delayed output cannot overwrite completion.\n\nThe retained tail is at most 400 lines and 128 KiB, with at most 4 KiB per line and at most 64 commands. ANSI sequences and unsafe control characters are removed. Known Secret values, authorization fields, credential-shaped values, sensitive URL query values, the Manager state root, and the service workspace are replaced before any persistence, event publication, or service-log write. A truncation fact tells the UI that older content was removed; it does not reconstruct discarded output.\n\nUninstall keeps operation metadata, command templates, state, timing, error code, and retry lineage for audit, but clears output text for every operation owned by that service in the same transaction that finalizes uninstall. Failed uninstall retains the current records and output so explicit retry has the same observable context.\n\n## Service-row interaction\n\nThe owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. The service list is keyed by stable `service_id`, so refreshed service snapshots update the existing row and disclosure DOM in place instead of replaying entry presentation. The submitting placeholder transfers its explicit state once to the accepted backend operation ID. SSE snapshots and service-list replacements update the existing disclosure in place. A later operation defaults collapsed, and an operation removed from both page state and service state releases its disclosure entry.\n\nThe details surface shows stages, transfer facts, command templates, stream semantics, live tail, and truncation state inline below the service row. The output viewport is the only local scroll owner. It follows new output while the user remains at the bottom, stops following when the user scrolls upward, and resumes only after the user returns to the bottom. Output changes do not open the disclosure, move page focus, or create a dialog.\n\nOne Renderer presentation controller separates operation visibility from backend activity. A successful operation remains visible until both a 1.8-second minimum lifetime and a 1.2-second completed-state hold have elapsed, then exits through a 220-millisecond height, opacity, and position transition before unmounting. A transient submission released before backend acceptance still observes the minimum lifetime. An explicitly expanded transient or successful operation does not auto-close while the user is reading it; collapsing it resumes the settled exit. Failed, cancelled, and interrupted results remain available until a later operation replaces them or the owning service leaves the list. Retained terminal presentation never keeps service actions busy, and a later operation replaces the retained result immediately. Reduced-motion preference removes the animation without shortening the readable hold.",
+          "char_count": 4044
         },
         {
           "id": "boundaries",
@@ -5166,6 +5166,16 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:0:owns operation-id disclosure state and the bounded bottom-follow output viewport.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx",
           "description": "Owns operation-ID disclosure state and the bounded bottom-follow output viewport."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.ts:0:owns minimum visibility, terminal retention, expansion-aware exit, and presentation replacement.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.ts",
+          "description": "Owns minimum visibility, terminal retention, expansion-aware exit, and presentation replacement."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.test.ts:0:verifies brief success timing, expanded-detail retention, attention states, and replacement.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.test.ts",
+          "description": "Verifies brief success timing, expanded-detail retention, attention states, and replacement."
         },
         {
           "id": "redeven:internal/managedwebservice/operation_progress_test.go:0:covers ordering, bounds, redaction, quiet-burst persistence, and close behavior.",
@@ -11904,5 +11914,5 @@
       ]
     }
   ],
-  "source_sha256": "1b98d59cb3749b071f7ab127150008d93d939d78848c254d3692248d9aec5f6a"
+  "source_sha256": "cea78c4ccb56eae0b83783322c6b6e88a51c38f20bf0bba9daf6bd21a0a5af4b"
 }

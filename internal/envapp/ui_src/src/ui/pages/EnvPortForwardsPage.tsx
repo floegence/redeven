@@ -63,6 +63,10 @@ import {
   type ManagedOperation,
 } from './managedServiceOperationController';
 import {
+  createManagedServiceOperationPresentation,
+  type ManagedOperationPresentationPhase,
+} from './managedServiceOperationPresentation';
+import {
   desktopShellWebServiceWindowOpenAvailable,
   openWebServiceWindowInDesktopShell,
 } from '../services/desktopShellBridge';
@@ -1031,6 +1035,7 @@ function managedTransferProgress(operation: ManagedOperation): Readonly<{ curren
 
 function ManagedOperationDisclosure(props: Readonly<{
   operation: ManagedOperation;
+  presentationPhase: ManagedOperationPresentationPhase;
   deployment: ManagedDeployment;
   expanded: boolean;
   canCancel: boolean;
@@ -1046,6 +1051,7 @@ function ManagedOperationDisclosure(props: Readonly<{
   const transfer = () => props.operation.progress_detail?.transfer;
   const hostTransfer = () => props.deployment === 'host';
   const terminal = () => ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(props.operation.state);
+  const succeeded = () => props.operation.state === 'succeeded';
   const progress = () => managedTransferProgress(props.operation);
   const percent = () => progress().total > 0 ? Math.max(0, Math.min(100, (progress().current / progress().total) * 100)) : 0;
   const steps = () => managedOperationStages(props.operation, props.deployment);
@@ -1067,8 +1073,21 @@ function ManagedOperationDisclosure(props: Readonly<{
     return `${Math.min(props.operation.progress_current, props.operation.progress_total)}/${props.operation.progress_total}`;
   };
   return (
-    <div class="relative border-t border-border/70 bg-muted/15" role="status" aria-live="polite" data-testid="managed-operation-disclosure">
-      <div class="flex min-w-0 items-stretch pl-[3.25rem] pr-3">
+    <div
+      class={cn(
+        'grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-[220ms] ease-out motion-reduce:transform-none motion-reduce:transition-none',
+        props.presentationPhase === 'exiting'
+          ? 'grid-rows-[0fr] -translate-y-1 opacity-0'
+          : 'grid-rows-[1fr] translate-y-0 opacity-100 animate-in fade-in slide-in-from-top-1 duration-200 motion-reduce:animate-none',
+      )}
+      role="status"
+      aria-live="polite"
+      aria-hidden={props.presentationPhase === 'exiting' || undefined}
+      data-testid="managed-operation-disclosure"
+      data-presentation-state={props.presentationPhase}
+    >
+      <div class="relative min-h-0 overflow-hidden border-t border-border/70 bg-muted/15">
+        <div class="flex min-w-0 items-stretch pl-[3.25rem] pr-3">
         <span class="absolute bottom-0 left-8 top-0 w-px bg-border/80" aria-hidden="true" />
         <span class="absolute left-8 top-[1.4rem] h-px w-5 bg-border/80" aria-hidden="true" />
         <button
@@ -1079,9 +1098,15 @@ function ManagedOperationDisclosure(props: Readonly<{
           onClick={() => props.onExpandedChange(!props.expanded)}
           data-testid="managed-service-operation-trigger"
         >
-          <ManagedServiceShapingOrb />
+          <Show when={terminal()} fallback={<ManagedServiceShapingOrb />}>
+            <span class={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded-full', succeeded() ? 'bg-success/15 text-success' : 'bg-destructive/15 text-destructive')} data-testid="managed-operation-terminal-icon">
+              <Show when={succeeded()} fallback={<AlertTriangle class="h-3 w-3" aria-hidden="true" />}>
+                <Check class="h-3 w-3" aria-hidden="true" />
+              </Show>
+            </span>
+          </Show>
           <div class="min-w-0 flex-1">
-            <div class="managed-operation-shimmer-text truncate text-xs font-semibold">{managedOperationActivityLabel(props.operation, i18n)}</div>
+            <div class={cn('truncate text-xs font-semibold', !terminal() && 'managed-operation-shimmer-text', succeeded() ? 'text-success' : terminal() ? 'text-destructive' : undefined)}>{managedOperationActivityLabel(props.operation, i18n)}</div>
             <Show when={transfer()?.artifact_reference}>
               <div class="mt-0.5 truncate font-mono text-[10px] leading-4 text-muted-foreground" title={transfer()?.artifact_reference} data-testid="managed-operation-artifact">{transfer()?.artifact_reference}</div>
             </Show>
@@ -1089,9 +1114,11 @@ function ManagedOperationDisclosure(props: Readonly<{
           <span class="shrink-0 font-mono text-[10px] text-muted-foreground">{transferSummary()}</span>
           <ChevronDown class={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none', props.expanded && 'rotate-180')} aria-hidden="true" />
         </button>
-        <Button size="sm" variant="ghost" class="my-auto h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
-      </div>
-      <Show when={props.expanded}>
+        <Show when={!terminal()}>
+          <Button size="sm" variant="ghost" class="my-auto h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+        </Show>
+        </div>
+        <Show when={props.expanded}>
         <div id={detailsID()} class="grid gap-4 border-t border-border/60 px-5 py-4 sm:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)]" data-testid="managed-service-operation-details">
           <ol class="space-y-2">
             <For each={steps()}>{(stage, index) => {
@@ -1148,7 +1175,8 @@ function ManagedOperationDisclosure(props: Readonly<{
             </div>
           </Show>
         </div>
-      </Show>
+        </Show>
+      </div>
     </div>
   );
 }
@@ -1445,14 +1473,15 @@ function managedActionUnavailableReason(capability: ManagedActionCapability, i18
   return i18n.t(`webServices.managed.actionUnavailable.${code}` as EnvAppTranslationKey);
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; operationPhase?: ManagedOperationPresentationPhase; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const [failureDiagnosticCopied, setFailureDiagnosticCopied] = createSignal(false);
   let failureDiagnosticResetTimer: number | undefined;
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
   const failed = () => props.service.observed_state === 'error';
-  const operation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
+  const operation = () => props.operation ?? null;
+  const activeOperation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
   const busy = () => props.busy || managedOperationActive(props.operation);
   const actionCapability = (action: ManagedAction): ManagedActionCapability => props.service.actions?.[action] ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' };
   const primaryAction = (): ManagedAction => {
@@ -1596,7 +1625,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
         </div>
 
         <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
-          <Show when={operation()} keyed fallback={(
+          <Show when={activeOperation()} keyed fallback={(
             <Show when={failed() && props.service.last_failure} keyed fallback={(
               <ServiceStatusIndicator
                 label={managedStatusLabel(props.service.observed_state, i18n)}
@@ -1694,6 +1723,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       <Show when={operation()}>{(activeOperation) => (
         <ManagedOperationDisclosure
           operation={activeOperation()}
+          presentationPhase={props.operationPhase ?? 'visible'}
           deployment={props.service.deployment}
           expanded={props.operationExpanded}
           canCancel={props.canManage}
@@ -2182,9 +2212,14 @@ export function EnvPortForwardsPage() {
   const [managedLoading, setManagedLoading] = createSignal(false);
   const [managedLoadError, setManagedLoadError] = createSignal(false);
   const [expandedManagedOperations, setExpandedManagedOperations] = createSignal<Record<string, boolean>>({});
+  const managedOperationPresentation = createManagedServiceOperationPresentation({
+    isExpanded: (operationID) => Boolean(expandedManagedOperations()[operationID]),
+  });
   const managedOperations = createManagedServiceOperationController({
     streamFailedMessage: () => i18n.t('webServices.managed.operationStreamFailed'),
     timedOutMessage: () => i18n.t('webServices.managed.operationTimedOut'),
+    onOperationUpdated: managedOperationPresentation.update,
+    onOperationReleased: managedOperationPresentation.release,
     onSubmittingOperationAccepted: (submittingOperationID, operationID) => {
       setExpandedManagedOperations((current) => {
         if (!Object.prototype.hasOwnProperty.call(current, submittingOperationID)) return current;
@@ -2237,14 +2272,13 @@ export function EnvPortForwardsPage() {
 	});
   const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
   const managedRowOperation = (serviceID: string) => managedOperations.operationForService(serviceID);
+  const managedPresentedOperation = (serviceID: string) => managedOperationPresentation.operationForService(serviceID);
   const setManagedOperationExpanded = (operationID: string, expanded: boolean) => {
     setExpandedManagedOperations((current) => ({ ...current, [operationID]: expanded }));
+    managedOperationPresentation.reconcileExpansion(operationID);
   };
   createEffect(() => {
-    const visible = new Set([
-      ...managedOperations.operationIDs(),
-      ...managedState().flatMap((service) => service.active_operation ? [service.active_operation.operation_id] : []),
-    ]);
+    const visible = new Set(managedOperationPresentation.operationIDs());
     setExpandedManagedOperations((current) => {
       const next = Object.fromEntries(Object.entries(current).filter(([operationID]) => visible.has(operationID)));
       return Object.keys(next).length === Object.keys(current).length ? current : next;
@@ -2286,6 +2320,7 @@ export function EnvPortForwardsPage() {
       setManagedTemplates(templates);
       const nextServices = Array.isArray(services.services) ? services.services : [];
       setManagedState(nextServices);
+      managedOperationPresentation.pruneServices(new Set(nextServices.map((service) => service.service_id)));
       setManagedLoadError(false);
       for (const service of nextServices) {
         const activeOperation = service.active_operation;
@@ -2944,6 +2979,9 @@ export function EnvPortForwardsPage() {
     const query = searchQuery().trim().toLowerCase();
     return managedState().filter((service) => !query || `${service.name}\n${service.description ?? ''}\n${service.workspace_path}\n${service.template_id}`.toLowerCase().includes(query));
   });
+  const managedServicesByID = createMemo(() => new Map(managedState().map((service) => [service.service_id, service])));
+  const filteredManagedServiceIDs = createMemo(() => filteredManagedServices().map((service) => service.service_id));
+  const managedServiceForID = (serviceID: string) => managedServicesByID().get(serviceID) ?? null;
 
   createEffect(() => {
     const serviceID = focusedManagedServiceID();
@@ -2977,7 +3015,10 @@ export function EnvPortForwardsPage() {
   const [deleting, setDeleting] = createSignal(false);
 
   createEffect(() => { if (permissionReady() && canRead()) void loadManaged(); });
-  onCleanup(() => managedOperations.dispose());
+  onCleanup(() => {
+    managedOperations.dispose();
+    managedOperationPresentation.dispose();
+  });
 
   // Create service handler
   const doCreate = async (target: string, name: string, description: string, accessMode: WebServiceAccessMode) => {
@@ -3432,29 +3473,32 @@ export function EnvPortForwardsPage() {
                     </div>
                   }>
                     <div class={cn('overflow-hidden rounded-xl border divide-y', redevenSurfaceRoleClass('panel'))} data-testid="unified-web-services-list">
-                      <For each={filteredManagedServices()}>{(service) => (
-                        <ManagedServiceRow
-                          service={service}
-                          operation={managedRowOperation(service.service_id)}
-                          operationExpanded={Boolean(expandedManagedOperations()[managedRowOperation(service.service_id)?.operation_id ?? ''])}
-                          busy={busyID() === `managed:${service.service_id}`}
-                          busyText={busyID() === `managed:${service.service_id}` ? busyText() : undefined}
-                          canOpen={canExecute() && (service.access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
-                          openUnavailableReason={service.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
-                            ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
-                            : undefined}
-                          canManage={canManageManagedService()}
-                          onOpen={() => void openManaged(service)}
-                          onOpenResource={openManagedContainerResource}
-                          onAction={(action) => void managedAction(service.service_id, action)}
-                          onOperationExpandedChange={setManagedOperationExpanded}
-                          onCancelOperation={() => void cancelManagedOperation(managedRowOperation(service.service_id))}
-                          onDiagnosticCopyFailure={(message) => notify.error(i18n.t('webServices.managed.failureDiagnosticCopyFailedTitle'), message)}
-                          onSettings={() => setManagedSettingsService(service)}
-						  onVersions={() => openServiceReleasePicker(service)}
-                          onLogs={() => void loadManagedLogs(service.service_id)}
-                          onUninstall={() => setManagedUninstall({ service, deleteData: false })}
-                        />
+                      <For each={filteredManagedServiceIDs()}>{(serviceID) => (
+                        <Show when={managedServiceForID(serviceID)}>{(service) => (
+                          <ManagedServiceRow
+                            service={service()}
+                            operation={managedPresentedOperation(serviceID)}
+                            operationPhase={managedOperationPresentation.phaseForService(serviceID)}
+                            operationExpanded={Boolean(expandedManagedOperations()[managedPresentedOperation(serviceID)?.operation_id ?? ''])}
+                            busy={busyID() === `managed:${serviceID}`}
+                            busyText={busyID() === `managed:${serviceID}` ? busyText() : undefined}
+                            canOpen={canExecute() && (service().access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
+                            openUnavailableReason={service().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                              ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
+                              : undefined}
+                            canManage={canManageManagedService()}
+                            onOpen={() => void openManaged(service())}
+                            onOpenResource={openManagedContainerResource}
+                            onAction={(action) => void managedAction(serviceID, action)}
+                            onOperationExpandedChange={setManagedOperationExpanded}
+                            onCancelOperation={() => void cancelManagedOperation(managedRowOperation(serviceID))}
+                            onDiagnosticCopyFailure={(message) => notify.error(i18n.t('webServices.managed.failureDiagnosticCopyFailedTitle'), message)}
+                            onSettings={() => setManagedSettingsService(service())}
+                            onVersions={() => openServiceReleasePicker(service())}
+                            onLogs={() => void loadManagedLogs(serviceID)}
+                            onUninstall={() => setManagedUninstall({ service: service(), deleteData: false })}
+                          />
+                        )}</Show>
                       )}</For>
                       <For each={filteredForwards()}>{(forward) => (
                         <PortForwardRow

@@ -485,6 +485,32 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const host = document.createElement('div');
     host.style.width = '1024px';
     document.body.appendChild(host);
+    const [operation, setOperation] = createSignal<ManagedOperation>({
+      operation_id: 'mop-retry',
+      service_id: 'mws-failed',
+      action: 'retry_install',
+      state: 'running',
+      stage: 'pulling',
+      progress_current: 2,
+      progress_total: 7,
+      progress_detail: {
+        schema_version: 2,
+        stage_started_at_unix_ms: Date.now() - 2_000,
+        updated_at_unix_ms: Date.now(),
+        transfer: {
+          phase: 'pulling',
+          artifact_reference: 'ghcr.io/runzhliu/example-service@sha256:reviewed',
+          artifact_index: 1,
+          artifact_total: 1,
+          downloaded_bytes: 2_000,
+          total_bytes: 5_000,
+          bytes_per_second: 1_000,
+          completed_layers: 2,
+          total_layers: 5,
+        },
+      },
+    });
+    const [operationPhase, setOperationPhase] = createSignal<'visible' | 'exiting'>('visible');
     dispose = render(() => (
       <ManagedServiceRow
         service={{
@@ -504,31 +530,8 @@ describe('EnvPortForwardsPage browser presentation', () => {
           last_failure: { action: 'install', stage: 'pulling', error_code: 'IMAGE_PULL_FAILED', message: 'The image could not be pulled.' },
           actions: { start: { available: false, reason_code: 'OPERATION_ACTIVE' }, stop: { available: false, reason_code: 'OPERATION_ACTIVE' }, restart: { available: false, reason_code: 'OPERATION_ACTIVE' }, retry: { available: false, reason_code: 'OPERATION_ACTIVE' } },
         }}
-        operation={{
-          operation_id: 'mop-retry',
-          service_id: 'mws-failed',
-          action: 'retry_install',
-          state: 'running',
-          stage: 'pulling',
-          progress_current: 2,
-          progress_total: 7,
-          progress_detail: {
-            schema_version: 2,
-            stage_started_at_unix_ms: Date.now() - 2_000,
-            updated_at_unix_ms: Date.now(),
-            transfer: {
-              phase: 'pulling',
-              artifact_reference: 'ghcr.io/runzhliu/example-service@sha256:reviewed',
-              artifact_index: 1,
-              artifact_total: 1,
-              downloaded_bytes: 2_000,
-              total_bytes: 5_000,
-              bytes_per_second: 1_000,
-              completed_layers: 2,
-              total_layers: 5,
-            },
-          },
-        }}
+        operation={operation()}
+        operationPhase={operationPhase()}
         busy
         canOpen
         canManage
@@ -570,6 +573,22 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await settle();
     expect(details.getBoundingClientRect().right).toBeLessThanOrEqual(640);
     expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toContain('managed-operation-text-shimmer');
+
+    setOperation((current) => ({ ...current, state: 'succeeded', stage: 'completed', progress_current: 7 }));
+    await settle();
+    expect(progress.textContent).toContain('Completed');
+    expect(progress.querySelector('[data-testid="managed-operation-terminal-icon"]')).toBeTruthy();
+    expect(progress.querySelector('.managed-operation-shimmer-text')).toBeNull();
+    expect(Array.from(row.querySelectorAll('button')).some((button) => button.textContent?.trim() === 'Cancel operation')).toBe(false);
+
+    const disclosure = row.querySelector<HTMLElement>('[data-testid="managed-operation-disclosure"]')!;
+    expect(getComputedStyle(disclosure).transitionProperty).toContain('grid-template-rows');
+    setOperationPhase('exiting');
+    await settle();
+    expect(disclosure.dataset.presentationState).toBe('exiting');
+    expect(disclosure.getAttribute('aria-hidden')).toBe('true');
+    await new Promise((resolve) => window.setTimeout(resolve, 240));
+    expect(disclosure.getBoundingClientRect().height).toBeLessThanOrEqual(1);
   });
 
   it('renders bounded command output and follows only while the user stays at the bottom', async () => {
