@@ -868,7 +868,17 @@ describe('Local Environment Flower surface adapter', () => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/retry') return { ok: true };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1') {
-        return detailView({ run_status: 'running', active_run_id: 'run-retry' }, { view_version: 5, activity: 'active', turn_id: 'turn-retry' });
+        return detailView({
+          run_status: 'running',
+          active_run_id: 'run-retry',
+          run_progress: { run_id: 'run-retry', turn_id: 'turn-retry', phase: 'retrying' },
+        }, {
+          view_version: 5,
+          activity: 'active',
+          run_id: 'run-retry',
+          turn_id: 'turn-retry',
+          run_progress: { phase: 'retrying' },
+        });
       }
       throw new Error(`unexpected path: ${request.path}`);
     });
@@ -954,9 +964,14 @@ describe('Local Environment Flower surface adapter', () => {
   it('loads a typed current view from the canonical thread detail endpoint', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1') {
-        return detailView({ run_status: 'running', active_run_id: 'run-1' }, {
+        return detailView({
+          run_status: 'running',
+          active_run_id: 'run-1',
+          run_progress: { run_id: 'run-1', turn_id: 'turn-1', phase: 'streaming' },
+        }, {
           view_version: 9,
           activity: 'active',
+          run_progress: { phase: 'streaming' },
           turn_id: 'turn-1',
           items: [{
             id: 'assistant-live',
@@ -983,7 +998,10 @@ describe('Local Environment Flower surface adapter', () => {
       status: 'streaming',
     });
     expect(snapshot.current).toEqual(currentView({
-      view_version: 9, activity: 'active', turn_id: 'turn-1',
+      view_version: 9,
+      activity: 'active',
+      turn_id: 'turn-1',
+      run_progress: { phase: 'streaming' },
       items: [{
         id: 'assistant-live', turn_id: 'turn-1', run_id: 'run-1', kind: 'assistant',
         text: 'working live', live: true, created_at: '2026-08-12T00:00:42Z',
