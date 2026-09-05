@@ -559,7 +559,11 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
         <button
           type="button"
           data-testid="flower-turn-launcher-send"
-          onClick={() => void props.onSubmit({ prompt: 'inspect from launcher', intent: props.intent })}
+          onClick={() => void props.onSubmit({
+            client_request_id: 'client_launcher_request',
+            prompt: 'inspect from launcher',
+            intent: props.intent,
+          })}
         >
           Send
         </button>
