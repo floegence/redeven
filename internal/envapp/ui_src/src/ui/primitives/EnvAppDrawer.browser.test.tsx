@@ -52,16 +52,21 @@ describe('EnvAppDrawer browser geometry', () => {
     await settle();
 
     const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]');
+    const overlay = document.querySelector<HTMLElement>('[data-floe-dialog-overlay-root]');
     const boundary = panel?.querySelector<HTMLElement>('[data-redeven-desktop-titlebar-no-drag="true"]');
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Template name"]');
     expect(panel).toBeTruthy();
+    expect(overlay).toBeTruthy();
     expect(boundary).toBeTruthy();
     expect(input).toBeTruthy();
 
     const panelRect = panel!.getBoundingClientRect();
     const boundaryRect = boundary!.getBoundingClientRect();
     const panelStyle = getComputedStyle(panel!);
+    const overlayStyle = getComputedStyle(overlay!);
     expect(panelStyle.position).toBe('fixed');
+    expect(panelStyle.getPropertyValue('app-region').trim()).toBe('no-drag');
+    expect(overlayStyle.getPropertyValue('app-region').trim()).not.toBe('no-drag');
     expect(panelStyle.getPropertyValue('--floe-floating-enter-y').trim()).toBe('0');
     expect(panelStyle.getPropertyValue('--floe-floating-enter-scale').trim()).toBe('1');
     expect(panelStyle.getPropertyValue('--floe-floating-origin').trim()).toBe('right center');
@@ -72,6 +77,9 @@ describe('EnvAppDrawer browser geometry', () => {
     expect(Math.abs(boundaryRect.top - panelRect.top)).toBeLessThanOrEqual(1);
     expect(Math.abs(boundaryRect.right - panelRect.right)).toBeLessThanOrEqual(1);
     expect(Math.abs(boundaryRect.bottom - panelRect.bottom)).toBeLessThanOrEqual(1);
+
+    const titlebarTarget = document.elementFromPoint(window.innerWidth / 2, 16);
+    expect(titlebarTarget?.closest('[data-floe-dialog-backdrop]')).toBeTruthy();
 
     await userEvent.click(input!);
     expect(document.activeElement).toBe(input);
