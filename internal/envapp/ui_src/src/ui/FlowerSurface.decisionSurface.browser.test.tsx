@@ -375,7 +375,6 @@ describe('Flower bottom decision surface', () => {
         view_version: 22 + submitApproval.mock.calls.length,
         activity: 'active' as const,
         run_id: approvalThread.active_run_id,
-        turn_id: 'turn-fixture',
         run_progress: { phase: 'finalizing' as const },
         turn_id: action.run_id,
         interactions: input.interaction_id === action.action_id
