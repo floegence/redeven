@@ -1685,10 +1685,19 @@ describe('EnvPortForwardsPage', () => {
       digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', channel: 'special', trust: 'registry_verified', selectable: true, relation: 'newer', verification_status: 'verified',
     };
     let createBody: Record<string, any> | null = null;
+    let rejectInstall = true;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') return { services: [] };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'POST') {
+        if (rejectInstall) {
+          rejectInstall = false;
+          throw new LocalApiError({
+            code: 'RECOMMENDED_RELEASE_UNAVAILABLE',
+            status: 409,
+            message: 'The recommended release is no longer available.',
+          });
+        }
         createBody = JSON.parse(String(init.body));
         return {
           service: { service_id: 'mws-webtop', template_id: template.template_id, deployment: 'container', workspace_path: template.default_workspace_path, release_status: releaseStatus('oci', verified.tag), desired_state: 'running', observed_state: 'installing', forward_id: 'managed-webtop', runtime_port: 3000 },
@@ -1732,10 +1741,17 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy selected version')?.click();
     await flushPage();
+    expect(install?.disabled).toBe(false);
+    install?.click();
+    await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith(
+      'Failed to add service',
+      'The recommended release is unavailable. Refresh and choose an available release.',
+    ));
     expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull();
     expect(install?.disabled).toBe(false);
     install?.click();
     await waitForAssertion(() => expect(createBody).toMatchObject({ template_id: 'example-webtop', target_release_id: 'verified-release' }));
+    expect(host.querySelector('[data-testid="env-app-drawer-mock"]')).toBeNull();
   });
 
   it('hands an accepted install to its service row and lets the drawer close without cancelling', async () => {
