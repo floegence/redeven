@@ -3354,6 +3354,7 @@
 		"RELEASE_SOURCE_NETWORK_UNAVAILABLE": "Redeven 無法連線至 Registry。請檢查網路連線後重新整理。",
 		"RELEASE_SOURCE_RESPONSE_INVALID": "Registry 傳回的版本資訊無效，請稍後重新整理或檢查設定的來源。",
 		"RELEASE_SOURCE_UNAVAILABLE": "Redeven 無法從 Registry 讀取版本。請檢查網路和設定的來源後重新整理。",
+		"RECOMMENDED_RELEASE_UNAVAILABLE": "推薦版本無法使用，請重新整理並選擇可用版本。",
 		"unavailable": "Redeven 無法載入可用版本。請檢查網路後重新整理。"
 	  },
 	  "releaseVerification": { "pending": "正在檢查" },
@@ -3382,9 +3383,10 @@
 		"RELEASE_IDENTITY_UNVERIFIABLE": "來源未提供此精確版本可驗證的身分資訊。",
 		"RELEASE_DEPRECATED": "npm Registry 已將此版本標記為棄用。",
 		"RELEASE_NOT_FOUND": "Registry 已不再提供此版本。",
+		"RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "該 tag 已無法使用，但此精確映像 digest 仍已驗證。請明確選取後再部署固定映像。",
 		"unavailable": "無法選擇此版本。"
 	  },
-	  "releaseBadge": { "current": "目前", "recommended": "Redeven 推薦", "latestStable": "最新穩定", "latestPreview": "最新預覽" },
+	  "releaseBadge": { "current": "目前", "recommended": "Redeven 推薦", "recommendedUnavailable": "推薦版本無法使用", "verifiedDigest": "已驗證固定映像", "latestStable": "最新穩定", "latestPreview": "最新預覽" },
       "deploySelectedRelease": "部署所選版本",
       "downgradeRequiresStopped": "選擇較舊版本前請先停止服務。",
       "releaseRisk": {

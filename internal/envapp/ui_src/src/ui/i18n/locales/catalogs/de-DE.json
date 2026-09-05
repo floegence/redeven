@@ -3354,6 +3354,7 @@
 		"RELEASE_SOURCE_NETWORK_UNAVAILABLE": "Redeven konnte die Registry nicht erreichen. Prüfen Sie die Netzwerkverbindung und aktualisieren Sie die Ansicht.",
 		"RELEASE_SOURCE_RESPONSE_INVALID": "Die Registry hat ungültige Versionsinformationen zurückgegeben. Aktualisieren Sie die Ansicht später oder prüfen Sie die konfigurierte Quelle.",
 		"RELEASE_SOURCE_UNAVAILABLE": "Redeven konnte keine Versionen aus der Registry lesen. Prüfen Sie das Netzwerk und die konfigurierte Quelle und aktualisieren Sie dann die Ansicht.",
+		"RECOMMENDED_RELEASE_UNAVAILABLE": "Die empfohlene Version ist nicht verfügbar. Aktualisieren Sie die Liste und wählen Sie eine verfügbare Version.",
 		"unavailable": "Redeven konnte die verfügbaren Versionen nicht laden. Prüfen Sie das Netzwerk und aktualisieren Sie dann die Ansicht."
 	  },
 	  "releaseVerification": { "pending": "Wird geprüft" },
@@ -3369,8 +3370,8 @@
       "registryTokenDescription": "Wird nur für diese Registry-Abfrage verwendet. Es wird weder in der Vorlage gespeichert noch an Redeven-Server gesendet.",
 	  "releaseTokenRefreshPrompt": "Token eingeben und aktualisieren, um verfügbare Versionen zu laden.",
 	  "releaseTrust": { "catalog_reviewed_source": "Validierte Katalogquelle", "upstream_registry": "Upstream-Registry", "user_configured_registry": "Benutzerdefinierte Registry", "registry_verified": "Von der Registry bestätigte Identität", "registry": "Registry-Quelle" },
-	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven kann die Node.js-Anforderung dieser Version nicht sicher prüfen.", "NODE_VERSION_UNAVAILABLE": "Diese Version ist mit der von Redeven verwalteten Node.js-Laufzeitumgebung nicht kompatibel.", "PLATFORM_UNAVAILABLE": "Für dieses Tag gibt es kein Image für die aktuelle Plattform.", "RELEASE_IDENTITY_UNVERIFIABLE": "Die Quelle hat für diese genaue Version keine überprüfbare Identität bereitgestellt.", "RELEASE_DEPRECATED": "Die npm-Registry kennzeichnet diese Version als veraltet.", "RELEASE_NOT_FOUND": "Diese Version ist in der Registry nicht mehr verfügbar.", "unavailable": "Diese Version kann nicht ausgewählt werden." },
-	  "releaseBadge": { "current": "Aktuell", "recommended": "Von Redeven empfohlen", "latestStable": "Neueste stabile", "latestPreview": "Neueste Vorschau" },
+	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven kann die Node.js-Anforderung dieser Version nicht sicher prüfen.", "NODE_VERSION_UNAVAILABLE": "Diese Version ist mit der von Redeven verwalteten Node.js-Laufzeitumgebung nicht kompatibel.", "PLATFORM_UNAVAILABLE": "Für dieses Tag gibt es kein Image für die aktuelle Plattform.", "RELEASE_IDENTITY_UNVERIFIABLE": "Die Quelle hat für diese genaue Version keine überprüfbare Identität bereitgestellt.", "RELEASE_DEPRECATED": "Die npm-Registry kennzeichnet diese Version als veraltet.", "RELEASE_NOT_FOUND": "Diese Version ist in der Registry nicht mehr verfügbar.", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "Der Tag ist nicht verfügbar, aber dieser exakte Image-Digest ist weiterhin verifiziert. Wählen Sie ihn ausdrücklich aus, um das unveränderliche Image bereitzustellen.", "unavailable": "Diese Version kann nicht ausgewählt werden." },
+	  "releaseBadge": { "current": "Aktuell", "recommended": "Von Redeven empfohlen", "recommendedUnavailable": "Empfohlene Version nicht verfügbar", "verifiedDigest": "Verifiziertes unveränderliches Image", "latestStable": "Neueste stabile", "latestPreview": "Neueste Vorschau" },
       "deploySelectedRelease": "Ausgewählte Version bereitstellen",
       "downgradeRequiresStopped": "Stoppen Sie den Dienst, bevor Sie eine ältere Version auswählen.",
       "releaseRisk": {

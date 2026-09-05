@@ -3274,6 +3274,7 @@ export const enUS = defineDictionary({
 		RELEASE_SOURCE_NETWORK_UNAVAILABLE: 'Redeven could not reach the registry. Check the network connection, then refresh.',
 		RELEASE_SOURCE_RESPONSE_INVALID: 'The registry returned invalid version information. Refresh later or check the configured source.',
 		RELEASE_SOURCE_UNAVAILABLE: 'Redeven could not read versions from the registry. Check the network and configured source, then refresh.',
+		RECOMMENDED_RELEASE_UNAVAILABLE: 'The recommended release is unavailable. Refresh and choose an available release.',
 		unavailable: 'Redeven could not load available versions. Check the network, then refresh.',
 	  },
 	  releaseVerification: {
@@ -3312,11 +3313,14 @@ export const enUS = defineDictionary({
 		RELEASE_IDENTITY_UNVERIFIABLE: 'The source did not provide a verifiable identity for this exact version.',
 		RELEASE_DEPRECATED: 'The npm Registry marks this release as deprecated.',
 		RELEASE_NOT_FOUND: 'This version is no longer available from the registry.',
+		RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED: 'The tag is unavailable, but this exact image digest is still verified. Select it explicitly to deploy the fixed image.',
 		unavailable: 'This release cannot be selected.',
 	  },
 	  releaseBadge: {
 		current: 'Current',
 		recommended: 'Redeven recommended',
+		recommendedUnavailable: 'Recommended unavailable',
+		verifiedDigest: 'Verified fixed image',
 		latestStable: 'Latest stable',
 		latestPreview: 'Latest preview',
 	  },

@@ -1666,6 +1666,78 @@ describe('EnvPortForwardsPage', () => {
     }));
   });
 
+  it('requires an explicit verified release when the built-in recommendation is unavailable', async () => {
+    const template = {
+      template_id: 'example-webtop', service_family_id: 'linuxserver-webtop', name: 'LinuxServer Webtop', description: 'Browser desktop',
+      source: 'builtin', deployment: 'container', revision: 2, duplicateable: false, editable: false, available: true,
+      recommended_release: { schema_version: 1 as const, kind: 'oci' as const, source: 'lscr.io/linuxserver/webtop', tag: '654ea8e3-ls177', digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      developer_preview: false, notices: [], deployments: [{ deployment: 'container', available: true }],
+      default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/webtop', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
+      spec: { schema_version: 5, kind: 'container', endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/' }, container: { image: 'lscr.io/linuxserver/webtop:654ea8e3-ls177@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } },
+    };
+    const stale = {
+      schema_version: 2, candidate_id: 'stale-recommendation', source_kind: 'oci', source: 'lscr.io/linuxserver/webtop', tag: '654ea8e3-ls177',
+      digest: template.recommended_release.digest, channel: 'special', trust: 'catalog_reviewed_source', selectable: false, relation: 'unknown',
+      recommendation_status: 'unavailable', verification_status: 'unavailable', reason_code: 'RELEASE_NOT_FOUND', reason: 'This version is no longer available from the registry.',
+    };
+    const verified = {
+      schema_version: 2, candidate_id: 'verified-release', source_kind: 'oci', source: 'lscr.io/linuxserver/webtop', tag: '7c4ebdc9-ls209',
+      digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', channel: 'special', trust: 'registry_verified', selectable: true, relation: 'newer', verification_status: 'verified',
+    };
+    let createBody: Record<string, any> | null = null;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
+      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') return { services: [] };
+      if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'POST') {
+        createBody = JSON.parse(String(init.body));
+        return {
+          service: { service_id: 'mws-webtop', template_id: template.template_id, deployment: 'container', workspace_path: template.default_workspace_path, release_status: releaseStatus('oci', verified.tag), desired_state: 'running', observed_state: 'installing', forward_id: 'managed-webtop', runtime_port: 3000 },
+          operation: { operation_id: 'mop-webtop-install', service_id: 'mws-webtop', state: 'pending', stage: 'environment_check', progress_current: 0, progress_total: 7 },
+        };
+      }
+      if (url === '/_redeven_proxy/api/managed-web-service-templates/example-webtop/release-candidates' && init?.method === 'POST') {
+        return { schema_version: 2, recommended_release: template.recommended_release, candidates: [stale, verified], catalog_status: 'complete', has_more: false, loaded_count: 2, check_status: 'fresh', checked_at_unix_ms: Date.now() };
+      }
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-webtop-install', service_id: 'mws-webtop', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('Container templates'))?.click();
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
+    await flushPage();
+
+    const chooseVersion = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Choose version');
+    chooseVersion?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy());
+    const staleButton = host.querySelector<HTMLButtonElement>('[data-release-id="stale-recommendation"]')!;
+    const deploySelected = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy selected version');
+    expect(staleButton.disabled).toBe(true);
+    expect(deploySelected?.disabled).toBe(true);
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel')?.click();
+    await flushPage();
+
+    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Install and start');
+    expect(install?.disabled).toBe(true);
+    expect(host.textContent).toContain('The recommended release is unavailable. Refresh and choose an available release.');
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Choose version')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-release-id="verified-release"]')).toBeTruthy());
+    host.querySelector<HTMLButtonElement>('[data-release-id="verified-release"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy selected version')?.click();
+    await flushPage();
+    expect(host.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull();
+    expect(install?.disabled).toBe(false);
+    install?.click();
+    await waitForAssertion(() => expect(createBody).toMatchObject({ template_id: 'example-webtop', target_release_id: 'verified-release' }));
+  });
+
   it('hands an accepted install to its service row and lets the drawer close without cancelling', async () => {
     const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
     const template = {

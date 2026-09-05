@@ -140,6 +140,69 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(surface.getBoundingClientRect().width).toBeLessThanOrEqual(390);
   });
 
+  it('keeps an unavailable recommendation historical without presenting it as deployable', async () => {
+    await page.viewport(640, 760);
+    const host = document.createElement('div');
+    host.style.width = '620px';
+    document.body.appendChild(host);
+    const [selected, setSelected] = createSignal('');
+    const unavailable = {
+      schema_version: 2 as const,
+      candidate_id: 'stale-recommendation',
+      source_kind: 'oci' as const,
+      source: 'lscr.io/linuxserver/webtop',
+      tag: '654ea8e3-ls177',
+      digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      channel: 'special' as const,
+      trust: 'catalog_reviewed_source',
+      selectable: false,
+      relation: 'unknown' as const,
+      recommendation_status: 'unavailable' as const,
+      verification_status: 'unavailable' as const,
+      reason_code: 'RELEASE_NOT_FOUND',
+      reason: 'This version is no longer available from the registry.',
+    };
+    const verified = {
+      ...unavailable,
+      candidate_id: 'verified-release',
+      tag: 'latest-verified',
+      digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      selectable: true,
+      recommendation_status: undefined,
+      verification_status: 'verified' as const,
+      reason_code: undefined,
+      reason: undefined,
+    };
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{
+        schema_version: 2,
+        recommended_release: { schema_version: 1, kind: 'oci', source: unavailable.source, tag: unavailable.tag, digest: unavailable.digest },
+        check_status: 'fresh',
+        catalog_status: 'complete',
+        has_more: false,
+        loaded_count: 2,
+        checked_at_unix_ms: Date.now(),
+        candidates: [unavailable, verified],
+      }}
+      loading={false}
+      error=""
+      query=""
+      filter="all"
+      selectedID={selected()}
+      onQueryChange={() => undefined}
+      onFilterChange={() => undefined}
+      onSelect={setSelected}
+    />, host);
+    await settle();
+
+    const stale = host.querySelector<HTMLButtonElement>('[data-release-id="stale-recommendation"]')!;
+    expect(stale.disabled).toBe(true);
+    expect(stale.textContent).toContain('Recommended unavailable');
+    expect(stale.textContent).not.toContain('Redeven recommended');
+    await userEvent.click(host.querySelector<HTMLButtonElement>('[data-release-id="verified-release"]')!);
+    expect(selected()).toBe('verified-release');
+  });
+
   it('fills the available drawer body with compact releases and scrolls from row content', async () => {
     await page.viewport(1440, 960);
     const host = document.createElement('div');

@@ -57,6 +57,14 @@ type OCIReleaseVerificationRequest struct {
 	Tags         []string
 }
 
+type OCIReleaseDigestVerificationRequest struct {
+	Reference    string
+	PlatformOS   string
+	PlatformArch string
+	Credential   RegistryCredential
+	Digests      []string
+}
+
 type OCIRelease struct {
 	Tag            string
 	IndexDigest    string
@@ -64,6 +72,7 @@ type OCIRelease struct {
 	PlatformOS     string
 	PlatformArch   string
 	Compatible     bool
+	DigestVerified bool
 	ReasonCode     string
 	Reason         string
 }
@@ -230,6 +239,41 @@ func (d OCIReleaseDiscovery) VerifyTags(ctx context.Context, request OCIReleaseV
 	return items, nil
 }
 
+// VerifyDigests verifies immutable platform image digests without requiring
+// the mutable source tag to remain published. The returned item is marked so
+// callers can present it as a fixed image rather than a live tag.
+func (d OCIReleaseDiscovery) VerifyDigests(ctx context.Context, request OCIReleaseDigestVerificationRequest) ([]OCIRelease, error) {
+	client := d.Client
+	if client == nil {
+		client = &http.Client{Timeout: 45 * time.Second}
+	}
+	reference, err := parseRegistryReference(request.Reference)
+	if err != nil {
+		return nil, err
+	}
+	digests := uniqueRegistryDigests(request.Digests)
+	if len(digests) == 0 {
+		return []OCIRelease{}, nil
+	}
+	items := make([]OCIRelease, 0, len(digests))
+	token := ""
+	for _, digest := range digests {
+		item, refreshed, resolveErr := d.resolveDigest(ctx, client, reference, digest, request.PlatformOS, request.PlatformArch, request.Credential, token)
+		if refreshed != "" {
+			token = refreshed
+		}
+		if resolveErr != nil {
+			if unavailable, ok := unavailableOCIRelease(digest, request.PlatformOS, request.PlatformArch, resolveErr); ok {
+				items = append(items, unavailable)
+				continue
+			}
+			return items, resolveErr
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
 func collectOCIReleases(resolved []OCIRelease, present []bool) []OCIRelease {
 	items := make([]OCIRelease, 0, len(resolved))
 	for index := range resolved {
@@ -319,6 +363,23 @@ func uniqueRegistryTags(values []string) []string {
 	return result
 }
 
+func uniqueRegistryDigests(values []string) []string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !registryDigestPattern.MatchString(value) {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
 func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client, reference parsedRegistryReference, tag, platformOS, platformArch string, credential RegistryCredential, token string) (OCIRelease, string, error) {
 	accept := strings.Join([]string{
 		"application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json",
@@ -389,6 +450,19 @@ func (d OCIReleaseDiscovery) resolveTag(ctx context.Context, client *http.Client
 	if !item.Compatible {
 		item.ReasonCode, item.Reason = "PLATFORM_UNAVAILABLE", "This tag does not publish an image for the current platform."
 	}
+	return item, refreshed, nil
+}
+
+func (d OCIReleaseDiscovery) resolveDigest(ctx context.Context, client *http.Client, reference parsedRegistryReference, digest, platformOS, platformArch string, credential RegistryCredential, token string) (OCIRelease, string, error) {
+	item, refreshed, err := d.resolveTag(ctx, client, reference, digest, platformOS, platformArch, credential, token)
+	if err != nil {
+		return OCIRelease{}, refreshed, err
+	}
+	if item.IndexDigest != digest || item.PlatformDigest != digest {
+		return OCIRelease{}, refreshed, &ociReleaseVerificationError{cause: fmt.Errorf("digest reference did not resolve to the requested platform image")}
+	}
+	item.Tag = digest
+	item.DigestVerified = item.Compatible
 	return item, refreshed, nil
 }
 

@@ -3444,6 +3444,7 @@
 		"RELEASE_SOURCE_NETWORK_UNAVAILABLE": "Redeven не удалось подключиться к Registry. Проверьте сетевое подключение и обновите список.",
 		"RELEASE_SOURCE_RESPONSE_INVALID": "Registry вернул некорректные сведения о версиях. Обновите список позже или проверьте настроенный источник.",
 		"RELEASE_SOURCE_UNAVAILABLE": "Redeven не удалось получить версии из Registry. Проверьте сеть и настроенный источник, затем обновите список.",
+		"RECOMMENDED_RELEASE_UNAVAILABLE": "Рекомендуемая версия недоступна. Обновите список и выберите доступную версию.",
 		"unavailable": "Redeven не удалось загрузить доступные версии. Проверьте сеть и обновите список."
 	  },
 	  "releaseVerification": { "pending": "Проверка" },
@@ -3459,8 +3460,8 @@
       "registryTokenDescription": "Используется только для этого запроса к Registry. Он не сохраняется в шаблоне и не отправляется на серверы Redeven.",
 	  "releaseTokenRefreshPrompt": "Введите токен и обновите список, чтобы получить доступные версии.",
 	  "releaseTrust": { "catalog_reviewed_source": "Проверенный источник каталога", "upstream_registry": "Исходный Registry", "user_configured_registry": "Пользовательский Registry", "registry_verified": "Идентичность подтверждена Registry", "registry": "Источник Registry" },
-	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven не может безопасно проверить требования этой версии к Node.js.", "NODE_VERSION_UNAVAILABLE": "Эта версия несовместима с управляемой Redeven средой выполнения Node.js.", "PLATFORM_UNAVAILABLE": "Для этого тега нет образа текущей платформы.", "RELEASE_IDENTITY_UNVERIFIABLE": "Источник не предоставил проверяемую идентичность для этой точной версии.", "RELEASE_DEPRECATED": "Registry npm помечает эту версию как устаревшую.", "RELEASE_NOT_FOUND": "Эта версия больше недоступна в Registry.", "unavailable": "Эту версию нельзя выбрать." },
-	  "releaseBadge": { "current": "Текущая", "recommended": "Рекомендована Redeven", "latestStable": "Последняя стабильная", "latestPreview": "Последняя предварительная" },
+	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven не может безопасно проверить требования этой версии к Node.js.", "NODE_VERSION_UNAVAILABLE": "Эта версия несовместима с управляемой Redeven средой выполнения Node.js.", "PLATFORM_UNAVAILABLE": "Для этого тега нет образа текущей платформы.", "RELEASE_IDENTITY_UNVERIFIABLE": "Источник не предоставил проверяемую идентичность для этой точной версии.", "RELEASE_DEPRECATED": "Registry npm помечает эту версию как устаревшую.", "RELEASE_NOT_FOUND": "Эта версия больше недоступна в Registry.", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "Тег недоступен, но точный дайджест этого образа по-прежнему проверен. Выберите его явно, чтобы развернуть фиксированный образ.", "unavailable": "Эту версию нельзя выбрать." },
+	  "releaseBadge": { "current": "Текущая", "recommended": "Рекомендована Redeven", "recommendedUnavailable": "Рекомендуемая версия недоступна", "verifiedDigest": "Проверенный фиксированный образ", "latestStable": "Последняя стабильная", "latestPreview": "Последняя предварительная" },
       "deploySelectedRelease": "Развернуть выбранную версию",
       "downgradeRequiresStopped": "Остановите сервис перед выбором более старой версии.",
       "releaseRisk": {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -354,7 +355,17 @@ func (m *Manager) resolveReleaseCandidate(ctx context.Context, scope, candidateI
 		return nil, serviceError("RELEASE_CANDIDATE_UNVERIFIED", "Verify this release before selecting it.", 409, true, nil)
 	}
 	if cached.Candidate.SourceKind == "oci" {
-		items, err := m.verifyOCIReleaseTags(withReleaseSourceRefresh(ctx), cached.Spec, []string{cached.Candidate.Tag})
+		var items []containerengine.OCIRelease
+		var err error
+		if cached.Candidate.DigestVerified {
+			items, err = m.verifyOCIReleaseDigests(withReleaseSourceRefresh(ctx), cached.Spec, []string{cached.Candidate.Digest})
+			if len(items) == 1 {
+				items[0].Tag = cached.Candidate.Tag
+				items[0].DigestVerified = true
+			}
+		} else {
+			items, err = m.verifyOCIReleaseTags(withReleaseSourceRefresh(ctx), cached.Spec, []string{cached.Candidate.Tag})
+		}
 		if err != nil {
 			return nil, err
 		}

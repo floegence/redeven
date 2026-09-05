@@ -523,6 +523,11 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(req.TargetReleaseID) == "" {
+		if err := m.ensureDefaultReleaseAvailable(ctx, *template, secretValues); err != nil {
+			return nil, err
+		}
+	}
 	var selectedRelease *cachedReleaseCandidate
 	if strings.TrimSpace(req.TargetReleaseID) != "" {
 		selectedRelease, err = m.resolveReleaseCandidate(ctx, "template:"+template.TemplateID, req.TargetReleaseID, secretValues, nil, template.Source)
@@ -580,6 +585,44 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	m.launch(service, op, operationInputs{})
 	return &CreateResult{Service: service, Operation: op}, nil
+}
+
+// ensureDefaultReleaseAvailable prevents a stale catalog recommendation from
+// becoming an implicit installation choice. Explicit candidate selections are
+// revalidated separately by resolveReleaseCandidate.
+func (m *Manager) ensureDefaultReleaseAvailable(ctx context.Context, template Template, parameters map[string]string) error {
+	if template.Source != "builtin" || template.Spec == nil || template.RecommendedRelease == nil {
+		return nil
+	}
+	recommended := template.RecommendedRelease
+	switch recommended.Kind {
+	case "oci":
+		if template.Spec.Container == nil || strings.TrimSpace(recommended.Tag) == "" || strings.TrimSpace(recommended.Digest) == "" {
+			return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is not verifiable. Refresh the version list and select an available release.", 409, true, nil)
+		}
+		items, err := m.verifyOCIReleaseTags(ctx, *template.Spec, []string{recommended.Tag})
+		if err != nil {
+			return err
+		}
+		if len(items) != 1 || !items[0].Compatible || items[0].PlatformDigest != recommended.Digest {
+			return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is no longer available at its Registry source. Refresh the version list and select an available release.", 409, true, nil)
+		}
+	case "npm":
+		if template.Spec.Host == nil || template.Spec.Host.NPM == nil {
+			return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is not verifiable. Refresh the version list and select an available release.", 409, true, nil)
+		}
+		items, err := m.discoverNPMCandidates(ctx, *template.Spec, parameters, nil, template.Source)
+		if err != nil {
+			return err
+		}
+		for _, item := range items {
+			if sameReleaseIdentity(item.Identity, *recommended) && item.Candidate.Selectable {
+				return nil
+			}
+		}
+		return serviceError("RECOMMENDED_RELEASE_UNAVAILABLE", "The recommended release is no longer available at its package Registry. Refresh the version list and select an available release.", 409, true, nil)
+	}
+	return nil
 }
 
 func defaultReleaseIdentity(template Template) ReleaseIdentity {
