@@ -1597,6 +1597,84 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(surfaceAdapter.loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('does not persist a transient active current progress gap while approval detail catches up', async () => {
+    const threadID = 'thread-approval-progress-gap';
+    const turnID = 'turn-approval-progress-gap';
+    const runID = 'run-approval-progress-gap';
+    const running = thread({
+      thread_id: threadID,
+      title: 'Approval progress gap',
+      status: 'running',
+      active_run_id: runID,
+      run_progress: { phase: 'preparing', run_id: runID, turn_id: turnID },
+      messages: [{
+        id: 'approval-gap-user',
+        turn_id: turnID,
+        run_id: runID,
+        role: 'user',
+        content: 'Run the deployment',
+        status: 'complete',
+        created_at_ms: 1,
+      }],
+    });
+    const waiting = thread({
+      ...running,
+      status: 'waiting_approval',
+      updated_at_ms: 4,
+      approval_pending: true,
+      approval_pending_count: 1,
+      approval_actions: [{
+        action_id: 'approval-gap-action',
+        origin: 'main_tool',
+        run_id: runID,
+        tool_id: 'approval-gap-tool',
+        tool_name: 'terminal.exec',
+        state: 'requested',
+        status: 'pending',
+        requested_at_ms: 4,
+        can_approve: true,
+        queue_order: 1,
+        summary: { label: 'Run deployment' },
+      }],
+    });
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);
+    let loadCount = 0;
+    const loadThread = vi.fn(async () => {
+      loadCount += 1;
+      return liveBootstrap(loadCount === 1 ? running : waiting, loadCount === 1 ? 1 : 2);
+    });
+    const surfaceAdapter = {
+      ...adapter(true),
+      listThreads: vi.fn(async () => [running]),
+      loadThread,
+      connectLiveStream: stream.connect,
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-flower-thread-status="running"]') !== null);
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: threadID,
+      current: {
+        thread_id: threadID,
+        view_version: 2,
+        activity: 'active',
+        run_id: runID,
+        turn_id: turnID,
+        items: [],
+      },
+    });
+
+    await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="approval"]') !== null);
+    expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+    expect(runtime.textContent).not.toContain('a running thread current requires run_progress');
+    expect(loadThread).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for a higher revision after a terminal detail request fails', async () => {
     const completed = completedTerminalThread();
     const advanced = thread({

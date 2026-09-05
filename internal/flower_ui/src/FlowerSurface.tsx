@@ -531,6 +531,13 @@ function getErrorMessage(error: unknown): string {
 
 const FLOWER_APPROVAL_CONFLICT_ERROR_CODE = 'AI_APPROVAL_CONFLICT';
 const FLOWER_ACTIVE_TURN_ADMISSION_ERROR_CODE = 'floret_thread_admission_blocked';
+const FLOWER_TRANSIENT_CURRENT_PROGRESS_ERROR = 'Flower contract error: a running thread current requires run_progress.';
+
+function isTransientCurrentProgressGap(current: FlowerRuntimeCurrentView, error: unknown): boolean {
+  return current.activity === 'active'
+    && current.run_progress == null
+    && getErrorMessage(error) === FLOWER_TRANSIENT_CURRENT_PROGRESS_ERROR;
+}
 
 function isFlowerApprovalConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -4211,9 +4218,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         current.view_version,
       );
       if (threadID === selectedThreadID()) {
-        setThreadLoadError(threadDetailUserError(error));
-        if (current.activity === 'active' && current.run_progress == null) {
+        const transientProgressGap = isTransientCurrentProgressGap(current, error);
+        if (transientProgressGap) {
+          // Approval publication briefly exposes an active current before its
+          // interaction is attached. Keep the last valid detail visible while
+          // the canonical snapshot catches up.
+          setThreadLoadError('');
           void requestThreadDetail(threadID, current.view_version, 'live_current', true);
+        } else {
+          setThreadLoadError(threadDetailUserError(error));
         }
       }
       return false;
