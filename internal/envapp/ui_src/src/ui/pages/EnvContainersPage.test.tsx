@@ -1088,7 +1088,7 @@ describe('native Containers page', () => {
     expect(harness.listFiles).not.toHaveBeenCalled();
   });
 
-  it('renders inspect filesystem layers separately from build history', async () => {
+  it('keeps useful build steps primary and technical layer IDs in one disclosure', async () => {
     harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images' ? [{
       id: 'sha256:image-layered',
       reference: 'ghcr.io/floegence/flowersec-runtime',
@@ -1101,10 +1101,10 @@ describe('native Containers page', () => {
     harness.resourceDetails.mockResolvedValue({
       id: 'sha256:image-layered',
       reference: 'ghcr.io/floegence/flowersec-runtime',
-      layers: [{ digest: 'sha256:root-layer' }, { digest: 'sha256:top-layer' }],
+      layers: [{ digest: 'sha256:root-layer' }, { digest: 'sha256:middle-layer' }, { digest: 'sha256:top-layer' }],
     });
     harness.imageBuildHistory.mockResolvedValue([
-      { step: 0, operation: 'run', summary: 'bazel build @bookworm//base-files/amd64', filesystem_effect: 'filesystem', size_bytes: 10_400_000, created_at_unix_ms: 1_700_000_000_000 },
+      { step: 0, operation: 'run', summary: 'apt-get update && apt-get install -y curl', filesystem_effect: 'filesystem', size_bytes: 10_400_000, created_at_unix_ms: 1_700_000_000_000 },
       { step: 1, operation: 'env', filesystem_effect: 'metadata_only', size_bytes: 0, created_at_unix_ms: 0 },
     ]);
     const host = document.createElement('div');
@@ -1124,22 +1124,21 @@ describe('native Containers page', () => {
     await settle();
 
     expect(harness.imageBuildHistory).toHaveBeenCalledWith('sha256:image-layered', 'docker', 'docker-primary');
-    expect(host.textContent).toContain('bazel');
+    expect(host.textContent).toContain('apt-get update && apt-get install -y curl');
     expect(host.textContent).not.toContain('containers.detail.buildOperations.run');
+    expect(host.textContent).toContain('containers.detail.filesystemLayerCount');
+    expect(host.querySelector('.container-layer-identities')?.hasAttribute('open')).toBe(false);
 
     harness.imageBuildHistory.mockClear();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-      .find((button) => button.textContent?.includes('containers.detail.filesystemLayers'))
-      ?.click();
+    (host.querySelector('.container-layer-identities > summary') as HTMLElement).click();
     await settle();
-    expect(host.querySelectorAll('.container-layer-row')).toHaveLength(3);
+    expect(host.querySelectorAll('.container-layer-identities .container-layer-row')).toHaveLength(4);
     expect(harness.imageBuildHistory).not.toHaveBeenCalled();
-
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-      .find((button) => button.textContent?.includes('containers.detail.buildSteps'))
-      ?.click();
-    await settle();
-    expect(harness.imageBuildHistory).toHaveBeenCalledWith('sha256:image-layered', 'docker', 'docker-primary');
+    expect(host.querySelector('.container-layer-identities')?.hasAttribute('open')).toBe(true);
+    expect(host.textContent).toContain('root-layer');
+    expect(host.textContent).toContain('containers.detail.baseLayer');
+    expect(host.textContent).toContain('containers.detail.middleLayer');
+    expect(host.textContent).toContain('containers.detail.topLayer');
     expect(host.textContent).toContain('containers.detail.buildEffects.metadata_only');
     expect(host.textContent).not.toContain('containers.detail.noIntermediateImage');
     expect(host.textContent).not.toContain('sha256:history-layer');

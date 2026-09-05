@@ -317,7 +317,11 @@ func describeBuildHistoryCommand(value string) (ImageBuildHistoryOperation, stri
 	}
 	if marker := strings.Index(strings.ToLower(command), "#(nop)"); marker >= 0 {
 		directive := strings.TrimSpace(command[marker+len("#(nop)"):])
-		return describeBuildHistoryDirective(directive)
+		operation, summary, effect, _ := describeBuildHistoryDirective(directive)
+		return operation, summary, effect
+	}
+	if operation, summary, effect, recognized := describeBuildHistoryDirective(command); recognized {
+		return operation, summary, effect
 	}
 	command = normalizeBuildHistoryCommand(command)
 	if command == "" {
@@ -326,43 +330,43 @@ func describeBuildHistoryCommand(value string) (ImageBuildHistoryOperation, stri
 	return ImageBuildHistoryOperationRun, safeBuildHistorySummary(command), ImageBuildHistoryEffectFilesystem
 }
 
-func describeBuildHistoryDirective(value string) (ImageBuildHistoryOperation, string, ImageBuildHistoryEffect) {
+func describeBuildHistoryDirective(value string) (ImageBuildHistoryOperation, string, ImageBuildHistoryEffect, bool) {
 	fields := strings.Fields(value)
-	if len(fields) == 0 {
-		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown
+	if len(fields) == 0 || fields[0] != strings.ToUpper(fields[0]) {
+		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown, false
 	}
 	summary := safeBuildHistoryDirectiveSummary(value)
 	switch strings.ToUpper(fields[0]) {
 	case "FROM":
-		return ImageBuildHistoryOperationFrom, summary, ImageBuildHistoryEffectFilesystem
+		return ImageBuildHistoryOperationFrom, summary, ImageBuildHistoryEffectFilesystem, true
 	case "RUN":
-		return ImageBuildHistoryOperationRun, safeBuildHistorySummary(strings.TrimSpace(strings.TrimPrefix(value, fields[0]))), ImageBuildHistoryEffectFilesystem
+		return ImageBuildHistoryOperationRun, safeBuildHistorySummary(strings.TrimSpace(strings.TrimPrefix(value, fields[0]))), ImageBuildHistoryEffectFilesystem, true
 	case "COPY":
-		return ImageBuildHistoryOperationCopy, summary, ImageBuildHistoryEffectFilesystem
+		return ImageBuildHistoryOperationCopy, summary, ImageBuildHistoryEffectFilesystem, true
 	case "ADD":
-		return ImageBuildHistoryOperationAdd, summary, ImageBuildHistoryEffectFilesystem
+		return ImageBuildHistoryOperationAdd, summary, ImageBuildHistoryEffectFilesystem, true
 	case "ENV":
-		return ImageBuildHistoryOperationEnv, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationEnv, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "WORKDIR":
-		return ImageBuildHistoryOperationWorkdir, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationWorkdir, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "USER":
-		return ImageBuildHistoryOperationUser, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationUser, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "ENTRYPOINT":
-		return ImageBuildHistoryOperationEntrypoint, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationEntrypoint, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "CMD":
-		return ImageBuildHistoryOperationCmd, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationCmd, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "LABEL":
-		return ImageBuildHistoryOperationLabel, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationLabel, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "EXPOSE":
-		return ImageBuildHistoryOperationExpose, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationExpose, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "VOLUME":
-		return ImageBuildHistoryOperationVolume, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationVolume, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "ARG":
-		return ImageBuildHistoryOperationArg, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationArg, summary, ImageBuildHistoryEffectMetadataOnly, true
 	case "ONBUILD":
-		return ImageBuildHistoryOperationOnbuild, summary, ImageBuildHistoryEffectMetadataOnly
+		return ImageBuildHistoryOperationOnbuild, summary, ImageBuildHistoryEffectMetadataOnly, true
 	default:
-		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown
+		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown, false
 	}
 }
 

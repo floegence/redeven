@@ -14,6 +14,7 @@ const browserHarness = vi.hoisted(() => ({
   listRuntimes: vi.fn(),
   listResources: vi.fn(),
   resourceDetails: vi.fn(),
+  imageBuildHistory: vi.fn(),
   preflight: vi.fn(),
   createExecSession: vi.fn(),
   deleteExecSession: vi.fn(),
@@ -83,7 +84,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   getComposeProjectDefinition: vi.fn(),
   updateComposeProjectDefinition: vi.fn(),
   deleteComposeProjectDefinition: vi.fn(),
-  getContainerImageBuildHistory: vi.fn().mockResolvedValue([]),
+  getContainerImageBuildHistory: browserHarness.imageBuildHistory,
   getRawContainerInspect: vi.fn().mockResolvedValue({}),
   listContainerResourceFiles: vi.fn().mockResolvedValue({ path: '/', entries: [], truncated: false }),
   readContainerResourceFile: vi.fn().mockResolvedValue(new Blob()),
@@ -199,6 +200,7 @@ describe('native Containers responsive product surface', () => {
       runtime: { network_mode: 'redeven-dev', restart_policy: 'unless-stopped', user: '1000:1000', privileged: false, read_only_root: true },
       ports: [{ protocol: 'tcp', host_ip: '127.0.0.1', host_port: 4318, port: 4318 }],
     }));
+    browserHarness.imageBuildHistory.mockReset().mockResolvedValue([]);
     browserHarness.preflight.mockReset().mockResolvedValue({
       method: 'images.prune', request_hash: 'request', plan_hash: 'plan',
       plan: {
@@ -387,6 +389,58 @@ describe('native Containers responsive product surface', () => {
 
     expect(resourceTab('Volumes').getAttribute('aria-selected')).toBe('true');
     expect(root.textContent).not.toContain('stale:latest');
+  });
+
+  it('keeps build details readable and technical layer IDs secondary', async () => {
+    await page.viewport(1440, 900);
+    browserHarness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'images' ? [{
+      id: 'sha256:image-layered', reference: 'node:24.20.0-bookworm-slim', size_bytes: 80_595_921, referenced_containers: 0,
+    }] : []));
+    browserHarness.resourceDetails.mockResolvedValue({
+      id: 'sha256:image-layered', reference: 'node:24.20.0-bookworm-slim',
+      layers: [
+        { digest: 'sha256:13a56b6535801be2adde694dabaf1c2df1d862a390661907dac821c42cd565cc' },
+        { digest: 'sha256:ff00d448ccb0cd940fed13f51fe9b4fa9b9985b4c0d8234504db84fb695a24b6' },
+      ],
+    });
+    const longCommand = 'apt-get update && apt-get install -y ca-certificates curl wget gnupg dirmngr --no-install-recommends';
+    browserHarness.imageBuildHistory.mockResolvedValue([
+      { step: 0, operation: 'run', summary: longCommand, filesystem_effect: 'filesystem', size_bytes: 152_000_000, created_at_unix_ms: 1_787_853_587_000 },
+      { step: 1, operation: 'copy', summary: 'COPY docker-entrypoint.sh /usr/local/bin/', filesystem_effect: 'filesystem', size_bytes: 20_500, created_at_unix_ms: 1_787_853_599_000 },
+    ]);
+    const mounted = mount('activity');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('Images'))?.click();
+    await settle();
+    root.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('Layers'))?.click();
+    await settle();
+
+    const details = root.querySelector<HTMLDetailsElement>('.container-layer-identities')!;
+    expect(root.querySelector('.container-layer-change code')?.getAttribute('title')).toBe(longCommand);
+    expect(details.open).toBe(false);
+    expect(details.querySelector('summary')?.textContent).toContain('2 filesystem layers');
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+
+    details.querySelector<HTMLElement>('summary')?.click();
+    await settle();
+    expect(details.open).toBe(true);
+    expect(details.textContent).toContain('Base');
+    expect(details.textContent).toContain('Top');
+    expect(details.textContent).toContain('13a56b653580…');
+    expect(details.querySelector('.container-layer-digest')?.getAttribute('title')).toContain('sha256:13a56b6535801be2');
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+
+    await page.viewport(390, 844);
+    await settle();
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
   it('keeps a container detail open when a return refresh finishes', async () => {
