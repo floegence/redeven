@@ -144,9 +144,12 @@ Managed, stopped, paused, and unsupported targets never expose Exec. Image detai
 Layers, references, Run, Tag, and Delete without security-analysis placeholders.
 The Layers view defaults to user-facing build steps backed by the engine history
 command. Each step shows one user-facing change description, step size, creation
-time, and a classified effect (`filesystem`, `metadata_only`, or `unknown`). Raw
-`CreatedBy` commands, their arguments, and engine-generated intermediate image
-identifiers never reach the client. A separate technical
+time, and a classified effect (`filesystem`, `metadata_only`, or `unknown`). The
+change description keeps the full normalized command after removing shell and
+BuildKit wrappers, so users can understand actions such as package installation
+or application compilation. Clearly sensitive assignment and flag values are
+shown as `[redacted]`. Raw `CreatedBy` commands, unfiltered arguments, and
+engine-generated intermediate image identifiers never reach the client. A separate technical
 Filesystem layers view shows only the ordered digests from the same image
 Inspect response's `RootFS.Layers`; their count is derived from that list and
 never from build history. Redeven never infers a digest-to-history relationship

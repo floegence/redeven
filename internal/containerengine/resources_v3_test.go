@@ -616,11 +616,71 @@ func TestCLIClientBuildHistoryNeverProjectsLayerCommands(t *testing.T) {
 	if history[0].Step != 0 || history[0].Operation != ImageBuildHistoryOperationRun || history[0].Summary != "bazel build @bookworm//base-files/amd64" || history[0].FilesystemEffect != ImageBuildHistoryEffectFilesystem {
 		t.Fatalf("run history metadata = %#v", history[0])
 	}
-	if history[1].Operation != ImageBuildHistoryOperationEnv || history[1].Summary != "" || history[1].FilesystemEffect != ImageBuildHistoryEffectMetadataOnly {
+	if history[1].Operation != ImageBuildHistoryOperationEnv || history[1].Summary != "ENV API_TOKEN=[redacted]" || history[1].FilesystemEffect != ImageBuildHistoryEffectMetadataOnly {
 		t.Fatalf("env history metadata = %#v", history[1])
 	}
-	if history[2].Operation != ImageBuildHistoryOperationCopy || history[2].FilesystemEffect != ImageBuildHistoryEffectFilesystem {
+	if history[2].Operation != ImageBuildHistoryOperationCopy || history[2].Summary != "COPY file:abc in /app" || history[2].FilesystemEffect != ImageBuildHistoryEffectFilesystem {
 		t.Fatalf("copy history metadata = %#v", history[2])
+	}
+}
+
+func TestDescribeBuildHistoryCommandNormalizesShellAndBuildKitCommands(t *testing.T) {
+	tests := []struct {
+		name    string
+		created string
+		want    string
+	}{
+		{name: "shell", created: "/bin/sh -c apt-get update && apt-get install -y curl", want: "apt-get update && apt-get install -y curl"},
+		{name: "run shell", created: "RUN /bin/sh -c bazel build @bookworm//base-files/amd64", want: "bazel build @bookworm//base-files/amd64"},
+		{name: "buildkit shell", created: "RUN |1 TARGETPLATFORM=linux/amd64 /bin/sh -c bazel build @bookworm//base-files/amd64 # buildkit", want: "bazel build @bookworm//base-files/amd64"},
+		{name: "bash shell", created: "/bin/bash -c npm install --omit=dev", want: "npm install --omit=dev"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			operation, summary, effect := describeBuildHistoryCommand(test.created)
+			if operation != ImageBuildHistoryOperationRun || summary != test.want || effect != ImageBuildHistoryEffectFilesystem {
+				t.Fatalf("describeBuildHistoryCommand(%q) = operation %q, summary %q, effect %q", test.created, operation, summary, effect)
+			}
+		})
+	}
+}
+
+func TestDescribeBuildHistoryCommandRedactsSensitiveValues(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		created string
+		want    string
+		omit    string
+	}{
+		{name: "assignment", created: "/bin/sh -c curl -H TOKEN=raw-secret https://example.test", want: "curl -H TOKEN=[redacted] https://example.test", omit: "raw-secret"},
+		{name: "flag", created: "/bin/sh -c npm publish --token raw-secret", want: "npm publish --token [redacted]", omit: "raw-secret"},
+		{name: "directive", created: "/bin/sh -c #(nop) ENV API_TOKEN=raw-secret", want: "ENV API_TOKEN=[redacted]", omit: "raw-secret"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, summary, _ := describeBuildHistoryCommand(test.created)
+			if summary != test.want {
+				t.Fatalf("describeBuildHistoryCommand(%q) summary = %q, want %q", test.created, summary, test.want)
+			}
+			if strings.Contains(summary, test.omit) {
+				t.Fatalf("summary leaked sensitive value %q: %q", test.omit, summary)
+			}
+		})
+	}
+}
+
+func TestDescribeBuildHistoryCommandSummarizesMetadataDirectives(t *testing.T) {
+	for _, test := range []struct {
+		created string
+		want    string
+	}{
+		{created: "/bin/sh -c #(nop) CMD [\"/bin/sh\", \"-c\", \"echo ready\"]", want: `CMD ["/bin/sh", "-c", "echo ready"]`},
+		{created: "/bin/sh -c #(nop) ENTRYPOINT [\"/usr/local/bin/app\"]", want: `ENTRYPOINT ["/usr/local/bin/app"]`},
+		{created: "/bin/sh -c #(nop) COPY file:abc in /app", want: "COPY file:abc in /app"},
+	} {
+		_, summary, _ := describeBuildHistoryCommand(test.created)
+		if summary != test.want {
+			t.Fatalf("describeBuildHistoryCommand(%q) summary = %q, want %q", test.created, summary, test.want)
+		}
 	}
 }
 
