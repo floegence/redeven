@@ -1361,11 +1361,21 @@ export function ManagedReleaseCandidates(props: Readonly<{
 	const i18n = useI18n();
 	let scrollViewport: HTMLDivElement | undefined;
 	let viewportFrame: number | undefined;
+	const [scrollTop, setScrollTop] = createSignal(0);
+	const rowHeight = 76;
+	const overscan = 8;
 	const candidates = createMemo(() => (props.result?.candidates ?? []).filter((candidate) => {
 		if (props.filter !== 'all' && candidate.channel !== props.filter) return false;
 		const query = props.query.trim().toLowerCase();
 		return !query || `${candidate.version ?? ''} ${candidate.tag ?? ''} ${candidate.source} ${candidate.registry ?? ''}`.toLowerCase().includes(query);
 	}));
+	const windowedCandidates = createMemo(() => {
+		const all = candidates();
+		const height = scrollViewport?.clientHeight ?? 600;
+		const start = Math.max(0, Math.floor(scrollTop() / rowHeight) - overscan);
+		const end = Math.min(all.length, Math.ceil((scrollTop() + height) / rowHeight) + overscan);
+		return { all, start, end, items: all.slice(start, end) };
+	});
 	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
 	const scanViewport = () => {
 		viewportFrame = undefined;
@@ -1424,10 +1434,19 @@ export function ManagedReleaseCandidates(props: Readonly<{
 						role="region"
 						aria-label={i18n.t('webServices.managed.releaseListLabel')}
 						tabindex="0"
-						onScroll={scheduleViewportScan}
+						onScroll={(event) => { setScrollTop(event.currentTarget.scrollTop); scheduleViewportScan(); }}
+						onWheel={(event) => {
+							if (!scrollViewport || event.deltaY === 0) return;
+							event.preventDefault();
+							event.stopPropagation();
+							scrollViewport.scrollTop = Math.max(0, Math.min(scrollViewport.scrollHeight - scrollViewport.clientHeight, scrollViewport.scrollTop + event.deltaY));
+						}}
 					>
 						{props.leadingItem}
-						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => (
+						<Show when={windowedCandidates().all.length > 0} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>
+							<div style={{ height: `${windowedCandidates().all.length * rowHeight}px`, position: 'relative' }}>
+								<div style={{ position: 'absolute', top: `${windowedCandidates().start * rowHeight}px`, left: '0', right: '0' }}>
+								<For each={windowedCandidates().items}>{(candidate) => (
 							<button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', props.selectedID === candidate.candidate_id && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', candidate.verification_status === 'unavailable' && 'cursor-not-allowed opacity-65')} disabled={candidate.verification_status === 'unavailable'} aria-pressed={props.selectedID === candidate.candidate_id} onClick={() => candidate.verification_status === 'pending' ? props.onVerify?.(candidate.candidate_id) : props.onSelect(candidate.candidate_id)} data-release-id={candidate.candidate_id} data-verification-status={candidate.verification_status}>
 								<div class="min-w-0"><div class="truncate font-mono text-sm font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div>
 								<div class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"><div class="truncate text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.t('webServices.managed.releasePublishedAt', { date: i18n.formatDateTime(published(), { dateStyle: 'medium' }) })}`}</Show></div><Show when={candidate.integrity || candidate.digest}>{(exactIdentity) => <code class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show></div>
@@ -1435,7 +1454,10 @@ export function ManagedReleaseCandidates(props: Readonly<{
 								<Show when={candidate.tag_moved}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
 								<Show when={candidate.digest_verified || candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
 							</button>
-						)}</For>
+								)}</For>
+								</div>
+							</div>
+						</Show>
 						<Show when={props.result?.has_more}><div class="py-3 text-center text-[11px] text-muted-foreground" data-testid="managed-release-more-sentinel">{i18n.t('webServices.managed.releaseLoadingProgress', { count: props.result?.loaded_count ?? 0 })}</div></Show>
 					</div>
 				</Show>
@@ -2716,11 +2738,11 @@ export function EnvPortForwardsPage() {
 	const loadReleaseCandidates = async (
 		target = releasePickerTarget(),
 		action: 'open' | 'refresh' | 'continue' | 'verify' = 'open',
-		options: Readonly<{ cursorID?: string; candidateIDs?: string[] }> = {},
+		options: Readonly<{ cursorID?: string; candidateIDs?: string[]; background?: boolean }> = {},
 	) => {
 		if (!target) return;
 		const request = beginReleasePickerRequest(target);
-		setReleaseCandidatesLoading(true);
+		if (!options.background) setReleaseCandidatesLoading(true);
 		setReleaseCandidatesError('');
 		try {
 			const explicitlyVerifiedCandidateID = action === 'verify' && options.candidateIDs?.length === 1 ? options.candidateIDs[0] : undefined;
@@ -2754,6 +2776,9 @@ export function EnvPortForwardsPage() {
 			setManagedUpdatePlan(null);
 			setManagedUpdatePlanError('');
 			setUpdateNoticeAcceptances({});
+			if (action === 'open' && result.check_status === 'stale') {
+				void loadReleaseCandidates(target, 'refresh', { background: true });
+			}
 		} catch (error) {
 			if (isAbortError(error) && action === 'verify') {
 				for (const candidateID of options.candidateIDs ?? []) {
@@ -2762,12 +2787,14 @@ export function EnvPortForwardsPage() {
 			}
 			if (request.isCurrent() && !isAbortError(error)) setReleaseCandidatesError(releaseSourceErrorLabel(error, i18n));
 		} finally {
-			if (request.isCurrent()) {
+			if (request.isCurrent() && !options.background) {
 				setReleaseCandidatesLoading(false);
 				releasePickerRequest = null;
 				if (queuedReleaseVerifications.size > 0 && releaseVerificationTimer === undefined) {
 					releaseVerificationTimer = setTimeout(flushVisibleReleaseVerifications, 0);
 				}
+			} else if (request.isCurrent() && options.background) {
+				releasePickerRequest = null;
 			}
 		}
 	};

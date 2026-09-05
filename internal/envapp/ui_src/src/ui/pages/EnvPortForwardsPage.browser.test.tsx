@@ -337,6 +337,36 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(loadMoreCalls).toBe(1);
   });
 
+  it('windows large release catalogs while preserving scroll access', async () => {
+    await page.viewport(1024, 768);
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '820px', height: '620px' });
+    document.body.appendChild(host);
+    const candidates = Array.from({ length: 1000 }, (_, index) => ({
+      schema_version: 2 as const,
+      candidate_id: `large-${index}`,
+      source_kind: 'oci' as const,
+      source: 'registry.example/managed/example-service',
+      tag: `build-${index}`,
+      channel: 'stable' as const,
+      trust: 'registry_verified',
+      selectable: true,
+      relation: 'newer' as const,
+      verification_status: 'verified' as const,
+    }));
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{ schema_version: 2, check_status: 'fresh', catalog_status: 'complete', has_more: false, loaded_count: candidates.length, checked_at_unix_ms: Date.now(), candidates }}
+      loading={false} error="" query="" filter="all" selectedID="" onQueryChange={() => undefined} onFilterChange={() => undefined} onSelect={() => undefined}
+    />, host);
+    await settle();
+    const viewport = document.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
+    expect(viewport.querySelectorAll('[data-release-id]').length).toBeLessThan(40);
+    viewport.scrollTop = viewport.scrollHeight;
+    viewport.dispatchEvent(new Event('scroll'));
+    await settle();
+    expect(viewport.querySelector('[data-release-id="large-999"]')).toBeTruthy();
+  });
+
   it('keeps notice geometry and scroll position fixed when acknowledgement changes', async () => {
     await page.viewport(1024, 768);
     const host = document.createElement('div');
