@@ -511,16 +511,6 @@ func normalizePodStatus(value string) string {
 	}
 }
 
-func normalizeHealth(value string) string {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	switch lower {
-	case "healthy", "unhealthy", "starting", "none":
-		return lower
-	default:
-		return "unknown"
-	}
-}
-
 func parseFlexibleTime(value string) int64 {
 	value = strings.TrimSpace(value)
 	if value == "" {
