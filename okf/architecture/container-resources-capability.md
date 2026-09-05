@@ -41,8 +41,12 @@ resource reads, image Inspect filesystem layers, image build history, and typed
 mutations. Image filesystem layers are returned only from the inspected image's
 ordered `RootFS.Layers`; build history provides separately classified build-step
 metadata and never becomes a source of layer identities.
-The build-step metadata contains only a normalized operation and safe command
-summary; raw `CreatedBy` content is never returned. Endpoint responses
+The build-step metadata contains only a normalized operation and a user-readable
+command summary. Shell wrappers (`/bin/sh -c`, `/bin/bash -c`, and BuildKit's
+`RUN` prefix) are removed so commands such as `apt-get`, `bazel`, `npm`, and
+`go` remain visible as the actual build action. Clearly sensitive assignment
+and flag values are replaced with `[redacted]`; raw `CreatedBy` content is
+never returned. Endpoint responses
 advertise collection statistics, Podman volume files, and Exec independently so the UI never
 presents an unsupported tool.
 Docker-only methods reject Podman targets and Podman-only methods reject Docker
