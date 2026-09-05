@@ -687,8 +687,11 @@ describe('native Containers page', () => {
     expect(harness.listResources.mock.calls.length).toBeGreaterThan(callsBeforePrune);
   });
 
-  it('keeps one disabled loading surface until environment permissions are available', async () => {
+  it('allows choosing a resource view while environment permissions are loading', async () => {
     harness.setEnvironment(undefined);
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'images'
+      ? [{ id: 'image-1', reference: 'example/app:latest', referenced_containers: 0 }]
+      : []));
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
@@ -697,12 +700,59 @@ describe('native Containers page', () => {
     expect(harness.listRuntimes).not.toHaveBeenCalled();
     expect(host.querySelector('[data-container-list-loading]')).not.toBeNull();
     expect(host.querySelector('[data-container-resource-skeleton-table]')).not.toBeNull();
-    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'));
+    expect(tabs.every((tab) => !tab.disabled)).toBe(true);
+
+    tabs.find((tab) => tab.textContent?.includes('containers.views.images'))?.click();
+    await settle();
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.images');
 
     harness.setEnvironment({ permissions: harness.permissions });
     await settle();
     expect(host.querySelector('[data-container-endpoint-bar]')).toBeNull();
     expect(host.querySelector('[data-container-resource-table]')).not.toBeNull();
+    expect(harness.listResources).toHaveBeenCalledWith('images', 'docker', 'docker-primary', expect.anything());
+    expect(host.textContent).toContain('example/app:latest');
+  });
+
+  it('keeps resource tabs interactive during loading and ignores stale view responses', async () => {
+    const delayedImages = deferred<any[]>();
+    harness.listResources.mockImplementation((nextView: string) => {
+      if (nextView === 'images') return delayedImages.promise;
+      if (nextView === 'volumes') return Promise.resolve([{ name: 'build-cache', driver: 'local', referenced_containers: 0 }]);
+      return Promise.resolve([{ container_id: 'container-1', name: 'Managed API', state: 'running', management: { managed: false } }]);
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+
+    const imagesTab = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((tab) => tab.textContent?.includes('containers.views.images'))!;
+    imagesTab.click();
+    await Promise.resolve();
+
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.images');
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => !tab.disabled)).toBe(true);
+    expect(host.querySelector('[data-container-list-loading]')).not.toBeNull();
+
+    const volumesTab = Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((tab) => tab.textContent?.includes('containers.views.volumes'))!;
+    volumesTab.click();
+    await settle();
+
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.volumes');
+    expect(host.textContent).toContain('build-cache');
+
+    delayedImages.resolve([{ id: 'stale-image', reference: 'stale:latest', referenced_containers: 0 }]);
+    await settle();
+
+    expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
+      .toContain('containers.views.volumes');
+    expect(host.textContent).not.toContain('stale:latest');
   });
 
   it('applies live resource navigation to an already mounted Activity page', async () => {
@@ -1114,7 +1164,7 @@ describe('native Containers page', () => {
     expect(host.textContent).not.toContain('Current API');
     expect(host.querySelector('[data-container-resource-table]')).toBeNull();
     expect(host.querySelector('[data-container-list-loading]')).not.toBeNull();
-    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => tab.disabled)).toBe(true);
+    expect(Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => !tab.disabled)).toBe(true);
 
     requestContainerResourceNavigation({
       engine: 'docker',

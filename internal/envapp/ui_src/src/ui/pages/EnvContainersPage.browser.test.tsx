@@ -311,6 +311,41 @@ describe('native Containers responsive product surface', () => {
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
+  it('keeps resource tabs interactive while an uncached view is loading', async () => {
+    const delayedImages = deferred<readonly unknown[]>();
+    browserHarness.listResources.mockImplementation((view: string) => {
+      if (view === 'images') return delayedImages.promise;
+      if (view === 'volumes') return Promise.resolve([{ name: 'build-cache', driver: 'local', referenced_containers: 0 }]);
+      return Promise.resolve([]);
+    });
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    await settle();
+
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    const resourceTab = (label: string) => Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((tab) => tab.textContent?.includes(label))!;
+
+    resourceTab('Images').click();
+    await settle();
+
+    expect(resourceTab('Images').getAttribute('aria-selected')).toBe('true');
+    expect(Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]')).every((tab) => !tab.disabled)).toBe(true);
+    expect(root.querySelector('[data-container-list-loading]')).not.toBeNull();
+
+    resourceTab('Volumes').click();
+    await settle();
+
+    expect(resourceTab('Volumes').getAttribute('aria-selected')).toBe('true');
+    expect(root.textContent).toContain('build-cache');
+
+    delayedImages.resolve([{ id: 'stale-image', reference: 'stale:latest', referenced_containers: 0 }]);
+    await settle();
+
+    expect(resourceTab('Volumes').getAttribute('aria-selected')).toBe('true');
+    expect(root.textContent).not.toContain('stale:latest');
+  });
+
   it('keeps a container detail open when a return refresh finishes', async () => {
     await page.viewport(1440, 900);
     const refreshedContainers = deferred<any[]>();
