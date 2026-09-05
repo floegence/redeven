@@ -18,7 +18,7 @@ import type {
   AIStopThreadResponse,
 } from './sdk/ai';
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
-import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsListRequest, FsListResponse, FsMkdirRequest, FsMkdirResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
+import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsExtractRequest, FsExtractResponse, FsListRequest, FsListResponse, FsMkdirRequest, FsMkdirResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type {
   GitApplyStashRequest,
   GitApplyStashResponse,
@@ -103,7 +103,7 @@ import {
   toWireAIStopThreadRequest,
 } from './codec/ai';
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
-import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsListResponse, fromWireFsMkdirResponse, fromWireFsPathContextResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsMkdirRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
+import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsExtractResponse, fromWireFsListResponse, fromWireFsMkdirResponse, fromWireFsPathContextResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsExtractRequest, toWireFsListRequest, toWireFsMkdirRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import {
   fromWireGitApplyStashResponse,
   fromWireGitCheckoutBranchResponse,
@@ -211,6 +211,7 @@ export type RedevenV1Rpc = {
     rename: (req: FsRenameRequest) => Promise<FsRenameResponse>;
     copy: (req: FsCopyRequest) => Promise<FsCopyResponse>;
     delete: (req: FsDeleteRequest) => Promise<FsDeleteResponse>;
+    extract: (req: FsExtractRequest, options?: RpcOperationOptions) => Promise<FsExtractResponse>;
   };
   git: {
     resolveRepo: (req: GitResolveRepoRequest, options?: RpcOperationOptions) => Promise<GitResolveRepoResponse>;
@@ -342,6 +343,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
       delete: async (req) => {
         const payload = toWireFsDeleteRequest(req);
         const resp = await call(redevenV1TypeIds.fs.delete, payload, decodeWire(redevenWireSchemaNames.fromWireFsDeleteResponse, fromWireFsDeleteResponse));
+        return resp;
+      },
+      extract: async (req, options) => {
+        const payload = toWireFsExtractRequest(req);
+        const resp = await call(redevenV1TypeIds.fs.extract, payload, decodeWire(redevenWireSchemaNames.fromWireFsExtractResponse, fromWireFsExtractResponse), options);
         return resp;
       },
     },

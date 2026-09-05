@@ -868,6 +868,35 @@ export const redevenWireSchemas = {
       "success"
     ]
   },
+  "wire_fs_extract_resp": {
+    "kind": "object",
+    "properties": {
+      "destination_path": {
+        "kind": "string"
+      },
+      "result_kind": {
+        "kind": "union",
+        "options": [
+          {
+            "kind": "literal",
+            "value": "file"
+          },
+          {
+            "kind": "literal",
+            "value": "directory"
+          }
+        ]
+      },
+      "archive_format": {
+        "kind": "string"
+      }
+    },
+    "required": [
+      "archive_format",
+      "destination_path",
+      "result_kind"
+    ]
+  },
   "wire_git_resolve_repo_resp": {
     "kind": "object",
     "properties": {
@@ -5505,6 +5534,7 @@ export const redevenWireSchemaNames = {
   "fromWireFsDeleteResponse": "wire_fs_delete_resp",
   "fromWireFsRenameResponse": "wire_fs_rename_resp",
   "fromWireFsCopyResponse": "wire_fs_copy_resp",
+  "fromWireFsExtractResponse": "wire_fs_extract_resp",
   "fromWireFsPathContextResponse": "wire_fs_get_path_context_resp",
   "fromWireGitResolveRepoResponse": "wire_git_resolve_repo_resp",
   "fromWireGitGetRepoSummaryResponse": "wire_git_get_repo_summary_resp",

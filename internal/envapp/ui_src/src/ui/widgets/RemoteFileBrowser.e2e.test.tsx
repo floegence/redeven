@@ -217,6 +217,15 @@ const inputDialogStore = vi.hoisted(() => ({
   pendingConfirmValue: null as string | null,
 }));
 
+const archiveExtractionRenderStore = vi.hoisted(() => ({
+  snapshots: [] as Array<{
+    open: boolean;
+    sourcePath?: string;
+    format?: string;
+    kind?: string;
+  }>,
+}));
+
 const filePreviewStore = vi.hoisted(() => ({
   openPreview: vi.fn(),
   closePreview: vi.fn(),
@@ -254,6 +263,7 @@ const mockRpc = vi.hoisted(() => ({
     rename: vi.fn(),
     copy: vi.fn(),
     delete: vi.fn(),
+    extract: vi.fn(),
     getPathContext: vi.fn(),
   },
   git: {
@@ -435,6 +445,42 @@ vi.mock('./InputDialog', () => ({
   },
 }));
 
+vi.mock('./ArchiveExtractionDialog', () => ({
+  ArchiveExtractionDialog: (props: any) => {
+    createEffect(() => {
+      archiveExtractionRenderStore.snapshots.push({
+        open: Boolean(props.open),
+        sourcePath: props.request?.item?.path,
+        format: props.request?.classification?.format,
+        kind: props.request?.classification?.kind,
+      });
+    });
+    return (
+      <Show when={props.open && props.request}>
+        <div data-testid="mock-archive-extraction-dialog">
+          <div>{props.request?.item?.name}:{props.request?.classification?.format}</div>
+          <button
+            type="button"
+            onClick={async () => {
+              const controller = new AbortController();
+              const response = await props.onExtract({
+                sourcePath: props.request.item.path,
+                destinationParentPath: '/workspace/repo/src',
+                destinationName: props.request.classification.defaultOutputName,
+              }, { signal: controller.signal });
+              await props.onComplete(response);
+              props.onClose();
+            }}
+          >
+            mock-submit-archive-extraction
+          </button>
+          <button type="button" onClick={props.onClose}>mock-close-archive-extraction</button>
+        </div>
+      </Show>
+    );
+  },
+}));
+
 vi.mock('../primitives/EnvAppModal', () => ({
   ConfirmDialog: (props: {
     open: boolean;
@@ -476,6 +522,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     onPreviewGitMode?: () => void;
     onResize?: (delta: number) => void;
     onNavigate?: (path: string) => void;
+    onOpen?: (item: FileItem) => void;
     onDragMove?: (items: FileItem[], targetPath: string) => void;
     onPathSubmit?: (path: string) => Promise<{ status: string; committedPath?: string; message?: string }>;
     pathEditRequestKey?: number;
@@ -512,6 +559,13 @@ vi.mock('./FileBrowserWorkspace', () => ({
       path: '/workspace/repo/src/x64?format=deb',
       size: 4_424_448,
     };
+    const archiveTarget: FileItem = {
+      id: '/workspace/repo/src/bundle.zip',
+      name: 'bundle.zip',
+      type: 'file',
+      path: '/workspace/repo/src/bundle.zip',
+      size: 1024,
+    };
     const fileEvent: ContextMenuEvent = {
       x: 40,
       y: 44,
@@ -530,6 +584,10 @@ vi.mock('./FileBrowserWorkspace', () => ({
         path: folderTarget.path,
         item: folderTarget,
       },
+    };
+    const archiveEvent: ContextMenuEvent = {
+      ...fileEvent,
+      items: [archiveTarget],
     };
     const multiSelectEvent: ContextMenuEvent = {
       x: 48,
@@ -562,6 +620,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     const copyNameItems = () => resolveItems(fileEvent);
     const folderItems = () => resolveItems(folderEvent);
     const fileItems = () => resolveItems(fileEvent);
+    const archiveItems = () => resolveItems(archiveEvent);
     const multiSelectItems = () => resolveItems(multiSelectEvent);
     const multiFileSelectItems = () => resolveItems(multiFileSelectEvent);
     const backgroundItems = () => resolveItems({
@@ -618,6 +677,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div data-testid="mock-folder-menu-order">{describeMenuItems(folderItems())}</div>
         <div data-testid="mock-background-menu-order">{describeMenuItems(backgroundItems())}</div>
         <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems())}</div>
+        <div data-testid="mock-archive-menu-order">{describeMenuItems(archiveItems())}</div>
         <div data-testid="mock-multi-menu-order">{describeMenuItems(multiSelectItems())}</div>
         <div data-testid="mock-multi-file-menu-order">{describeMenuItems(multiFileSelectItems())}</div>
         <div data-testid="mock-folder-new-has-icon">{findMenuItem(folderItems(), 'new')?.icon ? 'yes' : 'no'}</div>
@@ -645,6 +705,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/first')}>mock-nav-first</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/second')}>mock-nav-second</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/missing')}>mock-nav-missing</button>
+        <button type="button" onClick={() => props.onOpen?.(copyNameTarget)}>mock-open-regular-file</button>
+        <button type="button" onClick={() => props.onOpen?.(archiveTarget)}>mock-open-archive-file</button>
         <button
           type="button"
           onClick={async () => {
@@ -713,6 +775,14 @@ vi.mock('./FileBrowserWorkspace', () => ({
             onClick={() => fileItems().find((item) => item.id === 'download')?.onAction?.(fileEvent.items, fileEvent)}
           >
             mock-download-file
+          </button>
+        ) : null}
+        {archiveItems().some((item) => item.id === 'extract-archive') ? (
+          <button
+            type="button"
+            onClick={() => archiveItems().find((item) => item.id === 'extract-archive')?.onAction?.(archiveEvent.items, archiveEvent)}
+          >
+            mock-extract-archive-menu
           </button>
         ) : null}
         {multiFileSelectItems().some((item) => item.id === 'download') ? (
@@ -1382,6 +1452,9 @@ beforeEach(() => {
   workspaceLifecycleStore.gitUnmounts = 0;
   workspacePathSubmitStore.nextPath = '/workspace/repo/src';
   inputDialogStore.pendingConfirmValue = null;
+  archiveExtractionRenderStore.snapshots = [];
+  filePreviewStore.openPreview.mockReset();
+  filePreviewStore.closePreview.mockReset();
   fileBrowserSurfaceStore.openBrowser.mockReset();
   fileBrowserSurfaceStore.openBrowser.mockResolvedValue(undefined);
   fileBrowserSurfaceStore.closeBrowser.mockReset();
@@ -1405,6 +1478,11 @@ beforeEach(() => {
   mockRpc.fs.rename.mockResolvedValue({ success: true, newPath: '/workspace/repo/renamed' });
   mockRpc.fs.copy.mockResolvedValue({ success: true, newPath: '/workspace/repo/copied' });
   mockRpc.fs.delete.mockResolvedValue({ success: true });
+  mockRpc.fs.extract.mockResolvedValue({
+    destinationPath: '/workspace/repo/src/bundle',
+    resultKind: 'directory',
+    archiveFormat: 'zip',
+  });
   mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
   localApiFetchStore.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url !== '/_redeven_proxy/api/settings') return null;
@@ -5019,6 +5097,98 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('opens archives in extraction, keeps regular preview behavior, and refreshes the extracted result', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      const folder = (name: string, entryPath: string) => ({
+        name,
+        path: entryPath,
+        isDirectory: true,
+        entryType: 'folder',
+        resolvedType: 'folder',
+        size: 0,
+        modifiedAt: 0,
+        createdAt: 0,
+      });
+      if (path === '/workspace') return { entries: [folder('repo', '/workspace/repo')] };
+      if (path === '/workspace/repo') return { entries: [folder('src', '/workspace/repo/src')] };
+      if (path === '/workspace/repo/src') {
+        return {
+          entries: [{
+            name: 'bundle.zip',
+            path: '/workspace/repo/src/bundle.zip',
+            isDirectory: false,
+            entryType: 'file',
+            resolvedType: 'file',
+            size: 1024,
+            modifiedAt: 0,
+            createdAt: 0,
+          }],
+        };
+      }
+      return { entries: [] };
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.querySelector('[data-testid="mock-archive-menu-order"]')?.textContent).toBe(
+        'ask-flower,extract-archive,download,separator:download,duplicate,copy-name,copy-path,rename,delete',
+      );
+      expect(host.querySelector('[data-testid="mock-multi-file-menu-order"]')?.textContent).not.toContain('extract-archive');
+
+      Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'mock-open-regular-file')!.click();
+      expect(filePreviewStore.openPreview).toHaveBeenCalledWith(expect.objectContaining({ name: '.env' }));
+
+      Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'mock-open-archive-file')!.click();
+      await flush();
+      expect(filePreviewStore.openPreview).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('[data-testid="mock-archive-extraction-dialog"]')?.textContent).toContain('bundle.zip:zip');
+      expect(archiveExtractionRenderStore.snapshots.at(-1)).toMatchObject({
+        open: true,
+        sourcePath: '/workspace/repo/src/bundle.zip',
+        format: 'zip',
+        kind: 'archive',
+      });
+
+      Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'mock-close-archive-extraction')!.click();
+      Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'mock-extract-archive-menu')!.click();
+      await flush();
+      const listCallsBeforeExtraction = mockRpc.fs.list.mock.calls.length;
+      Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'mock-submit-archive-extraction')!.click();
+      await flush();
+      await flush();
+
+      expect(mockRpc.fs.extract).toHaveBeenCalledWith({
+        sourcePath: '/workspace/repo/src/bundle.zip',
+        destinationParentPath: '/workspace/repo/src',
+        destinationName: 'bundle',
+      }, { signal: expect.any(AbortSignal) });
+      expect(mockRpc.fs.list.mock.calls.length).toBeGreaterThan(listCallsBeforeExtraction);
+      expect(host.querySelector('[data-testid="mock-reveal-target-path"]')?.textContent).toBe('/workspace/repo/src/bundle');
+      expect(host.querySelector('[data-testid="mock-reveal-request-id"]')?.textContent).toMatch(/^entry-reveal-\d+$/);
+      expect(notificationStore.success.at(-1)).toEqual({
+        title: 'Archive Extracted',
+        message: 'Extracted to "bundle".',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps the workbench file browser context menu to a single terminal action', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -5158,7 +5328,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
       expect(host.querySelector('[data-testid="mock-reveal-parent-path"]')?.textContent).toBe('/workspace/repo/src');
       expect(host.querySelector('[data-testid="mock-reveal-target-path"]')?.textContent).toBe('/workspace/repo/src/fresh.txt');
-      expect(host.querySelector('[data-testid="mock-reveal-request-id"]')?.textContent).toMatch(/^created-entry-\d+$/);
+      expect(host.querySelector('[data-testid="mock-reveal-request-id"]')?.textContent).toMatch(/^entry-reveal-\d+$/);
       expect(notificationStore.success).toContainEqual({ title: 'Created', message: '"fresh.txt" created.' });
 
       const consumeRevealButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-consume-reveal') as HTMLButtonElement | undefined;
@@ -5239,7 +5409,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
       expect(host.querySelector('[data-testid="mock-reveal-parent-path"]')?.textContent).toBe('/workspace/repo/src');
       expect(host.querySelector('[data-testid="mock-reveal-target-path"]')?.textContent).toBe('/workspace/repo/src/components');
-      expect(host.querySelector('[data-testid="mock-reveal-request-id"]')?.textContent).toMatch(/^created-entry-\d+$/);
+      expect(host.querySelector('[data-testid="mock-reveal-request-id"]')?.textContent).toMatch(/^entry-reveal-\d+$/);
       expect(notificationStore.success).toContainEqual({ title: 'Created', message: '"components" created.' });
 
       const consumeRevealButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-consume-reveal') as HTMLButtonElement | undefined;
@@ -5280,6 +5450,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-background-menu-order"]')?.textContent).toBe(
         'ask-flower,new[new-file|new-folder]',
       );
+      expect(host.querySelector('[data-testid="mock-archive-menu-order"]')?.textContent).not.toContain('extract-archive');
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
       const backgroundButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-background') as HTMLButtonElement | undefined;
       expect(folderButton).toBeUndefined();

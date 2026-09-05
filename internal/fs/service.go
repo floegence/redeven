@@ -27,6 +27,7 @@ const (
 	TypeID_FS_DELETE           uint32 = 1006
 	TypeID_FS_MKDIR            uint32 = 1007
 	TypeID_FS_GET_PATH_CONTEXT uint32 = 1010
+	TypeID_FS_EXTRACT          uint32 = 1011
 
 	fsErrorReadPermissionDenied = "read permission denied"
 	fsErrorPathOutsideScope     = "path outside filesystem scope"
@@ -361,6 +362,59 @@ func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		}
 		return &fsCopyResp{Success: true, NewPath: newPath}, nil
 	})
+
+	accessgate.RegisterTyped[fsExtractReq, fsExtractResp](r, TypeID_FS_EXTRACT, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsExtractReq) (*fsExtractResp, error) {
+		if meta == nil || !meta.CanRead || !meta.CanWrite {
+			return nil, &sessionrpc.Error{Code: 403, Message: "read and write permission required"}
+		}
+		result, err := s.extractArchive(ctx, req.SourcePath, req.DestinationParentPath, req.DestinationName, req.Password)
+		if err != nil {
+			return nil, archiveExtractionRPCError(err)
+		}
+		return &fsExtractResp{
+			DestinationPath: result.DestinationPath,
+			ResultKind:      result.ResultKind,
+			ArchiveFormat:   result.ArchiveFormat,
+		}, nil
+	})
+}
+
+func archiveExtractionRPCError(err error) *sessionrpc.Error {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return &sessionrpc.Error{Code: 499, Message: "request canceled"}
+	case errors.Is(err, filesystemscope.ErrPathOutsideScope),
+		errors.Is(err, filesystemscope.ErrReadDenied),
+		errors.Is(err, filesystemscope.ErrWriteDenied),
+		errors.Is(err, os.ErrPermission):
+		return &sessionrpc.Error{Code: 403, Message: "filesystem permission denied"}
+	case errors.Is(err, os.ErrNotExist):
+		return &sessionrpc.Error{Code: 404, Message: "source or destination parent not found"}
+	case errors.Is(err, filesystemscope.ErrPathNotDirectory):
+		return &sessionrpc.Error{Code: 400, Message: "destination parent is not a directory"}
+	case errors.Is(err, errArchiveUnsupportedFormat):
+		return &sessionrpc.Error{Code: 42211, Message: "unsupported archive format"}
+	case errors.Is(err, errArchiveMultipart):
+		return &sessionrpc.Error{Code: 42212, Message: "multipart archive is unsupported"}
+	case errors.Is(err, errArchivePasswordRequired):
+		return &sessionrpc.Error{Code: 42213, Message: "archive password required"}
+	case errors.Is(err, errArchiveWrongPassword):
+		return &sessionrpc.Error{Code: 42214, Message: "archive password is incorrect"}
+	case errors.Is(err, errArchiveUnsafeEntry):
+		return &sessionrpc.Error{Code: 42215, Message: "archive contains an unsafe path or link"}
+	case errors.Is(err, errArchiveUnsupportedEntry):
+		return &sessionrpc.Error{Code: 42216, Message: "archive contains an unsupported entry type"}
+	case errors.Is(err, errArchiveCorrupt):
+		return &sessionrpc.Error{Code: 42217, Message: "archive is corrupt"}
+	case errors.Is(err, errArchiveResourceLimit), errors.Is(err, gitruntime.ErrResourceLimit):
+		return &sessionrpc.Error{Code: 50311, Message: "archive extraction resource limit exceeded"}
+	case errors.Is(err, errArchiveNoSpace):
+		return &sessionrpc.Error{Code: 50711, Message: "insufficient disk space"}
+	case errors.Is(err, errArchiveCleanup):
+		return &sessionrpc.Error{Code: 50011, Message: "archive staging cleanup failed"}
+	default:
+		return &sessionrpc.Error{Code: 400, Message: "invalid archive extraction request"}
+	}
 }
 
 func (s *Service) PathContext() *PathContextResponse {
@@ -591,6 +645,19 @@ type fsCopyReq struct {
 type fsCopyResp struct {
 	Success bool   `json:"success"`
 	NewPath string `json:"new_path"`
+}
+
+type fsExtractReq struct {
+	SourcePath            string `json:"source_path"`
+	DestinationParentPath string `json:"destination_parent_path"`
+	DestinationName       string `json:"destination_name"`
+	Password              string `json:"password,omitempty"`
+}
+
+type fsExtractResp struct {
+	DestinationPath string `json:"destination_path"`
+	ResultKind      string `json:"result_kind"`
+	ArchiveFormat   string `json:"archive_format"`
 }
 
 // copyFile copies a single file from src to dst, preserving permissions.

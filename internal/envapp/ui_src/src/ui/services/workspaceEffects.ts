@@ -28,6 +28,7 @@ export function createWorkspaceEffectRpc(
         rename: wrapWorkspaceEffect(clientIdentity, repoHint, rpc.fs.rename),
         copy: wrapWorkspaceEffect(clientIdentity, repoHint, rpc.fs.copy),
         delete: wrapWorkspaceEffect(clientIdentity, repoHint, rpc.fs.delete),
+        extract: wrapWorkspaceEffect(clientIdentity, repoHint, rpc.fs.extract),
       };
     },
     get git() {

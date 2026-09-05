@@ -97,3 +97,16 @@ export type wire_fs_copy_resp = {
   success: boolean;
   new_path: string;
 };
+
+export type wire_fs_extract_req = {
+  source_path: string;
+  destination_parent_path: string;
+  destination_name: string;
+  password?: string;
+};
+
+export type wire_fs_extract_resp = {
+  destination_path: string;
+  result_kind: 'directory' | 'file';
+  archive_format: string;
+};

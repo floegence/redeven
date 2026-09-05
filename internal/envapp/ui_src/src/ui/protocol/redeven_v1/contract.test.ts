@@ -15,6 +15,37 @@ describe('Redeven v1 terminal notifications', () => {
     expect(new Set(typeIds).size).toBe(typeIds.length);
   });
 
+  it('passes archive extraction cancellation through the typed RPC', async () => {
+    const controller = new AbortController();
+    const call = vi.fn(async (
+      _typeId: number,
+      _payload: unknown,
+      decodeResponse: (payload: unknown) => unknown,
+    ) => decodeResponse({
+      destination_path: '/workspace/bundle',
+      result_kind: 'directory',
+      archive_format: 'zip',
+    }));
+    const rpc = createRedevenV1Rpc({ call, onNotify: vi.fn() } as any);
+
+    await expect(rpc.fs.extract({
+      sourcePath: '/workspace/bundle.zip',
+      destinationParentPath: '/workspace',
+      destinationName: 'bundle',
+      password: 'secret',
+    }, { signal: controller.signal })).resolves.toEqual({
+      destinationPath: '/workspace/bundle',
+      resultKind: 'directory',
+      archiveFormat: 'zip',
+    });
+    expect(call).toHaveBeenCalledWith(1011, {
+      source_path: '/workspace/bundle.zip',
+      destination_parent_path: '/workspace',
+      destination_name: 'bundle',
+      password: 'secret',
+    }, expect.any(Function), { signal: controller.signal });
+  });
+
   it('decodes whole-environment memory from the existing system monitor RPC', async () => {
     const call = vi.fn(async (
       _typeId: number,

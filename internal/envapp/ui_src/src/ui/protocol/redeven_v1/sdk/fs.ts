@@ -106,3 +106,18 @@ export interface FsCopyResponse {
   success: boolean;
   newPath: string;
 }
+
+export type FsExtractResultKind = 'directory' | 'file';
+
+export interface FsExtractRequest {
+  sourcePath: string;
+  destinationParentPath: string;
+  destinationName: string;
+  password?: string;
+}
+
+export interface FsExtractResponse {
+  destinationPath: string;
+  resultKind: FsExtractResultKind;
+  archiveFormat: string;
+}
