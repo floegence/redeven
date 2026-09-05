@@ -240,6 +240,7 @@ describe('Flower final thread cache and workspace transport', () => {
       activity: 'active',
       turn_id: 'child-turn',
       run_id: 'child-run',
+      run_progress: { phase: 'streaming' },
       items: [
         {
           id: 'child-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
@@ -373,6 +374,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: parent.thread_id,
       subagent_current: {
         thread_id: child.thread_id, view_version: 8, activity: 'active', turn_id: 'child-turn', run_id: 'child-run',
+        run_progress: { phase: 'streaming' },
         items: [{
           id: 'child-live', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
           kind: 'assistant', text: 'Live child content.', live: true,
@@ -461,6 +463,7 @@ describe('Flower final thread cache and workspace transport', () => {
         activity: 'active',
         turn_id: 'parent-turn',
         run_id: 'parent-run',
+        run_progress: { phase: 'streaming' },
         items: [{
           id: 'parent-live', turn_id: 'parent-turn', run_id: 'parent-run', ordinal: 1,
           kind: 'assistant', text: 'Parent live growth.', live: true,
@@ -504,6 +507,7 @@ describe('Flower final thread cache and workspace transport', () => {
       summary: child,
       current: {
         thread_id: child.thread_id, view_version: 7, activity: 'active', turn_id: 'child-turn', run_id: 'child-run',
+        run_progress: { phase: 'streaming' },
         items: [{
           id: 'child-stale', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
           kind: 'assistant', text: 'Stale HTTP content.', live: true,
@@ -587,6 +591,7 @@ describe('Flower final thread cache and workspace transport', () => {
           activity: 'active',
           turn_id: 'child-turn-retry',
           run_id: 'child-run-retry',
+          run_progress: { phase: 'streaming' },
           items: [{
             id: 'child-retry-result',
             turn_id: 'child-turn-retry',
@@ -678,6 +683,7 @@ describe('Flower final thread cache and workspace transport', () => {
         activity: 'active',
         run_id: runID,
         turn_id: turnID,
+        run_progress: { phase: 'streaming' },
         items: [
           { id: 'user:thinking-wrap', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Inspect the workspace' },
           { id: 'thinking:thinking-wrap', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: thinkingText, live: true },
@@ -737,6 +743,7 @@ describe('Flower final thread cache and workspace transport', () => {
         activity: 'active',
         run_id: runID,
         turn_id: turnID,
+        run_progress: { phase: 'streaming' },
         items: [
           { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
           { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files', live: true },
@@ -756,6 +763,7 @@ describe('Flower final thread cache and workspace transport', () => {
         activity: 'active',
         run_id: runID,
         turn_id: turnID,
+        run_progress: { phase: 'streaming' },
         items: [
           { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
           { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration', live: true },

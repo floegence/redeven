@@ -147,6 +147,8 @@ describe('Flower bottom decision surface', () => {
         view_version: 21,
         activity: 'active' as const,
         run_id: waitingThread.active_run_id,
+        turn_id: 'turn-fixture',
+        run_progress: { phase: 'streaming' as const },
         interactions: [],
       },
     }));
@@ -209,6 +211,8 @@ describe('Flower bottom decision surface', () => {
         view_version: 21,
         activity: 'active' as const,
         run_id: waitingThread.active_run_id,
+        turn_id: 'turn-fixture',
+        run_progress: { phase: 'streaming' as const },
         interactions: [
           { id: request.prompt_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'input' as const, resolved: true },
           {
@@ -230,6 +234,8 @@ describe('Flower bottom decision surface', () => {
         view_version: 22,
         activity: 'active' as const,
         run_id: waitingThread.active_run_id,
+        turn_id: 'turn-fixture',
+        run_progress: { phase: 'finalizing' as const },
         interactions: [
           { id: request.prompt_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'input' as const, resolved: true },
           { id: action.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, tool_call_id: action.tool_id, resolved: true, approved: true },
@@ -369,6 +375,8 @@ describe('Flower bottom decision surface', () => {
         view_version: 22 + submitApproval.mock.calls.length,
         activity: 'active' as const,
         run_id: approvalThread.active_run_id,
+        turn_id: 'turn-fixture',
+        run_progress: { phase: 'finalizing' as const },
         turn_id: action.run_id,
         interactions: input.interaction_id === action.action_id
           ? [
@@ -499,6 +507,8 @@ describe('Flower bottom decision surface', () => {
         view_version: version,
         activity: 'active' as const,
         run_id: approvalThread.active_run_id,
+        turn_id: 'turn-fixture',
+        run_progress: { phase: 'finalizing' as const },
         interactions: [
           {
             id: firstAction.action_id,
@@ -615,6 +625,8 @@ describe('Flower bottom decision surface', () => {
         view_version: version,
         activity: 'active' as const,
         run_id: approvalThread.active_run_id,
+        turn_id: 'turn-fixture',
+        run_progress: { phase: 'finalizing' as const },
         interactions: [
           { id: firstAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved: true },
           { id: secondAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved: true },
@@ -702,6 +714,8 @@ describe('Flower bottom decision surface', () => {
             view_version: 22,
             activity: 'active' as const,
             run_id: approvalThread.active_run_id,
+            turn_id: 'turn-fixture',
+            run_progress: { phase: 'finalizing' as const },
             interactions: [
               { id: approvalAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, tool_call_id: approvalAction.tool_id, resolved: true, approved: input.approved },
               {
