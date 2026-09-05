@@ -142,18 +142,24 @@ being retried. The terminal stays mounted while detail tabs change, fills the
 detail body's remaining height, and closes when container detail closes.
 Managed, stopped, paused, and unsupported targets never expose Exec. Image detail provides Overview,
 Layers, references, Run, Tag, and Delete without security-analysis placeholders.
-The Layers view defaults to user-facing build steps backed by the engine history
-command. Each step shows one user-facing change description, step size, creation
-time, and a classified effect (`filesystem`, `metadata_only`, or `unknown`). The
-change description keeps the full normalized command after removing shell and
-BuildKit wrappers, so users can understand actions such as package installation
-or application compilation. Clearly sensitive assignment and flag values are
-shown as `[redacted]`. Raw `CreatedBy` commands, unfiltered arguments, and
-engine-generated intermediate image identifiers never reach the client. A separate technical
-Filesystem layers view shows only the ordered digests from the same image
-Inspect response's `RootFS.Layers`; their count is derived from that list and
-never from build history. Redeven never infers a digest-to-history relationship
-by array position. Volume detail provides
+The Layers view presents user-facing build steps backed by the engine history
+command as its only primary view. Each step shows one user-facing change
+description, step size, creation time, and a classified effect (`filesystem`,
+`metadata_only`, or `unknown`). The change description keeps the full normalized
+command after removing shell and BuildKit wrappers, so users can understand
+actions such as package installation or application compilation. Clearly
+sensitive assignment and flag values are shown as `[redacted]`. Raw `CreatedBy`
+commands, unfiltered arguments, and engine-generated intermediate image
+identifiers never reach the client.
+
+The ordered digests from the same image Inspect response's `RootFS.Layers` are
+available in one collapsed technical disclosure below those build steps. The
+disclosure identifies base, intermediate, and top positions, preserves the full
+copyable digest, and derives its count from the inspected list. It does not
+present digests as a second peer view or imply that a digest alone explains a
+user-visible build change. Redeven never infers a digest-to-history relationship
+by array position or projects history size and time onto an Inspect digest.
+Volume detail provides
 Overview, references, and
 capability-gated files. Compose Projects and Pods provide overview, members,
 lifecycle, and member navigation. Managed resources replace native mutation

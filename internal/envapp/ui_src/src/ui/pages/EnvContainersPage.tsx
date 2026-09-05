@@ -223,7 +223,6 @@ type ReviewState = Readonly<{
 
 type ResourceFilter = 'all' | 'active' | 'inactive' | 'managed';
 type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'used-by' | 'containers';
-type ImageLayerView = 'build-steps' | 'filesystem';
 type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created';
 type ResourceSortDirection = 'ascending' | 'descending';
 
@@ -712,7 +711,7 @@ function pruneReviewModel(preflight: ContainerPreflight): PruneReviewModel | nul
   };
 }
 
-function shortPruneIdentity(identity: string): string {
+function shortResourceIdentity(identity: string): string {
   const value = identity.startsWith('sha256:') ? identity.slice('sha256:'.length) : identity;
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
@@ -950,7 +949,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [logsWrap, setLogsWrap] = createSignal(true);
   const [rawInspect, setRawInspect] = createSignal<unknown>(null);
   const [rawInspectLoading, setRawInspectLoading] = createSignal(false);
-  const [imageLayerView, setImageLayerView] = createSignal<ImageLayerView>('build-steps');
   const [imageBuildHistory, setImageBuildHistory] = createSignal<ContainerImageBuildHistoryEntry[]>([]);
   const [imageBuildHistoryLoading, setImageBuildHistoryLoading] = createSignal(false);
   const [imageBuildHistoryError, setImageBuildHistoryError] = createSignal('');
@@ -1368,7 +1366,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setCollectionStats(new Map());
     setRawInspect(null);
     setRawInspectLoading(false);
-    setImageLayerView('build-steps');
     setImageBuildHistory([]);
     setImageBuildHistoryLoading(false);
     setImageBuildHistoryError('');
@@ -1777,7 +1774,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   createEffect(() => {
     const ready = readyConsole();
     const entry = selectedEntry();
-    if (!ready || !entry || detailTab() !== 'layers' || imageLayerView() !== 'build-steps' || ready.target.view !== 'images') return;
+    if (!ready || !entry || detailTab() !== 'layers' || ready.target.view !== 'images') return;
     const identity = resourceIdentity('images', entry.item);
     let active = true;
     setImageBuildHistory([]);
@@ -3184,6 +3181,13 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     }
   };
 
+  const imageLayerPositionLabel = (index: number, count: number) => {
+    if (count === 1) return i18n.t('containers.detail.onlyLayer');
+    if (index === 0) return i18n.t('containers.detail.baseLayer');
+    if (index === count - 1) return i18n.t('containers.detail.topLayer');
+    return i18n.t('containers.detail.middleLayer');
+  };
+
   const renderDetailContent = () => {
     const tab = detailTab();
     if (['overview', 'inspect', 'mounts', 'used-by', 'containers'].includes(tab)) {
@@ -3264,29 +3268,62 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
               <strong>{i18n.t('containers.detail.layersTitle')}</strong>
               <span>{i18n.t('containers.detail.layersDescription')}</span>
             </div>
-            <div class="container-layer-view__switch" role="tablist" aria-label={i18n.t('containers.detail.layerViewLabel')}>
-              <button type="button" role="tab" aria-selected={imageLayerView() === 'build-steps'} data-active={imageLayerView() === 'build-steps'} onClick={() => setImageLayerView('build-steps')}>
-                {i18n.t('containers.detail.buildSteps')}
-              </button>
-              <button type="button" role="tab" aria-selected={imageLayerView() === 'filesystem'} data-active={imageLayerView() === 'filesystem'} onClick={() => setImageLayerView('filesystem')}>
-                {i18n.t('containers.detail.filesystemLayers')}
-              </button>
-            </div>
           </div>
-          <Show when={imageLayerView() === 'filesystem'}>
+          <div class="container-layer-list">
+            <div class="container-layer-row container-layer-row--build container-layer-row--header" aria-hidden="true">
+              <span>{i18n.t('containers.detail.step')}</span>
+              <span>{i18n.t('containers.detail.change')}</span>
+              <span>{i18n.t('containers.detail.size')}</span>
+              <span>{i18n.t('containers.detail.created')}</span>
+              <span>{i18n.t('containers.detail.result')}</span>
+            </div>
+            <Show when={!imageBuildHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
+              <Show when={!imageBuildHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.buildHistoryUnavailable')}</strong></div>}>
+                <Show when={imageBuildHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyBuildHistory')}</div>}>
+                  <For each={imageBuildHistory()}>{(entry) => (
+                    <div class="container-layer-row container-layer-row--build">
+                      <span>{entry.step + 1}</span>
+                      <div class="container-layer-change">
+                        <Show when={compact(entry.summary)} fallback={<strong>{buildHistoryDescription(entry)}</strong>}>
+                          <code title={entry.summary}>{buildHistoryDescription(entry)}</code>
+                        </Show>
+                      </div>
+                      <span class="tabular-nums">{formatBytes(entry.size_bytes)}</span>
+                      <time>{formatDate(entry.created_at_unix_ms)}</time>
+                      <span class="container-layer-effect" data-effect={entry.filesystem_effect}>{buildHistoryEffectLabel(entry.filesystem_effect)}</span>
+                    </div>
+                  )}</For>
+                </Show>
+              </Show>
+            </Show>
+          </div>
+          <details class="container-layer-identities">
+            <summary>
+              <span class="container-layer-identities__icon" aria-hidden="true"><Layers class="h-4 w-4" /></span>
+              <span class="container-layer-identities__title">
+                <strong>{i18n.t('containers.detail.filesystemLayers')}</strong>
+                <small>{i18n.t('containers.detail.filesystemLayerCount', { count: layers.length })}</small>
+                <small>{i18n.t('containers.detail.filesystemLayerHint')}</small>
+              </span>
+              <ChevronRight class="container-layer-identities__chevron h-4 w-4" aria-hidden="true" />
+            </summary>
             <div class="container-layer-list">
               <div class="container-layer-row container-layer-row--filesystem container-layer-row--header" aria-hidden="true">
-                <span>{i18n.t('containers.detail.step')}</span>
+                <span>{i18n.t('containers.detail.position')}</span>
                 <span>{i18n.t('containers.detail.digest')}</span>
                 <span />
               </div>
               <Show when={layers.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}>
                 <For each={layers}>{(layer, index) => {
                   const digest = compact(layer.digest);
+                  const positionLabel = imageLayerPositionLabel(index(), layers.length);
                   return (
                     <div class="container-layer-row container-layer-row--filesystem">
-                      <span>{index() + 1}</span>
-                      <code class="container-layer-digest" title={digest || undefined}>{digest || i18n.t('containers.detail.layerUnavailable')}</code>
+                      <span class="container-layer-position">
+                        <Show when={positionLabel}><strong>{positionLabel}</strong></Show>
+                        <small>{index() + 1} / {layers.length}</small>
+                      </span>
+                      <code class="container-layer-digest" title={digest || undefined}>{digest ? shortResourceIdentity(digest) : i18n.t('containers.detail.layerUnavailable')}</code>
                       <Show when={digest}>
                         <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.copyLayerDigest')} title={i18n.t('containers.detail.copyLayerDigest')} onClick={() => void copyImageLayerDigest(digest)}>
                           <Copy class="h-3.5 w-3.5" />
@@ -3297,37 +3334,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                 }}</For>
               </Show>
             </div>
-          </Show>
-          <Show when={imageLayerView() === 'build-steps'}>
-            <div class="container-layer-list">
-              <div class="container-layer-row container-layer-row--build container-layer-row--header" aria-hidden="true">
-                <span>{i18n.t('containers.detail.step')}</span>
-                <span>{i18n.t('containers.detail.change')}</span>
-                <span>{i18n.t('containers.detail.size')}</span>
-                <span>{i18n.t('containers.detail.created')}</span>
-                <span>{i18n.t('containers.detail.result')}</span>
-              </div>
-              <Show when={!imageBuildHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
-                <Show when={!imageBuildHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.buildHistoryUnavailable')}</strong></div>}>
-                  <Show when={imageBuildHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyBuildHistory')}</div>}>
-                    <For each={imageBuildHistory()}>{(entry) => (
-                      <div class="container-layer-row container-layer-row--build">
-                        <span>{entry.step + 1}</span>
-                        <div class="container-layer-change">
-                          <Show when={compact(entry.summary)} fallback={<strong>{buildHistoryDescription(entry)}</strong>}>
-                            <code title={entry.summary}>{buildHistoryDescription(entry)}</code>
-                          </Show>
-                        </div>
-                        <span class="tabular-nums">{formatBytes(entry.size_bytes)}</span>
-                        <time>{formatDate(entry.created_at_unix_ms)}</time>
-                        <span class="container-layer-effect" data-effect={entry.filesystem_effect}>{buildHistoryEffectLabel(entry.filesystem_effect)}</span>
-                      </div>
-                    )}</For>
-                  </Show>
-                </Show>
-              </Show>
-            </div>
-          </Show>
+          </details>
         </div>
       );
     }
@@ -4005,7 +4012,7 @@ function PruneReviewPanel(props: { model: PruneReviewModel }) {
                   <Show when={references.length > 0}><span title={references.join(', ')}>{references.join(' · ')}</span></Show>
                 </div>
                 <div class="container-prune-review__meta">
-                  <Show when={props.model.kind === 'images'} fallback={<span>{resource.driver || '—'}</span>}><code title={resource.identity}>{shortPruneIdentity(resource.identity)}</code><strong>{formatBytes(resource.sizeBytes)}</strong></Show>
+                  <Show when={props.model.kind === 'images'} fallback={<span>{resource.driver || '—'}</span>}><code title={resource.identity}>{shortResourceIdentity(resource.identity)}</code><strong>{formatBytes(resource.sizeBytes)}</strong></Show>
                 </div>
               </div>;
             }}</For>

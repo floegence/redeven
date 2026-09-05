@@ -670,16 +670,21 @@ func TestDescribeBuildHistoryCommandRedactsSensitiveValues(t *testing.T) {
 
 func TestDescribeBuildHistoryCommandSummarizesMetadataDirectives(t *testing.T) {
 	for _, test := range []struct {
-		created string
-		want    string
+		created       string
+		want          string
+		wantOperation ImageBuildHistoryOperation
+		wantEffect    ImageBuildHistoryEffect
 	}{
-		{created: "/bin/sh -c #(nop) CMD [\"/bin/sh\", \"-c\", \"echo ready\"]", want: `CMD ["/bin/sh", "-c", "echo ready"]`},
-		{created: "/bin/sh -c #(nop) ENTRYPOINT [\"/usr/local/bin/app\"]", want: `ENTRYPOINT ["/usr/local/bin/app"]`},
-		{created: "/bin/sh -c #(nop) COPY file:abc in /app", want: "COPY file:abc in /app"},
+		{created: "/bin/sh -c #(nop) CMD [\"/bin/sh\", \"-c\", \"echo ready\"]", want: `CMD ["/bin/sh", "-c", "echo ready"]`, wantOperation: ImageBuildHistoryOperationCmd, wantEffect: ImageBuildHistoryEffectMetadataOnly},
+		{created: "/bin/sh -c #(nop) ENTRYPOINT [\"/usr/local/bin/app\"]", want: `ENTRYPOINT ["/usr/local/bin/app"]`, wantOperation: ImageBuildHistoryOperationEntrypoint, wantEffect: ImageBuildHistoryEffectMetadataOnly},
+		{created: "/bin/sh -c #(nop) COPY file:abc in /app", want: "COPY file:abc in /app", wantOperation: ImageBuildHistoryOperationCopy, wantEffect: ImageBuildHistoryEffectFilesystem},
+		{created: `CMD ["node"]`, want: `CMD ["node"]`, wantOperation: ImageBuildHistoryOperationCmd, wantEffect: ImageBuildHistoryEffectMetadataOnly},
+		{created: `ENTRYPOINT ["docker-entrypoint.sh"]`, want: `ENTRYPOINT ["docker-entrypoint.sh"]`, wantOperation: ImageBuildHistoryOperationEntrypoint, wantEffect: ImageBuildHistoryEffectMetadataOnly},
+		{created: "COPY docker-entrypoint.sh /usr/local/bin/ # buildkit", want: "COPY docker-entrypoint.sh /usr/local/bin/", wantOperation: ImageBuildHistoryOperationCopy, wantEffect: ImageBuildHistoryEffectFilesystem},
 	} {
-		_, summary, _ := describeBuildHistoryCommand(test.created)
-		if summary != test.want {
-			t.Fatalf("describeBuildHistoryCommand(%q) summary = %q, want %q", test.created, summary, test.want)
+		operation, summary, effect := describeBuildHistoryCommand(test.created)
+		if operation != test.wantOperation || summary != test.want || effect != test.wantEffect {
+			t.Fatalf("describeBuildHistoryCommand(%q) = operation %q, summary %q, effect %q", test.created, operation, summary, effect)
 		}
 	}
 }

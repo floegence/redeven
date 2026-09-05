@@ -46,7 +46,9 @@ command summary. Shell wrappers (`/bin/sh -c`, `/bin/bash -c`, and BuildKit's
 `RUN` prefix) are removed so commands such as `apt-get`, `bazel`, `npm`, and
 `go` remain visible as the actual build action. Clearly sensitive assignment
 and flag values are replaced with `[redacted]`; raw `CreatedBy` content is
-never returned. Endpoint responses
+never returned. The inspected `RootFS.Layers` list remains an ordered technical
+identity list only; it does not provide per-layer commands, sizes, or timestamps,
+so those fields are never inferred from history. Endpoint responses
 advertise collection statistics, Podman volume files, and Exec independently so the UI never
 presents an unsupported tool.
 Docker-only methods reject Podman targets and Podman-only methods reject Docker
