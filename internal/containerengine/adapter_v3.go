@@ -155,7 +155,7 @@ func (a *Adapter) InspectImage(ctx context.Context, req ImageInspectRequest) (Im
 	return ext.InspectImage(ctx, req.Engine, strings.TrimSpace(req.Image))
 }
 
-func (a *Adapter) HistoryImage(ctx context.Context, req ImageHistoryRequest) ([]ImageHistoryEntry, error) {
+func (a *Adapter) BuildHistoryImage(ctx context.Context, req ImageBuildHistoryRequest) ([]ImageBuildHistoryEntry, error) {
 	ext, err := requireExtended(a.client)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (a *Adapter) HistoryImage(ctx context.Context, req ImageHistoryRequest) ([]
 	if err := validateImageReference(req.Image); err != nil {
 		return nil, err
 	}
-	return ext.HistoryImage(ctx, req.Engine, strings.TrimSpace(req.Image))
+	return ext.BuildHistoryImage(ctx, req.Engine, strings.TrimSpace(req.Image))
 }
 
 func (a *Adapter) TagImage(ctx context.Context, req ImageTagRequest) error {

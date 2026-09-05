@@ -115,6 +115,10 @@ export type ImageInventoryItem = Readonly<{
   referenced_containers: number;
 }>;
 
+export type ContainerImageLayer = Readonly<{
+  digest: string;
+}>;
+
 export type VolumeInventoryItem = Readonly<{
   name: string;
   driver?: string;
@@ -242,8 +246,8 @@ export type ContainerStatsCollection = Readonly<{
 	samples: readonly ContainerStats[];
 }>;
 
-export type ContainerImageHistoryEntry = Readonly<{
-	id?: string;
+export type ContainerImageBuildHistoryEntry = Readonly<{
+	intermediate_image_id?: string;
 	created_at_unix_ms?: number;
 	size_bytes?: number;
 }>;
@@ -351,16 +355,16 @@ export async function getContainerStats(
   );
 }
 
-export async function getContainerImageHistory(
+export async function getContainerImageBuildHistory(
 	identity: string,
 	engine: ContainerEngine,
 	endpointID: string,
-): Promise<ContainerImageHistoryEntry[]> {
-	const response = await fetchLocalApiJSON<{ history: ContainerImageHistoryEntry[] }>(
-		`/_redeven_proxy/api/container-resources/images/${encodeURIComponent(identity)}/history?${query(engine, endpointID)}`,
+): Promise<ContainerImageBuildHistoryEntry[]> {
+	const response = await fetchLocalApiJSON<{ build_history: ContainerImageBuildHistoryEntry[] }>(
+		`/_redeven_proxy/api/container-resources/images/${encodeURIComponent(identity)}/build-history?${query(engine, endpointID)}`,
 		{ method: 'GET' },
 	);
-	return response.history ?? [];
+	return response.build_history ?? [];
 }
 
 export async function getRawContainerInspect(identity: string, engine: ContainerEngine, endpointID: string): Promise<unknown> {

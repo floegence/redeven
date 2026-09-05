@@ -35,7 +35,7 @@ const (
 	MethodContainersStatsWatch      Method = "containers.stats.watch"
 	MethodImagesList                Method = "images.list"
 	MethodImagesInspect             Method = "images.inspect"
-	MethodImagesHistory             Method = "images.history"
+	MethodImagesBuildHistory        Method = "images.build_history"
 	MethodImagesTag                 Method = "images.tag"
 	MethodImagesRemove              Method = "images.remove"
 	MethodImagesRemovePreflight     Method = "images.remove.preflight"
@@ -93,7 +93,7 @@ func Methods() []Method {
 		MethodImagesPull,
 		MethodContainersStatsSnapshot,
 		MethodContainersStatsWatch,
-		MethodImagesList, MethodImagesInspect, MethodImagesHistory, MethodImagesTag, MethodImagesRemovePreflight, MethodImagesRemove, MethodImagesPrunePreflight, MethodImagesPrune,
+		MethodImagesList, MethodImagesInspect, MethodImagesBuildHistory, MethodImagesTag, MethodImagesRemovePreflight, MethodImagesRemove, MethodImagesPrunePreflight, MethodImagesPrune,
 		MethodVolumesList, MethodVolumesInspect, MethodVolumesCreatePreflight, MethodVolumesCreate, MethodVolumesRemovePreflight, MethodVolumesRemove, MethodVolumesPrunePreflight, MethodVolumesPrune,
 		MethodContainersCreatePreflight, MethodContainersCreate, MethodContainersRemovePreflight,
 		MethodPause, MethodUnpause, MethodKill,
@@ -277,17 +277,21 @@ type ImageRecord struct {
 	Variant                     string              `json:"variant,omitempty"`
 	WorkingDir                  string              `json:"working_dir,omitempty"`
 	User                        string              `json:"user,omitempty"`
-	LayerCount                  int                 `json:"layer_count,omitempty"`
+	Layers                      []ImageLayer        `json:"layers"`
 	ExposedPorts                []string            `json:"exposed_ports,omitempty"`
 	UsedBy                      []ResourceReference `json:"used_by,omitempty"`
 	ReferencedContainers        int                 `json:"referenced_containers"`
 	ReferenceInspectionFailures int                 `json:"-"`
 }
 
-type ImageHistoryEntry struct {
-	ID              string `json:"id,omitempty"`
-	CreatedAtUnixMs int64  `json:"created_at_unix_ms,omitempty"`
-	SizeBytes       int64  `json:"size_bytes,omitempty"`
+type ImageLayer struct {
+	Digest string `json:"digest"`
+}
+
+type ImageBuildHistoryEntry struct {
+	IntermediateImageID string `json:"intermediate_image_id,omitempty"`
+	CreatedAtUnixMs     int64  `json:"created_at_unix_ms,omitempty"`
+	SizeBytes           int64  `json:"size_bytes,omitempty"`
 }
 
 type VolumeRecord struct {

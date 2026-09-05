@@ -243,11 +243,17 @@ func (c *CLIClient) InspectImage(ctx context.Context, engine Engine, image strin
 		exposedPorts = append(exposedPorts, cleanImageMetadata(value))
 	}
 	sort.Strings(exposedPorts)
+	layers := make([]ImageLayer, 0, len(docs[0].RootFS.Layers))
+	for _, layer := range docs[0].RootFS.Layers {
+		if digest := cleanImageLayerDigest(layer); digest != "" {
+			layers = append(layers, ImageLayer{Digest: digest})
+		}
+	}
 	item := ImageRecord{
 		ID: firstNonEmpty(docs[0].ID, docs[0].AltID), Tags: cleanImageMetadataList(docs[0].RepoTags), Digest: firstNonEmpty(firstDigest(docs[0].RepoDigests), docs[0].Digest),
 		SizeBytes: docs[0].Size, CreatedAtUnixMs: parseTimeUnixMs(docs[0].Created), Reference: strings.TrimSpace(image),
 		OS: firstNonEmpty(docs[0].OS, docs[0].OSAlt), Architecture: strings.TrimSpace(docs[0].Architecture), Variant: strings.TrimSpace(docs[0].Variant),
-		WorkingDir: strings.TrimSpace(docs[0].Config.WorkingDir), User: strings.TrimSpace(docs[0].Config.User), LayerCount: len(docs[0].RootFS.Layers), ExposedPorts: exposedPorts,
+		WorkingDir: strings.TrimSpace(docs[0].Config.WorkingDir), User: strings.TrimSpace(docs[0].Config.User), Layers: layers, ExposedPorts: exposedPorts,
 	}
 	containers, inspectionFailures, err := c.inspectAllContainers(ctx, engine)
 	if err != nil {
@@ -259,7 +265,7 @@ func (c *CLIClient) InspectImage(ctx context.Context, engine Engine, image strin
 	return item, nil
 }
 
-func (c *CLIClient) HistoryImage(ctx context.Context, engine Engine, image string) ([]ImageHistoryEntry, error) {
+func (c *CLIClient) BuildHistoryImage(ctx context.Context, engine Engine, image string) ([]ImageBuildHistoryEntry, error) {
 	if err := validateEngine(engine); err != nil {
 		return nil, err
 	}
@@ -274,9 +280,9 @@ func (c *CLIClient) HistoryImage(ctx context.Context, engine Engine, image strin
 	if err := decodeJSONLines(raw, &values); err != nil {
 		return nil, err
 	}
-	out := make([]ImageHistoryEntry, 0, len(values))
+	out := make([]ImageBuildHistoryEntry, 0, len(values))
 	for _, v := range values {
-		out = append(out, ImageHistoryEntry{ID: cleanImageMetadata(firstNonEmpty(v.ID, v.Id)), CreatedAtUnixMs: parseTimeUnixMs(v.CreatedAt), SizeBytes: parseBytes(v.Size)})
+		out = append(out, ImageBuildHistoryEntry{IntermediateImageID: cleanBuildHistoryImageID(firstNonEmpty(v.ID, v.Id)), CreatedAtUnixMs: parseTimeUnixMs(v.CreatedAt), SizeBytes: parseBytes(v.Size)})
 	}
 	return out, nil
 }
@@ -292,6 +298,18 @@ type historyRecord struct {
 func cleanImageMetadata(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "<none>" {
+		return ""
+	}
+	return value
+}
+
+func cleanImageLayerDigest(value string) string {
+	return strings.TrimSpace(value)
+}
+
+func cleanBuildHistoryImageID(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "<none>" || value == "<missing>" {
 		return ""
 	}
 	return value

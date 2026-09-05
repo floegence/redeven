@@ -83,7 +83,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   getComposeProjectDefinition: vi.fn(),
   updateComposeProjectDefinition: vi.fn(),
   deleteComposeProjectDefinition: vi.fn(),
-  getContainerImageHistory: vi.fn().mockResolvedValue([]),
+  getContainerImageBuildHistory: vi.fn().mockResolvedValue([]),
   getRawContainerInspect: vi.fn().mockResolvedValue({}),
   listContainerResourceFiles: vi.fn().mockResolvedValue({ path: '/', entries: [], truncated: false }),
   readContainerResourceFile: vi.fn().mockResolvedValue(new Blob()),

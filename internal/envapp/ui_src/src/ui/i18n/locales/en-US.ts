@@ -2805,7 +2805,7 @@ export const enUS = defineDictionary({
     },
     detailTabs: {
       overview: 'Overview', logs: 'Logs', inspect: 'Inspect', mounts: 'Mounts', exec: 'Terminal',
-      files: 'Files', stats: 'Stats', layers: 'Layers', 'used-by': 'Used by', containers: 'Containers',
+      files: 'Files', stats: 'Stats', layers: 'Image layers', 'build-history': 'Build history', 'used-by': 'Used by', containers: 'Containers',
     },
     detail: {
       back: 'Back', showCharts: 'Show charts', hideCharts: 'Hide charts', ports: 'Ports', actions: 'Actions',
@@ -2815,7 +2815,7 @@ export const enUS = defineDictionary({
       emptyReferences: 'No referenced containers', emptyMounts: 'No mounts', redacted: 'Redacted',
       namedVolumes: 'Named volumes', otherMounts: 'Other mounts', readOnly: 'Read only', readWrite: 'Read and write',
       parentFolder: 'Parent folder', downloadFile: 'Download file', binaryFile: 'This file cannot be previewed as text.',
-      layer: 'Layer', layersUnavailable: 'Image layers could not be loaded', emptyLayers: 'No image layers reported',
+      layer: 'Layer', layerCount: 'Filesystem layers', layerUnavailable: 'Layer digest unavailable', emptyLayers: 'No filesystem layers reported', buildHistoryUnavailable: 'Build history could not be loaded', emptyBuildHistory: 'No build history reported', noIntermediateImage: 'No intermediate image ID',
       execUnavailable: 'This Floeterm release does not support a container terminal.', fullscreen: 'Full screen',
     },
     inspector: {

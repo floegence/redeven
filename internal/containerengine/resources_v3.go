@@ -87,7 +87,7 @@ type ImageInspectRequest struct {
 	EndpointID EndpointID `json:"endpoint_id,omitempty"`
 	Image      string     `json:"image"`
 }
-type ImageHistoryRequest struct {
+type ImageBuildHistoryRequest struct {
 	Engine     Engine     `json:"engine"`
 	EndpointID EndpointID `json:"endpoint_id,omitempty"`
 	Image      string     `json:"image"`
@@ -164,7 +164,7 @@ type ExtendedEngineClient interface {
 	Stats(context.Context, Engine, string) (ContainerStats, error)
 	ListImages(context.Context, Engine) ([]ImageRecord, error)
 	InspectImage(context.Context, Engine, string) (ImageRecord, error)
-	HistoryImage(context.Context, Engine, string) ([]ImageHistoryEntry, error)
+	BuildHistoryImage(context.Context, Engine, string) ([]ImageBuildHistoryEntry, error)
 	TagImage(context.Context, ImageTagRequest) error
 	RemoveImage(context.Context, ImageRemoveRequest) error
 	PruneImages(context.Context, ResourcePruneRequest) error

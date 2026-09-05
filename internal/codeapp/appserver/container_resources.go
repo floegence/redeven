@@ -409,13 +409,13 @@ func (g *Server) handleImageCollection(w http.ResponseWriter, r *http.Request, p
 		writeContainerResourceError(w, err)
 		return true
 	}
-	if len(parts) == 3 && parts[2] == "history" {
-		items, err := g.containers.ImageHistory(r.Context(), containerengine.ImageHistoryRequest{Engine: engine, EndpointID: endpointID, Image: identity})
+	if len(parts) == 3 && parts[2] == "build-history" {
+		items, err := g.containers.ImageBuildHistory(r.Context(), containerengine.ImageBuildHistoryRequest{Engine: engine, EndpointID: endpointID, Image: identity})
 		if err != nil {
 			writeContainerResourceError(w, err)
 			return true
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"history": items}})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"build_history": items}})
 		return true
 	}
 	if len(parts) == 2 {

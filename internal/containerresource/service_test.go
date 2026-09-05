@@ -78,7 +78,7 @@ func (f *fakeEngineClient) InspectImage(context.Context, containerengine.Engine,
 	return containerengine.ImageRecord{}, containerengine.ErrImageNotFound
 }
 
-func (f *fakeEngineClient) HistoryImage(context.Context, containerengine.Engine, string) ([]containerengine.ImageHistoryEntry, error) {
+func (f *fakeEngineClient) BuildHistoryImage(context.Context, containerengine.Engine, string) ([]containerengine.ImageBuildHistoryEntry, error) {
 	return nil, nil
 }
 
