@@ -227,7 +227,7 @@ describe('native Containers responsive product surface', () => {
     { width: 1440, height: 900, variant: 'activity' as const, name: 'desktop' },
     { width: 640, height: 720, variant: 'workbench' as const, name: 'workbench' },
     { width: 390, height: 844, variant: 'activity' as const, name: 'mobile' },
-  ])('shows Compose detail errors and retry without false empty content on $name', async ({ width, height, variant, name }) => {
+  ])('shows Compose detail errors and retry without false empty content on $name', async ({ width, height, variant }) => {
     await page.viewport(width, height);
     browserHarness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'compose-projects'
       ? [{ project_id: 'project-1', name: 'dev_deps', status: 'running', service_count: 3, container_count: 3, running_count: 3, management: { managed: false } }]
