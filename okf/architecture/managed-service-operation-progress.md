@@ -1,15 +1,15 @@
 ---
 type: Runtime Contract
 title: Managed Service operation progress
-description: Persist and stream bounded, redacted lifecycle command output while preserving user-controlled detail state.
+description: Persist and stream bounded, redacted lifecycle command output while preserving stable, user-controlled progress presentation.
 tags: [architecture, managed-services, operations, observability, security, ui]
 timestamp: 2026-09-03T00:00:00Z
 ---
 # Summary
 
 - Authority: one Manager-owned Reporter mutates, persists, and publishes each active Managed Service operation; the Registry is the durable operation-history authority.
-- Outcome: users can keep an operation expanded through list and stream refreshes and inspect real, safely bounded lifecycle output while work is running.
-- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure state, and output never becomes a source of Runtime identity or application behavior.
+- Outcome: users can keep an operation expanded through list and stream refreshes, inspect real safely bounded lifecycle output, and see a brief operation finish without the progress surface flashing away.
+- Invariants: command displays are safe templates, output is redacted before persistence or broadcast, one operation ID owns disclosure and presentation state, terminal feedback remains readable, and output never becomes a source of Runtime identity or application behavior.
 - Failure boundary: persistence, stream, capture, or validation failures cannot expose raw output, secrets, authentication data, sensitive URL queries, managed private paths, or control characters.
 
 # Contract
@@ -26,9 +26,11 @@ Uninstall keeps operation metadata, command templates, state, timing, error code
 
 ## Service-row interaction
 
-The owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. The submitting placeholder transfers its explicit state once to the accepted backend operation ID. SSE snapshots and service-list replacements update the existing disclosure in place. A later operation defaults collapsed, and an operation removed from both page state and service state releases its disclosure entry.
+The owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. The service list is keyed by stable `service_id`, so refreshed service snapshots update the existing row and disclosure DOM in place instead of replaying entry presentation. The submitting placeholder transfers its explicit state once to the accepted backend operation ID. SSE snapshots and service-list replacements update the existing disclosure in place. A later operation defaults collapsed, and an operation removed from both page state and service state releases its disclosure entry.
 
 The details surface shows stages, transfer facts, command templates, stream semantics, live tail, and truncation state inline below the service row. The output viewport is the only local scroll owner. It follows new output while the user remains at the bottom, stops following when the user scrolls upward, and resumes only after the user returns to the bottom. Output changes do not open the disclosure, move page focus, or create a dialog.
+
+One Renderer presentation controller separates operation visibility from backend activity. A successful operation remains visible until both a 1.8-second minimum lifetime and a 1.2-second completed-state hold have elapsed, then exits through a 220-millisecond height, opacity, and position transition before unmounting. A transient submission released before backend acceptance still observes the minimum lifetime. An explicitly expanded transient or successful operation does not auto-close while the user is reading it; collapsing it resumes the settled exit. Failed, cancelled, and interrupted results remain available until a later operation replaces them or the owning service leaves the list. Retained terminal presentation never keeps service actions busy, and a later operation replaces the retained result immediately. Reduced-motion preference removes the animation without shortening the readable hold.
 
 # Boundaries
 
@@ -42,5 +44,7 @@ Operation output is observability data, not a terminal, shell, downloadable tran
 - `redeven:internal/portforward/registry/managed.go` - Canonicalizes progress v2 and clears service output bodies during uninstall finalization.
 - `redeven:internal/portforward/registry/schema.go` - Migrates progress v1 to v2 atomically in Registry v5.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Owns operation-ID disclosure state and the bounded bottom-follow output viewport.
+- `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.ts` - Owns minimum visibility, terminal retention, expansion-aware exit, and presentation replacement.
+- `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.test.ts` - Verifies brief success timing, expanded-detail retention, attention states, and replacement.
 - `redeven:internal/managedwebservice/operation_progress_test.go` - Covers ordering, bounds, redaction, quiet-burst persistence, and close behavior.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.browser.test.tsx` - Verifies stable output DOM, truncation, stream semantics, and user-controlled following in a real browser.

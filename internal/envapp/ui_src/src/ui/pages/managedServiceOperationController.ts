@@ -50,6 +50,8 @@ type ManagedOperationControllerOptions = Readonly<{
   streamFailedMessage: () => string;
   timedOutMessage: () => string;
   onSubmittingOperationAccepted?: (submittingOperationID: string, operationID: string) => void;
+  onOperationUpdated?: (operation: ManagedOperation) => void;
+  onOperationReleased?: (operationID: string) => void;
 }>;
 
 type ActiveStream = Readonly<{
@@ -96,6 +98,7 @@ export function createManagedServiceOperationController(options: ManagedOperatio
       options.onSubmittingOperationAccepted?.(previous.operation_id, operation.operation_id);
     }
     setStates((current) => ({ ...current, [operation.service_id]: { operation } }));
+    options.onOperationUpdated?.(operation);
   };
 
   const begin = (serviceID: string, action: ManagedOperation['action']): ManagedOperation => {
@@ -173,13 +176,16 @@ export function createManagedServiceOperationController(options: ManagedOperatio
   };
 
   const clear = (operationID: string) => {
+    let released = false;
     setStates((current) => {
       const serviceID = Object.keys(current).find((key) => current[key]?.operation.operation_id === operationID);
       if (!serviceID) return current;
       const next = { ...current };
       delete next[serviceID];
+      released = true;
       return next;
     });
+    if (released) options.onOperationReleased?.(operationID);
   };
 
   const cancel = async (operation: ManagedOperation) => {
@@ -189,7 +195,6 @@ export function createManagedServiceOperationController(options: ManagedOperatio
   };
 
   const operationForService = (serviceID: string) => states()[serviceID]?.operation ?? null;
-  const operationIDs = () => Object.values(states()).map((state) => state.operation.operation_id);
   const knows = (operationID: string) => Object.values(states()).some((state) => state.operation.operation_id === operationID);
 
   const dispose = () => {
@@ -197,5 +202,5 @@ export function createManagedServiceOperationController(options: ManagedOperatio
     streams.clear();
   };
 
-  return { begin, track, clear, cancel, operationForService, operationIDs, knows, dispose };
+  return { begin, track, clear, cancel, operationForService, knows, dispose };
 }
