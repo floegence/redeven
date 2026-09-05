@@ -42,7 +42,7 @@ describe('Redeven v1 terminal notifications', () => {
       timestampMs: 1234,
     });
     expect(redevenV1TypeIds.monitor.sysMonitor).toBe(3001);
-    expect(call).toHaveBeenCalledWith(3001, {}, expect.any(Function));
+    expect(call).toHaveBeenCalledWith(3001, {}, expect.any(Function), undefined);
   });
 
   it('accepts the complete runtime service snapshot returned by sys ping', async () => {
@@ -97,7 +97,7 @@ describe('Redeven v1 terminal notifications', () => {
         },
       },
     });
-    expect(call).toHaveBeenCalledWith(4001, {}, expect.any(Function));
+    expect(call).toHaveBeenCalledWith(4001, {}, expect.any(Function), undefined);
   });
 
   it('keeps terminal metadata notifications on unique consecutive type IDs', () => {

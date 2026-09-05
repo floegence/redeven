@@ -157,7 +157,12 @@ describe('Flower composer references', () => {
 
   it('selects a directory with the keyboard and sends a valid reference-only action', async () => {
     const launchTurn = vi.fn(async (turn) => (
-      launchReceipt(turn.thread_id ?? 'thread-reference', turn.turn_id ?? 'turn-reference')
+      launchReceipt(
+        turn.thread_id ?? 'thread-reference',
+        turn.turn_id ?? 'turn-reference',
+        'start',
+        turn.client_request_id,
+      )
     ));
     const runtime = renderSurfaceWithAdapter(composerReferenceAdapter({
       launchTurn,
