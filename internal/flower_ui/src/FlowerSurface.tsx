@@ -4210,7 +4210,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         error,
         current.view_version,
       );
-      if (threadID === selectedThreadID()) setThreadLoadError(threadDetailUserError(error));
+      if (threadID === selectedThreadID()) {
+        setThreadLoadError(threadDetailUserError(error));
+        if (current.activity === 'active' && current.run_progress == null) {
+          void requestThreadDetail(threadID, current.view_version, 'live_current', true);
+        }
+      }
       return false;
     }
   };

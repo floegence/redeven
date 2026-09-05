@@ -1174,6 +1174,9 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     throw new Error('Flower contract error: an active thread requires active_run_id.');
   }
   const progress = mapRunProgress(record.run_progress, activeRunID);
+  if (status === 'running' && !progress) {
+    throw new Error('Flower contract error: a running thread summary requires run_progress.');
+  }
   const waitingPrompt = record.waiting_prompt !== undefined ? mapInputRequest(record.waiting_prompt) : null;
   const inputRequest = status === 'waiting_user' ? waitingPrompt : null;
   const errorMessage = trim(record.run_error);

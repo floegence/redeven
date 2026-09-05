@@ -426,6 +426,9 @@ export function applyFlowerRuntimeCurrentView(
   if ((status === 'running' || status === 'waiting_approval' || status === 'waiting_user') && !activeRunID) {
     throw new Error('Flower contract error: an active thread current requires run_id.');
   }
+  if (status === 'running' && !current.run_progress) {
+    throw new Error('Flower contract error: a running thread current requires run_progress.');
+  }
   const projected: FlowerThreadSnapshot = {
     ...base,
     updated_at_ms: base.updated_at_ms,

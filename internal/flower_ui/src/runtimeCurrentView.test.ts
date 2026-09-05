@@ -12,6 +12,13 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('rejects a running current without canonical run progress', () => {
+    expect(() => applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 6, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
+      items: [{ id: 'user-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'hello' }],
+    })).toThrow('a running thread current requires run_progress');
+  });
+
   it('keeps product metadata while replacing detail with the typed current view', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 7, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
@@ -94,6 +101,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('keeps user messages with different request identities even when text repeats', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 11, activity: 'active', run_id: 'run-b', turn_id: 'turn-b',
+      run_progress: { phase: 'streaming' },
       items: [
     { id: 'user:request-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'same message' },
     { id: 'user:request-b', turn_id: 'turn-b', run_id: 'run-b', ordinal: 2, kind: 'user', text: 'same message' },
@@ -216,6 +224,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('keeps queued mixed attachments in order and projects scoped image URLs', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 13, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
+      run_progress: { phase: 'preparing' },
       queue: [{
         id: 'queue-a', request_key: 'request-a', created_at: '2026-08-24T10:00:00.000Z',
         input: {
@@ -247,6 +256,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('uses the explicit live item marker as the only streaming authority', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 9, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
+      run_progress: { phase: 'streaming' },
       items: [
     { id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: 'sealed segment' },
     { id: 'assistant:turn-a:2', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'assistant', text: 'live segment', live: true },
@@ -294,6 +304,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
         thread_id: 'thread-a', view_version: index + 1,
         activity: index === stages.length - 1 ? 'idle' : 'active', turn_id: 'turn-a',
         ...(index === stages.length - 1 ? {} : { run_id: 'run-a' }),
+        ...(index === stages.length - 1 ? {} : { run_progress: { phase: 'streaming' as const } }),
         ...(index === stages.length - 1 ? { last_outcome: 'completed' as const } : {}),
         items,
       };
@@ -319,7 +330,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('prioritizes waiting input over approval and running', () => {
     const current: FlowerRuntimeCurrentView = {
-      thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a',
+      thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
+      run_progress: { phase: 'preparing' },
       interactions: [
     { id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval' },
     { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', signal: { name: 'ask_user', call_id: 'input-a' } },
@@ -360,7 +372,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
   it('renders accepted busy input only in the typed runtime queue', () => {
     const current: FlowerRuntimeCurrentView = {
-      thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a',
+      thread_id: 'thread-a', view_version: 8, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',
+      run_progress: { phase: 'preparing' },
     items: [{ id: 'user:active', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'active work' }],
       queue: [
         { id: 'queue:queued-first', request_key: 'queued-first', input: { text: 'first queued' } },

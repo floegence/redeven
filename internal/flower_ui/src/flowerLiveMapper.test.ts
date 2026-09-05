@@ -191,6 +191,26 @@ describe('Flower input response message contract', () => {
 });
 
 describe('mapFlowerThread title contract', () => {
+  it('rejects a running summary without canonical run progress', () => {
+    expect(() => mapFlowerThread({
+      thread_id: 'thread-running-without-progress',
+      title: '',
+      title_status: '',
+      model_id: 'openai/gpt-5-mini',
+      working_dir: '/',
+      created_at_unix_ms: 1,
+      updated_at_unix_ms: 1,
+      run_status: 'running',
+      active_run_id: 'run-a',
+      queued_turn_count: 0,
+    }, [], {
+      runtimeID: 'runtime-test',
+      runtimeKind: 'local_environment',
+      sourceLabel: 'Local',
+      targetLabels: [],
+    })).toThrow('a running thread summary requires run_progress');
+  });
+
   it('rejects a non-empty title without a canonical title status', () => {
     expect(() => mapFlowerThread({
       thread_id: 'thread-invalid-title',
@@ -223,6 +243,7 @@ describe('mapFlowerThread title contract', () => {
       updated_at_unix_ms: 9,
       run_status: 'running',
       active_run_id: 'run-settings-revision',
+      run_progress: { run_id: 'run-settings-revision', turn_id: 'turn-settings-revision', phase: 'preparing' },
       queued_turn_count: 0,
       read_status: {
         is_unread: false,
