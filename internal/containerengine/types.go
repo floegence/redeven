@@ -288,10 +288,42 @@ type ImageLayer struct {
 	Digest string `json:"digest"`
 }
 
+type ImageBuildHistoryOperation string
+
+const (
+	ImageBuildHistoryOperationUnknown    ImageBuildHistoryOperation = "unknown"
+	ImageBuildHistoryOperationFrom       ImageBuildHistoryOperation = "from"
+	ImageBuildHistoryOperationRun        ImageBuildHistoryOperation = "run"
+	ImageBuildHistoryOperationCopy       ImageBuildHistoryOperation = "copy"
+	ImageBuildHistoryOperationAdd        ImageBuildHistoryOperation = "add"
+	ImageBuildHistoryOperationEnv        ImageBuildHistoryOperation = "env"
+	ImageBuildHistoryOperationWorkdir    ImageBuildHistoryOperation = "workdir"
+	ImageBuildHistoryOperationUser       ImageBuildHistoryOperation = "user"
+	ImageBuildHistoryOperationEntrypoint ImageBuildHistoryOperation = "entrypoint"
+	ImageBuildHistoryOperationCmd        ImageBuildHistoryOperation = "cmd"
+	ImageBuildHistoryOperationLabel      ImageBuildHistoryOperation = "label"
+	ImageBuildHistoryOperationExpose     ImageBuildHistoryOperation = "expose"
+	ImageBuildHistoryOperationVolume     ImageBuildHistoryOperation = "volume"
+	ImageBuildHistoryOperationArg        ImageBuildHistoryOperation = "arg"
+	ImageBuildHistoryOperationOnbuild    ImageBuildHistoryOperation = "onbuild"
+)
+
+type ImageBuildHistoryEffect string
+
+const (
+	ImageBuildHistoryEffectUnknown      ImageBuildHistoryEffect = "unknown"
+	ImageBuildHistoryEffectFilesystem   ImageBuildHistoryEffect = "filesystem"
+	ImageBuildHistoryEffectMetadataOnly ImageBuildHistoryEffect = "metadata_only"
+)
+
 type ImageBuildHistoryEntry struct {
-	IntermediateImageID string `json:"intermediate_image_id,omitempty"`
-	CreatedAtUnixMs     int64  `json:"created_at_unix_ms,omitempty"`
-	SizeBytes           int64  `json:"size_bytes,omitempty"`
+	Step                int                        `json:"step"`
+	Operation           ImageBuildHistoryOperation `json:"operation"`
+	Summary             string                     `json:"summary,omitempty"`
+	FilesystemEffect    ImageBuildHistoryEffect    `json:"filesystem_effect"`
+	IntermediateImageID string                     `json:"intermediate_image_id,omitempty"`
+	CreatedAtUnixMs     int64                      `json:"created_at_unix_ms,omitempty"`
+	SizeBytes           int64                      `json:"size_bytes,omitempty"`
 }
 
 type VolumeRecord struct {

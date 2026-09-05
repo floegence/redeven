@@ -281,8 +281,13 @@ func (c *CLIClient) BuildHistoryImage(ctx context.Context, engine Engine, image 
 		return nil, err
 	}
 	out := make([]ImageBuildHistoryEntry, 0, len(values))
-	for _, v := range values {
-		out = append(out, ImageBuildHistoryEntry{IntermediateImageID: cleanBuildHistoryImageID(firstNonEmpty(v.ID, v.Id)), CreatedAtUnixMs: parseTimeUnixMs(v.CreatedAt), SizeBytes: parseBytes(v.Size)})
+	for step, v := range values {
+		operation, summary, effect := describeBuildHistoryCommand(v.CreatedBy)
+		out = append(out, ImageBuildHistoryEntry{
+			Step: step, Operation: operation, Summary: summary, FilesystemEffect: effect,
+			IntermediateImageID: cleanBuildHistoryImageID(firstNonEmpty(v.ID, v.Id)),
+			CreatedAtUnixMs:     parseTimeUnixMs(v.CreatedAt), SizeBytes: parseBytes(v.Size),
+		})
 	}
 	return out, nil
 }
@@ -313,6 +318,137 @@ func cleanBuildHistoryImageID(value string) string {
 		return ""
 	}
 	return value
+}
+
+func describeBuildHistoryCommand(value string) (ImageBuildHistoryOperation, string, ImageBuildHistoryEffect) {
+	command := strings.TrimSpace(value)
+	if command == "" {
+		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown
+	}
+	if marker := strings.Index(strings.ToLower(command), "#(nop)"); marker >= 0 {
+		directive := strings.TrimSpace(command[marker+len("#(nop)"):])
+		return describeBuildHistoryDirective(directive)
+	}
+	command = trimBuildHistoryShell(command)
+	if command == "" {
+		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown
+	}
+	return ImageBuildHistoryOperationRun, safeBuildHistorySummary(command), ImageBuildHistoryEffectFilesystem
+}
+
+func describeBuildHistoryDirective(value string) (ImageBuildHistoryOperation, string, ImageBuildHistoryEffect) {
+	fields := strings.Fields(value)
+	if len(fields) == 0 {
+		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown
+	}
+	switch strings.ToUpper(fields[0]) {
+	case "FROM":
+		return ImageBuildHistoryOperationFrom, "", ImageBuildHistoryEffectFilesystem
+	case "RUN":
+		return ImageBuildHistoryOperationRun, safeBuildHistorySummary(strings.TrimSpace(strings.TrimPrefix(value, fields[0]))), ImageBuildHistoryEffectFilesystem
+	case "COPY":
+		return ImageBuildHistoryOperationCopy, "", ImageBuildHistoryEffectFilesystem
+	case "ADD":
+		return ImageBuildHistoryOperationAdd, "", ImageBuildHistoryEffectFilesystem
+	case "ENV":
+		return ImageBuildHistoryOperationEnv, "", ImageBuildHistoryEffectMetadataOnly
+	case "WORKDIR":
+		return ImageBuildHistoryOperationWorkdir, "", ImageBuildHistoryEffectMetadataOnly
+	case "USER":
+		return ImageBuildHistoryOperationUser, "", ImageBuildHistoryEffectMetadataOnly
+	case "ENTRYPOINT":
+		return ImageBuildHistoryOperationEntrypoint, "", ImageBuildHistoryEffectMetadataOnly
+	case "CMD":
+		return ImageBuildHistoryOperationCmd, "", ImageBuildHistoryEffectMetadataOnly
+	case "LABEL":
+		return ImageBuildHistoryOperationLabel, "", ImageBuildHistoryEffectMetadataOnly
+	case "EXPOSE":
+		return ImageBuildHistoryOperationExpose, "", ImageBuildHistoryEffectMetadataOnly
+	case "VOLUME":
+		return ImageBuildHistoryOperationVolume, "", ImageBuildHistoryEffectMetadataOnly
+	case "ARG":
+		return ImageBuildHistoryOperationArg, "", ImageBuildHistoryEffectMetadataOnly
+	case "ONBUILD":
+		return ImageBuildHistoryOperationOnbuild, "", ImageBuildHistoryEffectMetadataOnly
+	default:
+		return ImageBuildHistoryOperationUnknown, "", ImageBuildHistoryEffectUnknown
+	}
+}
+
+func trimBuildHistoryShell(value string) string {
+	value = strings.TrimSpace(value)
+	for {
+		lower := strings.ToLower(value)
+		trimmed := value
+		for _, prefix := range []string{"/bin/sh -c ", "/bin/bash -c ", "sh -c ", "bash -c "} {
+			if strings.HasPrefix(lower, prefix) {
+				trimmed = strings.TrimSpace(value[len(prefix):])
+				break
+			}
+		}
+		if trimmed == value {
+			return value
+		}
+		value = trimmed
+	}
+}
+
+func safeBuildHistorySummary(value string) string {
+	value = trimBuildHistoryShell(value)
+	fields := safeBuildHistoryFields(value)
+	if len(fields) == 0 {
+		return ""
+	}
+	command := fields[0]
+	if len(fields) == 1 {
+		return command
+	}
+	switch command {
+	case "bazel", "buck", "cargo", "go", "make", "mvn", "npm", "pnpm", "yarn":
+		if safeBuildHistoryToken(fields[1]) {
+			if len(fields) > 2 && safeBuildHistoryTarget(fields[2]) {
+				return strings.Join(fields[:3], " ")
+			}
+			return strings.Join(fields[:2], " ")
+		}
+	}
+	return command
+}
+
+func safeBuildHistoryFields(value string) []string {
+	fields := make([]string, 0, 3)
+	for _, field := range strings.Fields(value) {
+		field = strings.Trim(field, "\"'`")
+		if field == "" || field == "|" || strings.HasPrefix(field, "|") || strings.HasPrefix(field, "-") || strings.Contains(field, "=") {
+			continue
+		}
+		if index := strings.LastIndexAny(field, "/\\"); index >= 0 && len(fields) == 0 {
+			field = field[index+1:]
+		}
+		if field == "" || !safeBuildHistoryToken(field) {
+			break
+		}
+		fields = append(fields, field)
+		if len(fields) == 3 {
+			break
+		}
+	}
+	return fields
+}
+
+func safeBuildHistoryTarget(value string) bool {
+	return (strings.HasPrefix(value, "@") || strings.HasPrefix(value, "//")) && safeBuildHistoryToken(value)
+}
+
+func safeBuildHistoryToken(value string) bool {
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') || strings.ContainsRune("._+-/@", character) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func cleanImageMetadataList(values []string) []string {

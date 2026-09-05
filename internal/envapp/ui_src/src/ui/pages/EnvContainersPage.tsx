@@ -222,7 +222,8 @@ type ReviewState = Readonly<{
 }>;
 
 type ResourceFilter = 'all' | 'active' | 'inactive' | 'managed';
-type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'build-history' | 'used-by' | 'containers';
+type DetailTab = 'overview' | 'logs' | 'inspect' | 'mounts' | 'exec' | 'files' | 'stats' | 'layers' | 'used-by' | 'containers';
+type ImageLayerView = 'build-steps' | 'filesystem';
 type ResourceSortKey = 'status' | 'name' | 'secondary' | 'created';
 type ResourceSortDirection = 'ascending' | 'descending';
 
@@ -949,6 +950,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [logsWrap, setLogsWrap] = createSignal(true);
   const [rawInspect, setRawInspect] = createSignal<unknown>(null);
   const [rawInspectLoading, setRawInspectLoading] = createSignal(false);
+  const [imageLayerView, setImageLayerView] = createSignal<ImageLayerView>('build-steps');
   const [imageBuildHistory, setImageBuildHistory] = createSignal<ContainerImageBuildHistoryEntry[]>([]);
   const [imageBuildHistoryLoading, setImageBuildHistoryLoading] = createSignal(false);
   const [imageBuildHistoryError, setImageBuildHistoryError] = createSignal('');
@@ -1366,6 +1368,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setCollectionStats(new Map());
     setRawInspect(null);
     setRawInspectLoading(false);
+    setImageLayerView('build-steps');
     setImageBuildHistory([]);
     setImageBuildHistoryLoading(false);
     setImageBuildHistoryError('');
@@ -1774,7 +1777,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   createEffect(() => {
     const ready = readyConsole();
     const entry = selectedEntry();
-    if (!ready || !entry || detailTab() !== 'build-history' || ready.target.view !== 'images') return;
+    if (!ready || !entry || detailTab() !== 'layers' || imageLayerView() !== 'build-steps' || ready.target.view !== 'images') return;
     const identity = resourceIdentity('images', entry.item);
     let active = true;
     setImageBuildHistory([]);
@@ -3073,7 +3076,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       tabs.push('stats');
       return tabs;
     }
-    if (view() === 'images') return ['overview', 'layers', 'build-history', 'used-by'];
+    if (view() === 'images') return ['overview', 'layers', 'used-by'];
     if (view() === 'volumes') return selectedTarget()?.capabilities?.volume_files ? ['overview', 'files', 'used-by'] : ['overview', 'used-by'];
     return ['overview', 'containers'];
   });
@@ -3135,6 +3138,45 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </Show>
       </div>
     );
+  };
+
+  const buildHistoryOperationKey = (operation: string): string => {
+    switch (operation) {
+      case 'from':
+      case 'run':
+      case 'copy':
+      case 'add':
+      case 'env':
+      case 'workdir':
+      case 'user':
+      case 'entrypoint':
+      case 'cmd':
+      case 'label':
+      case 'expose':
+      case 'volume':
+      case 'arg':
+      case 'onbuild':
+        return operation;
+      default:
+        return 'unknown';
+    }
+  };
+
+  const buildHistoryOperationLabel = (operation: string) => i18n.t(
+    `containers.detail.buildOperations.${buildHistoryOperationKey(operation)}` as Parameters<typeof i18n.t>[0],
+  );
+
+  const buildHistoryEffectLabel = (effect: ContainerImageBuildHistoryEntry['filesystem_effect']) => i18n.t(
+    `containers.detail.buildEffects.${effect}` as Parameters<typeof i18n.t>[0],
+  );
+
+  const copyImageLayerDigest = async (digest: string) => {
+    try {
+      await navigator.clipboard.writeText(digest);
+      notify.success(i18n.t('uiCopy.audit.copiedTitle'), i18n.t('uiCopy.audit.copiedMessage', { label: i18n.t('containers.detail.layerDigest') }));
+    } catch {
+      notify.error(i18n.t('uiCopy.audit.copyFailedTitle'), i18n.t('uiCopy.audit.copyFailedMessage'));
+    }
   };
 
   const renderDetailContent = () => {
@@ -3210,9 +3252,81 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
       const detailsLoaded = Object.keys(selectedDetailRecord()).length > 0;
       if (!detailsLoaded) return <div class="container-empty-inline">{i18n.t('containers.loading')}</div>;
       const layers = Array.isArray(record.layers) ? record.layers as readonly ContainerImageLayer[] : [];
-      return <div class="container-layer-list"><Show when={layers.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}><For each={layers}>{(layer, index) => { const digest = compact(layer.digest); return <div class="container-layer-row container-layer-row--filesystem"><span>{index() + 1}</span><span class="font-mono" title={digest || undefined}>{digest || i18n.t('containers.detail.layerUnavailable')}</span></div>; }}</For></Show></div>;
+      return (
+        <div class="container-layer-view">
+          <div class="container-layer-view__heading">
+            <div>
+              <strong>{i18n.t('containers.detail.layersTitle')}</strong>
+              <span>{i18n.t('containers.detail.layersDescription')}</span>
+            </div>
+            <div class="container-layer-view__switch" role="tablist" aria-label={i18n.t('containers.detail.layerViewLabel')}>
+              <button type="button" role="tab" aria-selected={imageLayerView() === 'build-steps'} data-active={imageLayerView() === 'build-steps'} onClick={() => setImageLayerView('build-steps')}>
+                {i18n.t('containers.detail.buildSteps')}
+              </button>
+              <button type="button" role="tab" aria-selected={imageLayerView() === 'filesystem'} data-active={imageLayerView() === 'filesystem'} onClick={() => setImageLayerView('filesystem')}>
+                {i18n.t('containers.detail.filesystemLayers')}
+              </button>
+            </div>
+          </div>
+          <Show when={imageLayerView() === 'filesystem'}>
+            <div class="container-layer-list">
+              <div class="container-layer-row container-layer-row--filesystem container-layer-row--header" aria-hidden="true">
+                <span>{i18n.t('containers.detail.step')}</span>
+                <span>{i18n.t('containers.detail.digest')}</span>
+                <span />
+              </div>
+              <Show when={layers.length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyLayers')}</div>}>
+                <For each={layers}>{(layer, index) => {
+                  const digest = compact(layer.digest);
+                  return (
+                    <div class="container-layer-row container-layer-row--filesystem">
+                      <span>{index() + 1}</span>
+                      <code class="container-layer-digest" title={digest || undefined}>{digest || i18n.t('containers.detail.layerUnavailable')}</code>
+                      <Show when={digest}>
+                        <Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t('containers.detail.copyLayerDigest')} title={i18n.t('containers.detail.copyLayerDigest')} onClick={() => void copyImageLayerDigest(digest)}>
+                          <Copy class="h-3.5 w-3.5" />
+                        </Button>
+                      </Show>
+                    </div>
+                  );
+                }}</For>
+              </Show>
+            </div>
+          </Show>
+          <Show when={imageLayerView() === 'build-steps'}>
+            <div class="container-layer-list">
+              <div class="container-layer-row container-layer-row--build container-layer-row--header" aria-hidden="true">
+                <span>{i18n.t('containers.detail.step')}</span>
+                <span>{i18n.t('containers.detail.change')}</span>
+                <span>{i18n.t('containers.detail.size')}</span>
+                <span>{i18n.t('containers.detail.created')}</span>
+                <span>{i18n.t('containers.detail.result')}</span>
+              </div>
+              <Show when={!imageBuildHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}>
+                <Show when={!imageBuildHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.buildHistoryUnavailable')}</strong></div>}>
+                  <Show when={imageBuildHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyBuildHistory')}</div>}>
+                    <For each={imageBuildHistory()}>{(entry) => (
+                      <div class="container-layer-row container-layer-row--build">
+                        <span>{entry.step + 1}</span>
+                        <div class="container-layer-change">
+                          <strong>{buildHistoryOperationLabel(entry.operation)}</strong>
+                          <Show when={entry.summary}><code title={entry.summary}>{entry.summary}</code></Show>
+                          <Show when={entry.intermediate_image_id}><code class="container-layer-intermediate" title={entry.intermediate_image_id}>{compact(entry.intermediate_image_id)}</code></Show>
+                          <Show when={!entry.intermediate_image_id}><span class="container-layer-intermediate">{i18n.t('containers.detail.noIntermediateImage')}</span></Show>
+                        </div>
+                        <span class="tabular-nums">{formatBytes(entry.size_bytes)}</span>
+                        <time>{formatDate(entry.created_at_unix_ms)}</time>
+                        <span class="container-layer-effect" data-effect={entry.filesystem_effect}>{buildHistoryEffectLabel(entry.filesystem_effect)}</span>
+                      </div>
+                    )}</For>
+                  </Show>
+                </Show>
+              </Show>
+            </div>
+          </Show>
+        </div>
+      );
     }
-    if (tab === 'build-history') return <div class="container-layer-list"><Show when={!imageBuildHistoryLoading()} fallback={<div class="container-empty-inline">{i18n.t('containers.loading')}</div>}><Show when={!imageBuildHistoryError()} fallback={<div class="container-empty-inline"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.detail.buildHistoryUnavailable')}</strong></div>}><Show when={imageBuildHistory().length > 0} fallback={<div class="container-empty-inline">{i18n.t('containers.detail.emptyBuildHistory')}</div>}><For each={imageBuildHistory()}>{(entry, index) => <div class="container-layer-row container-layer-row--history"><span>{index() + 1}</span><span class="font-mono" title={entry.intermediate_image_id || undefined}>{entry.intermediate_image_id || i18n.t('containers.detail.noIntermediateImage')}</span><span>{formatBytes(entry.size_bytes)}</span><span>{formatDate(entry.created_at_unix_ms)}</span></div>}</For></Show></Show></Show></div>;
     if (tab === 'used-by' || tab === 'containers') return renderReferences();
     return null;
   };

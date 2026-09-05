@@ -2805,7 +2805,7 @@ export const enUS = defineDictionary({
     },
     detailTabs: {
       overview: 'Overview', logs: 'Logs', inspect: 'Inspect', mounts: 'Mounts', exec: 'Terminal',
-      files: 'Files', stats: 'Stats', layers: 'Image layers', 'build-history': 'Build history', 'used-by': 'Used by', containers: 'Containers',
+      files: 'Files', stats: 'Stats', layers: 'Layers', 'used-by': 'Used by', containers: 'Containers',
     },
     detail: {
       loadFailed: 'Could not load resource details. Try again.',
@@ -2816,7 +2816,10 @@ export const enUS = defineDictionary({
       emptyReferences: 'No referenced containers', emptyMounts: 'No mounts', redacted: 'Redacted',
       namedVolumes: 'Named volumes', otherMounts: 'Other mounts', readOnly: 'Read only', readWrite: 'Read and write',
       parentFolder: 'Parent folder', downloadFile: 'Download file', binaryFile: 'This file cannot be previewed as text.',
-      layer: 'Layer', layerCount: 'Filesystem layers', layerUnavailable: 'Layer digest unavailable', emptyLayers: 'No filesystem layers reported', buildHistoryUnavailable: 'Build history could not be loaded', emptyBuildHistory: 'No build history reported', noIntermediateImage: 'No intermediate image ID',
+      layer: 'Layer', layerCount: 'Filesystem layers', layerUnavailable: 'Layer digest unavailable', emptyLayers: 'No filesystem layers are available', buildHistoryUnavailable: 'Build steps could not be loaded', emptyBuildHistory: 'No build steps are available', noIntermediateImage: 'No intermediate image ID',
+      layersTitle: 'Build steps', layersDescription: 'Build steps show what changed in the image. Filesystem layers are available in the technical view.', layerViewLabel: 'Layer view', buildSteps: 'Build steps', filesystemLayers: 'Filesystem layers', step: 'Step', change: 'Change', size: 'Build step size', created: 'Created', result: 'Result', digest: 'Digest', copyLayerDigest: 'Copy layer digest', layerDigest: 'layer digest',
+      buildOperations: { unknown: 'Build step', from: 'Base image', run: 'Run command', copy: 'Copy files', add: 'Add files', env: 'Set environment', workdir: 'Set working directory', user: 'Set runtime user', entrypoint: 'Set entrypoint', cmd: 'Set default command', label: 'Set metadata', expose: 'Expose ports', volume: 'Declare volume', arg: 'Build argument', onbuild: 'Configure trigger' },
+      buildEffects: { filesystem: 'Filesystem change', metadata_only: 'Metadata only', unknown: 'Effect unknown' },
       execUnavailable: 'This Floeterm release does not support a container terminal.', fullscreen: 'Full screen',
     },
     inspector: {

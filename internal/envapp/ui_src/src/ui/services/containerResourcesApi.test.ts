@@ -255,8 +255,12 @@ describe('native container resources API', () => {
   });
 
   it('keeps build history safe and observes endpoint-wide stats from one SSE stream', async () => {
-    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ build_history: [{ intermediate_image_id: 'layer-1', size_bytes: 1024, created_at_unix_ms: 1 }] });
-    await expect(getContainerImageBuildHistory('alpine:3.22', 'podman', 'rootless')).resolves.toHaveLength(1);
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ build_history: [{ step: 0, operation: 'copy', summary: '', filesystem_effect: 'filesystem', intermediate_image_id: 'layer-1', size_bytes: 1024, created_at_unix_ms: 1 }] });
+    await expect(getContainerImageBuildHistory('alpine:3.22', 'podman', 'rootless')).resolves.toMatchObject([{
+      step: 0,
+      operation: 'copy',
+      filesystem_effect: 'filesystem',
+    }]);
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
       '/_redeven_proxy/api/container-resources/images/alpine%3A3.22/build-history?engine=podman&endpoint_id=rootless',
       { method: 'GET' },

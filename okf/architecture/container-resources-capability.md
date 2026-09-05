@@ -39,9 +39,11 @@ The engine supports endpoint status, containers, images, volumes, Docker
 Compose Projects, Podman Pods, bounded logs, endpoint-wide statistics, safe
 resource reads, image Inspect filesystem layers, image build history, and typed
 mutations. Image filesystem layers are returned only from the inspected image's
-ordered `RootFS.Layers`; build history remains a separate diagnostic read and
-its optional intermediate image IDs never become layer identities. Endpoint
-responses advertise collection statistics, Podman volume files, and Exec independently so the UI never
+ordered `RootFS.Layers`; build history provides separately classified build-step
+metadata and its optional intermediate image IDs never become layer identities.
+The build-step metadata contains only a normalized operation and safe command
+summary; raw `CreatedBy` content is never returned. Endpoint responses
+advertise collection statistics, Podman volume files, and Exec independently so the UI never
 presents an unsupported tool.
 Docker-only methods reject Podman targets and Podman-only methods reject Docker
 targets. Compose configuration paths and engine connection details remain

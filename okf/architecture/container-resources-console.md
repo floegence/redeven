@@ -140,15 +140,18 @@ cannot clear its replacement. The selected command always matches the argv
 being retried. The terminal stays mounted while detail tabs change, fills the
 detail body's remaining height, and closes when container detail closes.
 Managed, stopped, paused, and unsupported targets never expose Exec. Image detail provides Overview,
-filesystem layers, build history, references, Run, Tag, and Delete without
-security-analysis placeholders. Filesystem layers are the ordered digests from
-the same image Inspect response's `RootFS.Layers`; their count is derived from
-that list and never from build history. Build history is a separate diagnostic
-view backed by the engine history command. Its intermediate image ID is
-optional: Docker or Podman may report `<missing>` or `<none>` for a history
-step, and the product renders a localized absence label rather than treating
-that marker as a filesystem layer. Build history does not expose `CreatedBy`
-commands or infer filesystem layers from history. Volume detail provides
+Layers, references, Run, Tag, and Delete without security-analysis placeholders.
+The Layers view defaults to user-facing build steps backed by the engine history
+command. Each step shows a localized operation label, a safe command summary when
+available, step size, creation time, and a classified effect (`filesystem`,
+`metadata_only`, or `unknown`). Raw `CreatedBy` commands and their arguments
+never reach the client. Its intermediate image ID is optional: Docker or Podman
+may report `<missing>` or `<none>` for a history step, and the product renders a
+localized absence label rather than exposing that marker. A separate technical
+Filesystem layers view shows only the ordered digests from the same image
+Inspect response's `RootFS.Layers`; their count is derived from that list and
+never from build history. Redeven never infers a digest-to-history relationship
+by array position. Volume detail provides
 Overview, references, and
 capability-gated files. Compose Projects and Pods provide overview, members,
 lifecycle, and member navigation. Managed resources replace native mutation
