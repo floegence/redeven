@@ -4,6 +4,7 @@ title: Native container console
 description: Present aggregated container resources with stable loading, exact-target navigation, and structured Compose input.
 tags: [architecture, containers, ui, workbench]
 timestamp: 2026-09-05T00:00:00Z
+quality_exception: Cross-surface native container contract spanning aggregated resources, target-scoped navigation, operations, and Compose workflows.
 ---
 # Summary
 
