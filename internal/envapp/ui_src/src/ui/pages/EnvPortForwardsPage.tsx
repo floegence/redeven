@@ -1372,8 +1372,9 @@ export function ManagedReleaseCandidates(props: Readonly<{
 	const windowedCandidates = createMemo(() => {
 		const all = candidates();
 		const height = scrollViewport?.clientHeight ?? 600;
-		const start = Math.max(0, Math.floor(scrollTop() / rowHeight) - overscan);
+		const visibleRows = Math.ceil(height / rowHeight);
 		const end = Math.min(all.length, Math.ceil((scrollTop() + height) / rowHeight) + overscan);
+		const start = Math.max(0, Math.min(Math.floor(scrollTop() / rowHeight) - overscan, end - visibleRows - overscan));
 		return { all, start, end, items: all.slice(start, end) };
 	});
 	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
@@ -1447,7 +1448,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 							<div style={{ height: `${windowedCandidates().all.length * rowHeight}px`, position: 'relative' }}>
 								<div style={{ position: 'absolute', top: `${windowedCandidates().start * rowHeight}px`, left: '0', right: '0' }}>
 								<For each={windowedCandidates().items}>{(candidate) => (
-							<button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', props.selectedID === candidate.candidate_id && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', candidate.verification_status === 'unavailable' && 'cursor-not-allowed opacity-65')} disabled={candidate.verification_status === 'unavailable'} aria-pressed={props.selectedID === candidate.candidate_id} onClick={() => candidate.verification_status === 'pending' ? props.onVerify?.(candidate.candidate_id) : props.onSelect(candidate.candidate_id)} data-release-id={candidate.candidate_id} data-verification-status={candidate.verification_status}>
+							<button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', props.selectedID === candidate.candidate_id && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', candidate.verification_status === 'unavailable' && 'cursor-not-allowed opacity-65')} disabled={candidate.verification_status === 'unavailable'} aria-pressed={props.selectedID === candidate.candidate_id} aria-busy={candidate.verification_status === 'pending' || undefined} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); candidate.verification_status === 'pending' ? props.onVerify?.(candidate.candidate_id) : props.onSelect(candidate.candidate_id); }} data-release-id={candidate.candidate_id} data-verification-status={candidate.verification_status}>
 								<div class="min-w-0"><div class="truncate font-mono text-sm font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div>
 								<div class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"><div class="truncate text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.t('webServices.managed.releasePublishedAt', { date: i18n.formatDateTime(published(), { dateStyle: 'medium' }) })}`}</Show></div><Show when={candidate.integrity || candidate.digest}>{(exactIdentity) => <code class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show></div>
 				<div class="col-start-2 row-start-1 flex min-w-0 flex-wrap justify-end gap-1 sm:col-start-3 sm:max-w-52"><Show when={candidate.verification_status === 'pending'}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseVerification.pending')}</Tag></Show><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended && candidate.recommendation_status === 'available'}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.recommendation_status === 'unavailable'}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.recommendedUnavailable')}</Tag></Show><Show when={candidate.digest_verified}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.verifiedDigest')}</Tag></Show><Show when={candidate.is_latest_stable}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
@@ -1458,7 +1459,15 @@ export function ManagedReleaseCandidates(props: Readonly<{
 								</div>
 							</div>
 						</Show>
-						<Show when={props.result?.has_more}><div class="py-3 text-center text-[11px] text-muted-foreground" data-testid="managed-release-more-sentinel">{i18n.t('webServices.managed.releaseLoadingProgress', { count: props.result?.loaded_count ?? 0 })}</div></Show>
+						<Show when={props.result?.has_more}><div class="flex h-9 items-center justify-center gap-2 text-[11px] text-muted-foreground" data-testid="managed-release-more-sentinel">
+							<Show when={props.loading} fallback={<span>{i18n.t('webServices.managed.releaseLoadMoreHint', { count: props.result?.loaded_count ?? 0 })}</span>}>
+								<span class="inline-flex items-center gap-1" role="status" aria-label={i18n.t('common.status.loading')}>
+									<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/70 [animation-delay:-300ms]" />
+									<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/70 [animation-delay:-150ms]" />
+									<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/70" />
+								</span>
+							</Show>
+						</div></Show>
 					</div>
 				</Show>
 			</Show>
