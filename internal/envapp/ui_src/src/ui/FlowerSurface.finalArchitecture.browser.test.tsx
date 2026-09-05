@@ -21,6 +21,7 @@ import {
   readStatus,
   renderSurfaceWithAdapter,
   runtimeCurrentView,
+  settingsSnapshot,
   subagentDetail,
   subagentSummary,
   thread,
@@ -1037,12 +1038,24 @@ describe('Flower final thread cache and workspace transport', () => {
     const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchResponse.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
+      loadSettings: vi.fn(async () => ({
+        ...settingsSnapshot(true),
+        defaults: { permission_type: 'full_access' as const },
+      })),
       listThreads: vi.fn(async () => []),
       launchTurn,
       connectLiveStream: stream.connect,
     });
 
-    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')
+      ?.getAttribute('data-permission-type') === 'full_access');
+    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector(
+      '[data-permission-type="approval_required"].flower-permission-menu-item',
+    ) !== null);
+    (runtime.querySelector(
+      '[data-permission-type="approval_required"].flower-permission-menu-item',
+    ) as HTMLButtonElement).click();
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'hi';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -1091,6 +1104,8 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) === null);
     observeVisibleRows();
     expect(runtime.querySelector(`[data-flower-message-id="user:${requestID}"]`)).not.toBeNull();
+    expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type'))
+      .toBe('approval_required');
     expect(runtime.querySelector('.flower-empty-state')).toBeNull();
     launchResponse.resolve({ ...receipt, current });
 

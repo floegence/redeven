@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-09-05
+* **Stable provisional Flower settings**: New-thread admission now keeps the
+  effective permission, model, reasoning, and working directory with its
+  short-lived transport entry. Typed current state can render those settings
+  while canonical product detail is pending, without inheriting a changed
+  environment default or treating presentation state as authorization.
+
 ## 2026-09-04
 * **Current-template Managed Service Runtime**: Installed services now persist
   only template ID, instance configuration, selected application release,

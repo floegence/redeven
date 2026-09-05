@@ -967,6 +967,7 @@ describe('Flower bottom decision surface', () => {
     const chatThread = thread({
       thread_id: 'thread-menu-to-approval',
       status: 'idle',
+      permission_type: 'approval_required',
       approval_actions: [],
     });
     const approvalThread = { ...chatThread, status: 'waiting_approval' as const, approval_actions: [action] };

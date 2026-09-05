@@ -573,7 +573,8 @@ describe('FlowerSurface navigation', () => {
     expect(launchTurn).toHaveBeenCalledWith(expect.not.objectContaining({ permission_type: expect.anything() }));
   });
 
-  it('sends only an explicitly selected permission override for a new conversation', async () => {
+  it('keeps an explicitly selected permission while canonical detail is pending', async () => {
+    const detail = deferred<ReturnType<typeof liveBootstrap>>();
     const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => (
       launchReceipt(input.thread_id ?? 'thread-explicit-permission', 'turn-explicit-permission', 'start', input.client_request_id)
     ));
@@ -583,6 +584,9 @@ describe('FlowerSurface navigation', () => {
         ...settingsSnapshot(true),
         defaults: { permission_type: 'full_access' as const },
       })),
+      listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(() => detail.promise),
+      setThreadPermissionType: vi.fn(),
       launchTurn,
     };
     const runtime = renderSurfaceWithAdapter(surfaceAdapter);
@@ -599,6 +603,20 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => launchTurn.mock.calls.length === 1);
     expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({ permission_type: 'approval_required' }));
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')
+      ?.getAttribute('data-flower-selected-thread-id') === 'thread-explicit-permission');
+    const permissionTrigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
+    expect(permissionTrigger.getAttribute('data-permission-type')).toBe('approval_required');
+    expect(permissionTrigger.disabled).toBe(true);
+
+    detail.resolve(liveBootstrap(thread({
+      thread_id: 'thread-explicit-permission',
+      status: 'running',
+      active_run_id: 'turn-explicit-permission',
+      permission_type: 'approval_required',
+    }), 2));
+    await waitFor(() => (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement | null)
+      ?.getAttribute('data-permission-type') === 'approval_required');
   });
 
   it('does not turn the temporary permission fallback into a new-thread override while settings load', async () => {
@@ -620,6 +638,33 @@ describe('FlowerSurface navigation', () => {
     });
     await waitFor(() => runtime.querySelector('[data-permission-type="full_access"]') !== null);
     expect((runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('does not show the environment default while selected thread settings load', async () => {
+    const summary = thread({
+      thread_id: 'thread-permission-loading',
+      permission_type: undefined,
+    });
+    const detail = deferred<ReturnType<typeof liveBootstrap>>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => ({
+        ...settingsSnapshot(true),
+        defaults: { permission_type: 'full_access' as const },
+      })),
+      listThreads: vi.fn(async () => [summary]),
+      loadThread: vi.fn(() => detail.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')
+      ?.getAttribute('data-flower-selected-thread-id') === summary.thread_id);
+
+    const permission = runtime.querySelector('.flower-permission-selector') as HTMLElement;
+    expect(permission.getAttribute('data-permission-type')).toBeNull();
+    expect(permission.textContent?.toLowerCase()).toContain('permission');
+    expect(permission.textContent).not.toContain('Full access');
   });
 
   it('opens provider setup from settings when no model is configured', async () => {
