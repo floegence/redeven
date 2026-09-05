@@ -285,16 +285,13 @@ func (c *CLIClient) BuildHistoryImage(ctx context.Context, engine Engine, image 
 		operation, summary, effect := describeBuildHistoryCommand(v.CreatedBy)
 		out = append(out, ImageBuildHistoryEntry{
 			Step: step, Operation: operation, Summary: summary, FilesystemEffect: effect,
-			IntermediateImageID: cleanBuildHistoryImageID(firstNonEmpty(v.ID, v.Id)),
-			CreatedAtUnixMs:     parseTimeUnixMs(v.CreatedAt), SizeBytes: parseBytes(v.Size),
+			CreatedAtUnixMs: parseTimeUnixMs(v.CreatedAt), SizeBytes: parseBytes(v.Size),
 		})
 	}
 	return out, nil
 }
 
 type historyRecord struct {
-	ID        string `json:"ID"`
-	Id        string `json:"Id"`
 	Size      string `json:"Size"`
 	CreatedAt string `json:"CreatedAt"`
 	CreatedBy string `json:"CreatedBy"`
@@ -310,14 +307,6 @@ func cleanImageMetadata(value string) string {
 
 func cleanImageLayerDigest(value string) string {
 	return strings.TrimSpace(value)
-}
-
-func cleanBuildHistoryImageID(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "<none>" || value == "<missing>" {
-		return ""
-	}
-	return value
 }
 
 func describeBuildHistoryCommand(value string) (ImageBuildHistoryOperation, string, ImageBuildHistoryEffect) {

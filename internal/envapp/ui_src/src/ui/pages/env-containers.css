@@ -787,7 +787,6 @@
 .container-layer-change { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .container-layer-change strong { flex: none; color: var(--foreground); font-size: 11px; font-weight: 650; }
 .container-layer-change code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 10px; }
-.container-layer-intermediate { min-width: 0; overflow: hidden; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .container-layer-effect { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .container-layer-effect[data-effect="filesystem"] { color: var(--redeven-status-info-foreground); }
 .container-layer-effect[data-effect="metadata_only"] { color: var(--muted-foreground); }

@@ -309,7 +309,7 @@ func TestContainerImageBuildHistoryRouteIsSeparateFromLegacyHistory(t *testing.T
 		volumes:      map[string]containerengine.VolumeRecord{},
 		imagePresent: true,
 		image:        containerengine.ImageRecord{ID: "sha256:image", Layers: []containerengine.ImageLayer{{Digest: "sha256:layer"}}},
-		buildHistory: []containerengine.ImageBuildHistoryEntry{{IntermediateImageID: "sha256:step", SizeBytes: 1024}},
+		buildHistory: []containerengine.ImageBuildHistoryEntry{{Operation: containerengine.ImageBuildHistoryOperationCopy, FilesystemEffect: containerengine.ImageBuildHistoryEffectFilesystem, SizeBytes: 1024}},
 	}
 	adapter, err := containerengine.NewAdapter(client)
 	if err != nil {
@@ -324,7 +324,7 @@ func TestContainerImageBuildHistoryRouteIsSeparateFromLegacyHistory(t *testing.T
 	server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, UserPublicID: "user-image"})}
 
 	response := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/images/sha256%3Aimage/build-history?engine=docker", "")
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"build_history"`) || !strings.Contains(response.Body.String(), `sha256:step`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"build_history"`) || !strings.Contains(response.Body.String(), `"operation":"copy"`) || strings.Contains(response.Body.String(), `intermediate_image_id`) {
 		t.Fatalf("build history response status=%d body=%s", response.Code, response.Body.String())
 	}
 	legacy := serveContainerAPI(t, server, channelID, http.MethodGet, containerResourcesAPIBase+"/images/sha256%3Aimage/history?engine=docker", "")

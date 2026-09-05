@@ -255,7 +255,7 @@ describe('native container resources API', () => {
   });
 
   it('keeps build history safe and observes endpoint-wide stats from one SSE stream', async () => {
-    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ build_history: [{ step: 0, operation: 'copy', summary: '', filesystem_effect: 'filesystem', intermediate_image_id: 'layer-1', size_bytes: 1024, created_at_unix_ms: 1 }] });
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ build_history: [{ step: 0, operation: 'copy', summary: '', filesystem_effect: 'filesystem', size_bytes: 1024, created_at_unix_ms: 1 }] });
     await expect(getContainerImageBuildHistory('alpine:3.22', 'podman', 'rootless')).resolves.toMatchObject([{
       step: 0,
       operation: 'copy',

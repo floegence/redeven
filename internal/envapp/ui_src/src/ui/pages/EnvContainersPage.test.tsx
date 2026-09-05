@@ -1104,7 +1104,7 @@ describe('native Containers page', () => {
       layers: [{ digest: 'sha256:root-layer' }, { digest: 'sha256:top-layer' }],
     });
     harness.imageBuildHistory.mockResolvedValue([
-      { step: 0, operation: 'run', summary: 'bazel build @bookworm//base-files/amd64', filesystem_effect: 'filesystem', intermediate_image_id: 'sha256:history-layer', size_bytes: 10_400_000, created_at_unix_ms: 1_700_000_000_000 },
+      { step: 0, operation: 'run', summary: 'bazel build @bookworm//base-files/amd64', filesystem_effect: 'filesystem', size_bytes: 10_400_000, created_at_unix_ms: 1_700_000_000_000 },
       { step: 1, operation: 'env', filesystem_effect: 'metadata_only', size_bytes: 0, created_at_unix_ms: 0 },
     ]);
     const host = document.createElement('div');
@@ -1124,8 +1124,8 @@ describe('native Containers page', () => {
     await settle();
 
     expect(harness.imageBuildHistory).toHaveBeenCalledWith('sha256:image-layered', 'docker', 'docker-primary');
-    expect(host.textContent).toContain('containers.detail.buildOperations.run');
     expect(host.textContent).toContain('bazel');
+    expect(host.textContent).not.toContain('containers.detail.buildOperations.run');
 
     harness.imageBuildHistory.mockClear();
     Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
@@ -1141,7 +1141,8 @@ describe('native Containers page', () => {
     await settle();
     expect(harness.imageBuildHistory).toHaveBeenCalledWith('sha256:image-layered', 'docker', 'docker-primary');
     expect(host.textContent).toContain('containers.detail.buildEffects.metadata_only');
-    expect(host.textContent).toContain('containers.detail.noIntermediateImage');
+    expect(host.textContent).not.toContain('containers.detail.noIntermediateImage');
+    expect(host.textContent).not.toContain('sha256:history-layer');
   });
 
   it.each([
