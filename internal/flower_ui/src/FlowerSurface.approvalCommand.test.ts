@@ -25,13 +25,18 @@ describe('Flower approval command presentation', () => {
     const css = readFile(stylesPath);
     const commandRule = cssRule(css, '.flower-approval-command-text');
     const codeRule = cssRule(css, '.flower-approval-command-code');
+    const urlRule = cssRule(css, '.flower-approval-command-token-url');
 
     expect(commandRule).toContain('--flower-approval-command-font');
     expect(commandRule).toContain('Iosevka');
     expect(commandRule).toContain('JetBrains Mono');
     expect(commandRule).toContain('white-space: pre');
     expect(commandRule).toContain('overflow: auto');
+    expect(commandRule).toContain('border: 0');
+    expect(commandRule).toContain('box-shadow: none');
     expect(codeRule).toContain('font: inherit');
+    expect(urlRule).toContain('text-decoration: none');
+    expect(urlRule).not.toContain('underline');
     for (const token of ['command', 'flag', 'string', 'url', 'operator', 'variable']) {
       expect(css).toContain(`.flower-approval-command-token-${token}`);
     }
@@ -81,6 +86,7 @@ describe('Flower approval command presentation', () => {
     expect(decisionFocusRule).toContain('box-shadow: none !important');
     expect(decisionFocusRule).not.toContain('inset');
     expect(singleActionsRule).toContain('justify-content: flex-end');
+    expect(singleActionsRule).not.toContain('border-top');
     expect(css).not.toContain('.flower-approval-single .flower-composer-stop-thread {');
     expect(css).not.toContain('.flower-approval-action-pill');
   });
