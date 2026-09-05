@@ -8,9 +8,9 @@ timestamp: 2026-09-03T00:00:00Z
 # Summary
 
 - Authority: the configured npm or OCI Registry owns source metadata; Redeven owns candidate validation, exact installed identity, updates, and rollback.
-- Outcome: users can inspect all source releases, select one exact compatible identity, and deploy, upgrade, or deliberately downgrade without a Redeven version service.
-- Invariants: recommendation is only the no-choice default, discovery never installs automatically, an unavailable recommendation remains historical but is never presented as a normal badge or implicit install, Renderer submits only opaque short-lived IDs, operations revalidate their source, and installed services retain hashed exact release identity.
-- Failure boundary: source, authentication, compatibility, or update failure changes only the check or operation state; the last healthy service and persisted last-success summary remain usable.
+- Outcome: users inspect source releases, select one compatible identity, and deploy, upgrade, or downgrade without a Redeven version service.
+- Invariants: recommendations are defaults only; discovery never installs; unavailable recommendations stay historical and cannot become implicit installs; Renderer submits opaque expiring IDs; operations revalidate their source; installed services retain hashed release identity.
+- Failure boundary: discovery, authentication, compatibility, or update failure changes only its check or operation; the last healthy service and persisted last-success summary remain usable.
 
 # Contract
 

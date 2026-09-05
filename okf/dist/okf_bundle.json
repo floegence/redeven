@@ -186,7 +186,7 @@
               "updates",
               "web-services"
             ],
-            "summary": "- Authority: the configured npm or OCI Registry owns source metadata; Redeven owns candidate validation, exact installed identity, updates, and rollback.\n- Outcome: users can inspect all source releases, select one exact compatible identity, and deploy, upgrade, or deliberately downgrade without a Redeven version service.\n- Invariants: recommendation is only the no-choice default, discovery never installs automatically, an unavailable recommendation remains historical but is never presented as a normal badge or implicit install, Renderer submits only opaque short-lived IDs, operations revalidate their source, and installed services retain hashed exact release identity.\n- Failure boundary: source, authentication, compatibility, or update failure changes only the check or operation state; the last healthy service and persisted last-success summary remain usable.",
+            "summary": "- Authority: the configured npm or OCI Registry owns source metadata; Redeven owns candidate validation, exact installed identity, updates, and rollback.\n- Outcome: users inspect source releases, select one compatible identity, and deploy, upgrade, or downgrade without a Redeven version service.\n- Invariants: recommendations are defaults only; discovery never installs; unavailable recommendations stay historical and cannot become implicit installs; Renderer submits opaque expiring IDs; operations revalidate their source; installed services retain hashed release identity.\n- Failure boundary: discovery, authentication, compatibility, or update failure changes only its check or operation; the last healthy service and persisted last-success summary remain usable.",
             "section_count": 2
           },
           {
@@ -368,7 +368,7 @@
               "volumes"
             ],
             "summary": "Redeven's container engine owns volume observations; the native resource service\nbinds them to the authorized active runtime. Container references include stopped\ncontainers, and disk usage reports occupied space rather than capacity. Partial\ninspection cannot establish that a volume is unused. A failed or unsupported\nsize read leaves the inventory usable and the size unavailable. Neither\nobservation replaces the current authoritative mutation preflight.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "architecture.container-service-management",
@@ -4321,7 +4321,7 @@
         "title": "Volume usage observation",
         "type": "Architecture Contract"
       },
-      "body_length": 2936,
+      "body_length": 3220,
       "summary": "Redeven's container engine owns volume observations; the native resource service\nbinds them to the authorized active runtime. Container references include stopped\ncontainers, and disk usage reports occupied space rather than capacity. Partial\ninspection cannot establish that a volume is unused. A failed or unsupported\nsize read leaves the inventory usable and the size unavailable. Neither\nobservation replaces the current authoritative mutation preflight.",
       "sections": [
         {
@@ -4330,6 +4330,13 @@
           "level": 1,
           "body": "## Reference completeness\n\nVolume inventory and detail return `referenced_containers`, `used_by`, and\n`references_complete`. References come from named-volume mounts across all\ncontainers, including stopped ones; they do not indicate current I/O activity.\nInspection failures remain explicit even when the observed reference count is\nzero. The native console renders incomplete observations as Unknown and excludes\nthem from both In use and Unused filters. A partial Used by view may show known\nreferences together with an incomplete-inspection notice.\n\n## Disk usage\n\n`GET /container-resources/volume-disk-usage` is an independent, Read-only,\nno-store observation. It binds the exact engine and endpoint under\n[Native container resources](container-resources-capability.md), then issues one\n`system df --verbose` command. Docker supplies a JSON volume projection. Podman\nrejects combining verbose and format options, so its final volume table is\nvalidated by section, header, row shape, and unique volume identity. Unexpected\nlayouts fail visibly instead of being interpreted as an empty measurement.\n\nThe response exposes only volume names, optional `size_bytes`, and\n`sampled_at_unix_ms`. Sizes retain the precision of the engine's human-readable\nstatistics. Missing, unsupported, negative, or invalid sizes are unavailable;\nan explicitly reported zero remains zero. Output uses the normal bounded CLI\nlimit, with a one-minute deadline and request cancellation. This read does not\nstart a helper container, inspect private engine directories, or export files.\n\nThe [native console](container-resources-console.md) owns asynchronous loading,\nsize sorting, and list-to-detail navigation. A size-read failure affects only\nthat runtime's size cells; refreshing retries the observation. A new inventory\ngeneration cancels older measurements. Disk usage never authorizes cleanup or\noverrides the reference preflight.",
           "char_count": 1913
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Volume usage is an observation, not a capacity, quota, free-space, billing, or\ncleanup contract. Redeven does not infer safety from an unavailable size or an\nincomplete reference scan, and it does not bypass the authoritative mutation\npreflight when deleting a volume.",
+          "char_count": 268
         }
       ],
       "evidence": [
@@ -5362,8 +5369,8 @@
         "title": "Managed Service release discovery and updates",
         "type": "Runtime Contract"
       },
-      "body_length": 14095,
-      "summary": "- Authority: the configured npm or OCI Registry owns source metadata; Redeven owns candidate validation, exact installed identity, updates, and rollback.\n- Outcome: users can inspect all source releases, select one exact compatible identity, and deploy, upgrade, or deliberately downgrade without a Redeven version service.\n- Invariants: recommendation is only the no-choice default, discovery never installs automatically, an unavailable recommendation remains historical but is never presented as a normal badge or implicit install, Renderer submits only opaque short-lived IDs, operations revalidate their source, and installed services retain hashed exact release identity.\n- Failure boundary: source, authentication, compatibility, or update failure changes only the check or operation state; the last healthy service and persisted last-success summary remain usable.",
+      "body_length": 13992,
+      "summary": "- Authority: the configured npm or OCI Registry owns source metadata; Redeven owns candidate validation, exact installed identity, updates, and rollback.\n- Outcome: users inspect source releases, select one compatible identity, and deploy, upgrade, or downgrade without a Redeven version service.\n- Invariants: recommendations are defaults only; discovery never installs; unavailable recommendations stay historical and cannot become implicit installs; Renderer submits opaque expiring IDs; operations revalidate their source; installed services retain hashed release identity.\n- Failure boundary: discovery, authentication, compatibility, or update failure changes only its check or operation; the last healthy service and persisted last-success summary remain usable.",
       "sections": [
         {
           "id": "contract",
@@ -5467,7 +5474,7 @@
           "description": "Covers fresh v4 initialization, contiguous migration, release-summary preservation, rollback, drift, binding, and operation lineage."
         }
       ],
-      "snippet": "- Authority: the configured npm or OCI Registry owns source metadata; Redeven owns candidate validation, exact installed identity, updates, and rollback. - Outcome: users can inspect all source releases, select one exact compatible identity",
+      "snippet": "- Authority: the configured npm or OCI Registry owns source metadata; Redeven owns candidate validation, exact installed identity, updates, and rollback. - Outcome: users inspect source releases, select one compatible identity, and deploy, ",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -12070,5 +12077,5 @@
       ]
     }
   ],
-  "source_sha256": "868a58d54fa6cd77d00f3b834b93a40159d85b15f67e05b6f62324dfa49c51c2"
+  "source_sha256": "c2c2ffa358b6544156276747f801a3de20dc48ea3163a5f0a73a766939851dc3"
 }
