@@ -82,15 +82,22 @@ func TestBuildTargetProcessInventoryBlocksOnlyAmbiguousRedevenIdentity(t *testin
 }
 
 type fakeTargetProcessController struct {
-	inventories []TargetProcessInventory
-	index       int
-	terminated  []int
-	killed      []int
+	inventories     []TargetProcessInventory
+	index           int
+	terminated      []int
+	killed          []int
+	remainUntilKill bool
 }
 
 func (controller *fakeTargetProcessController) Inspect(context.Context, TargetProcessOptions) (TargetProcessInventory, error) {
 	if len(controller.inventories) == 0 {
 		return TargetProcessInventory{}, errors.New("missing fake inventory")
+	}
+	if controller.remainUntilKill {
+		if len(controller.killed) == 0 {
+			return controller.inventories[0], nil
+		}
+		return controller.inventories[len(controller.inventories)-1], nil
 	}
 	index := controller.index
 	if index >= len(controller.inventories) {
@@ -125,7 +132,8 @@ func TestStopTargetProcessesUsesTerminateThenIdentityCheckedKill(t *testing.T) {
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[target]"},
 		nil,
 	)
-	controller := &fakeTargetProcessController{inventories: []TargetProcessInventory{before, before, before, before, empty}}
+	// Keep the process alive until Kill, regardless of grace-period polling.
+	controller := &fakeTargetProcessController{inventories: []TargetProcessInventory{before, empty}, remainUntilKill: true}
 	result, err := stopTargetProcesses(context.Background(), controller, TargetProcessOptions{TargetRoot: root}, before.InventoryDigest, time.Nanosecond)
 	if err != nil {
 		t.Fatal(err)
