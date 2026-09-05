@@ -230,6 +230,21 @@ detail reading, panel close, and unrelated surface launch stay available while
 installation continues. Closing the dialog only hides it; the card or task area
 retains the current stage and one recovery action.
 
+Directory cards keep a fixed identity, two-line author summary, metadata, and
+action footprint across installation states. A same-name summary is omitted
+without substituting host-authored plugin copy. Uninstalled cards omit the
+redundant availability badge; source/trust evidence remains independent of
+lifecycle status. Category selection uses the same filter menu contract as
+source, trust, and lifecycle, with view tabs outside the filter scroll area.
+An installation summary replaces the card action row and opens the existing
+inspector for the complete timeline. Only authoritative download byte totals
+produce a percentage; other stages use a four-segment indicator that distinguishes
+completed stages from the current stage. Reconnection and finalization remain
+busy. Successful observation restores the projected primary action; failures
+retain their exact recovery action and full explanation in details. The card
+stays in place while an inspector or review dialog owns live announcements.
+No cancel control is exposed for the platform's noncancelable install Execution.
+
 The Shell has one observer per plugin attempt and retains the original request
 identity. It reattaches to the same Host Execution after Plugin Center reopens or
 transport reconnects. A lost start response replays the exact reviewed command
@@ -237,7 +252,7 @@ with the same request id; it does not start a competing poller. Closing the pane
 never cancels installation. Terminal failures use the released error code, stage,
 and `retryable` fact to produce one message and one action; raw backend messages
 are not primary UI and cards, details, dialogs, and notifications do not repeat
-the same error. A retry creates a new request only when the Host has confirmed a
+live error announcements. A retry creates a new request only when the Host has confirmed a
 retryable terminal failure. If the exact reviewed command is unavailable after a
 restart, the only action is a fresh review. After success, inventory is
 refreshed before the temporary status is removed. Refresh failure remains a

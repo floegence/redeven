@@ -42,6 +42,7 @@ import type {
   ExternalPluginInspection,
   PluginInventoryItem,
   PluginInventoryProjection,
+  PluginInstallExecutionProjection,
   PluginPanelModel,
 } from './pluginTypes';
 
@@ -984,7 +985,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(getComputedStyle(item).boxShadow).toBe('none');
     const filterTriggers = Array.from(host.querySelectorAll<HTMLElement>('[data-plugin-center-filter]'));
-    expect(filterTriggers).toHaveLength(3);
+    expect(filterTriggers).toHaveLength(4);
     expect(filterTriggers.map((trigger) => trigger.textContent)).toEqual(expect.arrayContaining([
       expect.stringContaining('Plugin source: All'),
       expect.stringContaining('Trust: All'),
@@ -1025,6 +1026,102 @@ describe('plugin management browser geometry and interaction', () => {
     }
   });
 
+  it.each(viewportCases)('keeps card and sibling geometry stable throughout installation at $width px', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    document.documentElement.classList.add('dark');
+    const host = fixedHost();
+    const [operations, setOperations] = createSignal<PluginInstallExecutionProjection[]>([]);
+    disposers.push(render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        installOperations={operations()}
+        canManagePlugins
+        canOpenPluginSurfaces
+        onRefresh={() => undefined}
+        onCommand={() => undefined}
+        onRetryInstall={() => undefined}
+      />
+    ), host));
+    await settle();
+    const card = host.querySelector<HTMLElement>('[data-plugin-directory-card="instance:metrics"]')!;
+    const sibling = host.querySelector<HTMLElement>('[data-plugin-directory-card="instance:toolbox"]')!;
+    const initialCard = card.getBoundingClientRect();
+    const initialSibling = sibling.getBoundingClientRect();
+    for (const observation of ['starting', 'watching', 'reconnecting', 'finalizing', 'failed'] as const) {
+      setOperations([{
+        pluginID: metricsItem.pluginID,
+        pluginInstanceID: metricsItem.pluginInstanceID!,
+        observation,
+        execution: {
+          execution_id: 'task', plugin_instance_id: metricsItem.pluginInstanceID!, kind: 'operation', status: observation === 'failed' ? 'failed' : 'running', cursor: 1, cancelable: false,
+          created_at: '2026-09-05T00:00:00Z', updated_at: '2026-09-05T00:00:01Z',
+        },
+        progress: [{ task_id: 'task', request_id: 'request', stage: 'download', status: 'running', completed: 256, total: 512 }],
+        ...(observation === 'failed' ? {
+          failure: { source: 'execution' as const, code: 'PLUGIN_RELEASE_NETWORK', retryable: true, recovery: 'retry_install' as const },
+        } : {}),
+      }]);
+      await settle();
+      expect(card.getBoundingClientRect().height).toBe(initialCard.height);
+      expect(sibling.getBoundingClientRect().height).toBe(initialSibling.height);
+      expect(sibling.getBoundingClientRect().top).toBe(initialSibling.top);
+      expect(card.querySelector('[data-plugin-install-steps]')).toBeNull();
+      expectNoHorizontalOverflow(card);
+      expectNoHorizontalOverflow(card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!);
+    }
+    setOperations([{
+      pluginID: metricsItem.pluginID, pluginInstanceID: metricsItem.pluginInstanceID!, observation: 'watching', progress: [],
+      execution: {
+        execution_id: 'task', plugin_instance_id: metricsItem.pluginInstanceID!, kind: 'operation', status: 'completed', cursor: 5, cancelable: false,
+        created_at: '2026-09-05T00:00:00Z', updated_at: '2026-09-05T00:00:01Z',
+      },
+    }]);
+    await settle();
+    expect(card.querySelector('[data-plugin-install-summary]')).toBeNull();
+    expect(card.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary]')?.disabled).toBe(false);
+    expect(card.getBoundingClientRect().height).toBe(initialCard.height);
+    expect(sibling.getBoundingClientRect().top).toBe(initialSibling.top);
+    await expectScreenshotHasPixelVariance();
+  });
+
+  it.each([
+    { width: 320, height: 720, locale: 'zh-CN' as const },
+    { width: 390, height: 844, locale: 'de-DE' as const },
+    { width: 1440, height: 900, locale: 'zh-CN' as const },
+  ])('opens localized installation details without overflow at $width px in $locale', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, viewport.locale);
+    await loadEnvAppDictionary(viewport.locale);
+    document.documentElement.classList.add('dark');
+    const host = fixedHost();
+    disposers.push(render(() => <I18nProvider><PluginCenterView
+      projection={projection}
+      loading={false}
+      installOperations={[{
+        pluginID: metricsItem.pluginID, pluginInstanceID: metricsItem.pluginInstanceID!, observation: 'watching',
+        execution: { execution_id: 'task', plugin_instance_id: metricsItem.pluginInstanceID!, kind: 'operation', status: 'running', cursor: 1, cancelable: false, created_at: '2026-09-05T00:00:00Z', updated_at: '2026-09-05T00:00:01Z' },
+        progress: [{ task_id: 'task', request_id: 'request', stage: 'download', status: 'running', completed: 262144, total: 524288 }],
+      }]}
+      canManagePlugins
+      canOpenPluginSurfaces
+      onCommand={() => undefined}
+      onRefresh={() => undefined}
+    /></I18nProvider>, host));
+    await settle();
+    await page.elementLocator(host.querySelector<HTMLElement>('[data-plugin-center-install-summary]')!).click();
+    await settle();
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    expectInsideViewport(details, viewport);
+    expect(details.querySelectorAll('[data-plugin-install-stage]')).toHaveLength(4);
+    expectNoHorizontalOverflow(details);
+    for (const stage of details.querySelectorAll<HTMLElement>('[data-plugin-install-stage]')) expectNoHorizontalOverflow(stage);
+    expect(host.querySelectorAll('[data-plugin-install-execution]')).toHaveLength(1);
+    await expectScreenshotHasPixelVariance();
+  });
+
   it('renders the selected Plugin Center detail with nonblank pixels in dark mode', async () => {
     await page.viewport(1440, 900);
     document.documentElement.classList.add('dark');
@@ -1053,7 +1150,7 @@ describe('plugin management browser geometry and interaction', () => {
     const actions = card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
     const initialHeight = primary.getBoundingClientRect().height;
     expect(label.textContent?.trim()).toBe('查看运行时要求');
-    expect(getComputedStyle(label).whiteSpace).toBe('nowrap');
+    expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(16);
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
     expectNoHorizontalOverflow(actions);
 
@@ -1072,7 +1169,7 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
-    expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(240);
+    expect(card.getBoundingClientRect().height).toBe(248);
     host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:metrics"]')!.click();
     await settle();
 

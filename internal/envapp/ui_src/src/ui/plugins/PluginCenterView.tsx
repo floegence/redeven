@@ -752,7 +752,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           <div
             data-plugin-center-list
             aria-busy={loading()}
-            class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(240px,100%),1fr))] gap-3 overflow-y-auto p-3 sm:p-4"
+            class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-start gap-4 overflow-y-auto p-3 sm:p-4"
           >
             <For each={visibleItems()}>
               {(item, index) => (
@@ -766,11 +766,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   onRetryRuntimeRecovery={item.pluginInstanceID ? () => props.onRetryRuntimeRecovery?.(item.pluginInstanceID) : undefined}
                   managementDisabled={loading() || itemManagementPending(item)}
                   commandPendingType={pendingCommandTypeForItem(item)}
-                  installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
+                  installOperation={installOperationForItem(item)}
+                  announceInstallStatus={!(officialInstallDialog()?.item.inventoryKey === item.inventoryKey
                     || retainedDataRecoveryItem()?.inventoryKey === item.inventoryKey
-                    || (selectedInventoryKey() === item.inventoryKey && mobileDetailOpen())
-                    ? undefined
-                    : installOperationForItem(item)}
+                    || (selectedInventoryKey() === item.inventoryKey && mobileDetailOpen()))}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => installItem(item)}
@@ -1315,7 +1314,6 @@ export function PluginCenterShell(props: {
         <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
           <div class="flex min-w-0 shrink-0 items-center gap-2">
             <h1 class="truncate text-sm font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
-            <span class="rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.openSources')}</span>
           </div>
           <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[360px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
@@ -1386,25 +1384,30 @@ export function PluginCenterShell(props: {
             </Show>
           </div>
         </div>
-        <div class="flex min-w-0 items-center gap-3 overflow-x-auto border-t px-3 py-2 sm:px-4" data-plugin-center-toolbar-secondary>
-          <div class="flex shrink-0 items-center" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
+        <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-t px-3 py-2 sm:px-4" data-plugin-center-toolbar-secondary>
+          <div class="flex max-w-full shrink-0 items-center overflow-x-auto" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
           <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
           <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
           <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
           </div>
-          <span aria-hidden="true" class="h-5 w-px shrink-0 bg-border" />
-          <div class="flex min-w-max flex-1 items-center gap-2" data-plugin-center-filter-scroll>
-            <div class="flex gap-1" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
-              <CenterCategoryButton id="all" active={props.category} label={i18n.t('uiCopy.plugin.categoryAll')} onSelect={props.onCategorySelect} />
-              <CenterCategoryButton id="development" active={props.category} label={i18n.t('uiCopy.plugin.categoryDevelopment')} onSelect={props.onCategorySelect} />
-              <CenterCategoryButton id="infrastructure" active={props.category} label={i18n.t('uiCopy.plugin.categoryInfrastructure')} onSelect={props.onCategorySelect} />
-              <CenterCategoryButton id="utilities" active={props.category} label={i18n.t('uiCopy.plugin.categoryUtilities')} onSelect={props.onCategorySelect} />
-              <CenterCategoryButton id="data" active={props.category} label={i18n.t('uiCopy.plugin.categoryData')} onSelect={props.onCategorySelect} />
-              <CenterCategoryButton id="collaboration" active={props.category} label={i18n.t('uiCopy.plugin.categoryCollaboration')} onSelect={props.onCategorySelect} />
-              <CenterCategoryButton id="productivity" active={props.category} label={i18n.t('uiCopy.plugin.categoryProductivity')} onSelect={props.onCategorySelect} />
-              <CenterCategoryButton id="other" active={props.category} label={i18n.t('uiCopy.plugin.categoryOther')} onSelect={props.onCategorySelect} />
-            </div>
+          <div class="flex min-w-0 flex-1 basis-[560px] items-center gap-2 overflow-x-auto" data-plugin-center-filter-scroll>
           <div class="flex items-center gap-2" data-plugin-center-filters>
+            <CenterFilterMenu
+              id="category"
+              dimension={i18n.t('uiCopy.plugin.categories')}
+              value={props.category}
+              onSelect={(value) => props.onCategorySelect(value as PluginPresentationCategory | 'all')}
+              items={[
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'development', label: i18n.t('uiCopy.plugin.categoryDevelopment') },
+                { id: 'infrastructure', label: i18n.t('uiCopy.plugin.categoryInfrastructure') },
+                { id: 'utilities', label: i18n.t('uiCopy.plugin.categoryUtilities') },
+                { id: 'data', label: i18n.t('uiCopy.plugin.categoryData') },
+                { id: 'collaboration', label: i18n.t('uiCopy.plugin.categoryCollaboration') },
+                { id: 'productivity', label: i18n.t('uiCopy.plugin.categoryProductivity') },
+                { id: 'other', label: i18n.t('uiCopy.plugin.categoryOther') },
+              ]}
+            />
             <CenterFilterMenu
               id="source"
               dimension={i18n.t('uiCopy.plugin.external.source')}
@@ -2074,30 +2077,8 @@ function TabButton(props: {
   );
 }
 
-function CenterCategoryButton(props: {
-  id: PluginPresentationCategory | 'all';
-  active: PluginPresentationCategory | 'all';
-  label: string;
-  onSelect: (category: PluginPresentationCategory | 'all') => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      data-plugin-center-category={props.id}
-      aria-pressed={props.id === props.active}
-      class={cn(
-        'h-11 min-w-11 shrink-0 cursor-pointer rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:min-w-0',
-        props.id === props.active ? 'border-foreground/20 bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
-      )}
-      onClick={() => props.onSelect(props.id)}
-    >
-      {props.label}
-    </button>
-  );
-}
-
 function CenterFilterMenu(props: {
-  id: 'source' | 'trust' | 'lifecycle';
+  id: 'category' | 'source' | 'trust' | 'lifecycle';
   dimension: string;
   value: string;
   items: DropdownItem[];

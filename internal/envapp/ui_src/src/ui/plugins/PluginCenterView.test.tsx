@@ -311,6 +311,20 @@ describe('PluginCenterView', () => {
     expect(card?.textContent).not.toContain('v2.0.0');
   });
 
+  it('omits a repeated author summary and redundant availability badge without replacing author copy', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => <PluginCenterView
+      projection={{ items: [{ ...metricsPlugin, officialCatalog: undefined, description: metricsPlugin.displayName }] }}
+      loading={false} onCommand={vi.fn()} onRefresh={vi.fn()} canManagePlugins canOpenPluginSurfaces
+    />, mount);
+    const card = mount.querySelector('[data-plugin-directory-card]')!;
+    expect(card.textContent?.match(/Metrics/g)).toHaveLength(1);
+    expect(card.textContent).not.toContain('Available');
+    openInventoryDetails(mount);
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
+  });
+
   it('opens a real card action menu instead of treating the ellipsis as a detail button', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -620,7 +634,7 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:metrics"]')).not.toBeNull());
     const update = mount.querySelector('[data-plugin-center-update="catalog:metrics"]') as HTMLButtonElement;
     expect(update.textContent).toContain('Review update');
-    expect(update.closest('article')?.className).toContain('border-t-2');
+    expect(update.closest('article')?.className).toContain('border-t-[var(--redeven-status-info-foreground)]');
     expect(mount.querySelector('[data-plugin-center-list]')?.className).toContain('grid');
   });
 
@@ -804,7 +818,7 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-item^="instance:"]')).not.toBeNull();
   });
 
-  it('renders a dedicated management shell outside Settings with local search', () => {
+  it('renders a dedicated management shell outside Settings with local search', async () => {
     const mount = document.createElement('div');
     const onClose = vi.fn();
     document.body.append(mount);
@@ -844,7 +858,10 @@ describe('PluginCenterView', () => {
 
     search.value = '';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    (mount.querySelector('[data-plugin-center-category="infrastructure"]') as HTMLButtonElement).click();
+    (mount.querySelector('[data-plugin-center-filter="category"]') as HTMLElement).click();
+    await Promise.resolve();
+    findDocumentButton('Infrastructure').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mount.querySelector('[data-plugin-center-item="catalog:metrics"]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).toBeNull();
   });
@@ -959,8 +976,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('[data-plugin-center-category="infrastructure"]') as HTMLButtonElement).click();
     for (const [filter, label] of [
+      ['category', 'Infrastructure'],
       ['source', 'External'],
       ['trust', 'Unsigned'],
       ['lifecycle', 'Needs attention'],
@@ -1524,9 +1541,12 @@ describe('PluginCenterView', () => {
         canOpenPluginSurfaces
       />
     ), mount);
-    expect(mount.querySelector('[data-plugin-install-stage="download"]')?.getAttribute('data-plugin-install-stage-status')).toBe('completed');
-    expect(mount.querySelector('[data-plugin-install-stage="verify"]')?.getAttribute('data-plugin-install-stage-status')).toBe('running');
-    expect(mount.querySelector('[data-plugin-install-stage="install"]')?.getAttribute('data-plugin-install-stage-status')).toBe('pending');
+    const summary = mount.querySelector('[data-plugin-center-install-summary]');
+    expect(summary).not.toBeNull();
+    expect(summary?.querySelector('[data-plugin-install-stage]')).toBeNull();
+    expect(summary?.querySelector('[data-plugin-install-progress]')?.getAttribute('aria-valuenow')).toBe('1');
+    expect(summary?.textContent).toContain('Security check');
+    expect(summary?.textContent).toContain('2 / 4');
     expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).not.toBeNull();
   });
 
@@ -1550,10 +1570,12 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const target = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:metrics"]')!;
+    const target = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install-summary]')!;
     const other = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:database"]')!;
     expect(target.textContent).toContain('Finalizing installation...');
-    expect(target.disabled).toBe(true);
+    expect(target.disabled).toBe(false);
+    expect(mount.querySelector('[data-plugin-center-install="catalog:metrics"]')).toBeNull();
+    expect(target.closest('[data-plugin-install-summary]')?.getAttribute('aria-busy')).toBe('true');
     expect(other.disabled).toBe(false);
     expect(mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!.disabled).toBe(false);
   });
@@ -1598,10 +1620,12 @@ describe('PluginCenterView', () => {
     const target = mount.querySelector('[data-plugin-directory-card="catalog:metrics"]')!;
     const other = mount.querySelector('[data-plugin-directory-card="catalog:database"]')!;
     const progress = target.querySelector<HTMLElement>('[data-plugin-install-progress]')!;
-    expect(target.querySelector('[data-plugin-install-stage="download"]')?.getAttribute('data-plugin-install-stage-status')).toBe('running');
-    expect(progress.getAttribute('aria-valuenow')).toBe('1');
-    expect(progress.getAttribute('aria-valuemax')).toBe('4');
-    expect(target.querySelector('[data-plugin-install-stage="download"]')?.textContent).toContain('256');
+    expect(target.querySelector('[data-plugin-install-stage]')).toBeNull();
+    expect(progress.getAttribute('aria-valuenow')).toBe('262144');
+    expect(progress.getAttribute('aria-valuemax')).toBe('524288');
+    expect(progress.title).toContain('256');
+    expect(target.querySelector('[data-plugin-center-install-summary]')?.textContent).toContain('50%');
+    expect(target.querySelector('[data-plugin-center-install-summary]')?.textContent).toContain('Get package');
     expect(other.querySelector('[data-plugin-install-execution]')).toBeNull();
 
     (mount.querySelector('[data-plugin-center-item="catalog:database"]') as HTMLButtonElement).click();
@@ -1653,7 +1677,8 @@ describe('PluginCenterView', () => {
   });
 
   it('does not duplicate a coordinator error when an authoritative install failure is present', async () => {
-    const onCommand = vi.fn(async () => undefined);
+    const [operations, setOperations] = createSignal<readonly typeof failedOperation[]>([]);
+    const onCommand = vi.fn(async () => { setOperations([failedOperation]); });
     const failedOperation = {
       pluginID: metricsPlugin.pluginID,
       pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
@@ -1679,7 +1704,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={{ items: [metricsPlugin] }}
         loading={false}
-        installOperations={[failedOperation]}
+        installOperations={operations()}
         onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -1749,7 +1774,8 @@ describe('PluginCenterView', () => {
 
   it('turns a same-session review-again action back into an exact confirmation', async () => {
     const onReviewOfficialInstall = vi.fn();
-    const onCommand = vi.fn(async () => undefined);
+    const [operations, setOperations] = createSignal<readonly typeof failedOperation[]>([]);
+    const onCommand = vi.fn(async () => { setOperations([failedOperation]); });
     const failedOperation = {
       pluginID: metricsPlugin.pluginID,
       pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
@@ -1775,7 +1801,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={{ items: [metricsPlugin] }}
         loading={false}
-        installOperations={[failedOperation]}
+        installOperations={operations()}
         onReviewOfficialInstall={onReviewOfficialInstall}
         onCommand={onCommand}
         onRefresh={vi.fn()}
