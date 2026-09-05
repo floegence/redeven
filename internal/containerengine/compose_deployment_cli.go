@@ -2,7 +2,7 @@ package containerengine
 
 import (
 	"context"
-	"errors"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -50,39 +50,31 @@ func (c *CLIClient) InspectComposeDeployment(ctx context.Context, req ComposeDep
 	if err := validateComposeDeploymentRequest(req); err != nil {
 		return ComposeProjectDetails{}, err
 	}
-	raw, err := c.run(ctx, EngineDocker, append(composeDeploymentArgs(req), "ps", "--all", "--no-trunc", "--format", "json")...)
+	projects, err := c.observeComposeProjects(ctx)
 	if err != nil {
 		return ComposeProjectDetails{}, err
 	}
-	type item struct {
-		ID      string `json:"ID"`
-		Name    string `json:"Name"`
-		Service string `json:"Service"`
-		State   string `json:"State"`
-		Health  string `json:"Health"`
-	}
-	items, err := decodeJSONLinesOrArray[item](raw)
-	if err != nil {
-		return ComposeProjectDetails{}, errors.New("docker Compose deployment inspection is invalid")
-	}
-	project := ComposeProject{ProjectID: ComposeProjectID(req.ProjectName), Name: strings.TrimSpace(req.ProjectName), ContainerCount: len(items)}
-	services := map[string]struct{}{}
-	children := make([]ComposeProjectContainer, 0, len(items))
-	for _, item := range items {
-		state := normalizeStateString(item.State)
-		if state == ContainerStateRunning {
-			project.RunningCount++
+	for _, project := range projects {
+		if project.Name == strings.TrimSpace(req.ProjectName) {
+			return project, nil
 		}
-		services[item.Service] = struct{}{}
-		children = append(children, ComposeProjectContainer{ContainerID: strings.TrimSpace(item.ID), Name: strings.TrimSpace(item.Name), Service: strings.TrimSpace(item.Service), State: state, Health: normalizeHealth(item.Health)})
 	}
-	project.ServiceCount = len(services)
-	if project.RunningCount == project.ContainerCount && project.ContainerCount > 0 {
-		project.Status = "running"
-	} else if project.ContainerCount > 0 {
-		project.Status = "stopped"
+	return summarizeComposeProject(strings.TrimSpace(req.ProjectName), nil), nil
+}
+
+func validateComposeFiles(paths []string) error {
+	for _, path := range paths {
+		file, err := os.Open(strings.TrimSpace(path))
+		if err != nil {
+			return ErrComposeConfigurationUnavailable
+		}
+		info, err := file.Stat()
+		file.Close()
+		if err != nil || !info.Mode().IsRegular() {
+			return ErrComposeConfigurationUnavailable
+		}
 	}
-	return ComposeProjectDetails{ComposeProject: project, Containers: children}, nil
+	return nil
 }
 
 func (c *CLIClient) StartComposeDeployment(ctx context.Context, req ComposeDeploymentRequest) error {

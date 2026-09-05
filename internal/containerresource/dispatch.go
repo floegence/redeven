@@ -198,19 +198,9 @@ func (s *Service) reconcile(ctx context.Context, decoded decodedMutation, result
 			status.Outcome = "absent"
 			break
 		}
-		if decoded.preflight.Method == containerengine.MethodComposeProjectsDown && err != nil {
-			items, listErr := s.engine.ListComposeProjects(bound, containerengine.ComposeProjectListRequest{Engine: req.Engine, EndpointID: req.EndpointID})
-			if listErr != nil {
-				return nil, listErr
-			}
-			present := false
-			for _, item := range items {
-				present = present || item.ProjectID == req.ProjectID
-			}
-			if !present {
-				err = nil
-				status.Outcome = "absent"
-			}
+		if decoded.preflight.Method == containerengine.MethodComposeProjectsDown && errors.Is(err, containerengine.ErrComposeProjectNotFound) {
+			err = nil
+			status.Outcome = "absent"
 		} else if err == nil {
 			status.State = inspected.Status
 			err = requireWorkspaceState(decoded.preflight.Method, inspected.Status)

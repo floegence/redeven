@@ -153,33 +153,31 @@ func (c *CLIClient) ListComposeProjects(ctx context.Context) ([]ComposeProject, 
 	if !boundForEngine(ctx, EngineDocker) {
 		return nil, ErrEndpointNotFound
 	}
-	rows, err := c.composeProjectRows(ctx)
+	projects, err := c.observeComposeProjects(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ComposeProject, 0, len(rows))
-	for _, item := range rows {
-		name := strings.TrimSpace(item.Name)
-		if invalidWorkspaceIdentity(name) {
-			continue
-		}
-		project := ComposeProject{ProjectID: ComposeProjectID(name), Name: name, Status: normalizeProjectStatus(item.Status)}
-		if details, detailErr := c.inspectComposeProjectRow(ctx, item); detailErr == nil {
-			project.ServiceCount = details.ServiceCount
-			project.ContainerCount = details.ContainerCount
-			project.RunningCount = details.RunningCount
-		}
-		out = append(out, project)
+	out := make([]ComposeProject, 0, len(projects))
+	for _, project := range projects {
+		out = append(out, project.ComposeProject)
 	}
 	return out, nil
 }
 
 func (c *CLIClient) InspectComposeProject(ctx context.Context, projectID string) (ComposeProjectDetails, error) {
-	row, err := c.resolveComposeProject(ctx, projectID)
+	if !boundForEngine(ctx, EngineDocker) {
+		return ComposeProjectDetails{}, ErrEndpointNotFound
+	}
+	projects, err := c.observeComposeProjects(ctx)
 	if err != nil {
 		return ComposeProjectDetails{}, err
 	}
-	return c.inspectComposeProjectRow(ctx, row)
+	for _, project := range projects {
+		if project.ProjectID == strings.TrimSpace(projectID) {
+			return project, nil
+		}
+	}
+	return ComposeProjectDetails{}, ErrComposeProjectNotFound
 }
 
 func (c *CLIClient) ComposeProjectAction(ctx context.Context, method Method, projectID string) error {
@@ -204,8 +202,22 @@ func (c *CLIClient) ComposeProjectAction(ctx context.Context, method Method, pro
 	if err != nil {
 		return err
 	}
+	if err := validateComposeFiles(strings.Split(row.ConfigFiles, ",")); err != nil {
+		return err
+	}
 	_, err = c.run(ctx, EngineDocker, append(args, action)...)
 	return err
+}
+
+func (c *CLIClient) ValidateComposeProjectConfiguration(ctx context.Context, projectID string) error {
+	row, err := c.resolveComposeProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if _, err := composeArgs(row); err != nil {
+		return ErrComposeConfigurationUnavailable
+	}
+	return validateComposeFiles(strings.Split(row.ConfigFiles, ","))
 }
 
 func (c *CLIClient) ListPods(ctx context.Context) ([]PodRecord, error) {
@@ -364,7 +376,6 @@ func (c *CLIClient) PodAction(ctx context.Context, method Method, podID string) 
 
 type composeProjectRow struct {
 	Name        string `json:"Name"`
-	Status      string `json:"Status"`
 	ConfigFiles string `json:"ConfigFiles"`
 }
 
@@ -393,44 +404,7 @@ func (c *CLIClient) resolveComposeProject(ctx context.Context, projectID string)
 			return item, nil
 		}
 	}
-	return composeProjectRow{}, ErrEndpointNotFound
-}
-
-func (c *CLIClient) inspectComposeProjectRow(ctx context.Context, row composeProjectRow) (ComposeProjectDetails, error) {
-	args, err := composeArgs(row)
-	if err != nil {
-		return ComposeProjectDetails{}, err
-	}
-	raw, err := c.run(ctx, EngineDocker, append(args, "ps", "--all", "--no-trunc", "--format", "json")...)
-	if err != nil {
-		return ComposeProjectDetails{}, err
-	}
-	type item struct {
-		ID      string `json:"ID"`
-		Name    string `json:"Name"`
-		Service string `json:"Service"`
-		State   string `json:"State"`
-		Health  string `json:"Health"`
-	}
-	items, err := decodeJSONLinesOrArray[item](raw)
-	if err != nil {
-		return ComposeProjectDetails{}, errors.New("docker Compose project inspection is invalid")
-	}
-	project := ComposeProject{ProjectID: ComposeProjectID(row.Name), Name: strings.TrimSpace(row.Name), Status: normalizeProjectStatus(row.Status), ContainerCount: len(items)}
-	services := map[string]struct{}{}
-	containers := make([]ComposeProjectContainer, 0, len(items))
-	for _, child := range items {
-		state := normalizeStateString(child.State)
-		if state == ContainerStateRunning {
-			project.RunningCount++
-		}
-		if service := strings.TrimSpace(child.Service); service != "" {
-			services[service] = struct{}{}
-		}
-		containers = append(containers, ComposeProjectContainer{ContainerID: strings.TrimSpace(child.ID), Name: strings.TrimSpace(child.Name), Service: strings.TrimSpace(child.Service), State: state, Health: normalizeHealth(child.Health)})
-	}
-	project.ServiceCount = len(services)
-	return ComposeProjectDetails{ComposeProject: project, Containers: containers}, nil
+	return composeProjectRow{}, ErrComposeProjectNotFound
 }
 
 func composeArgs(row composeProjectRow) ([]string, error) {
@@ -525,20 +499,6 @@ func decodeJSONLinesOrArray[T any](raw []byte) ([]T, error) {
 		items = append(items, item)
 	}
 	return items, scanner.Err()
-}
-
-func normalizeProjectStatus(value string) string {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	switch {
-	case strings.Contains(lower, "running"):
-		return "running"
-	case strings.Contains(lower, "exited"), strings.Contains(lower, "stopped"):
-		return "stopped"
-	case strings.Contains(lower, "partial"), strings.Contains(lower, "restarting"):
-		return "degraded"
-	default:
-		return "unknown"
-	}
 }
 
 func normalizePodStatus(value string) string {

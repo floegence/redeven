@@ -780,7 +780,7 @@ describe('native Containers page', () => {
       },
     });
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:activity' && (entry.value as { version?: number }).version === 2)).toBe(true);
-    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary');
+    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary', expect.any(AbortSignal));
   });
 
   it('shows the target detail skeleton immediately while live navigation resolves', async () => {
@@ -849,7 +849,7 @@ describe('native Containers page', () => {
     await settle();
 
     expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent).toContain('containers.views.images');
-    expect(harness.resourceDetails).toHaveBeenCalledWith('images', 'sha256:config-image', 'docker', 'docker-primary');
+    expect(harness.resourceDetails).toHaveBeenCalledWith('images', 'sha256:config-image', 'docker', 'docker-primary', expect.any(AbortSignal));
     expect(host.querySelector('[data-container-detail-page]')).not.toBeNull();
   });
 
@@ -876,7 +876,7 @@ describe('native Containers page', () => {
     });
     await settle();
 
-    expect(harness.resourceDetails).toHaveBeenCalledWith('images', 'sha256:config-image', 'docker', 'docker-primary');
+    expect(harness.resourceDetails).toHaveBeenCalledWith('images', 'sha256:config-image', 'docker', 'docker-primary', expect.any(AbortSignal));
     expect(host.querySelector('[data-container-detail-page]')).not.toBeNull();
   });
 
@@ -1932,6 +1932,67 @@ describe('native Containers page', () => {
     expect(harness.listResources.mock.calls.filter(([nextView]) => nextView === 'containers')).toHaveLength(2);
   });
 
+  it('distinguishes Compose detail loading, failure, retry, and an empty result', async () => {
+    harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects'
+      ? [{ project_id: 'project-1', name: 'Stack', status: 'running', container_count: 1, running_count: 1, management: { managed: false } }]
+      : []));
+    const pending = deferred<unknown>();
+    harness.resourceDetails.mockReturnValueOnce(pending.promise).mockResolvedValue({ project: { project_id: 'project-1', containers: [] } });
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.views.compose-projects'))?.click();
+    await settle();
+    host.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('containers.detailTabs.containers'))?.click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-loading]')).not.toBeNull();
+    expect(host.textContent).not.toContain('containers.detail.emptyReferences');
+    pending.reject(new Error('private engine failure'));
+    await settle();
+    expect(host.querySelector('[data-container-detail-error]')).not.toBeNull();
+    expect(host.textContent).not.toContain('containers.detail.emptyReferences');
+    expect(host.textContent).not.toContain('private engine failure');
+    host.querySelector<HTMLButtonElement>('[data-container-detail-error] button')?.click();
+    await settle();
+    expect(host.querySelector('[data-container-detail-error]')).toBeNull();
+    expect(host.textContent).toContain('containers.detail.emptyReferences');
+    expect(harness.resourceDetails).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels an old detail request and ignores its late response after switching resources', async () => {
+    const pending = deferred<unknown>();
+    harness.listResources.mockResolvedValue([
+      { container_id: 'container-1', name: 'API', state: 'running', management: { managed: false } },
+      { container_id: 'container-2', name: 'Worker', state: 'running', management: { managed: false } },
+    ]);
+    harness.resourceDetails.mockImplementation((_view: string, identity: string) => identity === 'container-1'
+      ? pending.promise
+      : Promise.resolve({ container_id: identity, runtime: { network_mode: 'worker-network' } }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    host.querySelector<HTMLTableRowElement>('tbody tr')?.click();
+    await settle();
+    const oldSignal = harness.resourceDetails.mock.calls[0][4] as AbortSignal;
+    host.querySelector<HTMLButtonElement>('button[aria-label="containers.detail.back"]')?.click();
+    await settle();
+    host.querySelectorAll<HTMLTableRowElement>('tbody tr')[1]?.click();
+    await settle();
+    expect(oldSignal.aborted).toBe(true);
+    expect(host.textContent).toContain('worker-network');
+    pending.resolve({ container_id: 'container-1', runtime: { network_mode: 'stale-network' } });
+    await settle();
+    expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('Worker');
+    expect(host.textContent).toContain('worker-network');
+    expect(host.textContent).not.toContain('stale-network');
+  });
+
   it('opens a Compose member as a container detail and restores the Compose detail on back', async () => {
     harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects'
       ? [{ project_id: 'project-1', name: 'Stack', status: 'running', container_count: 1, running_count: 1, management: { managed: false } }]
@@ -1961,7 +2022,7 @@ describe('native Containers page', () => {
     host.querySelector<HTMLButtonElement>('.container-reference-row')?.click();
     await settle();
 
-    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-full-1', 'docker', 'docker-primary');
+    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-full-1', 'docker', 'docker-primary', expect.any(AbortSignal));
     expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('API');
     expect(host.querySelector('.container-resource-tabs [role="tab"][aria-selected="true"]')?.textContent)
       .toContain('containers.views.containers');
@@ -1996,7 +2057,7 @@ describe('native Containers page', () => {
     host.querySelector<HTMLButtonElement>('.container-reference-row')?.click();
     await settle();
 
-    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-full-1', 'docker', 'docker-primary');
+    expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-full-1', 'docker', 'docker-primary', expect.any(AbortSignal));
     expect(host.querySelector('[data-container-detail-page] h2')?.textContent).toBe('API');
 
     host.querySelector<HTMLButtonElement>('[data-container-detail-page] button[aria-label="containers.detail.back"]')?.click();

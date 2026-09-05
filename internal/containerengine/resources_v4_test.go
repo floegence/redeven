@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -403,11 +405,16 @@ func TestAdapterV4ComposeDownRetainsVolumesAndBindsExactProject(t *testing.T) {
 	t.Parallel()
 	projectName := "application"
 	projectID := ComposeProjectID(projectName)
+	configPath := filepath.Join(t.TempDir(), "compose.yml")
+	if err := os.WriteFile(configPath, []byte("services: {}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prefix := "docker --context production compose --file " + configPath + " --project-name application"
 	runner := &fakeCommandRunner{outputs: map[string]string{
 		"docker context ls --format {{json .}}":                      `{"Name":"production","Current":true}`,
-		"docker --context production compose ls --all --format json": `[{"Name":"application","Status":"running(1)","ConfigFiles":"/srv/application/compose.yml"}]`,
-		"docker --context production compose --file /srv/application/compose.yml --project-name application ps --all --no-trunc --format json": `[{"ID":"container-a","Name":"application-web","Service":"web","State":"running"}]`,
-		"docker --context production compose --file /srv/application/compose.yml --project-name application down":                              "",
+		"docker --context production compose ls --all --format json": fmt.Sprintf(`[{"Name":"application","ConfigFiles":%q}]`, configPath),
+		"docker --context production ps -a --no-trunc --filter label=com.docker.compose.project --format " + composeObservationFormat: `[{"ID":"container-a","Name":"application-web","Project":"application","Service":"web","State":"running"}]`,
+		prefix + " down": "",
 	}}
 	client := &CLIClient{Runner: runner}
 	endpoints, err := client.ListEndpoints(context.Background(), EngineDocker)
@@ -433,6 +440,15 @@ func TestAdapterV4ComposeDownRetainsVolumesAndBindsExactProject(t *testing.T) {
 		if strings.Contains(call, "--volumes") {
 			t.Fatalf("Compose down unexpectedly removes volumes: %q", call)
 		}
+	}
+	if err := os.Remove(configPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.ComposeProjectPreflight(context.Background(), MethodComposeProjectsStop, req); !errors.Is(err, ErrComposeConfigurationUnavailable) {
+		t.Fatalf("missing configuration preflight = %v", err)
+	}
+	if details, err := adapter.InspectComposeProject(context.Background(), req); err != nil || details.RunningCount != 1 {
+		t.Fatalf("missing configuration must not block observation: %+v, %v", details, err)
 	}
 }
 

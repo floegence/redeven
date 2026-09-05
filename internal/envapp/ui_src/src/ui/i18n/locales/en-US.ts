@@ -2808,6 +2808,7 @@ export const enUS = defineDictionary({
       files: 'Files', stats: 'Stats', layers: 'Image layers', 'build-history': 'Build history', 'used-by': 'Used by', containers: 'Containers',
     },
     detail: {
+      loadFailed: 'Could not load resource details. Try again.',
       back: 'Back', showCharts: 'Show charts', hideCharts: 'Hide charts', ports: 'Ports', actions: 'Actions',
       searchLogs: 'Search logs', wrap: 'Wrap', copyLogs: 'Copy logs', downloadLogs: 'Download logs',
       safeInspect: 'Redacted inspect', safeInspectHint: 'Only redacted, structured information is shown by default.',
@@ -2856,6 +2857,8 @@ export const enUS = defineDictionary({
       referenceIncompleteTitle: 'Usage could not be confirmed', referenceIncompleteMessage: 'Refresh the inventory and try again.',
     },
     compose: {
+      notFound: 'The Compose project was not found. Refresh and try again.',
+      configurationUnavailable: 'The Compose configuration files are missing or unreadable. Restore access to the files before trying this action again.',
       add: 'Add project', edit: 'Edit project', forget: 'Forget project', saved: 'Saved', source: 'Compose file',
       editorAddTitle: 'Add Compose project', editorEditTitle: 'Edit Compose project', name: 'Project name',
       namePlaceholder: 'e.g. my-app', configPaths: 'Compose files', configPathPlaceholder: 'e.g. /workspace/my-app/compose.yaml',

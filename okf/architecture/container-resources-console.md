@@ -118,6 +118,12 @@ newer navigation generation still cancels the old request and prevents its
 response from committing across targets. A newer selection revision also owns
 the selected resource while an in-scope inventory refresh finishes.
 
+Compose detail loading, failure, and empty-member states are distinct. The
+console shows an empty state only after a successful detail response with no
+members; failed or canceled reads keep the detail surface actionable and allow
+retry. A late response from a prior selection cannot replace the current
+resource detail.
+
 Container detail provides Overview, live logs, redacted Inspect, mounts,
 capability-gated Exec, and bounded statistics. A running, unmanaged container
 shows one Terminal action when the user has Read and Execute. It opens the Exec

@@ -223,6 +223,49 @@ describe('native Containers responsive product surface', () => {
     await page.viewport(1280, 720);
   });
 
+  it.each([
+    { width: 1440, height: 900, variant: 'activity' as const, name: 'desktop' },
+    { width: 640, height: 720, variant: 'workbench' as const, name: 'workbench' },
+    { width: 390, height: 844, variant: 'activity' as const, name: 'mobile' },
+  ])('shows Compose detail errors and retry without false empty content on $name', async ({ width, height, variant, name }) => {
+    await page.viewport(width, height);
+    browserHarness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'compose-projects'
+      ? [{ project_id: 'project-1', name: 'dev_deps', status: 'running', service_count: 3, container_count: 3, running_count: 3, management: { managed: false } }]
+      : []));
+    browserHarness.resourceDetails.mockRejectedValueOnce(new Error('private CLI output')).mockResolvedValue({
+      project: { project_id: 'project-1', name: 'dev_deps', status: 'running', service_count: 3, container_count: 3, running_count: 3,
+        containers: ['keycloak-dev-gateway', 'keycloak-dev', 'keycloak-mysql-dev'].map((name, i) => ({ container_id: `full-id-${i}`, name, state: 'running' })),
+      },
+    });
+    const mounted = mount(variant);
+    dispose = mounted.dispose;
+    await settle();
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+      .find((button) => button.textContent?.includes('Compose'))!.click();
+    await settle();
+    const resource = Array.from(root.querySelectorAll<HTMLElement>('[data-container-resource-row], .container-mobile-card'))
+      .find((element) => element.getBoundingClientRect().width > 0)!;
+    resource.click();
+    await settle();
+    const error = root.querySelector<HTMLElement>('[data-container-detail-error]')!;
+    expect(error).not.toBeNull();
+    expect(root.textContent).not.toContain('No referenced containers');
+    expect(root.textContent).not.toContain('private CLI output');
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    expect(error.scrollWidth).toBeLessThanOrEqual(error.clientWidth + 1);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+    error.querySelector<HTMLButtonElement>('button')!.click();
+    await settle();
+    Array.from(root.querySelectorAll<HTMLButtonElement>('.container-detail-tabs [role="tab"]'))
+      .find((button) => button.textContent === 'Containers')!.click();
+    await settle();
+    expect(root.querySelectorAll('.container-reference-row')).toHaveLength(3);
+    expect(root.querySelector('[data-container-detail-error]')).toBeNull();
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
   it('uses a flat sortable inventory and a dedicated detail page on desktop', async () => {
     await page.viewport(1440, 900);
     const mounted = mount('workbench');
