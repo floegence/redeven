@@ -115,6 +115,21 @@ func TestDiscoverNPMCandidatesKeepsLastSuccessAndNeverReturnsToken(t *testing.T)
 	}
 }
 
+func TestPendingReleaseVerificationPrioritizesBuiltInRecommendation(t *testing.T) {
+	candidates := []ReleaseCandidate{
+		{CandidateID: "recommended", Channel: "special", VerificationStatus: "pending", RecommendationStatus: "pending"},
+		{CandidateID: "stable-first", Channel: "stable", VerificationStatus: "pending"},
+		{CandidateID: "stable-second", Channel: "stable", VerificationStatus: "pending"},
+		{CandidateID: "preview-first", Channel: "preview", VerificationStatus: "pending"},
+		{CandidateID: "unavailable", Channel: "stable", VerificationStatus: "unavailable"},
+	}
+	got := pendingReleaseVerificationIDs(candidates)
+	want := []string{"recommended", "stable-first", "preview-first"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("verification IDs = %v, want %v", got, want)
+	}
+}
+
 type releaseCredentialClient struct {
 	credential    containerengine.RegistryCredential
 	credentialErr error
