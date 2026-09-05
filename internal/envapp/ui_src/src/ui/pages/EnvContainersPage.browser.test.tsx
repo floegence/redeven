@@ -1,6 +1,6 @@
 import '../../index.css';
 
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { ThemeProvider } from '@floegence/floe-webapp-core';
 import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -15,6 +15,7 @@ const browserHarness = vi.hoisted(() => ({
   listResources: vi.fn(),
   resourceDetails: vi.fn(),
   imageBuildHistory: vi.fn(),
+  volumeDiskUsage: vi.fn(),
   preflight: vi.fn(),
   createExecSession: vi.fn(),
   deleteExecSession: vi.fn(),
@@ -85,6 +86,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   updateComposeProjectDefinition: vi.fn(),
   deleteComposeProjectDefinition: vi.fn(),
   getContainerImageBuildHistory: browserHarness.imageBuildHistory,
+  getVolumeDiskUsage: browserHarness.volumeDiskUsage,
   getRawContainerInspect: vi.fn().mockResolvedValue({}),
   listContainerResourceFiles: vi.fn().mockResolvedValue({ path: '/', entries: [], truncated: false }),
   readContainerResourceFile: vi.fn().mockResolvedValue(new Blob()),
@@ -167,6 +169,7 @@ describe('native Containers responsive product surface', () => {
       capabilities: { collection_stats: true, volume_files: false, exec: false },
     }, { engine: 'podman', state: 'not_installed' }]);
     browserHarness.createExecSession.mockReset().mockResolvedValue({ session_id: 'exec-session-1' });
+    browserHarness.volumeDiskUsage.mockReset().mockResolvedValue({ sampled_at_unix_ms: 1, volumes: [] });
     browserHarness.deleteExecSession.mockReset().mockResolvedValue(undefined);
     browserHarness.execTerminalProps.clear();
     browserHarness.listResources.mockReset().mockResolvedValue([
@@ -266,6 +269,57 @@ describe('native Containers responsive product surface', () => {
     expect(root.querySelector('[data-container-detail-error]')).toBeNull();
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it.each([
+    { width: 1440, height: 900, variant: 'activity' as const },
+    { width: 900, height: 720, variant: 'workbench' as const },
+    { width: 390, height: 844, variant: 'activity' as const },
+    { width: 320, height: 720, variant: 'workbench' as const },
+  ])('shows volume disk usage and readable reference status at $width in $variant', async ({ width, height, variant }) => {
+    await page.viewport(width, height);
+    const volumes = [
+      { name: 'redeven-db-data-dev', referenced_containers: 2, references_complete: true, driver: 'local' },
+      { name: '5b8cea84ca4ca979d636da025ad0cb43bbf599e4eee2ad0c8f6be43601cfef80', referenced_containers: 0, references_complete: true, driver: 'local' },
+      { name: 'remote-cache', referenced_containers: 0, references_complete: false, driver: 'local' },
+    ];
+    browserHarness.listResources.mockImplementation((view: string) => Promise.resolve(view === 'volumes' ? volumes : []));
+    browserHarness.resourceDetails.mockResolvedValue({ ...volumes[0], used_by: [{ container_id: 'stopped-container', name: 'Stopped API', state: 'exited' }] });
+    browserHarness.volumeDiskUsage.mockResolvedValue({ volumes: [{ name: volumes[0].name, size_bytes: 1250000000 }, { name: volumes[1].name, size_bytes: 0 }] });
+    const mounted = mount(variant);
+    dispose = mounted.dispose;
+    await settle();
+    await page.getByRole('tab', { name: 'Volumes', exact: true }).click();
+    await settle();
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    const desktop = width >= 640;
+    const surface = root.querySelector<HTMLElement>(desktop ? '.container-resource-table-shell' : '.container-mobile-list')!;
+    expect(surface.textContent).toContain('In use');
+    expect(surface.textContent).toContain('Unused');
+    expect(surface.textContent).toContain('Unknown');
+    expect(surface.textContent).toContain('1.2 GB');
+    expect(surface.textContent).toContain('0 B');
+    expect(surface.textContent).toContain('Unavailable');
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    for (const usage of surface.querySelectorAll<HTMLElement>('.container-volume-usage')) {
+      expect(usage.scrollWidth).toBeLessThanOrEqual(usage.clientWidth + 1);
+      if (!desktop) expect(usage.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    }
+    if (!desktop) for (const row of surface.querySelectorAll<HTMLElement>('.container-mobile-card')) expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+    if (desktop) {
+      const usage = Array.from(surface.querySelectorAll<HTMLButtonElement>('.container-volume-usage-link')).find((button) => button.textContent?.includes('In use'))!;
+      usage.focus();
+      await userEvent.keyboard('{Enter}');
+      await settle();
+      expect(root.querySelector('.container-reference-list')?.textContent).toContain('Stopped API');
+    } else {
+      const row = Array.from(surface.querySelectorAll<HTMLButtonElement>('.container-mobile-card')).find((button) => button.textContent?.includes('redeven-db-data-dev'))!;
+      await userEvent.click(row);
+      await settle();
+      expect(root.querySelector('.container-detail-body')?.textContent).toContain('1.2 GB');
+      expect(root.querySelector('.container-detail-body')?.textContent).toContain('In use');
+    }
   });
 
   it('uses a flat sortable inventory and a dedicated detail page on desktop', async () => {

@@ -2874,6 +2874,7 @@
     "filters": { "label": "リソースを絞り込む", "all": "すべて", "active": "アクティブ", "inactive": "非アクティブ", "managed": "管理対象", "inUse": "使用中", "unused": "未使用" },
     "summary": { "showing": "{total} 件中 {visible} 件を表示", "total": "合計", "managed": "管理対象" },
     "usage": { "containers": "コンテナ: {count}" },
+    "volumeUsage": {"size":"ディスク使用量","calculating":"計算中…","unavailable":"取得できません","referencesIncomplete":"コンテナの参照をすべて確認できませんでした。","includesStopped":"停止中のコンテナも含みます。"},
     "empty": { "title": "リソースがありません", "description": "現在、この種類のリソースを提供するアクティブなコンテナサービスはありません。", "filteredTitle": "一致するリソースがありません", "filteredDescription": "検索条件またはフィルターを変更して、他のリソースを表示してください。" },
     "actions": { "refresh": "更新", "start": "開始", "stop": "停止", "restart": "再起動", "pause": "一時停止", "resume": "再開", "kill": "強制終了", "remove": "削除", "down": "停止して削除", "tag": "タグを追加", "prune": "未使用をクリーンアップ", "cancel": "キャンセル", "close": "閉じる", "retry": "再試行", "review": "確認", "run": "操作を実行", "clearFilters": "フィルターをクリア" },
     "create": { "title": "リソースを作成", "tagTitle": "イメージタグを追加", "advanced": "実行設定", "container": "コンテナを作成", "image": "イメージを取得", "volume": "ボリュームを作成", "pod": "Pod を作成" },

@@ -2744,6 +2744,7 @@ export const enUS = defineDictionary({
     filters: { label: 'Filter resources', all: 'All', active: 'Active', inactive: 'Inactive', managed: 'Managed', inUse: 'In use', unused: 'Unused' },
     summary: { showing: 'Showing {visible} of {total}', total: 'Total', managed: 'Managed' },
     usage: { containers: 'Containers: {count}' },
+    volumeUsage: { size: 'Disk usage', calculating: 'Calculating…', unavailable: 'Unavailable', referencesIncomplete: 'Container references could not be fully checked.', includesStopped: 'Includes stopped containers.' },
     empty: {
       title: 'No resources found',
       description: 'No active container service currently exposes resources in this category.',

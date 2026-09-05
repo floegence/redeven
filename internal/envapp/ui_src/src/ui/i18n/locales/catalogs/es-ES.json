@@ -2874,6 +2874,7 @@
     "filters": { "label": "Filtrar recursos", "all": "Todos", "active": "Activos", "inactive": "Inactivos", "managed": "Administrados", "inUse": "En uso", "unused": "Sin usar" },
     "summary": { "showing": "Mostrando {visible} de {total}", "total": "Total", "managed": "Administrados" },
     "usage": { "containers": "Contenedores: {count}" },
+    "volumeUsage": {"size":"Espacio ocupado","calculating":"Calculando…","unavailable":"No disponible","referencesIncomplete":"No se pudieron comprobar todas las referencias de los contenedores.","includesStopped":"Incluye los contenedores detenidos."},
     "empty": { "title": "No se encontraron recursos", "description": "Ningún servicio de contenedores activo ofrece recursos de esta categoría.", "filteredTitle": "No hay recursos coincidentes", "filteredDescription": "Ajusta la búsqueda o los filtros para ver más recursos." },
     "actions": { "refresh": "Actualizar", "start": "Iniciar", "stop": "Detener", "restart": "Reiniciar", "pause": "Pausar", "resume": "Reanudar", "kill": "Forzar detención", "remove": "Eliminar", "down": "Detener y eliminar", "tag": "Añadir etiqueta", "prune": "Limpiar sin usar", "cancel": "Cancelar", "close": "Cerrar", "retry": "Reintentar", "review": "Revisar", "run": "Ejecutar operación", "clearFilters": "Borrar filtros" },
     "create": { "title": "Crear recurso", "tagTitle": "Añadir etiqueta de imagen", "advanced": "Ajustes de ejecución", "container": "Crear contenedor", "image": "Descargar imagen", "volume": "Crear volumen", "pod": "Crear pod" },

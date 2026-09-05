@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Native container console
 description: Present aggregated container resources with stable loading, exact-target navigation, and structured Compose input.
 tags: [architecture, containers, ui, workbench]
-timestamp: 2026-09-05T00:00:00Z
+timestamp: 2026-09-06T00:00:00Z
 quality_exception: Cross-surface native container contract spanning aggregated resources, target-scoped navigation, operations, and Compose workflows.
 ---
 # Summary
@@ -159,9 +159,18 @@ copyable digest, and derives its count from the inspected list. It does not
 present digests as a second peer view or imply that a digest alone explains a
 user-visible build change. Redeven never infers a digest-to-history relationship
 by array position or projects history size and time onto an Inspect digest.
-Volume detail provides
-Overview, references, and
-capability-gated files. Compose Projects and Pods provide overview, members,
+Volume detail provides Overview, references, and capability-gated files.
+Volume lists, mobile rows, and Overview show explicit In use, Unused, or Unknown
+reference status and disk usage. Reference counts include stopped containers;
+incomplete inspection never enters the Unused filter or renders an empty
+reference list as authoritative. The list status action opens Used by directly.
+Disk usage loads once per runtime after inventory commits, using the same load
+generation and cancellation signal. It never blocks resource navigation or
+replaces selection. Size sorting keeps unavailable values last in both directions;
+zero bytes, calculating, and unavailable are distinct. Refresh repeats the read,
+and same-name volumes remain isolated by their source runtime. Sizes are
+engine-reported observations, not capacity limits or a deletion authorization.
+Compose Projects and Pods provide overview, members,
 lifecycle, and member navigation. Managed resources replace native mutation
 controls with one Web Services action.
 

@@ -234,6 +234,19 @@ func (g *Server) handleContainerReadRoute(w http.ResponseWriter, r *http.Request
 		return g.handleImageCollection(w, r, parts, engine, endpointID)
 	case "volumes":
 		return g.handleVolumeCollection(w, r, parts, engine, endpointID)
+	case "volume-disk-usage":
+		if len(parts) != 1 || !containerQueryOnly(r.URL.Query(), "engine", "endpoint_id") {
+			writeContainerResourceError(w, containerresource.ErrInvalidRequest)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		usage, err := g.containers.VolumeDiskUsage(r.Context(), containerengine.VolumeListRequest{Engine: engine, EndpointID: endpointID})
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: usage})
+		return true
 	case "compose-projects":
 		return g.handleComposeCollection(w, r, parts, engine, endpointID)
 	case "pods":

@@ -136,7 +136,7 @@ func (s *Service) Volumes(ctx context.Context, req containerengine.VolumeListReq
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, VolumeItem{VolumeRecord: item, Management: management})
+		result = append(result, VolumeItem{VolumeRecord: item, Management: management, ReferencesComplete: item.ReferenceInspectionFailures == 0})
 	}
 	return result, nil
 }
@@ -154,7 +154,15 @@ func (s *Service) Volume(ctx context.Context, req containerengine.VolumeInspectR
 	if err != nil {
 		return VolumeItem{}, err
 	}
-	return VolumeItem{VolumeRecord: item, Management: management}, nil
+	return VolumeItem{VolumeRecord: item, Management: management, ReferencesComplete: item.ReferenceInspectionFailures == 0}, nil
+}
+
+func (s *Service) VolumeDiskUsage(ctx context.Context, req containerengine.VolumeListRequest) (containerengine.VolumeDiskUsageResponse, error) {
+	bound, _, err := s.engine.BindEndpoint(ctx, req.Engine, req.EndpointID)
+	if err != nil {
+		return containerengine.VolumeDiskUsageResponse{}, err
+	}
+	return s.engine.VolumeDiskUsage(bound, req)
 }
 
 func (s *Service) ComposeProjects(ctx context.Context, req containerengine.ComposeProjectListRequest) ([]ComposeProjectItem, error) {
