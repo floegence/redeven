@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import type { PluginExecution } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PluginInstallStatus } from './PluginInstallStatus';
+import { PluginInstallStatus, PluginInstallSummary } from './PluginInstallStatus';
 import type { PluginInstallExecutionProjection } from './pluginTypes';
 
 function execution(overrides: Partial<PluginExecution> = {}): PluginExecution {
@@ -209,4 +209,78 @@ describe('PluginInstallStatus', () => {
     host.remove();
   });
 
+});
+
+describe('PluginInstallSummary', () => {
+  it('uses authoritative download bytes and opens details without starting another install', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const onOpenDetails = vi.fn();
+    const dispose = render(() => <PluginInstallSummary projection={projection()} onOpenDetails={onOpenDetails} />, host);
+    const progress = host.querySelector('[role="progressbar"]')!;
+    expect(progress.getAttribute('aria-valuenow')).toBe('5');
+    expect(progress.getAttribute('aria-valuemax')).toBe('10');
+    expect(progress.getAttribute('aria-label')).toBe('Get package');
+    expect(host.textContent).toContain('50%');
+    expect(host.querySelector('[data-plugin-install-steps]')).toBeNull();
+    const details = host.querySelector<HTMLButtonElement>('[data-plugin-center-install-summary]')!;
+    details.click();
+    expect(onOpenDetails).toHaveBeenCalledWith(details);
+    dispose();
+    host.remove();
+  });
+
+  it('reports a stage without inventing a completion percentage or counting the running stage as complete', () => {
+    const host = document.createElement('div');
+    const dispose = render(() => <PluginInstallSummary projection={projection({
+      progress: [{ task_id: 'task', request_id: 'request', stage: 'verify', status: 'running' }],
+    })} onOpenDetails={vi.fn()} />, host);
+    expect(host.textContent).toContain('Security check');
+    expect(host.textContent).toContain('2 / 4');
+    expect(host.textContent).not.toContain('%');
+    expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('1');
+    dispose();
+  });
+
+  it.each(['finalizing', 'reconnecting'] as const)('keeps %s visibly busy even with a completed Execution', (observation) => {
+    const host = document.createElement('div');
+    const dispose = render(() => <PluginInstallSummary projection={projection({
+      observation, execution: execution({ status: 'completed' }),
+    })} onOpenDetails={vi.fn()} />, host);
+    expect(host.querySelector('[data-plugin-install-summary]')?.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('svg')?.classList.contains('animate-spin')).toBe(true);
+    expect(host.textContent).not.toContain('%');
+    dispose();
+  });
+
+  it.each(['review_again', 'erase_retained_data'] as const)('preserves the exact %s recovery action', (recovery) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const onReviewAgain = vi.fn();
+    const onResolveRetainedData = vi.fn();
+    const onRetry = vi.fn();
+    const dispose = render(() => <PluginInstallSummary projection={projection({
+      observation: 'failed', execution: execution({ status: 'failed' }),
+      failure: { source: 'execution', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', retryable: false, recovery },
+    })} onOpenDetails={vi.fn()} onRetry={onRetry} onReviewAgain={onReviewAgain} onResolveRetainedData={onResolveRetainedData} />, host);
+    const action = host.querySelector<HTMLButtonElement>(recovery === 'review_again' ? '[data-plugin-install-review-again]' : '[data-plugin-install-resolve-retained-data]')!;
+    expect(action.getAttribute('aria-label')).toBeTruthy();
+    action.click();
+    expect(recovery === 'review_again' ? onReviewAgain : onResolveRetainedData).toHaveBeenCalledOnce();
+    expect(onRetry).not.toHaveBeenCalled();
+    dispose();
+    host.remove();
+  });
+
+  it('keeps terminal failures readable in details without offering an unsupported retry', () => {
+    const host = document.createElement('div');
+    const dispose = render(() => <PluginInstallSummary projection={projection({
+      observation: 'failed', execution: execution({ status: 'failed', failure_code: 'PLUGIN_MANIFEST_INVALID' }),
+      failure: { source: 'execution', code: 'PLUGIN_MANIFEST_INVALID', retryable: false, recovery: 'none' },
+    })} onOpenDetails={vi.fn()} onRetry={vi.fn()} />, host);
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.querySelector('[data-plugin-install-retry]')).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('[data-plugin-center-install-summary]')?.title).toContain('manifest format');
+    dispose();
+  });
 });

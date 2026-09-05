@@ -57,10 +57,10 @@ export function PluginInstallStatus(props: {
       aria-live={failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed' ? 'assertive' : 'polite'}
       aria-busy={active()}
       class={cn(
-        'min-w-0 rounded-md border px-3 py-2.5',
+        'min-w-0',
         failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed'
-          ? 'border-destructive/40 bg-destructive/5 text-destructive'
-          : 'border-primary/25 bg-primary/5 text-foreground',
+          ? 'text-destructive'
+          : 'text-foreground',
         PLUGIN_ENTER_MOTION_CLASS,
       )}
     >
@@ -73,22 +73,152 @@ export function PluginInstallStatus(props: {
         )} />
         <div class="min-w-0 flex-1">
           <p class={cn('text-xs font-semibold leading-5', props.compact && 'line-clamp-2')}>{label()}</p>
-          <PluginInstallSteps
-            projection={props.projection}
-            action={recovery()}
-            actionLabel={props.projection.observation === 'refresh_failed'
-              ? i18n.t('uiCopy.plugin.installOperation.retryRefresh')
-              : props.projection.observation === 'activation_failed'
-                ? i18n.t('uiCopy.plugin.installOperation.retryActivation')
-                : recovery() === 'review_again'
-                  ? i18n.t('uiCopy.plugin.installOperation.reviewAgain')
-                : i18n.t('common.actions.retry')}
-            onRetry={props.onRetry}
-            onReviewAgain={props.onReviewAgain}
-            onResolveRetainedData={props.onResolveRetainedData}
-          />
         </div>
       </div>
+      <PluginInstallSteps
+        projection={props.projection}
+        action={recovery()}
+        actionLabel={props.projection.observation === 'refresh_failed'
+          ? i18n.t('uiCopy.plugin.installOperation.retryRefresh')
+          : props.projection.observation === 'activation_failed'
+            ? i18n.t('uiCopy.plugin.installOperation.retryActivation')
+            : recovery() === 'review_again'
+              ? i18n.t('uiCopy.plugin.installOperation.reviewAgain')
+              : i18n.t('common.actions.retry')}
+        onRetry={props.onRetry}
+        onReviewAgain={props.onReviewAgain}
+        onResolveRetainedData={props.onResolveRetainedData}
+      />
+    </section>
+  );
+}
+
+export function PluginInstallSummary(props: {
+  projection: PluginInstallExecutionProjection;
+  announce?: boolean;
+  onOpenDetails: (target: HTMLButtonElement) => void;
+  onRetry?: () => void;
+  onReviewAgain?: () => void;
+  onResolveRetainedData?: () => void;
+}): JSX.Element {
+  const i18n = useI18n();
+  const execution = () => props.projection.execution;
+  const failed = () => Boolean(props.projection.failure)
+    || execution()?.status === 'failed'
+    || execution()?.status === 'canceled'
+    || execution()?.status === 'orphaned'
+    || props.projection.observation === 'refresh_failed'
+    || props.projection.observation === 'activation_failed';
+  const active = () => !failed()
+    && (props.projection.observation === 'finalizing'
+      || props.projection.observation === 'reconnecting'
+      || execution()?.status !== 'completed');
+  const progress = () => latestProgress(props.projection);
+  const label = () => installStatusLabel(props.projection, i18n, progress());
+  const states = () => stageStates(props.projection);
+  const position = () => {
+    const current = states().findIndex((stage) => stage.status === 'running' || stage.status === 'failed');
+    if (current >= 0) return current + 1;
+    return states().filter((stage) => stage.status === 'completed').length;
+  };
+  const completedStages = () => states().filter((stage) => stage.status === 'completed').length;
+  const bytes = () => {
+    const value = progress();
+    if (!active() || props.projection.observation !== 'watching' || value?.stage !== 'download'
+      || value.status !== 'running' || value.completed === undefined || value.total === undefined
+      || !Number.isFinite(value.completed) || !Number.isFinite(value.total) || value.total <= 0) return undefined;
+    return { completed: Math.min(value.total, Math.max(0, value.completed)), total: value.total };
+  };
+  const progressLabel = () => bytes()
+    ? new Intl.NumberFormat(i18n.locale(), { style: 'percent', maximumFractionDigits: 0 }).format(bytes()!.completed / bytes()!.total)
+    : position() > 0 ? `${position()} / ${INSTALL_STAGES.length}` : '';
+  const recovery = () => props.projection.failure?.recovery ?? 'none';
+  const actionVisible = () => (
+    (recovery() === 'replay_submission'
+      || recovery() === 'retry_install'
+      || recovery() === 'refresh_inventory'
+      || recovery() === 'retry_setup') && props.onRetry
+  ) || (recovery() === 'review_again' && props.onReviewAgain)
+    || (recovery() === 'erase_retained_data' && props.onResolveRetainedData);
+  const actionLabel = () => props.projection.observation === 'refresh_failed'
+    ? i18n.t('uiCopy.plugin.installOperation.retryRefresh')
+    : props.projection.observation === 'activation_failed'
+      ? i18n.t('uiCopy.plugin.installOperation.retryActivation')
+      : recovery() === 'review_again'
+        ? i18n.t('uiCopy.plugin.installOperation.reviewAgain')
+        : recovery() === 'erase_retained_data'
+          ? i18n.t('uiCopy.plugin.installOperation.resolveRetainedData')
+          : i18n.t('common.actions.retry');
+  const runAction = () => {
+    if (recovery() === 'review_again') props.onReviewAgain?.();
+    else if (recovery() === 'erase_retained_data') props.onResolveRetainedData?.();
+    else props.onRetry?.();
+  };
+  const statusIcon = () => failed() ? AlertTriangle : active() ? RefreshIcon : CheckCircle;
+  return (
+    <section
+      data-plugin-install-execution={props.announce === false ? undefined : props.projection.pluginInstanceID}
+      data-plugin-install-summary
+      role={props.announce === false ? undefined : failed() ? 'alert' : 'status'}
+      aria-live={props.announce === false ? 'off' : failed() ? 'assertive' : 'polite'}
+      aria-busy={active()}
+      class={cn(
+        'flex h-11 min-w-0 flex-1 items-center gap-1',
+        failed() ? 'text-destructive' : 'text-foreground',
+      )}
+    >
+      <button
+        type="button"
+        data-plugin-center-install-summary
+        class="flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`${label()}: ${i18n.t('uiCopy.plugin.viewDetails')}`}
+        title={label()}
+        onClick={(event) => props.onOpenDetails(event.currentTarget)}
+      >
+        <Dynamic component={statusIcon()} class={cn('h-3.5 w-3.5 shrink-0', active() && 'animate-spin motion-reduce:animate-none')} />
+        <span class="min-w-0 flex-1">
+          <span class="flex min-w-0 items-center justify-between gap-2">
+            <span class="min-w-0 truncate text-xs font-medium leading-5">{label()}</span>
+            <Show when={!failed()}><span class="shrink-0 text-[11px] tabular-nums text-muted-foreground">{progressLabel()}</span></Show>
+          </span>
+          <span
+            role="progressbar"
+            data-plugin-install-progress
+            class="mt-1 flex h-1 gap-1 overflow-hidden rounded-full"
+            aria-label={bytes() ? i18n.t('uiCopy.plugin.installOperation.stage.download') : i18n.t('uiCopy.plugin.installOperation.progressLabel')}
+            aria-valuemin="0"
+            aria-valuemax={bytes()?.total ?? INSTALL_STAGES.length}
+            aria-valuenow={bytes()?.completed ?? (position() > 0 ? completedStages() : undefined)}
+            aria-valuetext={`${label()} ${progressLabel()}`}
+            title={bytes() ? `${formatBytes(bytes()!.completed, i18n.locale())} / ${formatBytes(bytes()!.total, i18n.locale())}` : label()}
+          >
+            <Show when={bytes()} fallback={(
+              <For each={states()}>{(stage) => <span class={cn(
+                'h-full min-w-0 flex-1 rounded-full bg-muted',
+                stage.status === 'completed' && 'bg-[var(--redeven-status-success-foreground)]',
+                stage.status === 'running' && !failed() && 'animate-pulse bg-[var(--redeven-status-info-foreground)] motion-reduce:animate-none',
+                stage.status === 'failed' && 'bg-destructive',
+              )} />}</For>
+            )}>
+              {(value) => <span class="h-full w-full bg-muted"><span class="block h-full bg-[var(--redeven-status-info-foreground)]" style={{ width: `${value().completed / value().total * 100}%` }} /></span>}
+            </Show>
+          </span>
+        </span>
+      </button>
+        <Show when={props.announce !== false && actionVisible()}>
+          <button
+            type="button"
+            data-plugin-install-retry={recovery() !== 'review_again' && recovery() !== 'erase_retained_data' ? '' : undefined}
+            data-plugin-install-review-again={recovery() === 'review_again' ? '' : undefined}
+            data-plugin-install-resolve-retained-data={recovery() === 'erase_retained_data' ? '' : undefined}
+            aria-label={actionLabel()}
+            title={actionLabel()}
+            class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={runAction}
+          >
+            <Show when={recovery() === 'erase_retained_data'} fallback={<RefreshIcon class="h-4 w-4" />}><AlertTriangle class="h-4 w-4" /></Show>
+          </button>
+        </Show>
     </section>
   );
 }
@@ -153,7 +283,7 @@ export function PluginInstallSteps(props: {
       </div>
       <ol class="space-y-2">
         <For each={states()}>{(stage) => (
-          <li class="flex min-h-6 items-center gap-2 text-xs" data-plugin-install-stage={stage.stage} data-plugin-install-stage-status={stage.status}>
+          <li class="grid min-h-6 min-w-0 grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 text-xs" data-plugin-install-stage={stage.stage} data-plugin-install-stage-status={stage.status}>
             <Show when={stage.status === 'completed'} fallback={(
               <Show when={stage.status === 'failed'} fallback={(
                 <Show when={stage.status === 'running'} fallback={<span class="w-4 text-center text-muted-foreground" aria-hidden="true">○</span>}>
@@ -163,14 +293,11 @@ export function PluginInstallSteps(props: {
                 <AlertTriangle class="h-4 w-4 text-destructive" />
               </Show>
             )}><CheckCircle class="h-4 w-4 text-primary" /></Show>
-            <span class={cn(stage.status === 'pending' && 'text-muted-foreground', stage.status === 'running' && 'font-semibold text-foreground', stage.status === 'failed' && 'font-semibold text-destructive')}>
+            <span class={cn('min-w-0 break-words', stage.status === 'pending' && 'text-muted-foreground', stage.status === 'running' && 'font-semibold text-foreground', stage.status === 'failed' && 'font-semibold text-destructive')}>
               {i18n.t(`uiCopy.plugin.installOperation.stage.${stage.stage}`)}
             </span>
-            <Show when={stage.status === 'running'}>
-              <span class="ml-auto text-[11px] text-muted-foreground">{i18n.t(`uiCopy.plugin.installOperation.stageStatus.${stage.stage}`)}</span>
-            </Show>
             <Show when={stage.stage === 'download' && stage.status === 'running' && byteProgress()}>
-              {(value) => <span class="ml-auto text-[11px] text-muted-foreground">{formatBytes(value().completed, i18n.locale())} / {formatBytes(value().total, i18n.locale())}</span>}
+              {(value) => <span class="col-start-2 min-w-0 break-words text-[11px] text-muted-foreground">{formatBytes(value().completed, i18n.locale())} / {formatBytes(value().total, i18n.locale())}</span>}
             </Show>
           </li>
         )}</For>
