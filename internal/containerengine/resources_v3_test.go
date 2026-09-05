@@ -610,11 +610,8 @@ func TestCLIClientBuildHistoryNeverProjectsLayerCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "raw-secret") || strings.Contains(string(raw), "created_by") || strings.Contains(string(raw), "missing") {
+	if strings.Contains(string(raw), "raw-secret") || strings.Contains(string(raw), "created_by") || strings.Contains(string(raw), "missing") || strings.Contains(string(raw), "intermediate_image_id") {
 		t.Fatalf("image history leaked layer command: %s", raw)
-	}
-	if history[1].IntermediateImageID != "" || history[2].IntermediateImageID != "" {
-		t.Fatalf("special history IDs were not normalized: %#v", history)
 	}
 	if history[0].Step != 0 || history[0].Operation != ImageBuildHistoryOperationRun || history[0].Summary != "bazel build @bookworm//base-files/amd64" || history[0].FilesystemEffect != ImageBuildHistoryEffectFilesystem {
 		t.Fatalf("run history metadata = %#v", history[0])

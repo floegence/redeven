@@ -3170,6 +3170,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     `containers.detail.buildEffects.${effect}` as Parameters<typeof i18n.t>[0],
   );
 
+  const buildHistoryDescription = (entry: ContainerImageBuildHistoryEntry) => {
+    const summary = compact(entry.summary);
+    return summary || buildHistoryOperationLabel(entry.operation);
+  };
+
   const copyImageLayerDigest = async (digest: string) => {
     try {
       await navigator.clipboard.writeText(digest);
@@ -3309,10 +3314,9 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
                       <div class="container-layer-row container-layer-row--build">
                         <span>{entry.step + 1}</span>
                         <div class="container-layer-change">
-                          <strong>{buildHistoryOperationLabel(entry.operation)}</strong>
-                          <Show when={entry.summary}><code title={entry.summary}>{entry.summary}</code></Show>
-                          <Show when={entry.intermediate_image_id}><code class="container-layer-intermediate" title={entry.intermediate_image_id}>{compact(entry.intermediate_image_id)}</code></Show>
-                          <Show when={!entry.intermediate_image_id}><span class="container-layer-intermediate">{i18n.t('containers.detail.noIntermediateImage')}</span></Show>
+                          <Show when={compact(entry.summary)} fallback={<strong>{buildHistoryDescription(entry)}</strong>}>
+                            <code title={entry.summary}>{buildHistoryDescription(entry)}</code>
+                          </Show>
                         </div>
                         <span class="tabular-nums">{formatBytes(entry.size_bytes)}</span>
                         <time>{formatDate(entry.created_at_unix_ms)}</time>

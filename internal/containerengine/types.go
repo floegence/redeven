@@ -317,13 +317,12 @@ const (
 )
 
 type ImageBuildHistoryEntry struct {
-	Step                int                        `json:"step"`
-	Operation           ImageBuildHistoryOperation `json:"operation"`
-	Summary             string                     `json:"summary,omitempty"`
-	FilesystemEffect    ImageBuildHistoryEffect    `json:"filesystem_effect"`
-	IntermediateImageID string                     `json:"intermediate_image_id,omitempty"`
-	CreatedAtUnixMs     int64                      `json:"created_at_unix_ms,omitempty"`
-	SizeBytes           int64                      `json:"size_bytes,omitempty"`
+	Step             int                        `json:"step"`
+	Operation        ImageBuildHistoryOperation `json:"operation"`
+	Summary          string                     `json:"summary,omitempty"`
+	FilesystemEffect ImageBuildHistoryEffect    `json:"filesystem_effect"`
+	CreatedAtUnixMs  int64                      `json:"created_at_unix_ms,omitempty"`
+	SizeBytes        int64                      `json:"size_bytes,omitempty"`
 }
 
 type VolumeRecord struct {
