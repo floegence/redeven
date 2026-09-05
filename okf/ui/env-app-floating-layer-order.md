@@ -23,6 +23,8 @@ Activity owns one global modal boundary. The Activity Shell, Activity movable wi
 
 Workbench selects automatic placement. A Dialog opened from a widget or projected Flower surface remains inside that owning surface: clicking the canvas or another widget neither closes nor captures the destination interaction, while clicking the surface-local backdrop closes the Dialog. Moving the retained Flower product between Activity and Workbench changes this single placement input reactively; it does not install another listener or duplicate Dialog state. Dropdowns, tooltips, and `SurfaceFloatingLayer` keep their existing surface-coordinate ownership.
 
+Desktop drawers retain the global Dialog backdrop and focus boundary, but their interactive panel begins below the native titlebar safe area. The panel is a no-drag region; the full-window overlay must not become one, so the unobstructed titlebar remains available for native window movement while the backdrop still owns outside-click dismissal. Interactive titlebar controls retain their existing no-drag exclusions.
+
 ## Movable window order
 
 One Shell-lifetime provider registers every open movable window under a stable identifier. Registration order establishes the initial order. Captured pointer input, focus entering the surface, and plugin bridge activation, focus, or action events move the interacted window to the top of the movable band. Product and plugin windows participate in the same order; the plugin window controller retains only its nine-window capacity and LRU eviction responsibility.
@@ -45,6 +47,8 @@ This contract governs cross-surface Env App stacking and the Activity-versus-Wor
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Selects global Activity placement and automatic Workbench placement for the retained Flower product.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx` - Projects plugin bridge interaction into the shared window stack.
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Applies the product modal band to explicitly global product dialogs.
+- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.tsx` - Keeps drawer interaction below the Desktop titlebar while preserving global Dialog dismissal and focus ownership.
+- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.browser.test.tsx` - Verifies the panel remains no-drag without turning the full-window overlay into a titlebar blocker.
 - `redeven:internal/envapp/ui_src/src/ui/envAppFloatingLayers.browser.test.tsx` - Uses actual overlapping DOM hit results to verify window MRU and every global band.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Verifies explicit close, focus handoff, persistent collapse, and outside dismissal.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Verifies trusted plugin window interaction dismisses the expanded companion across the iframe boundary.

@@ -42,10 +42,6 @@
   width: min(62rem, calc(100vw - 4rem));
 }
 
-[data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) {
-  app-region: no-drag;
-}
-
 [data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) > :not([data-floe-dialog-backdrop]) {
   pointer-events: none;
 }
