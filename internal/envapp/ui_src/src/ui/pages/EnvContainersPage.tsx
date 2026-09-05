@@ -277,6 +277,10 @@ type ContainerConsoleState =
 
 type ReadyContainerConsoleState = Extract<ContainerConsoleState, { phase: 'ready' }>;
 
+function resourceTabsEnabled(phase: ContainerConsoleState['phase']): boolean {
+  return phase === 'loading' || phase === 'navigating' || phase === 'ready';
+}
+
 type RelatedNavigationOrigin = Readonly<{
   state: ReadyContainerConsoleState;
   detailTab: DetailTab;
@@ -3060,7 +3064,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     id: item,
     label: viewLabel(item),
     icon: <ViewIcon view={item} class="h-4 w-4" />,
-    disabled: consoleState().phase !== 'ready',
+    disabled: !resourceTabsEnabled(consoleState().phase),
   })));
   const detailTabItems = createMemo<TabItem[]>(() => detailTabs().map((tab) => ({
     id: tab,
@@ -3073,7 +3077,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const selectResourceView = (nextView: ContainerResourceView) => {
     const state = consoleState();
-    if (state.phase !== 'ready' || state.target.view === nextView) return;
+    if (!resourceTabsEnabled(state.phase) || state.target.view === nextView) return;
     relatedNavigationHistory = [];
     void loadConsole(
       { view: nextView, selectedResourceKey: '' },

@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Native container console
 description: Present aggregated container resources with stable loading, exact-target navigation, and structured Compose input.
 tags: [architecture, containers, ui, workbench]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-05T00:00:00Z
 ---
 # Summary
 
@@ -29,12 +29,14 @@ View changes show a valid cache while refreshing instead of remounting the whole
 surface. Runtime rediscovery clears stale ownership before a new target set may
 commit. One generation and cancellation signal fences runtime, inventory,
 detail, log, history, file, and statistics responses. Only `ready` may render
-resource data; loading keeps the production tabs, toolbar, table or cards, and
-responsive geometry in place. Related-resource and external navigation commit
-the target view synchronously: an exact cache match opens its detail at once;
-otherwise the `navigating` state renders a detail-shaped skeleton until the
-single target inventory request resolves. Cached data provides continuity only
-and cannot authorize a mutation without a current server preflight.
+resource data; `loading` and `navigating` keep every available resource tab
+interactive while the toolbar, table or cards, and responsive geometry remain
+in place. Only permission, unavailable, and error states disable resource
+navigation. Related-resource and external navigation commit the target view
+synchronously: an exact cache match opens its detail at once; otherwise the
+`navigating` state renders a detail-shaped skeleton until the single target
+inventory request resolves. Cached data provides continuity only and cannot
+authorize a mutation without a current server preflight.
 
 Selection is current user intent, not inventory-request output. A background
 refresh may replace inventory, but it must retain any selection made after that
