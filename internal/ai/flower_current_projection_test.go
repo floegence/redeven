@@ -140,7 +140,7 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 		t.Fatalf("current state=(%q, %q, %q)", status, currentCode, currentMessage)
 	}
 	view := ThreadView{ThreadID: "thread-typed-summary"}
-	applyThreadRuntimeSummary(&view, current)
+	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjectionFromCurrent(current))
 	if view.RunStatus != status || view.RunErrorCode != currentCode || view.RunError != currentMessage {
 		t.Fatalf("summary projection=%#v, want status=%q code=%q message=%q", view, status, currentCode, currentMessage)
 	}
@@ -179,7 +179,7 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 	}
 
 	view := ThreadView{ThreadID: "thread-progress"}
-	applyThreadRuntimeSummary(&view, current)
+	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjectionFromCurrent(current))
 	if view.ActiveRunID != "run-progress" {
 		t.Fatalf("active run id=%q, want exact RunID", view.ActiveRunID)
 	}
@@ -232,6 +232,73 @@ func TestFlowerRuntimeSummaryProjectionSeparatesSettingsAndActivityRevisions(t *
 	}
 	if projected.UpdatedAtUnixMs == projected.SettingsRevision {
 		t.Fatalf("settings revision leaked into activity timestamp: %#v", projected)
+	}
+}
+
+func TestFlowerSummaryAndCurrentProjectionsStayIdenticalAcrossLifecycleStates(t *testing.T) {
+	const threadID = "thread-projection-parity"
+	createdAt := time.UnixMilli(1_000)
+	updatedAt := time.UnixMilli(2_000)
+	lastItemAt := time.UnixMilli(2_100)
+	settings := threadstore.ThreadSettings{
+		ThreadID: threadID, ModelID: "openai/gpt-5.2", PermissionType: "approval_required", WorkingDir: "/workspace",
+		SettingsCreatedAtUnixMs: 900, SettingsUpdatedAtUnixMs: 7_000,
+	}
+
+	completed := flruntime.TurnOutcomeCompleted
+	failed := flruntime.TurnOutcomeFailed
+	cancelled := flruntime.TurnOutcomeCancelled
+	interrupted := flruntime.TurnOutcomeInterrupted
+	cases := []struct {
+		name       string
+		activity   flruntime.ThreadActivity
+		attention  flruntime.AttentionSummary
+		outcome    *flruntime.TurnOutcome
+		failure    *flruntime.ThreadTurnFailure
+		queueCount int
+		runID      identity.RunID
+		turnID     identity.TurnID
+		progress   *flruntime.ThreadRunProgress
+	}{
+		{name: "idle"},
+		{name: "running", activity: flruntime.ThreadActivityActive, runID: "run-running", turnID: "turn-running", progress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming}},
+		{name: "waiting approval", activity: flruntime.ThreadActivityActive, attention: flruntime.AttentionSummary{ApprovalCount: 2}, runID: "run-approval", turnID: "turn-approval", progress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseToolExecution}},
+		{name: "waiting user", activity: flruntime.ThreadActivityActive, attention: flruntime.AttentionSummary{InputCount: 1}, runID: "run-input", turnID: "turn-input", progress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseFinalizing}},
+		{name: "completed", outcome: &completed},
+		{name: "failed", outcome: &failed, failure: &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureEngineContract, Message: "private failure"}},
+		{name: "canceled", outcome: &cancelled},
+		{name: "interrupted", outcome: &interrupted, failure: &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureEngineContract, Message: "private interruption"}},
+		{name: "queued turn", activity: flruntime.ThreadActivityActive, queueCount: 2, runID: "run-queued", turnID: "turn-queued", progress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhasePreparing}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			summary := flruntime.ThreadSummary{
+				ID: identity.ThreadID(threadID), Title: "Parity", TitleStatus: flruntime.ThreadTitleStatusReady,
+				CreatedAt: createdAt, UpdatedAt: updatedAt, LastItemAt: lastItemAt, LastItemPreview: "latest item",
+				Activity: tc.activity, Attention: tc.attention, LastOutcome: tc.outcome, Failure: tc.failure,
+				QueueCount: tc.queueCount, RunID: tc.runID, TurnID: tc.turnID, RunProgress: tc.progress,
+			}
+			current := flruntime.ThreadView{
+				ThreadID: threadID, Activity: tc.activity, Attention: tc.attention, LastOutcome: tc.outcome, Failure: tc.failure,
+				RunID: tc.runID, TurnID: tc.turnID, RunProgress: tc.progress,
+			}
+			for index := 0; index < tc.queueCount; index++ {
+				current.Queue = append(current.Queue, flruntime.QueuedInput{ID: string(rune('a' + index))})
+			}
+
+			fromSummary, err := (&Service{}).threadViewFromSummary(t.Context(), &settings, summary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fromCurrent, err := (&Service{}).threadViewFromRuntimeCurrent(t.Context(), &settings, current, &summary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(fromSummary, fromCurrent) {
+				t.Fatalf("summary projection=%#v, current projection=%#v", fromSummary, fromCurrent)
+			}
+		})
 	}
 }
 

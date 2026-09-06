@@ -124,25 +124,92 @@ func applyThreadSummaryPresentation(view *ThreadView, summary *flruntime.ThreadS
 	}
 }
 
+// flowerThreadRuntimeProjection is the common lifecycle projection input for
+// both Floret summaries and complete current views. Keeping this shape small
+// prevents either source from growing a second Flower-specific state machine.
+type flowerThreadRuntimeProjection struct {
+	QueueCount  int
+	Activity    flruntime.ThreadActivity
+	Attention   flruntime.AttentionSummary
+	LastOutcome *flruntime.TurnOutcome
+	Failure     *flruntime.ThreadTurnFailure
+	RunID       identity.RunID
+	TurnID      identity.TurnID
+	RunProgress *flruntime.ThreadRunProgress
+}
+
+func flowerThreadRuntimeProjectionFromSummary(summary flruntime.ThreadSummary) flowerThreadRuntimeProjection {
+	return flowerThreadRuntimeProjection{
+		QueueCount:  summary.QueueCount,
+		Activity:    summary.Activity,
+		Attention:   summary.Attention,
+		LastOutcome: summary.LastOutcome,
+		Failure:     summary.Failure,
+		RunID:       summary.RunID,
+		TurnID:      summary.TurnID,
+		RunProgress: summary.RunProgress,
+	}
+}
+
+func flowerThreadRuntimeProjectionFromCurrent(current flruntime.ThreadView) flowerThreadRuntimeProjection {
+	return flowerThreadRuntimeProjection{
+		QueueCount:  len(current.Queue),
+		Activity:    current.Activity,
+		Attention:   current.Attention,
+		LastOutcome: current.LastOutcome,
+		Failure:     current.Failure,
+		RunID:       current.RunID,
+		TurnID:      current.TurnID,
+		RunProgress: current.RunProgress,
+	}
+}
+
+func applyFlowerThreadRuntimeProjection(view *ThreadView, projection flowerThreadRuntimeProjection) {
+	if view == nil {
+		return
+	}
+	view.QueuedTurnCount = projection.QueueCount
+	view.RunErrorCode = ""
+	view.RunError = ""
+	approvalCount := projection.Attention.ApprovalCount
+	pending := approvalCount > 0
+	view.ApprovalPending = &pending
+	view.ApprovalPendingCount = approvalCount
+	lifecycle := projectFlowerThreadLifecycle(projection.Activity, projection.Attention, projection.LastOutcome, projection.Failure)
+	view.RunStatus, view.RunErrorCode, view.RunError = lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
+	if projection.Activity == flruntime.ThreadActivityActive && projection.RunID != "" {
+		view.ActiveRunID = projection.RunID.String()
+	} else {
+		view.ActiveRunID = ""
+	}
+	view.RunProgress = flowerRunProgress(projection.RunID, projection.TurnID, projection.RunProgress)
+}
+
+func finalizeFlowerThreadView(view *ThreadView) {
+	if view == nil {
+		return
+	}
+	view.FlowerActivity = FlowerThreadReadSnapshot{
+		ActivityRevision: max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
+	}
+}
+
 func (s *Service) threadViewFromSummary(ctx context.Context, th *threadstore.ThreadSettings, summary flruntime.ThreadSummary) (ThreadView, error) {
+	if th == nil {
+		return ThreadView{}, errors.New("thread settings are missing")
+	}
+	threadID := strings.TrimSpace(th.ThreadID)
+	summaryID := strings.TrimSpace(summary.ID.String())
+	if threadID == "" || summaryID == "" || threadID != summaryID {
+		return ThreadView{}, errors.New("thread identity differs between settings and canonical summary")
+	}
 	view, err := s.threadSettingsView(ctx, th)
 	if err != nil {
 		return ThreadView{}, err
 	}
 	applyThreadSummaryPresentation(&view, &summary)
-	view.QueuedTurnCount = summary.QueueCount
-	approvalPending := summary.Attention.ApprovalCount > 0
-	view.ApprovalPending = &approvalPending
-	view.ApprovalPendingCount = summary.Attention.ApprovalCount
-	lifecycle := projectFlowerThreadLifecycle(summary.Activity, summary.Attention, summary.LastOutcome, summary.Failure)
-	view.RunStatus, view.RunErrorCode, view.RunError = lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
-	if summary.Activity == flruntime.ThreadActivityActive {
-		view.ActiveRunID = strings.TrimSpace(summary.RunID.String())
-	}
-	view.RunProgress = flowerRunProgress(summary.RunID, summary.TurnID, summary.RunProgress)
-	view.FlowerActivity = FlowerThreadReadSnapshot{
-		ActivityRevision: max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
-	}
+	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjectionFromSummary(summary))
+	finalizeFlowerThreadView(&view)
 	return view, nil
 }
 
@@ -347,7 +414,6 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	for _, queued := range current.Queue {
 		view.QueuedTurns = append(view.QueuedTurns, queuedInputView(threadID, queued))
 	}
-	applyThreadRuntimeSummary(&view, current)
 	return &view, nil
 }
 
@@ -415,7 +481,6 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	thread.ContextUsage = contextProjection.Usage
 	thread.ContextCompactions = contextProjection.Compactions
 	thread.TimelineDecorations = contextProjection.Decorations
-	applyThreadRuntimeSummary(&thread, current)
 	return &FlowerThreadDetail{Thread: thread, Current: current}, nil
 }
 
@@ -469,27 +534,6 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 		out.Threads = append(out.Threads, view)
 	}
 	return out, nil
-}
-
-func applyThreadRuntimeSummary(view *ThreadView, current flruntime.ThreadView) {
-	if view == nil || strings.TrimSpace(view.ThreadID) == "" || current.ThreadID.String() != strings.TrimSpace(view.ThreadID) {
-		return
-	}
-	view.QueuedTurnCount = len(current.Queue)
-	view.RunErrorCode = ""
-	view.RunError = ""
-	approvalCount := current.Attention.ApprovalCount
-	pending := approvalCount > 0
-	view.ApprovalPending = &pending
-	view.ApprovalPendingCount = approvalCount
-	lifecycle := projectFlowerThreadLifecycle(current.Activity, current.Attention, current.LastOutcome, current.Failure)
-	view.RunStatus, view.RunErrorCode, view.RunError = lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
-	if current.Activity == flruntime.ThreadActivityActive && current.RunID != "" {
-		view.ActiveRunID = current.RunID.String()
-	} else if current.Activity != flruntime.ThreadActivityActive {
-		view.ActiveRunID = ""
-	}
-	view.RunProgress = flowerRunProgress(current.RunID, current.TurnID, current.RunProgress)
 }
 
 func flowerRunProgress(runID identity.RunID, turnID identity.TurnID, progress *flruntime.ThreadRunProgress) *FlowerRunProgress {
@@ -676,13 +720,11 @@ func (s *Service) threadViewFromRuntimeCurrent(ctx context.Context, settings *th
 		return ThreadView{}, err
 	}
 	applyThreadSummaryPresentation(&view, summary)
-	applyThreadRuntimeSummary(&view, current)
+	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjectionFromCurrent(current))
 	if view.LastMessagePreview == "" {
 		_, view.LastMessagePreview = currentThreadPreview(current)
 	}
-	view.FlowerActivity = FlowerThreadReadSnapshot{
-		ActivityRevision: max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
-	}
+	finalizeFlowerThreadView(&view)
 	return view, nil
 }
 
