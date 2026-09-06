@@ -3371,12 +3371,12 @@ export function EnvPortForwardsPage() {
   return (
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
       <header class="shrink-0 border-b bg-background/95 px-4 py-3 backdrop-blur md:px-5" data-testid="web-services-panel">
-        <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3">
-          <div class="min-w-0">
+        <div class="mx-auto flex w-full max-w-5xl items-start gap-4">
+          <div class="min-w-0 flex-1">
             <h1 class="text-base font-semibold tracking-tight">{i18n.t('webServices.title')}</h1>
-            <p class="hidden text-xs leading-5 text-muted-foreground sm:block">{i18n.t('webServices.description')}</p>
+            <p class="hidden truncate text-xs leading-5 text-muted-foreground sm:block" title={i18n.t('webServices.description')}>{i18n.t('webServices.description')}</p>
           </div>
-          <div class="ml-auto flex shrink-0 items-center gap-2">
+          <div class="ml-auto flex shrink-0 items-center gap-2 pt-0.5">
             <Button
               size="sm"
               variant="outline"
@@ -3406,11 +3406,7 @@ export function EnvPortForwardsPage() {
 
       <main {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto px-4 py-5 md:px-5">
         <div class="mx-auto w-full max-w-5xl space-y-6">
-          <section aria-labelledby="web-service-address-label">
-            <div class="mb-2 flex items-center gap-2">
-              <Globe class="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-              <h2 id="web-service-address-label" class="text-xs font-medium text-foreground">{i18n.t('webServices.address.label')}</h2>
-            </div>
+          <section aria-label={i18n.t('webServices.address.label')}>
             <form
               class="w-full"
               onSubmit={(event) => {
@@ -3420,7 +3416,8 @@ export function EnvPortForwardsPage() {
               data-testid="web-service-address-form"
             >
               <div class="flex w-full flex-col gap-2 sm:flex-row">
-                <div class="min-w-0 flex-1" data-testid="web-service-address-input-shell">
+                <div class="relative min-w-0 flex-1" data-testid="web-service-address-input-shell">
+                  <Globe class="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <Input
                     value={address()}
                     onInput={(event) => {
@@ -3438,7 +3435,7 @@ export function EnvPortForwardsPage() {
                     spellcheck={false}
                     size="sm"
                     class={cn(
-                      'h-10 w-full font-mono text-sm',
+                      'h-10 w-full pl-10 font-mono text-sm',
                       addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
                     )}
                     disabled={!canExecute() || !!busyID()}
