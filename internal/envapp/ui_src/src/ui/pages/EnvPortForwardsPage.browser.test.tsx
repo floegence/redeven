@@ -141,6 +141,71 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(surface.getBoundingClientRect().width).toBeLessThanOrEqual(390);
   });
 
+  it('records a pending release selection immediately and exposes its verification state', async () => {
+    await page.viewport(640, 760);
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '620px', height: '640px' });
+    document.body.appendChild(host);
+    const [selected, setSelected] = createSignal('');
+    const [phase, setPhase] = createSignal<'initial' | 'refresh' | 'load_more' | 'verification_queued' | 'verification' | 'idle'>('idle');
+    const [queued, setQueued] = createSignal<string[]>([]);
+    const [checking, setChecking] = createSignal<string[]>([]);
+    const verificationRequests: string[] = [];
+    const candidate = {
+      schema_version: 2 as const,
+      candidate_id: 'pending-release',
+      source_kind: 'oci' as const,
+      source: 'registry.example/team/app',
+      tag: 'ubuntu-xfce-version-99a31f06',
+      channel: 'special' as const,
+      trust: 'registry_verified',
+      selectable: false,
+      relation: 'unknown' as const,
+      verification_status: 'pending' as const,
+    };
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{ schema_version: 2, check_status: 'fresh', catalog_status: 'complete', has_more: false, loaded_count: 1, checked_at_unix_ms: Date.now(), candidates: [candidate] }}
+      loading={false}
+      requestPhase={phase()}
+      queuedVerificationCount={queued().length}
+      verificationCount={checking().length}
+      queuedVerificationIDs={queued()}
+      checkingVerificationIDs={checking()}
+      error=""
+      query=""
+      filter="all"
+      selectedID={selected()}
+      onQueryChange={() => undefined}
+      onFilterChange={() => undefined}
+      onSelect={setSelected}
+      onVerify={(candidateID) => {
+        verificationRequests.push(candidateID);
+        setQueued([candidateID]);
+        setPhase('verification_queued');
+      }}
+    />, host);
+    await settle();
+
+    const row = host.querySelector<HTMLButtonElement>('[data-release-id="pending-release"]')!;
+    expect(row.getAttribute('role')).toBe('radio');
+    expect(row.getAttribute('aria-checked')).toBe('false');
+    expect(row.textContent).toContain('Not checked');
+    await userEvent.click(row);
+    await settle();
+    expect(selected()).toBe('pending-release');
+    expect(verificationRequests).toEqual(['pending-release']);
+    expect(row.getAttribute('aria-checked')).toBe('true');
+    expect(row.textContent).toContain('Queued');
+    expect(host.textContent).toContain('Selected version ubuntu-xfce-version-99a31f06 is queued for checking');
+
+    setQueued([]);
+    setChecking(['pending-release']);
+    setPhase('verification');
+    await settle();
+    expect(row.textContent).toContain('Checking');
+    expect(host.textContent).toContain('Checking selected version ubuntu-xfce-version-99a31f06');
+  });
+
   it('keeps an unavailable recommendation historical without presenting it as deployable', async () => {
     await page.viewport(640, 760);
     const host = document.createElement('div');

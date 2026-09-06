@@ -3441,6 +3441,8 @@
 	  "releaseLoadedSummary": "Загружено версий: {count}.",
 	  "releaseVerificationQueued": "Подготовка проверки видимых версий: {count}…",
 	  "releaseVerificationProgress": "Проверка видимых версий: {count}…",
+	  "releaseSelectedVerificationQueued": "Выбранная версия {version} ожидает проверки…",
+	  "releaseSelectedVerificationProgress": "Проверка выбранной версии {version}…",
 	  "releaseListLabel": "Доступные версии",
 	  "releaseSourceError": {
 		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven не удалось прочитать учётные данные Registry, сохранённые контейнерным движком. Проверьте настройки учётных данных Docker или Podman и обновите список.",
@@ -3454,7 +3456,7 @@
 		"RECOMMENDED_RELEASE_UNAVAILABLE": "Рекомендуемая версия недоступна. Обновите список и выберите доступную версию.",
 		"unavailable": "Redeven не удалось загрузить доступные версии. Проверьте сеть и обновите список."
 	  },
-	  "releaseVerification": { "pending": "Проверка" },
+	  "releaseVerification": { "pending": "Не проверена", "queued": "Ожидает проверки", "active": "Проверяется" },
       "releaseSearch": "Поиск версий или тегов",
       "releaseFilterLabel": "Фильтр версий",
       "releaseFilter": { "all": "Все", "stable": "Стабильные", "preview": "Предварительные" },
@@ -3470,6 +3472,8 @@
 	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven не может безопасно проверить требования этой версии к Node.js.", "NODE_VERSION_UNAVAILABLE": "Эта версия несовместима с управляемой Redeven средой выполнения Node.js.", "PLATFORM_UNAVAILABLE": "Для этого тега нет образа текущей платформы.", "RELEASE_IDENTITY_UNVERIFIABLE": "Источник не предоставил проверяемую идентичность для этой точной версии.", "RELEASE_DEPRECATED": "Registry npm помечает эту версию как устаревшую.", "RELEASE_NOT_FOUND": "Эта версия больше недоступна в Registry.", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "Тег недоступен, но точный дайджест этого образа по-прежнему проверен. Выберите его явно, чтобы развернуть фиксированный образ.", "unavailable": "Эту версию нельзя выбрать." },
 	  "releaseBadge": { "current": "Текущая", "recommended": "Рекомендована Redeven", "recommendedUnavailable": "Рекомендуемая версия недоступна", "verifiedDigest": "Проверенный фиксированный образ", "latestStable": "Последняя стабильная", "latestPreview": "Последняя предварительная" },
       "deploySelectedRelease": "Развернуть выбранную версию",
+	  "releaseSelectionPending": "Ожидание проверки версии",
+	  "releaseSelectionUnavailable": "Выбранная версия недоступна",
       "downgradeRequiresStopped": "Остановите сервис перед выбором более старой версии.",
       "releaseRisk": {
         "npm_lifecycle_scripts": "Lifecycle-скрипты npm выполняются с правами текущего пользователя среды и могут обращаться к данным, доступным этому пользователю для чтения или записи.",

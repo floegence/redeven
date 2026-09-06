@@ -1359,6 +1359,8 @@ export function ManagedReleaseCandidates(props: Readonly<{
 	onVerify?: (candidateID: string) => void;
 	onVisible?: (candidateIDs: string[]) => void;
 	onLoadMore?: () => void;
+	checkingVerificationIDs?: ReadonlyArray<string>;
+	queuedVerificationIDs?: ReadonlyArray<string>;
 	leadingItem?: JSX.Element;
 	showRiskHints?: boolean;
 	defaultKind?: ManagedReleaseDefaultKind;
@@ -1372,16 +1374,24 @@ export function ManagedReleaseCandidates(props: Readonly<{
 		return !query || `${candidate.version ?? ''} ${candidate.tag ?? ''} ${candidate.source} ${candidate.registry ?? ''}`.toLowerCase().includes(query);
 	}));
 	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
+	const checkingVerificationIDs = createMemo(() => new Set(props.checkingVerificationIDs ?? []));
+	const queuedVerificationIDs = createMemo(() => new Set(props.queuedVerificationIDs ?? []));
 	const requestPhase = createMemo<ManagedReleaseRequestPhase>(() => props.requestPhase ?? (props.loading ? 'initial' : 'idle'));
 	const statusText = createMemo(() => {
 		if (props.error) return props.error;
 		const loadedCount = props.result?.loaded_count ?? 0;
+		const selectedCandidate = selected();
+		const selectedLabel = selectedCandidate?.version || selectedCandidate?.tag || '';
 		switch (requestPhase()) {
 			case 'initial': return i18n.t('webServices.managed.releaseLoadingInitial', { count: loadedCount });
 			case 'refresh': return i18n.t('webServices.managed.releaseRefreshing');
 			case 'load_more': return i18n.t('webServices.managed.releaseLoadingMore', { count: loadedCount });
-			case 'verification_queued': return i18n.t('webServices.managed.releaseVerificationQueued', { count: props.queuedVerificationCount ?? 0 });
-			case 'verification': return i18n.t('webServices.managed.releaseVerificationProgress', { count: props.verificationCount ?? 0 });
+			case 'verification_queued': return selectedCandidate?.verification_status === 'pending' && queuedVerificationIDs().has(selectedCandidate.candidate_id)
+				? i18n.t('webServices.managed.releaseSelectedVerificationQueued', { version: selectedLabel })
+				: i18n.t('webServices.managed.releaseVerificationQueued', { count: props.queuedVerificationCount ?? 0 });
+			case 'verification': return selectedCandidate?.verification_status === 'pending' && checkingVerificationIDs().has(selectedCandidate.candidate_id)
+				? i18n.t('webServices.managed.releaseSelectedVerificationProgress', { version: selectedLabel })
+				: i18n.t('webServices.managed.releaseVerificationProgress', { count: props.verificationCount ?? 0 });
 			default:
 				if (props.result?.has_more) return i18n.t('webServices.managed.releaseLoadMoreHint', { count: loadedCount });
 				if (props.result) return i18n.t('webServices.managed.releaseLoadedSummary', { count: loadedCount });
@@ -1441,7 +1451,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 						ref={(element) => { scrollViewport = element; scheduleViewportScan(); }}
 						class="min-h-0 flex-1 divide-y overflow-y-auto overscroll-contain rounded-lg border [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
 						data-testid="managed-release-candidate-scroll"
-						role="region"
+						role="radiogroup"
 						aria-label={i18n.t('webServices.managed.releaseListLabel')}
 						tabindex="0"
 						onScroll={scheduleViewportScan}
@@ -1453,22 +1463,26 @@ export function ManagedReleaseCandidates(props: Readonly<{
 						}}
 					>
 						{props.leadingItem}
-						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => (
-							<button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', props.selectedID === candidate.candidate_id && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', candidate.verification_status === 'unavailable' && 'cursor-not-allowed opacity-65')} disabled={candidate.verification_status === 'unavailable'} aria-pressed={props.selectedID === candidate.candidate_id} aria-busy={candidate.verification_status === 'pending' || undefined} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
+						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => {
+			const isSelected = () => props.selectedID === candidate.candidate_id;
+			const isChecking = () => checkingVerificationIDs().has(candidate.candidate_id);
+			const isQueued = () => queuedVerificationIDs().has(candidate.candidate_id);
+			return <button type="button" role="radio" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', isSelected() && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', candidate.verification_status === 'unavailable' && 'cursor-not-allowed opacity-65')} disabled={candidate.verification_status === 'unavailable'} aria-checked={isSelected()} aria-busy={isChecking() || isQueued() || undefined} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
 								event.stopPropagation();
 								if (candidate.verification_status === 'pending') {
+									props.onSelect(candidate.candidate_id);
 									props.onVerify?.(candidate.candidate_id);
-									return;
+								} else {
+									props.onSelect(candidate.candidate_id);
 								}
-								props.onSelect(candidate.candidate_id);
 							}} data-release-id={candidate.candidate_id} data-verification-status={candidate.verification_status}>
-								<div class="min-w-0"><div class="truncate font-mono text-sm font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div>
+								<div class="flex min-w-0 items-start gap-2"><span class={cn('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border', isSelected() ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50 text-transparent')} aria-hidden="true"><Check class="h-3 w-3" /></span><div class="min-w-0"><div class="truncate font-mono text-sm font-semibold text-foreground" title={candidate.version || candidate.tag} data-testid="managed-release-version-label">{candidate.version || candidate.tag}</div><div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={`${candidate.source}${candidate.registry ? ` · ${candidate.registry}` : ''} · ${candidate.platform || i18n.t('webServices.managed.platformAny')}`}>{candidate.source}<Show when={candidate.registry}>{(registry) => ` · ${registry()}`}</Show> · {candidate.platform || i18n.t('webServices.managed.platformAny')}</div></div></div>
 								<div class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"><div class="truncate text-[10px] text-muted-foreground">{releaseTrustLabel(candidate.trust, i18n)}<Show when={candidate.published_at_unix_ms}>{(published) => ` · ${i18n.t('webServices.managed.releasePublishedAt', { date: i18n.formatDateTime(published(), { dateStyle: 'medium' }) })}`}</Show></div><Show when={candidate.integrity || candidate.digest}>{(exactIdentity) => <code class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={exactIdentity()}>{exactIdentity()}</code>}</Show></div>
-				<div class="col-start-2 row-start-1 flex min-w-0 flex-wrap justify-end gap-1 sm:col-start-3 sm:max-w-52"><Show when={candidate.verification_status === 'pending'}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseVerification.pending')}</Tag></Show><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended && candidate.recommendation_status === 'available'}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.recommendation_status === 'unavailable'}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.recommendedUnavailable')}</Tag></Show><Show when={candidate.digest_verified}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.verifiedDigest')}</Tag></Show><Show when={candidate.is_latest_stable}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
+				<div class="col-start-2 row-start-1 flex min-w-0 flex-wrap justify-end gap-1 sm:col-start-3 sm:max-w-52"><Show when={candidate.verification_status === 'pending'}><Tag size="sm" variant="neutral" tone="soft">{i18n.t(`webServices.managed.releaseVerification.${isChecking() ? 'active' : isQueued() ? 'queued' : 'pending'}` as EnvAppTranslationKey)}</Tag></Show><Show when={candidate.is_current}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.current')}</Tag></Show><Show when={candidate.is_recommended && candidate.recommendation_status === 'available'}><Tag size="sm" variant="info" tone="soft">{i18n.t(props.defaultKind === 'template' ? 'webServices.managed.defaultVersion' : 'webServices.managed.releaseBadge.recommended')}</Tag></Show><Show when={candidate.recommendation_status === 'unavailable'}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.recommendedUnavailable')}</Tag></Show><Show when={candidate.digest_verified}><Tag size="sm" variant="success" tone="soft">{i18n.t('webServices.managed.releaseBadge.verifiedDigest')}</Tag></Show><Show when={candidate.is_latest_stable}><Tag size="sm" variant="neutral" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestStable')}</Tag></Show><Show when={candidate.is_latest_preview}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.releaseBadge.latestPreview')}</Tag></Show><Tag size="sm" variant={candidate.channel === 'preview' ? 'warning' : 'neutral'} tone="soft">{i18n.t(`webServices.managed.releaseChannel.${candidate.channel}` as EnvAppTranslationKey)}</Tag><Show when={candidate.deprecated}><Tag size="sm" variant="warning" tone="soft">{i18n.t('webServices.managed.deprecated')}</Tag></Show></div>
 								<Show when={candidate.tag_moved}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
 								<Show when={candidate.digest_verified || candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
 							</button>
-						)}</For>
+						}}</For>
 					</div>
 				</Show>
 				<div class="managed-release-list-status" data-loading={statusBusy()} data-error={Boolean(props.error)} data-phase={requestPhase()} data-testid="managed-release-more-sentinel" role="status" aria-live="polite" aria-busy={statusBusy() || undefined}>
@@ -2298,8 +2312,8 @@ export function EnvPortForwardsPage() {
 	const [releaseCandidates, setReleaseCandidates] = createSignal<ManagedReleaseCandidateResult | null>(null);
 	const [releaseCandidatesLoading, setReleaseCandidatesLoading] = createSignal(false);
 	const [releaseRequestPhase, setReleaseRequestPhase] = createSignal<ManagedReleaseRequestPhase>('idle');
-	const [releaseVerificationQueuedCount, setReleaseVerificationQueuedCount] = createSignal(0);
-	const [releaseVerificationActiveCount, setReleaseVerificationActiveCount] = createSignal(0);
+	const [releaseVerificationQueuedIDs, setReleaseVerificationQueuedIDs] = createSignal<string[]>([]);
+	const [releaseVerificationActiveIDs, setReleaseVerificationActiveIDs] = createSignal<string[]>([]);
 	const [releaseCandidatesError, setReleaseCandidatesError] = createSignal('');
 	const [templateRecommendationUnavailable, setTemplateRecommendationUnavailable] = createSignal(false);
 	const [releaseQuery, setReleaseQuery] = createSignal('');
@@ -2324,8 +2338,8 @@ export function EnvPortForwardsPage() {
 		releaseRequestFeedbackGeneration += 1;
 		releaseRequestFeedbackStartedAt = 0;
 		setReleaseRequestPhase('idle');
-		setReleaseVerificationQueuedCount(0);
-		setReleaseVerificationActiveCount(0);
+		setReleaseVerificationQueuedIDs([]);
+		setReleaseVerificationActiveIDs([]);
 	};
 	const startReleaseRequestFeedback = (phase: Exclude<ManagedReleaseRequestPhase, 'idle'>) => {
 		if (releaseRequestFeedbackTimer !== undefined) clearTimeout(releaseRequestFeedbackTimer);
@@ -2772,24 +2786,38 @@ export function EnvPortForwardsPage() {
 		releaseVerificationTimer = undefined;
 		const target = releasePickerTarget();
 		if (!target || releaseCandidatesLoading() || managedUpdatePlanLoading()) return;
-		const candidateIDs = Array.from(queuedReleaseVerifications).slice(0, 20);
+		const selectedID = selectedReleaseID();
+		const candidateIDs = [
+			...(queuedReleaseVerifications.has(selectedID) ? [selectedID] : []),
+			...Array.from(queuedReleaseVerifications).filter((candidateID) => candidateID !== selectedID),
+		].slice(0, 20);
 		if (candidateIDs.length === 0) return;
 		candidateIDs.forEach((candidateID) => {
 			queuedReleaseVerifications.delete(candidateID);
 			attemptedVisibleReleaseVerifications.add(candidateID);
 		});
-		setReleaseVerificationQueuedCount(queuedReleaseVerifications.size);
-		setReleaseVerificationActiveCount(candidateIDs.length);
+		setReleaseVerificationQueuedIDs(Array.from(queuedReleaseVerifications));
+		setReleaseVerificationActiveIDs(candidateIDs);
 		void loadReleaseCandidates(target, 'verify', { candidateIDs });
 	};
 	const scheduleVisibleReleaseVerification = (candidateIDs: string[]) => {
 		for (const candidateID of candidateIDs) {
 			if (!attemptedVisibleReleaseVerifications.has(candidateID)) queuedReleaseVerifications.add(candidateID);
 		}
-		setReleaseVerificationQueuedCount(queuedReleaseVerifications.size);
+		setReleaseVerificationQueuedIDs(Array.from(queuedReleaseVerifications));
 		if (!releaseCandidatesLoading() && queuedReleaseVerifications.size > 0) setReleaseRequestPhase('verification_queued');
 		if (releaseVerificationTimer !== undefined || queuedReleaseVerifications.size === 0) return;
 		releaseVerificationTimer = setTimeout(flushVisibleReleaseVerifications, 50);
+	};
+	const prioritizeReleaseVerification = (candidateID: string) => {
+		if (releaseVerificationActiveIDs().includes(candidateID)) return;
+		attemptedVisibleReleaseVerifications.delete(candidateID);
+		queuedReleaseVerifications.add(candidateID);
+		setReleaseVerificationQueuedIDs(Array.from(queuedReleaseVerifications));
+		if (releaseCandidatesLoading() || managedUpdatePlanLoading()) return;
+		setReleaseRequestPhase('verification_queued');
+		if (releaseVerificationTimer !== undefined) clearTimeout(releaseVerificationTimer);
+		releaseVerificationTimer = setTimeout(flushVisibleReleaseVerifications, 0);
 	};
 
 	const loadReleaseCandidates = async (
@@ -2803,7 +2831,7 @@ export function EnvPortForwardsPage() {
 		let requestFailed = false;
 		const requestPhase = action === 'open' ? 'initial' : action === 'refresh' ? 'refresh' : action === 'continue' ? 'load_more' : 'verification';
 		startReleaseRequestFeedback(requestPhase);
-		if (action !== 'verify') setReleaseVerificationActiveCount(0);
+		if (action !== 'verify') setReleaseVerificationActiveIDs([]);
 		setReleaseCandidatesLoading(true);
 		setReleaseCandidatesError('');
 		try {
@@ -2856,7 +2884,7 @@ export function EnvPortForwardsPage() {
 					void loadReleaseCandidates(target, 'refresh');
 				} else {
 					setReleaseCandidatesLoading(false);
-					if (action === 'verify') setReleaseVerificationActiveCount(0);
+					if (action === 'verify') setReleaseVerificationActiveIDs([]);
 					if (queuedReleaseVerifications.size > 0 && releaseVerificationTimer === undefined) {
 						setReleaseRequestPhase('verification_queued');
 						releaseVerificationTimer = setTimeout(flushVisibleReleaseVerifications, 0);
@@ -2877,8 +2905,8 @@ export function EnvPortForwardsPage() {
 		const target: ManagedReleasePickerTarget = { kind: 'template', id: templateID, name: managedTemplateLocalizedIdentity(template, i18n).name, authTokenParameter };
 		queuedReleaseVerifications.clear();
 		attemptedVisibleReleaseVerifications.clear();
-		setReleaseVerificationQueuedCount(0);
-		setReleaseVerificationActiveCount(0);
+		setReleaseVerificationQueuedIDs([]);
+		setReleaseVerificationActiveIDs([]);
 		setReleasePickerTarget(target);
 		setReleaseSecretParameters({});
 		if (!authTokenParameter) void loadReleaseCandidates(target, 'open');
@@ -2888,8 +2916,8 @@ export function EnvPortForwardsPage() {
 		const target: ManagedReleasePickerTarget = { kind: 'service', id: service.service_id, name: managedServiceLocalizedIdentity(service, i18n).name, service };
 		queuedReleaseVerifications.clear();
 		attemptedVisibleReleaseVerifications.clear();
-		setReleaseVerificationQueuedCount(0);
-		setReleaseVerificationActiveCount(0);
+		setReleaseVerificationQueuedIDs([]);
+		setReleaseVerificationActiveIDs([]);
 		setReleasePickerTarget(target);
 		setReleaseSecretParameters({});
 		void loadReleaseCandidates(target, 'open');
@@ -2902,6 +2930,12 @@ export function EnvPortForwardsPage() {
 		if (selectedReleaseID() && (!candidate || !candidate.selectable)) return false;
 		return Boolean(candidate && !candidate.is_current && candidate.relation !== 'same');
 	});
+	const releaseSelectionActionLabel = (readyKey: EnvAppTranslationKey) => {
+		const candidate = selectedReleaseCandidate();
+		if (candidate?.verification_status === 'pending') return i18n.t('webServices.managed.releaseSelectionPending');
+		if (candidate?.verification_status === 'unavailable') return i18n.t('webServices.managed.releaseSelectionUnavailable');
+		return i18n.t(readyKey);
+	};
 
 	const createManagedUpdatePlan = async () => {
 		const target = releasePickerTarget();
@@ -4059,10 +4093,10 @@ export function EnvPortForwardsPage() {
           <div class="ml-auto flex gap-2">
             <Button size="sm" variant="outline" onClick={closeReleasePicker}>{i18n.t('webServices.actions.cancel')}</Button>
             <Show when={releasePickerTarget()?.kind === 'template'}>
-              <Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable}>{i18n.t('webServices.managed.deploySelectedRelease')}</Button>
+              <Button size="sm" variant="default" onClick={confirmReleaseSelection} disabled={!canManageManagedService() || !selectedReleaseCandidate()?.selectable}>{releaseSelectionActionLabel('webServices.managed.deploySelectedRelease')}</Button>
             </Show>
             <Show when={releasePickerTarget()?.kind === 'service'}>
-              <Show when={managedUpdatePlan()} fallback={<Button size="sm" variant="default" onClick={() => void createManagedUpdatePlan()} disabled={!canReviewManagedUpdate() || managedUpdatePlanLoading()}>{managedUpdatePlanLoading() ? i18n.t('webServices.managed.preparingUpdatePlan') : i18n.t('webServices.managed.reviewUpdatePlan')}</Button>}>
+              <Show when={managedUpdatePlan()} fallback={<Button size="sm" variant="default" onClick={() => void createManagedUpdatePlan()} disabled={!canReviewManagedUpdate() || managedUpdatePlanLoading()}>{managedUpdatePlanLoading() ? i18n.t('webServices.managed.preparingUpdatePlan') : releaseSelectionActionLabel('webServices.managed.reviewUpdatePlan')}</Button>}>
                 <Button size="sm" variant="default" onClick={submitManagedUpdatePlan} disabled={!canManageManagedService() || !managedUpdatePlanNoticesAccepted() || managedUpdatePlanRequiresStopped()}>{i18n.t('webServices.managed.update')}</Button>
               </Show>
             </Show>
@@ -4078,8 +4112,10 @@ export function EnvPortForwardsPage() {
                   result={releaseCandidates()}
                   loading={releaseCandidatesLoading()}
                   requestPhase={releaseRequestPhase()}
-                  queuedVerificationCount={releaseVerificationQueuedCount()}
-                  verificationCount={releaseVerificationActiveCount()}
+                  queuedVerificationCount={releaseVerificationQueuedIDs().length}
+                  verificationCount={releaseVerificationActiveIDs().length}
+				  queuedVerificationIDs={releaseVerificationQueuedIDs()}
+				  checkingVerificationIDs={releaseVerificationActiveIDs()}
                   error={releaseCandidatesError()}
                   query={releaseQuery()}
                   filter={releaseFilter()}
@@ -4087,13 +4123,7 @@ export function EnvPortForwardsPage() {
 				  onQueryChange={setReleaseQuery}
 				  onFilterChange={setReleaseFilter}
 				  onSelect={(candidateID) => { setSelectedReleaseID(candidateID); setManagedUpdatePlanError(''); setUpdateNoticeAcceptances({}); }}
-				  onVerify={(candidateID) => {
-					attemptedVisibleReleaseVerifications.add(candidateID);
-					queuedReleaseVerifications.delete(candidateID);
-					setReleaseVerificationQueuedCount(queuedReleaseVerifications.size);
-					setReleaseVerificationActiveCount(1);
-					void loadReleaseCandidates(releasePickerTarget(), 'verify', { candidateIDs: [candidateID] });
-				  }}
+				  onVerify={prioritizeReleaseVerification}
 				  onVisible={scheduleVisibleReleaseVerification}
 				  onLoadMore={() => {
 					const result = releaseCandidates();
