@@ -1361,22 +1361,11 @@ export function ManagedReleaseCandidates(props: Readonly<{
 	const i18n = useI18n();
 	let scrollViewport: HTMLDivElement | undefined;
 	let viewportFrame: number | undefined;
-	const [scrollTop, setScrollTop] = createSignal(0);
-	const rowHeight = 76;
-	const overscan = 8;
 	const candidates = createMemo(() => (props.result?.candidates ?? []).filter((candidate) => {
 		if (props.filter !== 'all' && candidate.channel !== props.filter) return false;
 		const query = props.query.trim().toLowerCase();
 		return !query || `${candidate.version ?? ''} ${candidate.tag ?? ''} ${candidate.source} ${candidate.registry ?? ''}`.toLowerCase().includes(query);
 	}));
-	const windowedCandidates = createMemo(() => {
-		const all = candidates();
-		const height = scrollViewport?.clientHeight ?? 600;
-		const visibleRows = Math.ceil(height / rowHeight);
-		const end = Math.min(all.length, Math.ceil((scrollTop() + height) / rowHeight) + overscan);
-		const start = Math.max(0, Math.min(Math.floor(scrollTop() / rowHeight) - overscan, end - visibleRows - overscan));
-		return { all, start, end, items: all.slice(start, end) };
-	});
 	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
 	const scanViewport = () => {
 		viewportFrame = undefined;
@@ -1435,7 +1424,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 						role="region"
 						aria-label={i18n.t('webServices.managed.releaseListLabel')}
 						tabindex="0"
-						onScroll={(event) => { setScrollTop(event.currentTarget.scrollTop); scheduleViewportScan(); }}
+						onScroll={scheduleViewportScan}
 						onWheel={(event) => {
 							if (!scrollViewport || event.deltaY === 0) return;
 							event.preventDefault();
@@ -1444,10 +1433,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 						}}
 					>
 						{props.leadingItem}
-						<Show when={windowedCandidates().all.length > 0} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>
-							<div style={{ height: `${windowedCandidates().all.length * rowHeight}px`, position: 'relative' }}>
-								<div style={{ position: 'absolute', top: `${windowedCandidates().start * rowHeight}px`, left: '0', right: '0' }}>
-								<For each={windowedCandidates().items}>{(candidate) => (
+						<For each={candidates()} fallback={<div class="py-8 text-center text-sm text-muted-foreground">{i18n.t('webServices.managed.noReleaseMatches')}</div>}>{(candidate) => (
 							<button type="button" class={cn('grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] sm:items-center sm:py-2', props.selectedID === candidate.candidate_id && 'bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--primary)]', candidate.verification_status === 'unavailable' && 'cursor-not-allowed opacity-65')} disabled={candidate.verification_status === 'unavailable'} aria-pressed={props.selectedID === candidate.candidate_id} aria-busy={candidate.verification_status === 'pending' || undefined} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
 								event.stopPropagation();
 								if (candidate.verification_status === 'pending') {
@@ -1462,10 +1448,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 								<Show when={candidate.tag_moved}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
 								<Show when={candidate.digest_verified || candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
 							</button>
-								)}</For>
-								</div>
-							</div>
-						</Show>
+						)}</For>
 						<Show when={props.result?.has_more}><div class="flex h-9 items-center justify-center gap-2 text-[11px] text-muted-foreground" data-testid="managed-release-more-sentinel">
 							<Show when={props.loading} fallback={<span>{i18n.t('webServices.managed.releaseLoadMoreHint', { count: props.result?.loaded_count ?? 0 })}</span>}>
 								<span class="inline-flex items-center gap-1" role="status" aria-label={i18n.t('common.status.loading')}>
