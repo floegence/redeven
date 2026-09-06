@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.27` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.28` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -43,17 +43,17 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.27` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.28` set:
 
-- `github.com/floegence/redevplugin/v3 v3.0.27`;
-- `@floegence/redevplugin-contracts@3.0.27` and
-  `@floegence/redevplugin-ui@3.0.27`;
-- `redevplugin-runtime@3.0.27` and `redevplugin-worker-sdk@3.0.27` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.28`;
+- `@floegence/redevplugin-contracts@3.0.28` and
+  `@floegence/redevplugin-ui@3.0.28`;
+- `redevplugin-runtime@3.0.28` and `redevplugin-worker-sdk@3.0.28` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
   SHA-256 is
-  `5784ffd1ce0b1be08f92d90b87929285359f87833581f1305d6c2c55ae31aefa`.
+  `ede0e0f221d8b5fe2b2746f5bc746d715860fefe684b6966e3e0c29c92e83916`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm
@@ -95,7 +95,7 @@ carries its exact permission id, required status, and stable
 facts, but it must not parse the package, derive permissions itself, show method
 inventories in the primary UI, or treat the declaration as final verification.
 
-Worker activation remains ReDevPlugin work. The `v3.0.27` Host starts and
+Worker activation remains ReDevPlugin work. The `v3.0.28` Host starts and
 health-checks the runtime and prewarms the exact worker module after fresh
 install, update, downgrade, enable, and startup recovery. It revalidates the
 installed package identity, SHA-256 hashes, Ed25519 status, revocation, grants,
@@ -105,6 +105,12 @@ fences fail closed. Redeven consumes the Host lifecycle result and
 `RecoverySnapshot`; it must not scan the registry to start workers, inspect
 opaque control state, duplicate trust decisions, or treat local presentation
 state as fallback authorization.
+
+The same Host preparation gates initial worker dispatch during cold startup.
+Concurrent calls share preparation bound to the current plugin, authorization
+revisions, and runtime generation. Surface opening can still render before the
+worker is ready; Redeven must not add its own readiness polling or retry an
+already dispatched call.
 
 Environment-scoped runtime invocations retain `owner_user_hash` in the signed
 short-lived lease audience while deriving the narrower resource scope without a
@@ -191,7 +197,7 @@ affected authority, then the SDK tears down the shared scope for committed or
 unknown outcomes. Redeven must not issue a second close against those disposed
 slots or treat local disposal as the server-side revoke.
 
-The `v3.0.27` bridge delivers `keydown` and `keyup` from the focused plugin
+The `v3.0.28` bridge delivers `keydown` and `keyup` from the focused plugin
 Surface, including canvas, editable, control, and surface targets. Exact
 declarative bindings are evaluated synchronously inside the sandbox when a
 plugin must prevent a matching browser default; composition input never
