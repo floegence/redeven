@@ -1,3 +1,64 @@
+.managed-release-list-status {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 14px 16px;
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.managed-release-list-status[data-error='true'] {
+  color: var(--destructive);
+}
+
+.managed-release-list-status__spinner {
+  display: block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-right-color: var(--primary);
+  border-radius: 50%;
+  animation: managed-release-loading-spin 800ms linear infinite;
+}
+
+.managed-release-list-status__track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+}
+
+.managed-release-list-status__track > span {
+  display: block;
+  width: 25%;
+  height: 100%;
+  background: var(--primary);
+  animation: managed-release-loading-travel 1600ms ease-in-out infinite;
+}
+
+@keyframes managed-release-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes managed-release-loading-travel {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(400%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .managed-release-list-status__spinner,
+  .managed-release-list-status__track > span {
+    animation: none;
+  }
+}
+
 .redeven-terminal-surface:focus,
 .redeven-terminal-surface:focus-visible {
   outline: none;

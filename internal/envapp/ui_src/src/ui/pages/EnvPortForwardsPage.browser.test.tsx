@@ -329,6 +329,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(visibleBatches.flat()).toContain('pending-1');
     expect(visibleBatches.flat()).not.toContain('pending-20');
     expect(loadMoreCalls).toBe(0);
+    expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeNull();
 
     scrollViewport.scrollTop = scrollViewport.scrollHeight;
     scrollViewport.dispatchEvent(new Event('scroll'));
@@ -337,7 +338,64 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(loadMoreCalls).toBe(1);
   });
 
-  it('windows large release catalogs while preserving scroll access', async () => {
+  for (const width of [390, 1440]) it(`shows visible, animated request feedback at the list end at ${width}px`, async () => {
+    await page.viewport(width, 900);
+    document.documentElement.classList.add('dark');
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: `${Math.min(width, 992)}px`, height: '720px' });
+    document.body.appendChild(host);
+    const [loading, setLoading] = createSignal(true);
+    const [hasMore, setHasMore] = createSignal(true);
+    const [error, setError] = createSignal('');
+    const candidates = Array.from({ length: 101 }, (_, index) => ({
+      schema_version: 2 as const, candidate_id: `feedback-${index}`, source_kind: 'oci' as const,
+      source: 'lscr.io/linuxserver/webtop', tag: `debian-xfce-${index}-ls91`, channel: 'special' as const,
+      trust: 'catalog_reviewed_source', selectable: true, relation: 'unknown' as const,
+      verification_status: 'verified' as const,
+    }));
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{ schema_version: 2, check_status: 'fresh', catalog_status: 'loading', has_more: hasMore(), loaded_count: 101, checked_at_unix_ms: Date.now(), candidates }}
+      loading={loading()} error={error()} query="" filter="all" selectedID="" onQueryChange={() => undefined} onFilterChange={() => undefined} onSelect={() => undefined}
+    />, host);
+    await settle();
+    const viewport = host.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
+    viewport.scrollTop = viewport.scrollHeight;
+    await settle();
+    const status = host.querySelector<HTMLElement>('[data-testid="managed-release-more-sentinel"]')!;
+    const lastRow = host.querySelector<HTMLElement>('[data-release-id="feedback-100"]')!;
+    expect(status.getBoundingClientRect().top - lastRow.getBoundingClientRect().bottom).toBeLessThanOrEqual(2);
+    expect(status.getBoundingClientRect().height).toBeGreaterThanOrEqual(56);
+    expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom);
+    expect(status.textContent).toContain('101 versions loaded');
+    expect(status.textContent).toContain('Checking the source');
+    expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth);
+    const spinner = status.querySelector<HTMLElement>('[data-testid="managed-release-loading-spinner"]')!;
+    expect(spinner).toBeTruthy();
+    expect(spinner.getBoundingClientRect().width).toBeGreaterThanOrEqual(20);
+    const animation = spinner.getAnimations()[0];
+    expect(animation?.playState).toBe('running');
+    const before = getComputedStyle(spinner).transform;
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    expect(getComputedStyle(spinner).transform).not.toBe(before);
+    await page.screenshot({ path: `./__screenshots__/release-loading-${width}.png` });
+    await (commands as unknown as { emulateMediaPreferences: (value: { reducedMotion: string }) => Promise<void> }).emulateMediaPreferences({ reducedMotion: 'reduce' });
+    expect(getComputedStyle(spinner).animationName).toBe('none');
+    await (commands as unknown as { emulateMediaPreferences: (value: { reducedMotion: string }) => Promise<void> }).emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    setHasMore(false);
+    await settle();
+    expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeTruthy();
+    setLoading(false);
+    await settle();
+    expect(host.querySelector('[data-testid="managed-release-more-sentinel"]')).toBeNull();
+    setHasMore(true);
+    await settle();
+    expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeNull();
+    setError('Could not read the registry.');
+    await settle();
+    expect(host.querySelector('[data-testid="managed-release-more-sentinel"]')?.textContent).toContain('Could not read the registry.');
+  });
+
+  it('preserves scroll access through large release catalogs', async () => {
     await page.viewport(1024, 768);
     const host = document.createElement('div');
     Object.assign(host.style, { width: '820px', height: '620px' });

@@ -50,6 +50,8 @@ The service API projects current, recommended, latest stable, latest preview, ch
 
 The overlay, close button, Escape, and footer Cancel remain available during listing, verification, refresh, and plan generation. Closing or switching services aborts the session request; a generation fence rejects late and cross-service responses. Existing candidates stay visible under an inline loading state. Abort is silent, while source failures use stable localized codes rather than backend English messages. An explicitly clicked pending item becomes selected after successful verification.
 
+The list ends in a compact, full-width request-status band immediately after the last row. Active source requests display readable status text, a rotating indicator, and an indeterminate track; reduced-motion preferences retain the text and static indicator. Animation follows the active request, never the number of unverified candidates or the presence of a next page. An idle next page uses the load-more hint, a failed request displays its localized error, and a completed list removes the band. Refreshing a restored snapshot retains its rows and clears loading on completion, cancellation, or failure of the current request.
+
 # Boundaries
 
 Redeven does not mirror packages, images, metadata, or credentials and does not promise Registry availability. Discovery does not auto-update, auto-restart, infer a latest non-SemVer tag, select another platform, combine Compose image versions, reverse-migrate application data, or trust a mutable source identifier as an installed identity. Private Registry support is limited to credentials already provided for that exact source.
