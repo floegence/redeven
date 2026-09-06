@@ -1275,6 +1275,8 @@ export function ManagedTemplateNotices(props: {
 
 type ManagedReleaseDefaultKind = 'redeven' | 'template';
 
+type ManagedReleaseRequestPhase = 'idle' | 'initial' | 'refresh' | 'load_more' | 'verification_queued' | 'verification';
+
 function releaseRiskHintIDs(candidate: ManagedReleaseCandidate | undefined, defaultKind: ManagedReleaseDefaultKind = 'redeven'): string[] {
 	if (!candidate) return [];
 	return [
@@ -1344,6 +1346,9 @@ function releaseIdentityLabel(identity: ManagedReleaseIdentity): string {
 export function ManagedReleaseCandidates(props: Readonly<{
 	result: ManagedReleaseCandidateResult | null;
 	loading: boolean;
+	requestPhase?: ManagedReleaseRequestPhase;
+	queuedVerificationCount?: number;
+	verificationCount?: number;
 	error: string;
 	query: string;
 	filter: 'all' | 'stable' | 'preview';
@@ -1367,6 +1372,23 @@ export function ManagedReleaseCandidates(props: Readonly<{
 		return !query || `${candidate.version ?? ''} ${candidate.tag ?? ''} ${candidate.source} ${candidate.registry ?? ''}`.toLowerCase().includes(query);
 	}));
 	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
+	const requestPhase = createMemo<ManagedReleaseRequestPhase>(() => props.requestPhase ?? (props.loading ? 'initial' : 'idle'));
+	const statusText = createMemo(() => {
+		if (props.error) return props.error;
+		const loadedCount = props.result?.loaded_count ?? 0;
+		switch (requestPhase()) {
+			case 'initial': return i18n.t('webServices.managed.releaseLoadingInitial', { count: loadedCount });
+			case 'refresh': return i18n.t('webServices.managed.releaseRefreshing');
+			case 'load_more': return i18n.t('webServices.managed.releaseLoadingMore', { count: loadedCount });
+			case 'verification_queued': return i18n.t('webServices.managed.releaseVerificationQueued', { count: props.queuedVerificationCount ?? 0 });
+			case 'verification': return i18n.t('webServices.managed.releaseVerificationProgress', { count: props.verificationCount ?? 0 });
+			default:
+				if (props.result?.has_more) return i18n.t('webServices.managed.releaseLoadMoreHint', { count: loadedCount });
+				if (props.result) return i18n.t('webServices.managed.releaseLoadedSummary', { count: loadedCount });
+				return '';
+		}
+	});
+	const statusBusy = createMemo(() => requestPhase() !== 'idle' && !props.error);
 	const scanViewport = () => {
 		viewportFrame = undefined;
 		if (!scrollViewport || scrollViewport.clientHeight <= 0 || props.loading) return;
@@ -1412,10 +1434,8 @@ export function ManagedReleaseCandidates(props: Readonly<{
 					<For each={['all', 'stable', 'preview'] as const}>{(filter) => <Button size="sm" variant={props.filter === filter ? 'default' : 'ghost'} onClick={() => props.onFilterChange(filter)}>{i18n.t(`webServices.managed.releaseFilter.${filter}` as EnvAppTranslationKey)}</Button>}</For>
 				</div>
 			</div>
-			<Show when={props.loading}><div class="shrink-0 text-[11px] text-muted-foreground" role="status">{i18n.t('webServices.managed.releaseLoadingProgress', { count: props.result?.loaded_count ?? 0 })}</div></Show>
-			<Show when={!props.loading && props.result?.has_more}><div class="shrink-0 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.releaseLoadMoreHint', { count: props.result?.loaded_count ?? 0 })}</div></Show>
-			<Show when={!props.error || props.result} fallback={<div class="min-h-0 flex-1 rounded-lg border border-destructive/30 bg-destructive/[0.06] p-3 text-xs text-destructive">{props.error}</div>}>
-				<Show when={props.result} fallback={<div class="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">{i18n.t('common.status.loading')}</div>}>
+			<div class="flex min-h-0 flex-1 flex-col gap-2">
+				<Show when={props.result} fallback={<div class={cn('flex min-h-0 flex-1 items-center justify-center rounded-lg border p-3 text-sm', props.error ? 'border-destructive/30 bg-destructive/[0.06] text-destructive' : 'text-muted-foreground')}>{props.error || i18n.t('common.status.loading')}</div>}>
 					<div
 						{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
 						ref={(element) => { scrollViewport = element; scheduleViewportScan(); }}
@@ -1449,20 +1469,16 @@ export function ManagedReleaseCandidates(props: Readonly<{
 								<Show when={candidate.digest_verified || candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
 							</button>
 						)}</For>
-						<Show when={props.loading || props.error || props.result?.has_more}>
-							<div class="managed-release-list-status" data-loading={props.loading} data-error={Boolean(props.error)} data-testid="managed-release-more-sentinel" role="status" aria-live="polite">
-								<Show when={props.loading}>
-									<span class="managed-release-list-status__spinner" data-testid="managed-release-loading-spinner" aria-hidden="true" />
-								</Show>
-								<span class="min-w-0 text-xs font-medium leading-5">
-									{props.loading ? i18n.t('webServices.managed.releaseLoadingProgress', { count: props.result?.loaded_count ?? 0 }) : props.error || i18n.t('webServices.managed.releaseLoadMoreHint', { count: props.result?.loaded_count ?? 0 })}
-								</span>
-								<Show when={props.loading}><span class="managed-release-list-status__track" aria-hidden="true"><span /></span></Show>
-							</div>
-						</Show>
 					</div>
 				</Show>
-			</Show>
+				<div class="managed-release-list-status" data-loading={statusBusy()} data-error={Boolean(props.error)} data-phase={requestPhase()} data-testid="managed-release-more-sentinel" role="status" aria-live="polite" aria-busy={statusBusy() || undefined}>
+					<Show when={statusBusy()}>
+						<span class="managed-release-list-status__spinner" data-testid="managed-release-loading-spinner" aria-hidden="true" />
+					</Show>
+					<span class="managed-release-list-status__message min-w-0 text-xs font-medium leading-5">{statusText()}</span>
+					<Show when={statusBusy()}><span class="managed-release-list-status__track" aria-hidden="true"><span /></span></Show>
+				</div>
+			</div>
 			<Show when={props.showRiskHints && selected()} keyed>{(candidate) => (
 				<div class="shrink-0"><ManagedReleaseRiskHints riskIDs={releaseRiskHintIDs(candidate, props.defaultKind)} /></div>
 			)}</Show>
@@ -2281,6 +2297,9 @@ export function EnvPortForwardsPage() {
 	const [releasePickerTarget, setReleasePickerTarget] = createSignal<ManagedReleasePickerTarget | null>(null);
 	const [releaseCandidates, setReleaseCandidates] = createSignal<ManagedReleaseCandidateResult | null>(null);
 	const [releaseCandidatesLoading, setReleaseCandidatesLoading] = createSignal(false);
+	const [releaseRequestPhase, setReleaseRequestPhase] = createSignal<ManagedReleaseRequestPhase>('idle');
+	const [releaseVerificationQueuedCount, setReleaseVerificationQueuedCount] = createSignal(0);
+	const [releaseVerificationActiveCount, setReleaseVerificationActiveCount] = createSignal(0);
 	const [releaseCandidatesError, setReleaseCandidatesError] = createSignal('');
 	const [templateRecommendationUnavailable, setTemplateRecommendationUnavailable] = createSignal(false);
 	const [releaseQuery, setReleaseQuery] = createSignal('');
@@ -2294,11 +2313,43 @@ export function EnvPortForwardsPage() {
 	let releasePickerRequest: AbortController | null = null;
 	let releasePickerGeneration = 0;
 	let releaseVerificationTimer: ReturnType<typeof setTimeout> | undefined;
+	let releaseRequestFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
+	let releaseRequestFeedbackStartedAt = 0;
+	let releaseRequestFeedbackGeneration = 0;
 	const queuedReleaseVerifications = new Set<string>();
 	const attemptedVisibleReleaseVerifications = new Set<string>();
+	const resetReleaseRequestFeedback = () => {
+		if (releaseRequestFeedbackTimer !== undefined) clearTimeout(releaseRequestFeedbackTimer);
+		releaseRequestFeedbackTimer = undefined;
+		releaseRequestFeedbackGeneration += 1;
+		releaseRequestFeedbackStartedAt = 0;
+		setReleaseRequestPhase('idle');
+		setReleaseVerificationQueuedCount(0);
+		setReleaseVerificationActiveCount(0);
+	};
+	const startReleaseRequestFeedback = (phase: Exclude<ManagedReleaseRequestPhase, 'idle'>) => {
+		if (releaseRequestFeedbackTimer !== undefined) clearTimeout(releaseRequestFeedbackTimer);
+		releaseRequestFeedbackTimer = undefined;
+		releaseRequestFeedbackGeneration += 1;
+		releaseRequestFeedbackStartedAt = Date.now();
+		setReleaseRequestPhase(phase);
+	};
+	const finishReleaseRequestFeedback = () => {
+		if (releaseRequestFeedbackTimer !== undefined) clearTimeout(releaseRequestFeedbackTimer);
+		const feedbackGeneration = releaseRequestFeedbackGeneration;
+		const remaining = Math.max(0, 280 - (Date.now() - releaseRequestFeedbackStartedAt));
+		const finish = () => {
+			if (feedbackGeneration !== releaseRequestFeedbackGeneration || releaseCandidatesLoading() || queuedReleaseVerifications.size > 0) return;
+			releaseRequestFeedbackTimer = undefined;
+			setReleaseRequestPhase('idle');
+		};
+		if (remaining === 0) finish();
+		else releaseRequestFeedbackTimer = setTimeout(finish, remaining);
+	};
 	onCleanup(() => {
 		releasePickerRequest?.abort();
 		if (releaseVerificationTimer !== undefined) clearTimeout(releaseVerificationTimer);
+		if (releaseRequestFeedbackTimer !== undefined) clearTimeout(releaseRequestFeedbackTimer);
 	});
   const [managedDeleteConfirm, setManagedDeleteConfirm] = createSignal(false);
   const managedRowOperation = (serviceID: string) => managedOperations.operationForService(serviceID);
@@ -2692,6 +2743,7 @@ export function EnvPortForwardsPage() {
 		releaseVerificationTimer = undefined;
 		queuedReleaseVerifications.clear();
 		attemptedVisibleReleaseVerifications.clear();
+		resetReleaseRequestFeedback();
 		setReleaseCandidatesLoading(false);
 		setManagedUpdatePlanLoading(false);
 		setReleasePickerTarget(null);
@@ -2726,12 +2778,16 @@ export function EnvPortForwardsPage() {
 			queuedReleaseVerifications.delete(candidateID);
 			attemptedVisibleReleaseVerifications.add(candidateID);
 		});
+		setReleaseVerificationQueuedCount(queuedReleaseVerifications.size);
+		setReleaseVerificationActiveCount(candidateIDs.length);
 		void loadReleaseCandidates(target, 'verify', { candidateIDs });
 	};
 	const scheduleVisibleReleaseVerification = (candidateIDs: string[]) => {
 		for (const candidateID of candidateIDs) {
 			if (!attemptedVisibleReleaseVerifications.has(candidateID)) queuedReleaseVerifications.add(candidateID);
 		}
+		setReleaseVerificationQueuedCount(queuedReleaseVerifications.size);
+		if (!releaseCandidatesLoading() && queuedReleaseVerifications.size > 0) setReleaseRequestPhase('verification_queued');
 		if (releaseVerificationTimer !== undefined || queuedReleaseVerifications.size === 0) return;
 		releaseVerificationTimer = setTimeout(flushVisibleReleaseVerifications, 50);
 	};
@@ -2744,6 +2800,10 @@ export function EnvPortForwardsPage() {
 		if (!target) return;
 		const request = beginReleasePickerRequest(target);
 		let refreshAfterOpen = false;
+		let requestFailed = false;
+		const requestPhase = action === 'open' ? 'initial' : action === 'refresh' ? 'refresh' : action === 'continue' ? 'load_more' : 'verification';
+		startReleaseRequestFeedback(requestPhase);
+		if (action !== 'verify') setReleaseVerificationActiveCount(0);
 		setReleaseCandidatesLoading(true);
 		setReleaseCandidatesError('');
 		try {
@@ -2785,15 +2845,26 @@ export function EnvPortForwardsPage() {
 					attemptedVisibleReleaseVerifications.delete(candidateID);
 				}
 			}
-			if (request.isCurrent() && !isAbortError(error)) setReleaseCandidatesError(releaseSourceErrorLabel(error, i18n));
+			if (request.isCurrent() && !isAbortError(error)) {
+				requestFailed = true;
+				setReleaseCandidatesError(releaseSourceErrorLabel(error, i18n));
+			}
 		} finally {
 			if (request.isCurrent()) {
-				setReleaseCandidatesLoading(false);
 				releasePickerRequest = null;
 				if (refreshAfterOpen) {
 					void loadReleaseCandidates(target, 'refresh');
-				} else if (queuedReleaseVerifications.size > 0 && releaseVerificationTimer === undefined) {
-					releaseVerificationTimer = setTimeout(flushVisibleReleaseVerifications, 0);
+				} else {
+					setReleaseCandidatesLoading(false);
+					if (action === 'verify') setReleaseVerificationActiveCount(0);
+					if (queuedReleaseVerifications.size > 0 && releaseVerificationTimer === undefined) {
+						setReleaseRequestPhase('verification_queued');
+						releaseVerificationTimer = setTimeout(flushVisibleReleaseVerifications, 0);
+					} else if (requestFailed) {
+						setReleaseRequestPhase('idle');
+					} else {
+						finishReleaseRequestFeedback();
+					}
 				}
 			}
 		}
@@ -2806,6 +2877,8 @@ export function EnvPortForwardsPage() {
 		const target: ManagedReleasePickerTarget = { kind: 'template', id: templateID, name: managedTemplateLocalizedIdentity(template, i18n).name, authTokenParameter };
 		queuedReleaseVerifications.clear();
 		attemptedVisibleReleaseVerifications.clear();
+		setReleaseVerificationQueuedCount(0);
+		setReleaseVerificationActiveCount(0);
 		setReleasePickerTarget(target);
 		setReleaseSecretParameters({});
 		if (!authTokenParameter) void loadReleaseCandidates(target, 'open');
@@ -2815,6 +2888,8 @@ export function EnvPortForwardsPage() {
 		const target: ManagedReleasePickerTarget = { kind: 'service', id: service.service_id, name: managedServiceLocalizedIdentity(service, i18n).name, service };
 		queuedReleaseVerifications.clear();
 		attemptedVisibleReleaseVerifications.clear();
+		setReleaseVerificationQueuedCount(0);
+		setReleaseVerificationActiveCount(0);
 		setReleasePickerTarget(target);
 		setReleaseSecretParameters({});
 		void loadReleaseCandidates(target, 'open');
@@ -4005,6 +4080,9 @@ export function EnvPortForwardsPage() {
                 <ManagedReleaseCandidates
                   result={releaseCandidates()}
                   loading={releaseCandidatesLoading()}
+                  requestPhase={releaseRequestPhase()}
+                  queuedVerificationCount={releaseVerificationQueuedCount()}
+                  verificationCount={releaseVerificationActiveCount()}
                   error={releaseCandidatesError()}
                   query={releaseQuery()}
                   filter={releaseFilter()}
@@ -4015,6 +4093,8 @@ export function EnvPortForwardsPage() {
 				  onVerify={(candidateID) => {
 					attemptedVisibleReleaseVerifications.add(candidateID);
 					queuedReleaseVerifications.delete(candidateID);
+					setReleaseVerificationQueuedCount(queuedReleaseVerifications.size);
+					setReleaseVerificationActiveCount(1);
 					void loadReleaseCandidates(releasePickerTarget(), 'verify', { candidateIDs: [candidateID] });
 				  }}
 				  onVisible={scheduleVisibleReleaseVerification}

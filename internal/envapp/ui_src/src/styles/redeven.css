@@ -1,11 +1,15 @@
 .managed-release-list-status {
   position: relative;
   display: flex;
+  flex: 0 0 56px;
   align-items: center;
-  justify-content: center;
+  min-width: 0;
+  height: 56px;
   gap: 12px;
-  min-height: 56px;
-  padding: 14px 16px;
+  overflow: hidden;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--muted);
   color: var(--foreground);
 }
@@ -24,6 +28,12 @@
   border-right-color: var(--primary);
   border-radius: 50%;
   animation: managed-release-loading-spin 800ms linear infinite;
+}
+
+.managed-release-list-status__message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .managed-release-list-status__track {
