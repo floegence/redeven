@@ -396,7 +396,7 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
     pluginSurfaceMocks.render.mock.calls.at(-1)?.[0]?.onInteraction({
       kind: 'activation', sequence: 1, localScroll: false, selectionActive: false,
     });
-    expect(requestActivate).toHaveBeenCalledTimes(1);
+    expect(requestActivate).toHaveBeenCalledWith({ focus: false });
     dispose();
   });
 

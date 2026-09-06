@@ -218,7 +218,9 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
             registerClose={(close) => workbench.registerPluginSurfaceClose(props.widgetId, close)}
             onInteraction={(event) => {
               if (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action') {
-                props.requestActivate?.();
+                // Selection/stacking must not reclaim focus from an embedded
+                // plugin document while it is editing or holding pointer capture.
+                props.requestActivate?.({ focus: false });
               }
             }}
             onRetirementError={pluginHost!.onRetirementError}
