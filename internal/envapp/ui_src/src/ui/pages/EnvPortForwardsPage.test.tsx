@@ -1959,6 +1959,40 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).not.toContain('Container Registry credentials could not be read from the current engine store.');
   });
 
+  it('clears loading after refreshing a stale snapshot without hiding cached releases', async () => {
+    const service = {
+      service_id: 'mws-stale-feedback', template_id: 'example-container',
+      name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace',
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-stale-feedback', runtime_port: 32102,
+    };
+    const candidate = { schema_version: 2, candidate_id: 'cached-release', source_kind: 'oci', source: 'registry.example/app', tag: '1.0.0', channel: 'stable', trust: 'registry_verified', selectable: true, relation: 'same', is_current: true, verification_status: 'verified' };
+    const result = { schema_version: 2, candidates: [candidate], catalog_status: 'complete', has_more: false, loaded_count: 1, check_status: 'stale', checked_at_unix_ms: Date.now() };
+    const refresh = deferred<any>();
+    const actions: string[] = [];
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return Promise.resolve({ templates: [] });
+      if (url === '/_redeven_proxy/api/managed-web-services') return Promise.resolve({ services: [service] });
+      if (url === '/_redeven_proxy/api/forwards') return Promise.resolve({ forwards: [] });
+      if (url === '/_redeven_proxy/api/managed-web-services/mws-stale-feedback/release-candidates') {
+        const action = JSON.parse(String(init?.body)).action;
+        actions.push(action);
+        return action === 'open' ? Promise.resolve(result) : refresh.promise;
+      }
+      return Promise.reject(new Error(`Unexpected local API call: ${url}`));
+    });
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-version"]')).toBeTruthy());
+    host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
+    await waitForAssertion(() => expect(actions).toEqual(['open', 'refresh']));
+    expect(host.querySelector('[data-release-id="cached-release"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeTruthy();
+    refresh.resolve({ ...result, check_status: 'fresh' });
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeNull());
+    expect(host.querySelector('[data-release-id="cached-release"]')).toBeTruthy();
+    const refreshButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => button.textContent?.trim() === 'Refresh');
+    expect(refreshButton?.disabled).toBe(false);
+  });
+
   it('always closes and aborts release browsing while the source is loading', async () => {
     const service = {
       service_id: 'mws-release-loading', template_id: 'example-container',
