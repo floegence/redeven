@@ -32,8 +32,8 @@ function classifyThreadSettings(
   candidate: ThreadView,
 ): ThreadViewAcceptance {
   if (!current) return 'accepted';
-  const currentRevision = Math.max(0, Math.floor(Number(current.thread.settings_revision) || 0));
-  const candidateRevision = Math.max(0, Math.floor(Number(candidate.thread.settings_revision) || 0));
+  const currentRevision = threadSettingsRevision(current.thread);
+  const candidateRevision = threadSettingsRevision(candidate.thread);
   if (candidateRevision > currentRevision) return 'accepted';
   if (candidateRevision < currentRevision) return 'stale';
   return 'unchanged';
@@ -85,8 +85,8 @@ function mergeNewerSummaryMetadata(
   const withActivity = threadSnapshotRevision(candidate) > threadSnapshotRevision(base)
     ? mergeThreadActivity(base, candidate)
     : base;
-  const baseSettingsRevision = Math.max(0, Math.floor(Number(withActivity.settings_revision) || 0));
-  const candidateSettingsRevision = Math.max(0, Math.floor(Number(candidate.settings_revision) || 0));
+  const baseSettingsRevision = threadSettingsRevision(withActivity);
+  const candidateSettingsRevision = threadSettingsRevision(candidate);
   return candidateSettingsRevision > baseSettingsRevision
     ? mergeThreadSettings(withActivity, candidate)
     : withActivity;
@@ -111,6 +111,10 @@ export function threadSnapshotRevision(thread: FlowerThreadSnapshot | undefined)
   );
 }
 
+export function threadSettingsRevision(thread: FlowerThreadSnapshot | undefined): number {
+  return Math.max(0, Math.floor(Number(thread?.settings_revision) || 0));
+}
+
 function threadRuntimeStateKey(thread: FlowerThreadSnapshot): string {
   return [
     thread.status,
@@ -129,7 +133,10 @@ export function threadSummaryNeedsDetail(
   const summaryRevision = threadSnapshotRevision(summary);
   const detailRevision = threadSnapshotRevision(detail);
   if (summaryRevision > detailRevision) return true;
-  if (summaryRevision < detailRevision) return false;
+  const summarySettingsRevision = threadSettingsRevision(summary);
+  const detailSettingsRevision = threadSettingsRevision(detail);
+  if (summarySettingsRevision > detailSettingsRevision) return true;
+  if (summaryRevision < detailRevision || summarySettingsRevision < detailSettingsRevision) return false;
   return threadRuntimeStateKey(summary) !== threadRuntimeStateKey(detail);
 }
 
@@ -170,6 +177,17 @@ function summaryOnly(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
   return summary;
 }
 
+function receiveSummary(
+  current: FlowerThreadSnapshot | undefined,
+  candidate: FlowerThreadSnapshot,
+): FlowerThreadSnapshot {
+  if (!current) return summaryOnly(candidate);
+  const activityIsStale = threadSnapshotRevision(candidate) < threadSnapshotRevision(current);
+  return summaryOnly(activityIsStale
+    ? mergeNewerSummaryMetadata(current, candidate)
+    : mergeNewerSummaryMetadata(candidate, current));
+}
+
 function createCache(
   selectedId: string | null,
   summaries: Map<string, FlowerThreadSnapshot>,
@@ -195,14 +213,14 @@ function createCache(
       if (!id) return this;
       const next = new Map(summaries);
       // Summary state never carries or inherits detail content.
-      next.set(id, summaryOnly(summary));
+      next.set(id, receiveSummary(summaries.get(id), summary));
       return createCache(selectedId, next, views, clock + 1);
     },
     replaceSummaries(nextSummaries) {
       const next = new Map<string, FlowerThreadSnapshot>();
       for (const summary of nextSummaries) {
         const id = summary.thread_id.trim();
-        if (id) next.set(id, summaryOnly(summary));
+        if (id) next.set(id, receiveSummary(summaries.get(id), summary));
       }
       return createCache(selectedId, next, views, clock + 1);
     },
@@ -210,7 +228,7 @@ function createCache(
       const next = new Map<string, FlowerThreadSnapshot>();
       for (const summary of nextSummaries) {
         const id = summary.thread_id.trim();
-        if (id) next.set(id, summaryOnly(summary));
+        if (id) next.set(id, receiveSummary(summaries.get(id), summary));
       }
       const nextViews = new Map<string, CacheEntry>();
       for (const [id, view] of views) {

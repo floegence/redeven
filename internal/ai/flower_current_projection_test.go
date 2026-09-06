@@ -1,15 +1,32 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
+
+func mustProjectRuntimeThread(t *testing.T, settings threadstore.ThreadSettings, current flruntime.ThreadView, summary flruntime.ThreadSummary) ThreadView {
+	t.Helper()
+	if settings.PermissionType == "" {
+		settings.PermissionType = "approval_required"
+	}
+	if settings.WorkingDir == "" {
+		settings.WorkingDir = "/workspace"
+	}
+	view, err := (&Service{}).threadViewFromRuntimeCurrent(context.Background(), &settings, current, &summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return view
+}
 
 func TestStopThreadResponseIsAcknowledgementOnly(t *testing.T) {
 	typeOfResponse := reflect.TypeOf(StopThreadResponse{})
@@ -127,7 +144,7 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 	if view.RunStatus != status || view.RunErrorCode != currentCode || view.RunError != currentMessage {
 		t.Fatalf("summary projection=%#v, want status=%q code=%q message=%q", view, status, currentCode, currentMessage)
 	}
-	direct := threadViewFromRuntimeCurrent(threadstore.ThreadSettings{ThreadID: "thread-typed-summary"}, current, flruntime.ThreadSummary{})
+	direct := mustProjectRuntimeThread(t, threadstore.ThreadSettings{ThreadID: "thread-typed-summary"}, current, flruntime.ThreadSummary{})
 	if direct.RunStatus != status || direct.RunErrorCode != currentCode || direct.RunError != currentMessage {
 		t.Fatalf("direct projection=%#v, want status=%q code=%q message=%q", direct, status, currentCode, currentMessage)
 	}
@@ -170,9 +187,64 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 		t.Fatalf("summary run progress=%#v", view.RunProgress)
 	}
 
-	projected := threadViewFromRuntimeCurrent(threadstore.ThreadSettings{ThreadID: "thread-progress"}, current, flruntime.ThreadSummary{})
+	projected := mustProjectRuntimeThread(t, threadstore.ThreadSettings{ThreadID: "thread-progress"}, current, flruntime.ThreadSummary{})
 	if projected.ActiveRunID != "run-progress" || projected.RunProgress == nil || projected.RunProgress.TurnID != "turn-progress" {
 		t.Fatalf("runtime current projection=%#v", projected)
+	}
+}
+
+func TestFlowerRuntimeSummaryProjectionSeparatesSettingsAndActivityRevisions(t *testing.T) {
+	const threadID = "thread-settings-activity-revisions"
+	const settingsRevision = int64(9_999_999_999)
+	activityUpdatedAt := time.UnixMilli(2_000)
+	lastItemAt := time.UnixMilli(2_100)
+	current := flruntime.ThreadView{
+		ThreadID: identity.ThreadID(threadID),
+		Items: []flruntime.ThreadItem{{
+			ID: "assistant-current", TurnID: "turn-current", RunID: "run-current", Ordinal: 1,
+			Kind: flruntime.ThreadItemAssistant, Text: "runtime text", CreatedAt: time.UnixMilli(2_050),
+		}},
+	}
+	summary := flruntime.ThreadSummary{
+		ID: identity.ThreadID(threadID), Title: "Canonical title", TitleStatus: flruntime.ThreadTitleStatusReady,
+		CreatedAt: time.UnixMilli(1_000), UpdatedAt: activityUpdatedAt,
+		LastItemAt: lastItemAt, LastItemPreview: "canonical preview",
+	}
+	projected := mustProjectRuntimeThread(t, threadstore.ThreadSettings{
+		ThreadID: threadID, ModelID: "openai/gpt-5.2", PermissionType: "approval_required", WorkingDir: "/workspace",
+		SettingsCreatedAtUnixMs: 900, SettingsUpdatedAtUnixMs: settingsRevision,
+	}, current, summary)
+
+	if projected.SettingsRevision != settingsRevision {
+		t.Fatalf("settings revision=%d, want %d", projected.SettingsRevision, settingsRevision)
+	}
+	if projected.CreatedAtUnixMs != 1_000 || projected.UpdatedAtUnixMs != activityUpdatedAt.UnixMilli() {
+		t.Fatalf("activity timestamps=(%d,%d), want (1000,%d)", projected.CreatedAtUnixMs, projected.UpdatedAtUnixMs, activityUpdatedAt.UnixMilli())
+	}
+	if projected.RunUpdatedAtUnixMs != activityUpdatedAt.UnixMilli() {
+		t.Fatalf("run updated timestamp=%d, want %d", projected.RunUpdatedAtUnixMs, activityUpdatedAt.UnixMilli())
+	}
+	if projected.LastMessageAtUnixMs != lastItemAt.UnixMilli() || projected.LastMessagePreview != "canonical preview" {
+		t.Fatalf("last message=(%d,%q), want (%d,%q)", projected.LastMessageAtUnixMs, projected.LastMessagePreview, lastItemAt.UnixMilli(), "canonical preview")
+	}
+	if projected.FlowerActivity.ActivityRevision != lastItemAt.UnixMilli() {
+		t.Fatalf("activity revision=%d, want %d", projected.FlowerActivity.ActivityRevision, lastItemAt.UnixMilli())
+	}
+	if projected.UpdatedAtUnixMs == projected.SettingsRevision {
+		t.Fatalf("settings revision leaked into activity timestamp: %#v", projected)
+	}
+}
+
+func TestFlowerRuntimeSummaryProjectionRejectsMismatchedThreadIdentity(t *testing.T) {
+	settings := threadstore.ThreadSettings{ThreadID: "thread-settings", PermissionType: "approval_required", WorkingDir: "/workspace"}
+	current := flruntime.ThreadView{ThreadID: identity.ThreadID("thread-current")}
+	if _, err := (&Service{}).threadViewFromRuntimeCurrent(context.Background(), &settings, current, nil); err == nil {
+		t.Fatal("mismatched settings and current thread identities were accepted")
+	}
+	settings.ThreadID = "thread-current"
+	summary := flruntime.ThreadSummary{ID: identity.ThreadID("thread-summary")}
+	if _, err := (&Service{}).threadViewFromRuntimeCurrent(context.Background(), &settings, current, &summary); err == nil {
+		t.Fatal("mismatched summary and current thread identities were accepted")
 	}
 }
 

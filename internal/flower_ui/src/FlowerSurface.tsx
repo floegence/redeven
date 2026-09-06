@@ -150,6 +150,7 @@ import { SubagentDetailWindow } from './SubagentDetailWindow';
 import {
   createThreadCache,
   threadSnapshotRevision,
+  threadSettingsRevision,
   threadSummaryNeedsDetail,
   type ThreadView,
   type ThreadViewAcceptance,
@@ -952,14 +953,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let flowerLiveReadyCount = 0;
   type ThreadDetailLoadTarget = Readonly<{
     cycle: number;
-    revision: number;
+    activityRevision: number;
+    settingsRevision: number;
     sequence: number;
     source: ThreadDetailSource;
     force: boolean;
   }>;
   type ThreadDetailLoadCoordinatorState = {
     cycle: number;
-    failedRevision: number;
+    failedTarget: ThreadDetailLoadTarget | null;
     inFlightTarget: ThreadDetailLoadTarget | null;
     inFlight: Promise<void> | null;
     pending: ThreadDetailLoadTarget | null;
@@ -3130,7 +3132,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       source,
       summary_revision: threadSnapshotRevision(summary),
       detail_activity_revision: threadSnapshotRevision(detail?.thread),
-      settings_revision: Math.max(0, Math.floor(Number(detail?.thread.settings_revision) || 0)),
+      summary_settings_revision: threadSettingsRevision(summary),
+      settings_revision: threadSettingsRevision(detail?.thread),
       view_version: Math.max(0, Math.floor(Number(viewVersion || detail?.version) || 0)),
       ...(acceptance ? {
         runtime_state: acceptance.runtimeState,
@@ -3408,7 +3411,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (existing) return existing;
     const created: ThreadDetailLoadCoordinatorState = {
       cycle: 0,
-      failedRevision: -1,
+      failedTarget: null,
       inFlightTarget: null,
       inFlight: null,
       pending: null,
@@ -3420,52 +3423,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const beginThreadDetailDisplayCycle = (threadID: string) => {
     const state = threadDetailLoadState(threadID);
     state.cycle += 1;
-    state.failedRevision = -1;
+    state.failedTarget = null;
   };
+
+  const threadDetailTargetAdvanced = (target: ThreadDetailLoadTarget, current: ThreadDetailLoadTarget) => (
+    target.cycle > current.cycle
+    || (target.cycle === current.cycle && (
+      target.activityRevision > current.activityRevision
+      || target.settingsRevision > current.settingsRevision
+      || (target.force && !current.force)
+    ))
+  );
 
   const queueLatestThreadDetailTarget = (
     state: ThreadDetailLoadCoordinatorState,
     target: ThreadDetailLoadTarget,
   ) => {
     const current = state.pending;
-    if (
-      !current
-      || target.cycle > current.cycle
-      || (target.cycle === current.cycle && target.revision > current.revision)
-      || (target.cycle === current.cycle && target.revision === current.revision && target.force && !current.force)
-    ) {
-      state.pending = target;
+    if (!current || threadDetailTargetAdvanced(target, current)) {
+      state.pending = current && target.cycle === current.cycle ? {
+        ...target,
+        activityRevision: Math.max(target.activityRevision, current.activityRevision),
+        settingsRevision: Math.max(target.settingsRevision, current.settingsRevision),
+        force: target.force || current.force,
+      } : target;
     }
   };
 
   const requestThreadDetail = (
     threadID: string,
-    revision: number,
     source: ThreadDetailSource,
     force = false,
   ): Promise<void> => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid) || tid !== selectedThreadID()) return Promise.resolve();
     const state = threadDetailLoadState(tid);
-    const targetRevision = Math.max(0, Math.floor(Number(revision) || 0));
     const detail = threadCache().views.get(tid)?.thread;
     const summary = threadCache().summaries.get(tid);
     if (!force && detail && !threadSummaryNeedsDetail(summary, detail)) return Promise.resolve();
-    if (!force && state.failedRevision === targetRevision) return Promise.resolve();
 
     const target: ThreadDetailLoadTarget = {
       cycle: state.cycle,
-      revision: targetRevision,
+      activityRevision: threadSnapshotRevision(summary),
+      settingsRevision: threadSettingsRevision(summary),
       sequence: threadLoadSequence,
       source,
       force,
     };
+    if (!force && state.failedTarget && !threadDetailTargetAdvanced(target, state.failedTarget)) return Promise.resolve();
     if (state.inFlight && state.inFlightTarget) {
-      if (
-        target.cycle > state.inFlightTarget.cycle
-        || target.revision > state.inFlightTarget.revision
-        || (target.revision === state.inFlightTarget.revision && target.force && !state.inFlightTarget.force)
-      ) {
+      if (threadDetailTargetAdvanced(target, state.inFlightTarget)) {
         queueLatestThreadDetailTarget(state, target);
       }
       return state.inFlight;
@@ -3483,17 +3490,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           || selectedThreadID() !== tid
         ) return;
         const result = receiveThreadView(live, source);
-        state.failedRevision = -1;
+        state.failedTarget = null;
         const latestSummary = threadCache().summaries.get(tid);
         if (threadSummaryNeedsDetail(latestSummary, result.thread)) {
-          const latestRevision = threadSnapshotRevision(latestSummary);
-          if (latestRevision > target.revision) {
-            queueLatestThreadDetailTarget(state, {
-              ...target,
-              revision: latestRevision,
-              source: 'summary_update',
-              force: false,
-            });
+          const latestTarget: ThreadDetailLoadTarget = {
+            ...target,
+            activityRevision: threadSnapshotRevision(latestSummary),
+            settingsRevision: threadSettingsRevision(latestSummary),
+            source: 'summary_update',
+            force: false,
+          };
+          if (threadDetailTargetAdvanced(latestTarget, target)) {
+            queueLatestThreadDetailTarget(state, latestTarget);
           } else {
             const error = new Error('thread detail did not converge to the requested revision');
             reportThreadDetailDiagnostic(
@@ -3508,7 +3516,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }
         }
       } catch (error) {
-        if (target.cycle === state.cycle) state.failedRevision = target.revision;
+        if (target.cycle === state.cycle) state.failedTarget = target;
         reportThreadDetailDiagnostic(tid, 'request_or_mapping', source, error);
         if (target.cycle === state.cycle && selectedThreadID() === tid) {
           setThreadLoadError(threadDetailUserError(error));
@@ -3527,7 +3535,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             && selectedThreadID() === tid
             && !retiredThreadIDs.has(tid)
           ) {
-            void requestThreadDetail(tid, pending.revision, pending.source, pending.force);
+            void requestThreadDetail(tid, pending.source, pending.force);
           }
         }
       }
@@ -3536,11 +3544,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return request;
   };
 
-  const requestSelectedThreadDetailFromSummary = (
-    threadID: string,
-    summary: FlowerThreadSnapshot | undefined,
-  ) => requestThreadDetail(threadID, threadSnapshotRevision(summary), 'summary_update');
-
   const recoverActiveTurnAdmission = (threadID: string): Promise<void> => {
     const tid = trimString(threadID);
     if (!tid) return Promise.resolve();
@@ -3548,7 +3551,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (existing) return existing;
     const request = requestThreadDetail(
       tid,
-      threadSnapshotRevision(threadCache().summaries.get(tid)),
       'background_refresh',
       true,
     ).finally(() => activeTurnAdmissionRecoveryRequests.delete(tid));
@@ -3560,7 +3562,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = trimString(selectedThreadID());
     const summary = selectedThreadSummary();
     if (!threadID || !summary || !selectedThreadSummaryNeedsDetail()) return;
-    untrack(() => { void requestSelectedThreadDetailFromSummary(threadID, summary); });
+    untrack(() => { void requestThreadDetail(threadID, 'summary_update'); });
   });
 
   const scrollSelectedThreadToLatestAfterLayout = (threadID: string, sequence: number) => {
@@ -3856,7 +3858,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sequence = claimedSequence ?? ++threadLoadSequence;
     cancelPresentedSelectionSchedule();
     setPresentedSelection(null);
-    const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
     const detailAvailable = threadCache().views.has(tid);
     if (claimedSequence === undefined) {
       beginThreadDetailDisplayCycle(tid);
@@ -3878,13 +3879,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (revalidateWarmDetail) {
         void requestThreadDetail(
           tid,
-          threadSnapshotRevision(existing ?? undefined),
           'background_refresh',
         );
       }
       return;
     }
-    await requestThreadDetail(tid, threadSnapshotRevision(existing ?? undefined), 'initial_load');
+    await requestThreadDetail(tid, 'initial_load');
     if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
     const loaded = threadCache().views.get(tid)?.thread;
     if (loaded) {
@@ -3973,7 +3973,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setSelectedThreadID('');
       }
       if (effectiveEngagement() && selectedID && selectedSummary && selectedDetailCurrent) {
-        void requestSelectedThreadDetailFromSummary(selectedID, selectedSummary);
+        void requestThreadDetail(selectedID, 'summary_update');
       }
       return true;
     } catch (error) {
@@ -4102,7 +4102,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       untrack(() => {
         void requestThreadDetail(
           threadID,
-          threadSnapshotRevision(threadCache().summaries.get(threadID)),
           'background_refresh',
         ).then(() => {
             if (
@@ -4199,7 +4198,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ))
       ) {
         const summary = threadCache().summaries.get(threadID);
-        if (summary) void requestSelectedThreadDetailFromSummary(threadID, summary);
+        if (summary) void requestThreadDetail(threadID, 'summary_update');
       }
       return received.runtimeState === 'accepted';
     } catch (error) {
@@ -4276,7 +4275,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (waitingForCanonicalDetail && selectedThreadID() === threadID) {
       void requestThreadDetail(
         threadID,
-        threadSnapshotRevision(threadCache().summaries.get(threadID)),
         'user_action',
         true,
       );
@@ -4353,9 +4351,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           setThreadCache((cache) => cache.replaceSummary(summary));
         }
       }
-      const selectedSummaryAfter = selectedID ? threadCache().summaries.get(selectedID) : undefined;
       if (selectedID) {
-        void requestSelectedThreadDetailFromSummary(selectedID, selectedSummaryAfter);
+        void requestThreadDetail(selectedID, 'summary_update');
       }
       if (envelope.kind === 'ready' && flowerLiveReadyCount > 1 && activeSubagentDetail()) {
         void refreshActiveSubagentDetail();
@@ -9848,7 +9845,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     beginThreadDetailDisplayCycle(threadID);
     void requestThreadDetail(
       threadID,
-      threadSnapshotRevision(threadCache().summaries.get(threadID)),
       'user_action',
       true,
     );

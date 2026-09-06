@@ -59,30 +59,11 @@ func threadWorkingDir(th *threadstore.ThreadSettings) (string, error) {
 }
 
 func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.ThreadSettings, current flruntime.ThreadView, summary *flruntime.ThreadSummary) (ThreadView, error) {
-	view, err := s.threadSettingsView(ctx, th)
+	view, err := s.threadViewFromRuntimeCurrent(ctx, th, current, summary)
 	if err != nil {
 		return ThreadView{}, err
 	}
-	applyThreadSummaryPresentation(&view, summary)
-	runStatus, runErrorCode, runError := threadViewRunState(current)
-	view.RunStatus = runStatus
-	view.RunErrorCode = runErrorCode
-	view.RunError = runError
-	view.QueuedTurnCount = len(current.Queue)
 	view.WaitingPrompt = requestUserInputPromptFromCurrent(current)
-	if current.Activity == flruntime.ThreadActivityActive {
-		view.ActiveRunID = strings.TrimSpace(current.RunID.String())
-	}
-	view.RunProgress = flowerRunProgress(current.RunID, current.TurnID, current.RunProgress)
-	if view.LastMessagePreview == "" {
-		view.LastMessageAtUnixMs, view.LastMessagePreview = currentThreadPreview(current)
-	}
-	approvalPending := current.Attention.ApprovalCount > 0
-	view.ApprovalPending = &approvalPending
-	view.ApprovalPendingCount = current.Attention.ApprovalCount
-	view.FlowerActivity = FlowerThreadReadSnapshot{
-		ActivityRevision: max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
-	}
 	children, err := s.listFlowerSubagentsForParent(ctx, current.ThreadID)
 	if err != nil {
 		return ThreadView{}, err
@@ -113,15 +94,12 @@ func (s *Service) threadSettingsView(_ context.Context, th *threadstore.ThreadSe
 		PermissionType:     permissionTypeString(permissionType),
 		WorkingDir:         workingDir,
 		RunStatus:          string(RunStateIdle),
-		RunUpdatedAtUnixMs: th.SettingsUpdatedAtUnixMs,
 		ReasoningSelection: reasoningSelection,
 		// Model capability is live catalog state. Read projections preserve the
 		// stored selection and let the current model catalog decorate it in UI.
 		ReasoningCapability: config.AIReasoningCapability{},
 		PinnedAtUnixMs:      th.PinnedAtUnixMs,
 		SettingsRevision:    th.SettingsUpdatedAtUnixMs,
-		CreatedAtUnixMs:     th.SettingsCreatedAtUnixMs,
-		UpdatedAtUnixMs:     th.SettingsUpdatedAtUnixMs,
 	}, nil
 }
 
@@ -659,7 +637,10 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	if err != nil {
 		return nil, err
 	}
-	view := threadViewFromRuntimeCurrent(t, current, summary)
+	view, err := s.threadViewFromRuntimeCurrent(ctx, &t, current, &summary)
+	if err != nil {
+		return nil, err
+	}
 	return &view, nil
 }
 
@@ -676,30 +657,33 @@ func threadSummaryFromRuntime(ctx context.Context, runtime flruntime.ThreadServi
 	return flruntime.ThreadSummary{}, fmt.Errorf("canonical Floret summary is missing for thread %q", threadID)
 }
 
-func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current flruntime.ThreadView, summary flruntime.ThreadSummary) ThreadView {
-	lifecycle := projectFlowerThreadLifecycle(current.Activity, current.Attention, current.LastOutcome, current.Failure)
-	activeRunID := ""
-	if current.Activity == flruntime.ThreadActivityActive {
-		activeRunID = current.RunID.String()
+// threadViewFromRuntimeCurrent shares settings, lifecycle, and activity projection
+// between detail responses and live summaries. Settings never supply activity time.
+func (s *Service) threadViewFromRuntimeCurrent(ctx context.Context, settings *threadstore.ThreadSettings, current flruntime.ThreadView, summary *flruntime.ThreadSummary) (ThreadView, error) {
+	if settings == nil {
+		return ThreadView{}, errors.New("thread settings are missing")
 	}
-	preview := ""
-	for index := len(current.Items) - 1; index >= 0; index-- {
-		if text := strings.TrimSpace(current.Items[index].Text); text != "" {
-			preview = text
-			break
-		}
+	threadID := strings.TrimSpace(settings.ThreadID)
+	currentID := strings.TrimSpace(current.ThreadID.String())
+	if threadID == "" || currentID == "" || threadID != currentID {
+		return ThreadView{}, errors.New("thread identity differs between settings and canonical current")
 	}
-	return ThreadView{
-		ThreadID: current.ThreadID.String(), Title: strings.TrimSpace(summary.Title), TitleStatus: strings.TrimSpace(string(summary.TitleStatus)), ModelID: settings.ModelID,
-		PermissionType: settings.PermissionType, WorkingDir: settings.WorkingDir,
-		QueuedTurnCount: len(current.Queue), RunStatus: lifecycle.RunStatus,
-		RunErrorCode: lifecycle.RunErrorCode, RunError: lifecycle.RunError,
-		ApprovalPendingCount: current.Attention.ApprovalCount, ActiveRunID: activeRunID,
-		RunProgress:    flowerRunProgress(current.RunID, current.TurnID, current.RunProgress),
-		PinnedAtUnixMs: settings.PinnedAtUnixMs, CreatedAtUnixMs: settings.SettingsCreatedAtUnixMs,
-		UpdatedAtUnixMs: settings.SettingsUpdatedAtUnixMs, LastMessageAtUnixMs: settings.SettingsUpdatedAtUnixMs,
-		LastMessagePreview: preview,
+	if summary != nil && summary.ID != "" && strings.TrimSpace(summary.ID.String()) != currentID {
+		return ThreadView{}, errors.New("thread identity differs between summary and canonical current")
 	}
+	view, err := s.threadSettingsView(ctx, settings)
+	if err != nil {
+		return ThreadView{}, err
+	}
+	applyThreadSummaryPresentation(&view, summary)
+	applyThreadRuntimeSummary(&view, current)
+	if view.LastMessagePreview == "" {
+		_, view.LastMessagePreview = currentThreadPreview(current)
+	}
+	view.FlowerActivity = FlowerThreadReadSnapshot{
+		ActivityRevision: max(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
+	}
+	return view, nil
 }
 
 func (s *Service) ValidateWorkingDir(workingDir string) (string, error) {
@@ -883,7 +867,10 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, err
 	}
-	view := threadViewFromRuntimeCurrent(forked, current, summary)
+	view, err := s.threadViewFromRuntimeCurrent(ctx, &forked, current, &summary)
+	if err != nil {
+		return nil, err
+	}
 	return &view, nil
 }
 

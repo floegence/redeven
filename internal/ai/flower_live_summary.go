@@ -45,7 +45,11 @@ func (s *Service) publishCanonicalThreadSummary(ctx context.Context, endpointID,
 	if err != nil {
 		return err
 	}
-	s.publishFlowerLiveSummary(endpointID, threadViewFromRuntimeCurrent(*settings, current, summary))
+	view, err := s.threadViewFromRuntimeCurrent(ctx, settings, current, &summary)
+	if err != nil {
+		return err
+	}
+	s.publishFlowerLiveSummary(endpointID, view)
 	return nil
 }
 

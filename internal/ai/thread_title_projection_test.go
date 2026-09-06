@@ -157,7 +157,7 @@ func assertTitleProjection(t *testing.T, runtime flruntime.ThreadService, thread
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := threadViewFromRuntimeCurrent(threadstore.ThreadSettings{ThreadID: threadID.String()}, current, summary)
+	view := mustProjectRuntimeThread(t, threadstore.ThreadSettings{ThreadID: threadID.String()}, current, summary)
 	if view.Title != wantTitle || view.TitleStatus != string(wantStatus) {
 		t.Fatalf("title projection = (%q, %q), want (%q, %q)", view.Title, view.TitleStatus, wantTitle, wantStatus)
 	}
