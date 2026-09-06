@@ -338,7 +338,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(loadMoreCalls).toBe(1);
   });
 
-  for (const width of [390, 1440]) it(`shows visible, animated request feedback at the list end at ${width}px`, async () => {
+  for (const width of [390, 1440]) it(`keeps request feedback visible outside the release list at ${width}px`, async () => {
     await page.viewport(width, 900);
     document.documentElement.classList.add('dark');
     const host = document.createElement('div');
@@ -359,15 +359,12 @@ describe('EnvPortForwardsPage browser presentation', () => {
     />, host);
     await settle();
     const viewport = host.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
-    viewport.scrollTop = viewport.scrollHeight;
-    await settle();
     const status = host.querySelector<HTMLElement>('[data-testid="managed-release-more-sentinel"]')!;
-    const lastRow = host.querySelector<HTMLElement>('[data-release-id="feedback-100"]')!;
-    expect(status.getBoundingClientRect().top - lastRow.getBoundingClientRect().bottom).toBeLessThanOrEqual(2);
-    expect(status.getBoundingClientRect().height).toBeGreaterThanOrEqual(56);
-    expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom);
-    expect(status.textContent).toContain('101 versions loaded');
-    expect(status.textContent).toContain('Checking the source');
+    const initialStatusBounds = status.getBoundingClientRect();
+    expect(viewport.scrollTop).toBe(0);
+    expect(initialStatusBounds.height).toBe(56);
+    expect(initialStatusBounds.top).toBeGreaterThan(viewport.getBoundingClientRect().bottom);
+    expect(status.textContent).toContain('Loading available versions');
     expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth);
     const spinner = status.querySelector<HTMLElement>('[data-testid="managed-release-loading-spinner"]')!;
     expect(spinner).toBeTruthy();
@@ -377,22 +374,74 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const before = getComputedStyle(spinner).transform;
     await new Promise((resolve) => window.setTimeout(resolve, 180));
     expect(getComputedStyle(spinner).transform).not.toBe(before);
-    await page.screenshot({ path: `./__screenshots__/release-loading-${width}.png` });
     await (commands as unknown as { emulateMediaPreferences: (value: { reducedMotion: string }) => Promise<void> }).emulateMediaPreferences({ reducedMotion: 'reduce' });
     expect(getComputedStyle(spinner).animationName).toBe('none');
     await (commands as unknown as { emulateMediaPreferences: (value: { reducedMotion: string }) => Promise<void> }).emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    viewport.scrollTop = viewport.scrollHeight;
+    viewport.dispatchEvent(new Event('scroll'));
+    await settle();
+    expect(status.getBoundingClientRect().top).toBeCloseTo(initialStatusBounds.top, 0);
     setHasMore(false);
     await settle();
     expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeTruthy();
     setLoading(false);
     await settle();
-    expect(host.querySelector('[data-testid="managed-release-more-sentinel"]')).toBeNull();
+    expect(host.querySelector('[data-testid="managed-release-more-sentinel"]')).toBe(status);
+    expect(status.getBoundingClientRect().height).toBe(initialStatusBounds.height);
+    expect(status.textContent).toContain('101 versions loaded');
     setHasMore(true);
     await settle();
     expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeNull();
+    expect(status.getBoundingClientRect().height).toBe(initialStatusBounds.height);
     setError('Could not read the registry.');
     await settle();
-    expect(host.querySelector('[data-testid="managed-release-more-sentinel"]')?.textContent).toContain('Could not read the registry.');
+    expect(status.textContent).toContain('Could not read the registry.');
+    expect(status.getBoundingClientRect().height).toBe(initialStatusBounds.height);
+  });
+
+  it('distinguishes queued and active visible-version checks without moving the footer', async () => {
+    await page.viewport(1024, 768);
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '820px', height: '620px' });
+    document.body.appendChild(host);
+    const [phase, setPhase] = createSignal<'initial' | 'refresh' | 'load_more' | 'verification_queued' | 'verification' | 'idle'>('verification_queued');
+    const [queuedCount, setQueuedCount] = createSignal(7);
+    const [activeCount, setActiveCount] = createSignal(0);
+    const [filter, setFilter] = createSignal<'all' | 'stable' | 'preview'>('all');
+    const candidates = Array.from({ length: 40 }, (_, index) => ({
+      schema_version: 2 as const, candidate_id: `phase-${index}`, source_kind: 'oci' as const,
+      source: 'registry.example/managed/example-service', tag: `build-${index}`, channel: 'stable' as const,
+      trust: 'registry_verified', selectable: false, relation: 'unknown' as const, verification_status: 'pending' as const,
+    }));
+    dispose = render(() => <ManagedReleaseCandidates
+      result={{ schema_version: 2, check_status: 'fresh', catalog_status: 'loading', has_more: true, cursor_id: 'cursor-next', loaded_count: candidates.length, checked_at_unix_ms: Date.now(), candidates }}
+      loading={false} requestPhase={phase()} queuedVerificationCount={queuedCount()} verificationCount={activeCount()} error="" query="" filter={filter()} selectedID=""
+      onQueryChange={() => undefined} onFilterChange={setFilter} onSelect={() => undefined}
+    />, host);
+    await settle();
+
+    const viewport = host.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
+    const status = host.querySelector<HTMLElement>('[data-testid="managed-release-more-sentinel"]')!;
+    const statusHeight = status.getBoundingClientRect().height;
+    expect(viewport.scrollTop).toBe(0);
+    expect(status.textContent).toContain('Preparing checks for 7 visible versions');
+    expect(status.getBoundingClientRect().top).toBeGreaterThan(viewport.getBoundingClientRect().bottom);
+
+    setPhase('verification');
+    setQueuedCount(0);
+    setActiveCount(12);
+    await settle();
+    expect(status.textContent).toContain('Checking 12 visible versions');
+    expect(status.getBoundingClientRect().height).toBe(statusHeight);
+
+    setPhase('load_more');
+    await settle();
+    expect(status.textContent).toContain('Loading more versions');
+    expect(status.getBoundingClientRect().height).toBe(statusHeight);
+
+    await userEvent.click(Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Stable')!);
+    await settle();
+    expect(status.getBoundingClientRect().height).toBe(statusHeight);
   });
 
   it('preserves scroll access through large release catalogs', async () => {

@@ -1959,7 +1959,7 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).not.toContain('Container Registry credentials could not be read from the current engine store.');
   });
 
-  it('clears loading after refreshing a stale snapshot without hiding cached releases', async () => {
+  it('keeps short request feedback visible while refreshing a stale snapshot without hiding cached releases', async () => {
     const service = {
       service_id: 'mws-stale-feedback', template_id: 'example-container',
       name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace',
@@ -1987,6 +1987,11 @@ describe('EnvPortForwardsPage', () => {
     expect(host.querySelector('[data-release-id="cached-release"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeTruthy();
     refresh.resolve({ ...result, check_status: 'fresh' });
+    await flushPage();
+    expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 180));
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-loading-spinner"]')).toBeNull());
     expect(host.querySelector('[data-release-id="cached-release"]')).toBeTruthy();
     const refreshButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="env-app-drawer-mock"] button')).find((button) => button.textContent?.trim() === 'Refresh');
