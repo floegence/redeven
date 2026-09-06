@@ -130,24 +130,60 @@ func TestPendingReleaseVerificationPrioritizesBuiltInRecommendation(t *testing.T
 	}
 }
 
-func TestReleaseCatalogSortsCandidatesByPublishedAtDescending(t *testing.T) {
+func TestReleaseCatalogSortsCandidatesByVersionAndKeepsLatestByPublication(t *testing.T) {
 	result := ReleaseCandidateResult{
 		CatalogStatus: "complete",
 		Candidates: []ReleaseCandidate{
 			{CandidateID: "semantic-newer", SourceKind: "oci", Source: "registry.example/team/app", Tag: "9.0.0", Channel: "stable", Selectable: true, VerificationStatus: "verified", PublishedAtUnixMs: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()},
 			{CandidateID: "published-newer", SourceKind: "oci", Source: "registry.example/team/app", Tag: "1.0.0", Channel: "stable", Selectable: true, VerificationStatus: "verified", PublishedAtUnixMs: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()},
-			{CandidateID: "date-tag", SourceKind: "oci", Source: "registry.example/team/app", Tag: "2024.12.31", Channel: "stable", Selectable: true, VerificationStatus: "verified"},
+			{CandidateID: "opaque-tag", SourceKind: "oci", Source: "registry.example/team/app", Tag: "nightly", Channel: "special", Selectable: true, VerificationStatus: "verified"},
 		},
 	}
 	manager := &Manager{}
 	manager.recomputeReleaseViewLocked(&result)
 	got := []string{result.Candidates[0].CandidateID, result.Candidates[1].CandidateID, result.Candidates[2].CandidateID}
-	want := []string{"published-newer", "semantic-newer", "date-tag"}
+	want := []string{"semantic-newer", "published-newer", "opaque-tag"}
 	if !slices.Equal(got, want) {
-		t.Fatalf("published order = %v, want %v", got, want)
+		t.Fatalf("display order = %v, want %v", got, want)
 	}
 	if result.LatestStableRelease == nil || result.LatestStableRelease.CandidateID != "published-newer" {
 		t.Fatalf("latest stable = %#v", result.LatestStableRelease)
+	}
+}
+
+func TestReleaseCatalogVerificationDoesNotReorderCandidates(t *testing.T) {
+	browse := releaseBrowseContext{
+		Scope: "template:stable-order", TemplateID: "stable-order", TemplateSource: "builtin",
+		Spec: TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentContainer, Container: &ContainerTemplateSpec{Image: "registry.example/team/app:1.0.0"}},
+	}
+	manager := &Manager{releaseItems: map[string]cachedReleaseCandidate{}, releaseViews: map[string]ReleaseCandidateResult{}, releaseCursors: map[string]cachedReleaseCursor{}}
+	result, err := manager.replaceReleaseView(context.Background(), browse, []cachedReleaseCandidate{
+		pendingOCIReleaseCandidate(browse, "1.0.0"),
+		pendingOCIReleaseCandidate(browse, "2.0.0"),
+	}, "complete", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialOrder := []string{result.Candidates[0].Tag, result.Candidates[1].Tag}
+	if !slices.Equal(initialOrder, []string{"2.0.0", "1.0.0"}) {
+		t.Fatalf("initial display order = %v", initialOrder)
+	}
+	for index, candidateID := range []string{result.Candidates[0].CandidateID, result.Candidates[1].CandidateID} {
+		manager.releaseMu.Lock()
+		cached := manager.releaseItems[candidateID]
+		manager.releaseMu.Unlock()
+		updated := verifiedOCIReleaseCandidate(browse, cached, containerengine.OCIRelease{
+			Tag: cached.Candidate.Tag, PlatformDigest: testReleaseDigest(string(rune('a' + index))), Compatible: true,
+			PublishedAtUnixMs: time.Date(2025+index, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli(),
+		})
+		manager.updateReleaseCandidate(updated)
+	}
+	manager.releaseMu.Lock()
+	final := manager.releaseViews[browse.Scope]
+	manager.releaseMu.Unlock()
+	finalOrder := []string{final.Candidates[0].Tag, final.Candidates[1].Tag}
+	if !slices.Equal(finalOrder, initialOrder) {
+		t.Fatalf("verification reordered candidates = %v, initial = %v", finalOrder, initialOrder)
 	}
 }
 
@@ -527,6 +563,9 @@ func TestOCIReleaseCatalogKeepsPaginationCursorAfterCancellation(t *testing.T) {
 	}
 	if result.HasMore || len(result.Candidates) != 2 {
 		t.Fatalf("retried page = %#v", result)
+	}
+	if got := []string{result.Candidates[0].Tag, result.Candidates[1].Tag}; !slices.Equal(got, []string{"2.0.0", "1.0.0"}) {
+		t.Fatalf("paginated display order = %v, want semantic versions descending", got)
 	}
 }
 
