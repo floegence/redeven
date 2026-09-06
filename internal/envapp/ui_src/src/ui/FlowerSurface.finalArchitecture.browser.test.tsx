@@ -1597,7 +1597,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(surfaceAdapter.loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('does not persist a transient active current progress gap while approval detail catches up', async () => {
+  it.each([true, false])('requires an unresolved interaction when active progress is absent (complete=%s)', async (complete) => {
     const threadID = 'thread-approval-progress-gap';
     const turnID = 'turn-approval-progress-gap';
     const runID = 'run-approval-progress-gap';
@@ -1620,6 +1620,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const waiting = thread({
       ...running,
       status: 'waiting_approval',
+      run_progress: null,
       updated_at_ms: 4,
       approval_pending: true,
       approval_pending_count: 1,
@@ -1638,11 +1639,7 @@ describe('Flower final thread cache and workspace transport', () => {
       }],
     });
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running] }]);
-    let loadCount = 0;
-    const loadThread = vi.fn(async () => {
-      loadCount += 1;
-      return liveBootstrap(loadCount === 1 ? running : waiting, loadCount === 1 ? 1 : 2);
-    });
+    const loadThread = vi.fn(async () => liveBootstrap(running, 1));
     const surfaceAdapter = {
       ...adapter(true),
       listThreads: vi.fn(async () => [running]),
@@ -1659,7 +1656,14 @@ describe('Flower final thread cache and workspace transport', () => {
       schema_version: 1,
       kind: 'thread.batch',
       thread_id: threadID,
-      current: {
+      current: complete ? {
+        ...runtimeCurrentView(waiting, 2),
+        interactions: [{
+          id: 'approval-gap-action', kind: 'approval', turn_id: turnID, run_id: runID,
+          tool_call_id: 'approval-gap-tool', resolved: false,
+          approval: { label: 'Run deployment', tool_name: 'terminal.exec', tool_call_id: 'approval-gap-tool' },
+        }],
+      } : {
         thread_id: threadID,
         view_version: 2,
         activity: 'active',
@@ -1669,10 +1673,31 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
 
-    await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="approval"]') !== null);
-    expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
-    expect(runtime.textContent).not.toContain('a running thread current requires run_progress');
-    expect(loadThread).toHaveBeenCalledTimes(2);
+    if (complete) {
+      await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="approval"]') !== null);
+      expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+      expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+
+      stream.push({
+        schema_version: 1, kind: 'thread.batch', thread_id: threadID,
+        current: runtimeCurrentView(running, 3),
+      });
+      await waitFor(() => runtime.querySelector('.flower-model-status-indicator') !== null);
+      expect(runtime.querySelector('[data-flower-bottom-mode="approval"]')).toBeNull();
+      expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+    } else {
+      await waitFor(() => runtime.querySelector('.flower-thread-sync-error') !== null);
+      expect(runtime.querySelector('[data-flower-bottom-mode="approval"]')).toBeNull();
+      expect(runtime.textContent).toContain('Run the deployment');
+      expect(loadThread).toHaveBeenCalledTimes(1);
+      stream.push({
+        schema_version: 1, kind: 'thread.batch', thread_id: threadID,
+        current: runtimeCurrentView(running, 3),
+      });
+      await waitFor(() => runtime.querySelector('.flower-thread-sync-error') === null);
+      expect(runtime.querySelector('.flower-model-status-indicator')).not.toBeNull();
+    }
+    expect(loadThread).toHaveBeenCalledTimes(1);
   });
 
   it('waits for a higher revision after a terminal detail request fails', async () => {
