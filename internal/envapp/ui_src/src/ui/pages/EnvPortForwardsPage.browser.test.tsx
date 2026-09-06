@@ -723,10 +723,13 @@ describe('EnvPortForwardsPage browser presentation', () => {
 
     const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
     const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+    const operationHeader = row.querySelector<HTMLElement>('[data-testid="managed-operation-header"]')!;
     expect(progress.textContent).toContain('Pulling image');
     expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
+    const operationHeaderHeight = operationHeader.getBoundingClientRect().height;
+    expect(operationHeaderHeight).toBe(56);
     expect(row.textContent).not.toContain('Error');
-    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(128);
+    expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(130);
     expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
 
     await userEvent.click(progress);
@@ -753,9 +756,10 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(details.getBoundingClientRect().right).toBeLessThanOrEqual(640);
     expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toContain('managed-operation-text-shimmer');
 
-    setOperation((current) => ({ ...current, state: 'succeeded', stage: 'completed', progress_current: 7 }));
+    setOperation((current) => ({ ...current, state: 'succeeded', stage: 'completed', progress_current: 7, progress_detail: undefined }));
     await settle();
     expect(progress.textContent).toContain('Completed');
+    expect(operationHeader.getBoundingClientRect().height).toBe(operationHeaderHeight);
     expect(progress.querySelector('[data-testid="managed-operation-terminal-icon"]')).toBeTruthy();
     expect(progress.querySelector('.managed-operation-shimmer-text')).toBeNull();
     expect(Array.from(row.querySelectorAll('button')).some((button) => button.textContent?.trim() === 'Cancel operation')).toBe(false);
