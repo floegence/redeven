@@ -21,6 +21,7 @@ describe('ImagePreviewPane', () => {
     expect(host.querySelector('button[aria-label="uiCopy.preview.zoomOutImage"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="uiCopy.preview.zoomInImage"]')).toBeTruthy();
     expect(host.querySelector('[aria-label="uiCopy.preview.imageViewport"]')).toBeTruthy();
+    expect(host.querySelector('.image-preview-viewport')?.firstElementChild?.className).toContain('absolute');
     expect(host.textContent).toContain('100%');
   });
 
