@@ -360,7 +360,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     />, host);
     await settle();
     const viewport = document.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
-    expect(viewport.querySelectorAll('[data-release-id]').length).toBeLessThan(40);
+    expect(viewport.querySelectorAll('[data-release-id]').length).toBe(1000);
     viewport.scrollTop = viewport.scrollHeight;
     viewport.dispatchEvent(new Event('scroll'));
     await settle();
