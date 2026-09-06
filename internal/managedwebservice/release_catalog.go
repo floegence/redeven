@@ -535,8 +535,7 @@ func (m *Manager) commitReleaseView(ctx context.Context, browse releaseBrowseCon
 
 func (m *Manager) recomputeReleaseViewLocked(result *ReleaseCandidateResult) {
 	sort.SliceStable(result.Candidates, func(i, j int) bool {
-		return releaseCandidatePublishedAt(result.Candidates[i]) > releaseCandidatePublishedAt(result.Candidates[j]) ||
-			(releaseCandidatePublishedAt(result.Candidates[i]) == releaseCandidatePublishedAt(result.Candidates[j]) && releaseCandidateFallbackLess(result.Candidates[i], result.Candidates[j]))
+		return releaseCandidateDisplayLess(result.Candidates[i], result.Candidates[j])
 	})
 	result.LatestStableRelease, result.LatestPreviewRelease = nil, nil
 	for index := range result.Candidates {
@@ -615,7 +614,9 @@ func releaseCandidateMatchesRecommendation(candidate ReleaseCandidate, recommend
 	}
 }
 
-func releaseCandidateFallbackLess(left, right ReleaseCandidate) bool {
+// Display order depends only on the immutable version or tag. Verification can
+// enrich a row without moving it while the user is browsing the catalog.
+func releaseCandidateDisplayLess(left, right ReleaseCandidate) bool {
 	leftValue := left.Version
 	if leftValue == "" {
 		leftValue = left.Tag
@@ -639,10 +640,7 @@ func releaseCandidateFallbackLess(left, right ReleaseCandidate) bool {
 	if leftValue != rightValue {
 		return leftValue > rightValue
 	}
-	if left.IsCurrent != right.IsCurrent {
-		return left.IsCurrent
-	}
-	return left.IsRecommended && !right.IsRecommended
+	return false
 }
 
 func releaseCandidateNewer(candidate, current ReleaseCandidate) bool {
@@ -650,7 +648,7 @@ func releaseCandidateNewer(candidate, current ReleaseCandidate) bool {
 	if candidatePublishedAt != currentPublishedAt {
 		return candidatePublishedAt > currentPublishedAt
 	}
-	return releaseCandidateFallbackLess(candidate, current)
+	return releaseCandidateDisplayLess(candidate, current)
 }
 
 func (m *Manager) removeReleaseScopeLocked(scope string) {
