@@ -639,16 +639,16 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
   };
 
   return (
-    <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
-      <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <div class="flex min-w-0 items-center gap-2">
+    <div class={cn('relative flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+      <div class="pdf-preview-controls pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-center justify-between gap-2">
+        <div class="pointer-events-auto flex min-w-0 items-center gap-2 rounded-md border border-border/80 bg-background/90 px-2 py-1 shadow-lg backdrop-blur-sm">
           <span class="rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             PDF
           </span>
           <span class="text-xs text-muted-foreground">{pageCountLabel()}</span>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="pointer-events-auto flex items-center gap-2 rounded-md border border-border/80 bg-background/90 px-2 py-1 shadow-lg backdrop-blur-sm">
           <Button
             size="sm"
             variant="outline"
@@ -685,7 +685,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
       <div
         ref={viewportEl}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        class="pdf-preview-pane relative flex-1 min-h-0 overflow-auto bg-muted/20 p-3"
+        class="pdf-preview-pane min-h-0 flex-1 overflow-auto bg-muted/20 p-3"
       >
         <Show
           when={!renderError()}
