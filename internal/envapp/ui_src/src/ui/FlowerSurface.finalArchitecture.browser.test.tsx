@@ -1597,6 +1597,115 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(surfaceAdapter.loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('refreshes detail for a newer settings revision without inventing activity', async () => {
+    const initial = thread({
+      thread_id: 'thread-settings-revision',
+      title: 'Settings revision',
+      status: 'success',
+      permission_type: 'approval_required',
+      settings_revision: 1,
+      updated_at_ms: 10,
+      read_status: readStatus(false, 10, 'success'),
+    });
+    const updated = thread({
+      ...initial,
+      permission_type: 'full_access',
+      settings_revision: 2,
+      // Settings changes must not advance the activity revision.
+      updated_at_ms: initial.updated_at_ms,
+      read_status: readStatus(false, initial.updated_at_ms, 'success'),
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [initial],
+    }]);
+    let latest = initial;
+    const loadThread = vi.fn(async () => liveBootstrap(latest, 1));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [latest]),
+      loadThread,
+      connectLiveStream: stream.connect,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
+
+    latest = updated;
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [updated] });
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+
+    expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+  });
+
+  it.each(['resolve', 'reject'] as const)('coalesces settings-only updates while a detail request must %s', async (settlement) => {
+    const initial = thread({
+      thread_id: 'thread-concurrent-settings', title: 'Concurrent settings', status: 'success',
+      settings_revision: 1, permission_type: 'approval_required', updated_at_ms: 10,
+      read_status: readStatus(false, 10, 'success'),
+    });
+    const intermediate = thread({ ...initial, settings_revision: 2, permission_type: 'readonly' });
+    const latest = thread({ ...initial, settings_revision: 3, permission_type: 'full_access' });
+    const pending = deferred<ReturnType<typeof liveBootstrap>>();
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [initial] }]);
+    const loadThread = vi.fn()
+      .mockResolvedValueOnce(liveBootstrap(initial, 5))
+      .mockImplementationOnce(() => pending.promise)
+      .mockResolvedValue(liveBootstrap(latest, 5));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread, connectLiveStream: stream.connect });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [intermediate] });
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [latest] });
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [intermediate] });
+    await wait(80);
+    expect(loadThread).toHaveBeenCalledTimes(2);
+    expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('approval_required');
+    if (settlement === 'resolve') pending.resolve(liveBootstrap(intermediate, 5));
+    else pending.reject(new Error('Request failed'));
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+    expect(loadThread).toHaveBeenCalledTimes(3);
+    expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+    // A duplicate summary, stale reconnect inventory, and old current cannot undo accepted settings.
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [latest] });
+    stream.push({ schema_version: 1, kind: 'ready', summaries: [intermediate] });
+    stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: initial.thread_id, current: runtimeCurrentView(initial, 4) });
+    await wait(80);
+    expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('full_access');
+    expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+    expect(loadThread).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries after a settings revision advances beyond a failed request', async () => {
+    const initial = thread({ thread_id: 'thread-failed-settings', title: 'Failed settings', settings_revision: 1, updated_at_ms: 10, read_status: readStatus(false, 10, 'idle') });
+    const intermediate = thread({ ...initial, settings_revision: 2, permission_type: 'readonly' });
+    const latest = thread({ ...initial, settings_revision: 3, permission_type: 'full_access' });
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [initial] }]);
+    const loadThread = vi.fn()
+      .mockResolvedValueOnce(liveBootstrap(initial, 5))
+      .mockRejectedValueOnce(new Error('Request failed'))
+      .mockResolvedValue(liveBootstrap(latest, 5));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread, connectLiveStream: stream.connect });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [intermediate] });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-thread-sync-error')));
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [intermediate] });
+    await wait(80);
+    expect(loadThread).toHaveBeenCalledTimes(2);
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [latest] });
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+    expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+    expect(loadThread).toHaveBeenCalledTimes(3);
+  });
+
   it.each([true, false])('requires an unresolved interaction when active progress is absent (complete=%s)', async (complete) => {
     const threadID = 'thread-approval-progress-gap';
     const turnID = 'turn-approval-progress-gap';

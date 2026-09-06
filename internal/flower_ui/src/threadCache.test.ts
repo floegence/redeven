@@ -191,6 +191,66 @@ describe('ThreadCache', () => {
     }, detail)).toBe(false);
   });
 
+  it('tracks settings revision independently from activity revision', () => {
+    const detail = thread('a', 4, 'detail');
+    const settingsAhead = {
+      ...detail,
+      settings_revision: 2,
+      permission_type: 'full_access' as const,
+      messages: [],
+    };
+    expect(threadSnapshotRevision(settingsAhead)).toBe(4);
+    expect(threadSummaryNeedsDetail(settingsAhead, detail)).toBe(true);
+    expect(threadSummaryNeedsDetail({
+      ...settingsAhead,
+      updated_at_ms: 3,
+      read_status: {
+        ...settingsAhead.read_status,
+        snapshot: { activity_revision: 3 },
+      },
+    }, detail)).toBe(true);
+    expect(threadSummaryNeedsDetail(detail, {
+      ...detail,
+      settings_revision: 2,
+      permission_type: 'full_access',
+    })).toBe(false);
+    expect(threadSummaryNeedsDetail({ ...detail, status: 'running', active_run_id: 'old-run' }, {
+      ...detail,
+      settings_revision: 2,
+      status: 'success',
+      active_run_id: undefined,
+    })).toBe(false);
+  });
+
+  it.each(['replaceSummary', 'replaceSummaries', 'resetRootSummaries'] as const)(
+    'keeps activity and settings independently monotonic through %s', (method) => {
+      const current = { ...thread('a', 10, 'current'), settings_revision: 3, permission_type: 'full_access' as const };
+      let cache = receive(createThreadCache(), { thread: current, version: 5 });
+      const replace = (candidate: FlowerThreadSnapshot) => {
+        cache = method === 'replaceSummary' ? cache.replaceSummary(candidate) : cache[method]([candidate]);
+      };
+      replace({ ...thread('a', 8, 'old activity'), settings_revision: 4, model_id: 'new-model', working_dir: '/new' });
+      expect(cache.summaries.get('a')).toMatchObject({ updated_at_ms: 10, settings_revision: 4, model_id: 'new-model', working_dir: '/new' });
+      expect(cache.views.get('a')?.thread).toEqual(current);
+      replace({ ...thread('a', 11, 'new activity'), settings_revision: 2 });
+      expect(cache.summaries.get('a')).toMatchObject({ updated_at_ms: 11, settings_revision: 4, model_id: 'new-model', working_dir: '/new' });
+      replace(thread('a', 9, 'late duplicate'));
+      expect(cache.summaries.get('a')).toMatchObject({ updated_at_ms: 11, settings_revision: 4, messages: [] });
+      expect(threadSummaryNeedsDetail(cache.summaries.get('a'), current)).toBe(true);
+    },
+  );
+
+  it('preserves all newer composer settings when an older settings response advances runtime', () => {
+    const settings = {
+      settings_revision: 5, model_id: 'new-model', working_dir: '/new',
+      permission_type: 'full_access' as const, reasoning_selection: { level: 'high' as const },
+    };
+    const initial = { thread: { ...thread('a', 10, 'current'), ...settings }, version: 3 };
+    const cache = receive(receive(createThreadCache(), initial), view('a', 11, 'new reply'));
+    expect(cache.views.get('a')?.thread).toMatchObject(settings);
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('new reply');
+  });
+
   it('does not infer staleness from the content shape of an equal-revision detail', () => {
     const summary = thread('a', 4, 'summary');
     const detail = {
