@@ -1366,6 +1366,7 @@ export function ManagedReleaseCandidates(props: Readonly<{
 		const query = props.query.trim().toLowerCase();
 		return !query || `${candidate.version ?? ''} ${candidate.tag ?? ''} ${candidate.source} ${candidate.registry ?? ''}`.toLowerCase().includes(query);
 	}));
+	const pendingCount = createMemo(() => candidates().filter((candidate) => candidate.verification_status === 'pending').length);
 	const selected = createMemo(() => props.result?.candidates.find((candidate) => candidate.candidate_id === props.selectedID));
 	const scanViewport = () => {
 		viewportFrame = undefined;
@@ -1449,12 +1450,13 @@ export function ManagedReleaseCandidates(props: Readonly<{
 								<Show when={candidate.digest_verified || candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show>
 							</button>
 						)}</For>
-						<Show when={props.result?.has_more}><div class="flex h-9 items-center justify-center gap-2 text-[11px] text-muted-foreground" data-testid="managed-release-more-sentinel">
-							<Show when={props.loading} fallback={<span>{i18n.t('webServices.managed.releaseLoadMoreHint', { count: props.result?.loaded_count ?? 0 })}</span>}>
-								<span class="inline-flex items-center gap-1" role="status" aria-label={i18n.t('common.status.loading')}>
+						<Show when={props.result?.has_more || pendingCount() > 0}><div class={cn('mx-3 my-2 flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-[11px]', pendingCount() > 0 ? 'border-primary/30 bg-primary/[0.08] text-foreground' : 'border-border/60 text-muted-foreground')} data-testid="managed-release-more-sentinel">
+							<Show when={pendingCount() > 0} fallback={<span>{i18n.t('webServices.managed.releaseLoadMoreHint', { count: props.result?.loaded_count ?? 0 })}</span>}>
+								<span class="inline-flex items-center gap-1.5" role="status" aria-label={i18n.t('common.status.loading')}>
 									<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/70 [animation-delay:-300ms]" />
 									<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/70 [animation-delay:-150ms]" />
 									<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/70" />
+									<span class="font-medium">{i18n.t('webServices.managed.releaseLoadingProgress', { count: props.result?.loaded_count ?? 0 })}</span>
 								</span>
 							</Show>
 						</div></Show>
