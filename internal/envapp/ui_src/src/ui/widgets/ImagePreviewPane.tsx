@@ -49,7 +49,7 @@ export function ImagePreviewPane(props: ImagePreviewPaneProps) {
 
   const syncViewport = () => {
     if (!viewportEl) return;
-    setViewportSize({ width: viewportEl.clientWidth, height: viewportEl.clientHeight });
+    setViewportSize({ width: Math.max(0, viewportEl.clientWidth - 24), height: Math.max(0, viewportEl.clientHeight - 24) });
   };
 
   onMount(() => {
@@ -94,14 +94,14 @@ export function ImagePreviewPane(props: ImagePreviewPaneProps) {
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20">
-      <div class="flex shrink-0 items-center justify-end gap-1 border-b border-border px-3 py-2">
-        <Button size="sm" variant="outline" class="h-7 min-w-7 px-0 font-mono" disabled={!canZoomOut()} aria-label={i18n.t('uiCopy.preview.zoomOutImage')} onClick={() => setManualZoom(scale() - IMAGE_ZOOM_STEP)}>-</Button>
-        <div class="min-w-14 text-center font-mono text-[11px] text-muted-foreground" aria-live="polite">{zoomPercent()}</div>
-        <Button size="sm" variant="outline" class="h-7 min-w-7 px-0 font-mono" disabled={!canZoomIn()} aria-label={i18n.t('uiCopy.preview.zoomInImage')} onClick={() => setManualZoom(scale() + IMAGE_ZOOM_STEP)}>+</Button>
-        <Button size="sm" variant="outline" class="h-7 px-2 text-[11px]" aria-label={i18n.t('uiCopy.preview.fitImage')} onClick={() => setMode('fit')}>{i18n.t('uiCopy.preview.fit')}</Button>
-        <Button size="sm" variant="outline" class="h-7 px-2 text-[11px]" aria-label={i18n.t('uiCopy.preview.actualImageSize')} onClick={() => setMode('actual')}>1:1</Button>
-      </div>
-      <div ref={viewportEl} onWheel={handleWheel} onKeyDown={handleKeyDown} class="image-preview-viewport min-h-0 flex-1 overflow-auto" tabindex="0" role="region" aria-label={i18n.t('uiCopy.preview.imageViewport')}>
+      <div ref={viewportEl} onWheel={handleWheel} onKeyDown={handleKeyDown} class="image-preview-viewport relative min-h-0 flex-1 overflow-auto" tabindex="0" role="region" aria-label={i18n.t('uiCopy.preview.imageViewport')}>
+        <div class="absolute right-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 rounded-md border border-border/80 bg-background/90 p-1 shadow-lg backdrop-blur-sm">
+          <Button size="sm" variant="outline" class="h-7 min-w-7 px-0 font-mono" disabled={!canZoomOut()} aria-label={i18n.t('uiCopy.preview.zoomOutImage')} onClick={() => setManualZoom(scale() - IMAGE_ZOOM_STEP)}>-</Button>
+          <div class="min-w-14 px-1 text-center font-mono text-[11px] text-muted-foreground" aria-live="polite">{zoomPercent()}</div>
+          <Button size="sm" variant="outline" class="h-7 min-w-7 px-0 font-mono" disabled={!canZoomIn()} aria-label={i18n.t('uiCopy.preview.zoomInImage')} onClick={() => setManualZoom(scale() + IMAGE_ZOOM_STEP)}>+</Button>
+          <Button size="sm" variant="outline" class="h-7 px-2 text-[11px]" aria-label={i18n.t('uiCopy.preview.fitImage')} onClick={() => setMode('fit')}>{i18n.t('uiCopy.preview.fit')}</Button>
+          <Button size="sm" variant="outline" class="h-7 px-2 text-[11px]" aria-label={i18n.t('uiCopy.preview.actualImageSize')} onClick={() => setMode('actual')}>1:1</Button>
+        </div>
         <div class="flex min-h-full min-w-full items-center justify-center p-3">
           <Show when={props.objectUrl} fallback={<div class="text-sm text-muted-foreground">{i18n.t('uiCopy.preview.loadingImage')}</div>}>
             <img
