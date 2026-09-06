@@ -223,6 +223,19 @@ describe('PdfPreviewPane', () => {
     expect(firstCanvas?.style.height).toBe('630px');
   });
 
+  it('keeps PDF metadata and zoom controls outside the scrolling viewport', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <PdfPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
+
+    const controls = host.querySelector('.pdf-preview-controls');
+    const viewport = host.querySelector('.pdf-preview-pane');
+    expect(controls).toBeTruthy();
+    expect(viewport).toBeTruthy();
+    expect(controls?.parentElement).toBe(host.firstElementChild);
+    expect(controls?.parentElement).not.toBe(viewport);
+  });
+
   it('renders only nearby pages and starts rendering newly visible pages after scrolling', async () => {
     const pages = Array.from({ length: 6 }, () => createMockPage({ width: 860, height: 1260 }));
     mockPDFDocument({ pages });
