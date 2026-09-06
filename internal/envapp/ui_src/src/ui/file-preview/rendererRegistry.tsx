@@ -7,6 +7,7 @@ import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
 import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
 import { PdfPreviewPane } from '../widgets/PdfPreviewPane';
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
+import { ImagePreviewPane } from '../widgets/ImagePreviewPane';
 import { useI18n } from '../i18n';
 
 export type RedevenFilePreviewRendererId =
@@ -77,16 +78,7 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 }
 
 function renderImagePreview(props: RedevenFilePreviewRenderProps): JSX.Element {
-  const i18n = useI18n();
-  return (
-    <div class="flex h-full items-center justify-center p-3">
-      <img
-        src={props.objectUrl}
-        alt={props.item?.name ?? i18n.t('uiCopy.preview.imageAlt')}
-        class="max-h-full max-w-full object-contain"
-      />
-    </div>
-  );
+  return <ImagePreviewPane item={props.item} descriptor={props.descriptor} objectUrl={props.objectUrl} />;
 }
 
 function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
