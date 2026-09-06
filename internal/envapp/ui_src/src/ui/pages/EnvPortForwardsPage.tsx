@@ -1090,12 +1090,12 @@ function ManagedOperationDisclosure(props: Readonly<{
       data-presentation-state={props.presentationPhase}
     >
       <div class="relative min-h-0 overflow-hidden border-t border-border/70 bg-muted/15">
-        <div class="flex min-w-0 items-stretch pl-[3.25rem] pr-3">
+        <div class="flex h-14 min-h-14 min-w-0 items-stretch pl-[3.25rem] pr-3" data-testid="managed-operation-header">
         <span class="absolute bottom-0 left-8 top-0 w-px bg-border/80" aria-hidden="true" />
         <span class="absolute left-8 top-[1.4rem] h-px w-5 bg-border/80" aria-hidden="true" />
         <button
           type="button"
-          class="group flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          class="group flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           aria-expanded={props.expanded}
           aria-controls={detailsID()}
           onClick={() => props.onExpandedChange(!props.expanded)}
@@ -1118,7 +1118,7 @@ function ManagedOperationDisclosure(props: Readonly<{
           <ChevronDown class={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none', props.expanded && 'rotate-180')} aria-hidden="true" />
         </button>
         <Show when={!terminal()}>
-          <Button size="sm" variant="ghost" class="my-auto h-7 shrink-0 px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
+          <Button size="sm" variant="ghost" class="my-auto h-7 shrink-0 whitespace-nowrap px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
         </Show>
         </div>
         <Show when={props.expanded}>
