@@ -3351,6 +3351,8 @@
 	  "releaseLoadedSummary": "Se han cargado {count} versiones.",
 	  "releaseVerificationQueued": "Preparando la comprobación de {count} versiones visibles…",
 	  "releaseVerificationProgress": "Comprobando {count} versiones visibles…",
+	  "releaseSelectedVerificationQueued": "La versión seleccionada {version} está en cola para comprobarse…",
+	  "releaseSelectedVerificationProgress": "Comprobando la versión seleccionada {version}…",
 	  "releaseListLabel": "Versiones disponibles",
 	  "releaseSourceError": {
 		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven no pudo leer las credenciales del Registry guardadas por el motor de contenedores. Revisa la configuración de credenciales de Docker o Podman y actualiza.",
@@ -3364,7 +3366,7 @@
 		"RECOMMENDED_RELEASE_UNAVAILABLE": "La versión recomendada no está disponible. Actualiza y elige una versión disponible.",
 		"unavailable": "Redeven no pudo cargar las versiones disponibles. Revisa la red y actualiza."
 	  },
-	  "releaseVerification": { "pending": "Comprobando" },
+	  "releaseVerification": { "pending": "Sin comprobar", "queued": "En cola", "active": "Comprobando" },
       "releaseSearch": "Buscar versiones o etiquetas",
       "releaseFilterLabel": "Filtrar versiones",
       "releaseFilter": { "all": "Todas", "stable": "Estable", "preview": "Preliminar" },
@@ -3380,6 +3382,8 @@
 	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven no puede verificar de forma segura el requisito de Node.js de esta versión.", "NODE_VERSION_UNAVAILABLE": "Esta versión no es compatible con el entorno de ejecución de Node.js administrado por Redeven.", "PLATFORM_UNAVAILABLE": "Esta etiqueta no incluye una imagen para la plataforma actual.", "RELEASE_IDENTITY_UNVERIFIABLE": "La fuente no proporcionó una identidad verificable para esta versión exacta.", "RELEASE_DEPRECATED": "El Registry de npm marca esta versión como obsoleta.", "RELEASE_NOT_FOUND": "Esta versión ya no está disponible en el Registry.", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "La etiqueta no está disponible, pero este resumen exacto de imagen sigue verificado. Selecciónalo explícitamente para desplegar la imagen fija.", "unavailable": "Esta versión no se puede seleccionar." },
 	  "releaseBadge": { "current": "Actual", "recommended": "Recomendada por Redeven", "recommendedUnavailable": "Versión recomendada no disponible", "verifiedDigest": "Imagen fija verificada", "latestStable": "Última estable", "latestPreview": "Última preliminar" },
       "deploySelectedRelease": "Desplegar la versión seleccionada",
+	  "releaseSelectionPending": "Esperando la comprobación de la versión",
+	  "releaseSelectionUnavailable": "La versión seleccionada no está disponible",
       "downgradeRequiresStopped": "Detén el servicio antes de elegir una versión anterior.",
       "releaseRisk": {
         "npm_lifecycle_scripts": "Los scripts de ciclo de vida de npm se ejecutan con los permisos del usuario actual del entorno y pueden acceder a los datos que ese usuario pueda leer o modificar.",

@@ -3351,6 +3351,8 @@
 	  "releaseLoadedSummary": "已載入 {count} 個版本。",
 	  "releaseVerificationQueued": "正在準備檢查 {count} 個可見版本…",
 	  "releaseVerificationProgress": "正在檢查 {count} 個可見版本…",
+	  "releaseSelectedVerificationQueued": "所選版本 {version} 正在等待檢查…",
+	  "releaseSelectedVerificationProgress": "正在檢查所選版本 {version}…",
 	  "releaseListLabel": "可用版本",
 	  "releaseSourceError": {
 		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven 無法讀取容器引擎儲存的 Registry 憑證。請檢查 Docker 或 Podman 的憑證設定後重新整理。",
@@ -3364,7 +3366,7 @@
 		"RECOMMENDED_RELEASE_UNAVAILABLE": "推薦版本無法使用，請重新整理並選擇可用版本。",
 		"unavailable": "Redeven 無法載入可用版本。請檢查網路後重新整理。"
 	  },
-	  "releaseVerification": { "pending": "正在檢查" },
+	  "releaseVerification": { "pending": "尚未檢查", "queued": "等待檢查", "active": "正在檢查" },
       "releaseSearch": "搜尋版本或標籤",
       "releaseFilterLabel": "篩選版本",
       "releaseFilter": { "all": "全部", "stable": "穩定版", "preview": "預覽版" },
@@ -3395,6 +3397,8 @@
 	  },
 	  "releaseBadge": { "current": "目前", "recommended": "Redeven 推薦", "recommendedUnavailable": "推薦版本無法使用", "verifiedDigest": "已驗證固定映像", "latestStable": "最新穩定", "latestPreview": "最新預覽" },
       "deploySelectedRelease": "部署所選版本",
+	  "releaseSelectionPending": "等待版本檢查",
+	  "releaseSelectionUnavailable": "所選版本無法使用",
       "downgradeRequiresStopped": "選擇較舊版本前請先停止服務。",
       "releaseRisk": {
         "npm_lifecycle_scripts": "npm 生命週期指令碼會以目前環境使用者權限執行，並可能存取該使用者可讀寫的資料。",

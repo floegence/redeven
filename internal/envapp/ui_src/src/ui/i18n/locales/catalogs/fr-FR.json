@@ -3351,6 +3351,8 @@
 	  "releaseLoadedSummary": "{count} versions chargées.",
 	  "releaseVerificationQueued": "Préparation de la vérification de {count} versions visibles…",
 	  "releaseVerificationProgress": "Vérification de {count} versions visibles…",
+	  "releaseSelectedVerificationQueued": "La version sélectionnée {version} est en attente de vérification…",
+	  "releaseSelectedVerificationProgress": "Vérification de la version sélectionnée {version}…",
 	  "releaseListLabel": "Versions disponibles",
 	  "releaseSourceError": {
 		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "Redeven n’a pas pu lire les identifiants du Registry enregistrés par le moteur de conteneurs. Vérifiez les réglages d’identifiants Docker ou Podman, puis actualisez.",
@@ -3364,7 +3366,7 @@
 		"RECOMMENDED_RELEASE_UNAVAILABLE": "La version recommandée est indisponible. Actualisez et choisissez une version disponible.",
 		"unavailable": "Redeven n’a pas pu charger les versions disponibles. Vérifiez le réseau, puis actualisez."
 	  },
-	  "releaseVerification": { "pending": "Vérification" },
+	  "releaseVerification": { "pending": "Non vérifiée", "queued": "En attente", "active": "Vérification en cours" },
       "releaseSearch": "Rechercher des versions ou des tags",
       "releaseFilterLabel": "Filtrer les versions",
       "releaseFilter": { "all": "Toutes", "stable": "Stable", "preview": "Aperçu" },
@@ -3380,6 +3382,8 @@
 	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "Redeven ne peut pas vérifier de façon sûre l’exigence Node.js de cette version.", "NODE_VERSION_UNAVAILABLE": "Cette version est incompatible avec l’environnement d’exécution Node.js géré par Redeven.", "PLATFORM_UNAVAILABLE": "Ce tag ne fournit aucune image pour la plateforme actuelle.", "RELEASE_IDENTITY_UNVERIFIABLE": "La source n’a fourni aucune identité vérifiable pour cette version exacte.", "RELEASE_DEPRECATED": "Le Registry npm marque cette version comme obsolète.", "RELEASE_NOT_FOUND": "Cette version n’est plus disponible dans le Registry.", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "Le tag est indisponible, mais ce condensat exact d’image reste vérifié. Sélectionnez-le explicitement pour déployer l’image figée.", "unavailable": "Cette version ne peut pas être sélectionnée." },
 	  "releaseBadge": { "current": "Actuelle", "recommended": "Recommandée par Redeven", "recommendedUnavailable": "Version recommandée indisponible", "verifiedDigest": "Image figée vérifiée", "latestStable": "Dernière stable", "latestPreview": "Dernier aperçu" },
       "deploySelectedRelease": "Déployer la version sélectionnée",
+	  "releaseSelectionPending": "En attente de la vérification de la version",
+	  "releaseSelectionUnavailable": "La version sélectionnée n’est pas disponible",
       "downgradeRequiresStopped": "Arrêtez le service avant de choisir une version antérieure.",
       "releaseRisk": {
         "npm_lifecycle_scripts": "Les scripts de cycle de vie npm s’exécutent avec les droits de l’utilisateur actuel de l’environnement et peuvent accéder aux données que cet utilisateur peut lire ou modifier.",

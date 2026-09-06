@@ -3277,6 +3277,8 @@ export const enUS = defineDictionary({
 	  releaseLoadedSummary: '{count} versions loaded.',
 	  releaseVerificationQueued: 'Preparing checks for {count} visible versions…',
 	  releaseVerificationProgress: 'Checking {count} visible versions…',
+	  releaseSelectedVerificationQueued: 'Selected version {version} is queued for checking…',
+	  releaseSelectedVerificationProgress: 'Checking selected version {version}…',
 	  releaseListLabel: 'Available versions',
 	  releaseSourceError: {
 		RELEASE_SOURCE_AUTH_UNAVAILABLE: 'Redeven could not read the container engine’s saved registry credentials. Check Docker or Podman credential settings, then refresh.',
@@ -3291,7 +3293,9 @@ export const enUS = defineDictionary({
 		unavailable: 'Redeven could not load available versions. Check the network, then refresh.',
 	  },
 	  releaseVerification: {
-		pending: 'Checking',
+		pending: 'Not checked',
+		queued: 'Queued',
+		active: 'Checking',
 	  },
       releaseSearch: 'Search versions or tags',
       releaseFilterLabel: 'Filter versions',
@@ -3338,6 +3342,8 @@ export const enUS = defineDictionary({
 		latestPreview: 'Latest preview',
 	  },
       deploySelectedRelease: 'Deploy selected version',
+	  releaseSelectionPending: 'Waiting for version check',
+	  releaseSelectionUnavailable: 'Selected version unavailable',
       downgradeRequiresStopped: 'Stop the service before selecting an older version.',
       releaseRisk: {
         npm_lifecycle_scripts: 'npm lifecycle scripts run with the current Environment user permissions and may access data that user can read or write.',

@@ -3351,6 +3351,8 @@
 	  "releaseLoadedSummary": "{count} 件のバージョンを読み込みました。",
 	  "releaseVerificationQueued": "表示中の {count} 件を確認する準備をしています…",
 	  "releaseVerificationProgress": "表示中の {count} 件を確認しています…",
+	  "releaseSelectedVerificationQueued": "選択したバージョン {version} は確認待ちです…",
+	  "releaseSelectedVerificationProgress": "選択したバージョン {version} を確認しています…",
 	  "releaseListLabel": "利用可能なバージョン",
 	  "releaseSourceError": {
 		"RELEASE_SOURCE_AUTH_UNAVAILABLE": "コンテナエンジンに保存された Registry 認証情報を Redeven が読み取れませんでした。Docker または Podman の認証情報設定を確認してから更新してください。",
@@ -3364,7 +3366,7 @@
 		"RECOMMENDED_RELEASE_UNAVAILABLE": "推奨バージョンを利用できません。更新して利用可能なバージョンを選択してください。",
 		"unavailable": "Redeven が利用可能なバージョンを読み込めませんでした。ネットワークを確認してから更新してください。"
 	  },
-	  "releaseVerification": { "pending": "確認中" },
+	  "releaseVerification": { "pending": "未確認", "queued": "確認待ち", "active": "確認中" },
       "releaseSearch": "バージョンまたはタグを検索",
       "releaseFilterLabel": "バージョンを絞り込む",
       "releaseFilter": { "all": "すべて", "stable": "安定版", "preview": "プレビュー" },
@@ -3380,6 +3382,8 @@
 	  "releaseReason": { "NODE_RANGE_UNSUPPORTED": "このバージョンの Node.js 要件を Redeven で安全に確認できません。", "NODE_VERSION_UNAVAILABLE": "このバージョンは Redeven 管理の Node.js 実行環境と互換性がありません。", "PLATFORM_UNAVAILABLE": "このタグには現在のプラットフォーム向けイメージがありません。", "RELEASE_IDENTITY_UNVERIFIABLE": "この正確なバージョンについて、ソースから検証可能な同一性情報が提供されませんでした。", "RELEASE_DEPRECATED": "npm Registry でこのバージョンは非推奨に指定されています。", "RELEASE_NOT_FOUND": "このバージョンは Registry で提供されなくなりました。", "RECOMMENDED_TAG_UNAVAILABLE_DIGEST_VERIFIED": "タグは利用できませんが、この正確なイメージダイジェストは検証済みです。固定イメージをデプロイするには明示的に選択してください。", "unavailable": "このバージョンは選択できません。" },
 	  "releaseBadge": { "current": "現在", "recommended": "Redeven 推奨", "recommendedUnavailable": "推奨バージョンは利用できません", "verifiedDigest": "検証済み固定イメージ", "latestStable": "最新安定版", "latestPreview": "最新プレビュー" },
       "deploySelectedRelease": "選択したバージョンをデプロイ",
+	  "releaseSelectionPending": "バージョンの確認を待っています",
+	  "releaseSelectionUnavailable": "選択したバージョンは利用できません",
       "downgradeRequiresStopped": "古いバージョンを選ぶ前にサービスを停止してください。",
       "releaseRisk": {
         "npm_lifecycle_scripts": "npm ライフサイクルスクリプトは現在の環境ユーザー権限で実行され、そのユーザーが読み書きできるデータへアクセスする可能性があります。",
