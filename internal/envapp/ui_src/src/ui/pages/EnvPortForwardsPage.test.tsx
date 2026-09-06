@@ -1212,6 +1212,21 @@ describe('EnvPortForwardsPage', () => {
     expect(inputShell?.className).toContain('flex-1');
   });
 
+  it('keeps header actions beside a truncated description and places the address icon in the input', async () => {
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const header = host.querySelector<HTMLElement>('[data-testid="web-services-panel"] > div');
+    const description = header?.querySelector('p');
+    const inputShell = host.querySelector<HTMLElement>('[data-testid="web-service-address-input-shell"]');
+
+    expect(header?.className).not.toContain('flex-wrap');
+    expect(description?.className).toContain('truncate');
+    expect(host.querySelector('#web-service-address-label')).toBeNull();
+    expect(inputShell?.className).toContain('relative');
+    expect(host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]')?.className).toContain('pl-10');
+  });
+
   it('shows a managed Example Service card without duplicating its protected forward', async () => {
     envContextMocks.env = Object.assign(
       () => ({ name: 'Build host', permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true } }),
