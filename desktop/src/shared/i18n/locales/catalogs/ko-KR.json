@@ -145,6 +145,8 @@
       "threadSyncFailed": "Flower가 최신 답변을 동기화하지 못했습니다. 다시 시도하세요.",
       "activeTurnBusy": "이전 답변이 아직 실행 중입니다. 다시 보내기 전에 중지할 수 있습니다.",
       "composerErrorTitle": "Flower가 전송하지 못했습니다.",
+    "expandThinking": "전체 사고 펼치기",
+    "collapseThinking": "사고 접기",
       "modelStatusPreparing": "모델 요청을 준비 중...",
       "modelStatusWaitingResponse": "모델 응답을 기다리는 중...",
       "modelStatusStreaming": "생각 중...",

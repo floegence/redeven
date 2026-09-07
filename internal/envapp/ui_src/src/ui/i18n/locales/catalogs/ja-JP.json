@@ -4149,6 +4149,8 @@
       "threadSyncFailed": "Flower は最新の返信を同期できませんでした。もう一度お試しください。",
       "activeTurnBusy": "前の返信はまだ実行中です。もう一度送信する前に停止できます。",
       "composerErrorTitle": "Flower は送信できませんでした。",
+    "expandThinking": "思考をすべて展開",
+    "collapseThinking": "思考を折りたたむ",
       "modelStatusPreparing": "モデルリクエストを準備中...",
       "modelStatusWaitingResponse": "モデルの応答を待っています...",
       "modelStatusStreaming": "思考中...",

@@ -751,6 +751,14 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
     await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting files') === true);
+    const thinkingDisclosure = runtime.querySelector<HTMLElement>('.flower-thinking-disclosure');
+    const thinkingToggle = runtime.querySelector<HTMLButtonElement>('.flower-thinking-toggle');
+    expect(thinkingDisclosure?.getAttribute('data-flower-thinking-view')).toBe('preview');
+    expect(runtime.querySelector('.flower-thinking-content')?.getAttribute('data-flower-thinking-view')).toBe('preview');
+    expect(thinkingToggle?.getAttribute('aria-expanded')).toBe('true');
+    thinkingToggle?.click();
+    await waitFor(() => thinkingDisclosure?.getAttribute('data-flower-thinking-view') === 'expanded');
+    expect(thinkingToggle?.getAttribute('aria-expanded')).toBe('true');
     expect(runtime.textContent).not.toContain('Final workspace explanation');
 
     stream.push({
@@ -791,6 +799,9 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
     await waitFor(() => runtime.textContent?.includes('Final workspace explanation') === true);
+    expect(runtime.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
+    expect(runtime.querySelector('.flower-thinking-toggle')?.getAttribute('aria-expanded')).toBe('false');
+    expect(runtime.querySelector('.flower-thinking-content')).toBeNull();
   });
 
   it('keeps stop then continue on one stream and presents each truthful live stage', async () => {

@@ -4376,13 +4376,38 @@ html.dark .flower-component-shell {
 }
 
 .flower-thinking-content {
+  --flower-thinking-line-height: 1.24rem;
+  --flower-thinking-visible-lines: 4;
   max-width: min(100%, 58rem);
   margin-top: 0.3rem;
   padding-left: 1.2rem;
   border-left: 2px solid color-mix(in srgb, var(--flower-chat-surface-border) 42%, transparent);
   color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
   font-size: 0.8rem;
-  line-height: 1.55;
+  line-height: var(--flower-thinking-line-height);
+  scrollbar-width: none;
+}
+
+.flower-thinking-content::-webkit-scrollbar {
+  display: none;
+}
+
+.flower-thinking-content[data-flower-thinking-view='preview'] {
+  max-height: calc(var(--flower-thinking-visible-lines) * var(--flower-thinking-line-height));
+  overflow-y: auto;
+}
+
+.flower-thinking-content[data-flower-thinking-view='preview'][data-overflow='true'] {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, var(--foreground) 30%, var(--foreground) 100%);
+  mask-image: linear-gradient(180deg, transparent 0, var(--foreground) 30%, var(--foreground) 100%);
+}
+
+.flower-thinking-content[data-flower-thinking-view='expanded'] {
+  overflow: visible;
+}
+
+.flower-thinking-content-body {
+  min-width: 0;
 }
 
 .flower-chat-md-block {

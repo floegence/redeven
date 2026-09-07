@@ -4149,6 +4149,8 @@
       "threadSyncFailed": "Flower no pudo sincronizar la respuesta más reciente. Inténtalo de nuevo.",
       "activeTurnBusy": "La respuesta anterior sigue activa. Puedes detenerla antes de volver a enviar.",
       "composerErrorTitle": "Flower no pudo enviar el mensaje.",
+    "expandThinking": "Expandir todo el razonamiento",
+    "collapseThinking": "Contraer el razonamiento",
       "modelStatusPreparing": "Preparando solicitud al modelo...",
       "modelStatusWaitingResponse": "Esperando respuesta del modelo...",
       "modelStatusStreaming": "Pensando...",

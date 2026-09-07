@@ -38,6 +38,7 @@ import {
 } from './flowerTurnAdmission';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerThinkingOrb } from './FlowerThinkingOrb';
+import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
@@ -8845,13 +8846,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
     const thinking = createMemo(() => block().block_type === 'thinking');
     const thinkingLive = createMemo(() => thinking() && message().live === true);
-    const [thinkingOpen, setThinkingOpen] = createSignal(false);
-    createEffect(() => {
-      if (!thinking()) return;
-      // Reasoning is useful while it streams, but settled reasoning must not
-      // keep a large transcript panel open or retain its layout cost.
-      setThinkingOpen(streaming() || thinkingLive());
-    });
     const assistantCopyLayout = createMemo(() => message().role === 'assistant' && block().block_type !== 'thinking');
     const ContentBody: Component = () => (
       <Show
@@ -8883,28 +8877,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show>
     );
 
-    const ThinkingDisclosure: Component = () => (
-      <div
-        class="flower-thinking-disclosure"
-        data-state={thinkingOpen() ? 'open' : 'closed'}
-      >
-        <button
-          type="button"
-          class="flower-thinking-toggle"
-          aria-expanded={thinkingOpen()}
-          onClick={() => setThinkingOpen((open) => !open)}
-        >
-          <ChevronDown class="flower-thinking-toggle-icon" aria-hidden="true" />
-          <span>{trimString(copy().chat.modelStatus.streaming) || 'Thinking...'}</span>
-        </button>
-        <Show when={thinkingOpen()}>
-          <div class="flower-thinking-content">
-            <ContentBody />
-          </div>
-        </Show>
-      </div>
-    );
-
     return (
       <Show
         when={thinking()}
@@ -8930,7 +8902,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </div>
         )}
       >
-        <ThinkingDisclosure />
+        <FlowerThinkingDisclosure
+          contentID={block().key}
+          content={() => block().content}
+          streaming={streaming}
+          live={thinkingLive}
+          label={() => trimString(copy().chat.modelStatus.streaming) || 'Thinking...'}
+          expandLabel={() => copy().chat.expandThinking}
+          collapseLabel={() => copy().chat.collapseThinking}
+          contentBody={ContentBody}
+        />
       </Show>
     );
   };
