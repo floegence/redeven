@@ -634,7 +634,8 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:metrics"]')).not.toBeNull());
     const update = mount.querySelector('[data-plugin-center-update="catalog:metrics"]') as HTMLButtonElement;
     expect(update.textContent).toContain('Review update');
-    expect(update.closest('article')?.className).toContain('border-t-[var(--redeven-status-info-foreground)]');
+    expect(update.closest('article')?.className).not.toContain('border-t-[var(--redeven-status-info-foreground)]');
+    expect(update.className).toContain('h-9');
     expect(mount.querySelector('[data-plugin-center-list]')?.className).toContain('grid');
   });
 

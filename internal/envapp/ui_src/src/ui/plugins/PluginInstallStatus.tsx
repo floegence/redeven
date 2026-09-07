@@ -163,14 +163,14 @@ export function PluginInstallSummary(props: {
       aria-live={props.announce === false ? 'off' : failed() ? 'assertive' : 'polite'}
       aria-busy={active()}
       class={cn(
-        'flex h-11 min-w-0 flex-1 items-center gap-1',
+        'flex h-9 min-w-0 flex-1 items-center gap-1',
         failed() ? 'text-destructive' : 'text-foreground',
       )}
     >
       <button
         type="button"
         data-plugin-center-install-summary
-        class="flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        class="flex h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`${label()}: ${i18n.t('uiCopy.plugin.viewDetails')}`}
         title={label()}
         onClick={(event) => props.onOpenDetails(event.currentTarget)}
@@ -213,7 +213,7 @@ export function PluginInstallSummary(props: {
             data-plugin-install-resolve-retained-data={recovery() === 'erase_retained_data' ? '' : undefined}
             aria-label={actionLabel()}
             title={actionLabel()}
-            class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={runAction}
           >
             <Show when={recovery() === 'erase_retained_data'} fallback={<RefreshIcon class="h-4 w-4" />}><AlertTriangle class="h-4 w-4" /></Show>
