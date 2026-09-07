@@ -659,7 +659,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"github.com/floegence/floret/v7 v7.1.4",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go and Core v5.0.1 plus Floe Webapp v0.48.5",
+			"published Flowersec Go and Core v5.0.1 plus Floe Webapp v0.48.5 for the Desktop shell and v0.48.6 for Env App",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
