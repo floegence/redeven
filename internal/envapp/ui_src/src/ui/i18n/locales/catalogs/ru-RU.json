@@ -4245,6 +4245,8 @@
       "threadSyncFailed": "Flower не удалось синхронизировать последний ответ. Повторите попытку.",
       "activeTurnBusy": "Предыдущий ответ ещё выполняется. Остановите его перед повторной отправкой.",
       "composerErrorTitle": "Flower не смог отправить сообщение.",
+    "expandThinking": "Развернуть все рассуждения",
+    "collapseThinking": "Свернуть рассуждения",
       "modelStatusPreparing": "Подготовка запроса к модели...",
       "modelStatusWaitingResponse": "Ожидание ответа модели...",
       "modelStatusStreaming": "Думает...",

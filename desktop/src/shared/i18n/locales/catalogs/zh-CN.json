@@ -147,6 +147,8 @@
       "threadSyncFailed": "Flower 无法同步最新回复，请重试。",
       "activeTurnBusy": "上一条回复仍在运行。停止后即可再次发送。",
       "composerErrorTitle": "Flower 发送失败。",
+    "expandThinking": "展开完整思考",
+    "collapseThinking": "收起思考",
       "modelStatusPreparing": "正在准备模型请求...",
       "modelStatusWaitingResponse": "正在等待模型响应...",
       "modelStatusStreaming": "正在思考...",

@@ -381,6 +381,8 @@ export type FlowerSurfaceCopy = Readonly<{
     threadSyncFailed: string;
     activeTurnBusy: string;
     composerErrorTitle: string;
+    expandThinking: string;
+    collapseThinking: string;
     modelStatus: Readonly<{
       preparing: string;
       waitingResponse: string;
@@ -640,6 +642,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
     activeTurnBusy: 'The previous reply is still active. You can stop it before sending again.',
     composerErrorTitle: 'Flower could not send.',
+    expandThinking: 'Expand full thinking',
+    collapseThinking: 'Collapse thinking',
     modelStatus: {
       preparing: 'Preparing model request...',
       waitingResponse: 'Waiting for model response...',

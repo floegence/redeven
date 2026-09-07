@@ -140,6 +140,8 @@ export const flowerSurfaceEnUS = {
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
     activeTurnBusy: 'The previous reply is still active. You can stop it before sending again.',
     composerErrorTitle: 'Flower could not send.',
+    expandThinking: 'Expand full thinking',
+    collapseThinking: 'Collapse thinking',
     modelStatusPreparing: 'Preparing model request...',
     modelStatusWaitingResponse: 'Waiting for model response...',
     modelStatusStreaming: 'Thinking...',

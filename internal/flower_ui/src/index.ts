@@ -1,4 +1,5 @@
 export * from './FlowerSurface';
+export * from './FlowerThinkingDisclosure';
 export * from './FlowerTurnLauncherWindow';
 export * from './attachments/createFlowerAttachmentController';
 export * from './attachments/FlowerAttachmentLane';
