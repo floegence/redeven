@@ -726,6 +726,8 @@ describe('PluginCenterView', () => {
 
     expect(details.className).toContain('overflow-hidden');
     expect(details.className).not.toContain('overflow-y-auto');
+    expect(details.className).toContain('absolute');
+    expect(details.className).not.toContain('sm:relative');
     expect(controls.className).toContain('shrink-0');
     expect(body.className).toContain('min-h-0');
     expect(body.className).toContain('flex-1');
