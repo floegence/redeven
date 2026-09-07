@@ -174,8 +174,9 @@ are secondary actions; uninstall opens a dedicated keep-or-delete-data dialog.
 Every dialog open resets to keep data, while delete data requires a separate
 destructive confirmation before mutation submission. On narrow screens, list
 selection enters a detail view, focuses its explicit back action, and restores
-focus to the originating inventory row on return. Tablet and desktop layouts
-keep the inventory master and selected detail side by side.
+focus to the originating inventory row on return. On tablet and desktop,
+the detail drawer overlays the directory without resizing or reflowing the card
+grid; closing it restores focus to the originating row.
 
 ## Session recovery
 
