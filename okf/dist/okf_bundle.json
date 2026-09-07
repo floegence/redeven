@@ -5357,6 +5357,7 @@
       "timestamp": "2026-09-03T00:00:00Z",
       "frontmatter": {
         "description": "Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.",
+        "quality_exception": "Cross-domain release lifecycle contract spanning discovery, verification, installation, rollback, and UI selection states.",
         "tags": [
           "architecture",
           "npm",
@@ -12083,5 +12084,5 @@
       ]
     }
   ],
-  "source_sha256": "68f927196fb9645bba78e2c8080821561a6f9e3569418982c6cf7b9c5ba651b5"
+  "source_sha256": "2e653f3943cad7e684e53e0a40982796e00f3ef500b76ab69b6be04ab355c535"
 }
