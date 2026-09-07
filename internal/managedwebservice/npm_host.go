@@ -408,8 +408,9 @@ func runManagedNPMCommand(ctx context.Context, commandID, display, nodePath stri
 	}
 	go read("stdout", stdout)
 	go read("stderr", stderr)
-	runErr := cmd.Wait()
+	// StdoutPipe and StderrPipe must be drained before Wait closes them.
 	readers.Wait()
+	runErr := cmd.Wait()
 	if runErr == nil {
 		runErr = outputErr
 	}
@@ -431,7 +432,7 @@ func npmCommandEnvironment(nodePath, home, cache, userConfig, globalConfig, regi
 	env := []string{
 		"HOME=" + home, "PATH=" + pathValue, "npm_config_registry=" + normalizedRegistryURL(registry),
 		"npm_config_cache=" + cache, "npm_config_userconfig=" + userConfig, "npm_config_globalconfig=" + globalConfig,
-		"npm_config_audit=false", "npm_config_fund=false", "npm_config_update_notifier=false", "npm_config_progress=false", "npm_config_loglevel=warn",
+		"npm_config_audit=false", "npm_config_fund=false", "npm_config_update_notifier=false", "npm_config_progress=false", "npm_config_loglevel=info",
 	}
 	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"} {
 		if value := os.Getenv(key); value != "" {

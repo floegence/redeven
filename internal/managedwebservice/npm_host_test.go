@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+
+	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
 func TestVerifyInstalledNPMPackageUsesScopedPackageDirectory(t *testing.T) {
@@ -113,6 +116,74 @@ func TestNPMInstallArgumentsPinApplicationRootAndExactLayout(t *testing.T) {
 	for index := range want {
 		if arguments[index] != want[index] {
 			t.Fatalf("argument %d = %q, want %q", index, arguments[index], want[index])
+		}
+	}
+}
+
+func TestNPMCommandEnvironmentEmitsInformationalInstallOutput(t *testing.T) {
+	environment := npmCommandEnvironment(
+		"/managed/node/bin/node",
+		"/managed/home",
+		"/managed/cache",
+		"/managed/config/user.npmrc",
+		"/managed/config/global.npmrc",
+		"https://registry.npmjs.org/",
+	)
+	if !slices.Contains(environment, "npm_config_loglevel=info") {
+		t.Fatalf("environment does not enable informational npm output: %#v", environment)
+	}
+	if slices.Contains(environment, "npm_config_loglevel=warn") {
+		t.Fatalf("environment still suppresses normal npm install output: %#v", environment)
+	}
+}
+
+func TestRunManagedNPMCommandCapturesBothStreamsAndTrailingOutput(t *testing.T) {
+	root := t.TempDir()
+	fakeNode := filepath.Join(root, "fake-node")
+	if err := os.WriteFile(fakeNode, []byte("#!/bin/sh\nprintf 'resolving package\\ninstall complete'\nprintf 'lifecycle warning\\n' >&2\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := pfregistry.Open(filepath.Join(root, "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	operation := pfregistry.ManagedOperation{
+		OperationID: "mop_npm_output", ServiceID: "mws_npm_output", RequestID: "req_npm_output", RequestFingerprint: "fingerprint",
+		Action: "install", State: "running", Stage: "installing", ProgressTotal: operationProgressTotal,
+	}
+	if err := registry.CreateManagedOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{registry: registry, listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
+	reporter := newOperationReporter(manager, &operation, nil)
+	ctx := withOperationReporter(context.Background(), reporter)
+	if err := runManagedNPMCommand(ctx, "npm-install", "<managed-node> install", fakeNode, nil, root, os.Environ()); err != nil {
+		t.Fatal(err)
+	}
+	reporter.Close()
+
+	persisted, err := registry.GetManagedOperation(context.Background(), operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted == nil || persisted.ProgressDetail == nil {
+		t.Fatal("npm command progress was not persisted")
+	}
+	if len(persisted.ProgressDetail.Commands) != 1 || persisted.ProgressDetail.Commands[0].State != "succeeded" {
+		t.Fatalf("commands = %#v", persisted.ProgressDetail.Commands)
+	}
+	got := make(map[string]string, len(persisted.ProgressDetail.Output))
+	for _, line := range persisted.ProgressDetail.Output {
+		got[line.Text] = line.Stream
+	}
+	for text, stream := range map[string]string{
+		"resolving package": "stdout",
+		"install complete":  "stdout",
+		"lifecycle warning": "stderr",
+	} {
+		if got[text] != stream {
+			t.Fatalf("output = %#v, want %q on %s", persisted.ProgressDetail.Output, text, stream)
 		}
 	}
 }
