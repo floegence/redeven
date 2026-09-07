@@ -2,6 +2,7 @@
 type: Runtime Contract
 title: Managed Service release discovery and updates
 description: Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
+quality_exception: Cross-domain release lifecycle contract spanning discovery, verification, installation, rollback, and UI selection states.
 tags: [architecture, web-services, releases, npm, oci, updates]
 timestamp: 2026-09-03T00:00:00Z
 ---
