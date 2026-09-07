@@ -4,6 +4,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { useI18n } from '../i18n';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const IMAGE_ZOOM_STEP = 0.25;
 const IMAGE_MIN_SCALE = 0.25;
@@ -101,7 +102,7 @@ export function ImagePreviewPane(props: ImagePreviewPaneProps) {
         <Button size="sm" variant="outline" class="h-7 px-2 text-[11px]" aria-label={i18n.t('uiCopy.preview.fitImage')} onClick={() => setMode('fit')}>{i18n.t('uiCopy.preview.fit')}</Button>
         <Button size="sm" variant="outline" class="h-7 px-2 text-[11px]" aria-label={i18n.t('uiCopy.preview.actualImageSize')} onClick={() => setMode('actual')}>1:1</Button>
       </div>
-      <div ref={viewportEl} onWheel={handleWheel} onKeyDown={handleKeyDown} class="image-preview-viewport min-h-0 flex-1 overflow-auto" tabindex="0" role="region" aria-label={i18n.t('uiCopy.preview.imageViewport')}>
+      <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} ref={viewportEl} onWheel={handleWheel} onKeyDown={handleKeyDown} class="image-preview-viewport min-h-0 flex-1 overflow-auto" tabindex="0" role="region" aria-label={i18n.t('uiCopy.preview.imageViewport')}>
         <div class="flex min-h-full min-w-full items-center justify-center p-3">
           <Show when={props.objectUrl} fallback={<div class="text-sm text-muted-foreground">{i18n.t('uiCopy.preview.loadingImage')}</div>}>
             <img
