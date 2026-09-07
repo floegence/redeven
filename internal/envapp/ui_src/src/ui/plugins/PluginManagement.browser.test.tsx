@@ -992,6 +992,7 @@ describe('plugin management browser geometry and interaction', () => {
       expect.stringContaining('Lifecycle: All'),
     ]));
     filterTriggers.forEach((trigger) => expect(trigger.querySelector('svg')).not.toBeNull());
+    const masterRectBefore = master.getBoundingClientRect();
 
     item.click();
     await settle();
@@ -1017,11 +1018,14 @@ describe('plugin management browser geometry and interaction', () => {
       expect(getComputedStyle(details).display).not.toBe('none');
       const masterRect = master.getBoundingClientRect();
       expect(Math.abs(masterRect.top - detailsRect.top)).toBeLessThanOrEqual(1);
-      expect(masterRect.right).toBeLessThanOrEqual(detailsRect.left + 1);
+      // The details drawer overlays the directory without resizing or rearranging it.
+      expect(detailsRect.left).toBeLessThan(masterRect.right);
+      expect(detailsRect.right).toBeLessThanOrEqual(masterRect.right + 1);
+      expect(Math.abs(masterRect.left - masterRectBefore.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(masterRect.width - masterRectBefore.width)).toBeLessThanOrEqual(1);
       if (viewport.width >= 1280) {
         expect(detailsRect.width).toBeGreaterThanOrEqual(360);
         expect(detailsRect.width).toBeLessThanOrEqual(420);
-        expect(masterRect.width).toBeGreaterThan(detailsRect.width);
       }
     }
   });

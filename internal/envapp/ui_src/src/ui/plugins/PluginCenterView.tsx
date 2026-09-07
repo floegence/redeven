@@ -1539,7 +1539,7 @@ export function PluginCenterDetails(props: {
       role="dialog"
       aria-modal="true"
       aria-labelledby={props.item ? 'plugin-center-detail-heading' : undefined}
-      class={cn('absolute inset-y-0 right-0 z-20 min-h-0 w-full max-w-full overflow-hidden border-l bg-background shadow-2xl sm:relative sm:inset-auto sm:h-full sm:w-[420px] sm:max-w-[min(420px,calc(100vw-2rem))] sm:shrink-0', props.mobileOpen === false ? 'hidden' : 'redeven-plugin-motion block animate-in fade-in slide-in-from-right-2 duration-200 ease-out motion-reduce:animate-none')}
+      class={cn('absolute inset-y-0 right-0 z-20 min-h-0 w-full max-w-full overflow-hidden border-l bg-background shadow-2xl sm:w-[420px] sm:max-w-[min(420px,calc(100vw-2rem))]', props.mobileOpen === false ? 'hidden' : 'redeven-plugin-motion block animate-in fade-in slide-in-from-right-2 duration-200 ease-out motion-reduce:animate-none')}
     >
       <Show
         when={props.item}
