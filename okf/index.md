@@ -114,3 +114,4 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.
 - [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.
+- [Automated service-template catalog updates](release/service-template-updates.md) - Adopt checksum-verified catalog tags through the final main gate without publishing product packages or upgrading instances.
