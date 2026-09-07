@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-09-07
+* **Visible npm Host installation output**: Managed npm install and lifecycle
+  commands now emit informational logs and drain stdout and stderr before the
+  process wait closes their pipes. Redacted bounded output therefore remains
+  observable in live Managed Service operation progress, including final lines
+  written immediately before command exit.
+
 ## 2026-09-05
 * **Stable provisional Flower settings**: New-thread admission now keeps the
   effective permission, model, reasoning, and working directory with its
