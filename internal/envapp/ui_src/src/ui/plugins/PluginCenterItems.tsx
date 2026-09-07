@@ -118,7 +118,6 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         'redeven-plugin-directory-card group/card grid h-[248px] min-w-0 grid-rows-[minmax(0,1fr)_56px] gap-3 rounded-lg border bg-card p-4 text-card-foreground [transition-duration:180ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
         PLUGIN_ENTER_MOTION_CLASS,
         props.selected && 'border-primary bg-primary/[0.035] ring-1 ring-primary/20',
-        update() && 'border-t-[var(--redeven-status-info-foreground)]',
       )}
       style={`animation-delay: ${props.entranceDelayMs ?? 0}ms`}
       aria-current={props.selected ? 'true' : undefined}
@@ -164,7 +163,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             data-plugin-center-card-primary={primaryAction() === 'install' ? undefined : props.item.inventoryKey}
             data-plugin-center-install={primaryAction() === 'install' ? props.item.inventoryKey : undefined}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
-            class={cn('inline-flex h-11 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50', PLUGIN_PRESS_MOTION_CLASS)}
+            class={cn('inline-flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50', PLUGIN_PRESS_MOTION_CLASS)}
             aria-busy={commandPending()}
             disabled={commandPending() || ((primaryAction() === 'review_update' || primaryAction() === 'install') && (!props.canManage || props.managementDisabled))
               || (primaryAction() === 'open_activity' && (!props.canOpenSurfaces || !props.item.defaultLaunchTarget))
@@ -196,7 +195,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           )}
         </Show>
         <Show when={!installSummary() && runtimeRecovery()?.state === 'failed' && props.onRetryRuntimeRecovery}>
-          <button type="button" data-plugin-runtime-recovery-retry={props.item.pluginInstanceID} class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={i18n.t('common.actions.retry')} title={i18n.t('common.actions.retry')} onClick={() => void props.onRetryRuntimeRecovery?.()}>
+          <button type="button" data-plugin-runtime-recovery-retry={props.item.pluginInstanceID} class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={i18n.t('common.actions.retry')} title={i18n.t('common.actions.retry')} onClick={() => void props.onRetryRuntimeRecovery?.()}>
             <RefreshIcon class="h-4 w-4" />
           </button>
         </Show>
@@ -213,7 +212,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               ref={menuTrigger}
               type="button"
               data-plugin-center-card-menu={props.item.inventoryKey}
-              class={cn('inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
+              class={cn('inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
               title={i18n.t('uiCopy.plugin.moreActions')}
             >
               <MoreHorizontal class="h-4 w-4" />
