@@ -41,7 +41,7 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | github.com/floegence/floeterm/terminal-go | v0.19.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.0 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.1.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.1.4 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.0.1 | Floegence first-party dependency. |
-| github.com/floegence/redeven-service-templates | v0.4.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.4.1 | Floegence first-party versioned Managed Service template catalog. |
+| github.com/floegence/redeven-service-templates | v0.4.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.4.2 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.28 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.28 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |

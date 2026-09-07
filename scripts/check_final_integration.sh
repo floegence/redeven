@@ -94,6 +94,8 @@ check_shell_syntax() {
   bash -n scripts/check_docker_runtime_e2e.sh
   bash -n scripts/smoke_desktop_plugins.sh
   bash -n scripts/check_final_integration.sh
+  bash -n scripts/integrate_service_template_update.sh
+  bash -n scripts/prepare_service_template_update.sh
   bash -n scripts/check_quick_ci.sh
   bash -n scripts/check_renderer_e2e.sh
   bash -n scripts/check_ui_tests.sh
@@ -134,6 +136,7 @@ run_step "checking shell syntax" check_shell_syntax
 run_step "linting GitHub Actions workflows" check_github_workflows
 run_step "checking Go toolchain consistency" node scripts/check_go_version_consistency.mjs
 run_step "checking Managed Service catalog boundary" node scripts/check_managed_service_catalog_boundary.mjs
+run_step "testing published catalog dependency and main publication" node --test scripts/update_service_template_dependency.test.mjs scripts/service_template_publication.test.mjs
 run_step "testing README localization contract" node --test scripts/check_readme_localizations.test.mjs
 run_step "testing JavaScript lock inventory" node --test scripts/javascript_lock_inventory.test.mjs
 run_step "checking synchronized README localizations" node scripts/check_readme_localizations.mjs

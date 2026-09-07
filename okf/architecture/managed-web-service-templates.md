@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Service Templates
 description: Consume one signed-off versioned service catalog whose release is a recommendation, not a user-version restriction.
 tags: [architecture, templates, managed-services, localization, supply-chain]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-07T00:00:00Z
 ---
 # Summary
 
@@ -38,7 +38,7 @@ Built-in installed state is matched by exact template ID. Template responses exp
 
 ## Change contract
 
-A catalog change is released upstream first, then Redeven upgrades to that published module version without `replace`, `go.work`, local paths, or copied assets. Bundle schema evolution belongs to the template module; Redeven must explicitly adopt and validate a new schema before it can load it. Runtime persistence migration remains a separate Redeven-owned concern and cannot be hidden in catalog decoding.
+A catalog change is released upstream first, then Redeven upgrades to that published module version without `replace`, `go.work`, local paths, or copied assets. The [automated catalog update contract](../release/service-template-updates.md) owns scheduled discovery, source integration, checksums, and failure recovery. Catalog updates reach users through the next normal Redeven release and do not change installed release identities. Bundle schema evolution belongs to the template module; Redeven must explicitly adopt and validate a new schema before it can load it. Runtime persistence migration remains a separate Redeven-owned concern and cannot be hidden in catalog decoding.
 
 # Boundaries
 
@@ -46,7 +46,7 @@ Redeven does not keep a compatibility directory, template fingerprints, retired 
 
 # Evidence
 
-- `redeven:go.mod` - Pins catalog module v0.3.0 without local dependency wiring.
+- `redeven:go.mod` - Pins the released catalog module without local dependency wiring.
 - `redeven:internal/managedwebservice/builtin_templates.go` - Verifies and maps bundle records into generic templates.
 - `redeven:internal/managedwebservice/types.go` - Defines current TemplateSpec, localization, icon, and lifecycle API shapes.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx` - Presents localized verified content through the common catalog UI.

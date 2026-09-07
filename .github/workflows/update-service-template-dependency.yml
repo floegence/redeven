@@ -1,0 +1,147 @@
+name: Update service-template module
+
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: service-template-module-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Follow published service-template releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GOWORK: 'off'
+      GOENV: 'off'
+      GOFLAGS: ''
+      GOPROXY: https://proxy.golang.org
+      GOSUMDB: sum.golang.org
+      GONOSUMDB: ''
+      GONOPROXY: ''
+      GOPRIVATE: ''
+      GOINSECURE: ''
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+
+      - name: Create isolated update worktree
+        id: worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          base="$(git rev-parse origin/main)"
+          git merge --ff-only "$base"
+          worktree="$(mktemp -d "${RUNNER_TEMP}/service-template-module.XXXXXX")"
+          branch="codex/automation/service-template-module-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git worktree add -b "$branch" "$worktree" "$base"
+          {
+            echo "path=$worktree"
+            echo "base=$base"
+            echo "branch=$branch"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Discover and apply the published module
+        id: discover
+        working-directory: ${{ steps.worktree.outputs.path }}
+        run: |
+          node scripts/update_service_template_dependency.mjs
+          if git diff --quiet; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install update and final-gate prerequisites
+        if: steps.discover.outputs.changed == 'true'
+        working-directory: ${{ steps.worktree.outputs.path }}
+        run: |
+          npm install --global corepack@0.34.6
+          corepack enable
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+          bash scripts/prepare_service_template_update.sh
+          cd internal/envapp/ui_src
+          corepack pnpm exec playwright install --with-deps chromium
+
+      - name: Regenerate notices and OKF artifacts
+        if: steps.discover.outputs.changed == 'true'
+        working-directory: ${{ steps.worktree.outputs.path }}
+        run: |
+          node scripts/generate_third_party_notices.mjs
+          ./scripts/build_okf_bundle.sh
+          node scripts/generate_third_party_notices.mjs --check
+          ./scripts/okf/check_source_integrity.sh
+          ./scripts/build_okf_bundle.sh --verify-only
+
+      - name: Run dependency-focused checks
+        if: steps.discover.outputs.changed == 'true'
+        working-directory: ${{ steps.worktree.outputs.path }}
+        run: |
+          go test ./internal/managedwebservice/...
+          node scripts/check_managed_service_catalog_boundary.mjs
+          node --test scripts/update_service_template_dependency.test.mjs scripts/service_template_publication.test.mjs
+          git diff --check
+
+      - name: Commit only the published dependency and generated artifacts
+        if: steps.discover.outputs.changed == 'true'
+        working-directory: ${{ steps.worktree.outputs.path }}
+        run: |
+          test -z "$(git ls-files --others --exclude-standard)"
+          while IFS= read -r file; do
+            case "$file" in
+              go.mod|go.sum|THIRD_PARTY_NOTICES.md|okf/dist/okf_bundle.json|okf/dist/okf_bundle.manifest.json|okf/dist/okf_bundle.sha256) ;;
+              *) echo "Unexpected update output: $file" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only)
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add go.mod go.sum THIRD_PARTY_NOTICES.md okf/dist
+          git commit -m 'chore(deps): follow service-template catalog release'
+          test -z "$(git status --porcelain)"
+
+      - name: Fast-forward main and push through the exact-main final gate
+        if: steps.discover.outputs.changed == 'true'
+        env:
+          BASE: ${{ steps.worktree.outputs.base }}
+          BRANCH: ${{ steps.worktree.outputs.branch }}
+        run: xvfb-run -a bash scripts/integrate_service_template_update.sh "$BASE" "$BRANCH"
+
+      - name: Report no-op
+        if: steps.discover.outputs.changed == 'false'
+        run: echo 'The published service-template module is already current.'
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo '::error title=Service-template dependency watcher failed::Inspect the failed check and remote main before retrying an uncertain push response.'
+          echo 'Proxy verification, generated artifacts, the exact-main gate, or publication failed. The watcher never force-pushes or publishes Redeven product tags.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove this run's temporary worktree and private branch
+        if: always() && steps.worktree.outputs.path != ''
+        env:
+          WORKTREE: ${{ steps.worktree.outputs.path }}
+          BRANCH: ${{ steps.worktree.outputs.branch }}
+        run: |
+          git worktree remove --force "$WORKTREE"
+          git branch -D "$BRANCH"
