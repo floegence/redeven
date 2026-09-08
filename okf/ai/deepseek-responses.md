@@ -8,7 +8,7 @@ timestamp: 2026-09-08T00:00:00Z
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.3.2 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.
@@ -22,7 +22,10 @@ existing model-catalog contract.
 
 Native search is declared in the Agent tool surface and sent as `web_search`.
 Hosted search events and citation sources flow through Floret observation;
-search is never dispatched as a local tool. Short requests such as automatic
+search is never dispatched as a local tool. The current conversation and
+history retain a typed hosted search item, including queries, safe sources, and
+failed outcomes. Refresh and Runtime restart preserve this canonical activity;
+Redeven does not rebuild it from transport diagnostics. Short requests such as automatic
 titles have no hosted search surface and cannot initiate a search.
 
 # Boundaries

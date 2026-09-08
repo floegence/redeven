@@ -51,9 +51,9 @@ Docker Runtime E2E, OKF, serial uncached Go tests, and golangci-lint. Any
 generator that changes the tree fails the gate.
 
 `go.mod` is the single authoritative Go toolchain version and currently pins
-Go 1.27.0. Every GitHub Actions `setup-go` step resolves that file through
+Go 1.27.1. Every GitHub Actions `setup-go` step resolves that file through
 `go-version-file: go.mod`; repository checks select the matching
-`GOTOOLCHAIN=go1.27.0+auto`; public README prerequisites and badges mirror the
+`GOTOOLCHAIN=go1.27.1+auto`; public README prerequisites and badges mirror the
 same value. Quick CI and the exact-main final integration gate run
 `scripts/check_go_version_consistency.mjs`, which rejects drift among these
 sources and requires the local gate runtime to report the exact version. Build,

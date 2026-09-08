@@ -39,7 +39,7 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.0 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.3.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.3.1 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.3.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.3.2 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.0.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.4.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.4.2 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.28 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.28 | Floegence first-party dependency. |

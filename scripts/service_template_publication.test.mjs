@@ -43,7 +43,7 @@ if [ "$TEST_SCENARIO" = push-race ]; then git --git-dir="$TEST_REMOTE" update-re
     const base = git(main, 'rev-parse', 'HEAD');
     const feature = path.join(root, 'feature');
     git(main, 'worktree', 'add', '-b', 'codex/automation/catalog-test', feature, base);
-    fs.writeFileSync(path.join(feature, 'go.mod'), 'module example\n\ngo 1.27.0\n');
+    fs.writeFileSync(path.join(feature, 'go.mod'), 'module example\n\ngo 1.27.1\n');
     git(feature, 'add', 'go.mod');
     git(feature, 'commit', '-m', 'chore(deps): update');
     const tip = git(feature, 'rev-parse', 'HEAD');
