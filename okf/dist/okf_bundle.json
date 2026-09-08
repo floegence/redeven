@@ -2161,7 +2161,7 @@
         "title": "DeepSeek Responses",
         "type": "AI Provider Contract"
       },
-      "body_length": 3070,
+      "body_length": 3519,
       "summary": "Flower routes the DeepSeek provider to the published Floret v7.4.0 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
       "sections": [
         {
@@ -13229,5 +13229,5 @@
       ]
     }
   ],
-  "source_sha256": "d5ce519c7bcf6cef88d98b790bc9d36427bfdeae5d96460e1967148a2feaf86c"
+  "source_sha256": "e4ccac8307f2b91d2534aac20594bf23215d12d5bb6478d31a63f92598a5f740"
 }

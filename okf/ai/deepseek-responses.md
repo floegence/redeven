@@ -57,6 +57,13 @@ links. An opaque completed operation has an explicit missing-details notice and
 no empty disclosure. Explicitly empty lists are distinct from missing details.
 Answer citations never become fabricated per-call search results.
 
+Redeven's public Activity payload allowlist preserves `operation`, `url`,
+`pattern`, and `results_provided` alongside the existing query and result fields.
+Both live items and historical timeline blocks pass through this product
+sanitizer; tests must cross that boundary rather than inject payloads directly
+into the UI. Canonical records that already contain these facts need no migration
+or repeat search when the public projection is corrected.
+
 Desktop and Env App share [the web operation presentation](../../internal/flower_ui/src/WebSearchActivity.tsx).
 The source list initially shows five entries, with keyboard-accessible expansion;
 source titles, domains, full URLs, and two-line snippets support inspection.
