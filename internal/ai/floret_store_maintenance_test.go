@@ -208,6 +208,8 @@ func TestClassifyFloretStorageOpenErrorFailsClosedForUnknownAndPermissionErrors(
 		class FloretStoreStartupClass
 	}{
 		{name: "unknown io", err: errors.New("opaque storage failure"), class: FloretStoreStartupIOError},
+		{name: "opaque temporary text", err: errors.New("provider temporarily unavailable"), class: FloretStoreStartupIOError},
+		{name: "canonical import conflict", err: flruntime.ErrRequestConflict, class: FloretStoreStartupMigrationFailed},
 		{name: "permission", err: os.ErrPermission, class: FloretStoreStartupEnvironmentPermissionError},
 	}
 	for _, test := range tests {

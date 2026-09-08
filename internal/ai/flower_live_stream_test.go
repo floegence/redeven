@@ -469,7 +469,7 @@ func TestFlowerWorkspaceReadyUsesTypedRuntimeViewWithoutProjectionMirror(t *test
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { close(release) })
-	svc.floretEffects.put(identity.ThreadID(thread.ThreadID), "request-workspace-ready", floretEffectRequest{agent: agent})
+	svc.floretEffects.put(identity.ThreadID(thread.ThreadID), "request-workspace-ready", floretEffectRequest{agent: agent, meta: *meta})
 	result, err := svc.threadRuntime.Send(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), Input: flruntime.UserInput{Text: "remain active for baseline"}, RequestKey: "request-workspace-ready"})
 	if err != nil {
 		t.Fatal(err)

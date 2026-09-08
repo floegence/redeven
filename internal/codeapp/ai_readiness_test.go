@@ -533,3 +533,52 @@ func assertAIServiceCloseCount(t *testing.T, mu *sync.Mutex, counts map[*ai.Serv
 		t.Fatalf("service %p close count = %d, want %d", service, got, want)
 	}
 }
+
+func TestAIReadinessControllerDoesNotRetryAnUnclosedConstructor(t *testing.T) {
+	var creates atomic.Int32
+	controller := newAIReadinessController(context.Background(), ai.Options{}, func(context.Context, ai.Options) (*ai.Service, error) {
+		creates.Add(1)
+		return nil, errors.Join(ai.ErrFlowerGenerationClose, &ai.FloretStoreStartupError{Class: ai.FloretStoreStartupTemporarilyBlocked, Retryable: true, SafeToRetry: true})
+	}, nil)
+	controller.Start()
+	waitForAIReadinessState(t, controller, appserver.AIReadinessBlocked)
+	if creates.Load() != 1 {
+		t.Fatal("retried storage whose constructor did not close")
+	}
+	if err := controller.RetryAIReadiness(); !errors.Is(err, appserver.ErrAIServiceUnavailable) {
+		t.Fatalf("manual retry=%v", err)
+	}
+	if err := controller.Close(); !errors.Is(err, ai.ErrFlowerGenerationClose) {
+		t.Fatalf("close=%v", err)
+	}
+}
+
+func TestAIReadinessRestoreRejectsMissingSnapshotWithoutDraining(t *testing.T) {
+	service := new(ai.Service)
+	var closes atomic.Int32
+	controller := newAIReadinessController(t.Context(), ai.Options{StateDir: t.TempDir()},
+		func(context.Context, ai.Options) (*ai.Service, error) { return service, nil },
+		func(*ai.Service) error { closes.Add(1); return nil })
+	t.Cleanup(func() { _ = controller.Close() })
+	controller.Start()
+	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
+	_, leaseCtx, generation, release, err := controller.AcquireAIService(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if err := controller.RestoreFlowerSnapshot("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
+		t.Fatal("missing snapshot was accepted")
+	}
+	if leaseCtx.Err() != nil || closes.Load() != 0 || controller.AIReadiness().State != appserver.AIReadinessReady {
+		t.Fatal("invalid recovery interrupted a usable generation")
+	}
+	current, _, nextGeneration, nextRelease, err := controller.AcquireAIService(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nextRelease()
+	if current != service || nextGeneration != generation {
+		t.Fatal("invalid recovery replaced the generation")
+	}
+}

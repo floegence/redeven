@@ -576,6 +576,12 @@ type executionAuthorityThreadViewer interface {
 
 func executionAuthorityProtected(authority threadstore.ExecutionAuthority, view flruntime.ThreadView) bool {
 	turnID := strings.TrimSpace(authority.TurnID)
+	// Queue promotion is canonical before its effect binds the product record.
+	// Until that binding exists, an active or retryable thread cannot prove this
+	// older authority is unused. Keep it through this narrow handoff.
+	if turnID == "" && (view.Activity == flruntime.ThreadActivityActive || view.LastOutcome != nil && *view.LastOutcome == flruntime.TurnOutcomeFailed) {
+		return true
+	}
 	if turnID != "" && view.TurnID.String() == turnID {
 		if view.Activity == flruntime.ThreadActivityActive {
 			return true
@@ -661,13 +667,15 @@ func (s *Service) scheduleThreadstoreCompaction(reason string) {
 		return
 	}
 	s.mu.Lock()
-	if s.compactionScheduled || s.threadsDB == nil {
+	if s.serviceClosing || s.compactionScheduled || s.threadsDB == nil {
 		s.mu.Unlock()
 		return
 	}
 	s.compactionScheduled = true
+	s.serviceWorkers.Add(1)
 	s.mu.Unlock()
 	go func() {
+		defer s.serviceWorkers.Done()
 		defer func() {
 			s.mu.Lock()
 			s.compactionScheduled = false

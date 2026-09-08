@@ -4,6 +4,8 @@ import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 
 export type AIReadinessState =
   | 'unavailable'
+  | 'backing_up'
+  | 'restoring'
   | 'inspecting'
   | 'optimizing'
   | 'migrating'
@@ -19,6 +21,10 @@ export type AIReadinessReasonCode =
   | 'unsupported_store'
   | 'store_integrity_error'
   | 'environment_permission_error'
+  | 'insufficient_space'
+  | 'migration_failed'
+  | 'backup_failed'
+  | 'restore_failed'
   | 'store_io_error'
   | 'cancelled'
   | 'contract_error'
@@ -31,6 +37,7 @@ export type AIReadinessSnapshot = Readonly<{
   reason_code: AIReadinessReasonCode | '';
   retryable: boolean;
   safe_to_retry: boolean;
+  component?: 'product' | 'floret' | 'read_state' | 'uploads' | 'backup' | 'recovery';
   issue_count?: number;
   trace_id?: string;
   startup_phase?: string;
@@ -74,6 +81,8 @@ const CONTRACT_ERROR_REASON: AIReadinessReasonCode = 'ai_readiness_contract_erro
 
 const readinessStates = new Set<AIReadinessState>([
   'unavailable',
+  'backing_up',
+  'restoring',
   'inspecting',
   'optimizing',
   'migrating',
@@ -90,6 +99,10 @@ const readinessReasonCodes = new Set<AIReadinessReasonCode>([
   'unsupported_store',
   'store_integrity_error',
   'environment_permission_error',
+  'insufficient_space',
+  'migration_failed',
+  'backup_failed',
+  'restore_failed',
   'store_io_error',
   'cancelled',
   'contract_error',
@@ -156,6 +169,9 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
 
   const issueCount = value.issue_count === undefined ? 0 : value.issue_count;
   if (!Number.isSafeInteger(issueCount) || (issueCount as number) < 0) return contractErrorSnapshot;
+  const component = value.component;
+  if (component !== undefined && (typeof component !== 'string' || !['product', 'floret', 'read_state', 'uploads', 'backup', 'recovery'].includes(component))) return contractErrorSnapshot;
+  const owner = component as AIReadinessSnapshot['component'];
   const traceID = optionalDiagnostic(value.trace_id, 128);
   const startupPhase = optionalDiagnostic(value.startup_phase, 64);
   const retryReason = optionalDiagnostic(value.retry_reason, 128);
@@ -185,6 +201,7 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
       reason_code: (reasonCode ?? '') as AIReadinessReasonCode | '',
       retryable: value.retryable,
       safe_to_retry: value.safe_to_retry,
+      ...(owner ? { component: owner } : {}),
       ...(traceID ? { trace_id: traceID } : {}),
       ...(startupPhase ? { startup_phase: startupPhase } : {}),
       ...(retryReason ? { retry_reason: retryReason } : {}),
@@ -198,6 +215,7 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
     if (state === 'ready') return stableSnapshot('ready');
     return Object.freeze({
       ...stableSnapshot(state as Exclude<AIReadinessState, 'blocked'>),
+      ...(owner ? { component: owner } : {}),
       ...(traceID ? { trace_id: traceID } : {}),
       ...(startupPhase ? { startup_phase: startupPhase } : {}),
     });
@@ -210,7 +228,8 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
     reason_code: reasonCode as AIReadinessReasonCode,
     retryable: value.retryable,
     safe_to_retry: value.safe_to_retry,
-    ...(traceID ? { trace_id: traceID } : {}),
+    ...(owner ? { component: owner } : {}),
+      ...(traceID ? { trace_id: traceID } : {}),
     ...(startupPhase ? { startup_phase: startupPhase } : {}),
     ...(retryReason ? { retry_reason: retryReason } : {}),
   });
@@ -231,7 +250,9 @@ function normalizedDelay(value: number | undefined, fallback: number): number {
 }
 
 function shouldPoll(snapshot: AIReadinessSnapshot): boolean {
-  return snapshot.state === 'unavailable'
+  return snapshot.state === 'restoring'
+    || snapshot.state === 'backing_up'
+    || snapshot.state === 'unavailable'
     || snapshot.state === 'inspecting'
     || snapshot.state === 'optimizing'
     || snapshot.state === 'migrating'

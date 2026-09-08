@@ -2019,3 +2019,13 @@ describe('Env local Flower surface adapter', () => {
     expect(openFileBrowser).not.toHaveBeenCalled();
   });
 });
+
+it('fetches the current restore generation only when explicitly requested', async () => {
+  fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { storage_generation: 'a'.repeat(32) } }));
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_a', envLabel: 'Demo', rpc: { ai: {} } as any });
+  expect(fetchMock).not.toHaveBeenCalled();
+  await expect(adapter.resolveStorageGeneration?.()).resolves.toBe('a'.repeat(32));
+  expect(fetchMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/storage-generation', expect.objectContaining({ method: 'GET' }));
+  fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { storage_generation: 'invalid' } }));
+  await expect(adapter.resolveStorageGeneration?.()).rejects.toThrow();
+});

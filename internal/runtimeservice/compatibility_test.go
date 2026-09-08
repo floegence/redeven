@@ -16,11 +16,11 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 11 {
-		t.Fatalf("CompatibilityEpoch = %d, want canonical Flower title contract epoch 11", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 12 {
+		t.Fatalf("CompatibilityEpoch = %d, want Flower restore transport contract epoch 12", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 2 || contract.UpgradeFromRuntimeEpochs[0] != 9 || contract.UpgradeFromRuntimeEpochs[1] != 10 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epoch 9 and 10 upgrades", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 3 || contract.UpgradeFromRuntimeEpochs[0] != 9 || contract.UpgradeFromRuntimeEpochs[1] != 10 || contract.UpgradeFromRuntimeEpochs[2] != 11 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epoch 9, 10 and 11 upgrades", contract.UpgradeFromRuntimeEpochs)
 	}
 	if contract.MinimumDesktopVersion != "v0.12.0" || contract.MinimumRuntimeVersion != "v0.12.0" {
 		t.Fatalf(

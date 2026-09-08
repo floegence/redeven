@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 var (
@@ -41,8 +42,11 @@ const (
 )
 
 type Options struct {
-	Logger   *slog.Logger
-	StateDir string
+	Logger                 *slog.Logger
+	StateDir               string
+	BuildVersion           string
+	DeferExecution         bool
+	skipStorageMaintenance bool
 
 	AgentHomeDir    string
 	Shell           string
@@ -93,7 +97,20 @@ type Options struct {
 }
 
 type Service struct {
-	log *slog.Logger
+	serviceClosing         bool // guarded by mu; fences background worker admission
+	storageGeneration      string
+	log                    *slog.Logger
+	activationMu           sync.Mutex
+	activated              bool
+	serviceClosed          bool
+	closeOnce              sync.Once
+	closeResult            error
+	serviceWorkers         sync.WaitGroup
+	activateFloret         func(context.Context) error
+	prepareFloretRestore   func(context.Context) (flruntime.RestorePreparation, error)
+	readState              *threadreadstate.Store
+	pendingStartupThreads  []string
+	skipStorageMaintenance bool
 
 	stateDir     string
 	agentHomeDir string
@@ -224,8 +241,17 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	uploadsDir := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "uploads")
+	if !opts.skipStorageMaintenance {
+		if err := prepareFlowerStorage(ctx, opts); err != nil {
+			return nil, err
+		}
+	}
+	storageGeneration, err := readFlowerStorageGeneration(opts.StateDir)
+	if err != nil {
+		return nil, flowerStorageError("recovery", "verifying", err)
+	}
 	if err := os.MkdirAll(uploadsDir, 0o700); err != nil {
-		return nil, err
+		return nil, flowerStorageError("uploads", "opening", err)
 	}
 	persistTO := opts.PersistOpTimeout
 	if persistTO <= 0 {
@@ -241,15 +267,21 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
-	pendingInputMigration := &pendingInputMigrationState{}
 	ts, err := threadstore.OpenWithPendingInputMigration(
 		ctx,
 		threadsPath,
-		newPendingInputMigrationHandler(opts, floretBootstrap.threadRuntime, floretBootstrap.effects, pendingInputMigration),
+		newPendingInputMigrationHandler(floretBootstrap.threadRuntime, floretBootstrap.effects),
 	)
 	if err != nil {
-		_ = floretBootstrap.close()
-		return nil, err
+		return nil, errors.Join(flowerStorageError("product", "migrating", err), flowerGenerationCloseError(floretBootstrap.close()))
+	}
+	readPath, err := threadreadstate.PreparePath(ctx, opts.StateDir)
+	if err != nil {
+		return nil, errors.Join(flowerStorageError("read_state", "migrating", err), flowerGenerationCloseError(errors.Join(ts.Close(), floretBootstrap.close())))
+	}
+	reads, err := threadreadstate.Open(readPath)
+	if err != nil {
+		return nil, errors.Join(flowerStorageError("read_state", "migrating", err), flowerGenerationCloseError(errors.Join(ts.Close(), floretBootstrap.close())))
 	}
 
 	resolveProviderKey := opts.ResolveProviderAPIKey
@@ -262,9 +294,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	toolTargetPolicy := normalizeToolTargetPolicy(opts.ToolTargetPolicy)
 	if toolTargetPolicy.requiresExplicitTarget() && opts.TargetToolExecutor == nil {
-		_ = ts.Close()
-		_ = floretBootstrap.close()
-		return nil, errors.New("explicit target tool policy requires TargetToolExecutor")
+		return nil, errors.Join(errors.New("explicit target tool policy requires TargetToolExecutor"), flowerGenerationCloseError(errors.Join(reads.Close(), ts.Close(), floretBootstrap.close())))
 	}
 	maxWall := opts.RunMaxWallTime
 	if maxWall <= 0 {
@@ -287,6 +317,11 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
+		activateFloret:                  floretBootstrap.activate,
+		prepareFloretRestore:            floretBootstrap.prepareRestore,
+		readState:                       reads,
+		storageGeneration:               storageGeneration,
+		skipStorageMaintenance:          opts.skipStorageMaintenance,
 		log:                             logger,
 		stateDir:                        strings.TrimSpace(opts.StateDir),
 		agentHomeDir:                    agentHomeDir,
@@ -320,10 +355,11 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		capabilityResolver:              capabilityResolver,
 		skillManager:                    newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
 		flowerReadStateCleaner:          opts.FlowerReadStateCleaner,
-		maintenanceStopCh:               make(chan struct{}),
-		maintenanceDoneCh:               make(chan struct{}),
 		lifecycleCtx:                    lifecycleCtx,
 		lifecycleCancel:                 lifecycleCancel,
+	}
+	if svc.flowerReadStateCleaner == nil {
+		svc.flowerReadStateCleaner = reads
 	}
 	svc.flowerRuntimeCurrentPublisher = newFlowerRuntimeCurrentPublisher(
 		flowerRuntimeCurrentPublishInterval,
@@ -344,46 +380,33 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	svc.typedSendOps = make(map[string]*typedSendOperation)
 	svc.floretEffects.bind(svc)
-	if err := svc.resumeMigratedPendingInputs(ctx, pendingInputMigration.threadIDs); err != nil {
-		closeServiceBeforeMaintenance(svc)
-		return nil, fmt.Errorf("resume migrated pending inputs: %w", err)
+	if svc.flowerReadStateCleaner == nil {
+		svc.flowerReadStateCleaner = reads
 	}
-	svc.startFlowerRuntimeViewPump()
+	if _, err := svc.ReconcileCanonicalRootOwnership(ctx); err != nil {
+		return nil, errors.Join(flowerStorageError("product", "verifying", err), svc.Close())
+	}
+	if err := svc.prepareStartupThreads(ctx); err != nil {
+		return nil, errors.Join(flowerStorageError("floret", "verifying", err), svc.Close())
+	}
 	uploadRecoveryCtx, cancelUploadRecovery := context.WithTimeout(ctx, persistTO)
 	interruptedUploads, uploadRecoveryErr := svc.interruptUploadAttemptsFromPreviousProcess(uploadRecoveryCtx)
 	cancelUploadRecovery()
 	if uploadRecoveryErr != nil {
-		closeServiceBeforeMaintenance(svc)
-		return nil, fmt.Errorf("recover interrupted uploads: %w", uploadRecoveryErr)
+		return nil, errors.Join(flowerStorageError("uploads", "verifying", uploadRecoveryErr), svc.Close())
 	}
 	if interruptedUploads > 0 {
 		logger.Info("ai: interrupted upload recovery completed", "count", interruptedUploads)
 	}
-	svc.startBackgroundMaintenance()
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, svc.Close())
+	}
+	if !opts.DeferExecution {
+		if err := svc.Activate(ctx); err != nil {
+			return nil, errors.Join(err, svc.Close())
+		}
+	}
 	return svc, nil
-}
-
-func closeServiceBeforeMaintenance(s *Service) {
-	if s == nil {
-		return
-	}
-	if s.flowerRuntimeCurrentPublisher != nil {
-		s.flowerRuntimeCurrentPublisher.Close()
-	}
-	if s.flowerThreadSummaryPublisher != nil {
-		s.flowerThreadSummaryPublisher.Close()
-	}
-	if s.terminalProcesses != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-		_ = s.terminalProcesses.Close(ctx)
-		cancel()
-	}
-	if s.threadsDB != nil {
-		_ = s.threadsDB.Close()
-	}
-	if s.closeFloret != nil {
-		_ = s.closeFloret()
-	}
 }
 
 func (s *Service) startFlowerRuntimeViewPump() {
@@ -397,7 +420,9 @@ func (s *Service) startFlowerRuntimeViewPump() {
 		}
 		return
 	}
+	s.serviceWorkers.Add(1)
 	go func() {
+		defer s.serviceWorkers.Done()
 		defer subscription.Close()
 		for {
 			current, nextErr := subscription.Next(s.lifecycleCtx)
@@ -436,7 +461,16 @@ func (s *Service) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.closeOnce.Do(func() { s.closeResult = s.closeService() })
+	return s.closeResult
+}
+
+func (s *Service) closeService() error {
+	s.activationMu.Lock()
+	defer s.activationMu.Unlock()
+	s.serviceClosed = true
 	s.mu.Lock()
+	s.serviceClosing = true
 	terminalProcesses := s.terminalProcesses
 	s.terminalProcesses = nil
 	ts := s.threadsDB
@@ -480,6 +514,7 @@ func (s *Service) Close() error {
 	if maintenanceDoneCh != nil {
 		<-maintenanceDoneCh
 	}
+	s.serviceWorkers.Wait()
 	var floretCloseErr error
 	if closeFloret != nil {
 		floretCloseErr = closeFloret()
@@ -493,7 +528,11 @@ func (s *Service) Close() error {
 	if ts != nil {
 		threadCloseErr = ts.Close()
 	}
-	return errors.Join(terminalCloseErr, floretCloseErr, threadCloseErr)
+	var readCloseErr error
+	if s.readState != nil {
+		readCloseErr = s.readState.Close()
+	}
+	return flowerGenerationCloseError(errors.Join(terminalCloseErr, floretCloseErr, threadCloseErr, readCloseErr))
 }
 
 func (s *Service) snapshotThreadStore() *threadstore.Store {

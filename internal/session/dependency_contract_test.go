@@ -568,7 +568,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.5.0"
+		floretVersion = "v7.6.1"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -656,14 +656,14 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v7 v7.5.0",
+			"github.com/floegence/floret/v7 v7.6.1",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v5.0.1 plus Floe Webapp v0.49.0 for both the Desktop shell and Env App",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 11",
+			"\"compatibility_epoch\": 12",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",
@@ -768,7 +768,7 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 	bootstrap := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_bootstrap.go"))
 	for _, marker := range []string{
 		"flruntime.Open", "*flruntime.Host", "host.ThreadService(effects)",
-		"threadRuntime flruntime.ThreadService", "effects       *floretEffectAdapter",
+		"threadRuntime  flruntime.ThreadService", "effects        *floretEffectAdapter",
 	} {
 		if !strings.Contains(bootstrap, marker) {
 			t.Fatalf("floret_bootstrap.go is missing typed runtime boundary %q", marker)

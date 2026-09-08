@@ -34,6 +34,7 @@ type typedSendOperation struct {
 }
 
 type SendUserTurnRequest struct {
+	StorageGeneration string               `json:"storage_generation,omitempty"`
 	ClientRequestID   string               `json:"client_request_id,omitempty"`
 	ThreadID          string               `json:"thread_id"`
 	Create            *CreateThreadRequest `json:"create,omitempty"`
@@ -81,6 +82,9 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	}
 	if err := requireRWX(meta); err != nil {
 		return SendUserTurnResponse{}, err
+	}
+	if req.StorageGeneration != s.storageGeneration {
+		return SendUserTurnResponse{}, ErrFlowerStorageRestored
 	}
 	if err := validateInlineTurnText(req.Input.Text); err != nil {
 		return SendUserTurnResponse{}, err

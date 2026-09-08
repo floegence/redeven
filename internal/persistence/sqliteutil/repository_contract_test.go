@@ -29,6 +29,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 	}
 	wantDirectOpeners := map[string]struct{}{
 		"internal/persistence/sqliteutil/engine.go": {}, // The migration engine owns the physical connection.
+		"internal/persistence/sqliteutil/backup.go": {}, // Owner-requested read-only SQLite backup; no product schema or migration logic.
 	}
 	wantFloretOpeners := map[string]struct{}{
 		"internal/ai/floret_store_maintenance.go": {},

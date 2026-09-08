@@ -23,7 +23,7 @@ export type TransportOutboxEntry = Readonly<{
   /** Frozen effective settings for provisional UI only; never authorization evidence. */
   provisionalThreadSettings?: TransportOutboxProvisionalThreadSettings;
   /** A durable terminal state that must not be retried automatically. */
-  terminalError?: 'attachments_unavailable_after_restart';
+  terminalError?: 'attachments_unavailable_after_restart' | 'storage_restored';
 }>;
 
 export type TransportOutboxReconciliation = Readonly<{
@@ -220,7 +220,7 @@ function create(
         threadId: clean(entry.threadId),
         input: { ...entry.input, client_request_id: requestId },
         attachmentLabels: entry.attachmentLabels.map(clean).filter(Boolean),
-        terminalError: entry.terminalError === 'attachments_unavailable_after_restart'
+        terminalError: (entry.terminalError === 'attachments_unavailable_after_restart' || entry.terminalError === 'storage_restored')
           ? entry.terminalError
           : undefined,
       });
@@ -322,7 +322,7 @@ export async function restoreTransportOutbox(): Promise<TransportOutbox> {
       attachmentLabels: Array.isArray(entry.attachmentLabels)
         ? entry.attachmentLabels.map(clean).filter(Boolean)
         : Array.isArray(legacy.attachmentNames) ? legacy.attachmentNames.map(clean).filter(Boolean) : [],
-      terminalError: entry.terminalError === 'attachments_unavailable_after_restart' ? entry.terminalError : (
+      terminalError: (entry.terminalError === 'attachments_unavailable_after_restart' || entry.terminalError === 'storage_restored') ? entry.terminalError : (
         (Array.isArray(input.attachment_ids) && input.attachment_ids.length > 0)
           ? 'attachments_unavailable_after_restart'
           : undefined

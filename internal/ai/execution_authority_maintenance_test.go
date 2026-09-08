@@ -53,6 +53,7 @@ func TestExecutionAuthorityPruningUsesCanonicalThreadView(t *testing.T) {
 		"thread_deleted":  {err: flruntime.ErrThreadDeleted},
 	}}
 	authorities := []threadstore.ExecutionAuthority{
+		{RequestKey: "request_promoting", ThreadID: "thread_active", CreatedAtUnixMs: 1},
 		{RequestKey: "request_active", ThreadID: "thread_active", TurnID: "turn_active", CreatedAtUnixMs: 1},
 		{RequestKey: "request_waiting", ThreadID: "thread_waiting", TurnID: "turn_waiting", CreatedAtUnixMs: 1},
 		{RequestKey: "request_queued", ThreadID: "thread_queued", CreatedAtUnixMs: 1},
@@ -91,7 +92,7 @@ func TestExecutionAuthorityPruningUsesCanonicalThreadView(t *testing.T) {
 			t.Fatalf("deleted authority %q=%#v err=%v", requestKey, authority, err)
 		}
 	}
-	for _, requestKey := range []string{"request_active", "request_waiting", "request_queued", "request_failed", "request_recent", "request_error"} {
+	for _, requestKey := range []string{"request_promoting", "request_active", "request_waiting", "request_queued", "request_failed", "request_recent", "request_error"} {
 		if authority, err := store.GetExecutionAuthority(t.Context(), requestKey); err != nil || authority == nil {
 			t.Fatalf("preserved authority %q=%#v err=%v", requestKey, authority, err)
 		}

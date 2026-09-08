@@ -892,6 +892,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       });
       if (!result.ok) throw new Error(result.message || 'Desktop could not preview this attachment.');
     },
+    resolveStorageGeneration: async () => {
+      const result = await runtimeJSON<{ storage_generation: string }>(bridge, 'GET', '/_redeven_proxy/api/ai/storage-generation');
+      if (typeof result.storage_generation !== 'string' || (result.storage_generation && !/^[a-f0-9]{32}$/u.test(result.storage_generation))) throw new Error('Invalid Flower storage generation.');
+      return result.storage_generation;
+    },
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       return launchLocalEnvironmentFlowerTurn(bridge, input);
     },

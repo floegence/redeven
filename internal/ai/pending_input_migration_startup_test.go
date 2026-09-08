@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	_ "modernc.org/sqlite"
@@ -171,7 +174,8 @@ func TestPendingInputCanonicalFailureRollsBackProductMigration(t *testing.T) {
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir,
 		Shell: "/bin/bash", Config: &config.AIConfig{}, PersistOpTimeout: time.Second,
 	})
-	if err == nil || !strings.Contains(err.Error(), "import retired pending inputs") {
+	var startupError *FloretStoreStartupError
+	if !errors.As(err, &startupError) || startupError.Class != FloretStoreStartupMigrationFailed || startupError.Component != "product" {
 		if failed != nil {
 			_ = failed.Close()
 		}
@@ -326,5 +330,80 @@ func assertPendingMigrationAuthorityForTest(t *testing.T, db *sql.DB, requestID 
 			requestID, endpointID, namespacePublicID, channelID, userPublicID, userEmail,
 			want.EndpointID, want.NamespacePublicID, want.ChannelID, want.UserPublicID, want.UserEmail,
 		)
+	}
+}
+
+type interruptedPendingImport struct{ flruntime.ThreadService }
+
+func (service interruptedPendingImport) ImportPendingInputs(ctx context.Context, input flruntime.ImportPendingInputsInput) (flruntime.ImportResult, error) {
+	result, err := service.ThreadService.ImportPendingInputs(ctx, input)
+	if err != nil {
+		return result, err
+	}
+	return result, errors.New("simulated exit after canonical commit")
+}
+
+func TestPendingInputMigrationContinuesAfterCanonicalCommitWithoutProductCommit(t *testing.T) {
+	state := t.TempDir()
+	opts := fixtureMaintenanceOptions(t, state)
+	opts.Config = &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
+	service, err := NewServiceContext(t.Context(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := session.Meta{EndpointID: "env_partial", NamespacePublicID: "ns_partial", ChannelID: "ch_partial", UserPublicID: "user_partial", CanRead: true, CanWrite: true, CanExecute: true}
+	thread, err := service.CreateThread(t.Context(), &meta, "partial import", "openai/gpt-5-mini", "approval_required", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.Close(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(state, "ai", "threads.sqlite")
+	replaceCurrentThreadstoreWithV4ForTest(t, path)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertPendingMigrationThreadForTest(t, db, meta, thread.ThreadID)
+	raw, _ := json.Marshal(meta)
+	insertPendingMigrationRecordForTest(t, db, "request_partial", meta.EndpointID, thread.ThreadID, "preserve exactly", string(raw), 1)
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := openFloretRuntime(t.Context(), filepath.Join(state, "ai", "floret_threads.sqlite"), nil, opts.Logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial, err := threadstore.OpenWithPendingInputMigration(t.Context(), path, newPendingInputMigrationHandler(interruptedPendingImport{runtime.threadRuntime}, runtime.effects))
+	if err == nil {
+		partial.Close()
+		t.Fatal("expected interrupted product transaction")
+	}
+	view, err := runtime.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if err != nil || len(view.Queue) != 1 || view.Activity != flruntime.ThreadActivityIdle {
+		t.Fatalf("partial canonical commit: %+v %v", view, err)
+	}
+	before, _ := json.Marshal(view.Queue[0])
+	if err = runtime.close(); err != nil {
+		t.Fatal(err)
+	}
+	// A new generation imports the exact same historical record again.
+	resumed, err := NewServiceContext(t.Context(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resumed.Close()
+	view, err = resumed.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if err != nil || len(view.Queue) != 1 || view.Activity != flruntime.ThreadActivityIdle {
+		t.Fatalf("duplicate or executing retry: %+v %v", view, err)
+	}
+	after, _ := json.Marshal(view.Queue[0])
+	if !bytes.Equal(before, after) {
+		t.Fatalf("canonical import changed on retry:\n%s\n%s", before, after)
+	}
+	authority, err := resumed.threadsDB.GetExecutionAuthority(t.Context(), "request_partial")
+	if err != nil || authority == nil || authority.UserPublicID != meta.UserPublicID {
+		t.Fatalf("authority=%+v %v", authority, err)
 	}
 }

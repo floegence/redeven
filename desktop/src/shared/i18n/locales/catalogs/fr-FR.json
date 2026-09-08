@@ -340,7 +340,10 @@
       "workingDirPickerConfirm": "Choisir",
       "linkedContextLabel": "Contexte associé",
       "toolApprovalApproveBatch": "Tout autoriser",
-      "toolApprovalApproveBatchAction": "Autoriser les {count} approbations d’outils en attente"
+      "toolApprovalApproveBatchAction": "Autoriser les {count} approbations d’outils en attente",
+      "restoredInputTitle": "Entrée conservée après restauration",
+      "restoredInputDescription": "Cette entrée ne sera pas exécutée automatiquement. Copiez-la dans une nouvelle tâche pour la relancer.",
+      "restoredInputCopy": "Copier l’entrée"
     },
     "threadList": {
       "title": "Discussions",

@@ -55,6 +55,7 @@ export type AIRequestUserInputResponse = {
 };
 
 export type AISendUserTurnRequest = {
+  storage_generation?: string;
   threadId: string;
   model?: string;
   input: {

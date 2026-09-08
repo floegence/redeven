@@ -17,9 +17,11 @@ import (
 // floretBootstrapResult contains the only two Floret runtime boundaries used
 // by Redeven: the typed thread service and its product effect adapter.
 type floretBootstrapResult struct {
-	close         func() error
-	threadRuntime flruntime.ThreadService
-	effects       *floretEffectAdapter
+	activate       func(context.Context) error
+	prepareRestore func(context.Context) (flruntime.RestorePreparation, error)
+	close          func() error
+	threadRuntime  flruntime.ThreadService
+	effects        *floretEffectAdapter
 }
 
 // floretEffectAdapter is a short-lived command inbox, not lifecycle state. A
@@ -80,6 +82,11 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 		var err error
 		pending, err = service.restoreFloretEffectRequest(ctx, request)
 		if err != nil {
+			return nil, err
+		}
+	}
+	if request.RequestKey != "" && request.TurnID != "" {
+		if err := service.persistExecutionAuthority(ctx, &pending.meta, request.ThreadID.String(), request.RequestKey, request.TurnID.String()); err != nil {
 			return nil, err
 		}
 	}
@@ -195,9 +202,11 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 		return nil, err
 	}
 	return &floretBootstrapResult{
-		close:         func() error { return host.Shutdown(context.Background()) },
-		threadRuntime: threadRuntime,
-		effects:       effects,
+		activate:       host.Activate,
+		prepareRestore: host.PrepareRestore,
+		close:          func() error { return host.Shutdown(context.Background()) },
+		threadRuntime:  threadRuntime,
+		effects:        effects,
 	}, nil
 }
 
@@ -212,8 +221,7 @@ func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(
 	}
 	result, err := configureFloretRuntime(host)
 	if err != nil {
-		_ = host.Shutdown(context.Background())
-		return nil, err
+		return nil, errors.Join(err, flowerGenerationCloseError(host.Shutdown(context.Background())))
 	}
 	return result, nil
 }

@@ -1,0 +1,499 @@
+package pendinginputlegacy
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
+	"path"
+	"strings"
+	"unicode/utf8"
+)
+
+const ContextActionSchemaVersion = 2
+
+var ErrInvalidContextAction = errors.New("invalid context action")
+
+const (
+	contextActionAskFlowerID       = "assistant.ask.flower"
+	contextActionFlowerProvider    = "flower"
+	contextActionLocalityAuto      = "auto"
+	contextActionLocalityCurrent   = "current_runtime"
+	contextActionLocalityRemote    = "remote_runtime"
+	contextActionLocalityLocal     = "local_model_remote_target"
+	contextActionRuntimeHintAuto   = "auto"
+	contextActionRuntimeHintLocal  = "local_environment"
+	contextActionRuntimeHintEnv    = "env_local"
+	contextActionSessionLocal      = "local_runtime"
+	contextActionSessionProvider   = "provider_environment"
+	contextActionSessionSSH        = "ssh_environment"
+	contextActionSessionExternal   = "external_local_ui"
+	contextActionSessionGateway    = "runtime_gateway"
+	contextActionSessionSandbox    = "region_sandbox"
+	contextActionSurfaceWelcomeEnv = "desktop_welcome_environment_card"
+	contextActionSurfaceComposer   = "flower_composer"
+	contextActionSurfaceFile       = "file_browser"
+	contextActionSurfaceTerminal   = "terminal"
+	contextActionSurfacePreview    = "file_preview"
+	contextActionSurfaceMonitoring = "monitoring"
+	contextActionSurfaceGit        = "git_browser"
+	contextActionSurfaceEditor     = "editor_preview"
+	contextActionKindFilePath      = "file_path"
+	contextActionKindFileSelection = "file_selection"
+	contextActionKindTerminal      = "terminal_selection"
+	contextActionKindProcess       = "process_snapshot"
+	contextActionKindText          = "text_snapshot"
+)
+
+type ContextActionEnvelope struct {
+	SchemaVersion       int                         `json:"schema_version"`
+	ActionID            string                      `json:"action_id"`
+	Provider            string                      `json:"provider,omitempty"`
+	Target              ContextActionTarget         `json:"target"`
+	Source              ContextActionSource         `json:"source"`
+	ExecutionContext    *ContextActionExecutionHint `json:"execution_context,omitempty"`
+	Context             []ContextActionContextItem  `json:"context"`
+	Presentation        ContextActionPresentation   `json:"presentation"`
+	SuggestedWorkingDir string                      `json:"suggested_working_dir_abs,omitempty"`
+	wireFields          map[string]json.RawMessage
+}
+
+func (envelope *ContextActionEnvelope) UnmarshalJSON(data []byte) error {
+	type contextActionEnvelopeWire ContextActionEnvelope
+	var decoded contextActionEnvelopeWire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for field := range fields {
+		switch field {
+		case "schema_version", "action_id", "provider", "target", "source", "execution_context",
+			"context", "presentation", "suggested_working_dir_abs":
+		default:
+			return fmt.Errorf("json: unknown field %q", field)
+		}
+	}
+	*envelope = ContextActionEnvelope(decoded)
+	envelope.wireFields = fields
+	return nil
+}
+
+type ContextActionTarget struct {
+	TargetID string `json:"target_id"`
+	Locality string `json:"locality"`
+}
+
+type ContextActionSource struct {
+	Surface   string `json:"surface"`
+	SurfaceID string `json:"surface_id,omitempty"`
+}
+
+type ContextActionExecutionHint struct {
+	CurrentTargetID   string `json:"current_target_id,omitempty"`
+	SourceEnvPublicID string `json:"source_env_public_id,omitempty"`
+	RuntimeHint       string `json:"runtime_hint,omitempty"`
+	SessionSource     string `json:"session_source,omitempty"`
+}
+
+type ContextActionPresentation struct {
+	Label          string `json:"label"`
+	Priority       int    `json:"priority"`
+	StatusLabel    string `json:"status_label,omitempty"`
+	DisabledReason string `json:"disabled_reason,omitempty"`
+}
+
+type ContextActionContextItem struct {
+	Kind           string  `json:"kind"`
+	Path           string  `json:"path,omitempty"`
+	IsDirectory    bool    `json:"is_directory,omitempty"`
+	RootLabel      string  `json:"root_label,omitempty"`
+	Selection      string  `json:"selection,omitempty"`
+	SelectionChars int     `json:"selection_chars,omitempty"`
+	WorkingDir     string  `json:"working_dir,omitempty"`
+	PID            int     `json:"pid,omitempty"`
+	Name           string  `json:"name,omitempty"`
+	Username       string  `json:"username,omitempty"`
+	CPUPercent     float64 `json:"cpu_percent,omitempty"`
+	MemoryBytes    int64   `json:"memory_bytes,omitempty"`
+	Platform       string  `json:"platform,omitempty"`
+	CapturedAtMs   int64   `json:"captured_at_ms,omitempty"`
+	Title          string  `json:"title,omitempty"`
+	Detail         string  `json:"detail,omitempty"`
+	Content        string  `json:"content,omitempty"`
+	wireFields     map[string]json.RawMessage
+}
+
+func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
+	type contextActionContextItemWire ContextActionContextItem
+	var decoded contextActionContextItemWire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for field := range fields {
+		switch field {
+		case "kind", "path", "is_directory", "root_label", "selection", "selection_chars", "working_dir",
+			"pid", "name", "username", "cpu_percent", "memory_bytes", "platform", "captured_at_ms",
+			"title", "detail", "content":
+		default:
+			return fmt.Errorf("json: unknown field %q", field)
+		}
+	}
+	*item = ContextActionContextItem(decoded)
+	item.wireFields = fields
+	return nil
+}
+
+func (item ContextActionContextItem) MarshalJSON() ([]byte, error) {
+	switch strings.TrimSpace(item.Kind) {
+	case contextActionKindFilePath:
+		return json.Marshal(struct {
+			Kind        string `json:"kind"`
+			Path        string `json:"path"`
+			IsDirectory bool   `json:"is_directory"`
+			RootLabel   string `json:"root_label,omitempty"`
+		}{contextActionKindFilePath, item.Path, item.IsDirectory, item.RootLabel})
+	case contextActionKindFileSelection:
+		return json.Marshal(struct {
+			Kind           string `json:"kind"`
+			Path           string `json:"path"`
+			Selection      string `json:"selection"`
+			SelectionChars int    `json:"selection_chars"`
+		}{contextActionKindFileSelection, item.Path, item.Selection, item.SelectionChars})
+	case contextActionKindTerminal:
+		return json.Marshal(struct {
+			Kind           string `json:"kind"`
+			WorkingDir     string `json:"working_dir,omitempty"`
+			Selection      string `json:"selection"`
+			SelectionChars int    `json:"selection_chars"`
+		}{contextActionKindTerminal, item.WorkingDir, item.Selection, item.SelectionChars})
+	case contextActionKindProcess:
+		return json.Marshal(struct {
+			Kind         string  `json:"kind"`
+			PID          int     `json:"pid"`
+			Name         string  `json:"name"`
+			Username     string  `json:"username"`
+			CPUPercent   float64 `json:"cpu_percent"`
+			MemoryBytes  int64   `json:"memory_bytes"`
+			Platform     string  `json:"platform"`
+			CapturedAtMs int64   `json:"captured_at_ms"`
+		}{contextActionKindProcess, item.PID, item.Name, item.Username, item.CPUPercent, item.MemoryBytes, item.Platform, item.CapturedAtMs})
+	case contextActionKindText:
+		return json.Marshal(struct {
+			Kind    string `json:"kind"`
+			Title   string `json:"title"`
+			Detail  string `json:"detail,omitempty"`
+			Content string `json:"content"`
+		}{contextActionKindText, item.Title, item.Detail, item.Content})
+	default:
+		return nil, fmt.Errorf("%w: unsupported context item kind", ErrInvalidContextAction)
+	}
+}
+
+func normalizeContextActionEnvelope(in *ContextActionEnvelope) *ContextActionEnvelope {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	out.SchemaVersion = ContextActionSchemaVersion
+	out.ActionID = strings.TrimSpace(out.ActionID)
+	out.Provider = strings.TrimSpace(out.Provider)
+	out.Target = ContextActionTarget{
+		TargetID: strings.TrimSpace(out.Target.TargetID),
+		Locality: strings.TrimSpace(out.Target.Locality),
+	}
+	out.Source = ContextActionSource{
+		Surface:   strings.TrimSpace(out.Source.Surface),
+		SurfaceID: strings.TrimSpace(out.Source.SurfaceID),
+	}
+	if out.ExecutionContext != nil {
+		hint := *out.ExecutionContext
+		hint.CurrentTargetID = strings.TrimSpace(hint.CurrentTargetID)
+		hint.SourceEnvPublicID = strings.TrimSpace(hint.SourceEnvPublicID)
+		hint.RuntimeHint = strings.TrimSpace(hint.RuntimeHint)
+		hint.SessionSource = strings.TrimSpace(hint.SessionSource)
+		out.ExecutionContext = &hint
+	}
+	out.Presentation = ContextActionPresentation{
+		Label:          strings.TrimSpace(out.Presentation.Label),
+		Priority:       out.Presentation.Priority,
+		StatusLabel:    strings.TrimSpace(out.Presentation.StatusLabel),
+		DisabledReason: strings.TrimSpace(out.Presentation.DisabledReason),
+	}
+	out.SuggestedWorkingDir = strings.TrimSpace(out.SuggestedWorkingDir)
+	out.Context = normalizeContextActionItems(out.Context)
+	if out.ActionID == "" || out.Target.TargetID == "" || out.Target.Locality == "" || out.Source.Surface == "" {
+		return nil
+	}
+	return &out
+}
+
+func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*ContextActionEnvelope, error) {
+	if in != nil && in.SchemaVersion != ContextActionSchemaVersion {
+		return nil, ErrInvalidContextAction
+	}
+	out := normalizeContextActionEnvelope(in)
+	if in == nil {
+		return nil, nil
+	}
+	if out == nil {
+		return nil, ErrInvalidContextAction
+	}
+	if out.ActionID != contextActionAskFlowerID ||
+		out.Provider != contextActionFlowerProvider {
+		return nil, ErrInvalidContextAction
+	}
+	_, suggestedWorkingDirWasPresent := in.wireFields["suggested_working_dir_abs"]
+	rawSuggestedWorkingDir := in.SuggestedWorkingDir
+	if (suggestedWorkingDirWasPresent && strings.TrimSpace(rawSuggestedWorkingDir) == "") ||
+		strings.ContainsAny(rawSuggestedWorkingDir, "\r\n") {
+		return nil, ErrInvalidContextAction
+	}
+	switch out.Target.Locality {
+	case contextActionLocalityAuto, contextActionLocalityCurrent, contextActionLocalityRemote, contextActionLocalityLocal:
+	default:
+		return nil, ErrInvalidContextAction
+	}
+	switch out.Source.Surface {
+	case contextActionSurfaceWelcomeEnv,
+		contextActionSurfaceComposer,
+		contextActionSurfaceFile,
+		contextActionSurfaceTerminal,
+		contextActionSurfacePreview,
+		contextActionSurfaceMonitoring,
+		contextActionSurfaceGit,
+		contextActionSurfaceEditor:
+	default:
+		return nil, ErrInvalidContextAction
+	}
+	if out.ExecutionContext != nil {
+		switch out.ExecutionContext.RuntimeHint {
+		case "", contextActionRuntimeHintAuto, contextActionRuntimeHintLocal, contextActionRuntimeHintEnv:
+		default:
+			return nil, ErrInvalidContextAction
+		}
+		switch out.ExecutionContext.SessionSource {
+		case "", contextActionSessionLocal, contextActionSessionProvider, contextActionSessionSSH, contextActionSessionExternal, contextActionSessionGateway, contextActionSessionSandbox:
+		default:
+			return nil, ErrInvalidContextAction
+		}
+	}
+	if out.Source.Surface == contextActionSurfaceComposer {
+		for index := range out.Context {
+			if !contextActionComposerItemWireShapeAllowed(out.Context[index]) {
+				return nil, ErrInvalidContextAction
+			}
+			normalizedPath, err := normalizeCanonicalReferencePath(out.Context[index].Path)
+			if err != nil || normalizedPath != out.Context[index].Path || strings.TrimSpace(out.Context[index].RootLabel) != "" {
+				return nil, ErrInvalidContextAction
+			}
+			out.Context[index].Path = normalizedPath
+		}
+	}
+	if err := validateAskFlowerContextActionItems(out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func normalizeCanonicalReferencePath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 16*1024 || !utf8.ValidString(value) || strings.ContainsAny(value, "\r\n\x00") {
+		return "", errors.New("invalid canonical reference path")
+	}
+	return value, nil
+}
+
+func canonicalReferencePathLabel(value string) string {
+	value = strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")
+	if value == "" {
+		return ""
+	}
+	label := path.Base(strings.TrimSuffix(value, "/"))
+	if label == "." || label == "/" {
+		return value
+	}
+	return label
+}
+
+func contextActionComposerItemWireShapeAllowed(item ContextActionContextItem) bool {
+	if item.wireFields == nil {
+		return true
+	}
+	if len(item.wireFields) != 3 {
+		return false
+	}
+	for _, field := range []string{"kind", "path", "is_directory"} {
+		if _, ok := item.wireFields[field]; !ok {
+			return false
+		}
+	}
+	directoryJSON := strings.TrimSpace(string(item.wireFields["is_directory"]))
+	return directoryJSON == "true" || directoryJSON == "false"
+}
+
+func validateAskFlowerContextActionItems(action *ContextActionEnvelope) error {
+	if action == nil {
+		return nil
+	}
+	if len(action.Context) == 0 {
+		return ErrInvalidContextAction
+	}
+	surface := strings.TrimSpace(action.Source.Surface)
+	for _, item := range action.Context {
+		if !contextActionSurfaceAllowsKind(surface, item.Kind) {
+			return ErrInvalidContextAction
+		}
+		if !contextActionItemPayloadAllowed(item) {
+			return ErrInvalidContextAction
+		}
+	}
+	return nil
+}
+
+func contextActionSurfaceAllowsKind(surface string, kind string) bool {
+	switch strings.TrimSpace(surface) {
+	case contextActionSurfaceComposer, contextActionSurfaceFile:
+		return kind == contextActionKindFilePath
+	case contextActionSurfacePreview, contextActionSurfaceEditor:
+		return kind == contextActionKindFilePath
+	case contextActionSurfaceTerminal:
+		return kind == contextActionKindTerminal
+	case contextActionSurfaceMonitoring:
+		return kind == contextActionKindProcess
+	case contextActionSurfaceGit:
+		return kind == contextActionKindText
+	case contextActionSurfaceWelcomeEnv:
+		return kind == contextActionKindText
+	default:
+		return false
+	}
+}
+
+func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
+	switch strings.TrimSpace(item.Kind) {
+	case contextActionKindFilePath:
+		return strings.TrimSpace(item.Path) != "" &&
+			strings.TrimSpace(item.Path) == item.Path &&
+			!strings.ContainsAny(item.Path, "\r\n") &&
+			!strings.ContainsAny(item.RootLabel, "\r\n") &&
+			strings.TrimSpace(item.Selection) == "" &&
+			strings.TrimSpace(item.Content) == "" &&
+			strings.TrimSpace(item.Detail) == "" &&
+			strings.TrimSpace(item.Title) == "" &&
+			strings.TrimSpace(item.WorkingDir) == "" &&
+			item.SelectionChars == 0 &&
+			item.PID == 0 &&
+			strings.TrimSpace(item.Name) == "" &&
+			strings.TrimSpace(item.Username) == "" &&
+			item.CPUPercent == 0 &&
+			item.MemoryBytes == 0 &&
+			strings.TrimSpace(item.Platform) == "" &&
+			item.CapturedAtMs == 0
+	case contextActionKindTerminal:
+		selection := strings.TrimSpace(item.Selection)
+		selectionRunes := len([]rune(selection))
+		_, workingDirWasPresent := item.wireFields["working_dir"]
+		workingDir := strings.TrimSpace(item.WorkingDir)
+		return (!workingDirWasPresent || workingDir != "") &&
+			!strings.ContainsAny(workingDir, "\r\n") &&
+			item.SelectionChars >= 0 &&
+			(selection == "" || item.SelectionChars == selectionRunes) &&
+			strings.TrimSpace(item.Content) == "" &&
+			strings.TrimSpace(item.Detail) == "" &&
+			strings.TrimSpace(item.Title) == "" &&
+			strings.TrimSpace(item.Path) == "" &&
+			selectionRunes <= floretTerminalSelectionInlineChars &&
+			!item.IsDirectory &&
+			strings.TrimSpace(item.RootLabel) == "" &&
+			item.PID == 0 &&
+			strings.TrimSpace(item.Name) == "" &&
+			strings.TrimSpace(item.Username) == "" &&
+			item.CPUPercent == 0 &&
+			item.MemoryBytes == 0 &&
+			strings.TrimSpace(item.Platform) == "" &&
+			item.CapturedAtMs == 0
+	case contextActionKindProcess:
+		return item.PID > 0 &&
+			strings.TrimSpace(item.Name) != "" &&
+			!strings.ContainsAny(item.Name, "\r\n") &&
+			strings.TrimSpace(item.Username) != "" &&
+			!strings.ContainsAny(item.Username, "\r\n") &&
+			strings.TrimSpace(item.Platform) != "" &&
+			!strings.ContainsAny(item.Platform, "\r\n") &&
+			item.CapturedAtMs > 0 &&
+			!math.IsNaN(item.CPUPercent) &&
+			!math.IsInf(item.CPUPercent, 0) &&
+			item.CPUPercent >= 0 &&
+			item.MemoryBytes >= 0 &&
+			strings.TrimSpace(item.Selection) == "" &&
+			strings.TrimSpace(item.Content) == "" &&
+			strings.TrimSpace(item.Detail) == "" &&
+			strings.TrimSpace(item.Title) == "" &&
+			strings.TrimSpace(item.Path) == "" &&
+			!item.IsDirectory &&
+			strings.TrimSpace(item.RootLabel) == "" &&
+			item.SelectionChars == 0 &&
+			strings.TrimSpace(item.WorkingDir) == ""
+	case contextActionKindText:
+		return strings.TrimSpace(item.Title) != "" &&
+			!strings.ContainsAny(item.Title, "\r\n") &&
+			!strings.ContainsAny(item.Detail, "\r\n") &&
+			strings.TrimSpace(item.Content) != "" &&
+			strings.TrimSpace(item.Selection) == "" &&
+			strings.TrimSpace(item.Path) == "" &&
+			!item.IsDirectory &&
+			strings.TrimSpace(item.RootLabel) == "" &&
+			item.SelectionChars == 0 &&
+			strings.TrimSpace(item.WorkingDir) == "" &&
+			item.PID == 0 &&
+			strings.TrimSpace(item.Name) == "" &&
+			strings.TrimSpace(item.Username) == "" &&
+			item.CPUPercent == 0 &&
+			item.MemoryBytes == 0 &&
+			strings.TrimSpace(item.Platform) == "" &&
+			item.CapturedAtMs == 0
+	default:
+		return false
+	}
+}
+
+func normalizeContextActionItems(items []ContextActionContextItem) []ContextActionContextItem {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]ContextActionContextItem, 0, len(items))
+	for _, item := range items {
+		normalized := ContextActionContextItem{
+			Kind:           strings.TrimSpace(item.Kind),
+			Path:           strings.TrimSpace(item.Path),
+			IsDirectory:    item.IsDirectory,
+			RootLabel:      strings.TrimSpace(item.RootLabel),
+			Selection:      item.Selection,
+			SelectionChars: item.SelectionChars,
+			WorkingDir:     strings.TrimSpace(item.WorkingDir),
+			PID:            item.PID,
+			Name:           strings.TrimSpace(item.Name),
+			Username:       strings.TrimSpace(item.Username),
+			CPUPercent:     item.CPUPercent,
+			MemoryBytes:    item.MemoryBytes,
+			Platform:       strings.TrimSpace(item.Platform),
+			CapturedAtMs:   item.CapturedAtMs,
+			Title:          strings.TrimSpace(item.Title),
+			Detail:         strings.TrimSpace(item.Detail),
+			Content:        item.Content,
+			wireFields:     item.wireFields,
+		}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}

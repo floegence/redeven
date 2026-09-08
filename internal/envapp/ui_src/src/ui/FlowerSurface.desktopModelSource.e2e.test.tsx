@@ -90,6 +90,9 @@ describe('Flower Desktop model source E2E', () => {
           },
         });
       }
+      if (url === '/_redeven_proxy/api/ai/storage-generation' && init?.method === 'GET') {
+        return jsonResponse({ storage_generation: 'a'.repeat(32) });
+      }
       if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
         return jsonResponse({
           current_model: deepSeekModelID,
@@ -219,6 +222,7 @@ describe('Flower Desktop model source E2E', () => {
     }));
     expect(turnBodies[0]).toEqual(expect.objectContaining({
       model: deepSeekModelID,
+      storage_generation: 'a'.repeat(32),
       options: expect.objectContaining({
         reasoning_selection: { level: 'high' },
       }),

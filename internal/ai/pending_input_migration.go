@@ -8,74 +8,13 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/ai/pendinginputlegacy"
 	"github.com/floegence/redeven/internal/ai/threadstore"
-	"github.com/floegence/redeven/internal/session"
 )
 
-// These decoders are isolated to the one-time product queue migration. They
-// are not a production queue or admission API.
-func decodePendingInputSessionMeta(raw string) (session.Meta, error) {
-	if strings.TrimSpace(raw) == "" {
-		return session.Meta{}, errors.New("pending input session metadata is empty")
-	}
-	var out session.Meta
-	if err := decodeStrictJSON(raw, &out); err != nil {
-		return session.Meta{}, fmt.Errorf("decode pending input session metadata: %w", err)
-	}
-	if strings.TrimSpace(out.ChannelID) == "" || strings.TrimSpace(out.EndpointID) == "" {
-		return session.Meta{}, errors.New("pending input session metadata has incomplete identity")
-	}
-	return out, nil
-}
-
-func decodePendingInputAttachments(raw string) ([]RunAttachmentIn, error) {
-	if strings.TrimSpace(raw) == "" {
-		return nil, errors.New("pending input attachments are empty")
-	}
-	var out []RunAttachmentIn
-	if err := decodeStrictJSON(raw, &out); err != nil {
-		return nil, fmt.Errorf("decode pending input attachments: %w", err)
-	}
-	cleaned := make([]RunAttachmentIn, 0, len(out))
-	for index, item := range out {
-		uploadID, err := normalizeUploadID(item.AttachmentID)
-		if err != nil {
-			return nil, fmt.Errorf("pending input attachment %d has an invalid attachment_id", index)
-		}
-		cleaned = append(cleaned, RunAttachmentIn{AttachmentID: uploadID})
-	}
-	return cleaned, nil
-}
-
-func decodePendingInputContextAction(raw string) (*ContextActionEnvelope, error) {
-	if strings.TrimSpace(raw) == "" {
-		return nil, nil
-	}
-	var out ContextActionEnvelope
-	if err := decodeStrictJSON(raw, &out); err != nil {
-		return nil, err
-	}
-	return normalizeAskFlowerContextActionEnvelope(&out)
-}
-
-func decodePendingInputOptions(raw string) (RunOptions, error) {
-	if strings.TrimSpace(raw) == "" {
-		return RunOptions{}, errors.New("pending input options are empty")
-	}
-	var out RunOptions
-	if err := decodeStrictJSON(raw, &out); err != nil {
-		return RunOptions{}, fmt.Errorf("decode pending input options: %w", err)
-	}
-	return out, nil
-}
-
-type pendingInputMigrationState struct {
-	threadIDs []string
-}
-
-func newPendingInputMigrationHandler(opts Options, runtime flruntime.ThreadService, effects *floretEffectAdapter, state *pendingInputMigrationState) threadstore.PendingInputMigrationHandler {
+func newPendingInputMigrationHandler(runtime flruntime.ThreadService, effects *floretEffectAdapter) threadstore.PendingInputMigrationHandler {
 	return func(ctx context.Context, source threadstore.PendingInputMigrationSource, records []threadstore.PendingInputMigrationRecord) ([]threadstore.ExecutionAuthority, error) {
-		if runtime == nil || effects == nil || source == nil || state == nil {
+		if runtime == nil || effects == nil || source == nil {
 			return nil, errors.New("pending input migration dependencies are unavailable")
 		}
 		authorities := make([]threadstore.ExecutionAuthority, 0, len(records))
@@ -84,19 +23,18 @@ func newPendingInputMigrationHandler(opts Options, runtime flruntime.ThreadServi
 			for end < len(records) && records[end].EndpointID == records[start].EndpointID && records[end].ThreadID == records[start].ThreadID {
 				end++
 			}
-			groupAuthorities, err := migratePendingInputGroup(ctx, opts, runtime, effects, source, records[start:end])
+			groupAuthorities, err := migratePendingInputGroup(ctx, runtime, effects, source, records[start:end])
 			if err != nil {
 				return nil, err
 			}
 			authorities = append(authorities, groupAuthorities...)
-			state.threadIDs = appendUniqueString(state.threadIDs, strings.TrimSpace(records[start].ThreadID))
 			start = end
 		}
 		return authorities, nil
 	}
 }
 
-func migratePendingInputGroup(ctx context.Context, opts Options, runtime flruntime.ThreadService, effects *floretEffectAdapter, source threadstore.PendingInputMigrationSource, records []threadstore.PendingInputMigrationRecord) ([]threadstore.ExecutionAuthority, error) {
+func migratePendingInputGroup(ctx context.Context, runtime flruntime.ThreadService, effects *floretEffectAdapter, source threadstore.PendingInputMigrationSource, records []threadstore.PendingInputMigrationRecord) ([]threadstore.ExecutionAuthority, error) {
 	if len(records) == 0 {
 		return nil, nil
 	}
@@ -109,9 +47,6 @@ func migratePendingInputGroup(ctx context.Context, opts Options, runtime flrunti
 	if settings == nil {
 		return nil, fmt.Errorf("pending input thread %q is absent from the product catalog", threadID)
 	}
-	if _, err := threadPermissionType(settings); err != nil {
-		return nil, err
-	}
 	legacyPrimaryTargetID, err := source.LegacyPrimaryTargetID(ctxOrBackground(ctx), endpointID, threadID)
 	if err != nil {
 		return nil, err
@@ -123,75 +58,69 @@ func migratePendingInputGroup(ctx context.Context, opts Options, runtime flrunti
 		if strings.TrimSpace(record.ThreadID) != threadID || strings.TrimSpace(record.EndpointID) != endpointID {
 			return nil, errors.New("pending input migration group contains mixed thread scopes")
 		}
-		meta, err := decodePendingInputSessionMeta(record.SessionMetaJSON)
+		meta, err := pendinginputlegacy.DecodeSession(record.SessionMetaJSON)
 		if err != nil {
 			return nil, fmt.Errorf("decode pending input %q session: %w", record.RequestID, err)
-		}
-		if err := requireRWX(&meta); err != nil {
-			return nil, fmt.Errorf("validate pending input %q authority: %w", record.RequestID, err)
 		}
 		if strings.TrimSpace(meta.EndpointID) != endpointID || strings.TrimSpace(meta.NamespacePublicID) != strings.TrimSpace(settings.NamespacePublicID) {
 			return nil, fmt.Errorf("pending input %q session scope conflicts with the product catalog", record.RequestID)
 		}
-		options, err := decodePendingInputOptions(record.OptionsJSON)
+		options, err := pendinginputlegacy.DecodeOptions(record.OptionsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("decode pending input %q options: %w", record.RequestID, err)
 		}
-		attachments, err := decodePendingInputAttachments(record.AttachmentsJSON)
+		attachments, err := pendinginputlegacy.DecodeAttachments(record.AttachmentsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("decode pending input %q attachments: %w", record.RequestID, err)
 		}
-		contextAction, err := decodePendingInputContextAction(record.ContextActionJSON)
+		contextAction, err := pendinginputlegacy.DecodeContext(record.ContextActionJSON)
 		if err != nil {
 			return nil, fmt.Errorf("decode pending input %q context action: %w", record.RequestID, err)
 		}
-		input := RunInput{Text: strings.TrimSpace(record.TextContent), Attachments: attachments, ContextAction: contextAction}
-		policy := normalizeToolTargetPolicy(opts.ToolTargetPolicy)
-		if policy.requiresExplicitTarget() && strings.TrimSpace(policy.DefaultTargetID) == "" {
-			policy.DefaultTargetID = legacyPrimaryTargetID
-		}
-		var referenceAuthority *flowerCanonicalReferenceTargetAuthority
-		if flowerContextActionRequiresCanonicalReferenceAuthority(input.ContextAction) {
-			resolved, err := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, policy)
-			if err != nil {
-				return nil, fmt.Errorf("resolve pending input %q context authority: %w", record.RequestID, err)
-			}
-			if err := authorizeFlowerContextActionTarget(input.ContextAction, resolved); err != nil {
-				return nil, fmt.Errorf("authorize pending input %q context: %w", record.RequestID, err)
-			}
-			input.ContextAction = canonicalizeFlowerContextActionTarget(input.ContextAction, resolved)
-			referenceAuthority = &resolved
-		}
-		projection, err := floretContextProjectionForInputWithAuthority(input, referenceAuthority)
+
+		references, supplemental, err := pendinginputlegacy.Project(contextAction, endpointID, legacyPrimaryTargetID)
 		if err != nil {
 			return nil, fmt.Errorf("project pending input %q: %w", record.RequestID, err)
 		}
-		turnInput, err := floretTurnInputWithUploadLoader(ctxOrBackground(ctx), input, projection.References, func(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {
-			return source.GetThreadOwnedUpload(ctx, endpointID, threadID, uploadID)
+		turnInput, err := pendinginputlegacy.TurnInput(ctxOrBackground(ctx), record.TextContent, attachments, references, func(ctx context.Context, id string) (pendinginputlegacy.Upload, error) {
+			upload, err := source.GetThreadOwnedUpload(ctx, endpointID, threadID, id)
+			if err != nil {
+				return pendinginputlegacy.Upload{}, err
+			}
+			if upload == nil {
+				return pendinginputlegacy.Upload{}, errors.New("historical upload is missing")
+			}
+			return pendinginputlegacy.Upload{ID: upload.UploadID, Name: upload.Name, MIMEType: upload.DetectedMediaType, SHA256: upload.ContentSHA256, Size: upload.SizeBytes, CodePoints: upload.UnicodeCodePoints, Lines: upload.LogicalLineCount}, nil
 		})
 		if err != nil {
 			return nil, fmt.Errorf("materialize pending input %q: %w", record.RequestID, err)
 		}
+		// Mapping into live effect DTOs happens only after canonical bytes have
+		// been frozen. Execution still passes today's product authorization.
+		input := pendingInputEffectInput(record.TextContent, attachments, contextAction)
+
 		requestID := strings.TrimSpace(record.RequestID)
 		request := SendUserTurnRequest{
 			ClientRequestID: requestID,
 			ThreadID:        threadID,
 			Model:           strings.TrimSpace(record.ModelID),
 			Input:           input,
-			Options:         options,
+			Options:         pendingInputEffectOptions(options),
 		}
-		authority, err := executionAuthorityFromMeta(&meta, threadID, requestID, "")
-		if err != nil {
-			return nil, err
+
+		authority := threadstore.ExecutionAuthority{
+			RequestKey: requestID, ThreadID: threadID, EndpointID: meta.EndpointID,
+			NamespacePublicID: meta.NamespacePublicID, ChannelID: meta.ChannelID,
+			UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail, CreatedAtUnixMs: record.CreatedAtUnixMs,
 		}
-		authority.CreatedAtUnixMs = record.CreatedAtUnixMs
-		effects.put(identity.ThreadID(threadID), requestID, floretEffectRequest{meta: meta, req: request})
+		effects.put(identity.ThreadID(threadID), requestID, floretEffectRequest{meta: pendingInputEffectMeta(meta), req: request})
+
 		requestIDs = append(requestIDs, requestID)
 		authorities = append(authorities, authority)
 		items = append(items, flruntime.ImportedPendingInput{
 			RequestKey:          flruntime.RequestKey(requestID),
 			Input:               turnInput,
-			SupplementalContext: projection.Items,
+			SupplementalContext: supplemental,
 		})
 	}
 	if _, err := runtime.ImportPendingInputs(ctxOrBackground(ctx), flruntime.ImportPendingInputsInput{

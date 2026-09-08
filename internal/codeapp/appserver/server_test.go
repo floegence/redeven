@@ -228,19 +228,6 @@ func writeTestConfigWithAI(t *testing.T) string {
 	return p
 }
 
-func openTestThreadReadStateStore(t *testing.T) *threadreadstate.Store {
-	t.Helper()
-
-	store, err := threadreadstate.Open(filepath.Join(t.TempDir(), "thread_read_state.sqlite"))
-	if err != nil {
-		t.Fatalf("threadreadstate.Open: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = store.Close()
-	})
-	return store
-}
-
 type failingFlowerReadStateCleaner struct{ err error }
 
 func (c *failingFlowerReadStateCleaner) RetireFlowerThreadReadState(context.Context, string, string) error {
@@ -2682,7 +2669,6 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 
 	cfgPath := writeTestConfig(t)
-	store := openTestThreadReadStateStore(t)
 	stateDir := t.TempDir()
 	aiOptions := ai.Options{
 		StateDir:     stateDir,
@@ -2744,13 +2730,12 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	newServer := func() *Server {
 		t.Helper()
 		srv, err := New(Options{
-			Backend:              &stubBackend{},
-			DistFS:               dist,
-			ListenAddr:           "127.0.0.1:0",
-			AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
-			ConfigPath:           cfgPath,
-			ThreadReadStateStore: store,
-			ResolveSessionMeta:   resolveMeta,
+			Backend:            &stubBackend{},
+			DistFS:             dist,
+			ListenAddr:         "127.0.0.1:0",
+			AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
+			ConfigPath:         cfgPath,
+			ResolveSessionMeta: resolveMeta,
 		})
 		if err != nil {
 			t.Fatalf("New: %v", err)
@@ -3014,7 +2999,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("user2 list is_unread=false after user1 mark-read, want per-user read-state")
 	}
 
-	if err := store.Close(); err != nil {
+	if err := aiSvc.ThreadReadState().Close(); err != nil {
 		t.Fatalf("close read-state store before failure mapping: %v", err)
 	}
 	failedRead := performAIMarkRead(originUser1, detail.Data.Thread.ReadStatus.Snapshot)
@@ -3041,7 +3026,6 @@ func TestServer_AILegacyThreadLiveEventsRouteIsRemoved(t *testing.T) {
 		CanExecute:        true,
 	}
 	cfgPath := writeTestConfig(t)
-	store := openTestThreadReadStateStore(t)
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:     stateDir,
@@ -3062,13 +3046,12 @@ func TestServer_AILegacyThreadLiveEventsRouteIsRemoved(t *testing.T) {
 	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_live_read_1", "run_live_read_1", "Initial", "Initial response")
 
 	srv, err := New(Options{
-		Backend:              &stubBackend{},
-		DistFS:               dist,
-		ListenAddr:           "127.0.0.1:0",
-		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
-		ConfigPath:           cfgPath,
-		ThreadReadStateStore: store,
-		ResolveSessionMeta:   resolveMetaForTest(channelID, meta),
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -3225,8 +3208,7 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	}
 
 	cfgPath := writeTestConfig(t)
-	store := openTestThreadReadStateStore(t)
-	cleaner := &notifyingFlowerReadStateCleaner{store: store, result: make(chan error, 1)}
+	cleaner := &notifyingFlowerReadStateCleaner{result: make(chan error, 1)}
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:               stateDir,
@@ -3234,9 +3216,15 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		Shell:                  "/bin/sh",
 		Config:                 appserverTestAIConfig(),
 		FlowerReadStateCleaner: cleaner,
+		DeferExecution:         true,
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
+	}
+	store := aiSvc.ThreadReadState()
+	cleaner.store = store
+	if err := aiSvc.Activate(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 	auditStore, err := auditlog.New(auditlog.Options{StateDir: stateDir})
 	if err != nil {
@@ -3292,14 +3280,13 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	}
 
 	srv, err := New(Options{
-		Backend:              &stubBackend{},
-		DistFS:               dist,
-		ListenAddr:           "127.0.0.1:0",
-		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
-		Audit:                auditStore,
-		ConfigPath:           cfgPath,
-		ThreadReadStateStore: store,
-		ResolveSessionMeta:   resolveMeta,
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
+		Audit:              auditStore,
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMeta,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -3346,7 +3333,6 @@ func TestServer_AIThreadDeleteDoesNotWaitForReadStateCleanup(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	store := openTestThreadReadStateStore(t)
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:               stateDir,
@@ -3370,13 +3356,12 @@ func TestServer_AIThreadDeleteDoesNotWaitForReadStateCleanup(t *testing.T) {
 	}
 	const channelID = "ch_test_ai_delete_pending"
 	srv, err := New(Options{
-		Backend:              &stubBackend{},
-		DistFS:               dist,
-		ListenAddr:           "127.0.0.1:0",
-		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
-		Audit:                auditStore,
-		ConfigPath:           writeTestConfig(t),
-		ThreadReadStateStore: store,
+		Backend:           &stubBackend{},
+		DistFS:            dist,
+		ListenAddr:        "127.0.0.1:0",
+		AIServiceProvider: newStaticAIServiceProvider(aiSvc),
+		Audit:             auditStore,
+		ConfigPath:        writeTestConfig(t),
 		ResolveSessionMeta: func(raw string) (*session.Meta, bool) {
 			if strings.TrimSpace(raw) != channelID {
 				return nil, false

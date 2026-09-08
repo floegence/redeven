@@ -340,7 +340,10 @@
       "workingDirPickerConfirm": "選擇",
       "linkedContextLabel": "已連結內容",
       "toolApprovalApproveBatch": "核准全部",
-      "toolApprovalApproveBatchAction": "核准全部 {count} 個待核准工具"
+      "toolApprovalApproveBatchAction": "核准全部 {count} 個待核准工具",
+      "restoredInputTitle": "還原後保留的輸入",
+      "restoredInputDescription": "此輸入不會自動執行。再次執行前，請將其複製到新任務。",
+      "restoredInputCopy": "複製輸入"
     },
     "threadList": {
       "title": "對話",

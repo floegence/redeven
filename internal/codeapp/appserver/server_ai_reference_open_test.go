@@ -96,8 +96,8 @@ func TestServer_AIReferenceOpenTargetAcceptsOnlyCanonicalIdentity(t *testing.T) 
 	srv, err := New(Options{
 		Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("console.log('inject');")}},
 		ListenAddr: "127.0.0.1:0", Logger: logger, AIServiceProvider: newStaticAIServiceProvider(aiSvc), ConfigPath: writeTestConfig(t),
-		ThreadReadStateStore: openTestThreadReadStateStore(t), ResolveSessionMeta: resolveMetaForTest(channelID, meta),
-		AgentHomeDir: home, FilesystemScope: scope,
+		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
+		AgentHomeDir:       home, FilesystemScope: scope,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -214,8 +214,8 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 	srv, err := New(Options{
 		Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("console.log('inject');")}},
 		ListenAddr: "127.0.0.1:0", Logger: logger, AIServiceProvider: newStaticAIServiceProvider(aiSvc), ConfigPath: writeTestConfig(t),
-		ThreadReadStateStore: openTestThreadReadStateStore(t), ResolveSessionMeta: resolveMetaForTest(channelID, meta),
-		AgentHomeDir: home, FilesystemScope: scope,
+		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
+		AgentHomeDir:       home, FilesystemScope: scope,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

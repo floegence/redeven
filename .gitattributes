@@ -1,1 +1,6 @@
 spec/redevplugin/official-containers-plugin/**/release.json.sig binary
+
+# Retain exact historical writer sources, including their blank-line tabs.
+internal/ai/testdata/upgrade/10ce4c152/producer_test.go.txt whitespace=-blank-at-eol
+internal/ai/testdata/upgrade/10ce4c152-waiting/producer_test.go.txt whitespace=-blank-at-eol
+internal/ai/testdata/upgrade/10ce4c152-lifecycle/producer_test.go.txt whitespace=-blank-at-eol

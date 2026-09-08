@@ -26,6 +26,7 @@ node scripts/check_floeterm_dependency_consistency.mjs
 ./scripts/ui_package_common_node_test.sh
 node scripts/check_go_version_consistency.mjs
 node scripts/check_managed_service_catalog_boundary.mjs
+python3 scripts/check_flower_storage_compatibility.py
 node --test scripts/check_readme_localizations.test.mjs
 node scripts/check_readme_localizations.mjs
 ./scripts/okf/check_source_integrity.sh

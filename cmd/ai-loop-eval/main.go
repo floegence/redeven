@@ -446,11 +446,12 @@ func runTask(
 		runCtx, cancel := context.WithTimeout(ctx, timeout)
 		oneStart := time.Now()
 		accepted, runErr := svc.SendUserTurn(runCtx, meta, ai.SendUserTurnRequest{
-			ClientRequestID: requestID,
-			ThreadID:        thread.ThreadID,
-			Model:           modelID,
-			Input:           ai.RunInput{Text: turnText},
-			Options:         runOptions,
+			StorageGeneration: svc.StorageGeneration(),
+			ClientRequestID:   requestID,
+			ThreadID:          thread.ThreadID,
+			Model:             modelID,
+			Input:             ai.RunInput{Text: turnText},
+			Options:           runOptions,
 		})
 		observation := typedTurnObservation{}
 		if runErr == nil {

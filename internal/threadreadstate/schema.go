@@ -15,9 +15,10 @@ const (
 
 func schemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
-		Kind:           schemaKind,
-		CurrentVersion: currentSchemaVersion,
-		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
+		Kind:             schemaKind,
+		ValidateExisting: validateExisting,
+		CurrentVersion:   currentSchemaVersion,
+		Pragmas:          []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},

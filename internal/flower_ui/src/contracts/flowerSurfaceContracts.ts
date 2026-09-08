@@ -507,6 +507,7 @@ export type FlowerThreadSnapshot = Readonly<{
   approval_pending_count?: number;
   queued_turn_count?: number;
   queued_turns?: readonly FlowerQueuedTurn[];
+  restored_inputs?: readonly FlowerRestoredInput[];
   permission_type?: FlowerPermissionType;
   source_label: string;
   target_labels: readonly string[];
@@ -676,7 +677,13 @@ export type FlowerRuntimeInteraction = Readonly<{
   }>;
 }>;
 
+export type FlowerRestoredInput = Readonly<{
+ id: string;
+ input: Readonly<{ text?: string; attachments?: FlowerRuntimeCurrentItem['attachments']; references?: FlowerRuntimeCurrentItem['references'] }>;
+}>;
+
 export type FlowerRuntimeCurrentView = Readonly<{
+  restored_inputs?: readonly FlowerRestoredInput[];
   thread_id: string;
   view_version: number;
   activity?: 'idle' | 'active';
@@ -830,6 +837,7 @@ export type FlowerResolveHandlerInput = Readonly<{
 }>;
 
 export type FlowerTurnLaunchInput = Readonly<{
+  storage_generation?: string;
   client_request_id: string;
   thread_id?: string;
   staging_scope?: FlowerAttachmentStagingScope;
@@ -1120,6 +1128,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   readStagedLongText?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => Promise<FlowerStagedLongTextReadResult>;
   loadStagedAttachmentPreview?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope, signal: AbortSignal) => Promise<Blob>;
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
+  resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;
   stopThread: (threadID: string) => Promise<void>;
