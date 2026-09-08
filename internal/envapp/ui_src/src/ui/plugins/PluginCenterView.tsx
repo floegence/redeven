@@ -34,6 +34,7 @@ import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
+  showTitle?: boolean;
   pluginWidgetCounts?: Readonly<Record<string, number>>;
   projection: PluginInventoryProjection;
   loading: boolean;
@@ -669,6 +670,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
   return (
     <PluginCenterShell
+      showTitle={props.showTitle}
       query={query()}
       loading={loading()}
       refreshing={refreshPending()}
@@ -1243,6 +1245,7 @@ function OfficialPluginInstallDialog(props: {
 }
 
 export function PluginCenterShell(props: {
+  showTitle?: boolean;
   query: string;
   searchRef?: (element: HTMLInputElement) => void;
   category: PluginPresentationCategory | 'all';
@@ -1311,9 +1314,9 @@ export function PluginCenterShell(props: {
     <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="redeven-plugin-motion flex h-full min-h-0 flex-col bg-background text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
         <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
-          <div class="flex min-w-0 shrink-0 items-center gap-2">
+          <Show when={props.showTitle !== false}><div class="flex min-w-0 shrink-0 items-center gap-2">
             <h1 class="truncate text-sm font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
-          </div>
+          </div></Show>
           <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[360px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
               <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
