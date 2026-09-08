@@ -51,7 +51,7 @@ const builtIn: ServiceTemplatePresentation = {
   defaultWorkspacePath: '/workspace/example-service',
   defaultAccessMode: 'desktop_loopback',
   runtimeSpec: {
-    schema_version: 5,
+    schema_version: 6,
     kind: 'host',
     endpoint: { scheme: 'http', path: '/', health_path: '/health', startup_timeout_sec: 45 },
     host: { npm: { package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'service-cli' }, start_script: 'exec "$REDEVEN_INSTALL_EXECUTABLE" web --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT" --no-open' },
@@ -189,7 +189,7 @@ describe('ServiceTemplateCatalog', () => {
       kind: 'container',
       deploymentLabel: 'Container',
       runtimeSpec: {
-        schema_version: 5,
+        schema_version: 6,
         kind: 'container',
         endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/ready', startup_timeout_sec: 180 },
         container: {

@@ -2,82 +2,99 @@ package managedwebservice
 
 import (
 	"context"
-	"strings"
-
-	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
+	"net/url"
 )
 
 func (m *Manager) OpenSession(ctx context.Context, serviceID string, request OpenSessionRequest) (*OpenSession, error) {
 	if err := validateRequestID(request.RequestID); err != nil {
 		return nil, err
 	}
+	result := m.openFlights.DoChan(serviceID, func() (any, error) {
+		m.mu.Lock()
+		if m.closed {
+			m.mu.Unlock()
+			return nil, serviceError("RUNTIME_CLOSING", "The Runtime is reconnecting. Retry opening shortly.", 503, true, nil)
+		}
+		m.workers.Add(1)
+		m.mu.Unlock()
+		defer m.workers.Done()
+		// One cancelled browser request must not cancel another caller's shared hook.
+		openCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		defer cancel()
+		if m.managementCtx != nil {
+			stop := context.AfterFunc(m.managementCtx, cancel)
+			defer stop()
+		}
+		return m.openExistingSession(openCtx, serviceID)
+	})
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case value := <-result:
+		if value.Err != nil {
+			return nil, value.Err
+		}
+		session := *value.Val.(*OpenSession)
+		return &session, nil
+	}
+}
+
+func (m *Manager) openExistingSession(ctx context.Context, serviceID string) (*OpenSession, error) {
 	service, forward, err := m.serviceAndForward(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
-	active, err := m.registry.GetActiveManagedOperation(ctx, service.ServiceID)
+	active, err := m.registry.GetActiveManagedOperation(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
 	if active != nil {
-		if OperationAction(active.Action) == ActionRestart {
+		switch OperationAction(active.Action) {
+		case ActionStart, ActionInstall, ActionRetryInstall, ActionRestart:
 			return &OpenSession{State: "preparing", Operation: active}, nil
+		default:
+			return nil, serviceError("OPERATION_CONFLICT", "Another operation is changing this service.", 409, true, nil)
 		}
-		return nil, serviceError("OPERATION_CONFLICT", "Another operation is already running for this managed Web Service.", 409, true, nil)
 	}
-	if service.ObservedState != "running" {
+	running, err := m.observe(ctx, service)
+	if err != nil {
+		return nil, err
+	}
+	if !running {
 		return nil, serviceError("SERVICE_NOT_RUNNING", "Start the managed Web Service before opening it.", 409, true, nil)
 	}
-	resolved, err := m.resolveCurrentRuntime(ctx, service)
+	binding, err := decodeRuntimeBinding(service)
 	if err != nil {
 		return nil, err
 	}
-	resolved.applyTo(service)
-	if service.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256 {
-		return m.prepareOpenSession(ctx, service, request.RequestID)
-	}
-	spec := resolved.Spec
-	appPath := strings.TrimSpace(spec.Endpoint.Path)
-	if appPath == "" {
-		appPath = "/"
-	}
-	if spec.Kind == DeploymentHost && spec.Host != nil && spec.Host.OpenTarget != nil {
+	appPath := "/"
+	if binding.Deployment == DeploymentHost {
 		driver, ok := m.host.(*hostScriptDriver)
 		if !ok {
-			return nil, serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The Host service startup URL is unavailable.", 409, true, nil)
+			return nil, serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The service opening information is unavailable.", 409, true, nil)
 		}
-		appPath, err = driver.resolveOpenSession(service)
+		// The applied instance owns its verified entrance, even if its template has
+		// changed or was removed. Never execute changed scripts against an old run.
+		resolved, resolveErr := m.resolveCurrentRuntime(ctx, service)
+		if resolveErr != nil || resolved.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 {
+			appPath, err = driver.readOpenSession(service, service.RuntimeIdentity)
+		} else {
+			resolved.applyTo(service)
+			appPath, err = driver.prepareOpening(ctx, service, resolved.Spec)
+		}
 		if err != nil {
-			code, _, _, retryable := ErrorDetails(err)
-			if retryable && (code == "HOST_OPEN_TARGET_UNAVAILABLE" || code == "HOST_OPEN_TARGET_INVALID") {
-				return m.prepareOpenSession(ctx, service, request.RequestID)
-			}
 			return nil, err
 		}
+	} else {
+		// The persisted Forward belongs to the applied container/Compose instance.
+		target, parseErr := url.Parse(forward.TargetURL)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		appPath = target.RequestURI()
+	}
+	if err := m.checkOpeningEndpoint(ctx, service); err != nil {
+		return nil, err
 	}
 	return &OpenSession{State: "ready", Forward: forward, AppPath: appPath}, nil
-}
-
-func (m *Manager) prepareOpenSession(ctx context.Context, service *pfregistry.ManagedService, requestID string) (*OpenSession, error) {
-	active, err := m.registry.GetActiveManagedOperation(ctx, service.ServiceID)
-	if err != nil {
-		return nil, err
-	}
-	if active != nil {
-		if OperationAction(active.Action) == ActionRestart {
-			return &OpenSession{State: "preparing", Operation: active}, nil
-		}
-		return nil, serviceError("OPERATION_CONFLICT", "Another operation is already running for this managed Web Service.", 409, true, nil)
-	}
-	operation, err := m.Operate(ctx, service.ServiceID, OperationRequest{RequestID: requestID, Action: ActionRestart})
-	if err != nil {
-		if code, _, _, _ := ErrorDetails(err); code == "OPERATION_CONFLICT" {
-			active, readErr := m.registry.GetActiveManagedOperation(ctx, service.ServiceID)
-			if readErr == nil && active != nil && OperationAction(active.Action) == ActionRestart {
-				return &OpenSession{State: "preparing", Operation: active}, nil
-			}
-		}
-		return nil, err
-	}
-	return &OpenSession{State: "preparing", Operation: operation}, nil
 }

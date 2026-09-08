@@ -330,7 +330,7 @@ func TestOpenMigratesDefaultAppPathAndPreservesRecords(t *testing.T) {
 	if err := reg.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 {
+	if version != registryCurrentSchemaVersion {
 		t.Fatalf("version = %d", version)
 	}
 }

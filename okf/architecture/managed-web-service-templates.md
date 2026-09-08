@@ -18,7 +18,7 @@ timestamp: 2026-09-07T00:00:00Z
 
 The template repository publishes a versioned Go module. Each template lives at `templates/<template-id>/template.json`, with locale files under `locales/<locale>.json` and passive assets under `assets/`. Its reproducible schema-v2 bundle includes:
 
-- template and service-family identity, revision, deployment kind, and TemplateSpec v5;
+- template and service-family identity, revision, deployment kind, and TemplateSpec v6;
 - `recommended_version`, npm or OCI source, exact default platform artifact, platform matrix, access mode, and resource requirements;
 - localized name, description, notices, source declaration, and icon metadata for every shipped locale.
 
@@ -32,7 +32,19 @@ Catalog loading completes before Registry and Manager startup. Validation covers
 
 The mapper does not reinterpret application commands or manufacture service presentation. API responses carry localized bundle content and verified icon resource bytes; they no longer expose `localization_key` or a fixed brand enum. Renderer selects the requested locale with `en-US` fallback inside the already verified bundle and renders SVG only as an image data resource, never as arbitrary HTML.
 
-TemplateSpec v5 lets a Host choose exactly one opening contract: the existing static endpoint path, or a declared `startup_output_url` identified by a strict line prefix. The template owns only that declaration. Redeven owns process output capture, URL validation, private storage, Forward resolution, and opening authorization; it does not infer an application from its output or provide a fallback when the declared contract is not met.
+TemplateSpec v6 defines the generic Host hook contract below. Container and Compose retain their existing launch and opening behavior and acquire no host-script execution permission.
+
+## Host hooks and output
+
+`start_script` prepares application configuration and executes the foreground application. `after_start_script` is an optional, safely repeatable preparation hook using the existing startup deadline; it must not start a second service. `open_script` is an optional URL resolver with a maximum execution time of 10 seconds and a stdout limit of 16 KiB containing exactly one URL line. `stop_script` remains a before-stop hook, followed by Redeven's verified group termination. Templates without new hooks use the declared endpoint scheme, port, and path.
+
+Each real launch creates a mode-0700 private directory exposed as `REDEVEN_SERVICE_RUN_DIR`. It belongs to the service, launch nonce, applied digest, and stable native identity. Hooks use the same user, authorized workspace, parameters, and secret injection as the existing Host contract. Installation-only npm Registry credentials remain excluded. Redeven stores opening metadata, never executable template snapshots.
+
+`output_mode` defaults to `discard`, directly connecting application standard streams to `/dev/null`. `private_file` appends stdout and stderr directly to a mode-0600 file whose path is exposed as `REDEVEN_SERVICE_OUTPUT_FILE`. Templates may parse that output to persist private opening information; applications with configuration or state-file support should read those sources directly. Every output prefix and application-specific parsing rule belongs to the template.
+
+Private output is truncated in place after successful opening persistence. While Runtime is online, a 30-second maintenance check truncates files above 8 MiB without replacing their inode or live descriptor. Offline growth is an explicit limitation. These files are startup scratch space, not a log archive; deleting an open filename is not a substitute for truncation. No output collector or additional resident process is introduced.
+
+Hook results can contain credentials and never enter ordinary logs, operation output, or audit. Diagnostics contain only hook phase, duration, exit code, and safe error codes. The returned URL must use the declared HTTP/HTTPS scheme, a loopback host, the service's exact port, and a valid relative opening path after conversion. Hook code cannot select an external target or bypass the existing Forward authorization and proxy authentication. Hook failure changes opening availability without stopping a running service. Lifecycle and legacy-instance recovery are defined in the [independent Host lifecycle](independent-host-services.md).
 
 Built-in installed state is matched by exact template ID. Template responses expose `recommended_release`, `release_source`, and the exact default artifact, never an ambiguous `version`. The default workspace path is presentation-only and is not created while browsing, saving, copying, or checking versions. Custom templates remain Registry-owned user content, use their entered name and description, derive their default release from the exact npm or image reference, and are marked as user-configured sources. Both built-in and custom templates enter the same generic Host, Container, or Compose lifecycle after validation.
 

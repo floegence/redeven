@@ -15,11 +15,15 @@ import (
 
 func hostTestService(t *testing.T, root string, spec TemplateSpec) (*Manager, *pfregistry.ManagedService) {
 	t.Helper()
+	root, resolveErr := filepath.EvalSymlinks(root)
+	if resolveErr != nil {
+		t.Fatal(resolveErr)
+	}
 	specJSON, specDigest, err := canonicalTemplateSpec(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
+	registry, err := pfregistry.Open(filepath.Join(root, "registry.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +69,10 @@ func hostTestService(t *testing.T, root string, spec TemplateSpec) (*Manager, *p
 		t.Fatal(err)
 	}
 	service.RuntimeBindingJSON, service.RuntimeBindingSHA256 = raw, digest
+	service.ForwardID = "pf-host-test"
+	if err := registry.CreateManagedService(context.Background(), *service, pfregistry.Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:39191"}); err != nil {
+		t.Fatal(err)
+	}
 	return &Manager{stateDir: root, registry: registry, catalog: catalog, scope: scope}, service
 }
 
@@ -133,7 +141,7 @@ func TestHostRuntimeRestartAdoptsExactProcessIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start() after Runtime restart error = %v", err)
 	}
-	if recovered != identity || !strings.HasPrefix(recovered, "host:v2:") {
+	if recovered != identity || !strings.HasPrefix(recovered, "host:v3:") {
 		t.Fatalf("recovered identity = %q, want %q", recovered, identity)
 	}
 	if err := second.Stop(context.Background(), service); err != nil {

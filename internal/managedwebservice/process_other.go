@@ -17,7 +17,7 @@ func terminateManagedProcess(cmd *exec.Cmd) error {
 func killManagedProcess(cmd *exec.Cmd) error { return terminateManagedProcess(cmd) }
 func managedProcessAlive(_ int) bool         { return false }
 func managedProcessRunning(_ int) bool       { return false }
-func managedProcessDetails(_ int) (string, int, string, error) {
+func legacyManagedProcessDetails(_ int) (string, int, string, error) {
 	return "", 0, "", errors.New("managed process recovery is unsupported on this platform")
 }
 func terminateManagedProcessPID(_ int) error {
@@ -25,4 +25,8 @@ func terminateManagedProcessPID(_ int) error {
 }
 func killManagedProcessPID(_ int) error {
 	return errors.New("managed process recovery is unsupported on this platform")
+}
+
+func readManagedProcess(_ int) (managedProcessSnapshot, error) {
+	return managedProcessSnapshot{}, errors.New("managed process recovery is unsupported on this platform")
 }

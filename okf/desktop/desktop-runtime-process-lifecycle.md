@@ -54,7 +54,7 @@ Gateway-only, Provider-only, and URL Environments have no authorized direct proc
 
 # Boundaries
 
-Runtime owns business services, active sessions, and graceful cleanup after a normal process signal. Desktop owns installation and process actions. Maintenance helper performs two temporary low-level operations. Gateway and Provider own access. External systemd, Docker, or Kubernetes automation may be added by users, but it is outside Redeven's lifecycle contract.
+Runtime manages business services and owns proxy sessions. Desktop/Runtime shutdown retires management and transport without stopping independently running services; the [independent Host lifecycle](../architecture/independent-host-services.md) owns that boundary. Desktop owns installation and process actions. Maintenance helper performs two temporary low-level operations. Gateway and Provider own access. External systemd, Docker, or Kubernetes automation may be added by users, but it is outside Redeven's lifecycle contract.
 
 # Evidence
 

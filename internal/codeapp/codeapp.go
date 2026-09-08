@@ -408,6 +408,12 @@ func (s *Service) Close() error {
 	if s == nil {
 		return nil
 	}
+	// Enter management shutdown before retiring request and engine resources,
+	// so cancellation cannot be mistaken for a user request to stop a service.
+	if s.managed != nil {
+		_ = s.managed.Close()
+	}
+
 	if s.appSrv != nil {
 		_ = s.appSrv.Close()
 	}
@@ -416,9 +422,6 @@ func (s *Service) Close() error {
 	}
 	if s.containers != nil {
 		_ = s.containers.Close()
-	}
-	if s.managed != nil {
-		_ = s.managed.Close()
 	}
 	if s.reg != nil {
 		_ = s.reg.Close()

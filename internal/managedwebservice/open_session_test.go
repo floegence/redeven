@@ -2,100 +2,55 @@ package managedwebservice
 
 import (
 	"context"
-	"strings"
-	"sync"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-func TestOpenSessionRestartsStaleDynamicHostAndJoinsPreparation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("starts a local managed process")
-	}
-	spec := TemplateSpec{
-		SchemaVersion: templateSpecSchemaVersion,
-		Kind:          DeploymentHost,
-		Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 5},
-		Host: &HostTemplateSpec{
-			StartScript: `printf 'dsh web: http://127.0.0.1:%s/?token=secret-token\n' "$REDEVEN_SERVICE_PORT"; exec sleep 60`,
-			OpenTarget:  &HostOpenTargetSpec{Mode: "startup_output_url", LinePrefix: "dsh web: "},
-		},
-	}
-	manager, registry, service, _ := newRuntimeResolutionTestService(t, spec, ReleaseIdentity{Kind: "none"}, "running")
-	staleDigest := strings.Repeat("0", 64)
-	if err := registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{RuntimeSpecSHA256: &staleDigest}); err != nil {
+func TestOpenSessionPreservesAppliedInstanceAndRetriesHook(t *testing.T) {
+	spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{
+		StartScript:      `exec sleep 60`,
+		AfterStartScript: `printf 'http://127.0.0.1:%s/?token=secret-token\n' "$REDEVEN_SERVICE_PORT" > "$REDEVEN_SERVICE_RUN_DIR/open-url"`,
+		OpenScript:       `cat "$REDEVEN_SERVICE_RUN_DIR/open-url"`,
+	}}
+	manager, registry, service, template := newRuntimeResolutionTestService(t, spec, ReleaseIdentity{Kind: "none"}, "stopped")
+	manager.healthCheck = func(context.Context, *pfregistry.ManagedService) error { return nil }
+	driver := manager.host.(*hostScriptDriver)
+	identity, err := driver.Start(context.Background(), service)
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	healthStarted := make(chan struct{})
-	healthRelease := make(chan struct{})
-	var healthOnce sync.Once
-	manager.healthCheck = func(context.Context, *pfregistry.ManagedService) error {
-		healthOnce.Do(func() { close(healthStarted) })
-		<-healthRelease
-		return nil
+	t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
+	driver.removeOpenSession(service)
+	ready, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "retry-opening-hook"})
+	if err != nil || ready.State != "ready" || ready.AppPath != "/?token=secret-token" {
+		t.Fatalf("OpenSession=%+v err=%v", ready, err)
 	}
-
-	first, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "open-stale-runtime"})
-	if err != nil || first.State != "preparing" || first.Operation == nil || first.Forward != nil || first.AppPath != "" {
-		t.Fatalf("first OpenSession() = %+v, err=%v", first, err)
+	// A newer template must not execute against this existing application.
+	spec.Host.OpenScript = "exit 99"
+	template.SpecJSON, template.SpecSHA256, err = canonicalTemplateSpec(spec)
+	if err != nil {
+		t.Fatal(err)
 	}
-	select {
-	case <-healthStarted:
-	case <-time.After(5 * time.Second):
-		t.Fatal("automatic restart did not reach its health check")
+	template.Revision++
+	if err := registry.UpdateManagedTemplate(context.Background(), template); err != nil {
+		t.Fatal(err)
 	}
-	joined, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "open-join-restart"})
-	if err != nil || joined.State != "preparing" || joined.Operation == nil || joined.Operation.OperationID != first.Operation.OperationID {
-		t.Fatalf("joined OpenSession() = %+v, err=%v", joined, err)
-	}
-	close(healthRelease)
-	waitForManagedOperationState(t, registry, first.Operation.OperationID, "succeeded")
-
-	ready, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "open-ready-runtime"})
-	if err != nil || ready.State != "ready" || ready.Forward == nil || ready.Forward.ForwardID != service.ForwardID || ready.AppPath != "/?token=secret-token" || ready.Operation != nil {
-		t.Fatalf("ready OpenSession() = %+v, err=%v", ready, err)
+	ready, err = manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "open-pending-template"})
+	if err != nil || ready.AppPath != "/?token=secret-token" {
+		t.Fatalf("pending template OpenSession=%+v err=%v", ready, err)
 	}
 	stored, err := registry.GetManagedService(context.Background(), service.ServiceID)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || stored.RuntimeIdentity != identity || !managedProcessRunning(hostPIDFromIdentity(identity)) {
+		t.Fatal("Open changed the running application")
 	}
-	resolved, err := manager.resolveCurrentRuntime(context.Background(), stored)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256 || stored.RuntimeIdentity == "" {
-		t.Fatalf("applied runtime identity = %+v, resolved digest = %q", stored, resolved.RuntimeSpecSHA256)
-	}
-
-	driver := manager.host.(*hostScriptDriver)
-	driver.removeOpenSession(stored)
-	recapture, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "open-recapture-target"})
-	if err != nil || recapture.State != "preparing" || recapture.Operation == nil || recapture.Operation.OperationID == first.Operation.OperationID {
-		t.Fatalf("missing-target OpenSession() = %+v, err=%v", recapture, err)
-	}
-	waitForManagedOperationState(t, registry, recapture.Operation.OperationID, "succeeded")
-	recaptured, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "open-recaptured-target"})
-	if err != nil || recaptured.State != "ready" || recaptured.AppPath != "/?token=secret-token" {
-		t.Fatalf("recaptured OpenSession() = %+v, err=%v", recaptured, err)
-	}
-
-	stored, err = registry.GetManagedService(context.Background(), service.ServiceID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	driver.removeOpenSession(stored)
-	active := pfregistry.ManagedOperation{
-		OperationID: "mop-unrelated-open-conflict", ServiceID: service.ServiceID, RequestID: "unrelated-open-conflict", RequestFingerprint: "stop",
-		Action: string(ActionStop), State: "running", Stage: "stopping", ProgressTotal: operationProgressTotal,
-	}
-	if err := registry.CreateManagedOperation(context.Background(), active); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "open-operation-conflict"}); managedErrorCode(err) != "OPERATION_CONFLICT" {
-		t.Fatalf("OpenSession() unrelated-operation error = %v", err)
+	active, err := registry.GetActiveManagedOperation(context.Background(), service.ServiceID)
+	if err != nil || active != nil {
+		t.Fatal("Open created a lifecycle operation")
 	}
 }
 
@@ -118,4 +73,45 @@ func waitForManagedOperationState(t *testing.T, registry *pfregistry.Registry, o
 	operation, _ := registry.GetManagedOperation(context.Background(), operationID)
 	t.Fatalf("operation %s did not reach %q: %+v", operationID, state, operation)
 	return nil
+}
+
+func TestConcurrentOpenSharesOneHook(t *testing.T) {
+	spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{
+		StartScript: "exec sleep 60",
+		OpenScript:  `printf 'invocation\n' >> "$REDEVEN_SERVICE_RUN_DIR/open-count"; sleep 0.2; printf 'http://127.0.0.1:%s/\n' "$REDEVEN_SERVICE_PORT"`,
+	}}
+	manager, _, service, _ := newRuntimeResolutionTestService(t, spec, ReleaseIdentity{Kind: "none"}, "stopped")
+	manager.healthCheck = func(context.Context, *pfregistry.ManagedService) error { return nil }
+	driver := manager.host.(*hostScriptDriver)
+	identity, err := driver.Start(context.Background(), service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
+	countPath := filepath.Join(driver.runDirectory(service), "open-count")
+	if err := os.WriteFile(countPath, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	results := make(chan error, 16)
+	for i := 0; i < 16; i++ {
+		go func() {
+			<-start
+			session, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "concurrent-open"})
+			if err == nil && session.AppPath != "/" {
+				err = errors.New("unexpected opening path")
+			}
+			results <- err
+		}()
+	}
+	close(start)
+	for i := 0; i < 16; i++ {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(countPath)
+	if err != nil || string(raw) != "invocation\n" {
+		t.Fatalf("concurrent opens executed %q, err=%v", raw, err)
+	}
 }

@@ -143,6 +143,8 @@ type ManagedService = Readonly<{
   }>>;
   release_status: ManagedReleaseStatus;
   actions?: ManagedServiceActions;
+  opening?: Readonly<{ state: string; error_code?: string }>;
+  pending_changes?: boolean;
 }>;
 
 type ManagedReleaseIdentity = Readonly<{
@@ -256,7 +258,7 @@ type ManagedContainerResource = NonNullable<ManagedService['container_resources'
 type ManagedDeployment = 'host' | 'container' | 'compose';
 type ManagedAction = 'start' | 'stop' | 'restart' | 'retry';
 type ManagedActionCapability = Readonly<{ available: boolean; reason_code?: string }>;
-type ManagedServiceActions = Readonly<Record<ManagedAction, ManagedActionCapability>>;
+type ManagedServiceActions = Readonly<Record<ManagedAction, ManagedActionCapability> & { open?: ManagedActionCapability; restore_management?: ManagedActionCapability }>;
 type ManagedTemplateLocalization = Readonly<{
   name: string;
   description: string;
@@ -307,6 +309,8 @@ type ManagedCatalogTemplate = Readonly<{
   host_lifecycle_plan?: HostLifecyclePlan;
 }>;
 
+type HostManagementReview = Readonly<{ service_id: string; saved_identity: string; fingerprint: string; pid: number; process_group: number; executable: string; user_id: string; birth: string }>;
+
 type ManagedUninstallRequest = Readonly<{ service: ManagedService; deleteData: boolean }>;
 type ManagedReconfigureRequest = Readonly<{
   draft: ManagedServiceReconfigureDraft;
@@ -325,6 +329,9 @@ export type TemplateEditorDraft = {
   containerPort: string;
   installScript: string;
   startScript: string;
+  afterStartScript: string;
+  openScript: string;
+  outputMode: 'discard' | 'private_file';
   stopScript: string;
   uninstallScript: string;
   npmPackageName: string;
@@ -411,6 +418,7 @@ function validTemplateEnvironment(raw: string): boolean {
 function emptyTemplateDraft(kind: 'host' | 'container' | 'compose'): TemplateEditorDraft {
   return {
     name: '', description: '', kind, scheme: 'http', path: '/', healthPath: '/', containerPort: '3000',
+    afterStartScript: '', openScript: '', outputMode: 'discard',
     installScript: '', startScript: kind === 'host' ? 'exec your-server --host "$REDEVEN_SERVICE_HOST" --port "$REDEVEN_SERVICE_PORT"' : '', stopScript: '', uninstallScript: '',
     npmPackageName: '', npmPackageVersion: '', npmRegistryURL: 'https://registry.npmjs.org/', npmExecutable: '', npmAuthTokenParameter: '',
     image: '', entrypoint: '', command: '', environment: '',
@@ -431,6 +439,9 @@ function draftFromTemplate(template: ManagedCatalogTemplate): TemplateEditorDraf
     path: spec?.endpoint.path ?? '/',
     healthPath: spec?.endpoint.health_path ?? '/',
     containerPort: String(spec?.endpoint.container_port ?? 3000),
+    afterStartScript: spec?.host?.after_start_script ?? '',
+    openScript: spec?.host?.open_script ?? '',
+    outputMode: spec?.host?.output_mode ?? 'discard',
     installScript: spec?.host?.install_script ?? '',
     startScript: spec?.host?.start_script ?? draft.startScript,
     stopScript: spec?.host?.stop_script ?? '',
@@ -502,9 +513,9 @@ function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string)
     startup_timeout_sec: original?.endpoint.startup_timeout_sec || 60,
     ...(draft.kind === 'host' ? {} : { container_port: Number(draft.containerPort) }),
   };
-  const common = { schema_version: 5 as const, kind: draft.kind, endpoint, parameters };
+  const common = { schema_version: 6 as const, kind: draft.kind, endpoint, parameters };
   const spec: ManagedTemplateSpec = draft.kind === 'host'
-    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.environment ? { environment: original.host.environment } : {}), ...(original?.host?.open_target ? { open_target: original.host.open_target } : {}), ...(!hasNPM && original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(hasNPM ? { npm: { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } } : {}) } }
+    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.environment ? { environment: original.host.environment } : {}), after_start_script: draft.afterStartScript, open_script: draft.openScript, output_mode: draft.outputMode, ...(!hasNPM && original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(hasNPM ? { npm: { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } } : {}) } }
     : draft.kind === 'container'
 	  ? { ...common, container: { image: draft.image.trim(), entrypoint: draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit || 512 } }
       : { ...common, compose: { yaml: draft.composeYAML, main_service: draft.mainService.trim() } };
@@ -957,7 +968,13 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
     case 'DEPENDENCY_LAYOUT_INVALID': return i18n.t('webServices.managed.dependencyLayoutInvalid');
     case 'HOST_PROCESS_IDENTITY_MISMATCH':
     case 'HOST_PROCESS_IDENTITY_UNAVAILABLE': return i18n.t('webServices.managed.hostProcessIdentityChanged');
+    case 'HOST_RECOVERY_UNAVAILABLE':
+    case 'HOST_RECOVERY_NOT_REQUIRED':
+    case 'HOST_RECOVERY_CONFIRMATION_REQUIRED': return i18n.t('webServices.managed.managementRecoveryUnavailable');
+    case 'SERVICE_ENDPOINT_UNAVAILABLE': return i18n.t('webServices.managed.endpointUnavailable');
     case 'HOST_OPEN_TARGET_INVALID': return i18n.t('webServices.managed.hostOpenTargetInvalid');
+    case 'HOST_OPEN_HOOK_FAILED':
+    case 'HOST_AFTER_START_HOOK_FAILED': return i18n.t('webServices.managed.openingRetryHint');
     case 'HOST_OPEN_TARGET_MISSING': return i18n.t('webServices.managed.hostOpenTargetMissing');
     case 'HOST_OPEN_TARGET_UNAVAILABLE': return i18n.t('webServices.managed.hostOpenTargetUnavailable');
     case 'MANAGED_WEB_SERVICE_INTERNAL': return i18n.t('webServices.managed.operationFailed');
@@ -1528,7 +1545,7 @@ function managedActionUnavailableReason(capability: ManagedActionCapability, i18
   return i18n.t(`webServices.managed.actionUnavailable.${code}` as EnvAppTranslationKey);
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; operationPhase?: ManagedOperationPresentationPhase; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; operationPhase?: ManagedOperationPresentationPhase; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onRestoreManagement?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void }) {
   const i18n = useI18n();
   const [failureDiagnosticCopied, setFailureDiagnosticCopied] = createSignal(false);
   let failureDiagnosticResetTimer: number | undefined;
@@ -1555,7 +1572,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
   };
   const primaryCapability = () => actionCapability(primaryAction());
   const actionLabel = (action: ManagedAction): string => {
-    const label = action === 'restart' ? i18n.t('webServices.managed.restart') : i18n.t('webServices.managed.retry');
+    const label = action === 'restart' ? i18n.t(props.service.pending_changes ? 'webServices.managed.applyAndRestart' : 'webServices.managed.restart') : i18n.t('webServices.managed.retry');
     const reason = managedActionUnavailableReason(actionCapability(action), i18n);
     return reason ? `${label} — ${reason}` : label;
   };
@@ -1600,6 +1617,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     if (failureDiagnosticResetTimer !== undefined) window.clearTimeout(failureDiagnosticResetTimer);
   });
   const moreItems = (): DropdownItem[] => [
+    ...(props.service.actions?.restore_management?.available ? [{ id: 'restore-management', label: i18n.t('webServices.managed.restoreManagement'), disabled: busy() || !props.canManage }] : []),
     ...(props.service.container_resources ?? []).map((resource) => ({
       id: `resource:${resource.kind}`,
       label: resource.kind === 'image'
@@ -1640,6 +1658,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     },
   ];
   const selectMoreItem = (id: string) => {
+    if (id === 'restore-management') { props.onRestoreManagement?.(); return; }
     if (id.startsWith('resource:')) {
       const resource = props.service.container_resources?.find((item) => `resource:${item.kind}` === id);
       if (resource) props.onOpenResource(resource);
@@ -1726,6 +1745,9 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
               <span class="shrink-0 font-mono text-muted-foreground">{Math.min(activeOperation.progress_current, activeOperation.progress_total)}/{activeOperation.progress_total}</span>
             </div>
           )}</Show>
+          <Show when={props.service.pending_changes}><span class="text-[10px] text-warning">{i18n.t('webServices.managed.pendingChanges')}</span></Show>
+          <Show when={running() && props.service.opening?.error_code}><Tooltip content={managedFailureMessage(props.service.opening?.error_code ?? '', i18n)}><span class="text-[10px] text-warning">{i18n.t('webServices.managed.openingUnavailable')}</span></Tooltip></Show>
+          <Show when={!failed() && props.service.last_failure}><Tooltip content={props.service.last_failure?.message ?? ''}><span class="text-[10px] text-muted-foreground">{i18n.t('webServices.managed.previousFailure')}</span></Tooltip></Show>
 		  <Show when={props.service.release_status.latest_stable_relation === 'newer' && props.service.release_status.latest_stable_release}>{(latest) => <span class="max-w-full truncate text-[10px] font-medium text-warning">{releaseIdentityLabel(props.service.release_status.current_release!)} → {releaseIdentityLabel(latest())}</span>}</Show>
 		  <Show when={props.service.release_status.latest_stable_relation !== 'newer' && props.service.release_status.latest_preview_relation === 'newer' && props.service.release_status.latest_preview_release}>{(latest) => <span class="max-w-full truncate text-[10px] font-medium text-warning">{i18n.t('webServices.managed.releaseChannel.preview')}: {releaseIdentityLabel(latest())}</span>}</Show>
         </div>
@@ -1737,7 +1759,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
               variant="default"
               class="h-8 w-full px-3"
               onClick={props.onOpen}
-              disabled={!running() || busy() || !props.canOpen}
+              disabled={!props.service.actions?.open?.available || busy() || !props.canOpen}
               aria-busy={props.busy || undefined}
             >
               <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
@@ -2298,6 +2320,9 @@ export function EnvPortForwardsPage() {
   const [templateDuplicate, setTemplateDuplicate] = createSignal<ManagedCatalogTemplate | null>(null);
   const [templateDuplicateName, setTemplateDuplicateName] = createSignal('');
   const [templateDelete, setTemplateDelete] = createSignal<ManagedCatalogTemplate | null>(null);
+  const [managementReview, setManagementReview] = createSignal<HostManagementReview | null>(null);
+  const [managementRestoreBusy, setManagementRestoreBusy] = createSignal(false);
+  const [managedLogIsHost, setManagedLogIsHost] = createSignal(false);
   const [managedLogs, setManagedLogs] = createSignal<string[] | null>(null);
   const [updateNoticeAcceptances, setUpdateNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   const [managedUninstall, setManagedUninstall] = createSignal<ManagedUninstallRequest | null>(null);
@@ -2434,10 +2459,12 @@ export function EnvPortForwardsPage() {
 
   const selectedTemplate = createMemo(() => managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
 
-	const requestManagedOpenSession = (service: ManagedService) => fetchLocalApiJSON<ManagedOpenSession>(
+	const requestManagedOpenSession = async (service: ManagedService) => {
+    try { return await fetchLocalApiJSON<ManagedOpenSession>(
 		`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/open-session`,
 		{ method: 'POST', body: JSON.stringify({ request_id: managedRequestID() }) },
-	);
+	); } catch (error) { if (error instanceof LocalApiError) throw new Error(managedFailureMessage(error.code, i18n)); throw error; }
+  };
 
 	const resolveManagedForwardSession = async (service: ManagedService): Promise<Pick<ForwardSession, 'forward' | 'app_path'>> => {
 		let result = await requestManagedOpenSession(service);
@@ -2560,6 +2587,24 @@ export function EnvPortForwardsPage() {
     } finally {
       if (operationID) managedOperations.clear(operationID);
     }
+  };
+
+  const reviewManagement = async (service: ManagedService) => {
+    try {
+      const review = await fetchLocalApiJSON<HostManagementReview>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/management-review`, { method: 'POST', body: '{}' });
+      setManagementReview(review);
+    } catch (error) { notify.error(i18n.t('webServices.managed.restoreManagement'), error instanceof LocalApiError ? managedFailureMessage(error.code, i18n) : error instanceof Error ? error.message : String(error)); }
+  };
+  const restoreManagement = async () => {
+    const review = managementReview();
+    if (!review || managementRestoreBusy()) return;
+    setManagementRestoreBusy(true);
+    try {
+      await fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(review.service_id)}/restore-management`, { method: 'POST', body: JSON.stringify({ saved_identity: review.saved_identity, fingerprint: review.fingerprint, confirmed: true }) });
+      setManagementReview(null);
+      await loadManaged(false);
+    } catch (error) { notify.error(i18n.t('webServices.managed.restoreManagement'), error instanceof LocalApiError ? managedFailureMessage(error.code, i18n) : error instanceof Error ? error.message : String(error)); }
+    finally { setManagementRestoreBusy(false); }
   };
 
   const openManaged = async (service: ManagedService) => {
@@ -3084,7 +3129,7 @@ export function EnvPortForwardsPage() {
   };
 
   const loadManagedLogs = async (serviceID: string) => {
-    try { const result = await fetchLocalApiJSON<{ lines: string[] }>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/logs`, { method: 'GET' }); setManagedLogs(result.lines ?? []); }
+    try { const result = await fetchLocalApiJSON<{ lines: string[] }>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/logs`, { method: 'GET' }); setManagedLogIsHost(managedState().find((service) => service.service_id === serviceID)?.deployment === 'host'); setManagedLogs(result.lines ?? []); }
     catch (error) { notify.error(i18n.t('webServices.notifications.failedToOpenTitle'), error instanceof Error ? error.message : String(error)); }
   };
 
@@ -3625,6 +3670,7 @@ export function EnvPortForwardsPage() {
                               : undefined}
                             canManage={canManageManagedService()}
                             onOpen={() => void openManaged(service())}
+                            onRestoreManagement={() => void reviewManagement(service())}
                             onOpenResource={openManagedContainerResource}
                             onAction={(action) => void managedAction(serviceID, action)}
                             onOperationExpandedChange={setManagedOperationExpanded}
@@ -3910,6 +3956,15 @@ export function EnvPortForwardsPage() {
                   <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.serviceRuntimeSettings')}</h3>
                   <Show when={draft().kind === 'host'}>
                     <p class="mt-2 text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.hostScriptNote')}</p>
+                    <details class="service-template-editor__advanced mt-3" open={Boolean(draft().afterStartScript || draft().openScript || draft().outputMode === 'private_file')}>
+                      <summary class="cursor-pointer text-xs font-medium">{i18n.t('webServices.managed.openingHooks')}</summary>
+                      <p class="mt-2 text-xs text-muted-foreground">{i18n.t('webServices.managed.openingHooksHelp')}</p>
+                      <div class="mt-3 space-y-3">
+                        <div><TemplateEditorLabel for="template-editor-output-mode" label={i18n.t('webServices.managed.outputMode')} /><select id="template-editor-output-mode" class="w-full rounded border bg-background p-2 text-xs" value={draft().outputMode} onChange={(event) => update({ outputMode: event.currentTarget.value as 'discard' | 'private_file' })}><option value="discard">{i18n.t('webServices.managed.outputDiscard')}</option><option value="private_file">{i18n.t('webServices.managed.outputPrivateFile')}</option></select></div>
+                        <div><TemplateEditorLabel for="template-editor-after-start" label={i18n.t('webServices.managed.afterStartScript')} /><Textarea id="template-editor-after-start" value={draft().afterStartScript} rows={5} class="font-mono text-xs" onInput={(event) => update({ afterStartScript: event.currentTarget.value })} /></div>
+                        <div><TemplateEditorLabel for="template-editor-open-script" label={i18n.t('webServices.managed.openScript')} /><Textarea id="template-editor-open-script" value={draft().openScript} rows={3} class="font-mono text-xs" onInput={(event) => update({ openScript: event.currentTarget.value })} /></div>
+                      </div>
+                    </details>
                     <details class="service-template-editor__advanced mt-3" open={Boolean(draft().npmPackageName)}>
                       <summary class="cursor-pointer py-2 text-xs font-medium text-muted-foreground">{i18n.t('webServices.managed.npmPackageSettings')}</summary>
                       <div class="grid gap-x-4 gap-y-3 pb-1 pt-2 sm:grid-cols-2">
@@ -4055,7 +4110,11 @@ export function EnvPortForwardsPage() {
 
       <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-sm">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
 
-      <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
+      <ConfirmDialog open={managementReview() !== null} onOpenChange={(open) => { if (!open && !managementRestoreBusy()) setManagementReview(null); }} title={i18n.t('webServices.managed.restoreManagement')} confirmText={i18n.t('webServices.managed.confirmProcess')} loading={managementRestoreBusy()} onConfirm={() => void restoreManagement()}>
+        <p class="text-sm">{i18n.t('webServices.managed.restoreManagementHelp')}</p>
+        <Show when={managementReview()}>{(review) => <p class="mt-3 rounded bg-muted p-3 font-mono text-xs break-words">{i18n.t('webServices.managed.processFacts', { pid: review().pid, group: review().process_group, executable: review().executable, user: review().user_id, birth: review().birth })}</p>}</Show>
+      </ConfirmDialog>
+      <Dialog open={managedLogs() !== null} onOpenChange={(open) => { if (!open) setManagedLogs(null); }} title={i18n.t('webServices.managed.logsTitle')} footer={<div class="flex justify-end"><Button size="sm" variant="outline" onClick={() => setManagedLogs(null)}>{i18n.t('webServices.actions.cancel')}</Button></div>}><Show when={managedLogIsHost()}><p class="mb-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.logScope')}</p></Show><pre class="max-h-96 overflow-auto rounded-md bg-muted/40 p-3 text-[11px] whitespace-pre-wrap">{(managedLogs() ?? []).join('\n') || i18n.t('webServices.managed.noLogs')}</pre></Dialog>
 
       <DialogPlacementProvider mode="global">
         <EnvAppDrawer

@@ -229,6 +229,9 @@ func TestHostUninstallRejectsMissingCurrentTemplate(t *testing.T) {
 	if err := os.WriteFile(sentinel, []byte("preserved"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.registry.DeleteManagedService(context.Background(), service.ServiceID); err != nil {
+		t.Fatal(err)
+	}
 	if err := manager.registry.DeleteManagedTemplate(context.Background(), service.TemplateID); err != nil {
 		t.Fatal(err)
 	}

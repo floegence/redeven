@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestParseHostStartupTargetAcceptsOnlyExactLoopbackEndpoint(t *testing.T) {
@@ -32,11 +31,11 @@ func TestParseHostStartupTargetAcceptsOnlyExactLoopbackEndpoint(t *testing.T) {
 		{name: "fragment", value: "http://127.0.0.1:39191/#private", wantCode: "HOST_OPEN_TARGET_INVALID"},
 		{name: "extra text", value: "http://127.0.0.1:39191/ ready", wantCode: "HOST_OPEN_TARGET_INVALID"},
 		{name: "relative", value: "/app?token=private", wantCode: "HOST_OPEN_TARGET_INVALID"},
-		{name: "oversized", value: "http://127.0.0.1:39191/?token=" + strings.Repeat("x", operationOutputLineMax), wantCode: "HOST_OPEN_TARGET_INVALID"},
+		{name: "oversized", value: "http://127.0.0.1:39191/?token=" + strings.Repeat("x", hostOpenResultLimit), wantCode: "HOST_OPEN_TARGET_INVALID"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := parseHostStartupTarget(test.value, endpoint, 39191)
+			got, err := parseHostOpenURL(test.value, endpoint, 39191)
 			if test.wantCode != "" {
 				if code := managedErrorCode(err); code != test.wantCode {
 					t.Fatalf("parse error = %v, code=%q", err, code)
@@ -61,7 +60,8 @@ func TestHostDynamicOpenTargetPersistsPrivateRedactedSessionAndRecovers(t *testi
 		Kind:          DeploymentHost,
 		Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 2},
 		Host: &HostTemplateSpec{
-			OpenTarget:  &HostOpenTargetSpec{Mode: "startup_output_url", LinePrefix: "ready: "},
+			OutputMode:       "private_file",
+			AfterStartScript: testOutputOpeningScript, OpenScript: `cat "$REDEVEN_SERVICE_RUN_DIR/open-url"`,
 			StartScript: fmt.Sprintf("printf \"ready: http://127.0.0.1:$REDEVEN_SERVICE_PORT/app?token=%s\\n\"; exec sleep 60", token),
 		},
 	})
@@ -83,20 +83,12 @@ func TestHostDynamicOpenTargetPersistsPrivateRedactedSessionAndRecovers(t *testi
 		t.Fatalf("private open-session state mode = %v, err=%v", info, err)
 	}
 
-	logPath := first.logPath(service)
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		raw, readErr := os.ReadFile(logPath)
-		if readErr == nil && len(raw) > 0 {
-			if strings.Contains(string(raw), token) || !strings.Contains(string(raw), "REDACTED") {
-				t.Fatalf("service log was not safely redacted: %s", raw)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("service log was not written: %v", readErr)
-		}
-		time.Sleep(10 * time.Millisecond)
+	raw, readErr := os.ReadFile(filepath.Join(first.runDirectory(service), "output"))
+	if readErr != nil || len(raw) != 0 {
+		t.Fatalf("private output was not truncated: size=%d, err=%v", len(raw), readErr)
+	}
+	if raw, _ := os.ReadFile(first.logPath(service)); strings.Contains(string(raw), token) {
+		t.Fatal("private token leaked to ordinary logs")
 	}
 
 	second := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
@@ -118,49 +110,42 @@ func TestHostDynamicOpenTargetPersistsPrivateRedactedSessionAndRecovers(t *testi
 	}
 }
 
-func TestHostDynamicOpenTargetRejectsInvalidOrMissingOutput(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Host lifecycle is Unix-only")
-	}
-	tests := []struct {
-		name     string
-		script   string
-		wantCode string
-	}{
-		{name: "invalid remote URL", script: "printf 'ready: http://example.com:$REDEVEN_SERVICE_PORT/\\n'; exec sleep 60", wantCode: "HOST_OPEN_TARGET_INVALID"},
-		{name: "process exits first", script: "exit 0", wantCode: "HOST_OPEN_TARGET_MISSING"},
-		{name: "startup timeout", script: "exec sleep 60", wantCode: "HOST_OPEN_TARGET_MISSING"},
-	}
-	for _, test := range tests {
+const testOutputOpeningScript = `umask 077
+while :; do
+  url=$(awk 'index($0, "ready: ")==1 { print substr($0,8); exit }' "$REDEVEN_SERVICE_OUTPUT_FILE")
+  if [ -n "$url" ]; then
+    printf '%s\n' "$url" > "$REDEVEN_SERVICE_RUN_DIR/open-url.tmp"
+    mv "$REDEVEN_SERVICE_RUN_DIR/open-url.tmp" "$REDEVEN_SERVICE_RUN_DIR/open-url"
+    exit 0
+  fi
+  sleep 0.1
+done`
+
+func TestHostOpeningFailurePreservesApplication(t *testing.T) {
+	for _, test := range []struct{ name, hook, code string }{
+		{"external URL", `printf 'http://example.com:39191/'`, "HOST_OPEN_TARGET_INVALID"},
+		{"secret failure", `echo secret-on-stdout; echo secret-on-stderr >&2; exit 1`, "HOST_OPEN_HOOK_FAILED"},
+		{"multiline", `printf 'http://localhost:39191/\nsecret'`, "HOST_OPEN_TARGET_INVALID"},
+		{"oversized", `head -c 20000 /dev/zero`, "HOST_OPEN_TARGET_INVALID"},
+	} {
 		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			manager, service := hostTestService(t, root, TemplateSpec{
-				SchemaVersion: templateSpecSchemaVersion,
-				Kind:          DeploymentHost,
-				Endpoint:      WebEndpointSpec{Scheme: "http", HealthPath: "/", StartupTimeout: 1},
-				Host: &HostTemplateSpec{
-					OpenTarget: &HostOpenTargetSpec{Mode: "startup_output_url", LinePrefix: "ready: "}, StartScript: test.script,
-				},
-			})
+			spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{StartScript: "exec sleep 60", OpenScript: test.hook}}
+			manager, service := hostTestService(t, t.TempDir(), spec)
 			driver := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
-			if _, err := driver.Start(context.Background(), service); managedErrorCode(err) != test.wantCode {
-				t.Fatalf("Start() error = %v, want code %s", err, test.wantCode)
+			identity, err := driver.Start(context.Background(), service)
+			if err != nil {
+				t.Fatal(err)
 			}
-			deadline := time.Now().Add(2 * time.Second)
-			for {
-				driver.processMu.Lock()
-				remaining := len(driver.processes)
-				driver.processMu.Unlock()
-				if remaining == 0 {
-					break
-				}
-				if time.Now().After(deadline) {
-					t.Fatal("rejected Host process was not cleaned up")
-				}
-				time.Sleep(10 * time.Millisecond)
+			t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
+			state, err := driver.readRunState(service)
+			if err != nil || state.OpenErrorCode != test.code {
+				t.Fatalf("opening state=%+v, err=%v", state, err)
 			}
-			if _, err := os.Lstat(filepath.Join(root, "instances", service.ServiceID, "open-session.json")); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("rejected startup retained an open session: %v", err)
+			if !managedProcessRunning(hostPIDFromIdentity(identity)) {
+				t.Fatal("opening failure stopped the application")
+			}
+			if strings.Contains(state.OpenErrorMessage, "secret") {
+				t.Fatal("hook output leaked")
 			}
 		})
 	}
@@ -173,11 +158,44 @@ func TestValidHostOpenSessionPathRejectsAbsoluteAndFragmentValues(t *testing.T) 
 		"/nested/path?token=private":     true,
 		"http://127.0.0.1:39191/private": false,
 		"//example.com/private":          false,
+		"/\\example.com":                 false,
+		"/%2fexample.com":                false,
+		"/%5cexample.com":                false,
 		"/private#fragment":              false,
 		"/private trailing":              false,
 	} {
 		if got := validHostOpenSessionPath(value); got != want {
 			t.Errorf("validHostOpenSessionPath(%q) = %v, want %v", value, got, want)
 		}
+	}
+}
+
+func TestHostOpeningFromApplicationConfigurationWithoutOutputCapture(t *testing.T) {
+	spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: DeploymentHost, Endpoint: WebEndpointSpec{Scheme: "http"}, Host: &HostTemplateSpec{
+		StartScript:      `umask 077; printf 'http://127.0.0.1:%s/settings?key=from-config\n' "$REDEVEN_SERVICE_PORT" > "$REDEVEN_SERVICE_DATA_DIR/application-url"; exec sleep 60`,
+		AfterStartScript: `while [ ! -s "$REDEVEN_SERVICE_DATA_DIR/application-url" ]; do sleep 0.1; done`,
+		OpenScript:       `cat "$REDEVEN_SERVICE_DATA_DIR/application-url"`,
+	}}
+	manager, service := hostTestService(t, t.TempDir(), spec)
+	driver := &hostScriptDriver{manager: manager, processes: map[string]hostProcess{}}
+	identity, err := driver.Start(context.Background(), service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
+	if path, err := driver.resolveOpenSession(service); err != nil || path != "/settings?key=from-config" {
+		t.Fatalf("configuration opening failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(driver.runDirectory(service), "output")); !os.IsNotExist(err) {
+		t.Fatal("configuration template acquired output capture")
+	}
+	if err := os.WriteFile(filepath.Join(driver.runDirectory(service), "run.json"), []byte(`{"schema_version":99}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := driver.prepareOpening(context.Background(), service, spec); managedErrorCode(err) != "HOST_OPEN_TARGET_UNAVAILABLE" {
+		t.Fatal("corrupt launch record was accepted")
+	}
+	if !managedProcessRunning(hostPIDFromIdentity(identity)) {
+		t.Fatal("corrupt opening record stopped the application")
 	}
 }

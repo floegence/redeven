@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const templateSpecSchemaVersion = 5
+const templateSpecSchemaVersion = 6
 
 var (
 	templateNamePattern             = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
@@ -352,7 +352,7 @@ func validateTemplateSpec(spec TemplateSpec) error {
 		if spec.Host == nil || strings.TrimSpace(spec.Host.StartScript) == "" {
 			return serviceError("TEMPLATE_HOST_INVALID", "Host templates require a foreground start script.", 400, false, nil)
 		}
-		for _, script := range []string{spec.Host.InstallScript, spec.Host.StartScript, spec.Host.StopScript, spec.Host.UninstallScript} {
+		for _, script := range []string{spec.Host.InstallScript, spec.Host.StartScript, spec.Host.StopScript, spec.Host.UninstallScript, spec.Host.AfterStartScript, spec.Host.OpenScript} {
 			if len(script) > 128*1024 || strings.ContainsRune(script, '\x00') {
 				return serviceError("TEMPLATE_HOST_INVALID", "A host lifecycle script is too large or invalid.", 400, false, nil)
 			}
@@ -380,11 +380,10 @@ func validateTemplateSpec(spec TemplateSpec) error {
 				return err
 			}
 		}
-		if target := spec.Host.OpenTarget; target != nil {
-			if target.Mode != "startup_output_url" || !validHostOpenTargetPrefix(target.LinePrefix) {
-				return serviceError("TEMPLATE_HOST_OPEN_TARGET_INVALID", "The Host template startup output target is invalid.", 400, false, nil)
-			}
+		if spec.Host.OutputMode != "" && spec.Host.OutputMode != "discard" && spec.Host.OutputMode != "private_file" {
+			return serviceError("TEMPLATE_HOST_OUTPUT_INVALID", "Host output mode must be discard or private_file.", 400, false, nil)
 		}
+
 	case DeploymentContainer:
 		if spec.Container == nil || !validImageReference(spec.Container.Image) || spec.Endpoint.ContainerPort < 1 || spec.Endpoint.ContainerPort > 65535 {
 			return serviceError("TEMPLATE_CONTAINER_INVALID", "Single-container templates require an image and a valid container Web port.", 400, false, nil)
@@ -427,18 +426,6 @@ func validateTemplateSpec(spec TemplateSpec) error {
 		return serviceError("DEPLOYMENT_INVALID", "Choose a host, single-container, or Compose template.", 400, false, nil)
 	}
 	return nil
-}
-
-func validHostOpenTargetPrefix(value string) bool {
-	if strings.TrimSpace(value) == "" || len(value) > 128 {
-		return false
-	}
-	for _, character := range value {
-		if character < 0x20 || character == 0x7f {
-			return false
-		}
-	}
-	return true
 }
 
 func validateNPMHostPackage(value NPMHostPackageSpec, parameters []TemplateParameter) error {

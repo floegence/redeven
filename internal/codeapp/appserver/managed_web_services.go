@@ -281,6 +281,34 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	serviceID, action := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if r.Method == http.MethodPost && (action == "management-review" || action == "restore-management") {
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
+		if !ok {
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		if action == "management-review" {
+			review, err := g.managed.ReviewHostManagement(r.Context(), serviceID)
+			if err != nil {
+				writeManagedWebServiceError(w, err)
+				return true
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: review})
+			return true
+		}
+		var req managedwebservice.RestoreManagementRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		if err := g.managed.RestoreHostManagement(r.Context(), serviceID, req); err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		g.appendAudit(meta, "managed_web_service_restore_management", "success", map[string]any{"service_id": serviceID}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		return true
+	}
 	if r.Method == http.MethodPost && action == "open-session" {
 		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
 		if !ok {

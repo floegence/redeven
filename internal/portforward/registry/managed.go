@@ -14,11 +14,12 @@ import (
 )
 
 var (
-	ErrManagedServiceNotFound      = errors.New("managed web service not found")
-	ErrManagedForward              = errors.New("managed port forward can only be removed by uninstalling its service")
-	ErrManagedTemplateNotFound     = errors.New("managed web service template not found")
-	ErrManagedTemplateNameConflict = errors.New("managed web service template name already exists")
-	ErrManagedTemplateInUse        = errors.New("managed web service template has an installed service")
+	ErrManagedServiceRuntimeChanged = errors.New("managed web service launch changed during observation")
+	ErrManagedServiceNotFound       = errors.New("managed web service not found")
+	ErrManagedForward               = errors.New("managed port forward can only be removed by uninstalling its service")
+	ErrManagedTemplateNotFound      = errors.New("managed web service template not found")
+	ErrManagedTemplateNameConflict  = errors.New("managed web service template name already exists")
+	ErrManagedTemplateInUse         = errors.New("managed web service template has an installed service")
 )
 
 type ManagedTemplate struct {
@@ -557,6 +558,16 @@ func (r *Registry) createManagedService(ctx context.Context, service ManagedServ
 }
 
 func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, patch ManagedServicePatch) error {
+	return r.updateManagedService(ctx, serviceID, patch, nil)
+}
+
+// UpdateManagedServiceIfRuntimeMatches prevents an older observation or identity
+// upgrade from overwriting a launch committed by a concurrent user operation.
+func (r *Registry) UpdateManagedServiceIfRuntimeMatches(ctx context.Context, serviceID, identity, digest string, patch ManagedServicePatch) error {
+	return r.updateManagedService(ctx, serviceID, patch, &[2]string{identity, digest})
+}
+
+func (r *Registry) updateManagedService(ctx context.Context, serviceID string, patch ManagedServicePatch, expected *[2]string) error {
 	if r == nil || r.db == nil {
 		return errors.New("registry not initialized")
 	}
@@ -618,7 +629,12 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 	}
 	add("updated_at_unix_ms", time.Now().UnixMilli())
 	args = append(args, strings.TrimSpace(serviceID))
-	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_services SET `+strings.Join(sets, ", ")+` WHERE service_id = ?`, args...)
+	where := " WHERE service_id = ?"
+	if expected != nil {
+		where += " AND runtime_identity = ? AND runtime_spec_sha256 = ?"
+		args = append(args, expected[0], expected[1])
+	}
+	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_services SET `+strings.Join(sets, ", ")+where, args...)
 	if err != nil {
 		return err
 	}
@@ -627,6 +643,9 @@ func (r *Registry) UpdateManagedService(ctx context.Context, serviceID string, p
 		return err
 	}
 	if count == 0 {
+		if expected != nil {
+			return ErrManagedServiceRuntimeChanged
+		}
 		return ErrManagedServiceNotFound
 	}
 	return nil
@@ -1082,7 +1101,7 @@ func (r *Registry) MarkManagedOperationsInterrupted(ctx context.Context) error {
 		if _, err := tx.Exec(`UPDATE managed_web_service_operations SET state='interrupted',stage='interrupted',error_code='OPERATION_INTERRUPTED',error_message='The runtime stopped before this operation completed.',updated_at_unix_ms=?,finished_at_unix_ms=?,progress_detail_json=? WHERE operation_id=?`, now, now, detail.raw, detail.operationID); err != nil {
 			return err
 		}
-		result, err := tx.Exec(`UPDATE managed_web_services SET desired_state='stopped',observed_state='error',last_error_code='OPERATION_INTERRUPTED',last_error_message='The runtime stopped before this operation completed.',updated_at_unix_ms=? WHERE service_id=?`, now, detail.serviceID)
+		result, err := tx.Exec(`UPDATE managed_web_services SET last_error_code='OPERATION_INTERRUPTED',last_error_message='The runtime stopped before this operation completed.',updated_at_unix_ms=? WHERE service_id=?`, now, detail.serviceID)
 		if err != nil {
 			return err
 		}

@@ -531,7 +531,7 @@ describe('web service metadata and template validation', () => {
   it('validates each deployment with one authoritative draft validator', () => {
     const base = {
       name: 'Dashboard', description: '', version: '1.0.0', scheme: 'http' as const,
-      path: '/', healthPath: '/healthz', containerPort: '3000', installScript: '',
+      path: '/', healthPath: '/healthz', containerPort: '3000', afterStartScript: '', openScript: '', outputMode: 'discard' as const, installScript: '',
       startScript: '', stopScript: '', uninstallScript: '', image: '', entrypoint: '',
       npmPackageName: '', npmPackageVersion: '', npmRegistryURL: 'https://registry.npmjs.org/', npmExecutable: '', npmAuthTokenParameter: '',
       command: '', environment: '', mainService: '', composeYAML: '',
@@ -576,6 +576,29 @@ describe('web service metadata and template validation', () => {
       dispose();
       host.remove();
     }
+  });
+
+  it('keeps Running and Open available when opening preparation or a previous operation failed', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const open = vi.fn();
+    const dispose = render(() => <ManagedServiceRow
+      service={{ service_id: 'mws-independent', template_id: 'generic-host', template_source: 'custom', workspace_ownership: 'user_selected', name: 'Independent service', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'pf-independent', runtime_port: 3000,
+        actions: { open: { available: true }, start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: true } },
+        opening: { state: 'error', error_code: 'HOST_OPEN_HOOK_FAILED' }, pending_changes: true,
+        last_failure: { error_code: 'OPERATION_INTERRUPTED', message: 'Previous operation interrupted' },
+      }} busy={false} canOpen canManage onOpen={open} onOpenResource={() => undefined} onAction={() => undefined} onLogs={() => undefined} onUninstall={() => undefined}
+    />, host);
+    try {
+      expect(host.textContent).toContain('Running');
+      expect(host.textContent).toContain('Opening needs attention');
+      expect(host.textContent).toContain('Changes pending');
+      expect(host.textContent).toContain('Apply and restart');
+      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) => item.textContent?.trim() === 'Open');
+      expect(button?.disabled).toBe(false);
+      button?.click();
+      expect(open).toHaveBeenCalledOnce();
+    } finally { dispose(); host.remove(); }
   });
 
   it('shows opening progress inside the managed service action', () => {
@@ -1286,6 +1309,7 @@ describe('EnvPortForwardsPage', () => {
       release_status: releaseStatus('oci', '654ea8e3-ls177'),
       desired_state: 'running',
       observed_state: 'running',
+      actions: { open: { available: true } },
       forward_id: 'pf_legacy_managed_service',
       runtime_port: 54945,
     };
@@ -1321,11 +1345,11 @@ describe('EnvPortForwardsPage', () => {
     });
   });
 
-  it('prepares a stale managed runtime and opens it in the original browser window', async () => {
+  it('joins an explicit service operation and opens it in the original browser window', async () => {
     const service = {
       service_id: 'mws-stale-runtime', template_id: 'example-host',
       name: 'Example Host', template_source: 'builtin', deployment: 'host', workspace_path: '/workspace',
-      release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running',
+      release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', actions: { open: { available: true } },
       forward_id: 'pf-stale-runtime', runtime_port: 3080,
     };
     const assign = vi.fn();
@@ -1688,7 +1712,7 @@ describe('EnvPortForwardsPage', () => {
       recommended_release: { schema_version: 1 as const, kind: 'oci' as const, source: 'lscr.io/linuxserver/webtop', tag: '654ea8e3-ls177', digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
       developer_preview: false, notices: [], deployments: [{ deployment: 'container', available: true }],
       default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/webtop', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
-      spec: { schema_version: 5, kind: 'container', endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/' }, container: { image: 'lscr.io/linuxserver/webtop:654ea8e3-ls177@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } },
+      spec: { schema_version: 6, kind: 'container', endpoint: { scheme: 'http', container_port: 3000, path: '/', health_path: '/' }, container: { image: 'lscr.io/linuxserver/webtop:654ea8e3-ls177@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } },
     };
     const stale = {
       schema_version: 2, candidate_id: 'stale-recommendation', source_kind: 'oci', source: 'lscr.io/linuxserver/webtop', tag: '654ea8e3-ls177',
@@ -2225,7 +2249,7 @@ describe('EnvPortForwardsPage', () => {
 
     await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
     const submitted = updateBody as Record<string, any> | null;
-    expect(submitted?.spec?.schema_version).toBe(5);
+    expect(submitted?.spec?.schema_version).toBe(6);
     expect(submitted?.spec?.host?.environment).toEqual({ SERVICE_MODE: 'preserved' });
     expect(updateBody).not.toHaveProperty('host_lifecycle_plan');
   });
