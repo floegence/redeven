@@ -1716,9 +1716,11 @@ export function EnvAppShell() {
     const generation = pluginSurfaceGenerations()[id] ?? 0;
     const currentTarget = resolveCurrentPluginSurfaceTarget(target);
     const details = { label: 'details' as const, run: () => void openPluginCenter(`instance:${id}`).catch(reportPluginNavigationFailure) };
+    if (pluginSessionRetired()) return { target: null, generation, status: 'unknown',
+      action: { label: 'reload', run: () => reloadCurrentPage(window) } };
     if (phase === 'unknown' || phase === 'refreshing') return { target: null, generation, status: phase === 'unknown' ? 'unknown' : 'loading',
       action: { label: 'retry', run: () => void pluginSurfaceReconciliations.get(id)?.().catch(reportPluginNavigationFailure) } };
-    if (!canOpenPluginSurfaces() || pluginSessionRetired()) return { target: null, generation, status: 'loading' };
+    if (!canOpenPluginSurfaces()) return { target: null, generation, status: 'loading' };
     if (phase === 'pending') return { target: currentTarget, generation, status: 'pending' };
     if (!currentTarget && pluginRuntimeRecoveryByInstanceID()[id]?.state === 'failed') return { target: null, generation, status: 'runtimeFailed',
       action: canAdmin() ? { label: 'retry', run: () => retryPluginRuntimeRecovery(id) } : details };

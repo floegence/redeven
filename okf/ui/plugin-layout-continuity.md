@@ -94,6 +94,10 @@ wins over local editing, local removal remains a removal, and unrelated remote
 changes survive. Retry saves against the newly read revision. A response from an
 old environment or disposed layout owner cannot modify the new canvas.
 
+An unknown mutation without an exact instance retires the page’s plugin session.
+Saved cards offer an explicit page reload to acquire fresh authority; they do not
+remain in an indefinite preparing state or reuse the retired session.
+
 # Boundaries
 
 Redeven layout operations never grant plugin authority or inspect platform stores.

@@ -4611,6 +4611,7 @@
         "enableAction": "Activer le plugin",
         "permissionsAction": "Gérer les autorisations",
         "retryAction": "Vérifier à nouveau",
+        "reloadAction": "Recharger la page",
         "detailsAction": "Détails du plugin",
         "placing": "Enregistrement du composant…",
         "placementFailed": "Le composant n’a pas pu être enregistré. Réessayez pour le conserver sur le canevas.",

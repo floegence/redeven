@@ -4611,6 +4611,7 @@
         "enableAction": "플러그인 활성화",
         "permissionsAction": "권한 관리",
         "retryAction": "다시 확인",
+        "reloadAction": "페이지 다시 불러오기",
         "detailsAction": "플러그인 세부 정보",
         "placing": "구성 요소 저장 중…",
         "placementFailed": "구성 요소를 저장하지 못했습니다. 다시 시도하여 캔버스에 저장하세요.",

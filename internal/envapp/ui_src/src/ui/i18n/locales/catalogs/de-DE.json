@@ -4611,6 +4611,7 @@
         "enableAction": "Plugin aktivieren",
         "permissionsAction": "Berechtigungen verwalten",
         "retryAction": "Erneut prüfen",
+        "reloadAction": "Seite neu laden",
         "detailsAction": "Plugin-Details",
         "placing": "Komponente wird gespeichert…",
         "placementFailed": "Die Komponente konnte nicht gespeichert werden. Versuchen Sie es erneut.",

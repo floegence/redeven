@@ -2743,6 +2743,38 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it.each(['direct', 'command'])('offers a fresh page session after an unscoped unknown mutation without deleting placement: %s', async (source) => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      const target = projection.items[0].defaultLaunchTarget!;
+      await pluginPanelState.lastProps.onOpenPluginSurface(target);
+      if (source === 'command') {
+        await pluginPanelState.lastProps.onOpenCenter();
+        await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 60);
+        pluginLifecycleMocks.execute.mockImplementationOnce(async () => {
+          pluginPlatformMocks.state.onMutationOutcomeUnknown?.();
+          throw new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', 'unscoped outcome', {}, 'unknown');
+        });
+        await expect(pluginCenterViewState.lastProps.onCommand({ type: 'disable', pluginInstanceID: target.pluginInstanceID,
+          expectedManagementRevision: 11 }, new AbortController().signal)).rejects.toThrow('unscoped outcome');
+      } else {
+        pluginPlatformMocks.state.onMutationOutcomeUnknown?.();
+        await flushAsync();
+      }
+      expect(workbenchPluginSurfaceState.host.resolveSurface(target)).toMatchObject({ target: null, status: 'unknown', action: { label: 'reload' } });
+      expect(pluginLayoutMocks.removeWorkbenchPluginWidgets).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.releaseAll).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  }, 10000);
+
   it('keeps official installation observation alive when Plugin Center closes', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
