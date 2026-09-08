@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Native container console
 description: Present aggregated container resources with stable loading, exact-target navigation, and structured Compose input.
 tags: [architecture, containers, ui, workbench]
-timestamp: 2026-09-06T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 quality_exception: Cross-surface native container contract spanning aggregated resources, target-scoped navigation, operations, and Compose workflows.
 ---
 # Summary
@@ -63,6 +63,15 @@ search, status filters, a Filter-icon column control, and one primary action.
 Containers default to Active; other views default to All. Shared Dropdown and
 Dialog primitives own outside-click, Escape, focus, and Workbench-safe floating
 behavior.
+
+Resource identity is the first inventory column and the first reading anchor.
+Names use a moderate weight and retain the full value in their accessible text
+and title. Numeric sizes align to the right. Created dates and volume drivers
+are optional, initially hidden columns; enabling them preserves their existing
+sorting and detail access. Optional creation dates use a relative label with
+the exact timestamp in the title. Responsive column rules identify the column
+by its meaning, never its current position after another column is hidden.
+Inventory and loading rows share the same column order and geometry.
 
 Every resource view uses the same interactive table-row contract. A fine-pointer
 hover shows a visible surface change, a leading accent, and a small disclosure
@@ -226,11 +235,29 @@ preflight/hash/operation path rather than a second creation protocol.
 ## Responsive and accessible behavior
 
 Desktop uses a compact sortable table, narrow Workbench hides secondary
-columns, and mobile uses cards with a full-screen detail page. Interactive
+columns, and mobile uses cards with a full-screen detail page. Service cards
+also adapt to the owning surface width, including a narrow Workbench inside
+a wide application window. Interactive
 targets are at least 44 px where touch applies and expose pointer, keyboard,
 forced-colors, reduced-motion, and every shipped locale behavior. Missing,
 stopped, unreachable, or permission-denied engines render a dedicated detection
 state rather than stale inventory.
+
+## Visual feedback
+
+Inventories, details, service configuration, creation forms, and operation
+observation share a restrained type hierarchy and semantic theme surfaces.
+Resource, detail, and service configuration tabs use the released Floe slider
+indicator. Product hover and press feedback is brief; detail identity and
+disclosure entrances use small, bounded movements. Static service cards do not
+lift or scale on hover. Entry animation never remounts the Exec terminal,
+delays navigation, or transforms a new floating-layer ancestor.
+
+Reduced motion removes product entrance, press, and disclosure motion, and
+disables CSS animations and transitions in both the console and its portaled
+forms. Loading retains its geometry and progress remains visible without
+depending on animation. Dialog and menu positioning, focus, and lifecycle
+continue to belong to the released shared primitives.
 
 # Boundaries
 

@@ -1,7 +1,7 @@
 import '../../index.css';
 
-import { page, userEvent } from 'vitest/browser';
-import { ThemeProvider } from '@floegence/floe-webapp-core';
+import { commands, page, userEvent } from 'vitest/browser';
+import { ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -134,6 +134,10 @@ vi.mock('../services/containerResourcesApi', () => ({
 
 import { EnvContainersPage } from './EnvContainersPage';
 
+const mediaCommands = commands as unknown as {
+  emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
+};
+
 async function settle(): Promise<void> {
   await Promise.resolve();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -148,12 +152,16 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function mount(variant: 'activity' | 'workbench' = 'activity') {
+function mount(variant: 'activity' | 'workbench' = 'activity', appearance: 'light' | 'dark' = 'light') {
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.inset = '0';
   document.body.append(host);
-  const dispose = render(() => <ThemeProvider><I18nProvider><EnvContainersPage variant={variant} /></I18nProvider></ThemeProvider>, host);
+  function Surface() {
+    useTheme().setTheme(appearance);
+    return <I18nProvider><EnvContainersPage variant={variant} /></I18nProvider>;
+  }
+  const dispose = render(() => <ThemeProvider><Surface /></ThemeProvider>, host);
   return { host, dispose };
 }
 
@@ -408,6 +416,92 @@ describe('native Containers responsive product surface', () => {
     expect(detailPage.querySelector('.container-sparkline')).toBeNull();
     expect(detailPage.querySelector('[data-container-network-panel]')?.textContent).toContain('/s');
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it.each(['light', 'dark'] as const)('prioritizes resource identity within a narrow %s desktop surface', async (appearance) => {
+    await page.viewport(760, 900);
+    browserHarness.listRuntimes.mockResolvedValue([
+      { endpoint_id: 'docker', engine: 'docker', state: 'ready', capabilities: {} },
+      { endpoint_id: 'podman', engine: 'podman', state: 'ready', capabilities: {} },
+    ]);
+    browserHarness.listResources.mockImplementation((view: string) => Promise.resolve({
+      containers: [{ container_id: 'api-1', name: 'development-application-api', state: 'running', image: { reference: 'registry.example.test/development/application:latest' } }],
+      images: [{ id: 'image-1', reference: 'registry.example.test/development/application:latest', size_bytes: 2048, referenced_containers: 1 }],
+      volumes: [{ name: 'development-application-database-persistent-storage', driver: 'local', references_complete: true, referenced_containers: 1 }],
+      'compose-projects': [{ project_id: 'project-1', name: 'development-application', status: 'running', container_count: 3, running_count: 2 }],
+      pods: [{ pod_id: 'pod-1', name: 'development-application', status: 'running', container_count: 3, running_count: 2 }],
+    }[view] ?? []));
+    const mounted = mount('workbench', appearance);
+    dispose = mounted.dispose;
+    await settle();
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    expect(document.documentElement.classList.contains('dark')).toBe(appearance === 'dark');
+    for (const label of ['Containers', 'Images', 'Volumes', 'Compose Projects', 'Pods']) {
+      Array.from(root.querySelectorAll<HTMLButtonElement>('.container-resource-tabs [role="tab"]'))
+        .find((tab) => tab.textContent === label)!.click();
+      await settle();
+      const table = root.querySelector<HTMLTableElement>('[data-container-resource-table]')!;
+      expect(table.querySelector('th')?.textContent, label).toBe('Name');
+      expect(table.querySelector('tbody td .container-name-cell'), label).not.toBeNull();
+      const viewport = root.querySelector<HTMLElement>('.container-inventory-scroll')!;
+      expect(viewport.scrollWidth, label).toBeLessThanOrEqual(viewport.clientWidth + 1);
+      const name = table.querySelector<HTMLElement>('.container-name-cell')!;
+      expect(name.getBoundingClientRect().width, label).toBeGreaterThan(180);
+      expect(table.querySelectorAll('tbody tr').length, label).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps reduced-motion detail navigation immediate', async () => {
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    try {
+      await page.viewport(1024, 800);
+      const mounted = mount();
+      dispose = mounted.dispose;
+      await settle();
+      const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+      root.querySelector<HTMLElement>('[data-container-resource-row]')!.click();
+      await settle();
+      const detail = root.querySelector<HTMLElement>('[data-container-detail-page]')!;
+      const identity = detail.querySelector<HTMLElement>('.container-detail-identity')!;
+      expect(getComputedStyle(identity).animationName).toBe('none');
+      expect(getComputedStyle(identity).transform).toBe('none');
+      expect(detail.getAnimations({ subtree: true }).filter((animation) => animation.playState === 'running')).toHaveLength(0);
+      expect(detail.querySelectorAll('[role="tab"]')).not.toHaveLength(0);
+    } finally {
+      await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    }
+  });
+
+  it('animates the shared tab indicator without delaying navigation in a scaled Workbench', async () => {
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    await page.viewport(1200, 800);
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    mounted.host.style.transform = 'scale(0.8)';
+    mounted.host.style.transformOrigin = 'top left';
+    await settle();
+    const tabs = mounted.host.querySelector<HTMLElement>('.container-resource-tabs')!;
+    const indicator = tabs.querySelector<HTMLElement>('.container-tab-indicator')!;
+    const start = indicator.getBoundingClientRect().left;
+    const imageTab = Array.from(tabs.querySelectorAll<HTMLElement>('[role="tab"]'))
+      .find((tab) => tab.textContent === 'Images')!;
+    const pending = deferred<readonly unknown[]>();
+    browserHarness.listResources.mockReturnValue(pending.promise);
+    imageTab.click();
+    await settle();
+    expect(imageTab.getAttribute('aria-selected')).toBe('true');
+    expect(mounted.host.querySelector('[data-container-list-loading]')).not.toBeNull();
+    const animations = indicator.getAnimations();
+    expect(animations.some((animation) => animation.playState === 'running')).toBe(true);
+    await Promise.all(animations.map((animation) => animation.finished));
+    const destination = indicator.getBoundingClientRect();
+    const activeTab = tabs.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!;
+    expect(activeTab.textContent).toBe('Images');
+    expect(destination.left).toBeGreaterThan(start);
+    expect(Math.abs(destination.left - activeTab.getBoundingClientRect().left)).toBeLessThan(1);
+    expect(Math.abs(destination.width - activeTab.getBoundingClientRect().width)).toBeLessThan(1);
+    pending.resolve([]);
+    await settle();
   });
 
   it('keeps resource tabs interactive while an uncached view is loading', async () => {
@@ -785,6 +879,23 @@ describe('native Containers responsive product surface', () => {
     await settle();
     expect(dialog.querySelector<HTMLInputElement>('input[placeholder="http://proxy.example.com:3128"]')).not.toBeNull();
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('adapts service cards to the Workbench width inside a wide application window', async () => {
+    await page.viewport(1440, 900);
+    const mounted = mount('workbench');
+    dispose = mounted.dispose;
+    mounted.host.style.width = '560px';
+    mounted.host.style.right = 'auto';
+    await settle();
+    const root = mounted.host.querySelector<HTMLElement>('[data-container-page]')!;
+    root.querySelector<HTMLButtonElement>('[aria-label="Container services"]')!.click();
+    await settle();
+    const grid = root.querySelector<HTMLElement>('.container-services-grid')!;
+    expect(getComputedStyle(grid).gridTemplateColumns.split(' ')).toHaveLength(1);
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    const servicePage = root.querySelector<HTMLElement>('[data-container-services-page]')!;
+    expect(servicePage.scrollWidth).toBeLessThanOrEqual(servicePage.clientWidth + 1);
   });
 
   it('shows official service branding and complete local Docker CLI configuration', async () => {
