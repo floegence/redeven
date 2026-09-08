@@ -22,7 +22,7 @@ function currentFor(items: readonly FlowerActivityItem[], version: number) {
 }
 
 const write = () => activityItem({ item_id: 'write', tool_id: 'write', tool_name: 'terminal.write', renderer: 'terminal', label: '向 SSH 登录会话提交密码', status: 'success', payload: { operation: 'write', command: 'ssh udesk26', process_id: 'process-1', input_bytes: 12 } });
-const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal.read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', latest_seq: 2 } });
+const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal.read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', last_seq: 2, latest_seq: 2 } });
 
 function stream() {
   const queue: FlowerLiveStreamEnvelope[] = [];
@@ -72,6 +72,8 @@ describe('SSH terminal activity', () => {
     expect(document.getElementById(button.getAttribute('aria-controls')!)).not.toBeNull();
     toggleFor(runtime, 'read').click();
     await waitFor(() => rowFor(runtime, 'read').textContent?.includes('No new output.') === true);
+    expect(rowFor(runtime, 'read').textContent).toContain('2 / 2');
+    expect(rowFor(runtime, 'read').textContent).not.toContain('0–2');
     const nextRead = { ...read(), payload: { ...read().payload, output: 'GPU ready', first_seq: 3, last_seq: 4, latest_seq: 4, has_more: false } };
     live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), nextRead], 2) });
     await waitFor(() => rowFor(runtime, 'read').textContent?.includes('GPU ready') === true);
