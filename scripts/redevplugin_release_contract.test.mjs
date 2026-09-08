@@ -50,7 +50,7 @@ test('runtime staging derives its release tag from the published Go dependency',
   assert.match(source, /curl[\s\S]*releases\/download\/\$tag\/\$RELEASE_MANIFEST_ASSET/u);
   assert.doesNotMatch(source, /gh release download/u);
   const verificationSource = readFileSync(path.resolve(import.meta.dirname, 'check_redevplugin_release_artifacts.sh'), 'utf8');
-  assert.match(verificationSource, /api\.github\.com\/repos\/\$REPOSITORY\/releases\/tags\/\$tag/u);
+  assert.match(verificationSource, /gh api --hostname github\.com "repos\/\$REPOSITORY\/releases\/tags\/\$tag"/u);
   assert.doesNotMatch(verificationSource, /gh release view/u);
   assert.match(source, /release manifest version does not match Go module version/u);
   assert.match(source, /redevplugin_release_contract\.mjs" verify-runtime-executable "\$runtime" "\$target"/u);
