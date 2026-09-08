@@ -116,3 +116,21 @@ describe('createWorkbenchTerminalSession', () => {
       .rejects.toThrow('Invalid workbench terminal session response');
   });
 });
+
+describe('plugin placement API', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const state = { kind: 'plugin' as const, plugin_instance_id: 'instance-1', plugin_id: 'example.plugin', surface_id: 'secondary', display_name: 'Example', expected_management_revision: 7 };
+  const widgetState = { widget_id: 'widget-1', widget_type: 'redeven.plugin', revision: 1, updated_at_unix_ms: 1, state };
+  const snapshot = { seq: 1, revision: 1, updated_at_unix_ms: 1,
+    widgets: [{ widget_id: 'widget-1', widget_type: 'redeven.plugin', x: 12, y: 30, width: 1120, height: 760, z_index: 1, created_at_unix_ms: 1 }], widget_states: [widgetState] };
+  it('uses the atomic product operation and validates the saved target', async () => {
+    const { openWorkbenchPlugin } = await import('./workbenchLayoutApi');
+    stubResponse({ data: { widget_id: 'widget-1', created: true, snapshot, widget_state: widgetState } });
+    await expect(openWorkbenchPlugin({ state })).resolves.toMatchObject({ widget_id: 'widget-1', created: true });
+    expect(fetch).toHaveBeenCalledWith('/_redeven_proxy/api/workbench/actions/open_plugin', expect.objectContaining({ method: 'POST', body: JSON.stringify({ state }) }));
+    stubResponse({ data: { widget_id: 'widget-1', created: true, snapshot: { ...snapshot, widget_states: [] }, widget_state: widgetState } });
+    await expect(openWorkbenchPlugin({ state })).rejects.toThrow('Invalid plugin placement response');
+    stubResponse({ data: { widget_id: 'widget-1', created: true, snapshot, widget_state: { ...widgetState, state: { ...state, surface_id: 'another-surface' } } } });
+    await expect(openWorkbenchPlugin({ state })).rejects.toThrow('Invalid plugin placement response');
+  });
+});

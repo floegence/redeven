@@ -9,6 +9,8 @@ import {
   type RuntimeWorkbenchLayoutEvent,
   type RuntimeWorkbenchOpenPreviewRequest,
   type RuntimeWorkbenchOpenPreviewResponse,
+  type RuntimeWorkbenchOpenPluginRequest,
+  type RuntimeWorkbenchOpenPluginResponse,
   type RuntimeWorkbenchLayoutPutRequest,
   type RuntimeWorkbenchLayoutSnapshot,
   type RuntimeWorkbenchTerminalCreateSessionRequest,
@@ -135,6 +137,31 @@ export async function getWorkbenchLayoutSnapshot(): Promise<RuntimeWorkbenchLayo
   return normalizeRuntimeWorkbenchLayoutSnapshot(
     await fetchWorkbenchLayoutJSON('/_redeven_proxy/api/workbench/layout/snapshot', { method: 'GET' }),
   );
+}
+
+export async function openWorkbenchPlugin(request: RuntimeWorkbenchOpenPluginRequest): Promise<RuntimeWorkbenchOpenPluginResponse> {
+  const data = await fetchWorkbenchLayoutJSON<RuntimeWorkbenchOpenPluginResponse>('/_redeven_proxy/api/workbench/actions/open_plugin', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request),
+  });
+  const snapshot = normalizeRuntimeWorkbenchLayoutSnapshot(data.snapshot);
+  const widgetState = normalizeRuntimeWorkbenchWidgetState(data.widget_state);
+  if (!widgetState || widgetState.widget_type !== 'redeven.plugin' || widgetState.widget_id !== data.widget_id
+    || widgetState.state.kind !== 'plugin'
+    || widgetState.state.plugin_id !== request.state.plugin_id
+    || widgetState.state.plugin_instance_id !== request.state.plugin_instance_id
+    || widgetState.state.surface_id !== request.state.surface_id
+    || !snapshot.widget_states.some((state) => state.widget_id === data.widget_id && state.state.kind === 'plugin'
+      && state.state.plugin_id === request.state.plugin_id && state.state.plugin_instance_id === request.state.plugin_instance_id && state.state.surface_id === request.state.surface_id)
+    || !snapshot.widgets.some((widget) => widget.widget_id === data.widget_id && widget.widget_type === 'redeven.plugin')) {
+    throw new Error('Invalid plugin placement response');
+  }
+  return { widget_id: data.widget_id, created: data.created === true, snapshot, widget_state: widgetState };
+}
+
+export async function removeWorkbenchPluginWidgets(pluginInstanceID: string): Promise<RuntimeWorkbenchLayoutSnapshot> {
+  return normalizeRuntimeWorkbenchLayoutSnapshot(await fetchWorkbenchLayoutJSON('/_redeven_proxy/api/workbench/actions/remove_plugin', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plugin_instance_id: pluginInstanceID }),
+  }));
 }
 
 export async function putWorkbenchLayout(

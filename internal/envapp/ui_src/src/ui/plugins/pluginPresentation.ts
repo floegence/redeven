@@ -8,7 +8,7 @@ export const PLUGIN_PRESS_MOTION_CLASS = 'redeven-plugin-motion transition-[back
 export type PluginPrimaryAction =
   | 'install'
   | 'enable'
-  | 'open_activity'
+  | 'open'
   | 'review_update'
   | 'view_policy'
   | 'view_runtime'
@@ -19,8 +19,7 @@ export type PluginPrimaryAction =
 export type PluginPresentation = Readonly<{
   primaryAction: PluginPrimaryAction;
   tone: 'neutral' | 'success' | 'warning' | 'error' | 'info';
-  canOpenActivity: boolean;
-  canOpenWorkbench: boolean;
+  canOpenSurface: boolean;
   canDisable: boolean;
   canCheckForUpdate: boolean;
   canUninstall: boolean;
@@ -90,7 +89,7 @@ export function presentPlugin(item: PluginInventoryItem): PluginPresentation {
     primaryAction = 'enable';
     tone = 'neutral';
   } else if (item.lifecycleState === 'enabled' && item.defaultLaunchTarget) {
-    primaryAction = 'open_activity';
+    primaryAction = 'open';
     tone = 'success';
   } else {
     primaryAction = 'view_details';
@@ -100,8 +99,7 @@ export function presentPlugin(item: PluginInventoryItem): PluginPresentation {
   return Object.freeze({
     primaryAction,
     tone,
-    canOpenActivity: canOpen,
-    canOpenWorkbench: canOpen,
+    canOpenSurface: canOpen,
     canDisable: installed && Boolean(item.canDisable),
     canCheckForUpdate: installed && !trustBlocked && Boolean(item.externalPackage || item.officialCatalog),
     canUninstall: installed,

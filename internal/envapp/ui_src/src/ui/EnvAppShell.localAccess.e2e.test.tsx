@@ -150,12 +150,17 @@ const activityPluginPageState = vi.hoisted(() => ({
   closeCalls: 0,
   failClose: false,
 }));
+const pluginLayoutMocks = vi.hoisted(() => ({
+  getWorkbenchLayoutSnapshot: vi.fn(async () => ({ widget_states: [] })),
+  removeWorkbenchPluginWidgets: vi.fn(async () => ({ widget_states: [] })),
+}));
+vi.mock('./services/workbenchLayoutApi', () => pluginLayoutMocks);
 const workbenchPluginSurfaceState = vi.hoisted(() => ({
   open: vi.fn(async () => undefined),
   close: vi.fn(async () => undefined),
-  closePlugin: vi.fn(async () => undefined),
-  closeAll: vi.fn(async () => undefined),
-  listPluginTargets: vi.fn(() => []),
+  releasePlugin: vi.fn(async () => undefined),
+  releaseAll: vi.fn(async () => undefined),
+  focus: vi.fn(),
 }));
 const pluginPanelState = vi.hoisted(() => ({
   lastProps: null as any,
@@ -180,6 +185,8 @@ const pluginPlatformMocks = vi.hoisted(() => {
     fail: vi.fn(async () => undefined),
     release: vi.fn(async () => undefined),
     invalidatePlugin: vi.fn(async () => undefined),
+    invalidateAll: vi.fn(async () => undefined),
+    closePlugin: vi.fn(async () => undefined),
     closeAll: vi.fn(async () => undefined),
     dispose: vi.fn(async () => undefined),
   };
@@ -268,7 +275,6 @@ function examplePluginProjection(
           surfaceID: 'metrics.dashboard',
           displayName: examplePluginCatalog.displayName,
           expectedManagementRevision: 11,
-          preferredPlacement: 'activity' as const,
         },
       } : {}),
       officialCatalog: examplePluginCatalog,
@@ -304,7 +310,6 @@ function activityPluginProjection(count: number): PluginInventoryProjection {
           surfaceID,
           displayName: `Activity plugin ${ordinal}`,
           expectedManagementRevision: 1,
-          preferredPlacement: 'activity' as const,
         },
       };
     }),
@@ -913,7 +918,7 @@ vi.mock('./plugins/PluginSurfaceFrame', () => ({
         data-plugin-id={props.target?.pluginID ?? ''}
         data-plugin-instance-id={props.target?.pluginInstanceID ?? ''}
         data-surface-id={props.target?.surfaceID ?? ''}
-        data-placement={props.target?.preferredPlacement ?? ''}
+        data-placement="activity"
         data-management-revision={String(props.target?.expectedManagementRevision ?? '')}
         data-visible={String(Boolean(props.visible))}
       >
@@ -970,7 +975,7 @@ vi.mock('./plugins/ActivityPluginSurfaceWindow', () => ({
         data-plugin-id={props.target?.pluginID ?? ''}
         data-plugin-instance-id={props.target?.pluginInstanceID ?? ''}
         data-surface-id={props.target?.surfaceID ?? ''}
-        data-placement={props.target?.preferredPlacement ?? ''}
+        data-placement="activity"
         data-management-revision={String(props.target?.expectedManagementRevision ?? '')}
         data-visible={String(Boolean(props.visible))}
         data-z-index={String(props.zIndex)}
@@ -1587,11 +1592,14 @@ beforeEach(async () => {
   pluginSurfaceFrameState.closeOverrides.clear();
   activityPluginPageState.closeCalls = 0;
   activityPluginPageState.failClose = false;
+  pluginLayoutMocks.getWorkbenchLayoutSnapshot.mockClear();
+  pluginLayoutMocks.removeWorkbenchPluginWidgets.mockReset();
+  pluginLayoutMocks.removeWorkbenchPluginWidgets.mockResolvedValue({ widget_states: [] });
   workbenchPluginSurfaceState.open.mockClear();
   workbenchPluginSurfaceState.close.mockClear();
-  workbenchPluginSurfaceState.closePlugin.mockClear();
-  workbenchPluginSurfaceState.closeAll.mockClear();
-  workbenchPluginSurfaceState.listPluginTargets.mockClear();
+  workbenchPluginSurfaceState.releasePlugin.mockClear();
+  workbenchPluginSurfaceState.releaseAll.mockClear();
+  workbenchPluginSurfaceState.focus.mockClear();
   pluginPanelState.lastProps = null;
   pluginPanelState.renderActual = false;
   pluginPanelState.mounts = 0;
@@ -1609,6 +1617,10 @@ beforeEach(async () => {
   pluginPlatformMocks.coordinator.release.mockClear();
   pluginPlatformMocks.coordinator.invalidatePlugin.mockClear();
   pluginPlatformMocks.coordinator.closeAll.mockClear();
+  pluginPlatformMocks.coordinator.closePlugin.mockReset();
+  pluginPlatformMocks.coordinator.closePlugin.mockResolvedValue(undefined);
+  pluginPlatformMocks.coordinator.invalidateAll.mockReset();
+  pluginPlatformMocks.coordinator.invalidateAll.mockResolvedValue(undefined);
   pluginPlatformMocks.state.onMutationOutcomeUnknown = undefined;
   pluginPlatformMocks.coordinator.dispose.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection());
@@ -1996,7 +2008,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
       rejectRefresh(new Error('temporary inventory failure'));
       await refresh;
-      expect(pluginPanelState.lastProps.model.errorMessage).toBeUndefined();
+      expect(pluginPanelState.lastProps.model.errorMessage).toBe('temporary inventory failure');
       expect(pluginPanelState.lastProps.model.tiles).toContainEqual(
         expect.objectContaining({
           kind: 'plugin',
@@ -2030,7 +2042,9 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(document.querySelector('[data-plugin-panel-tile="instance:plugin_example_metrics"]')), 40);
       const tileBefore = document.querySelector('[data-plugin-panel-tile="instance:plugin_example_metrics"]');
 
-      pluginPlatformMocks.state.onMutationOutcomeUnknown?.();
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps));
+      void pluginCenterViewState.lastProps.onRefresh();
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
       expect(document.querySelector('[data-plugin-panel-tile="instance:plugin_example_metrics"]')).toBe(tileBefore);
       expect(document.body.textContent).not.toContain('Loading plugins...');
@@ -2674,7 +2688,7 @@ describe('EnvAppShell environment entry affordances', () => {
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const unknownOutcome = new Error('plugin mutation outcome is unknown');
     let finishDisposal!: () => void;
-    pluginPlatformMocks.coordinator.closeAll.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+    pluginPlatformMocks.coordinator.invalidateAll.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
       finishDisposal = () => resolve(undefined);
     }));
     pluginLifecycleMocks.execute.mockImplementationOnce(async () => {
@@ -2704,7 +2718,7 @@ describe('EnvAppShell environment entry affordances', () => {
       }, new AbortController().signal));
       void command.then(() => { settled = true; }, () => { settled = true; });
       await flushAsync();
-      expect(pluginPlatformMocks.coordinator.closeAll).toHaveBeenCalledTimes(1);
+      expect(pluginPlatformMocks.coordinator.invalidateAll).toHaveBeenCalledTimes(1);
       expect(settled).toBe(false);
 
       const queuedOpen = pluginCenterViewState.lastProps.onCommand({
@@ -2713,7 +2727,6 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 11,
-        placement: 'workbench',
       }, new AbortController().signal);
       await flushAsync();
       expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
@@ -2867,7 +2880,6 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 11,
-        placement: 'workbench',
       }, new AbortController().signal);
       await flushAsync();
       expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
@@ -2916,16 +2928,10 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 11,
-        placement: 'workbench',
       }, new AbortController().signal)).resolves.toBeUndefined();
-      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith({
-        pluginID: examplePluginCatalog.pluginID,
-        pluginInstanceID: examplePluginCatalog.pluginInstanceID,
-        surfaceID: 'metrics.dashboard',
-        displayName: examplePluginCatalog.displayName,
-        expectedManagementRevision: 11,
-        preferredPlacement: 'workbench',
-      });
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+      expect(document.querySelector('[data-plugin-surface-host]')).not.toBeNull();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -2964,19 +2970,16 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 11,
-        placement: 'workbench',
       }, new AbortController().signal)).resolves.toBeUndefined();
-      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith(expect.objectContaining({
-        pluginInstanceID: examplePluginCatalog.pluginInstanceID,
-        expectedManagementRevision: 11,
-        preferredPlacement: 'workbench',
-      }));
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+      expect(document.querySelector('[data-plugin-surface-host]')).not.toBeNull();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
   }, 10000);
 
-  it('removes a plugin window when a lifecycle mutation reports a committed error', async () => {
+  it('preserves a plugin window when a lifecycle mutation reports a committed error', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -3026,22 +3029,53 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 11,
-        placement: 'workbench',
       }, new AbortController().signal);
       await flushAsync();
       expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
 
+      pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('disabled'));
       finishCommittedCleanup();
       await expect(command).rejects.toBe(committedError);
       await expect(queuedOpen).rejects.toThrow();
       expect(pluginPlatformMocks.coordinator.invalidatePlugin).toHaveBeenCalledWith(examplePluginCatalog.pluginInstanceID);
       expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
-      expect(document.querySelector('[data-plugin-surface-host]')).toBeNull();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+      expect(document.querySelector('[data-plugin-surface-host]')).not.toBeNull();
       expect(pluginLifecycleMocks.loadInventoryProjection.mock.calls.length).toBeGreaterThan(inventoryRequestsBeforeCommand);
     } finally {
       dispose();
     }
   }, 10000);
+
+  it.each(['committed', 'committed_error', 'unknown', 'not_committed', 'unknown_unresolved'] as const)(
+    'removes canvas placements only after uninstall is confirmed: %s', async (outcome) => {
+      getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+      window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+      const host = document.createElement('div'); document.body.append(host);
+      const { EnvAppShell } = await import('./EnvAppShell');
+      const dispose = render(() => <EnvAppShell />, host);
+      try {
+        await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+        await pluginPanelState.lastProps.onOpenCenter();
+        await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 60);
+        const confirmed = outcome === 'committed' || outcome === 'committed_error' || outcome === 'unknown';
+        if (confirmed) pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({ items: [] });
+        if (outcome !== 'committed') pluginLifecycleMocks.execute.mockRejectedValueOnce(new PluginPlatformRequestError(
+          'PLUGIN_INVALID_REQUEST', 'uninstall response failed', {}, outcome === 'committed_error' ? 'committed' : outcome === 'unknown_unresolved' ? 'unknown' : outcome,
+        ));
+        const uninstall = pluginCenterViewState.lastProps.onCommand({ type: 'uninstall', pluginInstanceID: examplePluginCatalog.pluginInstanceID,
+          expectedManagementRevision: 11, dataPolicy: 'keep' }, new AbortController().signal);
+        if (outcome === 'committed') await expect(uninstall).resolves.toBeUndefined();
+        else await expect(uninstall).rejects.toThrow('uninstall response failed');
+        if (confirmed) expect(pluginLayoutMocks.removeWorkbenchPluginWidgets).toHaveBeenCalledWith(examplePluginCatalog.pluginInstanceID);
+        else expect(pluginLayoutMocks.removeWorkbenchPluginWidgets).not.toHaveBeenCalled();
+        expect(workbenchPluginSurfaceState.releaseAll).not.toHaveBeenCalled();
+        expect(workbenchPluginSurfaceState.releasePlugin).not.toHaveBeenCalled();
+      } finally { dispose(); }
+    }, 10000,
+  );
 
   it('closes Plugin Center back to the last normal activity surface', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -3192,7 +3226,6 @@ describe('EnvAppShell environment entry affordances', () => {
           pluginId: examplePluginCatalog.pluginID,
           pluginInstanceId: examplePluginCatalog.pluginInstanceID,
           surfaceId: 'metrics.dashboard',
-          placement: 'activity',
           managementRevision: '11',
           visible: 'true',
         }),
@@ -3203,7 +3236,6 @@ describe('EnvAppShell environment entry affordances', () => {
         surfaceID: 'metrics.dashboard',
         displayName: examplePluginCatalog.displayName,
         expectedManagementRevision: 11,
-        preferredPlacement: 'activity',
       });
       expect(pluginSurfaceFrameState.lastProps?.coordinator).toMatchObject({
         open: expect.any(Function),
@@ -3244,7 +3276,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => (
         document.querySelector('[data-plugin-surface-host]')?.getAttribute('data-management-revision') === '12'
       ));
-      expect(pluginSurfaceFrameState.lastProps.instanceID).not.toBe(firstInstanceID);
+      expect(pluginSurfaceFrameState.lastProps.instanceID).toBe(firstInstanceID);
 
       const refreshedProps = pluginSurfaceFrameState.lastProps;
       let finishUserClose!: () => void;
@@ -3315,7 +3347,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('opens a pinned Activity plugin in the kept-alive main area and retires it before Workbench placement', async () => {
+  it('opens a pinned Activity plugin in the kept-alive main area and preserves it across Workbench placement', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -3367,22 +3399,21 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
       expect(activityPluginPageState.closeCalls).toBe(0);
 
-      await pluginPanelState.lastProps.onOpenPluginSurface({
-        ...examplePluginProjection('enabled').items[0].defaultLaunchTarget,
-        preferredPlacement: 'workbench',
-      });
-      await flushUntil(() => host.querySelector('[data-activity-plugin-surface-page]') === null);
-      expect(activityPluginPageState.closeCalls).toBe(1);
-      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledTimes(1);
-
+      const switchMode = async (label: string) => {
+        findButtonByText(host, label)!.click();
+        await flushUntil(() => host.querySelector(`[data-testid="display-mode-view-${label.toLowerCase()}"]`)?.getAttribute('style')?.includes('display: block') ?? false, 60);
+      };
+      await switchMode('Workbench');
+      await pluginPanelState.lastProps.onOpenPluginSurface(examplePluginProjection('enabled').items[0].defaultLaunchTarget);
+      expect(activityPluginPageState.closeCalls).toBe(0);
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledOnce();
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
+      await switchMode('Activity');
       findActivityButton(host, activityID)!.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-activity-plugin-surface-page]')), 60);
-      expect(host.querySelector('[data-activity-plugin-surface-page]')).not.toBe(firstPage);
-      expect(workbenchPluginSurfaceState.close).toHaveBeenCalled();
-      expect(host.querySelectorAll('[data-activity-plugin-surface-page]')).toHaveLength(1);
-    } finally {
-      dispose();
-    }
+      await flushAsync();
+      expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
+      expect(workbenchPluginSurfaceState.releasePlugin).not.toHaveBeenCalled();
+    } finally { dispose(); }
   }, 10000);
 
   it('keeps an Activity pin when exact close fails and removes it after a successful retry', async () => {
@@ -3483,7 +3514,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(afterUnpin.activityInventoryKeys).toEqual([inventoryKey]);
       expect(afterUnpin.workbenchInventoryKeys).toEqual([]);
       expect(workbenchPluginSurfaceState.close).not.toHaveBeenCalled();
-      expect(workbenchPluginSurfaceState.closePlugin).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.releasePlugin).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -3589,7 +3620,6 @@ describe('EnvAppShell environment entry affordances', () => {
         await pluginCenterViewState.lastProps.onCommand({
           type: 'open_surface',
           ...item.defaultLaunchTarget,
-          placement: 'activity',
         }, new AbortController().signal);
         await flushUntil(() => document.querySelectorAll('[data-plugin-surface-host]').length === index + 1);
       }
@@ -3601,7 +3631,6 @@ describe('EnvAppShell environment entry affordances', () => {
       await pluginCenterViewState.lastProps.onCommand({
         type: 'open_surface',
         ...projection.items[9].defaultLaunchTarget,
-        placement: 'activity',
       }, new AbortController().signal);
       await flushAsync();
 
@@ -3639,7 +3668,6 @@ describe('EnvAppShell environment entry affordances', () => {
         await pluginCenterViewState.lastProps.onCommand({
           type: 'open_surface',
           ...item.defaultLaunchTarget,
-          placement: 'activity',
         }, new AbortController().signal);
         await flushUntil(() => document.querySelectorAll('[data-plugin-surface-host]').length === index + 1);
       }
@@ -3650,7 +3678,6 @@ describe('EnvAppShell environment entry affordances', () => {
       await expect(pluginCenterViewState.lastProps.onCommand({
         type: 'open_surface',
         ...projection.items[9].defaultLaunchTarget,
-        placement: 'activity',
       }, new AbortController().signal)).rejects.toThrow();
 
       const windows = [...document.querySelectorAll<HTMLElement>('[data-plugin-surface-host]')];
@@ -3689,7 +3716,7 @@ describe('EnvAppShell environment entry affordances', () => {
       const ending = pluginSurfaceFrameState.lastProps.onEndPluginSession();
       await flushAsync();
       expect(pluginPlatformMocks.coordinator.dispose).toHaveBeenCalledOnce();
-      expect(workbenchPluginSurfaceState.closeAll).toHaveBeenCalledOnce();
+      expect(workbenchPluginSurfaceState.releaseAll).toHaveBeenCalledOnce();
       expect(pluginPlatformMocks.close).not.toHaveBeenCalled();
 
       finishLocalCleanup();
@@ -3713,7 +3740,7 @@ describe('EnvAppShell environment entry affordances', () => {
         expected_management_revision: 11,
       },
     };
-    pluginPlatformMocks.coordinator.invalidatePlugin.mockRejectedValueOnce(new Error('local cleanup failed'));
+    pluginPlatformMocks.coordinator.closePlugin.mockRejectedValueOnce(new Error('local cleanup failed'));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -3736,12 +3763,13 @@ describe('EnvAppShell environment entry affordances', () => {
       await expect(pluginCenterViewState.lastProps.onCommitExternal(
         inspection,
         new AbortController().signal,
-      )).rejects.toThrow('External update surface cleanup requires attention');
+      )).rejects.toThrow('local cleanup failed');
 
       expect(pluginLifecycleMocks.installExternalPackage).not.toHaveBeenCalled();
-      expect(pluginPlatformMocks.coordinator.invalidatePlugin)
+      expect(pluginPlatformMocks.coordinator.closePlugin)
         .toHaveBeenCalledWith(examplePluginCatalog.pluginInstanceID);
-      expect(document.querySelector('[data-plugin-surface-host]')).toBeNull();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+      expect(document.querySelector('[data-plugin-surface-host]')).not.toBeNull();
     } finally {
       dispose();
     }
@@ -3794,9 +3822,9 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 11,
-        placement: 'workbench',
       }, new AbortController().signal)).resolves.toBeUndefined();
-      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledOnce();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+      expect(document.querySelector('[data-plugin-surface-host]')).not.toBeNull();
     } finally {
       dispose();
     }
@@ -3853,7 +3881,6 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: examplePluginCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 11,
-        placement: 'workbench',
       }, new AbortController().signal);
       await flushAsync();
       expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
@@ -3862,7 +3889,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await expect(commit).rejects.toBe(timeout);
       await expect(queuedOpen).rejects.toThrow();
       expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
-      expect(workbenchPluginSurfaceState.closePlugin)
+      expect(pluginPlatformMocks.coordinator.closePlugin)
         .toHaveBeenCalledWith(examplePluginCatalog.pluginInstanceID);
     } finally {
       dispose();
@@ -3921,77 +3948,50 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('opens Workbench plugin placement through the standard plugin widget controller', async () => {
+  it('opens in the clicked mode and keeps Activity and Workbench containers independent', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-
     const host = document.createElement('div');
     document.body.appendChild(host);
-
     const { EnvAppShell } = await import('./EnvAppShell');
     const dispose = render(() => <EnvAppShell />, host);
-
+    const changeMode = async (label: string) => {
+      const button = findButtonByText(host, label)!;
+      button.click();
+      await flushUntil(() => host.querySelector(`[data-testid="display-mode-view-${label.toLowerCase()}"]`)?.getAttribute('style')?.includes('display: block') ?? false, 60);
+    };
     try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      await changeMode('Activity');
+      const target = examplePluginProjection('enabled').items[0].defaultLaunchTarget;
+      await pluginPanelState.lastProps.onOpenPluginSurface(target);
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+      const activityWindow = document.querySelector('[data-plugin-surface-host]');
+      expect(activityWindow).not.toBeNull();
+      await changeMode('Workbench');
+      await pluginPanelState.lastProps.onOpenCenter();
+      expect(sidebarActiveTabValue).not.toBe('plugin-center');
+      await pluginPanelState.lastProps.onOpenPluginSurface(target);
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith(target);
+      expect(document.querySelector('[data-plugin-surface-host]')).toBe(activityWindow);
+      await changeMode('Activity');
+      await pluginPanelState.lastProps.onOpenPluginSurface(target);
+      expect(document.querySelectorAll('[data-plugin-surface-host]')).toHaveLength(1);
+      expect(workbenchPluginSurfaceState.releasePlugin).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.releaseAll).not.toHaveBeenCalled();
+      await changeMode('Workbench');
+      let finishOpen!: () => void;
+      workbenchPluginSurfaceState.open.mockImplementationOnce(() => new Promise((resolve) => { finishOpen = () => resolve(undefined); }));
+      const opening = pluginPanelState.lastProps.onOpenPluginSurface(target);
       await flushAsync();
-      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
-      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
-
-      const target = {
-        type: 'open_surface',
-        pluginID: examplePluginCatalog.pluginID,
-        pluginInstanceID: examplePluginCatalog.pluginInstanceID,
-        surfaceID: 'metrics.dashboard',
-        expectedManagementRevision: 11,
-        placement: 'workbench',
-      } as const;
-      await expect(pluginCenterViewState.lastProps.onCommand(target)).resolves.toBeUndefined();
-
-      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith({
-        pluginID: target.pluginID,
-        pluginInstanceID: target.pluginInstanceID,
-        surfaceID: target.surfaceID,
-        displayName: examplePluginCatalog.displayName,
-        expectedManagementRevision: 11,
-        preferredPlacement: 'workbench',
-      });
-      expect(host.querySelector('[data-testid="workbench-page"]')).not.toBeNull();
-
-      await expect(pluginCenterViewState.lastProps.onCommand({ ...target, placement: 'activity' })).resolves.toBeUndefined();
-      expect(workbenchPluginSurfaceState.close).toHaveBeenCalledWith({
-        pluginID: target.pluginID,
-        pluginInstanceID: target.pluginInstanceID,
-        surfaceID: target.surfaceID,
-        displayName: examplePluginCatalog.displayName,
-        expectedManagementRevision: 11,
-        preferredPlacement: 'activity',
-      });
-      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host][data-placement="activity"]')));
-      expect(document.querySelector('[data-plugin-surface-host][data-placement="activity"]')).not.toBeNull();
-
-      await expect(pluginCenterViewState.lastProps.onCommand(target)).resolves.toBeUndefined();
-      expect(document.querySelector('[data-plugin-surface-host]')).toBeNull();
-      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledTimes(2);
-
-      let resolveWorkbenchOpen!: () => void;
-      workbenchPluginSurfaceState.open.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
-        resolveWorkbenchOpen = () => resolve(undefined);
-      }));
-      const pendingWorkbench = pluginCenterViewState.lastProps.onCommand(target);
-      await flushAsync();
-      const closeCallsBeforeQueuedActivity = workbenchPluginSurfaceState.close.mock.calls.length;
-      const queuedActivity = pluginCenterViewState.lastProps.onCommand({ ...target, placement: 'activity' });
-      await flushAsync();
-      expect(workbenchPluginSurfaceState.close).toHaveBeenCalledTimes(closeCallsBeforeQueuedActivity);
-      resolveWorkbenchOpen();
-      await Promise.all([pendingWorkbench, queuedActivity]);
-      expect(workbenchPluginSurfaceState.close).toHaveBeenCalledTimes(closeCallsBeforeQueuedActivity + 1);
-    } finally {
-      dispose();
-    }
+      await changeMode('Activity');
+      finishOpen();
+      await opening;
+      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe('activity');
+      expect(document.querySelector('[data-plugin-surface-host]')).toBe(activityWindow);
+    } finally { dispose(); }
   }, 10000);
 
   it('keeps browser language controls available on the access gate without touching runtime settings', async () => {

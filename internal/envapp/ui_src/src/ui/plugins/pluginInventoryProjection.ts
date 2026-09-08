@@ -86,7 +86,7 @@ export function buildPluginPanelModel(
     ...projection.items.filter((item) => Boolean(item.defaultLaunchTarget)).map((item): PluginPanelTile => ({
       kind: 'plugin',
       item,
-      action: options.canOpenSurfaces && presentPlugin(item).canOpenActivity ? 'open_surface' : 'open_details',
+      action: options.canOpenSurfaces && presentPlugin(item).canOpenSurface ? 'open_surface' : 'open_details',
     })),
   ];
   return { loading: Boolean(options.loading), errorMessage, tiles };
@@ -161,6 +161,12 @@ function projectCatalogItem(
     trustBadge: installedTrustBadge(installed, catalogItem),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
+    declaredSurfaceIDs: installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => surface.surface_id),
+    launchTargets: installed.action_state?.can_open === true ? installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => ({
+      pluginID: installed.plugin_id, pluginInstanceID: installed.plugin_instance_id,
+      surfaceID: surface.surface_id, displayName: manifestDisplayName(installed) || installed.plugin_id,
+      expectedManagementRevision: installed.management_revision,
+    })) : [],
     defaultLaunchTarget: installed.action_state?.can_open === true && defaultViewSurface
       ? {
           pluginID: installed.plugin_id,
@@ -168,7 +174,6 @@ function projectCatalogItem(
           surfaceID: defaultViewSurface.surface_id,
           displayName: manifestDisplayName(installed) || installed.plugin_id,
           expectedManagementRevision: installed.management_revision,
-          preferredPlacement: 'activity',
         }
       : undefined,
     attentionReason,
@@ -224,6 +229,12 @@ function projectInstalledItem(
     trustBadge: installedTrustBadgeForRecord(installed),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
+    declaredSurfaceIDs: installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => surface.surface_id),
+    launchTargets: installed.action_state?.can_open === true ? installed.manifest.surfaces.filter((surface) => surface.kind === 'view').map((surface) => ({
+      pluginID: installed.plugin_id, pluginInstanceID: installed.plugin_instance_id,
+      surfaceID: surface.surface_id, displayName: manifestDisplayName(installed) || installed.plugin_id,
+      expectedManagementRevision: installed.management_revision,
+    })) : [],
     defaultLaunchTarget: installed.action_state?.can_open === true && launchSurface
       ? {
           pluginID: installed.plugin_id,
@@ -231,7 +242,6 @@ function projectInstalledItem(
           surfaceID: launchSurface.surface_id,
           displayName,
           expectedManagementRevision: installed.management_revision,
-          preferredPlacement: 'activity',
         }
       : undefined,
     attentionReason: !runnable

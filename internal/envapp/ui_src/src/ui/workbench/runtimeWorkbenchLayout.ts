@@ -123,6 +123,18 @@ export type RuntimeWorkbenchPluginWidgetState = Readonly<{
   expected_management_revision: number;
 }>;
 
+export type RuntimeWorkbenchOpenPluginRequest = Readonly<{
+  state: RuntimeWorkbenchPluginWidgetState;
+  viewport?: RuntimeWorkbenchOpenPreviewViewportHint;
+}>;
+
+export type RuntimeWorkbenchOpenPluginResponse = Readonly<{
+  widget_id: string;
+  created: boolean;
+  snapshot: RuntimeWorkbenchLayoutSnapshot;
+  widget_state: RuntimeWorkbenchWidgetState;
+}>;
+
 export type RuntimeWorkbenchWidgetState = Readonly<{
   widget_id: string;
   widget_type: string;

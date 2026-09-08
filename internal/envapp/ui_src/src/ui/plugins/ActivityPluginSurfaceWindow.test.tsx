@@ -114,7 +114,6 @@ const target: PluginSurfaceLaunchTarget = {
   surfaceID: 'metrics.dashboard',
   displayName: 'Metrics',
   expectedManagementRevision: 7,
-  preferredPlacement: 'activity',
 };
 
 let dispose: (() => void) | undefined;
@@ -370,7 +369,9 @@ describe('ActivityPluginSurfaceWindow', () => {
     const recovery = mount.querySelector('[data-plugin-surface-recovery]') as HTMLElement;
     const retry = mount.querySelector('[data-plugin-surface-retry]') as HTMLButtonElement;
     const endSession = mount.querySelector('[data-plugin-surface-end-session]') as HTMLButtonElement;
-    expect((mount.querySelector('[data-plugin-surface-stage]') as HTMLElement).inert).toBe(true);
+    let isolated = mount.querySelector('[data-plugin-surface-stage]') as HTMLElement | null;
+    while (isolated && !isolated.inert) isolated = isolated.parentElement;
+    expect(isolated).not.toBeNull();
     expect((mount.querySelector('[data-window-close]') as HTMLElement).inert).toBe(true);
     expect(external.inert).toBe(true);
     expect(recovery.inert).toBe(false);

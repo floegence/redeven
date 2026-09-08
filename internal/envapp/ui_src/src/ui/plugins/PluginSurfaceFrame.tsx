@@ -225,7 +225,10 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
                 <AlertTriangle class="h-5 w-5" />
               </span>
               <h2 class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.surfaceFailed')}</h2>
-              <p class="mt-2 break-words text-sm leading-6 text-muted-foreground">{errorMessage()}</p>
+              <details class="mt-2 break-words text-sm leading-6 text-muted-foreground">
+                <summary class="cursor-pointer">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+                <p>{errorMessage()}</p>
+              </details>
               <Button
                 type="button"
                 size="sm"
@@ -244,6 +247,8 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
         </Show>
         <div
           ref={stage}
+          inert={loadState() !== 'ready' || !props.visible}
+          aria-hidden={loadState() !== 'ready' || !props.visible ? 'true' : undefined}
           data-plugin-surface-stage
           class={cn(
             'h-full min-h-0 w-full bg-background transition-opacity duration-200 ease-out [&>iframe]:block [&>iframe]:h-full [&>iframe]:w-full [&>iframe]:border-0 motion-reduce:transition-none',

@@ -29,8 +29,7 @@ export function PluginCenterItem(props: {
   onEnable: () => void;
   onDisable: () => void;
   onUninstall: () => void;
-  onOpenActivity: () => void;
-  onOpenWorkbench: () => void;
+  onOpenSurface: () => void;
   onRetryInstall?: () => void;
   onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
@@ -69,7 +68,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
       case 'install': return i18n.t('uiCopy.plugin.install');
       case 'enable': return i18n.t('uiCopy.plugin.enable');
       case 'review_update': return i18n.t('uiCopy.plugin.reviewUpdate');
-      case 'open_activity': return i18n.t('common.actions.open');
+      case 'open': return i18n.t('common.actions.open');
       case 'view_policy': return i18n.t('uiCopy.plugin.viewPolicyRestriction');
       case 'view_runtime': return i18n.t('uiCopy.plugin.viewRuntimeRequirement');
       case 'view_trust': return i18n.t('uiCopy.plugin.viewTrustDetails');
@@ -82,18 +81,15 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
       case 'install': return props.onInstall();
       case 'enable': return props.onEnable();
       case 'review_update': return props.onUpdate();
-      case 'open_activity': return props.onOpenActivity();
+      case 'open': return props.onOpenSurface();
       default: return props.onOpenDetails(target);
     }
   };
   const menuItems = (): DropdownItem[] => [
-    ...(actions().canOpenActivity ? [
-      { id: 'activity', label: i18n.t('common.actions.open'), disabled: !props.canOpenSurfaces },
+    ...(actions().canOpenSurface ? [
+      { id: 'open', label: i18n.t('common.actions.open'), disabled: !props.canOpenSurfaces },
       ] : []),
-    ...(actions().canOpenWorkbench ? [
-      { id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: !props.canOpenSurfaces },
-    ] : []),
-    ...((actions().canOpenActivity || actions().canOpenWorkbench) ? [
+    ...(actions().canOpenSurface ? [
       { id: 'surface-separator', label: '', separator: true },
     ] : []),
     ...(actions().primaryAction === 'enable' ? [{ id: 'enable', label: i18n.t('uiCopy.plugin.enable'), disabled: !props.canManage || props.managementDisabled }] : []),
@@ -103,8 +99,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
     { id: 'details', label: i18n.t('uiCopy.plugin.viewDetails') },
   ];
   const selectMenuItem = (id: string, target: HTMLButtonElement) => {
-    if (id === 'activity') props.onOpenActivity();
-    else if (id === 'workbench') props.onOpenWorkbench();
+    if (id === 'open') props.onOpenSurface();
     else if (id === 'enable') props.onEnable();
     else if (id === 'disable') props.onDisable();
     else if (id === 'update') props.onUpdate();
@@ -166,7 +161,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             class={cn('inline-flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50', PLUGIN_PRESS_MOTION_CLASS)}
             aria-busy={commandPending()}
             disabled={commandPending() || ((primaryAction() === 'review_update' || primaryAction() === 'install') && (!props.canManage || props.managementDisabled))
-              || (primaryAction() === 'open_activity' && (!props.canOpenSurfaces || !props.item.defaultLaunchTarget))
+              || (primaryAction() === 'open' && (!props.canOpenSurfaces || !props.item.defaultLaunchTarget))
               || (primaryAction() === 'enable' && (!props.canManage || props.managementDisabled))}
             onClick={(event) => activatePrimary(event.currentTarget)}
           >
@@ -175,7 +170,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               : primaryAction() === 'install' ? <Download class="h-4 w-4 shrink-0" />
               : primaryAction() === 'review_update'
               ? <RefreshIcon class="h-4 w-4 shrink-0" />
-              : primaryAction() === 'open_activity' ? <Play class="h-4 w-4 shrink-0" />
+              : primaryAction() === 'open' ? <Play class="h-4 w-4 shrink-0" />
                 : primaryAction() === 'enable' ? <CheckCircle class="h-4 w-4 shrink-0" />
                   : <MoreHorizontal class="h-4 w-4 shrink-0" />}
             <span data-plugin-center-card-primary-label class="min-w-0 break-words leading-4">

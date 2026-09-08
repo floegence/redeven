@@ -919,6 +919,9 @@ func basename(path string) string {
 }
 
 func widgetStateDataEqual(left WidgetStateData, right WidgetStateData) bool {
+	if left.PluginInstanceID != right.PluginInstanceID || left.PluginID != right.PluginID || left.SurfaceID != right.SurfaceID || left.DisplayName != right.DisplayName || left.ExpectedManagementRevision != right.ExpectedManagementRevision {
+		return false
+	}
 	if left.Kind != right.Kind || left.CurrentPath != right.CurrentPath || left.RootID != right.RootID || left.FontFamilyID != right.FontFamilyID {
 		return false
 	}

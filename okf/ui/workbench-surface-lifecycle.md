@@ -53,6 +53,11 @@ coordinates or recenter the viewport after commit.
 
 Git entity menus use this shared projection for workspace sections and rows, branches, branch status entries, graph and history commits, compare files, and stashes. Mouse right-click and `ContextMenu` or `Shift+F10` open the same menu; the first action receives focus, Arrow keys plus Home and End navigate, Enter or Space activates, and Escape or Tab closes and restores focus to the trigger. Disabled actions remain focusable with `aria-disabled` and a reason. The controller snapshots the entity and repository or worktree root at open time so selection changes, refreshes, or later navigation cannot retarget an already-open action. Dangerous branch, stash, and discard actions still enter their existing review or confirmation owner rather than calling mutation RPCs from the menu.
 
+Plugin widgets follow [plugin layout continuity](plugin-layout-continuity.md):
+saved component identity and geometry survive SDK instance replacement. Initial
+layout read failure never enables autosave; failed or conflicting saves retain
+local edits and expose explicit retry without reviving remote removals.
+
 # Boundaries
 
 Lazy loading is a module-delivery boundary only. It must not pre-mount inactive Workbench features, eagerly initialize Flower providers, or weaken existing permission, state restoration, input ownership, and error recovery contracts.

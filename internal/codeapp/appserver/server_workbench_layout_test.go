@@ -863,3 +863,35 @@ func TestServerWorkbenchTerminalWidgetSessionCloseAPIPartialFailure(t *testing.T
 		t.Fatalf("closed widget state = %#v, want empty sessions despite partial terminal failure", closeData.WidgetState)
 	}
 }
+
+func TestServerWorkbenchPluginPlacementAndRemoval(t *testing.T) {
+	t.Parallel()
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true})
+	body := `{"state":{"kind":"plugin","plugin_instance_id":"instance-1","plugin_id":"example.plugin","surface_id":"secondary","display_name":"Example","expected_management_revision":7},"viewport":{"center_x":500,"center_y":400,"default_width":1120,"default_height":760}}`
+	first := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_plugin", body)
+	if first.Code != http.StatusOK {
+		t.Fatalf("placement: %d %s", first.Code, first.Body.String())
+	}
+	placed := decodeWorkbenchLayoutResponse[workbenchlayout.OpenPluginResponse](t, first)
+	if !placed.Created || len(placed.Snapshot.WidgetStates) != 1 {
+		t.Fatalf("incomplete placement: %#v", placed)
+	}
+	again := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_plugin", body)
+	reused := decodeWorkbenchLayoutResponse[workbenchlayout.OpenPluginResponse](t, again)
+	if reused.Created || reused.WidgetID != placed.WidgetID {
+		t.Fatal("retry duplicated placement")
+	}
+	for _, action := range []string{"open_plugin", "remove_plugin"} {
+		readonly := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true})
+		response := performWorkbenchLayoutRequest(t, readonly, http.MethodPost, "/_redeven_proxy/api/workbench/actions/"+action, body)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("%s allowed without write: %d", action, response.Code)
+		}
+	}
+	removed := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/remove_plugin", `{"plugin_instance_id":"instance-1"}`)
+	snapshot := decodeWorkbenchLayoutResponse[workbenchlayout.Snapshot](t, removed)
+	if len(snapshot.Widgets) != 0 || len(snapshot.WidgetStates) != 0 || snapshot.Revision <= placed.Snapshot.Revision {
+		t.Fatalf("incomplete removal: %#v", snapshot)
+	}
+}

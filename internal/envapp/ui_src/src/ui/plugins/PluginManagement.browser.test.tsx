@@ -28,6 +28,8 @@ import { ActivityPluginSurfaceWindow } from './ActivityPluginSurfaceWindow';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PluginConfirmationDialog, createPluginConfirmationQueue } from './PluginConfirmationQueue';
 import { PluginCenterView } from './PluginCenterView';
+import { PluginCenterDialog } from './PluginCenterDialog';
+import { PluginSurfaceContainer, type PluginSurfaceResolution } from './PluginSurfaceContainer';
 import { PluginPanel } from './PluginPanel';
 import { PluginPinContextMenu } from './PluginPinContextMenu';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
@@ -107,7 +109,6 @@ const metricsItem: PluginInventoryItem = {
     surfaceID: 'metrics.dashboard',
     displayName: 'Metrics',
     expectedManagementRevision: 7,
-    preferredPlacement: 'activity',
   },
   authorization: {
     grants: [],
@@ -443,7 +444,7 @@ function mountUpdateReviewDialog(): HTMLElement {
       onOfficialUpdate={async () => undefined}
       onRefresh={() => undefined}
       onCommitted={() => undefined}
-      onOpenActivity={() => undefined}
+      onOpenSurface={() => undefined}
       onViewPermissions={() => undefined}
     />
   ), host));
@@ -507,7 +508,7 @@ function mountLoadingUpdateReviewDialog(): {
       onOfficialUpdate={async () => undefined}
       onRefresh={() => undefined}
       onCommitted={() => undefined}
-      onOpenActivity={() => undefined}
+      onOpenSurface={() => undefined}
       onViewPermissions={() => undefined}
     />
   ), host));
@@ -632,6 +633,8 @@ function browserCoordinator(): PluginSurfacePlacementCoordinator {
     setVisible: () => undefined,
     fail: async () => undefined,
     release: async () => undefined,
+    closePlugin: async () => undefined,
+    invalidateAll: async () => undefined,
     invalidatePlugin: async () => undefined,
     closeAll: async () => undefined,
     dispose: async () => undefined,
@@ -1180,7 +1183,7 @@ describe('plugin management browser geometry and interaction', () => {
     const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
     expect(menu).not.toBeNull();
     expect(menu.textContent).toContain('Open');
-    expect(menu.textContent).toContain('Open in Workbench');
+    expect(menu.textContent).not.toContain('Open in Workbench');
     expect(menu.textContent).toContain('View plugin details');
     const detailsAction = [...menu.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'View plugin details')!;
@@ -1656,4 +1659,93 @@ describe('plugin management browser geometry and interaction', () => {
     expectNoHorizontalOverflow(dialog);
     expectNoHorizontalOverflow(report);
   });
+});
+
+
+describe('Workbench Plugin Center dialog continuity', () => {
+  it.each(['no-preference', 'reduce'] as const)('retains management state and restores focus with %s motion', async (reducedMotion) => {
+    await mediaCommands.emulateMediaPreferences({ reducedMotion });
+    await page.viewport(1440, 1000);
+    const host = fixedHost();
+    const [open, setOpen] = createSignal(false);
+    disposers.push(render(() => <>
+      <div data-test-scaled-canvas inert={open()} style={{ transform: 'translate(80px, 40px) scale(0.7)', 'transform-origin': 'top left' }}>
+        <button data-testid="center-entry" onClick={() => setOpen(true)}>Manage plugins</button>
+        <button data-testid="canvas-input">Canvas input</button>
+      </div>
+      <PluginCenterDialog open={open()} onOpenChange={setOpen} title="Plugin Center"
+        class="w-[min(1280px,calc(100vw-48px))] max-w-none">
+        <PluginCenterView projection={projection} loading={false} canManagePlugins canOpenPluginSurfaces
+          onRefresh={() => undefined} onCommand={() => undefined} />
+      </PluginCenterDialog>
+    </>, host));
+    await userEvent.click(page.getByTestId('center-entry'));
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expectInsideViewport(dialog, { width: 1440, height: 1000 });
+    expectNoHorizontalOverflow(dialog);
+    const search = dialog.querySelector<HTMLInputElement>('input[type="search"], input[placeholder]')!;
+    expect(search).not.toBeNull();
+    await userEvent.fill(search, 'Metrics');
+    await settle();
+    const content = dialog.querySelector('[data-plugin-center]') ?? search.parentElement;
+    let isolated = host.querySelector('[data-testid="canvas-input"]') as HTMLElement | null;
+    while (isolated && !isolated.inert) isolated = isolated.parentElement;
+    expect(isolated).not.toBeNull();
+    await userEvent.keyboard('{Escape}');
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    expect(document.activeElement).toBe(host.querySelector('[data-testid="center-entry"]'));
+    await userEvent.click(page.getByTestId('center-entry'));
+    await settle();
+    const restored = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(restored.contains(content)).toBe(true);
+    expect(restored.querySelector<HTMLInputElement>('input[type="search"], input[placeholder]')?.value).toBe('Metrics');
+    await expectScreenshotHasPixelVariance();
+  });
+});
+
+
+it('keeps a dragged and scaled plugin component stable through update and reconnection', async () => {
+  await page.viewport(1440, 1000);
+  const host = fixedHost();
+  const target = metricsItem.defaultLaunchTarget!;
+  const [resolution, setResolution] = createSignal<PluginSurfaceResolution>({ target, generation: 0, status: 'ready' });
+  const original: WorkbenchWidgetItem = { id: 'plugin-continuity', type: 'redeven.plugin', title: 'Metrics',
+    x: 180, y: 150, width: 720, height: 520, z_index: 3, created_at_unix_ms: 100 };
+  const [state, setState] = createSignal<WorkbenchState>({ version: 1, widgets: [original],
+    viewport: { x: 60, y: 40, scale: 0.8 }, locked: false, filters: {}, selectedWidgetId: original.id, theme: DEFAULT_WORKBENCH_THEME });
+  const coordinator = browserCoordinator();
+  const queue = createPluginConfirmationQueue();
+  const definition: WorkbenchWidgetDefinition = { ...redevenWorkbenchWidgets.find((item) => item.type === 'redeven.plugin')!,
+    body: () => <PluginSurfaceContainer target={target} resolveSurface={resolution} visible coordinator={coordinator} confirmationQueue={queue} onRetirementError={(error) => { throw error; }} /> };
+  disposers.push(render(() => <div class="h-full w-full" data-plugin-continuity-canvas>
+    <WorkbenchSurface state={state} setState={setState} widgetDefinitions={[definition]} launcherWidgetTypes={[]} enableKeyboard={false} />
+  </div>, host));
+  await vi.waitFor(() => expect(host.querySelector('[data-plugin-surface-iframe]')).not.toBeNull());
+  await (commands as unknown as { dragWorkbenchPlugin(delta: { x: number; y: number }): Promise<void> }).dragWorkbenchPlugin({ x: 120, y: 80 });
+  await settle();
+  expect(state().widgets[0].x).not.toBe(original.x);
+  expect(state().widgets[0].y).not.toBe(original.y);
+  const placement = { ...state().widgets[0] };
+  const viewport = { ...state().viewport };
+  const widget = host.querySelector('[data-floe-workbench-widget-id="plugin-continuity"]');
+  const first = host.querySelector('[data-plugin-surface-iframe]');
+  setResolution({ target: null, generation: 0, status: 'pending' });
+  await settle();
+  expect(host.querySelector('[data-plugin-surface-iframe]')).toBe(first);
+  expect(first?.closest('[inert]')).not.toBeNull();
+  for (const status of ['disabled', 'permission', 'loading', 'unknown', 'surfaceMissing'] as const) {
+    setResolution({ target: null, generation: 1, status });
+    await settle();
+    expect(state().widgets[0]).toEqual(placement);
+    expect(state().viewport).toEqual(viewport);
+    expect(host.querySelector('[data-floe-workbench-widget-id="plugin-continuity"]')).toBe(widget);
+    expect(host.querySelector('[data-plugin-surface-iframe]')).toBeNull();
+  }
+  setResolution({ target: { ...target, expectedManagementRevision: target.expectedManagementRevision + 1 }, generation: 2, status: 'ready' });
+  await vi.waitFor(() => expect(host.querySelector('[data-plugin-surface-iframe]')).not.toBeNull());
+  expect(host.querySelector('[data-plugin-surface-iframe]')).not.toBe(first);
+  expect(state().widgets[0]).toEqual(placement);
+  expect(state().viewport).toEqual(viewport);
+  await expectScreenshotHasPixelVariance();
 });

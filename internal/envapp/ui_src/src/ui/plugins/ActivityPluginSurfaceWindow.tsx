@@ -6,7 +6,7 @@ import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js'
 import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
-import { PluginSurfaceBody } from './PluginSurfaceFrame';
+import { PluginSurfaceContainer, type PluginSurfaceResolver } from './PluginSurfaceContainer';
 import { isolateDocumentBranch } from './modalIsolation';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type { PluginConfirmationQueue } from './PluginConfirmationQueue';
@@ -17,6 +17,7 @@ import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowSta
 export type ActivityPluginSurfaceWindowProps = {
   instanceID: string;
   target: PluginSurfaceLaunchTarget;
+  resolveSurface?: PluginSurfaceResolver;
   coordinator: PluginSurfacePlacementCoordinator;
   confirmationQueue: PluginConfirmationQueue;
   visible: boolean;
@@ -307,7 +308,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         class="fixed h-px w-px overflow-hidden opacity-0"
         onFocus={() => focusWindowBoundary('last')}
       />
-      <PluginSurfaceBody
+      <PluginSurfaceContainer resolveSurface={props.resolveSurface}
         coordinator={props.coordinator}
         confirmationQueue={props.confirmationQueue}
         target={props.target}

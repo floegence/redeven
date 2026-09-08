@@ -4,21 +4,18 @@ title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows and pinned pages, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
 timestamp: 2026-07-29T00:00:00Z
-quality_exception: Cross-surface plugin UX contract spanning exact inventory, discovery, package review, lifecycle governance, and Activity and Workbench placement.
+quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 ---
 # Summary
 
-Plugin UI uses released ReDevPlugin sandbox surfaces inside Redeven-owned
-navigation and placement. The Launcher and Plugin Center route exact inventory
-identities through discovery, lifecycle review, permissions, installation,
-updates, and recovery. Activity opens a Shell-root window, an Activity Bar pin
-opens a full main-area page, and Workbench opens a `redeven.plugin` widget, with
-fresh SDK slots for every placement change. ReDevPlugin remains the
-authority for package admission, lifecycle `action_state`, confirmations,
-Events, bridge sessions, exact-surface close, and revocation; Redeven owns the
-accessible product presentation, filters, and serialized placement. Unknown
-mutation or close outcomes require platform reconciliation, never wider teardown
-or blind retry.
+Redeven owns plugin navigation, discovery, management presentation, and placement;
+released ReDevPlugin owns package admission, surface authority, confirmations,
+bridge sessions, and revocation. Open uses the current mode with independent SDK
+slots in Activity and Workbench. Saved canvas placement survives runtime cleanup;
+[plugin layout continuity](plugin-layout-continuity.md) owns recovery and removal.
+Unknown outcomes require authoritative reconciliation, never wider teardown or
+blind retry. Management retains search and selection while exposing actionable
+failures and current permissions.
 
 # Contract
 
@@ -83,8 +80,7 @@ content has no header or footer divider and omits the installed and attention
 summary. Size, content layout, search, focus loop, and close behavior remain
 product-owned. Activity placement keeps the existing Shell-root modal behavior,
 including its fixed summary footer and dividers.
-Plugin Center remains a dedicated Activity surface with a separate Launcher
-entry and uses the same category/search projection. Its local filters combine
+Plugin Center opens in the current mode: a dedicated Activity page or a retained Workbench management dialog above the canvas. Both use the same content and category/search projection. The Workbench dialog preserves search, filters, scroll, and selection across close/reopen, isolates canvas input, and restores entry focus. A successful Open dismisses management and focuses the current mode's container; failed placement leaves management available. Its local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding
 identity. Every filter trigger permanently names its dimension and current
 value, exposes a dropdown affordance, and keeps one clear-all action visible
@@ -150,8 +146,7 @@ reopening either surface neither cancels nor reloads it. A lifecycle mutation,
 explicit retry, or session change refreshes through that same owner. During a
 same-session refresh the last successful projection remains interactive, so the
 Launcher never replaces existing tiles with a visible loading banner or an
-empty-state flash. A refresh failure keeps that projection; only a first load
-with no successful snapshot exposes an actionable error. Disconnect or session
+empty-state flash. A refresh failure keeps that projection and exposes its error; it cannot count as authoritative reconciliation of a mutation. A first-load failure remains explicitly retryable. Disconnect or session
 replacement aborts the old request and clears its projection boundary before a
 new owner can publish results. This process-local projection is not durable
 plugin state; Host catalog and `action_state` remain authoritative.
@@ -191,216 +186,13 @@ second open gate. Cards, details, launchers, and placement commands consume the
 Host `action_state`; they do not derive `can_open` from trust, policy, grants, or
 recovery flags.
 
-## Official installation progress
+## Installation and package review
 
-The pre-install interaction has one target-owned flow: `idle`, `review_ready`,
-`installing`, then `installed`; task failure is owned only by the shared install
-projection. A card or detail click opens the dialog in the same UI turn and
-reads the market-cached `install_preview`; no package request or Host inspection
-is started. The concise review shows only icon, name, publisher, version, source,
-and grouped declared permissions, followed by `The publisher declares these
-permissions; they will be verified during installation.`
-
-The preview identity includes the plugin instance, market generation, complete
-release reference, release-identity digest, manifest digest, contract-set digest,
-and summary digest. A changed target is stale and requires market refresh; stale
-completion cannot open another plugin's dialog. Confirmation submits exactly that
-identity and keeps the existing default-enable Host path.
-
-Uninstall retires the prior local management revision before the Host mutation.
-When a later official reinstall reaches terminal success, inventory refresh,
-required permission setup, and activation must all complete before the Shell
-clears the exact retirement fence captured by that install attempt. A newer
-disable, permission decision, uninstall, or unknown mutation outcome supersedes
-the install and keeps its newer fence authoritative. Each completed Execution's
-post-install setup commits at most once in the current Shell; recovery may
-finish only required permissions that have no durable prior decision and never
-re-enables a user-disabled plugin or restores a denied, revoked, or expired
-grant. Inventory retains every current durable Host permission decision,
-including denied, revoked, and expired records, while deriving current grant
-state from effect, revocation, and expiry. The current authoritative launch
-target is openable immediately only after that bounded setup succeeds; failed,
-superseded, or incomplete reinstalls cannot revive a stale surface.
-
-Official installation uses the released durable Execution instead of a
-page-bound pending flag. The dialog shows four fixed steps: `download`, `verify`,
-`install`, and `enable`, with completed, running, pending, or failed state. A
-total progress bar advances by stage; download may show byte progress, while
-verification, install, and enable remain indeterminate. Search, filters, scrolling,
-detail reading, panel close, and unrelated surface launch stay available while
-installation continues. Closing the dialog only hides it; the card or task area
-retains the current stage and one recovery action.
-
-Directory cards keep a fixed identity, two-line author summary, metadata, and
-action footprint across installation states. A same-name summary is omitted
-without substituting host-authored plugin copy. Uninstalled cards omit the
-redundant availability badge; source/trust evidence remains independent of
-lifecycle status. Category selection uses the same filter menu contract as
-source, trust, and lifecycle, with view tabs outside the filter scroll area.
-An installation summary replaces the card action row and opens the existing
-inspector for the complete timeline. Only authoritative download byte totals
-produce a percentage; other stages use a four-segment indicator that distinguishes
-completed stages from the current stage. Reconnection and finalization remain
-busy. Successful observation restores the projected primary action; failures
-retain their exact recovery action and full explanation in details. The card
-stays in place while an inspector or review dialog owns live announcements.
-No cancel control is exposed for the platform's noncancelable install Execution.
-
-The Shell has one observer per plugin attempt and retains the original request
-identity. It reattaches to the same Host Execution after Plugin Center reopens or
-transport reconnects. A lost start response replays the exact reviewed command
-with the same request id; it does not start a competing poller. Closing the panel
-never cancels installation. Terminal failures use the released error code, stage,
-and `retryable` fact to produce one message and one action; raw backend messages
-are not primary UI and cards, details, dialogs, and notifications do not repeat
-live error announcements. A retry creates a new request only when the Host has confirmed a
-retryable terminal failure. If the exact reviewed command is unavailable after a
-restart, the only action is a fresh review. After success, inventory is
-refreshed before the temporary status is removed. Refresh failure remains a
-separate inline recovery state and must not be reported as installation failure.
-The startup observer waits for that inventory before resolving durable plugin
-identities. A confirmed historical-data erase keeps the exact binding revision;
-absence on retry means the prior delete committed, while a changed revision
-requires a new confirmation. Opening the erase dialog transfers the sole error
-presentation into that dialog.
-Cards and inspector share the same accessible `aria-busy`, live-status, alert,
-and progress projection.
-
-## Update review and confirmation
-
-Plugin Center's Updates card and inspector expose one primary `Review update`
-action. Opening it creates an exact update intent, shows the loading review in
-the same interaction, and never submits a mutation, changes tabs, or replaces
-the current selection. For an official plugin, that loading state waits for the
-Shell's single market-then-inventory refresh, relocates the exact inventory key,
-and inspects only the refreshed release source. A missing item, changed source,
-changed generation during inspection, stale cache, or unavailable market stops
-the check and exposes one retry; none may produce `no update`. External plugins
-retain their explicit source-entry flow. Activity and Workbench remain overflow
-actions while an update is available. The dedicated
-update dialog owns source-required, loading-review, review, installing,
-reconciling, and complete states. Its fixed footer always exposes an explicit,
-single-line target action such as `Update to vX`, `Install new build`, or
-`Replace current build`; low-height and narrow layouts scroll only the body.
-
-The immutable update candidate binds the exact plugin instance, management
-revision, current and target versions, package, manifest, entries, contract-set,
-and summary hashes. Before install, Redeven rechecks the current inventory
-revision and market generation. A changed target is stale and requires a fresh
-review; it is never silently substituted. Version upgrades, same-version external replacements,
-exact-package no-ops, and downgrades are projected centrally rather than inferred
-separately by cards and dialogs.
-
-Official security declarations come only from the market preview generated from
-the final package and exact capability contracts; installation is the final
-verification authority. Redeven does not maintain
-official-plugin release notes or synthesize publisher notes from manifests,
-source history, plugin identity, or host locale catalogs. Missing publisher notes
-remain visibly absent.
-
-Install starts only from the review footer. Development builds and external
-replacements require a concise adjacent risk acknowledgement; ordinary verified
-version upgrades need no redundant checkbox. Source inspection and official
-review preparation remain cancellable through both the header close control and
-footer Cancel action; closing aborts the exact in-flight inspection and cannot
-publish a late candidate. Once mutation submission begins, installing and
-reconciling prevent close and duplicate submission because hiding an observer
-must not be presented as cancelling a durable Host operation. The Host rebinds
-the exact owner/session and revalidates the exact
-bytes and expected hash before its atomic control-database transaction. An unknown
-transport outcome retires stale UI authority and requires inventory refresh; it
-does not create receipt/query state or resubmit the mutation. Successful install
-remains in a complete dialog until the user chooses Activity, permissions,
-or Done. Inventory refresh failure is reported separately from mutation failure.
-Closing completion preserves the Updates tab, clears obsolete exact selection,
-and shows an `All plugins are up to date` success state when no updates remain.
-
-## External package review
-
-Administrators may start installation or update from a compatible public HTTPS
-package URL, public GitHub repository Release with optional tag, or local
-`.redevplugin` file. The product submits the source and intent to the released
-inspection API; it never downloads remote bytes in the browser, parses the
-package, chooses trust state, or invents provenance.
-
-An official Discover action uses the exact signed release reference from the
-validated market snapshot. Redeven passes the matching immutable GitHub Release
-transport to ReDevPlugin and never downloads package bytes in the browser. If
-the market is unavailable, installed plugins remain visible and usable while
-discovery and release installation show one retryable unavailable state. An
-invalid or expired official release never falls back to external-package review.
-
-Update source entry preserves only reusable public identity. GitHub may prefill
-its public repository, while package URLs and uploads require fresh input. Every
-update remains bound to the exact instance and management revision.
-
-The opaque review dialog exposes four compact visible stages: source, security
-review, install, and done. Review starts with immutable plugin identity, a
-concise source identity, and one plain-language trust decision. The primary UI
-does not expose execution-approval field names or reason codes. It explains why
-the exact package requires confirmation; full approval state and reason evidence
-remain in the initially collapsed report. Invalid, revoked, and policy-blocked
-results remain top-level blocked decisions. Absent, unknown-signer, and
-temporarily unavailable signatures remain top-level caution decisions that
-require exact-package confirmation. Verified, user-approved, and policy-approved
-assessments still require product confirmation and never imply a permission grant.
-
-The review presents one outcome-led access and operation-impact summary instead
-of separate permission and method inventories. Host permission declarations are
-shown only as a protected-access count in that summary. Methods are grouped by
-the released `read|write|execute|delete|admin` effect set, never as granted
-permissions or completed actions. Dangerous methods remain prominent regardless
-of effect, and an unrecognized runtime value fails visible as an additional
-high-attention group. Raw permission identifiers, method names, effects, routes,
-preflight, confirmation, and contract facts remain in the complete report.
-Network destinations, worker artifacts, secret references, and contract-proven
-storage writes use observable capability language without inferred business
-purpose.
-
-The next review level shows declared worker code, external destinations, secret
-references, operation-impact groups, core actions, and every sensitive added or
-changed update declaration. An update also shows the total added, changed, and
-removed count before confirmation and explicitly says when declared access is
-unchanged. If no permission or operation is declared, each empty state remains
-separate and makes no claim that the plugin is safe, trusted, or authorized. The
-complete Host inspection report is always initially closed;
-its entry carries the update-change count, and an explicit open expands the
-categories containing added or changed declarations while removed-only and
-unchanged categories remain closed. The report retains the complete Host source
-provenance, inspection id, expiry, intent, signature, execution approval, update
-eligibility, reason codes, security summary by category and item, package,
-manifest, entries, and security-summary hashes, and confirmation digest.
-Progressive disclosure changes prominence only and never removes authoritative
-inspection facts. Policy-blocked results retain their exact reason codes instead
-of collapsing into an unsigned-package warning.
-
-The exact-package confirmation control stays in the fixed action footer and
-remains visible while the review body scrolls. Its concise decision copy does
-not repeat the confirmation digest; the complete report retains that exact
-evidence. First install confirmation states that the Host will persist the
-plugin as enabled without silently granting permissions. Update or reinstall
-confirmation states that the Host retains enabled state and existing grants and
-adds no grants automatically.
-
-Invalid, revoked, or policy-blocked assessment disables install. Absent,
-unknown-signer, and temporarily unavailable signatures show a prominent risk
-state but may be explicitly confirmed. Install is unavailable until confirmation,
-and the dialog cannot close while the Host mutation is in flight. An update closes
-its visible slots before install; failure to close blocks the mutation. Unknown
-outcome retires the stale management revision until authoritative inventory is
-reloaded, so queued stale opens cannot pass.
-After a fresh install, the plugin is visibly enabled; missing required grants
-are shown as permission attention and block only the affected open or capability
-call. After an update or reinstall, completion reads the authoritative inventory
-record, retains existing grants, and claims only that no new grants were added.
-Manual updates remain the default unless verified evidence allows automatic
-updates. Equal SemVer never proves latest: equal package hashes offer exact-package
-reinstall, different hashes warn that content differs, and missing prior hash
-states that equality cannot be determined. Every case remains bound to the
-exact update intent and inspection digest. The completion action enters
-the exact installed detail for permission review. A refresh
-failure after a terminal install exposes only an inventory refresh recovery and
-never a second install action.
+[Official installation progress](plugin-installation-progress.md) owns durable
+Execution observation and approved setup. [Plugin package review](plugin-package-review.md)
+owns update and external-source inspection, confirmation, and result handling.
+Both workflows preserve the placement contract and never turn a failed operation
+into component deletion.
 
 ## Permissions and policy
 
@@ -460,10 +252,7 @@ Pinned Activity entries follow Flower and retain the saved pin order.
 Mobile never receives dynamic plugin tab entries and continues to use the
 Launcher and Activity window presentation.
 
-Moving the same target from a pinned page to an Activity window or Workbench
-first awaits the exact pinned-page close, removes its body from the retained
-contribution, then opens a fresh slot. Returning to the pin likewise creates a
-fresh slot rather than reviving or moving the old iframe. Unpin first closes the
+Opening an already present Activity target activates its existing window or pinned page. Workbench uses a separate slot and never retires the Activity container. Unpin first closes the
 mounted page; close failure retains both the shortcut and recovery presentation.
 Successful unpin of the active page selects the latest built-in Activity page.
 Restart restores shortcuts but always begins on a built-in page, so startup does
@@ -471,27 +260,14 @@ not automatically open third-party content.
 
 ## Workbench widgets and placement
 
-Workbench uses the normal projected widget type `redeven.plugin`. Its persisted
-state contains the exact plugin instance, plugin id, surface id, display name,
-and management revision. Restore resolves it against current inventory before a
-fresh slot mounts. Disabled, removed, permission-blocked, or unresolved records
-never open stale authority; their placeholder opens the matching Plugin Center
-detail. Duplicate open, replacement, removal, and `closeAll` share the controller
-and retain targets whose cleanup must be retried.
-
-The SDK's source/port-bound interaction observations drive Redeven's existing
-local wheel, selection, action, activation, focus, and floating-layer policy.
-They are presentation input only, not permission or identity evidence. Redeven
-does not add an overlay, toggle iframe pointer events, guess focus, synthesize DOM
-events, or establish a second MessageChannel.
-
-Placement operations are globally serialized. Move, revision replacement, and
-removal await old-slot close before state or a fresh slot commits. Every new
-placement receives a fresh lease, iframe, and surface instance; no iframe moves.
-Clicking a pinned Dock item creates or focuses the same standard widget, and its
-drag placement uses the released world-coordinate drop result. Pinned Dock items
-follow the built-in component group and Flower in saved order. Unpinning the
-Dock removes only the shortcut and never removes an existing canvas widget.
+[Plugin layout continuity](plugin-layout-continuity.md) owns saved binding,
+atomic placement, exact-instance removal, retry, conflict, and recovery behavior.
+A widget preserves its identity and geometry while its SDK surface is replaced.
+Its source/port-bound interaction observations drive the existing local wheel,
+selection, action, activation, focus, and floating-layer policy. Status overlays
+may isolate unavailable content but must not forward events, guess plugin focus,
+or establish another bridge. Dock clicks and world-coordinate drops create or
+focus the standard widget. Unpinning removes only the shortcut.
 
 ## Confirmation and teardown
 
@@ -502,7 +278,7 @@ details. Redeven does not infer risk from manifests or method names. Cancel owns
 initial focus, each request is decided independently, and hidden, retired, or
 revoked surfaces cannot approve queued work.
 
-Placement moves, explicit window/widget removal, and orderly Shell disposal use
+Explicit window/widget removal, external pre-update cleanup, and orderly Shell disposal use
 exact-slot close. Disable, update, uninstall, permission/policy, and owner-scope
 mutations rely on the released Host revoke followed by SDK scope invalidation or
 disposal for committed and unknown outcomes; Redeven does not close an already
@@ -535,15 +311,11 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinContextMenu.tsx:1` - Owns accessible pin-menu keyboard, outside-dismissal, focus restoration, and surface-aware projection.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginDockPins.ts:1` - Owns v1-to-v2 migration and independent ordered Activity and Workbench pin lists.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and owns install and update-review entry state.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Presents the target-bound review, fixed confirmation footer, reconciliation, and retained completion state.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Classifies update targets and fences revision, inspection expiry, and package identity.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts:1` - Projects verified market releases and manifest-owned presentation without plugin-specific author copy.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Consumes Host `action_state`, RecoverySnapshot, Execution, and Event DTOs.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/plugin-motion.css:1` - Defines the scoped subtle entrance and disclosure motion with a reduced-motion override.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1` - Verifies responsive plugin geometry, real motion timing, and reduced-motion operability.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/externalPluginSecurityProjection.ts:1` - Projects security declarations, update deltas, and operation impact without UI state.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Implements source, review, explicit confirmation, Host install, and terminal result UX.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Isolates official and external identity, trust, provenance, grants, and requirements.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx:1` - Owns Activity floating chrome, mobile modality, focus, and close.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx:1` - Projects a pinned surface into Activity KeepAlive activation and visibility lifecycle.

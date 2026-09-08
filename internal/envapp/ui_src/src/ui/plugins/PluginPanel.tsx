@@ -237,7 +237,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       canvasPlacement: target && props.onDropPlugin ? {
         widgetType: 'redeven.plugin',
         onDrop: (placement) => {
-          props.onDropPlugin?.({ ...target, preferredPlacement: 'workbench' }, placement);
+          props.onDropPlugin?.(target, placement);
           dismiss();
         },
       } : undefined,
