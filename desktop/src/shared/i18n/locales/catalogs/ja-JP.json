@@ -66,6 +66,7 @@
       "fromSource": "{source} から",
       "modelLabel": "モデル",
       "reasoningLabel": "推論",
+      "reasoningLoading": "推論設定を読み込み中…",
       "noModelSelected": "モデルが選択されていません",
       "truncatedLabel": "切り詰め済み",
       "permissionSelectorLabel": "スレッド権限",

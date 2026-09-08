@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-08: Flower reasoning settings authority
+
+- Keep confirmed thread reasoning separate from explicit new-thread draft choices and immutable submission snapshots.
+- Prevent cold-load defaults from becoming draft overrides and preserve Off across reopening and waiting continuation.
+- Align reasoning controls with idle-only preference changes and show a neutral placeholder before settings are known.
+
 ## 2026-09-08: Flower terminal results
 
 - Put returned output directly below the safe command; remove repeated intent and transport metadata from details.

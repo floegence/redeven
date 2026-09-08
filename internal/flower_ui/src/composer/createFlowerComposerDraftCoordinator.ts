@@ -39,6 +39,7 @@ export type FlowerComposerDraftValue = Readonly<{
   mode: FlowerComposerDraftMode;
   model_id?: string;
   permission_type_override?: FlowerPermissionType;
+  /** Explicit new-thread choice only; resolved defaults and request snapshots never write here. */
   reasoning_selection?: FlowerReasoningSelection;
   working_dir?: string;
   /** Stable upload-staging target for an unsent new-thread draft. */

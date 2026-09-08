@@ -68,6 +68,7 @@
       "fromSource": "От {source}",
       "modelLabel": "Модель",
       "reasoningLabel": "Рассуждение",
+      "reasoningLoading": "Загрузка настройки рассуждений…",
       "noModelSelected": "Модель не выбрана",
       "truncatedLabel": "Усечено",
       "permissionSelectorLabel": "Разрешение беседы",

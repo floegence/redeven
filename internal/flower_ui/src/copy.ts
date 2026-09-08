@@ -297,6 +297,7 @@ export type FlowerSurfaceCopy = Readonly<{
     fromSource: (source: string) => string;
     modelLabel: string;
     reasoningLabel: string;
+    reasoningLoading: string;
     noModelSelected: string;
     linkedContextLabel: string;
 		truncatedLabel: string;
@@ -574,6 +575,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     fromSource: (source) => `From ${source}`,
     modelLabel: 'Model',
     reasoningLabel: 'Reasoning',
+    reasoningLoading: 'Loading reasoning setting…',
     noModelSelected: 'No model selected',
     linkedContextLabel: 'Linked context',
 		truncatedLabel: 'Truncated',

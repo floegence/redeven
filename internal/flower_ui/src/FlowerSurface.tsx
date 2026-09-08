@@ -898,6 +898,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [permissionMenuActiveIndex, setPermissionMenuActiveIndex] = createSignal(0);
   const [pendingPermissionPatch, setPendingPermissionPatch] = createSignal<PendingPermissionPatch | null>(null);
   const [pendingModelPatch, setPendingModelPatch] = createSignal<PendingModelPatch | null>(null);
+  const [pendingReasoningThreadIDs, setPendingReasoningThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
   const [activeSubagentDetail, setActiveSubagentDetail] = createSignal<ActiveSubagentDetail | null>(null);
   const subagentDetailOpen = createMemo(() => activeSubagentDetail() !== null);
   const activeSubagentID = () => activeSubagentDetail()?.childThreadID ?? '';
@@ -1320,6 +1321,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		const threadID = trimString(selectedThreadID());
 		return threadID ? threadCache().summaries.get(threadID) : undefined;
 	});
+  const selectedThreadSettings = createMemo(() => {
+    const detail = selectedThread();
+    const summary = selectedThreadSummary();
+    return summary && (!detail || threadSettingsRevision(summary) > threadSettingsRevision(detail))
+      ? summary
+      : detail;
+  });
 	const selectedThreadSummaryNeedsDetail = createMemo(() => (
 		threadSummaryNeedsDetail(selectedThreadSummary(), selectedThread() ?? undefined)
 	));
@@ -1786,13 +1794,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const projectedAttachments = flowerComposerDraftAttachments(attachments);
     const projectedModelID = selectedComposerModelID();
     const projectedPermissionTypeOverride = currentComposerSessionDraft().permissionTypeOverride;
-    const projectedReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
     const projectedWorkingDir = draftWorkingDirectory();
     const projectedCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
     const unchanged = shared.value.mode === mode
       && shared.value.model_id === projectedModelID
       && shared.value.permission_type_override === projectedPermissionTypeOverride
-      && JSON.stringify(shared.value.reasoning_selection) === JSON.stringify(projectedReasoningSelection)
       && shared.value.working_dir === projectedWorkingDir
       && shared.value.capability_revision === projectedCapabilityRevision
       && JSON.stringify(shared.value.attachments) === JSON.stringify(projectedAttachments);
@@ -1805,7 +1811,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       mode,
       model_id: projectedModelID,
       permission_type_override: projectedPermissionTypeOverride,
-      reasoning_selection: projectedReasoningSelection,
       working_dir: projectedWorkingDir,
       capability_revision: projectedCapabilityRevision,
     }));
@@ -2098,7 +2103,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateComposerReasoningSelection = async (selection: FlowerReasoningSelection | undefined) => {
     const normalized = serializeFlowerReasoningSelection(selection);
     const threadID = trimString(selectedThreadID());
-    if (!threadID || selectedInputRequest()) {
+    if (!composerReasoningInteractive()) return;
+    if (!threadID) {
       updateCurrentComposerSessionDraft((draft) => (
         sameFlowerReasoningSelection(draft.reasoningOverride, normalized)
           ? draft
@@ -2106,9 +2112,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ));
       return;
     }
-    if (!props.adapter.setThreadReasoningSelection || !composerReasoningInteractive()) return;
-    const previous = normalizeFlowerReasoningSelection(selectedThread()?.reasoning_selection);
+    if (!props.adapter.setThreadReasoningSelection) return;
+    const previous = normalizeFlowerReasoningSelection(selectedThreadSettings()?.reasoning_selection);
     if (sameFlowerReasoningSelection(previous, normalized)) return;
+    setPendingReasoningThreadIDs((current) => new Set(current).add(threadID));
     try {
       const live = await props.adapter.setThreadReasoningSelection(threadID, normalized);
       const updated = receiveThreadView(live, 'user_action').thread;
@@ -2122,6 +2129,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectedThreadDetailMatches(threadID)) {
         notifyComposerError(getErrorMessage(error) || copy().chat.messageErrorFallback);
       }
+    } finally {
+      setPendingReasoningThreadIDs((current) => {
+        const next = new Set(current);
+        next.delete(threadID);
+        return next;
+      });
     }
   };
   const updateComposerPermissionType = async (permissionType: FlowerPermissionType) => {
@@ -2530,11 +2543,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const pending = pendingModelPatch();
     const threadID = trimString(selectedThreadID());
     if (pending && threadID && pending.threadID === threadID) return pending.requested;
-    const thread = selectedThread();
+    const thread = selectedThreadSettings();
     const threadModelID = thread?.thread_id === trimString(selectedThreadID())
       ? trimString(thread.model_id)
       : '';
-    if (threadModelID) return threadModelID;
+    if (threadID) return threadModelID;
     return trimString(currentComposerSessionDraft().modelIDOverride) || currentModelID();
   });
   let attachmentCapabilitySequence = 0;
@@ -2663,23 +2676,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ];
   });
   const selectedReasoningCapability = createMemo(() => {
-    const thread = selectedThread();
+    const thread = selectedThreadSettings();
     const model = selectedModelOption();
     if (model?.reasoningCapability) return model.reasoningCapability;
     return thread?.reasoning_capability ?? null;
   });
-	const selectedThreadReasoningSelection = createMemo(() => (
-		normalizeFlowerReasoningSelection(selectedThread()?.reasoning_selection)
-		?? normalizeFlowerReasoningSelection(selectedModelOption()?.defaultReasoningSelection)
-		?? defaultReasoningSelectionForCapability(selectedReasoningCapability())
-	));
-	const selectedWaitingReasoningSelection = createMemo(() => normalizeFlowerReasoningSelection(selectedInputRequest()?.reasoning_selection));
-	const composerReasoningOverride = createMemo(() => normalizeFlowerReasoningSelection(currentComposerSessionDraft().reasoningOverride));
-  const composerReasoningSelection = createMemo(() => composerReasoningOverride() ?? selectedWaitingReasoningSelection() ?? selectedThreadReasoningSelection());
+  const composerReasoningLoading = createMemo(() => Boolean(selectedThreadID() && !selectedThreadSettings()));
+  const composerReasoningSelection = createMemo(() => {
+    if (composerReasoningLoading()) return undefined;
+    const selection = selectedThreadID()
+      ? selectedThreadSettings()?.reasoning_selection
+      : currentComposerSessionDraft().reasoningOverride;
+    return normalizeFlowerReasoningSelection(selection)
+      ?? normalizeFlowerReasoningSelection(selectedModelOption()?.defaultReasoningSelection)
+      ?? defaultReasoningSelectionForCapability(selectedReasoningCapability());
+  });
   const composerReasoningEnabled = createMemo(() => reasoningCapabilitySupportsControl(selectedReasoningCapability()));
   const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined));
   createEffect(() => {
-    if (composerReasoningEnabled()) return;
+    if (selectedThreadID() || !selectedModelOption() || composerReasoningEnabled()) return;
     if (!currentComposerSessionDraft().reasoningOverride) return;
     updateCurrentComposerSessionDraft((draft) => (
       draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
@@ -2693,13 +2708,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const composerModelInteractive = createMemo(() => (
     selectedThreadPreferenceEditable()
+    && !pendingReasoningThreadIDs().has(trimString(selectedThreadID()))
     && modelSelectOptions().length > 0
     && (!selectedThreadID() || typeof props.adapter.setThreadModel === 'function')
   ));
   const composerReasoningInteractive = createMemo(() => (
     composerReasoningEnabled()
-    && (selectedInputRequest() ? !selectedThreadReadOnly() : selectedThreadPreferenceEditable())
-    && (!selectedThreadID() || selectedInputRequest() || typeof props.adapter.setThreadReasoningSelection === 'function')
+    && !composerReasoningLoading()
+    && !pendingReasoningThreadIDs().has(trimString(selectedThreadID()))
+    && !modelPatchPending()
+    && selectedThreadPreferenceEditable()
+    && (!selectedThreadID() || typeof props.adapter.setThreadReasoningSelection === 'function')
   ));
   const modelSource = createMemo(() => snapshot()?.model_source ?? null);
   const modelOptionReady = (option: ComposerModelOption | null | undefined): boolean => {
@@ -4687,7 +4706,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           mode: operationMode,
           client_request_id: clientRequestID,
           model_id: frozenModelID,
-          reasoning_selection: frozenReasoningSelection,
           working_dir: frozenWorkingDir,
           capability_revision: frozenCapabilityRevision,
         }
@@ -4707,7 +4725,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         .filter((item) => frozenDraftAttachmentLocalIDs.has(item.local_id) && item.status === 'staged_ready')
         .map((item) => item.local_id),
     );
-    const draftReasoningSelection = !selectedID ? frozenDraft.reasoning_selection : undefined;
+    const draftReasoningSelection = !selectedID ? frozenReasoningSelection : undefined;
     const draftModelID = !selectedID ? frozenDraft.model_id ?? '' : '';
     const launchModelID = frozenDraft.model_id ?? frozenModelID;
     const draftPermissionType = !selectedID ? frozenDraft.permission_type_override : undefined;
@@ -6903,14 +6921,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const focusHandoff = captureBottomActionFocus(threadID);
     const submittedDraft = currentComposerSessionDraft();
     try {
-      const reasoningSelection = serializeFlowerReasoningSelection(
-        composerReasoningEnabled() ? composerReasoningOverride() ?? selectedWaitingReasoningSelection() : undefined,
-      );
       const receipt: FlowerSubmitInputReceipt = await props.adapter.submitInput({
         thread_id: thread.thread_id,
         prompt_id: request.prompt_id,
         answers,
-        ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
       });
       if (
         trimString(receipt.thread_id) !== threadID
@@ -9988,7 +10002,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <div
         class={cn('flower-model-reasoning-control', `flower-composer-control-${location}`)}
         data-flower-composer-control="model_reasoning"
-        data-has-reasoning={composerReasoningEnabled() ? 'true' : 'false'}
+        data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}
         data-model-pending={modelPatchPending() ? 'true' : 'false'}
       >
         <button
@@ -10014,17 +10028,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
         </button>
         {modelMenu()}
-        <Show when={composerReasoningEnabled()}>
+        <Show when={composerReasoningEnabled() || composerReasoningLoading()}>
           <span class="flower-model-reasoning-divider" aria-hidden="true" />
-          <FlowerReasoningControl
-            compact
-            variant="segment"
-            capability={selectedReasoningCapability()}
-            selection={composerReasoningSelection()}
-            label={reasoningControlLabel()}
-            readOnly={!composerReasoningInteractive()}
-            onChange={(selection) => { void updateComposerReasoningSelection(selection); }}
-          />
+          <Show when={!composerReasoningLoading()} fallback={
+            <span class="flower-reasoning-loading" role="status" aria-label={copy().chat.reasoningLoading} title={copy().chat.reasoningLoading}>
+              <span aria-hidden="true">…</span>
+            </span>
+          }>
+            <FlowerReasoningControl
+              compact
+              variant="segment"
+              capability={selectedReasoningCapability()}
+              selection={composerReasoningSelection()}
+              label={reasoningControlLabel()}
+              readOnly={!composerReasoningInteractive()}
+              onChange={(selection) => { void updateComposerReasoningSelection(selection); }}
+            />
+          </Show>
         </Show>
       </div>
     </Show>
@@ -10078,20 +10098,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return (
           <span
             class="flower-model-reasoning-control flower-composer-control-measure"
-            data-has-reasoning={composerReasoningEnabled() ? 'true' : 'false'}
+            data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}
           >
             <span class="flower-model-reasoning-model-trigger">
               <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
               <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
             </span>
-            <Show when={composerReasoningEnabled()}>
+            <Show when={composerReasoningEnabled() || composerReasoningLoading()}>
               <span class="flower-model-reasoning-divider" aria-hidden="true" />
+              <Show when={!composerReasoningLoading()} fallback={<span class="flower-reasoning-loading">…</span>}>
               <span class="flower-reasoning-control flower-reasoning-control-segment">
                 <span class="flower-reasoning-segment-button">
                   <span>{reasoningControlLabel()}</span>
                   <ChevronDown class="flower-reasoning-badge-icon" aria-hidden="true" />
                 </span>
               </span>
+              </Show>
             </Show>
           </span>
         );

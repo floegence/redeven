@@ -79,6 +79,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.
 - [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.
 - [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
+- [Flower reasoning selection ownership](ui/flower-reasoning-selection.md) - Preserve explicit reasoning choices through cold loading, shared drafts, and restart.
 - [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.
 - [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.
 - [Flower file activity presentation](ui/flower-file-activity.md) - Show typed file-change statistics and unified diffs without protocol metadata or reconstructed state.
