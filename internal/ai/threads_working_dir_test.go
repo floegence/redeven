@@ -123,3 +123,50 @@ func TestService_CreateThread_RejectsInvalidWorkingDir(t *testing.T) {
 		t.Fatalf("CreateThread file error = %v, want working_dir must be a directory", err)
 	}
 }
+
+func TestService_CreateThread_ExternalReadOnlyRootCanonicalPath(t *testing.T) {
+	t.Parallel()
+	home, external := t.TempDir(), t.TempDir()
+	project := filepath.Join(external, "project with spaces")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(external, "project-link")
+	if err := os.Symlink(project, link); err != nil {
+		t.Fatal(err)
+	}
+	svc := newWorkingDirTestService(t, home)
+	// The same selected path is revalidated against the current registry at creation.
+	if _, err := svc.CreateThread(context.Background(), workingDirTestMeta(), "test", "", "", link); err == nil {
+		t.Fatal("ungranted external path accepted")
+	}
+	scope, err := filesystemscope.NewRegistry(&config.Config{AgentHomeDir: home, FilesystemScope: &config.FilesystemScope{
+		SchemaVersion: config.FilesystemScopeSchemaVersionV1, DefaultRootID: "project",
+		Roots: []config.FilesystemRootPolicy{{ID: "project", Label: "Project", Path: external, Kind: config.FilesystemRootCustom, Permissions: config.FilesystemPermissionSet{Read: true, Write: false}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.UpdateFilesystemScope(scope); err != nil {
+		t.Fatal(err)
+	}
+	view, err := svc.CreateThread(context.Background(), workingDirTestMeta(), "test", "", "", link+string(os.PathSeparator))
+	if err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.WorkingDir != real {
+		t.Fatalf("persisted directory = %q, want %q", view.WorkingDir, real)
+	}
+	// Revoke the external grant after selection; subsequent creation must fail.
+	homeOnly := newWorkingDirTestService(t, home)
+	if err := svc.UpdateFilesystemScope(homeOnly.scope); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateThread(context.Background(), workingDirTestMeta(), "test", "", "", link); err == nil {
+		t.Fatal("revoked path accepted")
+	}
+}

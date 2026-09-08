@@ -1,7 +1,6 @@
 import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification } from "@floegence/floe-webapp-core";
 import { AlertTriangle, ChevronDown, ExternalLink, Maximize, Play, RefreshIcon, Stop, Terminal, Trash } from "@floegence/floe-webapp-core/icons";
-import type { FileItem } from "@floegence/floe-webapp-core/file-browser";
 import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
 import { SnakeLoader } from "@floegence/floe-webapp-core/loading";
 import {
@@ -12,17 +11,13 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  DirectoryInput,
   Dropdown,
-  Input,
   Tag,
   type DropdownItem,
 } from "@floegence/floe-webapp-core/ui";
 import { Dialog } from "../primitives/EnvAppModal";
-import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useEnvContext } from "./EnvContext";
 import { FlowerContextMenuIcon } from "../icons/FlowerSoftAuraIcon";
-import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { Tooltip } from "../primitives/Tooltip";
 import {
   codeRuntimeMissing,
@@ -70,10 +65,11 @@ import {
 import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { canLaunchProcess } from "../utils/permission";
-import { replacePickerChildren, sortPickerItems, toPickerItem, toPickerTreeAbsolutePath } from "../../../../../flower_ui/src/filePicker/directoryPickerTree";
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from "../workbench/surface/workbenchWheelInteractive";
 import { FloatingContextMenu, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
+import { CreateCodespaceDialog } from './CreateCodespaceDialog';
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { EnvCollectionLoadingSkeleton } from "./EnvCollectionLoadingSkeleton";
 
 type SpaceStatus = Readonly<{
@@ -673,105 +669,6 @@ function CodespaceCard(props: {
   );
 }
 
-// Simple Create Codespace dialog - single dialog with DirectoryInput
-function CreateCodespaceDialog(props: {
-  open: boolean;
-  loading: boolean;
-  files: FileItem[];
-  homePath?: string;
-  onOpenChange: (open: boolean) => void;
-  onCreate: (path: string, name: string, description: string) => void;
-  onLoadDir: (path: string) => void;
-}) {
-  const [selectedPath, setSelectedPath] = createSignal("");
-  const [name, setName] = createSignal("");
-  const [description, setDescription] = createSignal("");
-  const outlineControlClass = redevenSurfaceRoleClass("control");
-  const i18n = useI18n();
-
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
-      setSelectedPath("");
-      setName("");
-      setDescription("");
-    }
-    props.onOpenChange(open);
-  };
-
-  const handlePathChange = (path: string) => {
-    setSelectedPath(path);
-    // Auto-fill name and description from selected directory
-    const segments = path.split("/").filter(Boolean);
-    const defaultName = segments[segments.length - 1] || "";
-    setName(defaultName);
-    setDescription(i18n.t("codespaces.dialog.autoDescription", { path }));
-  };
-
-  const handleCreate = () => {
-    if (!selectedPath()) return;
-    props.onCreate(selectedPath(), name().trim(), description().trim());
-  };
-
-  return (
-    <Dialog
-      open={props.open}
-      onOpenChange={handleOpenChange}
-      title={i18n.t("codespaces.dialog.createTitle")}
-      footer={
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading} class={outlineControlClass}>
-            {i18n.t("codespaces.actions.cancel")}
-          </Button>
-          <Button size="sm" variant="default" onClick={handleCreate} disabled={props.loading || !selectedPath()}>
-            <Show when={props.loading}>
-              <InlineButtonSnakeLoading class="mr-1" />
-            </Show>
-            {i18n.t("codespaces.actions.create")}
-          </Button>
-        </div>
-      }
-    >
-      <div class="space-y-4">
-        <div>
-          <label class="block text-xs font-medium mb-1">{i18n.t("codespaces.fields.directory")}</label>
-          <DirectoryInput
-            value={selectedPath()}
-            onChange={handlePathChange}
-            files={props.files}
-            onExpand={props.onLoadDir}
-            placeholder={i18n.t("codespaces.dialog.directoryPlaceholder")}
-            homePath={props.homePath}
-            homeLabel={i18n.t("codespaces.fields.home")}
-            size="sm"
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-medium mb-1">{i18n.t("codespaces.fields.name")}</label>
-          <Input
-            value={name()}
-            onInput={(e) => setName(e.currentTarget.value)}
-            placeholder={i18n.t("codespaces.dialog.namePlaceholder")}
-            size="sm"
-            class="w-full"
-          />
-          <p class="text-[11px] text-muted-foreground mt-1">{i18n.t("codespaces.dialog.nameHelp")}</p>
-        </div>
-        <div>
-          <label class="block text-xs font-medium mb-1">{i18n.t("codespaces.fields.description")}</label>
-          <Input
-            value={description()}
-            onInput={(e) => setDescription(e.currentTarget.value)}
-            placeholder={i18n.t("codespaces.dialog.descriptionPlaceholder")}
-            size="sm"
-            class="w-full"
-          />
-          <p class="text-[11px] text-muted-foreground mt-1">{i18n.t("codespaces.dialog.descriptionHelp")}</p>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
 function CodeRuntimePreparePanel(props: {
   status: CodeRuntimeStatus | null | undefined;
   loading: boolean;
@@ -945,8 +842,6 @@ function BrowserEditorReadinessInlineStatus(props: {
 
 export function EnvCodespacesPage() {
   const notification = useNotification();
-  const protocol = useProtocol();
-  const rpc = useRedevenRpc();
   const env = useEnvContext();
   const i18n = useI18n();
 
@@ -1008,12 +903,8 @@ export function EnvCodespacesPage() {
     });
   };
 
-  // File tree for directory picker
-  const [files, setFiles] = createSignal<FileItem[]>([]);
-  const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
+  const pickerProps = useEnvFilesystemPicker();
   const outlineControlClass = redevenSurfaceRoleClass("control");
-  type DirCache = Map<string, FileItem[]>;
-  let cache: DirCache = new Map();
 
   const [spaces, { refetch }] = createResource<SpaceStatus[]>(async () => {
     const out = await fetchLocalApiJSON<{ spaces: SpaceStatus[] }>("/_redeven_proxy/api/spaces", { method: "GET" });
@@ -1021,26 +912,6 @@ export function EnvCodespacesPage() {
     return Array.isArray(list) ? list : [];
   });
   const [runtimeStatus, { mutate: mutateRuntimeStatus, refetch: refetchRuntimeStatus }] = createResource<CodeRuntimeStatus>(fetchCodeRuntimeStatus);
-
-  // Load home directory path
-  createEffect(() => {
-    if (!protocol.session?.()) return;
-    void (async () => {
-      try {
-        const resp = await rpc.fs.getPathContext();
-        const home = String(resp?.agentHomePathAbs ?? "").trim();
-        if (home) setHomePath(home);
-      } catch {
-        // ignore
-      }
-    })();
-  });
-
-  createEffect(() => {
-    homePath();
-    cache = new Map();
-    setFiles([]);
-  });
 
   createEffect(() => {
     const status = runtimeStatus();
@@ -1062,34 +933,6 @@ export function EnvCodespacesPage() {
       setRuntimePrepareLocalCancelled(false);
     }
   });
-
-  const loadPickerDir = async (pickerPath: string) => {
-    if (!protocol.session?.()) return;
-
-    const absolutePath = toPickerTreeAbsolutePath(pickerPath, homePath());
-    if (!absolutePath) return;
-
-    if (cache.has(absolutePath)) {
-      setFiles((prev) => replacePickerChildren(prev, pickerPath, cache.get(absolutePath)!));
-      return;
-    }
-
-    try {
-      const resp = await rpc.fs.list({ path: absolutePath, showHidden: false });
-      const entries = resp?.entries ?? [];
-      const items = sortPickerItems(
-        entries.map((entry) => toPickerItem(entry as FsFileInfo, homePath())).filter((item): item is FileItem => !!item)
-      );
-      cache.set(absolutePath, items);
-      setFiles((prev) => replacePickerChildren(prev, pickerPath, items));
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleLoadDir = (path: string) => {
-    void loadPickerDir(path);
-  };
 
   const handleCreate = async (path: string, name: string, description: string) => {
     setCreateLoading(true);
@@ -1604,11 +1447,9 @@ export function EnvCodespacesPage() {
       <CreateCodespaceDialog
         open={createDialogOpen()}
         loading={createLoading()}
-        files={files()}
-        homePath={homePath()}
+        pickerProps={pickerProps}
         onOpenChange={setCreateDialogOpen}
         onCreate={handleCreate}
-        onLoadDir={handleLoadDir}
       />
 
       {/* Delete confirmation dialog */}

@@ -1,5 +1,36 @@
 {
   "flowerSurface": {
+    "filesystemPicker": {
+      "path": "ディレクトリのパス",
+      "go": "移動",
+      "roots": "場所",
+      "root": "ルート",
+      "showHidden": "隠し項目を表示",
+      "loading": "ディレクトリを読み込み中…",
+      "retry": "再試行",
+      "empty": "ディレクトリがありません",
+      "emptyFiles": "このディレクトリに一致するファイルはありません",
+      "invalidPath": "絶対パスまたは ~/ で始まるパスを入力してください",
+      "missingPath": "ディレクトリが見つかりません",
+      "unavailableContext": "ファイルシステムの場所を取得できません",
+      "loadFailed": "ディレクトリを読み込めませんでした",
+      "currentDirectory": "現在のディレクトリ",
+      "newFolder": "新しいフォルダー",
+      "folderName": "フォルダー名",
+      "create": "作成",
+      "cancel": "キャンセル",
+      "fileName": "ファイル名",
+      "fileNameRequired": "ファイル名を入力してください",
+      "noFilesSelected": "ファイルが選択されていません",
+      "selectionLimit": "選択数の上限に達しました",
+      "selectedCount": "選択数: {count}",
+      "home": "ホーム",
+      "outsideScope": "このディレクトリはアクセスが許可された範囲外です。",
+      "permissionDenied": "このディレクトリを読み取る権限がありません。",
+      "hostPermissionDenied": "オペレーティングシステムがこのディレクトリへのアクセスを拒否しました。",
+      "notDirectory": "このパスはディレクトリではありません。",
+      "connectionFailed": "環境に接続できません。接続を確認して再試行してください。"
+    },
     "runtime": {
       "localEnvironment": "ローカル環境",
       "subtitle": "この Mac でローカル AI プロファイルを使用します。"

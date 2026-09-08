@@ -1,5 +1,7 @@
+import { filesystemPickerEnUS } from './filesystemPickerMessages';
 
 export const flowerSurfaceEnUS = {
+  filesystemPicker: filesystemPickerEnUS,
   runtime: {
     localEnvironment: 'Local Environment',
     subtitle: 'Uses the Local AI Profile on this Mac',

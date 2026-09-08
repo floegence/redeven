@@ -20,6 +20,8 @@ presentation; opening never injects commands into an existing shell.
 
 # Contract
 
+Directory selection for a new draft is owned by [absolute filesystem directory selection](filesystem-picker-navigation.md). This concept owns navigation from an existing conversation.
+
 ## Directory and menu ownership
 
 The row menu uses the right-clicked conversation's working directory without

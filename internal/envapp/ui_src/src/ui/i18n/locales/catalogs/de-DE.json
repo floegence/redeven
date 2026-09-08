@@ -4007,6 +4007,37 @@
     "textOnlyModality": "Nur Text"
   },
   "flowerSurface": {
+    "filesystemPicker": {
+      "path": "Verzeichnispfad",
+      "go": "Öffnen",
+      "roots": "Orte",
+      "root": "Wurzelverzeichnis",
+      "showHidden": "Versteckte Einträge anzeigen",
+      "loading": "Verzeichnis wird geladen…",
+      "retry": "Erneut versuchen",
+      "empty": "Keine Verzeichnisse vorhanden",
+      "emptyFiles": "Keine passenden Dateien in diesem Verzeichnis",
+      "invalidPath": "Einen absoluten Pfad oder einen mit ~/ beginnenden Pfad eingeben",
+      "missingPath": "Verzeichnis nicht gefunden",
+      "unavailableContext": "Dateisystemorte sind nicht verfügbar",
+      "loadFailed": "Verzeichnis konnte nicht geladen werden",
+      "currentDirectory": "Aktuelles Verzeichnis",
+      "newFolder": "Neuer Ordner",
+      "folderName": "Ordnername",
+      "create": "Erstellen",
+      "cancel": "Abbrechen",
+      "fileName": "Dateiname",
+      "fileNameRequired": "Dateiname erforderlich",
+      "noFilesSelected": "Keine Dateien ausgewählt",
+      "selectionLimit": "Auswahllimit erreicht",
+      "selectedCount": "Ausgewählt: {count}",
+      "home": "Persönlicher Ordner",
+      "outsideScope": "Dieses Verzeichnis liegt außerhalb der erlaubten Dateisystembereiche.",
+      "permissionDenied": "Du hast keine Berechtigung, dieses Verzeichnis zu lesen.",
+      "hostPermissionDenied": "Das Betriebssystem hat den Zugriff auf dieses Verzeichnis verweigert.",
+      "notDirectory": "Dieser Pfad ist kein Verzeichnis.",
+      "connectionFailed": "Die Umgebung ist nicht erreichbar. Prüfe die Verbindung und versuche es erneut."
+    },
     "runtime": {
       "localEnvironment": "Lokale Umgebung",
       "subtitle": "Verwendet das lokale KI-Profil auf diesem Mac."

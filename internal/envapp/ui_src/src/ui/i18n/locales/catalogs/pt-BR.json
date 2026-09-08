@@ -4007,6 +4007,37 @@
     "textOnlyModality": "Somente texto"
   },
   "flowerSurface": {
+    "filesystemPicker": {
+      "path": "Caminho do diretório",
+      "go": "Ir",
+      "roots": "Locais",
+      "root": "Raiz",
+      "showHidden": "Mostrar itens ocultos",
+      "loading": "Carregando diretório…",
+      "retry": "Tentar novamente",
+      "empty": "Não há diretórios aqui",
+      "emptyFiles": "Não há arquivos correspondentes neste diretório",
+      "invalidPath": "Insira um caminho absoluto ou um caminho que comece com ~/",
+      "missingPath": "Diretório não encontrado",
+      "unavailableContext": "Os locais do sistema de arquivos não estão disponíveis",
+      "loadFailed": "Não foi possível carregar o diretório",
+      "currentDirectory": "Diretório atual",
+      "newFolder": "Nova pasta",
+      "folderName": "Nome da pasta",
+      "create": "Criar",
+      "cancel": "Cancelar",
+      "fileName": "Nome do arquivo",
+      "fileNameRequired": "O nome do arquivo é obrigatório",
+      "noFilesSelected": "Nenhum arquivo selecionado",
+      "selectionLimit": "Limite de seleção atingido",
+      "selectedCount": "Seleção: {count}",
+      "home": "Pasta pessoal",
+      "outsideScope": "Este diretório está fora dos locais permitidos.",
+      "permissionDenied": "Você não tem permissão para ler este diretório.",
+      "hostPermissionDenied": "O sistema operacional negou acesso a este diretório.",
+      "notDirectory": "Este caminho não é um diretório.",
+      "connectionFailed": "Não foi possível conectar ao ambiente. Verifique a conexão e tente novamente."
+    },
     "runtime": {
       "localEnvironment": "Ambiente local",
       "subtitle": "Usa o perfil de IA local neste Mac"

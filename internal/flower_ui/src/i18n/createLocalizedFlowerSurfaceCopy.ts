@@ -1,3 +1,4 @@
+import { createLocalizedFilesystemPickerCopy } from './filesystemPickerMessages';
 import type { FlowerSurfaceCopy } from '../copy';
 import { localizedFlowerProviderModelNote } from '../settings/providerModelNotes';
 import { localizedFlowerProviderTypeLabels } from '../settings/providerTypeLabels';
@@ -17,6 +18,7 @@ function t(i18n: FlowerSurfaceTranslator, key: string, params?: TranslationParam
 export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy {
   const k = (suffix: string) => `flowerSurface.${suffix}`;
   return {
+    filesystemPicker: createLocalizedFilesystemPickerCopy(i18n),
     attachments: {
       listLabel: t(i18n, k('attachments.listLabel')),
       add: t(i18n, k('attachments.add')),

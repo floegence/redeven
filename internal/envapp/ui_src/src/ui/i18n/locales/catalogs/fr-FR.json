@@ -4007,6 +4007,37 @@
     "textOnlyModality": "Texte uniquement"
   },
   "flowerSurface": {
+    "filesystemPicker": {
+      "path": "Chemin du répertoire",
+      "go": "Ouvrir",
+      "roots": "Emplacements",
+      "root": "Racine",
+      "showHidden": "Afficher les éléments masqués",
+      "loading": "Chargement du répertoire…",
+      "retry": "Réessayer",
+      "empty": "Aucun répertoire ici",
+      "emptyFiles": "Aucun fichier correspondant dans ce répertoire",
+      "invalidPath": "Saisissez un chemin absolu ou un chemin commençant par ~/",
+      "missingPath": "Répertoire introuvable",
+      "unavailableContext": "Les emplacements du système de fichiers sont indisponibles",
+      "loadFailed": "Impossible de charger le répertoire",
+      "currentDirectory": "Répertoire actuel",
+      "newFolder": "Nouveau dossier",
+      "folderName": "Nom du dossier",
+      "create": "Créer",
+      "cancel": "Annuler",
+      "fileName": "Nom du fichier",
+      "fileNameRequired": "Le nom du fichier est requis",
+      "noFilesSelected": "Aucun fichier sélectionné",
+      "selectionLimit": "Limite de sélection atteinte",
+      "selectedCount": "Sélection : {count}",
+      "home": "Dossier personnel",
+      "outsideScope": "Ce répertoire se trouve en dehors des emplacements autorisés.",
+      "permissionDenied": "Vous n’avez pas l’autorisation de lire ce répertoire.",
+      "hostPermissionDenied": "Le système d’exploitation a refusé l’accès à ce répertoire.",
+      "notDirectory": "Ce chemin ne désigne pas un répertoire.",
+      "connectionFailed": "Impossible de joindre l’environnement. Vérifiez la connexion et réessayez."
+    },
     "runtime": {
       "localEnvironment": "Environnement local",
       "subtitle": "Utilise le profil d’IA local sur ce Mac"

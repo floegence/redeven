@@ -122,7 +122,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardHeader: (props: any) => <div class={props.class}>{props.children}</div>,
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   Dialog: (props: any) => <Show when={props.open}><div>{props.children}{props.footer}</div></Show>,
-  DirectoryInput: (props: any) => <input value={props.value} onInput={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).value)} />,
+  DirectoryInput: (props: any) => <input data-directory-input value={props.value} onInput={(event) => { props.onChange?.((event.currentTarget as HTMLInputElement).value); props.onValidityChange?.(true); }} />,
   Dropdown: (props: any) => (
     <div data-testid="dropdown">
       {props.trigger}
@@ -145,7 +145,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </div>
   ),
-  Input: (props: any) => <input value={props.value} onInput={props.onInput} />,
+  Input: (props: any) => <input value={props.value} placeholder={props.placeholder} onInput={props.onInput} />,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
   Tooltip: (props: any) => <>{props.children}</>,
   SurfaceFloatingLayer: (props: any) => {
@@ -278,12 +278,6 @@ vi.mock('../services/sandboxWindowRegistry', () => ({
   registerSandboxWindow: vi.fn(),
 }));
 
-vi.mock('../../../../../flower_ui/src/filePicker/directoryPickerTree', () => ({
-  replacePickerChildren: vi.fn((prev: any) => prev),
-  sortPickerItems: vi.fn((items: any) => items),
-  toPickerItem: vi.fn(),
-  toPickerTreeAbsolutePath: vi.fn(),
-}));
 
 async function flushPage(): Promise<void> {
   await Promise.resolve();
@@ -479,6 +473,31 @@ describe('EnvCodespacesPage', () => {
     delete window.redevenDesktopShell;
     host.remove();
     document.body.innerHTML = '';
+  });
+
+  it('posts an absolute external directory and preserves all inputs after creation fails', async () => {
+    const original = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const create = vi.fn().mockRejectedValueOnce(new Error('Permission changed')).mockResolvedValue({});
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, options?: RequestInit) => (
+      url === '/_redeven_proxy/api/spaces' && options?.method === 'POST' ? create(JSON.parse(String(options.body))) : original(url, options)
+    ));
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+    const newButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('New Codespace'))!;
+    newButton.click(); await flushPage();
+    const path = host.querySelector<HTMLInputElement>('[data-directory-input]')!;
+    path.value = '/Volumes/team/project'; path.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const name = host.querySelector<HTMLInputElement>('input[placeholder="My Project"]')!;
+    const description = host.querySelector<HTMLInputElement>('input[placeholder="codespace at /path/to/project"]')!;
+    name.value = 'User name'; name.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    description.value = 'User description'; description.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const createButton = () => Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent === 'Create')!;
+    createButton().click(); await flushPage();
+    expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/Volumes/team/project', name: 'User name', description: 'User description' });
+    expect(name.value).toBe('User name'); expect(description.value).toBe('User description'); expect(path.value).toBe('/Volumes/team/project');
+    createButton().click(); await flushPage();
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-directory-input]')).toBeNull();
   });
 
   it('delays the quiet card skeleton for the initial codespaces request', async () => {

@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codeapp/registry"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
@@ -186,5 +187,56 @@ func TestService_CreateSpace_GeneratesValidIDWhenMissing(t *testing.T) {
 	}
 	if !IsValidCodeSpaceID(created.CodeSpaceID) {
 		t.Fatalf("generated code_space_id is invalid: %q", created.CodeSpaceID)
+	}
+}
+
+func TestService_CreateSpace_ExternalReadOnlyRootCanonicalPath(t *testing.T) {
+	t.Parallel()
+	home, external, stateDir := t.TempDir(), t.TempDir(), t.TempDir()
+	project := filepath.Join(external, "project with spaces")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(external, "project-link")
+	if err := os.Symlink(project, link); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := registry.Open(filepath.Join(stateDir, "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	scope, err := filesystemscope.NewRegistry(&config.Config{AgentHomeDir: home, FilesystemScope: &config.FilesystemScope{
+		SchemaVersion: config.FilesystemScopeSchemaVersionV1, DefaultRootID: "project",
+		Roots: []config.FilesystemRootPolicy{{ID: "project", Label: "Project", Path: external, Kind: config.FilesystemRootCustom, Permissions: config.FilesystemPermissionSet{Read: true, Write: false}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &Service{stateDir: stateDir, agentHomeDir: home, reg: reg, scope: scope}
+	created, err := svc.CreateSpace(context.Background(), appserver.CreateSpaceRequest{Path: link + string(os.PathSeparator), Name: "External project", Description: "Selected directory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := reg.GetSpace(context.Background(), created.CodeSpaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.WorkspacePath != real || created.WorkspacePath != real {
+		t.Fatalf("directory differs: stored %q, response %q, want %q", persisted.WorkspacePath, created.WorkspacePath, real)
+	}
+	if _, err := svc.CreateSpace(context.Background(), appserver.CreateSpaceRequest{Path: home}); err == nil {
+		t.Fatal("ungranted path accepted")
+	}
+	escape := filepath.Join(external, "escape")
+	if err := os.Symlink(home, escape); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateSpace(context.Background(), appserver.CreateSpaceRequest{Path: escape}); err == nil {
+		t.Fatal("out-of-scope symlink accepted")
 	}
 }

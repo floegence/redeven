@@ -1,4 +1,4 @@
-import { Button, DirectoryPicker, type DirectoryPickerProps } from '@floegence/floe-webapp-core/ui';
+import { Button, DirectoryPicker, type PickerPanelProps } from '@floegence/floe-webapp-core/ui';
 import { FolderOpen } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createSignal } from 'solid-js';
 
@@ -18,12 +18,7 @@ export function TerminalGroupEditorDialog(props: {
   open: boolean;
   group: TerminalGroup | null;
   defaultWorkingDir: string;
-  pickerFiles?: DirectoryPickerProps['files'];
-  pickerHomePath?: string;
-  pickerHomeLabel?: string;
-  onPickerOpen?: () => void;
-  onPickerExpand?: DirectoryPickerProps['onExpand'];
-  ensurePickerPath?: DirectoryPickerProps['ensurePath'];
+  pickerProps?: PickerPanelProps;
   onCancel: () => void;
   onSubmit: (name: string, defaultWorkingDir: string) => void;
 }) {
@@ -98,7 +93,6 @@ export function TerminalGroupEditorDialog(props: {
                 aria-label={i18n.t('terminal.browseGroupPath')}
                 data-testid="terminal-group-path-picker-trigger"
                 onClick={() => {
-                  props.onPickerOpen?.();
                   setPickerOpen(true);
                 }}
               >
@@ -111,17 +105,13 @@ export function TerminalGroupEditorDialog(props: {
         </div>
       </Dialog>
       <DirectoryPicker
-        open={pickerOpen()}
+        open={props.open && pickerOpen()}
         onOpenChange={setPickerOpen}
-        files={props.pickerFiles ?? []}
+        {...props.pickerProps}
         initialPath={workingDir()}
-        homePath={props.pickerHomePath ?? '/'}
-        homeLabel={props.pickerHomeLabel}
         title={i18n.t('terminal.selectGroupPath')}
         confirmText={i18n.t('common.actions.confirm')}
         cancelText={i18n.t('common.actions.cancel')}
-        onExpand={props.onPickerExpand}
-        ensurePath={props.ensurePickerPath}
         onSelect={updateWorkingDir}
       />
     </>
