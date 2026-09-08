@@ -13,10 +13,10 @@ import (
 )
 
 type hostIdentityUpgrade struct {
-	OldIdentity string                `json:"old_identity"`
-	NewIdentity string                `json:"new_identity"`
-	State       hostRunState          `json:"state"`
-	Session     *hostOpenSessionState `json:"session,omitempty"`
+	OldIdentity string                   `json:"old_identity"`
+	NewIdentity string                   `json:"new_identity"`
+	State       hostRunState             `json:"state"`
+	Session     *serviceOpenSessionState `json:"session,omitempty"`
 }
 
 func (d *hostScriptDriver) upgradeLegacyHostIdentity(service *pfregistry.ManagedService, parsed parsedHostIdentity, snapshot managedProcessSnapshot) (hostProcess, bool, error) {
@@ -63,7 +63,7 @@ func (d *hostScriptDriver) commitHostIdentityUpgrade(service *pfregistry.Managed
 		}
 	}
 	if appPath != "" {
-		upgrade.Session = &hostOpenSessionState{SchemaVersion: 1, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: identity, AppPath: appPath}
+		upgrade.Session = &serviceOpenSessionState{SchemaVersion: 1, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: identity, AppPath: appPath}
 	}
 	if err := writePrivateJSON(filepath.Join(d.instanceRoot(service), "identity-upgrade.json"), upgrade); err != nil {
 		return err
@@ -92,7 +92,7 @@ func (d *hostScriptDriver) finishHostIdentityUpgrade(service *pfregistry.Managed
 		return err
 	}
 	if upgrade.Session != nil {
-		if upgrade.Session.SchemaVersion != 1 || upgrade.Session.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 || upgrade.Session.ServiceID != service.ServiceID || upgrade.Session.RuntimeIdentity != upgrade.NewIdentity || !validHostOpenSessionPath(upgrade.Session.AppPath) {
+		if upgrade.Session.SchemaVersion != 1 || upgrade.Session.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 || upgrade.Session.ServiceID != service.ServiceID || upgrade.Session.RuntimeIdentity != upgrade.NewIdentity || !validServiceOpeningPath(upgrade.Session.AppPath, true) {
 			return errors.New("Host opening information does not match identity upgrade")
 		}
 	}

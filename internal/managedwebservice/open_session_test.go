@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,5 +114,58 @@ func TestConcurrentOpenSharesOneHook(t *testing.T) {
 	raw, err := os.ReadFile(countPath)
 	if err != nil || string(raw) != "invocation\n" {
 		t.Fatalf("concurrent opens executed %q, err=%v", raw, err)
+	}
+}
+
+type staticOpeningTestDriver struct{ inspectionTestDriver }
+
+func (d staticOpeningTestDriver) Start(_ context.Context, s *pfregistry.ManagedService) (string, error) {
+	return s.RuntimeIdentity, nil
+}
+
+func TestContainerAndComposeOpenPreserveAppliedNonRootPath(t *testing.T) {
+	for _, kind := range []Deployment{DeploymentContainer, DeploymentCompose} {
+		t.Run(string(kind), func(t *testing.T) {
+			spec := TemplateSpec{SchemaVersion: templateSpecSchemaVersion, Kind: kind, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/dashboard?tab=initial#panel", ContainerPort: 3000}}
+			release := ReleaseIdentity{Kind: "none"}
+			if kind == DeploymentContainer {
+				spec.Container = &ContainerTemplateSpec{Image: "example.invalid/app:1"}
+				release = ReleaseIdentity{Kind: "oci", Source: "example.invalid/app", Tag: "1", Digest: "sha256:" + strings.Repeat("a", 64)}
+			} else {
+				spec.Compose = &ComposeTemplateSpec{MainService: "web", YAML: "services:\n  web:\n    image: example.invalid/app@sha256:" + strings.Repeat("b", 64) + "\n"}
+			}
+			manager, registry, service, template := newRuntimeResolutionTestService(t, spec, release, "running")
+			manager.healthCheck = func(context.Context, *pfregistry.ManagedService) error { return nil }
+			identity := "verified-instance"
+			resolved, err := manager.resolveCurrentRuntime(context.Background(), service)
+			if err != nil {
+				t.Fatal(err)
+			}
+			service.RuntimeIdentity, service.RuntimeSpecSHA256 = identity, resolved.RuntimeSpecSHA256
+			if err := registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &identity, RuntimeSpecSHA256: &service.RuntimeSpecSHA256}); err != nil {
+				t.Fatal(err)
+			}
+			driver := staticOpeningTestDriver{inspectionTestDriver{deploymentDriver: manager.driver(kind), inspect: func(context.Context, *pfregistry.ManagedService) (bool, error) { return true, nil }}}
+			if kind == DeploymentContainer {
+				manager.container = driver
+			} else {
+				manager.compose = driver
+			}
+			if _, err := manager.startRuntime(context.Background(), service, driver); err != nil {
+				t.Fatal(err)
+			}
+			spec.Endpoint.Path = "/changed"
+			updateRuntimeResolutionTestTemplate(t, registry, template, spec)
+			session, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "applied-static-opening"})
+			if err != nil || session.AppPath != "/dashboard?tab=initial#panel" {
+				t.Fatalf("applied path=%+v err=%v", session, err)
+			}
+			if err := os.WriteFile(manager.staticOpeningPath(service), []byte(`{"schema_version":99}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "corrupt-static-opening"}); managedErrorCode(err) != "SERVICE_OPEN_TARGET_INVALID" {
+				t.Fatalf("corrupt record was replaced from a changed template: %v", err)
+			}
+		})
 	}
 }

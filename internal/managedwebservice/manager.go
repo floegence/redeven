@@ -349,6 +349,9 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 						view.Opening.State, view.Opening.ErrorCode = "error", state.OpenErrorCode
 					}
 				}
+			} else if _, err := readServiceOpening(m.staticOpeningPath(&service), &service, service.RuntimeIdentity, "SERVICE"); err != nil {
+				view.Opening.State = "unavailable"
+				view.Opening.ErrorCode, _, _, _ = ErrorDetails(err)
 			}
 		}
 		if observationErr != nil {
@@ -1207,6 +1210,9 @@ func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedS
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
 	// The external resources are already gone, so persist their removal even if
 	// the request was cancelled immediately after the driver returned.
+	if err := os.RemoveAll(m.staticOpeningDirectory(service)); err != nil {
+		return err
+	}
 	if err := m.registry.CompleteManagedServiceUninstall(context.Background(), service.ServiceID, *op); err != nil {
 		return serviceError("UNINSTALL_RECORD_FINALIZE_FAILED", "The managed Web Service removal could not be finalized.", 500, true, err)
 	}

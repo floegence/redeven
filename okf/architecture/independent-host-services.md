@@ -43,6 +43,8 @@ Identity upgrade writes a private journal containing old/new identities and vali
 
 A verified running instance owns its applied endpoint and private opening session. Current template changes remain pending until an explicit apply-and-restart action. No executable template snapshot is stored. Open uses the saved verified entrance when the current template differs, and otherwise runs the current authorized opening hooks. Missing opening information, invalid output, or hook failure is retryable without an implicit Restart.
 
+Container and Compose services retain their static declared path, query, and fragment in the same private opening-record format, bound to the applied resource identity and Runtime digest. New starts save that declaration before running; legacy instances without a record initialize it on first observation through their existing static-template resolver. Later template edits cannot overwrite a saved entrance, and a damaged record fails visibly. This grants no Host script execution to either deployment.
+
 The backend provides `actions.open`, `actions.restore_management`, opening state, and pending changes. Renderer uses those capabilities, presents opening failure separately from Running, and retains historical operation diagnostics without making them the current process state. Concurrent Open requests for one service share one hook execution; cancelling one browser request does not cancel another caller's shared work. The existing browser transaction and Desktop window identity suppress duplicate windows.
 
 Endpoint reachability is checked separately from process identity. A running process with an unavailable loopback endpoint remains Running and reports unavailable opening. Runtime-owned proxy connections may be interrupted while Runtime is offline; reopening reconnects through the existing authorized Forward route. The contract does not promise uninterrupted WebSockets, system boot autostart, or application crash supervision.
@@ -57,6 +59,7 @@ Template scripts, environment, output modes, hook limits, and URL validation are
 - `redeven:internal/managedwebservice/observation.go` - Common resource observation and separate endpoint availability.
 - `redeven:internal/managedwebservice/restore_management.go` - Review and explicit identity rebinding.
 - `redeven:internal/managedwebservice/host_identity_upgrade.go` - Resumable identity and private-session conversion.
+- `redeven:internal/managedwebservice/open_session_state.go` - Shared private opening records and applied static paths.
 - `redeven:internal/managedwebservice/open_session.go` - Shared opening preparation without implicit restart.
 - `redeven:internal/managedwebservice/process_boundary_test.go` - Real Runtime exit, forced termination, sustained application output, and hook boundaries.
 - `redeven:internal/managedwebservice/host_recovery_test.go` - Reused identity rejection, launch persistence, and private-session recovery.

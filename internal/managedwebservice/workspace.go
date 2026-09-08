@@ -133,6 +133,15 @@ func (m *Manager) startRuntime(ctx context.Context, service *pfregistry.ManagedS
 	if _, err := m.prepareWorkspace(service.WorkspacePath, workspaceVerifyExisting); err != nil {
 		return "", err
 	}
+	binding, err := decodeRuntimeBinding(service)
+	if err != nil {
+		return "", err
+	}
+	if binding.Deployment != DeploymentHost {
+		if _, err := m.saveStaticOpening(ctx, service); err != nil {
+			return "", err
+		}
+	}
 	return driver.Start(ctx, service)
 }
 
