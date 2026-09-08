@@ -2825,14 +2825,14 @@ describe('EnvPortForwardsPage', () => {
     expect(notificationMocks.error).not.toHaveBeenCalled();
   });
 
-  it('asks for a service name when saving a temporary session', async () => {
+  it.each([false, true])('preserves the temporary URL when saving (edited: %s)', async (edited) => {
     vi.spyOn(window, 'open').mockReturnValue({ location: { assign: vi.fn() }, close: vi.fn() } as unknown as Window);
     let saveBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
       if (url === '/_redeven_proxy/api/forward-sessions') return {
         forward: { forward_id: 'temporary-save', target_url: 'http://localhost:3000', name: '', description: '' },
-        app_path: '/',
+        app_path: '/967d185dad?view=details#section',
         ephemeral: true,
       };
       if (url === '/_redeven_proxy/api/forwards/temporary-save/touch') return { forward_id: 'temporary-save' };
@@ -2846,7 +2846,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     const addressInput = host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]')!;
-    addressInput.value = '3000';
+    addressInput.value = '3000/967d185dad?view=details#section';
     addressInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
     host.querySelector<HTMLFormElement>('[data-testid="web-service-address-form"]')?.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
     await waitForAssertion(() => expect(host.textContent).toContain('Save service'));
@@ -2855,9 +2855,11 @@ describe('EnvPortForwardsPage', () => {
 
     expect(host.textContent).toContain('Save Web Service');
     const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
-    expect(target.value).toBe('http://localhost:3000');
-    target.value = '4173';
-    target.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(target.value).toBe('http://localhost:3000/967d185dad?view=details#section');
+    if (edited) {
+      target.value = '4173/edited?mode=full#content';
+      target.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
     const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;
     expect(name.value).toBe('localhost:3000');
     name.value = 'Local documentation';
@@ -2865,7 +2867,25 @@ describe('EnvPortForwardsPage', () => {
     const dialog = Array.from(host.querySelectorAll('h2')).find((heading) => heading.textContent === 'Save Web Service')?.parentElement;
     Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) => button.textContent?.trim() === 'Save service')?.click();
 
-    await waitForAssertion(() => expect(saveBody).toEqual({ target: '4173', name: 'Local documentation', description: '', access_mode: 'unified_proxy' }));
+    await waitForAssertion(() => expect(saveBody).toEqual({ target: edited ? '4173/edited?mode=full#content' : 'http://localhost:3000/967d185dad?view=details#section', name: 'Local documentation', description: '', access_mode: 'unified_proxy' }));
+  });
+
+  it('opens a saved service at its persisted default path', async () => {
+    const assign = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close: vi.fn() } as unknown as Window);
+    const original = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      const result = await original(url);
+      if (url === '/_redeven_proxy/api/forwards') result.forwards[0].default_app_path = '/967d185dad?view=details#section';
+      return result;
+    });
+    render(() => <EnvPortForwardsPage />, host);
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="port-forward-row"]')).toBeTruthy());
+    const row = host.querySelector('[data-testid="port-forward-row"]')!;
+    expect(row.textContent).toContain('http://localhost:3000/967d185dad?view=details#section');
+    Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Open')?.click();
+    await waitForAssertion(() => expect(assign).toHaveBeenCalled());
+    expect(String(assign.mock.calls[0][0])).toContain('/967d185dad?view=details#section');
   });
 
   it('updates the name of an already saved service', async () => {
@@ -2873,7 +2893,7 @@ describe('EnvPortForwardsPage', () => {
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/forwards' && (!init?.method || init.method === 'GET')) return {
         forwards: [{
-          forward_id: 'forward-1', target_url: 'http://localhost:3000', name: 'Demo Forward', description: 'Browser preview', health_path: '/', insecure_skip_verify: false,
+          forward_id: 'forward-1', target_url: 'http://localhost:3000', default_app_path: '/967d185dad?view=details#section', name: 'Demo Forward', description: 'Browser preview', health_path: '/', insecure_skip_verify: false,
           created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 1, health: { status: 'unknown', last_checked_at_unix_ms: 0, latency_ms: 0, last_error: '' },
         }],
       };
@@ -2889,7 +2909,7 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('button[aria-label="Edit service details"]')?.click();
     await flushPage();
     const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
-    expect(target.value).toBe('http://localhost:3000');
+    expect(target.value).toBe('http://localhost:3000/967d185dad?view=details#section');
     target.value = 'http://127.0.0.1:4173';
     target.dispatchEvent(new InputEvent('input', { bubbles: true }));
     const name = host.querySelector<HTMLInputElement>('#web-service-metadata-name')!;

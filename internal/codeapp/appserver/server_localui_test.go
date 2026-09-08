@@ -280,7 +280,7 @@ func TestServer_LocalUIOpensAndExplicitlySavesTemporaryForwardSession(t *testing
 	}
 
 	saveURL := "http://localhost:23998/_redeven_proxy/api/forward-sessions/" + opened.Data.Forward.ForwardID + "/save"
-	saveReq := httptest.NewRequest(http.MethodPost, saveURL, strings.NewReader(`{"target":"4173","name":"Preview","description":"Docs","access_mode":"desktop_loopback"}`))
+	saveReq := httptest.NewRequest(http.MethodPost, saveURL, strings.NewReader(`{"target":"4173/docs?q=1#intro","name":"Preview","description":"Docs","access_mode":"desktop_loopback"}`))
 	saveReq = WithLocalUIEnvRoute(saveReq)
 	saveRR := httptest.NewRecorder()
 	srv.serveHTTP(saveRR, saveReq)
@@ -288,8 +288,21 @@ func TestServer_LocalUIOpensAndExplicitlySavesTemporaryForwardSession(t *testing
 		t.Fatalf("save status = %d, body=%s", saveRR.Code, saveRR.Body.String())
 	}
 	persisted, err := service.ListForwards(context.Background())
-	if err != nil || len(persisted) != 1 || persisted[0].ForwardID != opened.Data.Forward.ForwardID || persisted[0].TargetURL != "http://localhost:4173" || persisted[0].Name != "Preview" || persisted[0].AccessMode != pfregistry.AccessModeDesktopLoopback {
+	if err != nil || len(persisted) != 1 || persisted[0].ForwardID != opened.Data.Forward.ForwardID || persisted[0].TargetURL != "http://localhost:4173" || persisted[0].DefaultAppPath != "/docs?q=1#intro" || persisted[0].Name != "Preview" || persisted[0].AccessMode != pfregistry.AccessModeDesktopLoopback {
 		t.Fatalf("persisted forwards = %#v, %v", persisted, err)
+	}
+
+	for _, request := range []struct{ method, path, body string }{
+		{http.MethodGet, "/_redeven_proxy/api/forwards", ""},
+		{http.MethodPost, "/_redeven_proxy/api/forwards/" + opened.Data.Forward.ForwardID + "/touch", ""},
+		{http.MethodPatch, "/_redeven_proxy/api/forwards/" + opened.Data.Forward.ForwardID, `{"name":"Renamed"}`},
+	} {
+		rr := httptest.NewRecorder()
+		req := WithLocalUIEnvRoute(httptest.NewRequest(request.method, "http://localhost:23998"+request.path, strings.NewReader(request.body)))
+		srv.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"default_app_path":"/docs?q=1#intro"`) {
+			t.Fatalf("%s %s lost default path: %d %s", request.method, request.path, rr.Code, rr.Body.String())
+		}
 	}
 }
 

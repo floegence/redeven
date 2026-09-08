@@ -17,7 +17,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v2"
-	registryCurrentSchemaVersion = 1
+	registryCurrentSchemaVersion = 2
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -28,8 +28,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 		ValidateExisting: validateExistingRegistry,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
 		},
-		Verify: verifyRegistryV1,
+		Verify: verifyRegistryV2,
 	}
 }
 
@@ -50,10 +51,10 @@ func validateExistingRegistry(tx *sql.Tx) error {
 	if version > registryCurrentSchemaVersion {
 		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: registryCurrentSchemaVersion}
 	}
-	if version < registryCurrentSchemaVersion {
-		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: registryCurrentSchemaVersion}
+	if version < 1 {
+		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: 1}
 	}
-	if err := verifyRegistryV1(tx); err != nil {
+	if err := verifyRegistryVersion(tx, version); err != nil {
 		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: err}
 	}
 	return nil
@@ -176,6 +177,80 @@ CREATE TABLE managed_web_service_release_checks (
 }
 
 func verifyRegistryV1(tx *sql.Tx) error {
+	return verifyRegistryVersion(tx, 1)
+}
+
+func verifyRegistryV2(tx *sql.Tx) error {
+	return verifyRegistryVersion(tx, 2)
+}
+
+const addDefaultAppPath = `ALTER TABLE port_forwards ADD COLUMN default_app_path TEXT NOT NULL DEFAULT '/'`
+
+func migrateRegistryV1ToV2(tx *sql.Tx) error {
+	if err := verifyRegistryV1(tx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(addDefaultAppPath); err != nil {
+		return err
+	}
+	return verifyRegistryV2(tx)
+}
+
+// Compare all user DDL with the reviewed initializer and contiguous migrations,
+// including column types, defaults, constraints, indexes, and triggers.
+func verifyRegistryShape(tx *sql.Tx, version int) error {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	expected, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer expected.Rollback()
+	if err := initializeRegistryV1(expected); err != nil {
+		return err
+	}
+	if version == 2 {
+		if _, err := expected.Exec(addDefaultAppPath); err != nil {
+			return err
+		}
+	}
+	read := func(source *sql.Tx) ([]string, error) {
+		rows, err := source.Query(`SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__redeven_db_meta' ORDER BY type, name`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var result []string
+		for rows.Next() {
+			var kind, name, ddl string
+			if err := rows.Scan(&kind, &name, &ddl); err != nil {
+				return nil, err
+			}
+			result = append(result, kind+":"+name+":"+strings.Join(strings.Fields(ddl), " "))
+		}
+		return result, rows.Err()
+	}
+	want, err := read(expected)
+	if err != nil {
+		return err
+	}
+	got, err := read(tx)
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(got, want) {
+		return fmt.Errorf("port forward registry version %d schema drift", version)
+	}
+	return nil
+}
+
+func verifyRegistryVersion(tx *sql.Tx, version int) error {
+	if err := verifyRegistryShape(tx, version); err != nil {
+		return err
+	}
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
@@ -195,6 +270,9 @@ func verifyRegistryV1(tx *sql.Tx) error {
 		"managed_web_service_resources":         {"service_id", "resource_id", "kind", "engine_identity", "created_at_unix_ms"},
 		"managed_web_service_operations":        {"operation_id", "service_id", "request_id", "request_fingerprint", "retry_of_operation_id", "action", "delete_data", "delete_workspace", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code", "error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms", "progress_detail_json"},
 		"managed_web_service_release_checks":    {"service_id", "summary_json", "summary_sha256", "checked_at_unix_ms", "next_check_at_unix_ms", "stale", "last_error_code", "updated_at_unix_ms"},
+	}
+	if version == 2 {
+		wantColumns["port_forwards"] = append(wantColumns["port_forwards"], "default_app_path")
 	}
 	for table, want := range wantColumns {
 		got, err := sqliteutil.TableColumnNamesTx(tx, table)

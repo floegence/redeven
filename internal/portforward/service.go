@@ -228,8 +228,9 @@ func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req 
 	}
 	originalTargetURL := ephemeral.forward.TargetURL
 	targetURL := originalTargetURL
+	appPath := "/"
 	if strings.TrimSpace(req.Target) != "" {
-		targetURL, err = normalizePersistentTarget(req.Target)
+		targetURL, appPath, err = normalizeBrowserTarget(req.Target)
 		if err != nil {
 			return nil, err
 		}
@@ -239,6 +240,7 @@ func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req 
 		return nil, err
 	}
 	ephemeral.forward.TargetURL = targetURL
+	ephemeral.forward.DefaultAppPath = appPath
 	ephemeral.forward.Name = name
 	ephemeral.forward.Description = description
 	ephemeral.forward.AccessMode = accessMode
@@ -261,7 +263,7 @@ func (s *Service) CreateForward(ctx context.Context, req CreateForwardRequest) (
 		ctx = context.Background()
 	}
 
-	targetURL, err := normalizePersistentTarget(req.Target)
+	targetURL, appPath, err := normalizeBrowserTarget(req.Target)
 	if err != nil {
 		return nil, err
 	}
@@ -285,6 +287,7 @@ func (s *Service) CreateForward(ctx context.Context, req CreateForwardRequest) (
 	f := registry.Forward{
 		ForwardID:          id,
 		TargetURL:          targetURL,
+		DefaultAppPath:     appPath,
 		Name:               name,
 		Description:        description,
 		HealthPath:         strings.TrimSpace(req.HealthPath),
@@ -329,12 +332,14 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 	}
 
 	var targetURL *string
+	var defaultAppPath *string
 	if req.Target != nil {
-		v, err := normalizePersistentTarget(*req.Target)
+		v, path, err := normalizeBrowserTarget(*req.Target)
 		if err != nil {
 			return nil, err
 		}
 		targetURL = &v
+		defaultAppPath = &path
 	}
 	nextTargetURL := cur.TargetURL
 	if targetURL != nil {
@@ -384,6 +389,7 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 
 	patch := registry.UpdateForwardPatch{
 		TargetURL:          targetURL,
+		DefaultAppPath:     defaultAppPath,
 		Name:               name,
 		Description:        description,
 		HealthPath:         healthPath,
@@ -669,17 +675,6 @@ func normalizeBrowserTarget(raw string) (string, string, error) {
 		return "", "", err
 	}
 	return targetURL, path, nil
-}
-
-func normalizePersistentTarget(raw string) (string, error) {
-	targetURL, appPath, err := normalizeBrowserTarget(raw)
-	if err != nil {
-		return "", err
-	}
-	if appPath != "/" {
-		return "", errors.New("target path, query, and fragment are not supported for a saved service")
-	}
-	return targetURL, nil
 }
 
 func randomForwardID() string {

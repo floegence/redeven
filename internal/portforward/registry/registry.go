@@ -21,6 +21,7 @@ const (
 type Forward struct {
 	ForwardID          string `json:"forward_id"`
 	TargetURL          string `json:"target_url"`
+	DefaultAppPath     string `json:"default_app_path"`
 	Name               string `json:"name"`
 	Description        string `json:"description"`
 	HealthPath         string `json:"health_path"`
@@ -60,7 +61,7 @@ func (r *Registry) ListForwards(ctx context.Context) ([]Forward, error) {
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode
+SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode, default_app_path
 FROM port_forwards
 ORDER BY created_at_unix_ms ASC
 `)
@@ -84,6 +85,7 @@ ORDER BY created_at_unix_ms ASC
 			&f.UpdatedAtUnixMs,
 			&f.LastOpenedAtUnixMs,
 			&f.AccessMode,
+			&f.DefaultAppPath,
 		); err != nil {
 			return nil, err
 		}
@@ -108,7 +110,7 @@ func (r *Registry) GetForward(ctx context.Context, forwardID string) (*Forward, 
 	var f Forward
 	var insecure int
 	err := r.db.QueryRowContext(ctx, `
-SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode
+SELECT forward_id, target_url, name, description, health_path, insecure_skip_verify, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode, default_app_path
 FROM port_forwards
 WHERE forward_id = ?
 `, id).Scan(
@@ -122,6 +124,7 @@ WHERE forward_id = ?
 		&f.UpdatedAtUnixMs,
 		&f.LastOpenedAtUnixMs,
 		&f.AccessMode,
+		&f.DefaultAppPath,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -145,6 +148,9 @@ func (r *Registry) CreateForward(ctx context.Context, f Forward) error {
 	f.Name = strings.TrimSpace(f.Name)
 	f.Description = strings.TrimSpace(f.Description)
 	f.HealthPath = strings.TrimSpace(f.HealthPath)
+	if f.DefaultAppPath == "" {
+		f.DefaultAppPath = "/"
+	}
 	var err error
 	f.AccessMode, err = normalizedAccessMode(f.AccessMode)
 	if err != nil {
@@ -170,8 +176,8 @@ func (r *Registry) CreateForward(ctx context.Context, f Forward) error {
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO port_forwards(
   forward_id, target_url, name, description, health_path, insecure_skip_verify,
-  created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms, access_mode, default_app_path
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		f.ForwardID,
 		f.TargetURL,
@@ -183,12 +189,14 @@ INSERT INTO port_forwards(
 		f.UpdatedAtUnixMs,
 		f.LastOpenedAtUnixMs,
 		f.AccessMode,
+		f.DefaultAppPath,
 	)
 	return err
 }
 
 type UpdateForwardPatch struct {
 	TargetURL          *string
+	DefaultAppPath     *string
 	Name               *string
 	Description        *string
 	HealthPath         *string
@@ -220,6 +228,10 @@ func (r *Registry) UpdateForward(ctx context.Context, forwardID string, patch Up
 	if patch.TargetURL != nil {
 		set = append(set, "target_url = ?")
 		args = append(args, strings.TrimSpace(*patch.TargetURL))
+	}
+	if patch.DefaultAppPath != nil {
+		set = append(set, "default_app_path = ?")
+		args = append(args, *patch.DefaultAppPath)
 	}
 	if patch.Name != nil {
 		set = append(set, "name = ?")

@@ -5281,6 +5281,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			views = append(views, portForwardView{
 				ForwardID:          f.ForwardID,
 				TargetURL:          f.TargetURL,
+				DefaultAppPath:     f.DefaultAppPath,
 				Name:               f.Name,
 				Description:        f.Description,
 				HealthPath:         f.HealthPath,
@@ -5351,6 +5352,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		view := portForwardView{
 			ForwardID:          f.ForwardID,
 			TargetURL:          f.TargetURL,
+			DefaultAppPath:     f.DefaultAppPath,
 			Name:               f.Name,
 			Description:        f.Description,
 			HealthPath:         f.HealthPath,
@@ -5547,6 +5549,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				view := portForwardView{
 					ForwardID:          f.ForwardID,
 					TargetURL:          f.TargetURL,
+					DefaultAppPath:     f.DefaultAppPath,
 					Name:               f.Name,
 					Description:        f.Description,
 					HealthPath:         f.HealthPath,
@@ -5587,6 +5590,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				view := portForwardView{
 					ForwardID:          f.ForwardID,
 					TargetURL:          f.TargetURL,
+					DefaultAppPath:     f.DefaultAppPath,
 					Name:               f.Name,
 					Description:        f.Description,
 					HealthPath:         f.HealthPath,
@@ -5950,6 +5954,7 @@ type portForwardHealth struct {
 type portForwardView struct {
 	ForwardID          string `json:"forward_id"`
 	TargetURL          string `json:"target_url"`
+	DefaultAppPath     string `json:"default_app_path"`
 	Name               string `json:"name"`
 	Description        string `json:"description"`
 	HealthPath         string `json:"health_path"`

@@ -55,7 +55,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
         open
         mode="edit"
         editorKey="pf-editable-url"
-        targetURL="http://localhost:3000"
+        targetURL="http://localhost:3000/967d185dad?view=details#section"
         initialName="Local dashboard"
         initialDescription="Development status"
         initialAccessMode="unified_proxy"
@@ -70,7 +70,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const dialog = form.closest<HTMLElement>('[role="dialog"]') ?? form.parentElement!;
     const target = document.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
     const save = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Save changes')!;
-    expect(target.value).toBe('http://localhost:3000');
+    expect(target.value).toBe('http://localhost:3000/967d185dad?view=details#section');
     expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
     expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
 
@@ -79,9 +79,9 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(form.textContent).toContain('Available only inside this Environment');
     expect(save.getBoundingClientRect().bottom).toBeLessThanOrEqual(760);
 
-    await userEvent.fill(target, '4173');
+    await userEvent.fill(target, '4173/edited?mode=full#content');
     await userEvent.click(save);
-    expect(submissions).toEqual([['4173', 'Local dashboard', 'Development status', 'unified_proxy']]);
+    expect(submissions).toEqual([['4173/edited?mode=full#content', 'Local dashboard', 'Development status', 'unified_proxy']]);
   });
 
   it('shows exact direct releases, current identity, filters, and disabled reasons at narrow width', async () => {

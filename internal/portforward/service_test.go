@@ -239,11 +239,11 @@ func TestService_SaveForwardSessionKeepsIDAndPersistsMetadata(t *testing.T) {
 		t.Fatalf("OpenForwardSession: %v", err)
 	}
 
-	saved, err := svc.SaveForwardSession(context.Background(), opened.Forward.ForwardID, SaveForwardSessionRequest{Target: "9090", Name: "Admin", Description: "Local admin UI"})
+	saved, err := svc.SaveForwardSession(context.Background(), opened.Forward.ForwardID, SaveForwardSessionRequest{Target: "9090/967d185dad?view=details#section", Name: "Admin", Description: "Local admin UI"})
 	if err != nil {
 		t.Fatalf("SaveForwardSession: %v", err)
 	}
-	if saved.ForwardID != opened.Forward.ForwardID || saved.TargetURL != "http://localhost:9090" || saved.Name != "Admin" || saved.Description != "Local admin UI" {
+	if saved.ForwardID != opened.Forward.ForwardID || saved.TargetURL != "http://localhost:9090" || saved.DefaultAppPath != "/967d185dad?view=details#section" || saved.Name != "Admin" || saved.Description != "Local admin UI" {
 		t.Fatalf("saved = %#v", saved)
 	}
 	forwards, err := svc.ListForwards(context.Background())
@@ -403,5 +403,70 @@ func TestService_SaveForwardSessionKeepsConcurrentReadsResolvable(t *testing.T) 
 	close(errCh)
 	for err := range errCh {
 		t.Fatal(err)
+	}
+}
+
+func TestServiceDefaultURLSurvivesRestartAndMetadataEdits(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	reg, err := registry.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := New(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: "31903/967d185dad?view=full#section"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := svc.SaveForwardSession(ctx, session.Forward.ForwardID, SaveForwardSessionRequest{Target: session.Forward.TargetURL + session.AppPath, Name: "Dashboard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reg, err = registry.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	svc, err = New(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "Renamed dashboard"
+	updated, err := svc.UpdateForward(ctx, saved.ForwardID, UpdateForwardRequest{Name: &name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DefaultAppPath != session.AppPath || updated.TargetURL != session.Forward.TargetURL {
+		t.Fatalf("restored = %#v", updated)
+	}
+	opened, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: "31903/another"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened.Ephemeral || opened.Forward.ForwardID != saved.ForwardID || opened.AppPath != "/another" || opened.Forward.DefaultAppPath != session.AppPath {
+		t.Fatalf("explicit address must not overwrite default: %#v", opened)
+	}
+	target := "https://[::1]:4443/edited%20path?q=a%2Fb#anchor"
+	updated, err = svc.UpdateForward(ctx, saved.ForwardID, UpdateForwardRequest{Target: &target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.TargetURL != "https://[::1]:4443" || updated.DefaultAppPath != "/edited%20path?q=a%2Fb#anchor" {
+		t.Fatalf("edited = %#v", updated)
+	}
+	target = "31903"
+	updated, err = svc.UpdateForward(ctx, saved.ForwardID, UpdateForwardRequest{Target: &target})
+	if err != nil || updated.DefaultAppPath != "/" {
+		t.Fatalf("reset = %#v, %v", updated, err)
+	}
+	created, err := svc.CreateForward(ctx, CreateForwardRequest{Target: "3000/docs?tab=api#intro", Name: "Docs"})
+	if err != nil || created.DefaultAppPath != "/docs?tab=api#intro" {
+		t.Fatalf("created = %#v, %v", created, err)
 	}
 }

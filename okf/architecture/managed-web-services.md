@@ -57,7 +57,7 @@ Every retry records its real action and `retry_of_operation_id`. A current failu
 
 `portforward_registry_v2` schema version 1 is the user-approved one-time pre-release baseline for current-template resolution. A service row stores template ID, configuration, selected release, RuntimeBinding, workspace ownership, desired and observed state, protected Forward identity, managed Runtime identity, applied Runtime digest, artifact reference, and failure state; it stores no template revision, template snapshot, duplicated deployment, or service-family projection. The baseline also contains exact current TemplateSpec v5, release-check v2, operation-progress v2, resource, operation, and retry-lineage state.
 
-Every `portforward_registry_v1` version and any other discarded kind, future version, or exact structure drift is rejected read-only and remains byte-for-byte unchanged. Once v2 version 1 is merged and released or distributed, the kind is permanent: every persistent change must append a contiguous transactional migration that preserves user state and verifies the exact source and target shape. Another reset is not permitted.
+Every `portforward_registry_v1` version and any other discarded kind, future version, or exact structure drift is rejected read-only and remains byte-for-byte unchanged. Once v2 version 1 is merged and released or distributed, the kind is permanent: every persistent change must append a contiguous transactional migration that preserves user state and verifies the exact source and target shape. Another reset is not permitted. Version 2 adds the ordinary-forward default application path through that migration lineage; Managed Service opening continues to use its authoritative `open-session` result, as described in [Web Service browser sessions](web-service-browser-sessions.md).
 
 # Boundaries
 
@@ -73,6 +73,6 @@ Redeven does not contain built-in service names, descriptions, notices, icons, t
 - `redeven:internal/managedwebservice/host_runtime_output.go` - Captures redacted Host output and validates process-bound private opening paths.
 - `redeven:internal/managedwebservice/custom_container.go` - Owns exact current container identity and generic resource validation.
 - `redeven:internal/managedwebservice/update.go` - Commits or restores release and binding state around health validation.
-- `redeven:internal/portforward/registry/schema.go` - Defines the exact `portforward_registry_v2` version-1 baseline and strict existing-file validation.
+- `redeven:internal/portforward/registry/schema.go` - Defines the exact `portforward_registry_v2` version-1 baseline, contiguous migrations, and strict existing-file validation.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Renders backend capabilities, localized catalog content, progress, and safe diagnostics.
 - `redeven:scripts/check_managed_service_catalog_boundary.mjs` - Prevents service-specific catalog content from returning to Redeven runtime and Renderer source.

@@ -85,6 +85,7 @@ type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
 type PortForward = Readonly<{
   forward_id: string;
   target_url: string;
+  default_app_path?: string;
   name: string;
   description: string;
   health_path: string;
@@ -578,12 +579,9 @@ export function isSupportedWebServiceTarget(raw: string): boolean {
   return parseSupportedWebServiceTarget(raw) !== null;
 }
 
-function isSupportedWebServiceOrigin(raw: string): boolean {
-  const parsed = parseSupportedWebServiceTarget(raw);
-  return parsed !== null
-    && (parsed.pathname === '' || parsed.pathname === '/')
-    && parsed.search === ''
-    && parsed.hash === '';
+function forwardDefaultURL(forward: PortForward): string {
+  const path = forward.default_app_path || '/';
+  return path === '/' ? forward.target_url : new URL(path, forward.target_url).toString();
 }
 
 function normalizedHostname(hostname: string): string {
@@ -792,7 +790,7 @@ export function PortForwardRow(props: {
         </div>
         <div class="min-w-0">
           <div class="truncate text-sm font-semibold leading-5">{props.forward.name || i18n.t('webServices.card.fallbackName', { id: props.forward.forward_id })}</div>
-          <div class="mt-0.5 truncate font-mono text-[11px] leading-4 text-muted-foreground" title={props.forward.target_url}>{props.forward.target_url}</div>
+          <div class="mt-0.5 truncate font-mono text-[11px] leading-4 text-muted-foreground" title={forwardDefaultURL(props.forward)}>{forwardDefaultURL(props.forward)}</div>
         </div>
       </div>
 
@@ -1886,20 +1884,20 @@ export function CreateForwardDialog(props: {
 
   const handleCreate = () => {
     const targetVal = target().trim();
-    if (!targetVal || !isSupportedWebServiceOrigin(targetVal) || !name().trim()) return;
+    if (!targetVal || !isSupportedWebServiceTarget(targetVal) || !name().trim()) return;
     props.onCreate(targetVal, name().trim(), description().trim(), accessMode());
   };
 
   const isValid = () => {
     const val = target().trim();
     return val.length > 0
-      && isSupportedWebServiceOrigin(val)
+      && isSupportedWebServiceTarget(val)
       && name().trim().length > 0
       && Array.from(name().trim()).length <= 64
       && Array.from(description().trim()).length <= 256;
   };
 
-  const showScopeRestriction = () => target().trim().length > 0 && !isSupportedWebServiceOrigin(target());
+  const showScopeRestriction = () => target().trim().length > 0 && !isSupportedWebServiceTarget(target());
 
   return (
     <Dialog
@@ -2022,7 +2020,7 @@ export function ForwardMetadataDialog(props: Readonly<{
     setValidationVisible(false);
   });
 
-  const targetError = () => isSupportedWebServiceOrigin(target())
+  const targetError = () => isSupportedWebServiceTarget(target())
     ? ''
     : i18n.t('webServices.dialog.targetError');
   const nameError = () => {
@@ -3103,7 +3101,7 @@ export function EnvPortForwardsPage() {
     // Filter by search query
     const filtered = query
       ? list.filter((f) => {
-          const hay = `${f.name ?? ''}\n${f.description ?? ''}\n${f.target_url ?? ''}\n${f.forward_id ?? ''}`.toLowerCase();
+          const hay = `${f.name ?? ''}\n${f.description ?? ''}\n${forwardDefaultURL(f)}\n${f.forward_id ?? ''}`.toLowerCase();
           return hay.includes(query);
         })
       : list;
@@ -3275,7 +3273,7 @@ export function EnvPortForwardsPage() {
   };
 
   // Open service handler
-  const doOpen = async (f: PortForward, appPath = '/') => {
+  const doOpen = async (f: PortForward, appPath = f.default_app_path || '/') => {
     const fid = String(f?.forward_id ?? '').trim();
     if (!fid) return;
     await runOpenTransaction(
@@ -3318,7 +3316,7 @@ export function EnvPortForwardsPage() {
         method: 'POST',
         body: JSON.stringify({ target, name, description, access_mode: accessMode }),
       });
-      setRecentSession({ ...session, forward, ephemeral: false });
+      setRecentSession({ ...session, forward, app_path: forward.default_app_path || '/', ephemeral: false });
       setForwardMetadataTarget(null);
       bumpRefresh();
       notify.success(i18n.t('webServices.notifications.sessionSavedTitle'), i18n.t('webServices.notifications.sessionSavedMessage', { name }));
@@ -3372,7 +3370,7 @@ export function EnvPortForwardsPage() {
         initialName: forward.name || new URL(forward.target_url).host,
         initialDescription: forward.description,
         initialAccessMode: forward.access_mode || 'unified_proxy',
-        targetURL: forward.target_url,
+        targetURL: target.session.app_path === '/' ? forward.target_url : new URL(target.session.app_path, forward.target_url).toString(),
       } as const;
     }
     return {
@@ -3381,7 +3379,7 @@ export function EnvPortForwardsPage() {
       initialName: target.forward.name,
       initialDescription: target.forward.description,
       initialAccessMode: target.forward.access_mode || 'unified_proxy',
-      targetURL: target.forward.target_url,
+      targetURL: forwardDefaultURL(target.forward),
     } as const;
   });
 
