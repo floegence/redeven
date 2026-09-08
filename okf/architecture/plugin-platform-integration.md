@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v3.0.29 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v3.0.30 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v3.0.29` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v3.0.30` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux or Darwin runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -95,17 +95,30 @@ digests. A declaration mismatch refreshes the market before a new attempt.
 Confirmed retained-data deletion treats an
 already-absent binding as success and reconciles an unknown mutation outcome
 against the exact generation and binding revision before reinstalling.
-ReDevPlugin `v3.0.29` also preserves the deleted instance's durable revoke-epoch
+ReDevPlugin also preserves the deleted instance's durable revoke-epoch
 floor across both retained-data and delete-data reinstalls. Previously issued
 credentials therefore remain revoked, while the newly installed instance can
 open surfaces with credentials minted at the current floor.
 
 ReDevPlugin starts and health-checks the runtime and prewarms the exact worker
 module after fresh install, update, downgrade, enable, and startup recovery.
+A process Host opened before authentication now starts the admitted runtime and
+prewarms validated installed Worker modules without waiting for an Env App
+session. This preparation cannot invoke a Worker, create a lease, activate
+connectivity, or publish a surface. Authentication and current permission,
+release-trust, and runtime-generation checks still precede actual execution.
 Host restart and explicit retry use the Host-owned recovery snapshot and
 `recoverEnabled` path. Redeven observes and localizes the authoritative result;
 it does not scan the registry to start workers, persist release trust,
 activation evidence, recovery identities, or a second grant/trust state machine.
+
+Redeven gives the released `remoterelease.DocumentCache` one disposable
+`release-documents.sqlite` path under the selected plugin state root and closes
+it after the Host and market controller stop. All immutable release transports
+share it across process restarts. ReDevPlugin owns its schema, bounded storage,
+SHA-256 and size checks, and fallback transport. A cache-open failure preserves
+the existing file and uses remote verification. Cached bytes never substitute
+for signature, expiry, revocation, source-policy, or authorization decisions.
 
 An initial worker call also waits for Host-owned runtime readiness, exact worker
 prewarm, and connectivity policy preparation before dispatch. Calls arriving
@@ -148,7 +161,7 @@ user pin.
 ## Runtime boundary
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`v3.0.29`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+`v3.0.30`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux and Darwin runtime bytes are built
 with Rust 1.88.0 from the attested release manifest and travel with SBOM,
 provenance, notices, and signature evidence. Linux admission requires the
@@ -303,7 +316,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v3.0.29` assembly.
+This concept owns only Redeven's concrete `v3.0.30` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout

@@ -161,6 +161,7 @@ run_step "testing ReDevPlugin consumption gate" ./scripts/check_redevplugin_cons
 run_step "testing ReDevPlugin artifact staging" ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 run_step "checking ReDevPlugin integration" ./scripts/check_plugin_integration.sh --ci
 run_step "checking Desktop plugin opening smoke syntax" node --check scripts/smoke_desktop_plugin_opening.mjs
+run_step "checking Desktop plugin startup smoke syntax" node --check scripts/smoke_desktop_plugin_startup.mjs
 run_step "checking Gateway protocol contract" ./scripts/check_gateway_protocol_contract.sh
 run_step "checking Floret dependency boundary" ./scripts/check_floret_dependency_boundary.sh
 run_step "checking Flower live protocol" ./scripts/check_flower_live_protocol.sh

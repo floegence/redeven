@@ -2,8 +2,10 @@ package redevpluginintegration
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +13,8 @@ import (
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
 	"github.com/floegence/redevplugin/v3/pkg/externalsource"
 	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/releasetrust"
+	"github.com/floegence/redevplugin/v3/pkg/remoterelease"
 )
 
 type rejectingReleaseAssetFetcher struct{}
@@ -20,7 +24,7 @@ func (rejectingReleaseAssetFetcher) FetchArtifact(context.Context, externalsourc
 }
 
 func TestOfficialReleaseProviderTracksEveryOfficialMarketRelease(t *testing.T) {
-	module, provider, err := newOfficialReleaseModulePending(rejectingReleaseAssetFetcher{})
+	module, provider, err := newOfficialReleaseModulePending(rejectingReleaseAssetFetcher{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +47,7 @@ func TestOfficialReleaseProviderTracksEveryOfficialMarketRelease(t *testing.T) {
 }
 
 func TestOfficialReleaseProviderRefreshIsAtomicAndDropsMissingReleases(t *testing.T) {
-	_, provider, err := newOfficialReleaseModulePending(rejectingReleaseAssetFetcher{})
+	_, provider, err := newOfficialReleaseModulePending(rejectingReleaseAssetFetcher{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +79,7 @@ func TestOfficialReleaseProviderRefreshIsAtomicAndDropsMissingReleases(t *testin
 }
 
 func TestOfficialReleaseProviderRejectsUndeclaredRelease(t *testing.T) {
-	_, provider, err := newOfficialReleaseModulePending(rejectingReleaseAssetFetcher{})
+	_, provider, err := newOfficialReleaseModulePending(rejectingReleaseAssetFetcher{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,4 +168,57 @@ func officialMarketReleaseFixture(t *testing.T, pluginID, version, hashDigit str
 		}},
 	}
 	return release
+}
+
+// The document is deliberately invalid trust content. Its bytes may be cached,
+// but both provider lifetimes must still reject it through the released service.
+func TestOfficialReleaseProviderReusesDocumentBytesAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	cachePath := filepath.Join(t.TempDir(), "documents.sqlite")
+	value := []byte(`{}`)
+	digest := fmt.Sprintf("%x", sha256.Sum256(value))
+	release := officialMarketReleaseFixture(t, "com.redeven.official.weather", "1.0.0", "a")
+	locator := "sources/" + officialReleaseSourceID + "/root/current.json"
+	item := pluginmarket.TransportAsset{Locator: locator, ReleaseAsset: pluginmarket.ReleaseAsset{
+		AssetID: 4, Name: "root-current.json", URL: "https://github.com/floegence/redeven-official-plugins/releases/download/v1.0.0/root-current.json", Size: int64(len(value)), SHA256: digest,
+	}}
+	release.TransportAssets = append(release.TransportAssets, item)
+	release.PublisherReleaseRef.Files = append(release.PublisherReleaseRef.Files, pluginmarket.PublishedFile{Locator: locator, AssetName: item.Name, SHA256: digest, Size: item.Size})
+	fetcher := &countingDocumentFetcher{value: value}
+	for range 2 {
+		cache, err := remoterelease.OpenDocumentCache(ctx, cachePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		module, provider, err := newOfficialReleaseModulePending(fetcher, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := provider.setSnapshot(officialReleaseSnapshot(release)); err != nil {
+			t.Fatal(err)
+		}
+		ref := release.PublisherReleaseRef.ReleaseRef
+		_, err = module.Trust.PrepareRelease(ctx, releasetrust.ReleaseIdentity{
+			SourceID: ref.SourceID, Channel: ref.Channel, ReleaseMetadataRef: ref.ReleaseMetadataRef, ReleaseMetadataSHA256: ref.ReleaseMetadataSHA256, PublisherID: ref.PublisherID, PluginID: ref.PluginID, Version: ref.Version,
+		})
+		if err == nil {
+			t.Fatal("cached malformed trust document was accepted")
+		}
+		if err := cache.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if fetcher.calls != 1 {
+		t.Fatalf("provider restart fetched the same document %d times", fetcher.calls)
+	}
+}
+
+type countingDocumentFetcher struct {
+	calls int
+	value []byte
+}
+
+func (f *countingDocumentFetcher) FetchArtifact(_ context.Context, request externalsource.ArtifactFetchRequest) (externalsource.ArtifactFetchResult, error) {
+	f.calls++
+	return externalsource.ArtifactFetchResult{Bytes: append([]byte(nil), f.value...), Source: request.URL, Final: request.URL}, nil
 }

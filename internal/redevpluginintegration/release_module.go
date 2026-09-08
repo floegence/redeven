@@ -40,17 +40,19 @@ type officialReleaseProjection struct {
 type officialReleaseProvider struct {
 	mu                 sync.RWMutex
 	fetcher            remoterelease.AssetFetcher
+	documentCache      *remoterelease.DocumentCache
 	releases           map[host.PluginReleaseRef]officialReleaseProjection
 	documentTransports []*remoterelease.AssetSet
 }
 
-func newOfficialReleaseModulePending(fetcher remoterelease.AssetFetcher) (*host.ReleaseModule, *officialReleaseProvider, error) {
+func newOfficialReleaseModulePending(fetcher remoterelease.AssetFetcher, documentCache *remoterelease.DocumentCache) (*host.ReleaseModule, *officialReleaseProvider, error) {
 	if fetcher == nil {
 		return nil, nil, errors.New("official release fetcher is unavailable")
 	}
 	provider := &officialReleaseProvider{
-		fetcher:  fetcher,
-		releases: make(map[host.PluginReleaseRef]officialReleaseProjection),
+		fetcher:       fetcher,
+		documentCache: documentCache,
+		releases:      make(map[host.PluginReleaseRef]officialReleaseProjection),
 	}
 	trust, err := newOfficialReleaseTrust(provider)
 	if err != nil {
@@ -137,12 +139,13 @@ func (p *officialReleaseProvider) projectRelease(
 		return existing, nil
 	}
 	transport, err := remoterelease.NewAssetSet(remoterelease.AssetSetOptions{
-		SourceID:     ref.SourceID,
-		Channel:      ref.Channel,
-		QuotaKey:     "redeven.official:" + ref.PluginID,
-		AllowedHosts: append([]string(nil), officialReleaseAllowedHosts...),
-		Assets:       assets,
-		Fetcher:      p.fetcher,
+		SourceID:      ref.SourceID,
+		Channel:       ref.Channel,
+		QuotaKey:      "redeven.official:" + ref.PluginID,
+		AllowedHosts:  append([]string(nil), officialReleaseAllowedHosts...),
+		Assets:        assets,
+		Fetcher:       p.fetcher,
+		DocumentCache: p.documentCache,
 	})
 	if err != nil {
 		return officialReleaseProjection{}, fmt.Errorf("create official release transport: %w", err)
