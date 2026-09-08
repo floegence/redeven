@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-08: Flower terminal results
+
+- Put returned output directly below the safe command; remove repeated intent and transport metadata from details.
+- Distinguish successful invocation from process exit, and explain empty output, input delivery, timeout, and termination in all shipped languages.
+- Preserve disclosure behavior, canonical output ordering, and the boundary that excludes interactive input.
+
 ## 2026-09-08: Flower disclosure interaction
 
 - Consolidate transcript following, native gesture protection, and temporary anchoring in one viewport controller.

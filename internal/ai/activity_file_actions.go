@@ -743,7 +743,7 @@ func activityPayloadKeyPolicyToken(key string) string {
 func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]struct{} {
 	switch renderer {
 	case fltools.ActivityRendererTerminal:
-		return stringSet("operation", "command", "description", "process_id", "input_bytes", "execution_location", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "timed_out", "truncated", "summary", "details", "status", "error", "content_ref")
+		return stringSet("operation", "command", "description", "process_id", "input_bytes", "execution_location", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "timed_out", "terminated", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererFile:
 		return stringSet("operation", "display_name", "content", "line_offset", "line_count", "total_lines", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererPatch:

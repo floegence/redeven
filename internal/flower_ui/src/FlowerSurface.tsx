@@ -7879,18 +7879,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const displayCanceled = () => displayStatus() === 'canceled';
     const displayUserRejected = () => detailProps.approvalState() === 'rejected';
     const visibleOutput = liveOutput;
-    const displayOutput = () => {
-      const output = visibleOutput();
-      if (output.trim()) return output;
-      if (displayUserRejected()) return '';
-      if (liveError()) return `Live output unavailable: ${liveError()}`;
-      if (canReadLiveOutput() && terminalListeningPlaceholderVisible(output, displayStatus())) return 'Listening for output...';
-      if ((displayStatus() === 'running' || displayStatus() === 'pending') && processID() === '') {
-        return 'Live output handle is not available yet.';
+    const resultNotice = () => {
+      if (displayUserRejected()) return copy().chat.toolApprovalRejectedDetail;
+      if (displayCanceled()) return copy().chat.toolCallCanceled;
+      if (terminal().operation === 'write') {
+        if (displayStatus() === 'success') return copy().chat.terminalInputSent;
+        if (displayStatus() === 'error') return copy().chat.terminalInputFailed;
+        return copy().chat.terminalInputPending;
       }
-      return terminal().operation === 'read' ? copy().chat.terminalNoNewOutput : 'No output captured.';
+      if (terminal().timed_out) return copy().chat.terminalTimedOut;
+      if (terminal().terminated) return copy().chat.terminalStopped;
+      const exitCode = terminal().exit_code;
+      if (exitCode != null && exitCode !== 0) return copy().chat.terminalExitCode(exitCode);
+      return '';
     };
-    const muted = () => !visibleOutput().trim() && !displayUserRejected();
+    const emptyOutputNotice = () => {
+      if (resultNotice() || liveError()) return '';
+      if (terminalListeningPlaceholderVisible(visibleOutput(), displayStatus())) {
+        return copy().chat.terminalWaitingOutput;
+      }
+      if (terminal().operation === 'read') return copy().chat.terminalNoNewOutput;
+      if (terminal().exit_code === 0) return copy().chat.terminalFinishedNoOutput;
+      if (terminal().operation === 'exec' && displayStatus() === 'success') return copy().chat.terminalStartedNoOutput;
+      return copy().chat.terminalNoOutput;
+    };
     const copyTerminalCommand = async () => {
       const value = command();
       if (!value) return;
@@ -7973,7 +7985,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
 
     createEffect(() => {
-      displayOutput();
+      visibleOutput();
       displayStatus();
       outputViewport.notifyOutputChanged();
     });
@@ -7990,25 +8002,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         class={cn('flower-activity-terminal-panel', `flower-activity-terminal-panel-${displayStatus()}`)}
         data-flower-activity-terminal-panel
       >
-        <div class="flower-activity-terminal-header">
-          <span class="flower-activity-terminal-status">
-            {statusIcon(displayStatus())}
-            <Show when={detailProps.approvalState() === 'rejected'}>
-              <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
-            </Show>
-          </span>
-          <Show when={command()}><span class="flower-activity-terminal-prompt" aria-hidden="true">$</span></Show>
-          <span class="flower-activity-terminal-command">
-            <Show when={command()} fallback={copy().chat.terminalSession}>
-            <FlowerShellCommandHighlight
-              command={terminal().command}
-              class="flower-activity-terminal-command-code"
-              tokenClassPrefix="flower-activity-terminal-command-token"
-            />
-            </Show>
-          </span>
-          <div class="flower-activity-terminal-actions" aria-label="Terminal command actions">
-            <Show when={command()}>
+        <Show when={command()}>
+          <div class="flower-activity-terminal-header">
+            <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
+            <span class="flower-activity-terminal-command">
+              <FlowerShellCommandHighlight
+                command={terminal().command}
+                class="flower-activity-terminal-command-code"
+                tokenClassPrefix="flower-activity-terminal-command-token"
+              />
+            </span>
+            <div class="flower-activity-terminal-actions" aria-label={copy().chat.terminalCommandActions}>
               <button
                 type="button"
                 class={cn('flower-activity-terminal-action-button', commandExpanded() && 'flower-activity-terminal-action-button-active')}
@@ -8040,24 +8044,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <Check class="h-3.5 w-3.5" />
                 </Show>
               </button>
-            </Show>
+            </div>
           </div>
-        </div>
-        <dl class="flower-activity-terminal-facts">
-          <div><dt>{copy().chat.terminalPurpose}</dt><dd>{terminal().purpose}</dd></div>
-          <div><dt>{copy().chat.terminalStatus}</dt><dd>{copy().chat.toolStatuses[displayStatus()]}</dd></div>
-          <Show when={!command() && processID()}><div><dt>{copy().chat.terminalSession}</dt><dd>{processID()}</dd></div></Show>
-          <Show when={terminal().operation === 'write' && terminal().input_bytes != null}>
-            <div><dt>{copy().chat.terminalInputBytes}</dt><dd>{terminal().input_bytes}</dd></div>
-          </Show>
-          <Show when={terminal().operation === 'read' && terminal().last_seq > 0}>
-            <div><dt>{copy().chat.terminalOutputSequence}</dt><dd><Show when={terminal().first_seq > 0}>{terminal().first_seq}–</Show>{terminal().last_seq} / {terminal().latest_seq}</dd></div>
-          </Show>
-          <Show when={terminal().total_bytes != null}><div><dt>{copy().chat.terminalOutputBytes}</dt><dd>{terminal().total_bytes}</dd></div></Show>
-          <Show when={terminal().has_more}><div><dd>{copy().chat.terminalMoreOutput}</dd></div></Show>
-          <Show when={terminal().timed_out}><div><dd>{copy().chat.terminalTimedOut}</dd></div></Show>
-          <Show when={terminal().execution_location}><div><dt>{copy().chat.terminalLocation}</dt><dd>{terminal().execution_location}</dd></div></Show>
-        </dl>
+        </Show>
         <Show when={command() && commandExpanded()}>
           <div id={commandPanelID()} class="flower-activity-terminal-command-panel">
             <pre class="flower-activity-terminal-command-full">
@@ -8069,23 +8058,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </pre>
           </div>
         </Show>
-        <Show when={terminal().operation !== 'write'}>
-        <div
-          ref={outputViewport.bind}
-          class={cn('flower-activity-terminal-output', muted() && 'flower-activity-terminal-output-muted')}
-          onScroll={outputViewport.onScroll}
-          onWheel={outputViewport.onWheel}
-        >
-          <pre>
-            {displayOutput()}
-            <Show when={displayUserRejected()}>
-              <span class="flower-activity-terminal-approval-rejected">{copy().chat.toolApprovalRejectedDetail}</span>
-            </Show>
-            <Show when={displayCanceled() && !displayUserRejected()}>
-              <span class="flower-activity-terminal-canceled">{copy().chat.toolCallCanceled}</span>
-            </Show>
-          </pre>
-        </div>
+        <Show when={terminal().operation !== 'write' && visibleOutput().trim()} fallback={
+          <Show when={emptyOutputNotice()}>
+            {(notice) => <p class="flower-activity-terminal-notice">{notice()}</p>}
+          </Show>
+        }>
+          <div
+            ref={outputViewport.bind}
+            class="flower-activity-terminal-output"
+            onScroll={outputViewport.onScroll}
+            onWheel={outputViewport.onWheel}
+          >
+            <pre>{visibleOutput()}</pre>
+          </div>
+        </Show>
+        <Show when={resultNotice()}>
+          {(notice) => <p class={cn('flower-activity-terminal-notice', (displayCanceled() || terminal().timed_out || displayStatus() === 'error') && 'flower-activity-terminal-notice-error')}>{notice()}</p>}
+        </Show>
+        <Show when={terminal().operation !== 'write' && (terminal().has_more || terminal().truncated)}>
+          <p class="flower-activity-terminal-notice">{copy().chat.terminalPartialOutput}</p>
+        </Show>
+        <Show when={liveError()}>
+          {(error) => <p class="flower-activity-terminal-notice flower-activity-terminal-notice-error">{copy().chat.terminalLiveOutputUnavailable(error())}</p>}
         </Show>
       </section>
     );

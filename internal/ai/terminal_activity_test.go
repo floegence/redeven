@@ -61,6 +61,21 @@ func TestTerminalInteractionPresentationPreservesPurposeAndSafeFacts(t *testing.
 		if op == "terminate" && !got.Terminated {
 			t.Fatal("termination lost")
 		}
+		payloadJSON, err := json.Marshal(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(payloadJSON, &payload); err != nil {
+			t.Fatal(err)
+		}
+		public, ok := sanitizeActivityPayloadValue(payload, fltools.ActivityRendererTerminal, name)
+		if !ok || public["operation"] != op || public["timed_out"] != true {
+			t.Fatalf("%s lost public outcome: %#v", name, public)
+		}
+		if op == "terminate" && public["terminated"] != true {
+			t.Fatalf("termination lost at public boundary: %#v", public)
+		}
 		raw, _ := json.Marshal(merged)
 		if strings.Contains(string(raw), "private-password") || strings.Contains(string(raw), "private-stdin") {
 			t.Fatalf("input leaked: %s", raw)
