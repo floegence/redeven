@@ -58,6 +58,7 @@ main() {
       src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
+      src/ui/FlowerSurface.fork.test.tsx \
       src/ui/FlowerSurface.orderedPresentation.test.tsx \
       src/ui/FlowerSurface.composerReferences.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
@@ -96,6 +97,7 @@ main() {
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
       internal/flower_ui/src/threadCache.test.ts \
+      internal/flower_ui/src/flowerThreadTitle.test.ts \
       internal/flower_ui/src/transportOutbox.test.ts \
       internal/flower_ui/src/runtimeCurrentView.test.ts \
       internal/flower_ui/src/inputResponse.test.ts \
@@ -156,6 +158,7 @@ main() {
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
+        src/ui/FlowerSurface.fork.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \

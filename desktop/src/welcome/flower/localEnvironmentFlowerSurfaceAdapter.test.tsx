@@ -939,6 +939,26 @@ describe('Local Environment Flower surface adapter', () => {
     }]);
   });
 
+  it('returns the named fork receipt without a second IPC request for details', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      return {
+        client_request_id: 'fork-request',
+        thread: {
+          thread_id: 'fork-result', title: 'Source · Fork', title_status: 'ready',
+          run_status: 'idle', created_at_unix_ms: 1, updated_at_unix_ms: 2,
+          read_status: readStatus(), model_id: 'default/gpt-4.1', working_dir: '/workspace',
+        },
+      };
+    });
+    const input = { client_request_id: 'fork-request', title: 'Source · Fork' };
+    const result = await createLocalEnvironmentFlowerSurfaceAdapter(bridge).forkThread!('thread /1', input);
+    expect(result.thread_id).toBe('fork-result');
+    expect(result.title).toBe(input.title);
+    expect(calls).toEqual([{ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread%20%2F1/fork', body: input }]);
+  });
+
   it('propagates synchronous thread deletion failures', async () => {
     const diagnostic = { stage: 'product_cleanup', retryable: true };
     const bridgeForFailure: DesktopSettingsBridge = {

@@ -98,7 +98,7 @@ export type FlowerRuntimeTransport = Readonly<{
   reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
   promoteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
-  forkThread(threadID: string, input: Readonly<{ client_request_id: string }>): Promise<LoadThreadResponse>;
+  forkThread(threadID: string, input: Readonly<{ client_request_id: string; title: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<void>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalCommandResult>;
 }>;
@@ -342,18 +342,18 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
           return loadThread(tid);
         },
       } : {}),
-      forkThread: async (threadID: string, clientRequestID: string) => {
+      forkThread: async (threadID, input) => {
         const tid = trim(threadID);
-        const requestID = trim(clientRequestID);
+        const requestID = trim(input.client_request_id);
         if (!tid) throw new Error(missingThreadIDMessage(options));
         if (!requestID) throw new Error('Missing client request id.');
-        const threadResp = await options.transport.forkThread(tid, { client_request_id: requestID });
+        const threadResp = await options.transport.forkThread(tid, { client_request_id: requestID, title: input.title });
         if (trim(threadResp.client_request_id) !== requestID) {
           throw new Error('Flower fork returned a different client request identity.');
         }
         const nextID = trim(threadResp.thread?.thread_id);
-        if (!nextID) throw new Error(trim(options.failedToCreateThread) || 'Failed to create Flower chat.');
-        return loadThread(nextID);
+        if (!nextID || nextID === tid) throw new Error(trim(options.failedToCreateThread) || 'Failed to create Flower chat.');
+        return mapRuntimeThread(threadResp.thread!, options);
       },
     }),
     ...(options.canMutate !== false && options.transport.deleteThread ? {

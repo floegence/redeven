@@ -50,6 +50,7 @@ export type FlowerThreadCardProps = Readonly<{
   active: boolean;
   copy?: FlowerThreadListCopy;
   busy?: boolean;
+  busyLabel?: string;
   onSelect: () => void;
   onContextMenu?: (event: MouseEvent, item: FlowerThreadListItem) => void;
   onKeyboardMenu?: (event: KeyboardEvent, item: FlowerThreadListItem) => void;
@@ -77,6 +78,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-status={props.item.status}
       data-flower-thread-active={props.active ? 'true' : 'false'}
       data-flower-thread-busy={props.busy ? 'true' : 'false'}
+      aria-busy={props.busy ? 'true' : undefined}
       data-flower-thread-indicator={indicator().visual}
       data-flower-thread-unread-dot={indicator().attention === 'unread' ? 'true' : 'false'}
       data-flower-thread-action-required={indicator().actionRequired ? 'true' : 'false'}
@@ -118,6 +120,9 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           <div class="flex min-w-0 items-center gap-1">
             <span class="flower-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
+          <Show when={props.busyLabel}>
+            <span class="text-[10px] text-muted-foreground" role="status">{props.busyLabel}</span>
+          </Show>
         </div>
       </button>
       <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">
@@ -502,6 +507,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                                 active={props.activeThreadID === threadID}
                                 copy={copy()}
                                 busy={props.busyThreadID === threadID}
+                                busyLabel={props.busyThreadID === threadID && props.busyAction === 'fork' ? copy().forkCreating : undefined}
                                 onSelect={() => props.onSelect(threadID)}
                                 onContextMenu={openMenu}
                                 onKeyboardMenu={openMenu}

@@ -6,6 +6,12 @@
 - Prevent cold-load defaults from becoming draft overrides and preserve Off across reopening and waiting continuation.
 - Align reasoning controls with idle-only preference changes and show a neutral placeholder before settings are known.
 
+## 2026-09-08: Visible Flower fork results
+
+- Consume published Floret v7.3.3 and assign localized branch titles through the existing public title contract.
+- Show, select, and announce the created destination before loading details; reuse exact requests after lost responses and retry failed reads independently.
+- Publish destination summaries to connected windows and keep untitled historical forks visible without rewriting stored titles or conversation history.
+
 ## 2026-09-08: Flower terminal results
 
 - Put returned output directly below the safe command; remove repeated intent and transport metadata from details.
