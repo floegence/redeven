@@ -10766,7 +10766,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Show>
               <div
                 class={cn(
-                  'flower-composer flower-chat-input-floating chat-input-container p-3',
+                  'flower-composer p-3',
                   bottomActionMode() !== 'chat' && 'flower-decision-surface',
                 )}
                 aria-busy={composerReferenceMutationCount() > 0 ? 'true' : undefined}

@@ -38,6 +38,8 @@ An empty expanded companion keeps the Flower identity, concise description, and 
 
 Opening animates one shell upward from the anchor while preserving its bottom edge, width, border, background, and clipping boundary. Closing keeps valid geometry through every transition frame. It never clears fixed coordinates during exit, never flashes at the viewport origin, and never changes Activity body height. Reduced motion applies the same final state without geometry or glyph animation.
 
+The published `BottomBarCompanion` owns the collapsed surface's only visible outline, background, radius, and clipping. The retained Flower composer has no border, background, radius, shadow, or backdrop filter while collapsed, including focused, loading, pending-action, and attachment-drag states. Its decoration disappears immediately on collapse; only the outer shell animates. Non-collapsed editors own their ordinary composer decoration independently. Flower's custom composer uses its own structural styles rather than borrowing the upstream `ChatInput` skin. Visual regression fixtures must include the production `flower-surface` class and verify computed styles; source-rule presence alone cannot prove CSS cascade behavior.
+
 ## Contextual Ask Flower
 
 Activity and Workbench keep the existing `FlowerTurnLauncherWindow` interaction. Opening records the exact origin mode, Activity surface, companion placement, and Workbench anchor where applicable. The Activity Flower instance remains the presence owner but is hidden, inert, disengaged, and unable to acknowledge transcript reads while its launcher is open.
@@ -87,5 +89,7 @@ The companion never auto-expands for completion, failure, approval, or user inpu
 - `redeven:internal/envapp/ui_src/src/ui/activityFlowerCompletionNotice.ts` - a generation-safe controller turns only a just-observed successful run into a short completion acknowledgement.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - browser tests cover continuous geometry, outside dismissal, breakpoint placement, and DOM identity.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs` - production-build smoke loads the unmocked lazy Flower feature and verifies one companion, surface, composer, and stable full-page identity.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionAppearance.browser.test.tsx` - the real Flower component keeps one collapsed outline and retains its editor, draft, selection, and composition through presentation changes.
+- `redeven:internal/envapp/ui_src/src/ui/activityFlowerCompanionVisual.browser.test.tsx` - complete production class fixtures verify theme, viewport, focus, state, and transition decoration boundaries.
 - `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx` - focused tests cover collapsed engagement, background refresh, and composer identity.
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerAutosizeController.ts` - one measured controller owns one-to-five-line growth, internal overflow, resize scheduling, suspension, and cleanup.

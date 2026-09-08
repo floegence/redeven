@@ -128,7 +128,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track flower-chat-bottom-dock-track', timelineListIndex);
     const statusLaneIndex = src.indexOf('flower-model-status-lane', dockIndex);
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
-    const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
+    const composerIndex = src.indexOf('flower-composer p-3');
     const composerActionsIndex = src.indexOf('flower-composer-actions');
     const compactContextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator');
     const contextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator', compactContextIndicatorIndex + 1);
@@ -207,7 +207,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const scrollButtonIndex = src.indexOf('flower-scroll-to-latest-button', floatIndex);
     const dockTrackIndex = src.indexOf('flower-chat-bottom-dock-track', scrollButtonIndex);
     const statusLaneIndex = src.indexOf('flower-model-status-lane', dockTrackIndex);
-    const composerIndex = src.indexOf('flower-composer flower-chat-input-floating', statusLaneIndex);
+    const composerIndex = src.indexOf('flower-composer p-3', statusLaneIndex);
 
     expect(dockIndex).toBeGreaterThanOrEqual(0);
     expect(floatIndex).toBeGreaterThan(dockIndex);

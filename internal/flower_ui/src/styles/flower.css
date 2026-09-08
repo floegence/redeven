@@ -80,17 +80,12 @@
   gap: 0.375rem;
   overflow: hidden;
   border: 0;
-  border-radius: inherit;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
   padding: 0 0.5rem;
   backdrop-filter: none;
-  transition: padding 180ms ease, background-color 180ms ease;
-}
-
-.flower-surface-companion-collapsed .flower-composer:focus-within {
-  border: 0;
-  box-shadow: none;
+  transition: none;
 }
 
 .flower-surface-companion-collapsed .flower-composer-content {
@@ -300,7 +295,6 @@
 }
 
 .flower-composer[data-flower-companion-compact='true'] {
-  border-radius: 0.75rem;
   padding: 0.5rem;
 }
 
@@ -7067,22 +7061,26 @@ html.dark .flower-component-shell {
 }
 
 .flower-composer {
+  position: relative;
+  margin: 0;
+  overflow: visible;
   container-name: flower-bottom-composer;
   container-type: inline-size;
-  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  border-radius: 1rem;
-  border-color: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 72%, transparent);
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent);
-  box-shadow:
-    0 12px 28px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 38%, transparent),
-    0 2px 10px -8px color-mix(in srgb, var(--foreground) 28%, transparent);
-  backdrop-filter: blur(14px);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
-.flower-composer.flower-decision-surface {
-  background: var(--flower-chat-surface-elevated, var(--card));
-  box-shadow: 0 8px 22px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 42%, transparent);
-  backdrop-filter: none;
+/* The companion owns the collapsed outline; only an open editor paints its own surface. */
+.flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer {
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 46%, transparent);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 92%, var(--flower-chat-surface) 8%);
+  box-shadow: 0 10px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 44%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer:focus-within {
+  border-color: color-mix(in srgb, var(--ring) 52%, var(--flower-chat-surface-border) 48%);
+  box-shadow: 0 10px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
 }
 
 .flower-approval-surface {
@@ -7367,7 +7365,7 @@ html.dark .flower-component-shell {
   cursor: text;
 }
 
-.flower-surface[data-flower-warmup='true'] .flower-composer {
+.flower-surface[data-flower-warmup='true']:where(:not(.flower-surface-companion-collapsed)) .flower-composer {
   border-color: color-mix(in srgb, var(--primary) 20%, var(--redeven-stroke-overlay, var(--border)) 64%);
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 78%, transparent);
 }
@@ -7442,7 +7440,7 @@ html.dark .flower-component-shell {
   text-align: center;
 }
 
-.flower-composer[data-flower-attachment-drag='true'] {
+.flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer[data-flower-attachment-drag='true'] {
   border-color: color-mix(in srgb, var(--primary) 62%, var(--border));
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent),
@@ -10136,20 +10134,6 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 .flower-empty-hint kbd {
   border: 0;
   background: color-mix(in srgb, var(--foreground) 7%, transparent);
-}
-
-.flower-surface .flower-composer {
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 46%, transparent);
-  border-color: color-mix(in srgb, var(--flower-chat-surface-border) 46%, transparent);
-  border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 92%, var(--flower-chat-surface) 8%);
-  box-shadow: 0 10px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 44%, transparent);
-  backdrop-filter: blur(10px);
-}
-
-.flower-surface .flower-composer:focus-within {
-  border-color: color-mix(in srgb, var(--ring) 52%, var(--flower-chat-surface-border) 48%);
-  box-shadow: 0 10px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
 }
 
 .flower-working-dir-chip,

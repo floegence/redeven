@@ -772,6 +772,23 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     const product = page.locator('#redeven-activity-flower-product');
     const surface = page.locator('#redeven-flower-surface');
     const composer = page.locator('.flower-composer textarea');
+    const verifyCollapsedOutline = async () => {
+      const appearance = await page.evaluate(() => {
+        const frame = globalThis.getComputedStyle(globalThis.document.querySelector('#redeven-activity-flower-companion'));
+        const input = globalThis.getComputedStyle(globalThis.document.querySelector('.flower-composer'));
+        const widths = (style) => ['top', 'right', 'bottom', 'left'].map((side) => style.getPropertyValue(`border-${side}-width`));
+        return {
+          frameWidths: widths(frame), inputWidths: widths(input), radius: input.borderRadius,
+          background: input.backgroundColor, shadow: input.boxShadow, filter: input.backdropFilter,
+        };
+      });
+      if (appearance.frameWidths.some((width) => width !== '1px')
+        || appearance.inputWidths.some((width) => width !== '0px')
+        || appearance.radius !== '0px' || appearance.background !== 'rgba(0, 0, 0, 0)'
+        || appearance.shadow !== 'none' || appearance.filter !== 'none') {
+        throw new Error(`built Flower collapsed outline has competing decoration: ${JSON.stringify(appearance)}`);
+      }
+    };
     await companion.waitFor({ state: 'visible', timeout: 15_000 });
     await surface.waitFor({ state: 'visible', timeout: 15_000 });
     await composer.waitFor({ state: 'visible', timeout: 15_000 });
@@ -789,6 +806,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     if (!collapsedComposerBox || collapsedComposerBox.width <= 0 || collapsedComposerBox.height <= 0) {
       throw new Error(`built Flower collapsed composer has invalid geometry: ${JSON.stringify(collapsedComposerBox)}`);
     }
+    await verifyCollapsedOutline();
     await page.evaluate(() => {
       globalThis.__redevenBuiltFlowerIdentity = {
         surface: globalThis.document.querySelector('#redeven-flower-surface'),
@@ -835,6 +853,16 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
         composer: expandedComposerBox,
         textarea: expandedTextareaBox,
       })}`);
+    }
+
+    await page.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
+    ));
+    await verifyCollapsedOutline();
+    const restoredCollapsedBox = await companion.boundingBox();
+    if (!restoredCollapsedBox || Object.keys(collapsedBox).some((key) => Math.abs(restoredCollapsedBox[key] - collapsedBox[key]) > 1)) {
+      throw new Error(`built Flower collapsed geometry changed: ${JSON.stringify({ collapsedBox, restoredCollapsedBox })}`);
     }
 
     const flowerEntry = page.getByRole('button', { name: 'Flower', exact: true });
@@ -896,6 +924,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       full_page_width: fullPageSurfaceBox.width,
       full_page_height: fullPageSurfaceBox.height,
       identity_preserved: true,
+      single_collapsed_outline: true,
     };
   } finally {
     await page.close();

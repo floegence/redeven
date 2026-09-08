@@ -41,30 +41,14 @@ describe('Flower restrained selection and focus treatments', () => {
     expect(activeTitleRule).toContain('color: color-mix');
   });
 
-  it('does not alter composer border or shadow when text entry receives focus', () => {
-    const composerRule = lastCssRule('.flower-composer {');
-    const textareaFocusRule = cssRule('.flower-composer textarea,\n.flower-composer textarea:focus,');
-    const collapsedComposerRule = cssRule('.flower-surface-companion-collapsed .flower-composer {');
-    const collapsedFocusRule = cssRule('.flower-surface-companion-collapsed .flower-composer:focus-within {');
-
-    expect(composerRule).toContain('border: 1px solid');
-    expect(composerRule).toContain('box-shadow:');
-    expect(css).not.toMatch(/^\.flower-composer:focus-within \{/gmu);
-    expect(collapsedComposerRule).toContain('border: 0');
-    expect(collapsedComposerRule).toContain('box-shadow: none');
-    expect(collapsedFocusRule).toContain('border: 0');
-    expect(collapsedFocusRule).toContain('box-shadow: none');
-    expect(textareaFocusRule).toContain('outline: none');
-    expect(textareaFocusRule).toContain('border: 0');
-    expect(textareaFocusRule).toContain('box-shadow: none');
-  });
-
-  it('keeps approval and input request surfaces on the composer radius', () => {
-    const composerRule = lastCssRule('.flower-composer {');
-    const decisionRule = cssRule('.flower-composer.flower-decision-surface {');
-
-    expect(composerRule).toContain('border-radius: 1rem');
-    expect(decisionRule).not.toContain('border-radius:');
+  it('leaves the custom composer independent of the upstream chat input skin', () => {
+    const structuralRule = lastCssRule('.flower-composer {');
+    expect(surface).not.toContain('chat-input-container');
+    expect(surface).not.toContain('flower-chat-input-floating');
+    expect(structuralRule).toContain('position: relative');
+    expect(structuralRule).toContain('margin: 0');
+    expect(structuralRule).toContain('overflow: visible');
+    expect(structuralRule).not.toMatch(/(?:^|;)\s*(?:border|background|box-shadow)\s*:/u);
   });
 
   it('keeps one disclosure guide without nested SubAgent rails', () => {
