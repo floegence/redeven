@@ -1,9 +1,9 @@
 ---
 type: UI Contract
 title: Flower terminal activity presentation
-description: Canonical terminal activity facts, safe details, output scrolling, and read-only controls.
+description: Terminal output, truthful result messages, safe input confirmation, and read-only controls.
 tags: [ai, flower, terminal, presentation]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 ---
 # Summary
 
@@ -13,13 +13,17 @@ Flower renders canonical Floret v7 Activity facts. Host-authored labels and desc
 
 ## Terminal facts
 
-Floret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Redeven maps the same typed presentation from bootstrap and live current replacement. Labels and descriptions are authoritative; the typed operation supplies localized fallback text. Existing v7 history without an operation retains the known terminal fallback. Redeven consumes the additions from published Floret v7.3.1.
+Floret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Redeven maps the same typed presentation from bootstrap and live current replacement. Labels and descriptions are authoritative; the typed operation supplies localized fallback text. Existing v7 history without an operation retains the known terminal fallback. Redeven consumes the additions from published Floret v7.3.1. The public activity sanitizer preserves the existing `terminated` outcome so stopped-command details survive live delivery and history loading.
 
-Every `exec`, `read`, `write`, and `terminate` row exposes a chevron and detail panel. A missing command snapshot leaves a named terminal session and purpose, without an empty `$` prompt. Write details show purpose, safe target, actual sent-byte count, and status; they exclude raw input and output that could echo it. Read details show the invocation's incremental output, cursor range, total bytes, and remaining-output flag, with an explicit no-new-output state. Termination shows its target, result status, and final output. Public payloads exclude local `cwd`, `workdir`, and `stdin`.
+Every `exec`, `read`, `write`, and `terminate` row exposes a chevron and detail panel from its first appearance. The semantic title explains intent once. Expanded details prioritize the returned output, directly below a compact command header when a safe command is available. They do not repeat the description or render a status/metadata table. Missing command snapshots do not expose opaque process ids or invent a target.
 
-Completed status, output, exit code, and duration come from canonical Activity. Historical output without sequence metadata is an unsequenced static snapshot; live deltas remain sequence-strict. For running exec details, a newer cumulative snapshot replaces the view and a contiguous process-read delta appends. Equal or older snapshots are ignored; empty deltas preserve output; a declared truncated gap replaces the unavailable prefix. Flower requests only `after_seq` for an executing command with a public process id. Read and write panels never start another process poll. Process reads can stop local polling but cannot change canonical status. AppServer errors map to localized output or terminal-action failures.
+Write details confirm input sent, failure to send, or waiting to send. They exclude raw input and output that could echo it. Read details show that invocation's incremental output, or a localized no-new-output message. Execution with a successful launch but no exit code and no output says the command started without output yet; it does not claim the process completed. A recorded zero exit code with no output says the command finished without output. Nonzero exit codes, timeouts, and confirmed termination have concise result messages alongside any captured output. Partial output is identified in plain language. Output sequence numbers, byte counts, execution locations, duration, and private working paths are not presentation content.
 
-Details are read-only, offer icon actions to reveal and copy the command, and cap output at five visual lines. Execution and settlement belong to [Terminal tool runtime](../ai/terminal-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md).
+The canonical activity status describes the invocation, not the continued lifetime of its target process. A completed read or write must never imply that the command has exited. Result messages consume existing canonical exit, timeout, and termination facts; they do not reconstruct process lifecycle or derive completion from a successful tool call. Invocation errors retain their complete public error detail. Rejected and canceled operations cannot display a success confirmation. Empty states and output-refresh failures are localized and do not obscure returned output.
+
+Historical output without sequence metadata is an unsequenced static snapshot; live deltas remain sequence-strict. For running exec details, a newer cumulative snapshot replaces the view and a contiguous process-read delta appends. Equal or older snapshots are ignored; empty deltas preserve output; a declared truncated gap replaces the unavailable prefix. Flower requests only `after_seq` for an executing command with a public process id. Read and write panels never start another process poll. Process reads can stop local polling but cannot change canonical status. Transport cursors remain internal to output ordering.
+
+Details are read-only, offer localized icon actions to reveal and copy the command, and cap output at five visual lines with independent scrolling. Execution and settlement belong to [Terminal tool runtime](../ai/terminal-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md).
 
 ## Interaction boundary
 
@@ -34,8 +38,9 @@ Failed tools retain the public summary in the row and complete public message in
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - The Env adapter maps authorized terminal output reads to the product API without owning process lifecycle.
+- `redeven:internal/ai/terminal_activity_test.go` - Verifies typed terminal outcomes survive the public activity sanitizer.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Flower renders typed terminal activity detail and accessible execution status without approval presentation.
-- `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Terminal activity detail uses process, output, sequence, exit, and duration fields.
+- `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Terminal detail projects output and result facts while omitting duplicate intent and diagnostic metadata.
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - The wire adapter maps the closed Floret v7 nested activity presentation contract.
 - `redeven:internal/flower_ui/src/flowerTerminalOutput.ts` - Static snapshots, sequenced live deltas, and the 24 px local-following threshold have one owner.
 - `redeven:internal/codeapp/appserver/server.go` - Appserver exposes authorized terminal process read, write, and terminate routes.
@@ -43,4 +48,4 @@ Failed tools retain the public summary in the row and complete public message in
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Streams canonical SubAgent tool replacements while proving activity-row and terminal-viewport identity plus independent scroll ownership.
 - `redeven:internal/flower_ui/src/styles/flower.css` - Shared Flower styling owns the bounded terminal output viewport.
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - The shipped Env App stylesheet preserves the same bounded output presentation.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.terminalActivity.browser.test.tsx` - Verifies SSH input privacy, empty reads, keyboard disclosure, streamed replacement, task navigation, actionable details, and narrow layouts.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.terminalActivity.browser.test.tsx` - Verifies output-first details, honest empty execution results, input privacy, keyboard disclosure, streamed replacement, task navigation, and narrow layouts.

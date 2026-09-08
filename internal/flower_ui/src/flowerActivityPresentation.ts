@@ -89,22 +89,17 @@ export type FlowerActivityDiffFile = Readonly<{
 
 export type FlowerActivityTerminalDetail = Readonly<{
   operation: string;
-  purpose: string;
   command: string;
   output: string;
   status: FlowerActivityItem['status'];
   process_id: string;
-  input_bytes?: number;
-  execution_location: string;
   exit_code?: number;
-  duration_ms?: number;
-  total_bytes?: number;
   first_seq: number;
   last_seq: number;
-  latest_seq: number;
   has_more: boolean;
   truncated: boolean;
   timed_out: boolean;
+  terminated: boolean;
 }>;
 
 export type FlowerActivityWebSearchEntry = Readonly<{
@@ -1113,22 +1108,17 @@ function presentationForTerminal(item: FlowerActivityItem, copy?: FlowerActivity
   const detailLines: readonly FlowerActivityDetailLine[] = [];
   const terminal: FlowerActivityTerminalDetail = {
     operation: payloadValue(payload, 'operation'),
-    purpose: trimString(item.description) || titleText(title),
     command: payloadValue(payload, 'command'),
     output: payloadValue(payload, 'operation') === 'write' ? '' : terminalOutputFromPayload(payload),
     status: item.status,
     process_id: payloadValue(payload, 'process_id'),
-    input_bytes: optionalNumericValue(payload.input_bytes),
-    execution_location: payloadValue(payload, 'execution_location'),
     exit_code: optionalNumericValue(payload.exit_code),
-    duration_ms: optionalNumericValue(payload.duration_ms),
-    total_bytes: optionalNumericValue(payload.total_bytes),
     first_seq: optionalNumericValue(payload.first_seq) ?? 0,
     last_seq: optionalNumericValue(payload.last_seq) ?? 0,
-    latest_seq: optionalNumericValue(payload.latest_seq) ?? 0,
     has_more: boolValue(payload.has_more),
     truncated: boolValue(payload.truncated),
     timed_out: boolValue(payload.timed_out),
+    terminated: boolValue(payload.terminated),
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = item.status === 'canceled' || item.approval_state === 'rejected' ? null : errorDetailBlockForItem(item, payload);

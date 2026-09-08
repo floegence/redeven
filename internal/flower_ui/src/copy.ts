@@ -303,15 +303,19 @@ export type FlowerSurfaceCopy = Readonly<{
     permissionSelectorLabel: string;
     permissionSelectorSaving: string;
     permissionSelectorErrorTitle: string;
-    terminalPurpose: string;
-    terminalStatus: string;
-    terminalSession: string;
-    terminalInputBytes: string;
-    terminalOutputSequence: string;
-    terminalOutputBytes: string;
-    terminalMoreOutput: string;
+    terminalCommandActions: string;
+    terminalWaitingOutput: string;
+    terminalStartedNoOutput: string;
+    terminalFinishedNoOutput: string;
+    terminalNoOutput: string;
+    terminalInputSent: string;
+    terminalInputFailed: string;
+    terminalInputPending: string;
+    terminalStopped: string;
+    terminalExitCode: (code: number) => string;
+    terminalPartialOutput: string;
+    terminalLiveOutputUnavailable: (error: string) => string;
     terminalTimedOut: string;
-    terminalLocation: string;
     terminalNoNewOutput: string;
     toolActivityDetailsPending: string;
     toolActivityNoAdditionalDetails: string;
@@ -576,15 +580,19 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     permissionSelectorLabel: 'Thread permission',
     permissionSelectorSaving: 'Saving permission...',
     permissionSelectorErrorTitle: 'Flower could not save permission.',
-    terminalPurpose: "Purpose",
-    terminalStatus: "Status",
-    terminalSession: "Terminal session",
-    terminalInputBytes: "Bytes sent",
-    terminalOutputSequence: "Output sequence",
-    terminalOutputBytes: "Output bytes",
-    terminalMoreOutput: "More output is available",
-    terminalTimedOut: "Execution timed out",
-    terminalLocation: "Execution location",
+    terminalCommandActions: "Command actions",
+    terminalWaitingOutput: "Waiting for output…",
+    terminalStartedNoOutput: "Command started. No output returned yet.",
+    terminalFinishedNoOutput: "Command finished without output.",
+    terminalNoOutput: "No output returned.",
+    terminalInputSent: "Input sent.",
+    terminalInputFailed: "Input could not be sent.",
+    terminalInputPending: "Waiting to send input…",
+    terminalStopped: "Command stopped.",
+    terminalExitCode: (code) => `Command exited with code ${code}.`,
+    terminalPartialOutput: "Only part of the output is shown.",
+    terminalLiveOutputUnavailable: (error) => `Could not refresh output: ${error}`,
+    terminalTimedOut: "Command timed out.",
     terminalNoNewOutput: "No new output.",
     toolActivityDetailsPending: "Waiting for tool details",
     toolActivityNoAdditionalDetails: "No additional details",

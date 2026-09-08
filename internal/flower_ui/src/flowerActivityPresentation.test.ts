@@ -243,7 +243,6 @@ describe('presentFlowerActivityItem', () => {
         exit_code: 0,
 		first_seq: 1,
 		last_seq: 1,
-		latest_seq: 1,
 		has_more: false,
       },
     });
@@ -314,7 +313,6 @@ describe('presentFlowerActivityItem', () => {
         process_id: 'tp_build',
 		first_seq: 2,
 		last_seq: 2,
-		latest_seq: 2,
 		has_more: false,
       },
     });
@@ -1410,7 +1408,19 @@ describe('terminal interaction facts', () => {
     const raw = JSON.stringify(value);
     expect(raw).not.toContain('password');
     expect(raw).not.toContain('secret');
-    expect(value.detailBlocks).toContainEqual(expect.objectContaining({ terminal: expect.objectContaining({ input_bytes: 9, command: 'ssh host' }) }));
+    expect(value.detailBlocks).toContainEqual(expect.objectContaining({ terminal: expect.objectContaining({ command: 'ssh host' }) }));
+  });
+  it('keeps output and execution outcomes without projecting diagnostic metadata or duplicate intent', () => {
+    const value = presentFlowerActivityItem(item({ renderer: 'terminal', description: 'Check diagnostics', payload: {
+      operation: 'read', output: 'GPU ready', exit_code: 2, timed_out: true, terminated: true,
+      input_bytes: 12, total_bytes: 23, execution_location: 'local_runtime', duration_ms: 50,
+      first_seq: 1, last_seq: 2, latest_seq: 3, has_more: true,
+    } }));
+    const detail = value.detailBlocks.find((block) => block.kind === 'terminal_output');
+    expect(detail).toMatchObject({ terminal: { output: 'GPU ready', exit_code: 2, timed_out: true, terminated: true, first_seq: 1, last_seq: 2, has_more: true } });
+    for (const field of ['purpose', 'input_bytes', 'total_bytes', 'execution_location', 'duration_ms', 'latest_seq']) {
+      expect(detail && 'terminal' in detail ? detail.terminal : {}).not.toHaveProperty(field);
+    }
   });
   it('uses the typed operation when no semantic text was authored', () => {
     const value = presentFlowerActivityItem(item({ renderer: 'terminal', tool_name: 'custom.terminal', payload: { operation: 'write' } }));
@@ -1420,6 +1430,6 @@ describe('terminal interaction facts', () => {
     const history = item({ renderer: 'terminal', label: '再次检查诊断输出', payload: { operation: 'read', output: 'GPU ready', first_seq: 3, last_seq: 4, latest_seq: 4, has_more: false } });
     const before = presentFlowerActivityItem(history);
     expect(presentFlowerActivityItem(JSON.parse(JSON.stringify(history)))).toEqual(before);
-    expect(before.detailBlocks).toContainEqual(expect.objectContaining({ terminal: expect.objectContaining({ first_seq: 3, last_seq: 4, latest_seq: 4, has_more: false }) }));
+    expect(before.detailBlocks).toContainEqual(expect.objectContaining({ terminal: expect.objectContaining({ first_seq: 3, last_seq: 4, has_more: false }) }));
   });
 });

@@ -1498,7 +1498,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(terminateRow.querySelector('.flower-activity-inline-chevron')).not.toBeNull();
     terminateToggle.click();
     await waitFor(() => terminateToggle.getAttribute('aria-expanded') === 'true');
-    expect(terminateRow.querySelector('.flower-activity-terminal-facts')).not.toBeNull();
+    expect(terminateRow.querySelector('[data-flower-activity-terminal-panel]')?.textContent).toBe('No output returned.');
   });
 
   it('keeps waiting-user navigation interactive and applies background state without pointer activity', async () => {

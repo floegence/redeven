@@ -988,7 +988,7 @@
             "path": "ui/flower-terminal-activity.md",
             "type": "UI Contract",
             "title": "Flower terminal activity presentation",
-            "description": "Canonical terminal activity facts, safe details, output scrolling, and read-only controls.",
+            "description": "Terminal output, truthful result messages, safe input confirmation, and read-only controls.",
             "tags": [
               "ai",
               "flower",
@@ -11093,35 +11093,35 @@
       "concept_id": "ui.flower-terminal-activity",
       "type": "UI Contract",
       "title": "Flower terminal activity presentation",
-      "description": "Canonical terminal activity facts, safe details, output scrolling, and read-only controls.",
+      "description": "Terminal output, truthful result messages, safe input confirmation, and read-only controls.",
       "tags": [
         "ai",
         "flower",
         "presentation",
         "terminal"
       ],
-      "timestamp": "2026-07-18T00:00:00Z",
+      "timestamp": "2026-09-08T00:00:00Z",
       "frontmatter": {
-        "description": "Canonical terminal activity facts, safe details, output scrolling, and read-only controls.",
+        "description": "Terminal output, truthful result messages, safe input confirmation, and read-only controls.",
         "tags": [
           "ai",
           "flower",
           "presentation",
           "terminal"
         ],
-        "timestamp": "2026-07-18T00:00:00Z",
+        "timestamp": "2026-09-08T00:00:00Z",
         "title": "Flower terminal activity presentation",
         "type": "UI Contract"
       },
-      "body_length": 6008,
+      "body_length": 7412,
       "summary": "Flower renders canonical Floret v7 Activity facts. Host-authored labels and descriptions explain the task; every terminal operation has safe expandable details, including writes and empty reads. Disclosure and output scrolling are local presentation state. They never create process lifecycle facts or expose stdin, private working paths, or effect internals. Actionable approval controls belong to the composer.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Terminal facts\n\nFloret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Redeven maps the same typed presentation from bootstrap and live current replacement. Labels and descriptions are authoritative; the typed operation supplies localized fallback text. Existing v7 history without an operation retains the known terminal fallback. Redeven consumes the additions from published Floret v7.3.1.\n\nEvery `exec`, `read`, `write`, and `terminate` row exposes a chevron and detail panel. A missing command snapshot leaves a named terminal session and purpose, without an empty `$` prompt. Write details show purpose, safe target, actual sent-byte count, and status; they exclude raw input and output that could echo it. Read details show the invocation's incremental output, cursor range, total bytes, and remaining-output flag, with an explicit no-new-output state. Termination shows its target, result status, and final output. Public payloads exclude local `cwd`, `workdir`, and `stdin`.\n\nCompleted status, output, exit code, and duration come from canonical Activity. Historical output without sequence metadata is an unsequenced static snapshot; live deltas remain sequence-strict. For running exec details, a newer cumulative snapshot replaces the view and a contiguous process-read delta appends. Equal or older snapshots are ignored; empty deltas preserve output; a declared truncated gap replaces the unavailable prefix. Flower requests only `after_seq` for an executing command with a public process id. Read and write panels never start another process poll. Process reads can stop local polling but cannot change canonical status. AppServer errors map to localized output or terminal-action failures.\n\nDetails are read-only, offer icon actions to reveal and copy the command, and cap output at five visual lines. Execution and settlement belong to [Terminal tool runtime](../ai/terminal-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md).\n\n## Interaction boundary\n\n[Activity disclosure interaction](flower-activity-interaction.md) owns stable triggers, manual choices, animation, transcript following, and floating controls across all renderers. Terminal output additionally owns its separate 24 px near-bottom following threshold and five-line viewport. Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. The composer exclusively owns actionable approve/reject controls. Completing a decision removes that dock without inserting an approval outcome into history.",
-          "char_count": 2641
+          "body": "## Terminal facts\n\nFloret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Redeven maps the same typed presentation from bootstrap and live current replacement. Labels and descriptions are authoritative; the typed operation supplies localized fallback text. Existing v7 history without an operation retains the known terminal fallback. Redeven consumes the additions from published Floret v7.3.1. The public activity sanitizer preserves the existing `terminated` outcome so stopped-command details survive live delivery and history loading.\n\nEvery `exec`, `read`, `write`, and `terminate` row exposes a chevron and detail panel from its first appearance. The semantic title explains intent once. Expanded details prioritize the returned output, directly below a compact command header when a safe command is available. They do not repeat the description or render a status/metadata table. Missing command snapshots do not expose opaque process ids or invent a target.\n\nWrite details confirm input sent, failure to send, or waiting to send. They exclude raw input and output that could echo it. Read details show that invocation's incremental output, or a localized no-new-output message. Execution with a successful launch but no exit code and no output says the command started without output yet; it does not claim the process completed. A recorded zero exit code with no output says the command finished without output. Nonzero exit codes, timeouts, and confirmed termination have concise result messages alongside any captured output. Partial output is identified in plain language. Output sequence numbers, byte counts, execution locations, duration, and private working paths are not presentation content.\n\nThe canonical activity status describes the invocation, not the continued lifetime of its target process. A completed read or write must never imply that the command has exited. Result messages consume existing canonical exit, timeout, and termination facts; they do not reconstruct process lifecycle or derive completion from a successful tool call. Invocation errors retain their complete public error detail. Rejected and canceled operations cannot display a success confirmation. Empty states and output-refresh failures are localized and do not obscure returned output.\n\nHistorical output without sequence metadata is an unsequenced static snapshot; live deltas remain sequence-strict. For running exec details, a newer cumulative snapshot replaces the view and a contiguous process-read delta appends. Equal or older snapshots are ignored; empty deltas preserve output; a declared truncated gap replaces the unavailable prefix. Flower requests only `after_seq` for an executing command with a public process id. Read and write panels never start another process poll. Process reads can stop local polling but cannot change canonical status. Transport cursors remain internal to output ordering.\n\nDetails are read-only, offer localized icon actions to reveal and copy the command, and cap output at five visual lines with independent scrolling. Execution and settlement belong to [Terminal tool runtime](../ai/terminal-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md).\n\n## Interaction boundary\n\n[Activity disclosure interaction](flower-activity-interaction.md) owns stable triggers, manual choices, animation, transcript following, and floating controls across all renderers. Terminal output additionally owns its separate 24 px near-bottom following threshold and five-line viewport. Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. The composer exclusively owns actionable approve/reject controls. Completing a decision removes that dock without inserting an approval outcome into history.",
+          "char_count": 3882
         },
         {
           "id": "boundaries",
@@ -11138,14 +11138,19 @@
           "description": "The Env adapter maps authorized terminal output reads to the product API without owning process lifecycle."
         },
         {
+          "id": "redeven:internal/ai/terminal_activity_test.go:0:verifies typed terminal outcomes survive the public activity sanitizer.",
+          "source": "redeven:internal/ai/terminal_activity_test.go",
+          "description": "Verifies typed terminal outcomes survive the public activity sanitizer."
+        },
+        {
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:flower renders typed terminal activity detail and accessible execution status without approval presentation.",
           "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
           "description": "Flower renders typed terminal activity detail and accessible execution status without approval presentation."
         },
         {
-          "id": "redeven:internal/flower_ui/src/flowerActivityPresentation.ts:0:terminal activity detail uses process, output, sequence, exit, and duration fields.",
+          "id": "redeven:internal/flower_ui/src/flowerActivityPresentation.ts:0:terminal detail projects output and result facts while omitting duplicate intent and diagnostic metadata.",
           "source": "redeven:internal/flower_ui/src/flowerActivityPresentation.ts",
-          "description": "Terminal activity detail uses process, output, sequence, exit, and duration fields."
+          "description": "Terminal detail projects output and result facts while omitting duplicate intent and diagnostic metadata."
         },
         {
           "id": "redeven:internal/flower_ui/src/flowerLiveMapper.ts:0:the wire adapter maps the closed floret v7 nested activity presentation contract.",
@@ -11183,9 +11188,9 @@
           "description": "The shipped Env App stylesheet preserves the same bounded output presentation."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.terminalActivity.browser.test.tsx:0:verifies ssh input privacy, empty reads, keyboard disclosure, streamed replacement, task navigation, actionable details, and narrow layouts.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.terminalActivity.browser.test.tsx:0:verifies output-first details, honest empty execution results, input privacy, keyboard disclosure, streamed replacement, task navigation, and narrow layouts.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.terminalActivity.browser.test.tsx",
-          "description": "Verifies SSH input privacy, empty reads, keyboard disclosure, streamed replacement, task navigation, actionable details, and narrow layouts."
+          "description": "Verifies output-first details, honest empty execution results, input privacy, keyboard disclosure, streamed replacement, task navigation, and narrow layouts."
         }
       ],
       "snippet": "Flower renders canonical Floret v7 Activity facts. Host-authored labels and descriptions explain the task; every terminal operation has safe expandable details, including writes and empty reads. Disclosure and output scrolling are local pre",
@@ -12521,5 +12526,5 @@
       ]
     }
   ],
-  "source_sha256": "46d103e6fb4d17b9846422eccc6c1846f6a267d4f950eb96e8cadac1604526c9"
+  "source_sha256": "ea7406c90786527d4a13ef5fdea5bed4bd4a41397465a3955e53423291fae34e"
 }
