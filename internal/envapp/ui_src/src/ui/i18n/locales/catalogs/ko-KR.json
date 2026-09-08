@@ -4932,7 +4932,6 @@
       "launcherApplications": "애플리케이션",
       "launcherResultCount": "결과 {count}개",
       "launcherNoResults": "필터와 일치하는 애플리케이션이 없습니다.",
-      "launcherSummary": "{count}개 설치됨 · {attention}개 확인 필요",
       "categories": "플러그인 카테고리",
       "clearFilters": "필터 지우기",
       "filterSelection": "{dimension}: {value}",

@@ -4932,7 +4932,6 @@
       "launcherApplications": "アプリケーション",
       "launcherResultCount": "検索結果 {count} 件",
       "launcherNoResults": "フィルターに一致するアプリケーションはありません。",
-      "launcherSummary": "インストール済み {count} 件 · 要対応 {attention} 件",
       "categories": "プラグインのカテゴリ",
       "clearFilters": "フィルターをクリア",
       "filterSelection": "{dimension}: {value}",

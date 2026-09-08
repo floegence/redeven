@@ -4947,7 +4947,6 @@
       "launcherApplications": "应用",
       "launcherResultCount": "{count} 个结果",
       "launcherNoResults": "没有符合筛选条件的应用。",
-      "launcherSummary": "{count} 个已安装 · {attention} 个需要关注",
       "categories": "插件分类",
       "clearFilters": "清除筛选",
       "filterSelection": "{dimension}：{value}",

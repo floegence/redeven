@@ -5035,7 +5035,6 @@
       "launcherApplications": "Приложения",
       "launcherResultCount": "Найдено: {count}",
       "launcherNoResults": "Нет приложений, соответствующих этим фильтрам.",
-      "launcherSummary": "Установлено: {count} · «Требует внимания»: {attention}",
       "categories": "Категории плагинов",
       "clearFilters": "Сбросить фильтры",
       "filterSelection": "{dimension}: {value}",

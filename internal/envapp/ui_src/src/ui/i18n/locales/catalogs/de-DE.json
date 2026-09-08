@@ -4932,7 +4932,6 @@
       "launcherApplications": "Anwendungen",
       "launcherResultCount": "Ergebnisse: {count}",
       "launcherNoResults": "Keine Anwendungen entsprechen diesen Filtern.",
-      "launcherSummary": "{count} installiert · {attention} mit Handlungsbedarf",
       "categories": "Plugin-Kategorien",
       "clearFilters": "Filter zurücksetzen",
       "filterSelection": "{dimension}: {value}",

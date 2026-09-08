@@ -575,8 +575,7 @@ describe('PluginPanel', () => {
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.parentElement?.className).toContain('justify-center');
     expect(dialog.querySelector('header')?.className).toContain('border-b');
-    expect(dialog.querySelector('footer')?.className).toContain('border-t');
-    expect(dialog.querySelector('footer')?.textContent).toContain('1 installed · 0 need attention');
+    expect(dialog.querySelector('footer')).toBeNull();
     await Promise.resolve();
     expect(document.activeElement).toBe(document.querySelector('[data-plugin-launcher-search]'));
   });
@@ -723,8 +722,7 @@ describe('PluginPanel', () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.querySelector('header')?.className).toContain('border-b');
-    expect(dialog.querySelector('footer')?.className).toContain('border-t');
-    expect(dialog.querySelector('footer')?.textContent).toContain('1 installed · 0 need attention');
+    expect(dialog.querySelector('footer')).toBeNull();
     const close = document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement;
     expect(close.className).toContain('h-[44px]');
     expect(close.className).toContain('w-[44px]');
