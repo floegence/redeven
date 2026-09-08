@@ -324,7 +324,7 @@ describe('desktop preload runtime', () => {
       stdin: {
         contents: `
           import { app } from 'electron';
-          import { verifyWebServiceBrowserRuntime } from './src/build/fixtures/webServiceBrowserRuntime';
+          import { verifyWebServiceBrowserRuntime } from './src/build/test/webServiceBrowserRuntime';
           app.setPath('userData', process.env.${electronRuntimeUserDataEnvName});
           app.whenReady().then(async () => {
             const result = await verifyWebServiceBrowserRuntime(process.env.${electronRuntimePreloadEnvName}, process.env.REDEVEN_DESKTOP_TEST_SCREENSHOT_DIR);

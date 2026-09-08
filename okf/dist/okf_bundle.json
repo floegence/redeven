@@ -8417,7 +8417,7 @@
         "title": "Desktop shell theme state",
         "type": "Desktop Contract"
       },
-      "body_length": 9924,
+      "body_length": 9920,
       "summary": "Redeven Desktop is the single authority for the global `system | light | dark` source and the remembered light and dark Floe shell presets. One validated snapshot drives Welcome, every open Env App renderer, Web Service chrome, Floe shell tokens, Monaco, and Electron window chrome without allowing renderers to introduce arbitrary preset ids or colors.",
       "sections": [
         {
@@ -8437,8 +8437,8 @@
       ],
       "evidence": [
         {
-          "id": "redeven:desktop/src/build/fixtures/webServiceBrowserRuntime.ts:0:real electron coverage verifies all published presets, matching chrome surfaces, contrast, isolated target views, and uninterrupted address drafts across multiple windows.",
-          "source": "redeven:desktop/src/build/fixtures/webServiceBrowserRuntime.ts",
+          "id": "redeven:desktop/src/build/test/webServiceBrowserRuntime.ts:0:real electron coverage verifies all published presets, matching chrome surfaces, contrast, isolated target views, and uninterrupted address drafts across multiple windows.",
+          "source": "redeven:desktop/src/build/test/webServiceBrowserRuntime.ts",
           "description": "Real Electron coverage verifies all published presets, matching chrome surfaces, contrast, isolated target views, and uninterrupted address drafts across multiple windows."
         },
         {
@@ -13246,5 +13246,5 @@
       ]
     }
   ],
-  "source_sha256": "6a424ed2c0fee402cb44bf10f316d90c10c7db974ef004c2deaba601f094a0f0"
+  "source_sha256": "cd42e80d2b65991bc546e4d23dafa7ee008b29b41910cce33df21fe50cf4d1c7"
 }
