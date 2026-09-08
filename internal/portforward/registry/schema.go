@@ -220,7 +220,7 @@ func verifyRegistryShape(tx *sql.Tx, version int) error {
 	if err != nil {
 		return err
 	}
-	defer expected.Rollback()
+	defer func() { _ = expected.Rollback() }()
 	if err := initializeRegistryV1(expected); err != nil {
 		return err
 	}

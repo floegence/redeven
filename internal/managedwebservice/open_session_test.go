@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
@@ -53,27 +52,6 @@ func TestOpenSessionPreservesAppliedInstanceAndRetriesHook(t *testing.T) {
 	if err != nil || active != nil {
 		t.Fatal("Open created a lifecycle operation")
 	}
-}
-
-func waitForManagedOperationState(t *testing.T, registry *pfregistry.Registry, operationID, state string) *pfregistry.ManagedOperation {
-	t.Helper()
-	deadline := time.Now().Add(8 * time.Second)
-	for time.Now().Before(deadline) {
-		operation, err := registry.GetManagedOperation(context.Background(), operationID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if operation != nil && operation.State == state {
-			return operation
-		}
-		if operation != nil && (operation.State == "failed" || operation.State == "cancelled" || operation.State == "interrupted") {
-			t.Fatalf("operation %s ended in %s: %s %s", operationID, operation.State, operation.ErrorCode, operation.ErrorMessage)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	operation, _ := registry.GetManagedOperation(context.Background(), operationID)
-	t.Fatalf("operation %s did not reach %q: %+v", operationID, state, operation)
-	return nil
 }
 
 func TestConcurrentOpenSharesOneHook(t *testing.T) {
