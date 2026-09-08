@@ -93,6 +93,7 @@ type Backend interface {
 	StartSpace(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
 	StopSpace(ctx context.Context, codeSpaceID string) error
 	ResolveCodeServerPort(ctx context.Context, codeSpaceID string) (int, error)
+	BindRunningCodeSpace(ctx context.Context, codeSpaceID string) (NativeCodeSpaceBinding, error)
 	CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error)
 	CreateCodeRuntimeSetupOperation(ctx context.Context, operationID string, installMethod codeserver.BrowserEditorInstallMethod, manifest *CodeRuntimeArtifactManifest) (CodeRuntimeSetupOperation, error)
 	AppendCodeRuntimeSetupChunk(ctx context.Context, operationID string, chunkIndex int64, body io.Reader) (CodeRuntimeSetupChunkResult, error)

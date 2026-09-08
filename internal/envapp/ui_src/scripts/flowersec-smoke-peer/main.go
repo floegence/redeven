@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -35,15 +36,16 @@ func (writer *outputWriter) write(value any) {
 func main() {
 	certificatePath := flag.String("certificate", "", "PEM certificate path")
 	privateKeyPath := flag.String("private-key", "", "PEM private key path")
+	nativeCode := flag.Bool("native-codespace", false, "serve the native CodeSpace HTTP fixture")
 	allowedOrigin := flag.String("allowed-origin", "", "exact browser origin")
 	flag.Parse()
-	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin); err != nil {
+	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *nativeCode); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(certificatePath, privateKeyPath, allowedOrigin string) error {
+func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode bool) error {
 	if strings.TrimSpace(certificatePath) == "" || strings.TrimSpace(privateKeyPath) == "" || strings.TrimSpace(allowedOrigin) == "" {
 		return errors.New("certificate, private key, and allowed origin are required")
 	}
@@ -65,6 +67,10 @@ func run(certificatePath, privateKeyPath, allowedOrigin string) error {
 		return fmt.Errorf("create endpoint set: %w", err)
 	}
 	expiresAt := time.Now().UTC().Add(4 * time.Minute).Truncate(time.Second)
+	projection := json.RawMessage(`{"appBasePath":"/_redeven_proxy/env/","mode":"service_worker","serviceWorker":{"scope":"/_redeven_proxy/env/","scriptUrl":"/_redeven_proxy/env/_redeven_sw.js"},"version":2}`)
+	if nativeCode {
+		projection = json.RawMessage(`{"appBasePath":"/","controllerBridge":{"allowedOrigins":["https://app.native.test"]},"mode":"controller_bridge","version":2}`)
+	}
 	issued, err := controlplane.NewIssuer().IssueDirect(controlplane.DirectIssueOptions{
 		Session: controlplane.SessionOptions{
 			ChannelID: "channel-1", ExpiresAt: expiresAt,
@@ -74,7 +80,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin string) error {
 		ListenerAudience: "listener-1", UpstreamAddress: listener.Addr().String(),
 		Metadata: controlplane.ArtifactMetadata{Scopes: []controlplane.Scope{{
 			Name: "proxy.runtime", Version: 2, Critical: true,
-			Payload: json.RawMessage(`{"appBasePath":"/_redeven_proxy/env/","mode":"service_worker","serviceWorker":{"scope":"/_redeven_proxy/env/","scriptUrl":"/_redeven_proxy/env/_redeven_sw.js"},"version":2}`),
+			Payload: projection,
 		}}},
 	})
 	if err != nil {
@@ -85,7 +91,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin string) error {
 		return fmt.Errorf("issue direct artifact: %w", err)
 	}
 
-	handlers, err := newHandlers()
+	handlers, err := newHandlers(nativeCode)
 	if err != nil {
 		return err
 	}
@@ -169,7 +175,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin string) error {
 	return nil
 }
 
-func newHandlers() (*flowersec.SessionHandlers, error) {
+func newHandlers(nativeCode bool) (*flowersec.SessionHandlers, error) {
 	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{})
 	if err != nil {
 		return nil, err
@@ -193,6 +199,34 @@ func newHandlers() (*flowersec.SessionHandlers, error) {
 	}
 	for typeID, handler := range registrations {
 		if err := handlers.HandleRPC(typeID, handler); err != nil {
+			return nil, err
+		}
+	}
+	if nativeCode {
+		var unlocked atomic.Bool
+		if err := handlers.HandleStream("code/auth_v1", func(_ context.Context, incoming flowersec.IncomingStream) error {
+			if incoming.Metadata.Values()["password"] == "native-secret" {
+				unlocked.Store(true)
+			}
+			return json.NewEncoder(incoming.Stream).Encode(map[string]bool{"unlocked": unlocked.Load()})
+		}); err != nil {
+			return nil, err
+		}
+		if err := handlers.HandleStream("code/http_v1", func(ctx context.Context, incoming flowersec.IncomingStream) error {
+			origin, _ := incoming.Metadata.Values()["presentation_origin"].(string)
+			return flowersec.ServeHTTPStream(ctx, incoming.Stream, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !unlocked.Load() {
+					http.Error(w, "locked", 423)
+					return
+				}
+				if origin != "http://"+r.Host {
+					http.Error(w, "wrong origin", 403)
+					return
+				}
+				w.Header().Set("X-Native-Path", r.URL.RequestURI())
+				io.Copy(w, r.Body)
+			}), flowersec.HTTPStreamOptions{})
+		}); err != nil {
 			return nil, err
 		}
 	}

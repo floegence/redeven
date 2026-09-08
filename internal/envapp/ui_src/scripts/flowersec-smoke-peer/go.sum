@@ -2,6 +2,8 @@ github.com/dunglas/httpsfv v1.1.1 h1:HoSs101zIE9I23DlqlmljJ/OIi7ILwrH347pXhRZdxI
 github.com/dunglas/httpsfv v1.1.1/go.mod h1:zID2mqw9mFsnt7YC3vYQ9/cjq30q41W+1AnDwH8TiMg=
 github.com/floegence/flowersec/flowersec-go/v5 v5.0.1 h1:jMuspfynHlCnUwtSOZs6kc3Xd4qnFPkXitgV2w8d3Qo=
 github.com/floegence/flowersec/flowersec-go/v5 v5.0.1/go.mod h1:/y+M+qkr1aZyqHA1qXn4z7VFURSf1upQu/0FAdhYztc=
+github.com/floegence/flowersec/flowersec-go/v5 v5.1.0 h1:vqwmd3VMllnPbf0b/hS+3nM+UvdqCH0TrgkVo6as4yc=
+github.com/floegence/flowersec/flowersec-go/v5 v5.1.0/go.mod h1:2LEvswGb+xAVjjocxc5R8iaPGMWmID1jPeKr5ogKLug=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/libp2p/go-buffer-pool v0.0.2 h1:QNK2iAFa8gjAe1SPz6mHSMuCcjs+X1wlHzeOSqcmlfs=

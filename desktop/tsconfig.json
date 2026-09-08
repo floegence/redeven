@@ -7,14 +7,29 @@
     "rootDir": "src",
     "baseUrl": ".",
     "paths": {
-      "@floegence/floe-webapp-core/themes": ["node_modules/@floegence/floe-webapp-core/dist/themes.d.ts"]
+      "@floegence/floe-webapp-core/themes": [
+        "node_modules/@floegence/floe-webapp-core/dist/themes.d.ts"
+      ],
+      "@floegence/flowersec-core/node": [
+        "node_modules/@floegence/flowersec-core/dist/node/index.d.ts"
+      ],
+      "@floegence/floe-webapp-boot/artifact-source": [
+        "node_modules/@floegence/floe-webapp-boot/dist/artifact-source.d.ts"
+      ]
     },
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "types": ["node", "vitest/globals"]
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }

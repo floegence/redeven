@@ -425,3 +425,16 @@ func normalizeMeta(name string, description string) (string, string, error) {
 	}
 	return name, description, nil
 }
+
+// BindRunningCodeSpace does not start or recover an instance. Native connections
+// must fail when their exact running generation is no longer available.
+func (s *Service) BindRunningCodeSpace(ctx context.Context, id string) (appserver.NativeCodeSpaceBinding, error) {
+	if s == nil || s.runner == nil || !IsValidCodeSpaceID(id) {
+		return appserver.NativeCodeSpaceBinding{}, errors.New("invalid codespace")
+	}
+	ins, ok := s.runner.Get(id)
+	if !ok || ins.Lifetime() == nil || ins.Lifetime().Err() != nil {
+		return appserver.NativeCodeSpaceBinding{}, errors.New("codespace not ready")
+	}
+	return appserver.NativeCodeSpaceBinding{CodeSpaceID: id, InstanceID: ins.InstanceID, Port: ins.Port, WorkspacePath: ins.WorkspacePath, Context: ins.Lifetime(), AdmitConnection: ins.AdmitNativeConnection}, nil
+}

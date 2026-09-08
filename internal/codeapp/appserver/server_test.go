@@ -3750,3 +3750,7 @@ func TestServer_PluginOriginCannotAccessManagementSurfaces(t *testing.T) {
 		})
 	}
 }
+
+func (s *stubBackend) BindRunningCodeSpace(context.Context, string) (NativeCodeSpaceBinding, error) {
+	return NativeCodeSpaceBinding{}, errors.New("not implemented")
+}

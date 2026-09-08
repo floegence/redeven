@@ -1,3 +1,8 @@
+import { createNativeCodeSpaceGateway, type NativeCodeSpaceGateway } from './codespaceNativeGateway';
+import { createLocalNativeCodeSpaceRoute } from './codespaceNativeRoute';
+import { createRemoteNativeCodeSpaceRoute } from './codespaceNativeRemote';
+import { NativeCodeSpaceProfiles, nativeCodeSpaceIdentity } from './codespaceNativeProfiles';
+import { installNativeCodeSpaceSession } from './codespaceNativeSession';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import { once } from 'node:events';
@@ -256,7 +261,6 @@ import {
   desktopLoopbackBrowserDisplayURL,
   desktopLoopbackProtectedRouteURL,
   isAllowedAppNavigation,
-  isAllowedCodespaceWindowNavigation,
   isAllowedWebServiceWindowNavigation,
   isDesktopLoopbackWebServiceURL,
   resolveDesktopLoopbackBrowserAddress,
@@ -764,6 +768,7 @@ type DesktopSessionRecord = {
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
   codespace_windows: Map<string, DesktopTrackedWindow>;
+  codespace_native: Map<string, { identity: string; partition: string; lifetime: AbortController; gateway?: NativeCodeSpaceGateway; dispose?: () => void; opening?: Promise<void> }>;
   web_service_windows: Map<string, DesktopTrackedWindow>;
   web_service_loopback_gateways: Map<string, WebServiceLoopbackGateway>;
   codespace_loading_documents: Map<string, CodespaceLoadingWindowCopy>;
@@ -8188,87 +8193,91 @@ function openSessionChildWindow(
   return childWindow.browserWindow;
 }
 
-function openOrReuseSessionCodespaceWindow(
-  sessionKey: DesktopSessionKey,
-  codeSpaceID: string,
-  targetURL: string,
-): BrowserWindow | null {
-  const sessionRecord = sessionsByKey.get(sessionKey);
-  if (!sessionRecord) {
-    return null;
-  }
-
-  const existing = sessionRecord.codespace_windows.get(codeSpaceID);
-  const existingWindow = liveTrackedBrowserWindow(existing);
-  if (existing && existingWindow) {
-    void existingWindow.loadURL(targetURL);
-    presentAppWindow(existingWindow, { stealAppFocus: true });
-    return existingWindow;
-  }
-  if (existing) {
-    sessionRecord.codespace_windows.delete(codeSpaceID);
-    sessionKeyByWebContentsID.delete(existing.webContentsID);
-  }
-
-  const codespaceWindow = createBrowserWindow({
-    targetURL,
-    stateKey: sessionCodespaceWindowStateKey(sessionKey, codeSpaceID),
-    role: 'codespace_child',
-    sessionPartition: sessionRecord.session_partition,
-    diagnostics: sessionRecord.diagnostics,
-    chrome: 'native',
-    preload: 'none',
-    stealAppFocus: true,
-    onWindowOpen: (nextURL) => {
-      if (isAllowedCodespaceWindowNavigation(nextURL, sessionRecord.allowed_base_url, codeSpaceID)) {
-        openSessionCodespaceWindow(sessionKey, codeSpaceID, nextURL);
-      } else {
-        openExternal(nextURL);
-      }
-    },
-    onWillNavigate: (nextURL, event) => {
-      if (isAllowedCodespaceWindowNavigation(nextURL, sessionRecord.allowed_base_url, codeSpaceID)) {
-        return;
-      }
-      event.preventDefault();
-      openExternal(nextURL);
-    },
-    onClosed: (closedWindow) => {
-      sessionRecord.codespace_windows.delete(codeSpaceID);
-      sessionRecord.codespace_loading_documents.delete(codeSpaceID);
-      sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
-    },
-  });
-
-  sessionRecord.codespace_windows.set(codeSpaceID, codespaceWindow);
-  sessionKeyByWebContentsID.set(codespaceWindow.webContentsID, sessionKey);
-  return codespaceWindow.browserWindow;
+let nativeCodeSpaceProfiles: NativeCodeSpaceProfiles | undefined;
+function codeSpaceProfiles(): NativeCodeSpaceProfiles {
+  return nativeCodeSpaceProfiles ??= new NativeCodeSpaceProfiles(path.join(app.getPath('userData'), 'codespace-profiles.json'));
 }
 
-function openSessionCodespaceLoadingWindow(
+async function openSessionCodespaceLoadingWindow(
   sessionKey: DesktopSessionKey,
   codeSpaceID: string,
   copy: CodespaceLoadingWindowCopy = {},
-): BrowserWindow | null {
-  const sessionRecord = sessionsByKey.get(sessionKey);
-  if (!sessionRecord) {
-    return null;
+): Promise<BrowserWindow | null> {
+  const record = sessionsByKey.get(sessionKey);
+  if (!record || record.closing) return null;
+  const current = liveTrackedBrowserWindow(record.codespace_windows.get(codeSpaceID));
+  if (current) {
+    if (!record.codespace_native.get(codeSpaceID)?.gateway) {
+      record.codespace_loading_documents.set(codeSpaceID, copy);
+      await current.loadURL(buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), copy));
+    }
+    presentAppWindow(current, { stealAppFocus: true });
+    return current;
   }
-  sessionRecord.codespace_loading_documents.set(codeSpaceID, copy);
-  return openOrReuseSessionCodespaceWindow(
-    sessionKey,
-    codeSpaceID,
-    buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), copy),
-  );
+  // A late setup failure must not resurrect a child that the user already closed.
+  if (copy.state === 'error') return null;
+  const target = record.target;
+  const account = target.kind === 'local_environment' && target.provider_origin
+    ? savedControlPlaneByIdentity(await loadDesktopPreferencesCached(), target.provider_origin, target.provider_id ?? '')?.account.user_public_id ?? '' : '';
+  if (record.closing) return null;
+  const concurrent = liveTrackedBrowserWindow(record.codespace_windows.get(codeSpaceID));
+  if (concurrent) return concurrent;
+  const identity = nativeCodeSpaceIdentity(target, codeSpaceID, account);
+  const state = { identity, partition: `persist:redeven-code:${identity}`, lifetime: new AbortController() } as NonNullable<ReturnType<typeof record.codespace_native.get>>;
+  record.codespace_native.set(codeSpaceID, state);
+  record.codespace_loading_documents.set(codeSpaceID, copy);
+  const allowed = (url: string): boolean => {
+    try { return state.gateway !== undefined && new URL(url).origin === state.gateway.origin; } catch { return false; }
+  };
+  const window = createBrowserWindow({
+    targetURL: buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), copy),
+    stateKey: sessionCodespaceWindowStateKey(sessionKey, codeSpaceID), role: 'codespace_child',
+    sessionPartition: state.partition, diagnostics: record.diagnostics, chrome: 'native', preload: 'none', stealAppFocus: true,
+    onWindowOpen: (url) => { if (allowed(url)) { void window.browserWindow.loadURL(url); } else { openExternal(url); } },
+    onWillNavigate: (url, event) => { if (!allowed(url)) { event.preventDefault(); openExternal(url); } },
+    onClosed: (closed) => {
+      state.lifetime.abort(); state.dispose?.(); void state.gateway?.close();
+      recordWindowLifecycle(record.diagnostics, 'codespace_native_closed', 'native CodeSpace closed', { code_space_id: codeSpaceID });
+      if (record.codespace_native.get(codeSpaceID) === state) record.codespace_native.delete(codeSpaceID);
+      record.codespace_windows.delete(codeSpaceID); record.codespace_loading_documents.delete(codeSpaceID);
+      sessionKeyByWebContentsID.delete(closed.webContentsID);
+    },
+  });
+  record.codespace_windows.set(codeSpaceID, window);
+  // Editor children have no shell IPC authority or privileged preload.
+  return window.browserWindow;
 }
 
-function openSessionCodespaceWindow(
-  sessionKey: DesktopSessionKey,
-  codeSpaceID: string,
-  targetURL: string,
-): BrowserWindow | null {
-  sessionsByKey.get(sessionKey)?.codespace_loading_documents.delete(codeSpaceID);
-  return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, targetURL);
+async function prepareSessionNativeCodeSpace(record: DesktopSessionRecord, codeSpaceID: string, password?: string): Promise<void> {
+  const state = record.codespace_native.get(codeSpaceID);
+  const trackedWindow = record.codespace_windows.get(codeSpaceID);
+  const window = liveTrackedBrowserWindow(trackedWindow);
+  if (!state || !trackedWindow || !window || state.lifetime.signal.aborted) throw new Error('codespace_closed');
+  if (state.gateway) { presentAppWindow(window, { stealAppFocus: true }); return; }
+  if (state.opening) return state.opening;
+  state.opening = (async () => {
+    const signal = state.lifetime.signal;
+    const profile = codeSpaceProfiles();
+    const port = profile.port(state.identity);
+    const webSession = session.fromPartition(record.session_partition);
+    const route = record.transport.kind === 'provider_remote'
+      ? await createRemoteNativeCodeSpaceRoute({ webSession, environmentOrigin: record.transport.baseURL, envPublicID: record.target.kind === 'local_environment' ? record.target.env_public_id ?? '' : '', codeSpaceID, password, signal })
+      : await createLocalNativeCodeSpaceRoute({ transport: record.transport, startup: record.startup, webSession, codeSpaceID, signal });
+    if (signal.aborted) { await route.close(); throw new Error('codespace_closed'); }
+    const gateway = await createNativeCodeSpaceGateway(route, port);
+    try {
+      if (signal.aborted || window.isDestroyed()) throw new Error('codespace_closed');
+      profile.remember(state.identity, gateway.port);
+      await session.fromPartition(state.partition).setProxy({ mode: 'direct' });
+      if (signal.aborted || window.isDestroyed()) throw new Error('codespace_closed');
+      state.dispose = installNativeCodeSpaceSession(session.fromPartition(state.partition), gateway, trackedWindow.webContentsID);
+      state.gateway = gateway;
+      record.codespace_loading_documents.delete(codeSpaceID);
+      await window.loadURL(gateway.origin + '/');
+      recordWindowLifecycle(record.diagnostics, 'codespace_native_ready', 'native CodeSpace ready', { code_space_id: codeSpaceID, transport: record.transport.kind, port: gateway.port });
+    } catch (error) { state.gateway = undefined; state.dispose?.(); state.dispose = undefined; await gateway.close(); throw error; }
+  })();
+  try { await state.opening; } finally { state.opening = undefined; }
 }
 
 function refreshCodespaceLoadingDocuments(): void {
@@ -8285,47 +8294,23 @@ function refreshCodespaceLoadingDocuments(): void {
   }
 }
 
-function openCodespaceWindowFromShell(
-  sessionRecord: DesktopSessionRecord | null,
+async function openCodespaceWindowFromShell(
+  record: DesktopSessionRecord | null,
   request: DesktopShellOpenCodespaceWindowRequest,
-): DesktopShellOpenCodespaceWindowResponse {
-  if (!sessionRecord || sessionRecord.closing) {
-    return {
-      ok: false,
-      message: DESKTOP_STALE_WINDOW_MESSAGE,
-    };
-  }
-  if (request.mode === 'loading') {
-    const win = openSessionCodespaceLoadingWindow(sessionRecord.session_key, request.code_space_id, {
-      ...(request.state ? { state: request.state } : {}),
-      ...(request.title ? { title: request.title } : {}),
-      ...(request.detail ? { detail: request.detail } : {}),
-    });
-    if (!win) {
-      return {
-        ok: false,
-        message: DESKTOP_STALE_WINDOW_MESSAGE,
-      };
+): Promise<DesktopShellOpenCodespaceWindowResponse> {
+  if (!record || record.closing) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
+  try {
+    if (request.mode === 'loading') {
+      const window = await openSessionCodespaceLoadingWindow(record.session_key, request.code_space_id, request);
+      return { ok: window !== null };
     }
+    await prepareSessionNativeCodeSpace(record, request.code_space_id, request.password);
     return { ok: true };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    const i18n = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale);
+    return { ok: false, message: code === 'codespace_password_required' ? code : i18n.t((error as NodeJS.ErrnoException).code === 'EADDRINUSE' ? 'codespaceNative.portInUse' : code === 'codespace_profiles_invalid' ? 'codespaceNative.profileInvalid' : 'codespaceNative.unavailable') };
   }
-
-  if (!isAllowedCodespaceWindowNavigation(request.url, sessionRecord.allowed_base_url, request.code_space_id)) {
-    return {
-      ok: false,
-      message: 'Desktop refused to open a codespace window outside this environment session.',
-    };
-  }
-
-  const win = openSessionCodespaceWindow(sessionRecord.session_key, request.code_space_id, request.url);
-  if (!win) {
-    return {
-      ok: false,
-      message: DESKTOP_STALE_WINDOW_MESSAGE,
-    };
-  }
-
-  return { ok: true };
 }
 
 async function prepareWebServiceWindowPartition(
@@ -9304,6 +9289,7 @@ async function createSessionRecord(
     root_window: rootWindow,
     child_windows: new Map(),
     codespace_windows: new Map(),
+    codespace_native: new Map(),
     web_service_windows: new Map(),
     web_service_loopback_gateways: new Map(),
     codespace_loading_documents: new Map(),
@@ -9424,6 +9410,7 @@ async function finalizeSessionClosure(
     }
     sessionRecord.child_windows.clear();
 
+    const nativeCodeSpaces = Array.from(sessionRecord.codespace_native.values());
     for (const codespaceWindow of sessionRecord.codespace_windows.values()) {
       sessionKeyByWebContentsID.delete(codespaceWindow.webContentsID);
       const browserWindow = liveTrackedBrowserWindow(codespaceWindow);
@@ -9431,6 +9418,10 @@ async function finalizeSessionClosure(
         browserWindow.destroy();
       }
     }
+    await Promise.all(nativeCodeSpaces.map(async (state) => {
+      state.lifetime.abort(); state.dispose?.(); await state.gateway?.close(); await state.opening?.catch(() => undefined);
+    }));
+    sessionRecord.codespace_native.clear();
     sessionRecord.codespace_windows.clear();
     sessionRecord.codespace_loading_documents.clear();
 
@@ -18100,7 +18091,9 @@ if (!app.requestSingleInstanceLock()) {
       };
     }
 
-    return openCodespaceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (!record || event.senderFrame !== event.sender.mainFrame || record.root_window.webContentsID !== event.sender.id) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
+    return openCodespaceWindowFromShell(record, normalized);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL, async (event, request): Promise<DesktopShellOpenWebServiceWindowResponse> => {
     const normalized = normalizeDesktopShellOpenWebServiceWindowRequest(request);

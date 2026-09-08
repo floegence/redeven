@@ -209,37 +209,6 @@ function decodePathSegment(value: string): string {
   }
 }
 
-export function isCodespaceURLForCodeSpace(input: string, codeSpaceID: string): boolean {
-  const expectedID = compactCodeSpaceID(codeSpaceID);
-  if (!expectedID) {
-    return false;
-  }
-
-  try {
-    const url = new URL(input);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return false;
-    }
-
-    const labels = splitHostname(url.hostname);
-    if (labels[0] === `cs-${expectedID.toLowerCase()}`) {
-      return true;
-    }
-
-    const pathSegments = url.pathname
-      .split('/')
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-    return pathSegments[0] === 'cs' && decodePathSegment(pathSegments[1] ?? '') === expectedID;
-  } catch {
-    return false;
-  }
-}
-
-export function isAllowedCodespaceWindowNavigation(input: string, allowedBaseURL: string, codeSpaceID: string): boolean {
-  return isAllowedAppNavigation(input, allowedBaseURL) && isCodespaceURLForCodeSpace(input, codeSpaceID);
-}
-
 export function isPortForwardURLForForward(input: string, forwardID: string): boolean {
   const expectedID = compactCodeSpaceID(forwardID);
   if (!expectedID) return false;

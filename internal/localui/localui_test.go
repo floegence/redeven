@@ -1399,3 +1399,7 @@ func TestSameOriginWSRequest(t *testing.T) {
 		t.Fatalf("expected mismatched origin to fail")
 	}
 }
+
+func (localUITestBackend) BindRunningCodeSpace(context.Context, string) (appserverpkg.NativeCodeSpaceBinding, error) {
+	return appserverpkg.NativeCodeSpaceBinding{}, errors.New("not implemented")
+}

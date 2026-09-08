@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@floegence/flowersec-core':
-        specifier: 5.0.1
-        version: 5.0.1
+        specifier: 5.1.0
+        version: 5.1.0
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.4
@@ -233,39 +233,39 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@floegence/flowersec-core@5.0.1':
-    resolution: {integrity: sha512-VmbS1OvK8VOUqq7Ws5K+eqPNjBJh4RQcIkb2SoLeCV+jQLHIajASfMeUjBDZ/cT1trVnKrpb8sdpS+vEeEbnbA==}
+  '@floegence/flowersec-core@5.1.0':
+    resolution: {integrity: sha512-oysiuog1NbH37KsGtVMqGoneG/R526U9BW0+k0K0Ms85ACJio/gw7r3ZvmdNTRPHsUDosiZQq6Vd7ZY05uJEOg==}
     engines: {node: '>=24.20.0'}
     hasBin: true
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.0.1':
-    resolution: {integrity: sha512-KrRx6lkZIjl2h1wVR4JzHauBn+CIY0aoH42HY0RfYnNE/YKgL50kXW+1MIqxRCAKQWVs9yiNcyMyKVhTy5eWuw==}
+  '@floegence/flowersec-node-native-darwin-arm64@5.1.0':
+    resolution: {integrity: sha512-MBz69w4ROIWgVIbj8C+XKV6X2VKxR/tmVneKXfxb/j2369EklUa59MZsgXG+E3RoKWoZ6Qq8YWPmUNAUshAnNw==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-darwin-x64@5.0.1':
-    resolution: {integrity: sha512-WYA88sPr+J6DthBCJw2uq771s1YYHsMS/N/kIeVetMiEOMdt89l7Q3QHBHgRHGgCeIuf9eRc5UEE/LJ05txLGg==}
+  '@floegence/flowersec-node-native-darwin-x64@5.1.0':
+    resolution: {integrity: sha512-ZeXo6bOMa4awQOKFO8eUUt7eoML5RSyKWN1GCWGTT3IbSN+u+3+4/En/soKQ7mMia4FXo5AxuuOFbjSfnv1gKg==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.0.1':
-    resolution: {integrity: sha512-/t77dXzHNlV5Hgd4u3Hzu/FKrqtmeFttJL228P3/dAfRT/AzOWTZlWvTp1bNT7/fGSAKvBP4EcHTy/hTPbWPbw==}
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.1.0':
+    resolution: {integrity: sha512-bVLHKpoverRjjl568EYctL3UQ68g50LysDATroN6Dr93/0hx6y2obDi/3iq/3Q1+3eYYFGkkW/50sx5S5f9KXQ==}
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.0.1':
-    resolution: {integrity: sha512-hBCG7GLjwBwXdW5K5UaEDPW/vIV1pepcx1PvqJhmx02+5H7ZA6hQ7sa5rxgW0/wOA4K8wp+KsKtnFlLI+nnTPg==}
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.1.0':
+    resolution: {integrity: sha512-ccwlqi6mzk5En32eP7rzYyCxYq9AaI5EA5lPcc1QFuHRpLCrpYulON7ZoQZT/aX2f31WBMkiTaz3/9DuUZ7tRw==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@floegence/flowersec-node-native@5.0.1':
-    resolution: {integrity: sha512-H8UXo7SHfdG7HCakMSI1DIoE3K0EP6dMHnzSbfd7Hr7cIWxd6UYZwt2V1dYd5dqqE2z8oAWAcYNOnB4gT/59aw==}
+  '@floegence/flowersec-node-native@5.1.0':
+    resolution: {integrity: sha512-nGjirQdMV0bvJ2H99bm5PP1CxY2oBj1H4ancA+wwyciPCQXCIL8okmEkkoO5xZqEcjuvHoGDo0IN3/nK99RjTQ==}
     engines: {node: '>=24.20.0'}
 
   '@humanfs/core@0.19.2':
@@ -1081,8 +1081,8 @@ packages:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
 
-  ws@8.21.2:
-    resolution: {integrity: sha512-54dMVAo4WIe6SKy3vBgN+9bJZqqQ8IMRevAkOLQALhi49qkkQDQfWdAZ8KQlXiEabw88ARXXdUrlvtbKQX+aKw==}
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -1223,37 +1223,37 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@floegence/flowersec-core@5.0.1':
+  '@floegence/flowersec-core@5.1.0':
     dependencies:
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
       tr46: 6.0.0
-      ws: 8.21.2
+      ws: 8.21.3
     optionalDependencies:
-      '@floegence/flowersec-node-native': 5.0.1
+      '@floegence/flowersec-node-native': 5.1.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/flowersec-node-native-darwin-arm64@5.0.1':
+  '@floegence/flowersec-node-native-darwin-arm64@5.1.0':
     optional: true
 
-  '@floegence/flowersec-node-native-darwin-x64@5.0.1':
+  '@floegence/flowersec-node-native-darwin-x64@5.1.0':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@5.0.1':
+  '@floegence/flowersec-node-native-linux-arm64-gnu@5.1.0':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@5.0.1':
+  '@floegence/flowersec-node-native-linux-x64-gnu@5.1.0':
     optional: true
 
-  '@floegence/flowersec-node-native@5.0.1':
+  '@floegence/flowersec-node-native@5.1.0':
     optionalDependencies:
-      '@floegence/flowersec-node-native-darwin-arm64': 5.0.1
-      '@floegence/flowersec-node-native-darwin-x64': 5.0.1
-      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.0.1
-      '@floegence/flowersec-node-native-linux-x64-gnu': 5.0.1
+      '@floegence/flowersec-node-native-darwin-arm64': 5.1.0
+      '@floegence/flowersec-node-native-darwin-x64': 5.1.0
+      '@floegence/flowersec-node-native-linux-arm64-gnu': 5.1.0
+      '@floegence/flowersec-node-native-linux-x64-gnu': 5.1.0
     optional: true
 
   '@humanfs/core@0.19.2':
@@ -1960,6 +1960,6 @@ snapshots:
 
   word-wrap@1.2.5: {}
 
-  ws@8.21.2: {}
+  ws@8.21.3: {}
 
   yocto-queue@0.1.0: {}

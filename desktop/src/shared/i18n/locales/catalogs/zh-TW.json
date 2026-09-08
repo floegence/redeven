@@ -227,8 +227,8 @@
       "threadSyncFailed": "Flower 無法同步最新回覆，請再試一次。",
       "activeTurnBusy": "上一則回覆仍在執行。停止後即可再次傳送。",
       "composerErrorTitle": "Flower 傳送失敗。",
-    "expandThinking": "展開完整思考",
-    "collapseThinking": "收起思考",
+      "expandThinking": "展開完整思考",
+      "collapseThinking": "收起思考",
       "modelStatusPreparing": "正在準備模型請求...",
       "modelStatusWaitingResponse": "正在等待模型回應...",
       "modelStatusStreaming": "正在思考...",
@@ -2300,5 +2300,10 @@
     "startFailedDetail": "Redeven 無法啟動此環境，請重試。",
     "openFailedDetail": "環境已啟動，但 Redeven 無法開啟工作區，請重試。",
     "preflightFailedDetail": "Redeven 無法檢查此環境，請重試。"
+  },
+  "codespaceNative": {
+    "portInUse": "此 CodeSpace 儲存的本機連接埠正在使用中。請關閉使用該連接埠的應用程式，然後重試。",
+    "unavailable": "CodeSpace 連線無法使用。請檢查環境連線，然後重新開啟。",
+    "profileInvalid": "無法讀取儲存的 CodeSpace 瀏覽器設定。請先還原 codespace-profiles.json，再重新開啟此 CodeSpace。"
   }
 }

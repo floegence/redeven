@@ -1318,6 +1318,12 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess flowersec.Session,
 		return err
 	}
 
+	cleanupNative, err := a.registerNativeCodeSpaceStreams(ctx, handlers, meta)
+	if err != nil {
+		return err
+	}
+	defer cleanupNative()
+
 	proxyOpts := runtimeproxy.Options{
 		Upstream:               up,
 		UpstreamOrigin:         origin,

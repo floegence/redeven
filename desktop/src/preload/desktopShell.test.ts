@@ -129,7 +129,7 @@ describe('bootstrapDesktopShellBridge', () => {
     });
   });
 
-  it('normalizes codespace window loading and navigate requests', async () => {
+  it('normalizes codespace loading and resource intents', async () => {
     const { normalizeDesktopShellOpenCodespaceWindowRequest } = await import('../shared/desktopShellCodespaceWindowIPC');
 
     expect(normalizeDesktopShellOpenCodespaceWindowRequest({
@@ -146,24 +146,8 @@ describe('bootstrapDesktopShellBridge', () => {
       detail: 'Try again.',
     });
 
-    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
-      mode: 'navigate',
-      code_space_id: 'demo',
-      url: 'http://127.0.0.1:43123/cs/demo/',
-    })).toEqual({
-      mode: 'navigate',
-      code_space_id: 'demo',
-      url: 'http://127.0.0.1:43123/cs/demo/',
-    });
-
-    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
-      code_space_id: 'demo',
-      url: 'http://127.0.0.1:43123/cs/demo/',
-    })).toEqual({
-      mode: 'navigate',
-      code_space_id: 'demo',
-      url: 'http://127.0.0.1:43123/cs/demo/',
-    });
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({ mode: 'open', code_space_id: 'demo' })).toEqual({mode: 'open',code_space_id: 'demo'});
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({code_space_id: 'demo',url: 'http://127.0.0.1:43123/cs/demo/'})).toBeNull();
 
     expect(normalizeDesktopShellOpenCodespaceWindowRequest({
       mode: 'loading',

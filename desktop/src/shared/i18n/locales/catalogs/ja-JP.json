@@ -227,8 +227,8 @@
       "threadSyncFailed": "Flower は最新の返信を同期できませんでした。もう一度お試しください。",
       "activeTurnBusy": "前の返信はまだ実行中です。もう一度送信する前に停止できます。",
       "composerErrorTitle": "Flower は送信できませんでした。",
-    "expandThinking": "思考をすべて展開",
-    "collapseThinking": "思考を折りたたむ",
+      "expandThinking": "思考をすべて展開",
+      "collapseThinking": "思考を折りたたむ",
       "modelStatusPreparing": "モデルリクエストを準備中...",
       "modelStatusWaitingResponse": "モデルの応答を待っています...",
       "modelStatusStreaming": "思考中...",
@@ -2300,5 +2300,10 @@
     "startFailedDetail": "Redeven はこの環境を起動できませんでした。もう一度お試しください。",
     "openFailedDetail": "環境は起動しましたが、Redeven はワークスペースを開けませんでした。もう一度お試しください。",
     "preflightFailedDetail": "Redeven はこの環境を確認できませんでした。もう一度お試しください。"
+  },
+  "codespaceNative": {
+    "portInUse": "この CodeSpace に保存されたローカルポートは使用中です。そのポートを使用しているアプリを閉じてから、もう一度お試しください。",
+    "unavailable": "CodeSpace に接続できません。環境への接続を確認し、もう一度開いてください。",
+    "profileInvalid": "保存された CodeSpace のブラウザープロファイルを読み取れません。codespace-profiles.json を復元してから、この CodeSpace を開き直してください。"
   }
 }

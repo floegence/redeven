@@ -93,7 +93,8 @@ type Options struct {
 }
 
 type Server struct {
-	log *slog.Logger
+	nativeAccess sync.Map // *nativeCodeAccess -> access-session cancellation
+	log          *slog.Logger
 
 	bind                   BindSpec
 	configPath             string
@@ -212,6 +213,7 @@ func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("/cs/", s.handleCodeSpace)
+	mux.HandleFunc("/api/local/codespaces/", s.handleNativeCodeSpace)
 	mux.HandleFunc("/pf/", s.handlePortForward)
 	// Browsers may request these root-level assets regardless of the actual SPA base path.
 	// Keep them available to avoid noisy 404s in Local UI mode.
@@ -235,7 +237,16 @@ func (s *Server) handler() http.Handler {
 	if s.diag != nil {
 		handler = s.withDiagnostics(handler)
 	}
-	return withLocalUISecurityHeaders(handler)
+	secured := withLocalUISecurityHeaders(handler)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Native editor responses own their CSP and embedding policy. The listener,
+		// resource permission, generation, and AccessGate checks still apply.
+		if strings.HasPrefix(r.URL.Path, "/api/local/codespaces/") {
+			handler.ServeHTTP(w, r)
+			return
+		}
+		secured.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) HandlerForDesktopBridge() http.Handler {
@@ -906,6 +917,7 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.closeNativeCodeAccess("")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for _, directSession := range s.beginDirectShutdown() {
@@ -2696,9 +2708,10 @@ func (s *Server) pluginAccessAllowsRequest(r *http.Request, channelID string) bo
 }
 
 func (s *Server) closePluginAccessSession(accessSessionID string) {
-	if s == nil {
+	if s == nil || strings.TrimSpace(accessSessionID) == "" {
 		return
 	}
+	s.closeNativeCodeAccess(accessSessionID)
 	accessSessionID = strings.TrimSpace(accessSessionID)
 	if accessSessionID == "" {
 		return

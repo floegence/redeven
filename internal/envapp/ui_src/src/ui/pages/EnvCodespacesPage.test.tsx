@@ -1131,13 +1131,38 @@ describe('EnvCodespacesPage', () => {
       title: 'Opening Codespace',
     }));
     expect(openCodespaceWindowBridge.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
-      mode: 'navigate',
+      mode: 'open',
       code_space_id: 'space-1',
     }));
-    expect(String(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url ?? '')).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url).toBeUndefined();
     expect(controlplaneMocks.mintEnvEntryTicketForApp).not.toHaveBeenCalled();
 
     windowOpenSpy.mockRestore();
+  });
+
+  it('requests a Code App password in the trusted page and clears rejected input before retrying', async () => {
+    const bridge = vi.fn().mockImplementation(async (request) => request.mode === 'loading' || request.password === 'correct-password' ? { ok: true } : { ok: false, message: 'codespace_password_required' });
+    window.redevenDesktopShell = { openCodespaceWindow: bridge };
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Desktop')?.click();
+    await flushPage();
+    const submit = async (password: string) => {
+      const input = host.querySelector<HTMLInputElement>('input[type="password"]');
+      expect(input).toBeTruthy();
+      input!.value = password;
+      input!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      input!.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushPage();
+    };
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await submit('incorrect-password');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('The access password is incorrect.');
+    expect(host.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe('');
+    await submit('correct-password');
+    expect(host.querySelector('input[type="password"]')).toBeNull();
+    expect(bridge).toHaveBeenLastCalledWith({ mode: 'open', code_space_id: 'space-1', password: 'correct-password' });
+    expect(controlplaneMocks.mintEnvEntryTicketForApp).not.toHaveBeenCalled();
   });
 
   it('keeps system browser available from the desktop split menu', async () => {
@@ -1316,13 +1341,13 @@ describe('EnvCodespacesPage', () => {
 
     expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(2);
     expect(openCodespaceWindowBridge.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
-      mode: 'navigate',
+      mode: 'open',
       code_space_id: 'space-1',
     }));
-    expect(String(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url ?? '')).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url).toBeUndefined();
   });
 
-  it('opens a trusted-launcher codespace in a desktop window from the primary action', async () => {
+  it('sends only a CodeSpace intent to Desktop for a remote environment', async () => {
     const openCodespaceWindowBridge = vi.fn().mockResolvedValue({ ok: true });
     const openExternalURLBridge = vi.fn().mockResolvedValue({ ok: true });
     window.redevenDesktopShell = {
@@ -1344,11 +1369,7 @@ describe('EnvCodespacesPage', () => {
     await flushPage();
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
-    expect(controlplaneMocks.mintEnvEntryTicketForApp).toHaveBeenCalledWith({
-      envId: 'env_local',
-      floeApp: 'com.floegence.redeven.code',
-      codeSpaceId: 'space-1',
-    });
+    expect(controlplaneMocks.mintEnvEntryTicketForApp).not.toHaveBeenCalled();
     expect(openExternalURLBridge).not.toHaveBeenCalled();
     expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(2);
     expect(openCodespaceWindowBridge.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
@@ -1357,9 +1378,9 @@ describe('EnvCodespacesPage', () => {
       title: 'Opening Codespace',
     }));
     const targetURL = String(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url ?? '');
-    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]?.mode).toBe('navigate');
+    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]?.mode).toBe('open');
     expect(openCodespaceWindowBridge.mock.calls[1]?.[0]?.code_space_id).toBe('space-1');
-    expect(targetURL).toContain('https://codespace.test/_redeven_boot/?env=env_local#redeven=');
+    expect(targetURL).toBe('');
 
     windowOpenSpy.mockRestore();
   });

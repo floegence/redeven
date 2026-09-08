@@ -2,6 +2,8 @@ package codeserver
 
 import (
 	"bufio"
+	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -55,7 +57,12 @@ type Instance struct {
 	PID           int       `json:"pid"`
 	StartedAt     time.Time `json:"started_at"`
 
-	cmd *exec.Cmd
+	cmd               *exec.Cmd
+	InstanceID        string `json:"instance_id"`
+	lifetime          context.Context
+	cancel            context.CancelFunc
+	exited            <-chan struct{}
+	nativeConnections chan struct{}
 }
 
 func NewRunner(opts RunnerOptions) *Runner {
@@ -86,7 +93,7 @@ func (r *Runner) Get(codeSpaceID string) (*Instance, bool) {
 	if !ok || ins == nil {
 		return nil, false
 	}
-	if ins.cmd == nil || ins.cmd.Process == nil {
+	if ins.cmd == nil || ins.cmd.Process == nil || ins.lifetime.Err() != nil {
 		return nil, false
 	}
 	// Best-effort liveness check.
@@ -111,9 +118,12 @@ func (r *Runner) EnsureRunning(codeSpaceID string, workspacePath string, desired
 	defer lk.Unlock()
 
 	r.mu.Lock()
-	if ins, ok := r.instances[id]; ok && ins != nil && ins.cmd != nil && ins.cmd.Process != nil && isPortListening(ins.Port) {
+	if ins, ok := r.instances[id]; ok && ins != nil && ins.cmd != nil && ins.cmd.Process != nil && ins.lifetime.Err() == nil && isPortListening(ins.Port) {
 		r.mu.Unlock()
 		return ins, nil
+	}
+	if previous := r.instances[id]; previous != nil && previous.cancel != nil {
+		previous.cancel()
 	}
 	r.mu.Unlock()
 
@@ -172,6 +182,9 @@ func (r *Runner) Stop(codeSpaceID string) error {
 	r.mu.Lock()
 	ins := r.instances[id]
 	delete(r.instances, id)
+	if ins != nil && ins.cancel != nil {
+		ins.cancel()
+	}
 	r.mu.Unlock()
 	sessionSocketPath := r.sessionSocketPathForCodeSpace(id)
 
@@ -182,7 +195,9 @@ func (r *Runner) Stop(codeSpaceID string) error {
 
 	// Hard stop: code-server is behind E2EE, so we can keep process management simple for MVP.
 	_ = killCmdProcessGroup(ins.cmd)
-	_, _ = ins.cmd.Process.Wait()
+	if ins.exited != nil {
+		<-ins.exited
+	}
 	_, _ = r.killStaleCodeServerProcessesBySessionSocket(sessionSocketPath)
 	return nil
 }
@@ -335,7 +350,11 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		return nil, enrichStartError(err, stdoutPath, stderrPath, execPath, prefixArgs)
 	}
 
+	lifetime, cancel := context.WithCancel(context.Background())
+	exited := make(chan struct{})
+	go func() { _ = cmd.Wait(); cancel(); close(exited) }()
 	return &Instance{
+		InstanceID: rand.Text(), lifetime: lifetime, cancel: cancel, exited: exited, nativeConnections: make(chan struct{}, 64),
 		CodeSpaceID:   codeSpaceID,
 		WorkspacePath: workspacePath,
 		Port:          port,
@@ -772,4 +791,21 @@ func parseCodeServerPIDsFromPSOutput(raw string, sessionSocketPath string) []int
 	}
 	sort.Ints(out)
 	return out
+}
+
+// Lifetime ends before an instance is stopped, replaced, or reaped.
+func (i *Instance) Lifetime() context.Context { return i.lifetime }
+
+// AdmitNativeConnection bounds every native transport against the same instance owner.
+func (i *Instance) AdmitNativeConnection() (func(), bool) {
+	if i == nil || i.lifetime.Err() != nil {
+		return nil, false
+	}
+	select {
+	case i.nativeConnections <- struct{}{}:
+		var once sync.Once
+		return func() { once.Do(func() { <-i.nativeConnections }) }, true
+	default:
+		return nil, false
+	}
 }
