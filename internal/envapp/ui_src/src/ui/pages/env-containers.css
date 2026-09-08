@@ -4,6 +4,7 @@
 .container-compose-editor,
 .container-prune-review-dialog,
 .container-operations-workspace {
+  --container-interactive-hover: color-mix(in srgb, var(--foreground) 7%, var(--redeven-surface-main));
   --container-motion-feedback: 120ms;
   --container-motion-enter: 180ms;
   --container-motion-ease: cubic-bezier(.2, .8, .2, 1);
@@ -11,7 +12,6 @@
 
 .redeven-containers {
   --container-selection: color-mix(in srgb, var(--redeven-status-primary-soft) 72%, transparent);
-  --container-interactive-hover: color-mix(in srgb, var(--foreground) 7%, var(--redeven-surface-main));
   --container-interactive-accent: color-mix(in srgb, var(--ring) 76%, var(--foreground) 24%);
   container-type: inline-size;
   background: var(--redeven-surface-main);
