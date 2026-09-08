@@ -143,6 +143,28 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('returns a named fork summary without coupling creation to detail loading', async () => {
+    const forkThread = vi.fn(async () => ({
+      client_request_id: 'fork-request',
+      thread: {
+        thread_id: 'fork-result', title: 'Source · Fork', title_status: 'ready',
+        model_id: 'default/gpt-5', working_dir: '/workspace', run_status: 'idle',
+        created_at_unix_ms: 1, updated_at_unix_ms: 2, read_status: readStatus(),
+      },
+    }));
+    const options = adapterOptions({ forkThread });
+    const adapter = createRuntimeFlowerSurfaceAdapter(options);
+    const input = { client_request_id: 'fork-request', title: 'Source · Fork' };
+    await expect(adapter.forkThread!('source', input)).resolves.toMatchObject({ thread_id: 'fork-result', title: input.title });
+    expect(forkThread).toHaveBeenCalledWith('source', input);
+    expect(options.transport.loadThread).not.toHaveBeenCalled();
+  });
+
+  it('rejects a fork response with a different request identity', async () => {
+    const options = adapterOptions({ forkThread: vi.fn(async () => ({ client_request_id: 'other' })) });
+    await expect(createRuntimeFlowerSurfaceAdapter(options).forkThread!('source', { client_request_id: 'fork-request', title: 'Source · Fork' })).rejects.toThrow('different client request identity');
+    expect(options.transport.loadThread).not.toHaveBeenCalled();
+  });
 	it('treats stop as an acknowledgement without mapping or loading thread detail', async () => {
 		const loadThread = vi.fn(async () => { throw new Error('loadThread must not race stop'); });
 		const stopThread = vi.fn(async () => ({ ok: true }));
@@ -201,7 +223,7 @@ describe('runtime Flower surface adapter read state', () => {
 		const detail = await adapter.loadThread('thread_detail');
 
 		expect(detail.thread.thread_id).toBe('thread_detail');
-		expect(detail.thread.title).toBe('hello');
+		expect(detail.thread.title).toBe('');
 			expect(detail.current.view_version).toBe(7);
 		expect(detail.thread.messages).toEqual(expect.arrayContaining([
 			expect.objectContaining({ id: 'user:req-1', role: 'user', content: 'hello' }),

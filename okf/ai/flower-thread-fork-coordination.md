@@ -20,6 +20,21 @@ Floret returns the canonical destination. Redeven copies only product-owned sett
 
 The response is rebuilt from the returned Floret current view plus the adopted product settings. There is no durable fork operation table, immutable resource snapshot, lifecycle gate, stage replay, upload-copy protocol, summary acknowledgement receipt, or fork recovery coordinator. Product settings adoption is deliberately small; canonical fork idempotency remains owned by Floret's request key.
 
+The shared Flower UI freezes the client request identity and localized branch
+title together until creation is acknowledged. It reserves room for the branch
+suffix within Floret's 200-rune title limit and sends the title through the
+existing fork request. After settings adoption and title assignment, the
+service schedules the canonical summary publisher so other windows see the
+destination without polling.
+
+Creation returns a summary independently of detail loading. Flower inserts and
+selects that summary immediately and announces success. A failed detail read
+keeps the destination available and retries only detail, never the fork command.
+Untitled persisted threads use a localized display label plus a short ThreadID;
+that label is presentation only and never replaces the canonical title. Existing
+forks are not deleted or rewritten. New forks receive canonical fallback titles
+from published Floret v7.3.3 even when a caller omits an explicit product title.
+
 # Boundaries
 
 Redeven never stores a fork saga, source/destination turn or run identity mapping, Floret fork result, canonical title, or Agent lifecycle snapshot. Product adoption cannot authorize a foreign source, choose a different destination, reconstruct canonical content, or compensate by deleting a valid Floret destination.

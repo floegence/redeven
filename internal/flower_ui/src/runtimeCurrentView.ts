@@ -11,7 +11,6 @@ import type {
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerActivityItem } from './flowerLiveMapper';
-import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
 
@@ -446,5 +445,5 @@ export function applyFlowerRuntimeCurrentView(
       ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error) }
       : undefined,
   };
-  return { ...projected, title: canonicalFlowerThreadSnapshotTitle(projected) };
+  return projected;
 }

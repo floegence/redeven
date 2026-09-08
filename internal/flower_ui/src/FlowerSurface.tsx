@@ -92,7 +92,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { flowerThreadHasActiveTurnEvidence, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import { presentFlowerApproval } from './flowerApprovalPresentation';
-import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
+import { canonicalFlowerThreadSnapshotTitle, flowerForkTitle, flowerThreadDisplayTitle } from './flowerThreadTitle';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 import {
   flowerRunProgress,
@@ -865,7 +865,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadDetailLoadingIDs, setThreadDetailLoadingIDs] = createSignal<ReadonlySet<string>>(new Set());
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
-  const forkRequestIDs = new Map<string, string>();
+  const forkRequests = new Map<string, Readonly<{ client_request_id: string; title: string }>>();
+  const [createdForkThreadID, setCreatedForkThreadID] = createSignal('');
   const pinMutationSequences = new Map<string, number>();
   const [renameThreadID, setRenameThreadID] = createSignal('');
   const [renameDraft, setRenameDraft] = createSignal('');
@@ -1346,7 +1347,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		const threadID = trimString(selectedThreadID());
 		if (!threadID) return copy().chat.titleFallback;
 		return canonicalFlowerThreadSnapshotTitle(threadCache().summaries.get(threadID))
-			|| canonicalFlowerThreadSnapshotTitle(threadCache().views.get(threadID)?.thread);
+			|| canonicalFlowerThreadSnapshotTitle(threadCache().views.get(threadID)?.thread)
+      || flowerThreadDisplayTitle({ thread_id: threadID, title: '', title_status: 'unset' }, copy().threadList.untitled);
 	});
   const companionCollapsedEmptySelection = createMemo(() => (
     companionCollapsed() && !trimString(selectedThreadID())
@@ -2331,7 +2333,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return [
       t.thread_id,
       t.status,
-		canonicalFlowerThreadSnapshotTitle(t),
+		flowerThreadDisplayTitle(t, copy().threadList.untitled),
       String(Number(t.pinned_at_ms ?? 0) > 0),
       String(Number(t.pinned_at_ms ?? 0)),
       String(t.created_at_ms),
@@ -2361,16 +2363,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
-		return threads().flatMap((t) => {
+		return threads().map((t) => {
       const visibleThread = threadWithLocalReadVisibility(t);
       const sig = threadItemSignature(t);
       const cached = threadItemCache.get(t.thread_id);
       if (cached && cached.sig === sig) {
-			return cached.item.title ? [cached.item] : [];
+			return cached.item;
       }
-      const item = projectFlowerThreadListItem(visibleThread);
+      const item = projectFlowerThreadListItem(visibleThread, copy().threadList.untitled);
       threadItemCache.set(t.thread_id, { item, sig });
-			return item.title ? [item] : [];
+			return item;
     });
   });
   // Stable sidebar list items: only updates when sidebar-visible fields change.
@@ -2390,7 +2392,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const cache = threadCache();
     return threads().map((summary) => {
       const visibleSummary = threadWithLocalReadVisibility(summary);
-      const item = projectFlowerThreadListItem(visibleSummary);
+      const item = projectFlowerThreadListItem(visibleSummary, copy().threadList.untitled);
       const detail = cache.views.get(summary.thread_id)?.thread;
       const activeRunID = trimString(summary.active_run_id);
       const matchingActiveDetail = detail?.status === 'running'
@@ -3197,6 +3199,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const acceptedSummary = nextCache.summaries.get(threadID);
     const detailConverged = !threadSummaryNeedsDetail(acceptedSummary, retained);
+    if (detailConverged && createdForkThreadID() === threadID) setCreatedForkThreadID('');
     if (detailConverged && threadID === selectedThreadID()) setThreadLoadError('');
     if (
       busyAdmissionThreadIDs().has(threadID)
@@ -3734,7 +3737,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       restoreThreadMenuFocus(restore);
       return;
     }
-    const shouldRestoreFocus = action !== 'rename' && action !== 'delete';
+    let shouldRestoreFocus = action !== 'rename' && action !== 'delete';
     try {
       switch (action) {
         case 'copy_thread_id':
@@ -3783,13 +3786,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!props.adapter.forkThread) return;
           setThreadActionBusy({ threadID: item.thread_id, action });
           {
-            const clientRequestID = forkRequestIDs.get(item.thread_id) ?? createFlowerClientRequestID();
-            forkRequestIDs.set(item.thread_id, clientRequestID);
-            const forked = receiveThreadView(
-              await props.adapter.forkThread(item.thread_id, clientRequestID),
-              'user_action',
-            ).thread;
-            forkRequestIDs.delete(item.thread_id);
+            const request = forkRequests.get(item.thread_id) ?? {
+              client_request_id: createFlowerClientRequestID(),
+              title: flowerForkTitle(item.title, copy().threadList.forkSuffix),
+            };
+            forkRequests.set(item.thread_id, request);
+            const forked = await props.adapter.forkThread(item.thread_id, request);
+            forkRequests.delete(item.thread_id);
+            setThreadCache((cache) => cache.replaceSummary(forked));
+            setCreatedForkThreadID(forked.thread_id);
+            shouldRestoreFocus = false;
+            notifySuccess(copy().threadList.forkCreated);
             await loadAndSelectThread(forked.thread_id);
           }
           return;
@@ -9763,7 +9770,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return (
         <div class="flower-thread-load-error">
           {errorNotice(
-            copy().chat.threadLoadErrorTitle,
+            createdForkThreadID() === selectedThreadID() ? copy().threadList.forkLoadFailed : copy().chat.threadLoadErrorTitle,
             threadLoadError(),
             <Button
               size="sm"

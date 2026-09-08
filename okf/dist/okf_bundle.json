@@ -1168,7 +1168,7 @@
               "deepseek",
               "provider"
             ],
-            "summary": "Flower routes the DeepSeek provider to the published Floret v7.3.2 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
+            "summary": "Flower routes the DeepSeek provider to the published Floret v7.3.3 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
             "section_count": 2
           },
           {
@@ -2076,7 +2076,7 @@
         "type": "AI Provider Contract"
       },
       "body_length": 2234,
-      "summary": "Flower routes the DeepSeek provider to the published Floret v7.3.2 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
+      "summary": "Flower routes the DeepSeek provider to the published Floret v7.3.3 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
       "sections": [
         {
           "id": "contract",
@@ -2120,7 +2120,7 @@
           "description": "Turn surface switching and replay."
         }
       ],
-      "snippet": "Flower routes the DeepSeek provider to the published Floret v7.3.2 Responses gateway. Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization, function-call validation, and opaque provider history. Redeven only maps ",
+      "snippet": "Flower routes the DeepSeek provider to the published Floret v7.3.3 Responses gateway. Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization, function-call validation, and opaque provider history. Redeven only maps ",
       "links": [
         {
           "label": "Model and context runtime",
@@ -2867,15 +2867,15 @@
         "title": "Flower thread fork coordination",
         "type": "AI Persistence Contract"
       },
-      "body_length": 3076,
+      "body_length": 4047,
       "summary": "- Authority: Floret owns the forked journal and canonical destination identity; Redeven owns endpoint authorization and the destination's product settings.\n- Outcome: one stable client request forks the authorized source, adopts settings for the returned destination, and optionally sets an explicit title.\n- Invariants: source ownership is proven before Floret mutation, the returned destination is the only product adoption target, and the product stores no fork receipt, saga, or canonical lifecycle copy.\n- Failure boundary: invalid request identity, foreign source authority, Floret failure, or conflicting destination settings fails explicitly without a recovery coordinator or compensating canonical delete.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call. Redeven then reads the source's current product settings and invokes published Floret v7 `Fork` with the source ThreadID and client request key.\n\nFloret returns the canonical destination. Redeven copies only product-owned settings into a new root settings value, preserves the source endpoint, namespace, model, reasoning selection, permission, and working directory, clears pin state, and records the current requesting user as the destination creator/updater. `AdoptCanonicalRootSettings` inserts that exact destination or accepts an identical existing record; a conflicting record fails closed. A non-empty requested title is then sent through typed `SetTitle` with a derived stable key.\n\nThe response is rebuilt from the returned Floret current view plus the adopted product settings. There is no durable fork operation table, immutable resource snapshot, lifecycle gate, stage replay, upload-copy protocol, summary acknowledgement receipt, or fork recovery coordinator. Product settings adoption is deliberately small; canonical fork idempotency remains owned by Floret's request key.",
-          "char_count": 1341
+          "body": "`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call. Redeven then reads the source's current product settings and invokes published Floret v7 `Fork` with the source ThreadID and client request key.\n\nFloret returns the canonical destination. Redeven copies only product-owned settings into a new root settings value, preserves the source endpoint, namespace, model, reasoning selection, permission, and working directory, clears pin state, and records the current requesting user as the destination creator/updater. `AdoptCanonicalRootSettings` inserts that exact destination or accepts an identical existing record; a conflicting record fails closed. A non-empty requested title is then sent through typed `SetTitle` with a derived stable key.\n\nThe response is rebuilt from the returned Floret current view plus the adopted product settings. There is no durable fork operation table, immutable resource snapshot, lifecycle gate, stage replay, upload-copy protocol, summary acknowledgement receipt, or fork recovery coordinator. Product settings adoption is deliberately small; canonical fork idempotency remains owned by Floret's request key.\n\nThe shared Flower UI freezes the client request identity and localized branch\ntitle together until creation is acknowledged. It reserves room for the branch\nsuffix within Floret's 200-rune title limit and sends the title through the\nexisting fork request. After settings adoption and title assignment, the\nservice schedules the canonical summary publisher so other windows see the\ndestination without polling.\n\nCreation returns a summary independently of detail loading. Flower inserts and\nselects that summary immediately and announces success. A failed detail read\nkeeps the destination available and retries only detail, never the fork command.\nUntitled persisted threads use a localized display label plus a short ThreadID;\nthat label is presentation only and never replaces the canonical title. Existing\nforks are not deleted or rewritten. New forks receive canonical fallback titles\nfrom published Floret v7.3.3 even when a caller omits an explicit product title.",
+          "char_count": 2312
         },
         {
           "id": "boundaries",
@@ -12659,5 +12659,5 @@
       ]
     }
   ],
-  "source_sha256": "32702a82fb40fe0413ec94b5c9fdaa7858d1f601e2910e6de24508c67c7d8970"
+  "source_sha256": "736b4b5c6371bc904205a7c29c28f81a4a46ef3cc55b226a597a0fff2e082a30"
 }

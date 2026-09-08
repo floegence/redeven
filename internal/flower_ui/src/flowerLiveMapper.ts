@@ -25,7 +25,6 @@ import type {
   FlowerRunProgressPhase,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
-import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 import {
   normalizeFlowerReasoningCapability,
@@ -1227,5 +1226,5 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
   };
-  return { ...thread, title: canonicalFlowerThreadSnapshotTitle(thread) };
+  return thread;
 }

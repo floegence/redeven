@@ -47,6 +47,10 @@ export type FlowerThreadListCopy = Readonly<{
   workingDirectoryLabel: string;
   copied: (label: string) => string;
   fork: string;
+  forkSuffix: string;
+  forkCreating: string;
+  forkCreated: string;
+  forkLoadFailed: string;
   pin: string;
   unpin: string;
   pinnedGroup: string;
@@ -831,6 +835,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     workingDirectoryLabel: 'working directory',
     copied: (label) => `Copied ${label}.`,
     fork: 'Fork',
+    forkSuffix: "Fork",
+    forkCreating: "Creating branch…",
+    forkCreated: "Branch created.",
+    forkLoadFailed: "Branch created, but could not load the conversation.",
     pin: 'Pin conversation',
     unpin: 'Unpin conversation',
     pinnedGroup: 'Pinned',

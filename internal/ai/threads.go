@@ -913,6 +913,7 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, err
 	}
+	s.requestCanonicalThreadSummary(endpointID, forked.ThreadID)
 	return &view, nil
 }
 

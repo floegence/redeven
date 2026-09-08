@@ -8,7 +8,7 @@ timestamp: 2026-09-08T00:00:00Z
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.3.2 Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.3.3 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.

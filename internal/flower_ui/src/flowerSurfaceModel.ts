@@ -2,7 +2,7 @@ import type {
   FlowerThreadListItem,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
-import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
+import { flowerThreadDisplayTitle } from './flowerThreadTitle';
 
 export function trimString(value: string | null | undefined): string {
   return String(value ?? '').trim();
@@ -27,11 +27,11 @@ function messagePreviewText(message: FlowerThreadSnapshot['messages'][number]): 
   return trimString(message.content || fromBlocks);
 }
 
-export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot): FlowerThreadListItem {
+export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot, untitled = ''): FlowerThreadListItem {
   const lastMessage = [...thread.messages].reverse().map(messagePreviewText).find(Boolean);
   return {
     thread_id: thread.thread_id,
-    title: canonicalFlowerThreadSnapshotTitle(thread),
+    title: flowerThreadDisplayTitle(thread, untitled),
     title_status: thread.title_status,
     model_id: thread.model_id,
     working_dir: thread.working_dir,
