@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-08: Fork tool-history continuation
+
+- Consume published Floret v7.3.4 for canonical tool-call reasoning and matching hosted assistant fragment boundaries.
+- Verify source, ordinary fork, and nested fork continuation after restart through the product service and DeepSeek HTTP adapter.
+- Cover shared UI send, refresh, and reconnect behavior. Existing corrupt histories remain unchanged; no downstream repair or validation bypass is introduced.
+
 ## 2026-09-08: Flower reasoning settings authority
 
 - Keep confirmed thread reasoning separate from explicit new-thread draft choices and immutable submission snapshots.

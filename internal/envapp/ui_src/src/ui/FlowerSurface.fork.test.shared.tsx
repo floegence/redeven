@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   adapter, deferred, flowerSurfaceNotifications, liveBootstrap,
-  renderSurfaceWithAdapter, thread, waitFor,
+  launchReceipt, renderSurfaceWithAdapter, thread, waitFor,
 } from './FlowerSurface.navigation.testHarness';
+import type { FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 async function forkFrom(runtime: HTMLElement, threadID: string) {
   const card = runtime.querySelector(`[data-thread-id="${threadID}"]`)!;
@@ -13,6 +14,60 @@ async function forkFrom(runtime: HTMLElement, threadID: string) {
 }
 
 describe('Flower fork results', () => {
+  it('continues the selected branch and keeps its reply across refresh and reconnect', async () => {
+    const source = thread({ thread_id: 'source', title: 'Original' });
+    const forked = thread({ thread_id: 'destination', title: 'Original · Fork' });
+    const completed = thread({ ...forked, messages: [
+      ...forked.messages,
+      { id: 'followup', turn_id: 'turn-followup', role: 'user', content: 'Continue here', status: 'complete', created_at_ms: 3 },
+      { id: 'reply', turn_id: 'turn-followup', role: 'assistant', content: 'Branch reply completed.', status: 'complete', created_at_ms: 4 },
+    ] });
+    const publishReply = deferred<void>();
+    let created = false;
+    let sent = false;
+    let connections = 0;
+    const listThreads = vi.fn(async () => created ? [source, sent ? completed : forked] : [source]);
+    const loadThread = vi.fn(async (id: string) => liveBootstrap(id === 'source' ? source : sent ? completed : forked, sent ? 3 : 0));
+    const forkThread = vi.fn(async () => { created = true; return forked; });
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => {
+      sent = true;
+      return launchReceipt(input.thread_id!, 'turn-followup', 'start', input.client_request_id);
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true), listThreads, loadThread, forkThread, launchTurn,
+      connectLiveStream: async function* ({ signal }) {
+        const connection = ++connections;
+        yield { schema_version: 1, kind: 'ready' as const, summaries: await listThreads() };
+        if (connection === 1) {
+          await Promise.race([publishReply.promise, new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))]);
+          if (signal.aborted) return;
+        }
+        if (sent) yield { schema_version: 1, kind: 'thread.batch' as const, thread_id: forked.thread_id, current: liveBootstrap(completed, 3).current };
+        if (connection === 1) return;
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    });
+    await waitFor(() => !!runtime.querySelector('[data-thread-id="source"]'));
+    await forkFrom(runtime, 'source');
+    await waitFor(() => document.activeElement === runtime.querySelector('textarea'));
+    const textarea = runtime.querySelector('textarea')!;
+    textarea.value = 'Continue here';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(launchTurn.mock.calls[0][0]).toMatchObject({ thread_id: 'destination' });
+    publishReply.resolve();
+    await waitFor(() => connections >= 2 && runtime.textContent!.includes('Branch reply completed.'));
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="source"] button') as HTMLButtonElement).click();
+    await waitFor(() => !!runtime.querySelector('[data-thread-id="source"][data-flower-thread-active="true"]'));
+    (runtime.querySelector('[data-thread-id="destination"] button') as HTMLButtonElement).click();
+    await waitFor(() => !!runtime.querySelector('[data-thread-id="destination"][data-flower-thread-active="true"]') && runtime.textContent!.includes('Branch reply completed.'));
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+    expect(forkThread).toHaveBeenCalledTimes(1);
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+  });
+
   it('shows and selects the created branch before loading detail, then retries only detail', async () => {
     const source = thread({ thread_id: 'source', title: 'Original' });
     const forked = thread({ thread_id: 'destination', title: 'Original · Fork', messages: [] });
