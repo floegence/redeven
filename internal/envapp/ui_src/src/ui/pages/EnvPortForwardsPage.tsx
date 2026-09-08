@@ -972,10 +972,12 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
     case 'HOST_RECOVERY_NOT_REQUIRED':
     case 'HOST_RECOVERY_CONFIRMATION_REQUIRED': return i18n.t('webServices.managed.managementRecoveryUnavailable');
     case 'SERVICE_ENDPOINT_UNAVAILABLE': return i18n.t('webServices.managed.endpointUnavailable');
+    case 'SERVICE_OPEN_TARGET_INVALID':
     case 'HOST_OPEN_TARGET_INVALID': return i18n.t('webServices.managed.hostOpenTargetInvalid');
     case 'HOST_OPEN_HOOK_FAILED':
     case 'HOST_AFTER_START_HOOK_FAILED': return i18n.t('webServices.managed.openingRetryHint');
     case 'HOST_OPEN_TARGET_MISSING': return i18n.t('webServices.managed.hostOpenTargetMissing');
+    case 'SERVICE_OPEN_TARGET_UNAVAILABLE':
     case 'HOST_OPEN_TARGET_UNAVAILABLE': return i18n.t('webServices.managed.hostOpenTargetUnavailable');
     case 'MANAGED_WEB_SERVICE_INTERNAL': return i18n.t('webServices.managed.operationFailed');
     default: return i18n.t('webServices.managed.operationFailed');

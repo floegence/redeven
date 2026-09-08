@@ -133,7 +133,7 @@ func TestIdentityUpgradeResumesAfterDatabaseCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upgrade := hostIdentityUpgrade{OldIdentity: legacy, NewIdentity: identity, State: state, Session: &hostOpenSessionState{SchemaVersion: 1, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: identity, AppPath: "/?token=retained"}}
+	upgrade := hostIdentityUpgrade{OldIdentity: legacy, NewIdentity: identity, State: state, Session: &serviceOpenSessionState{SchemaVersion: 1, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: identity, AppPath: "/?token=retained"}}
 	if err := writePrivateJSON(filepath.Join(driver.instanceRoot(service), "identity-upgrade.json"), upgrade); err != nil {
 		t.Fatal(err)
 	}

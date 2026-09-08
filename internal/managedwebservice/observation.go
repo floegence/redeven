@@ -82,6 +82,10 @@ func (m *Manager) observe(ctx context.Context, service *pfregistry.ManagedServic
 		}
 		service.ObservedState = observed
 	}
+	if running && err == nil && binding.Deployment != DeploymentHost {
+		// Opening preparation must never change the observed business state.
+		_, _ = m.resolveStaticOpening(ctx, service)
+	}
 	return running, err
 }
 

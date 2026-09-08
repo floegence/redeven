@@ -2,7 +2,6 @@ package managedwebservice
 
 import (
 	"context"
-	"net/url"
 )
 
 func (m *Manager) OpenSession(ctx context.Context, serviceID string, request OpenSessionRequest) (*OpenSession, error) {
@@ -86,12 +85,10 @@ func (m *Manager) openExistingSession(ctx context.Context, serviceID string) (*O
 			return nil, err
 		}
 	} else {
-		// The persisted Forward belongs to the applied container/Compose instance.
-		target, parseErr := url.Parse(forward.TargetURL)
-		if parseErr != nil {
-			return nil, parseErr
+		appPath, err = m.resolveStaticOpening(ctx, service)
+		if err != nil {
+			return nil, err
 		}
-		appPath = target.RequestURI()
 	}
 	if err := m.checkOpeningEndpoint(ctx, service); err != nil {
 		return nil, err

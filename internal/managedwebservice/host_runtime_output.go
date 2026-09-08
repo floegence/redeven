@@ -1,7 +1,6 @@
 package managedwebservice
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,16 +13,6 @@ import (
 
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
-
-const hostOpenSessionSchemaVersion = 1
-
-type hostOpenSessionState struct {
-	SchemaVersion     int    `json:"schema_version"`
-	ServiceID         string `json:"service_id"`
-	RuntimeSpecSHA256 string `json:"runtime_spec_sha256"`
-	RuntimeIdentity   string `json:"runtime_identity"`
-	AppPath           string `json:"app_path"`
-}
 
 func parseHostOpenURL(value string, endpoint WebEndpointSpec, runtimePort int) (string, error) {
 	if value == "" || len(value) > hostOpenResultLimit || value != strings.TrimSpace(value) || strings.ContainsAny(value, "\t\r\n ") {
@@ -96,7 +85,7 @@ func (d *hostScriptDriver) openSessionPath(service *pfregistry.ManagedService) s
 }
 
 func (d *hostScriptDriver) writeOpenSession(service *pfregistry.ManagedService, runtimeIdentity, appPath string) error {
-	state := hostOpenSessionState{SchemaVersion: hostOpenSessionSchemaVersion, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: runtimeIdentity, AppPath: appPath}
+	state := serviceOpenSessionState{SchemaVersion: serviceOpenSessionSchemaVersion, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: runtimeIdentity, AppPath: appPath}
 	launch := *service
 	launch.RuntimeIdentity = runtimeIdentity
 	return writePrivateJSON(d.openSessionPath(&launch), state)
@@ -106,35 +95,17 @@ func (d *hostScriptDriver) readOpenSession(service *pfregistry.ManagedService, r
 	launch := *service
 	launch.RuntimeIdentity = runtimeIdentity
 	path := d.openSessionPath(&launch)
-	info, err := os.Lstat(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The Host service startup URL is unavailable. Retry opening the service.", 409, true, nil)
-		}
-		return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The Host service startup URL could not be read.", 500, true, err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() > 64*1024 {
-		return "", serviceError("HOST_OPEN_TARGET_INVALID", "The saved Host service startup URL identity is invalid.", 409, true, nil)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The Host service startup URL could not be read.", 500, true, err)
-	}
-	var state hostOpenSessionState
-	if err := decodeStrictJSON(raw, &state); err != nil || state.SchemaVersion != hostOpenSessionSchemaVersion ||
-		state.ServiceID != service.ServiceID || state.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 ||
-		state.RuntimeIdentity != strings.TrimSpace(runtimeIdentity) || !validHostOpenSessionPath(state.AppPath) {
-		return "", serviceError("HOST_OPEN_TARGET_INVALID", "The saved Host service startup URL identity is invalid.", 409, true, nil)
-	}
-	return state.AppPath, nil
+	return readServiceOpening(path, service, runtimeIdentity, "HOST")
 }
 
-func validHostOpenSessionPath(value string) bool {
+func validHostOpenSessionPath(value string) bool { return validServiceOpeningPath(value, false) }
+
+func validServiceOpeningPath(value string, allowFragment bool) bool {
 	if value == "" || len(value) > hostOpenResultLimit || value != strings.TrimSpace(value) || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || strings.ContainsAny(value, "\r\n\t ") {
 		return false
 	}
 	parsed, err := url.Parse(value)
-	return err == nil && !parsed.IsAbs() && parsed.Host == "" && parsed.Fragment == "" && !strings.HasPrefix(parsed.Path, "//") && !strings.ContainsAny(parsed.Path, "\\\r\n\t")
+	return err == nil && !parsed.IsAbs() && parsed.Host == "" && (allowFragment || parsed.Fragment == "") && !strings.HasPrefix(parsed.Path, "//") && !strings.ContainsAny(parsed.Path, "\\\r\n\t")
 }
 
 func (d *hostScriptDriver) removeOpenSession(service *pfregistry.ManagedService) {
