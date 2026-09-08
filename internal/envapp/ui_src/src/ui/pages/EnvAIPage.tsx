@@ -104,6 +104,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
     },
     onSettingsChanged: env.bumpSettingsSeq,
+    ...env.flowerWorkingDirectoryActions,
     openFileBrowser: env.openFlowerFileBrowser,
     openFilePreview: env.openFlowerFilePreview,
     openCanonicalReferenceTarget: env.openFlowerCanonicalReferenceTarget,

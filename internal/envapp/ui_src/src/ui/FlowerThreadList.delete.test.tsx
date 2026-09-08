@@ -122,7 +122,7 @@ describe('FlowerThreadList deletion entry', () => {
     expect(host.querySelector('[data-icon="trash"]')).toBeNull();
   });
 
-  it('keeps an open menu on the latest thread metadata', async () => {
+  it('refreshes menu metadata while preserving the opened directory target', async () => {
     const { host, onMenuAction, setItems } = renderList();
     (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
     await settleMenuFocus();
@@ -138,7 +138,7 @@ describe('FlowerThreadList deletion entry', () => {
     copyWorkdir?.click();
     expect(onMenuAction).toHaveBeenCalledWith(
       'copy_workdir',
-      expect.objectContaining({ title: 'Updated release review', working_dir: '/workspace/latest', pinned: true }),
+      expect.objectContaining({ title: 'Updated release review', working_dir: '/workspace/redeven', pinned: true }),
       expect.any(HTMLElement),
     );
     const restore = onMenuAction.mock.calls[0]?.[2] as HTMLElement | undefined;

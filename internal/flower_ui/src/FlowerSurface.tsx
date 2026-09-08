@@ -5,6 +5,10 @@ import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, Globe, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
+import { FlowerContextMenu } from './FlowerContextMenu';
+import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAction, type FlowerDirectoryMenuAvailability } from './FlowerDirectoryMenuItems';
+import type { FlowerWorkingDirectoryOpenRequest } from './contracts/flowerSurfaceContracts';
+
 import { writeTextToClipboard } from './clipboard';
 import { FlowerAttachmentLane } from './attachments/FlowerAttachmentLane';
 import {
@@ -3727,12 +3731,93 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!restore) return;
     queueMicrotask(() => {
       if (document.contains(restore)) {
-        restore.focus();
+        restore.focus({ preventScroll: true });
       }
     });
   };
 
+  const directoryMenuAvailability = createMemo<FlowerDirectoryMenuAvailability>(() => {
+    const state = props.adapter.workingDirectoryActionAvailability?.();
+    return {
+      ...(props.adapter.openWorkingDirectoryInFileBrowser ? { browse: state?.browse ?? { enabled: true } } : {}),
+      ...(props.adapter.openWorkingDirectoryInTerminal ? { terminal: state?.terminal ?? { enabled: true } } : {}),
+    };
+  });
+  const handleDirectoryMenuAction = async (
+    action: FlowerDirectoryMenuAction,
+    request: FlowerWorkingDirectoryOpenRequest,
+    restore?: HTMLElement,
+  ) => {
+    const path = normalizeAbsolutePath(request.path);
+    const target = { thread_id: request.thread_id, path };
+    try {
+      if (!path || !request.thread_id) throw new Error(copy().threadList.workingDirectoryUnavailable);
+      if (action === 'copy_workdir') {
+        await writeClipboardText(path, copy().threadList.workingDirectoryLabel);
+        restoreThreadMenuFocus(restore);
+        return;
+      }
+      const availability = directoryMenuAvailability()[action === 'browse_workdir' ? 'browse' : 'terminal'];
+      if (!availability?.enabled) throw new Error(availability?.reason || copy().threadList.workingDirectoryUnavailable);
+      if (action === 'browse_workdir') {
+        // The floating window captures this origin before taking focus.
+        if (restore?.isConnected) restore.focus({ preventScroll: true });
+        await props.adapter.openWorkingDirectoryInFileBrowser?.(target);
+      } else await props.adapter.openWorkingDirectoryInTerminal?.(target);
+    } catch (error) {
+      notifyThreadActionError(getErrorMessage(error));
+      restoreThreadMenuFocus(restore);
+    }
+  };
+  const [transcriptMenu, setTranscriptMenu] = createSignal<Readonly<{
+    target: FlowerWorkingDirectoryOpenRequest | null;
+    title: string;
+    x: number;
+    y: number;
+    restore: HTMLElement;
+    selection: string;
+  }> | null>(null);
+  const closeTranscriptMenu = () => {
+    const restore = transcriptMenu()?.restore;
+    setTranscriptMenu(null);
+    restore?.focus({ preventScroll: true });
+  };
+  const openTranscriptMenu = (event: MouseEvent | KeyboardEvent) => {
+    if (event.defaultPrevented) return;
+    const viewport = event.currentTarget;
+    const target = event.target;
+    if (!(viewport instanceof HTMLElement) || !(target instanceof Element)) return;
+    if (target.closest('a, input, textarea, button, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="menu"], [data-flower-context-menu-owner], .flower-activity-terminal-output')) return;
+    const selection = window.getSelection();
+    const text = selection && !selection.isCollapsed
+      && selection.anchorNode && viewport.contains(selection.anchorNode)
+      && selection.focusNode && viewport.contains(selection.focusNode)
+      ? selection.toString() : '';
+    const threadID = selectedThreadID();
+    if (!threadID && !text) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = viewport.getBoundingClientRect();
+    setTranscriptMenu({
+      target: threadID ? { thread_id: threadID, path: selectedThreadDetailPending() ? '' : selectedThreadWorkingDirectory() } : null,
+      title: selectedThread()?.title || copy().threadList.title,
+      x: event instanceof MouseEvent ? event.clientX : rect.left + 18,
+      y: event instanceof MouseEvent ? event.clientY : rect.top + 18,
+      restore: viewport,
+      selection: text,
+    });
+  };
+  createEffect(() => {
+    const menu = transcriptMenu();
+    if (menu && (menu.target && menu.target.thread_id !== selectedThreadID()
+      || !surfaceEngaged() || !transcriptVisible() || companionCollapsed() || sidePanel() !== 'chat')) setTranscriptMenu(null);
+  });
+
   const handleThreadMenuAction = async (action: FlowerThreadMenuAction, item: FlowerThreadListItem, restore?: HTMLElement) => {
+    if (action === 'browse_workdir' || action === 'terminal_workdir' || action === 'copy_workdir') {
+      await handleDirectoryMenuAction(action, { thread_id: item.thread_id, path: item.working_dir }, restore);
+      return;
+    }
     if (threadActionBusy()) {
       restoreThreadMenuFocus(restore);
       return;
@@ -3742,9 +3827,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       switch (action) {
         case 'copy_thread_id':
           await writeClipboardText(item.thread_id, copy().threadList.threadIDLabel);
-          return;
-        case 'copy_workdir':
-          await writeClipboardText(item.working_dir, copy().threadList.workingDirectoryLabel);
           return;
         case 'rename':
           if (!props.adapter.renameThread) return;
@@ -10587,13 +10669,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           aria-hidden={companionCollapsed() ? 'true' : undefined}
           inert={companionCollapsed()}
           onPointerDown={transcriptScroll.onPointerDown}
-          onKeyDown={transcriptScroll.onKeyDown}
+          onContextMenu={openTranscriptMenu}
+          onKeyDown={(event) => {
+            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openTranscriptMenu(event);
+            if (!event.defaultPrevented) transcriptScroll.onKeyDown(event);
+          }}
           tabIndex={0}
           data-flower-tail-preparing={selectedThreadTailPreparing() ? 'true' : undefined}
           aria-busy={selectedThreadTailPreparing() ? 'true' : undefined}
           onScroll={updateTranscriptNearBottom}
-          onWheel={transcriptScroll.onWheel}
-          onTouchMove={transcriptScroll.onTouchMove}
+          onWheel={(event) => {
+            if (transcriptMenu()) closeTranscriptMenu();
+            transcriptScroll.onWheel(event);
+          }}
+          onTouchMove={(event) => {
+            if (transcriptMenu()) closeTranscriptMenu();
+            transcriptScroll.onTouchMove(event);
+          }}
         >
           <div class="flower-transcript-stack">
             <Show when={loadError()}>
@@ -11223,9 +11315,51 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           busyThreadID={threadActionBusy()?.threadID}
           busyAction={threadActionBusy()?.action}
           actionsBusy={threadActionBusy() !== null}
+          directoryActions={directoryMenuAvailability()}
+          visible={surfaceEngaged() && transcriptVisible()}
           onMenuAction={(action, item, restore) => void handleThreadMenuAction(action, item, restore)}
         />
       </aside>
+      <Show when={transcriptMenu()}>
+        {(menu) => (
+          <FlowerContextMenu
+            x={menu().x}
+            y={menu().y}
+            label={copy().threadList.contextMenuLabel(menu().title)}
+            height={220}
+            resolveRestore={() => menu().restore}
+            onClose={closeTranscriptMenu}
+          >
+            <Show when={menu().selection}>
+              <button type="button" role="menuitem" class="flower-thread-menu-item" onClick={() => {
+                const state = menu();
+                setTranscriptMenu(null);
+                void writeTextToClipboard(state.selection)
+                  .catch((error) => notifyThreadActionError(getErrorMessage(error)))
+                  .finally(() => restoreThreadMenuFocus(state.restore));
+              }}>
+                <Copy class="h-3.5 w-3.5" />
+                <span>{copy().threadList.copySelectedText}</span>
+              </button>
+            </Show>
+            <Show when={menu().target}>
+              {(target) => (
+                <FlowerDirectoryMenuItems
+                  path={target().path}
+                  copy={copy().threadList}
+                  availability={directoryMenuAvailability()}
+                  onAction={(action) => {
+                    const state = menu();
+                    const request = target();
+                    setTranscriptMenu(null);
+                    void handleDirectoryMenuAction(action, request, state.restore);
+                  }}
+                />
+              )}
+            </Show>
+          </FlowerContextMenu>
+        )}
+      </Show>
       <ConfirmDialog
         open={deleteTarget() !== null}
         onOpenChange={(open) => {

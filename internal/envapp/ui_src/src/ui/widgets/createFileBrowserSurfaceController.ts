@@ -40,6 +40,7 @@ export function createFileBrowserSurfaceController(params: Readonly<{
 }> = {}) {
   const createRequestId = params.createRequestId ?? (() => createClientId('file-browser-surface'));
   const [surface, setSurface] = createSignal<FileBrowserSurfaceState | null>(null);
+  let returnFocusTo: HTMLElement | null = null;
 
   const openSurface = (input: FileBrowserSurfaceOpenParams): FileBrowserSurfaceState | null => {
     const path = normalizeAbsolutePath(input.path);
@@ -55,12 +56,20 @@ export function createFileBrowserSurfaceController(params: Readonly<{
       stateScope: compact(input.stateScope) || DEFAULT_FILE_BROWSER_SURFACE_STATE_SCOPE,
     };
 
+    const active = typeof document === 'undefined' ? null : document.activeElement;
+    if (typeof HTMLElement !== 'undefined' && active instanceof HTMLElement && active !== document.body) returnFocusTo = active;
     setSurface(nextSurface);
     return nextSurface;
   };
 
   const closeSurface = () => {
+    const restore = returnFocusTo;
+    returnFocusTo = null;
     setSurface(null);
+    queueMicrotask(() => {
+      if (restore?.isConnected && restore.getClientRects().length > 0
+        && !restore.closest('[inert], [hidden], [aria-hidden="true"]')) restore.focus({ preventScroll: true });
+    });
   };
 
   const handleOpenChange = (open: boolean) => {

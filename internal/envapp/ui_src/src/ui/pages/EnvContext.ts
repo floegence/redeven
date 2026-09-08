@@ -11,6 +11,7 @@ import type {
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
 import type { FlowerCanonicalReferenceNavigationTarget } from '../flower/linkedContextNavigation';
+import type { FlowerWorkingDirectoryNavigation } from '../flower/workingDirectoryNavigation';
 import type { AIReadinessController } from '../flower/aiReadiness';
 import type {
   EnvFileBrowserSurfacePayload,
@@ -133,7 +134,8 @@ export type EnvContextValue = {
     options?: {
       preferredName?: string;
       openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
-      workbenchAnchor?: EnvWorkbenchHandoffAnchor;
+      /** Null selects the viewport center; omission retains contextual pointer placement. */
+      workbenchAnchor?: EnvWorkbenchHandoffAnchor | null;
     },
   ) => void;
   openFileBrowserAtPath: (
@@ -148,6 +150,7 @@ export type EnvContextValue = {
     item: FileItem,
     options?: FilePreviewOpenOptions,
   ) => Promise<void>;
+  flowerWorkingDirectoryActions?: FlowerWorkingDirectoryNavigation;
   openFlowerFileBrowser: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerFilePreview: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;

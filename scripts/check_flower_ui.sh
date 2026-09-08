@@ -58,6 +58,7 @@ main() {
       src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
+      src/ui/FlowerSurface.directoryActions.test.tsx \
       src/ui/FlowerSurface.fork.test.tsx \
       src/ui/FlowerSurface.orderedPresentation.test.tsx \
       src/ui/FlowerSurface.composerReferences.test.tsx \
@@ -79,6 +80,7 @@ main() {
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
+      src/ui/flower/workingDirectoryNavigation.test.ts \
       src/ui/plugins/ActivityPluginSurfaceWindow.test.tsx \
       src/ui/plugins/ExternalPluginInstallDialog.test.tsx \
       src/ui/plugins/PluginCenterView.test.tsx \
@@ -158,6 +160,7 @@ main() {
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
+        src/ui/FlowerDirectoryMenus.browser.test.tsx \
         src/ui/FlowerSurface.fork.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
