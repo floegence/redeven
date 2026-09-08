@@ -333,8 +333,21 @@ vi.mock('../services/localApi', () => ({
   },
 }));
 
+vi.mock('@floegence/floe-webapp-protocol', () => ({
+  useProtocol: () => ({ session: () => null }),
+}));
+
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
+    fs: {
+      getPathContext: async () => ({
+        agentHomePathAbs: '/home/demo',
+        homePathAbs: '/home/demo',
+        defaultRootId: 'workspace',
+        roots: [{ id: 'workspace', label: 'Workspace', pathAbs: '/workspace/env-flower', kind: 'custom', permissions: { read: true, write: true } }],
+      }),
+      list: async () => ({ entries: [] }),
+    },
     ai: {
       sendUserTurn: mocks.sendUserTurnMock,
       subscribeThread: mocks.subscribeThreadMock,
@@ -1047,6 +1060,7 @@ export function registerEnvAIPageSendTests() {
           create: expect.objectContaining({
             client_request_id: expect.stringMatching(/^client_/u),
             model_id: 'openai/gpt-5.2',
+            working_dir: '/workspace/env-flower',
           }),
         }));
         expect(turnBody).not.toHaveProperty('thread_id');
