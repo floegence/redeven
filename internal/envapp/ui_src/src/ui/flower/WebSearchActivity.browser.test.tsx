@@ -1,0 +1,32 @@
+import { afterEach, expect, it } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
+import { render } from 'solid-js/web';
+import { WebSearchActivity } from '../../../../../flower_ui/src/WebSearchActivity';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../../flower_ui/src/copy';
+import '../../../../../flower_ui/src/styles/flower.css';
+
+let dispose: (() => void) | undefined;
+afterEach(()=>{dispose?.();document.body.replaceChildren();});
+it('keeps search details readable and keyboard accessible in a narrow viewport', async()=>{
+ const host=document.createElement('div');
+ host.style.cssText='font-family:system-ui,sans-serif;width:320px;padding:16px;box-sizing:border-box;background:#18181b;color:#fafafa;--foreground:#fafafa;--muted-foreground:#a1a1aa;--primary:#93c5fd;--ring:#93c5fd';
+ document.body.append(host);
+ const results=Array.from({length:7},(_,index)=>({title:`Weather source ${index+1}`,url:index===0?'javascript:alert(1)':`https://weather.example/${'forecast-'.repeat(15)}${index}`,snippet:'A short weather forecast. '.repeat(12),source:''}));
+ dispose=render(()=><WebSearchActivity search={{query:'长沙天气\nChangsha weather forecast',url:'',pattern:'',results,notice:''}} copy={DEFAULT_FLOWER_SURFACE_COPY.chat.webSearch} openLabel="Open web page"/>,host);
+ expect(host.querySelectorAll('li')).toHaveLength(5);
+ expect(host.querySelectorAll('a[href^="javascript:"]')).toHaveLength(0);
+ const address = host.querySelectorAll<HTMLDetailsElement>('details')[1];
+ address.open = true;
+ expect(address.textContent).toContain('forecast-'.repeat(15));
+ expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+ address.open = false;
+ const button=host.querySelector<HTMLButtonElement>('button')!;
+ button.focus();
+ await userEvent.keyboard('{Enter}');
+ expect(host.querySelectorAll('li')).toHaveLength(7);
+ expect(button.getAttribute('aria-expanded')).toBe('true');
+ expect(document.activeElement).toBe(button);
+ const snippet=host.querySelector<HTMLElement>('.flower-activity-web-entry-snippet')!;
+ expect(getComputedStyle(snippet).webkitLineClamp).toBe('2');
+ if (import.meta.env.VITE_WEB_SEARCH_SCREENSHOT === '1') await page.screenshot();
+});

@@ -4068,6 +4068,31 @@
       "modelSupportUnavailable": "無法確認附件支援狀態"
     },
     "chat": {
+      "webSearch": {
+        "search": "搜尋",
+        "openPage": "開啟網頁",
+        "findInPage": "頁內尋找",
+        "webActivity": "網頁搜尋",
+        "noDetails": "未提供詳細資訊",
+        "noSources": "未傳回來源",
+        "sourcesUnavailable": "未提供來源詳細資訊",
+        "sourcesTitle": "來源",
+        "queryLabel": "搜尋詞",
+        "targetLabel": "網頁",
+        "patternLabel": "尋找內容",
+        "showLess": "收合",
+        "sources": {
+          "one": "{count} 個來源",
+          "other": "{count} 個來源"
+        },
+        "queries": {
+          "one": "共 {count} 個查詢",
+          "other": "共 {count} 個查詢"
+        },
+        "showMore": {
+          "other": "顯示其餘 {count} 個"
+        }
+      },
       "loadingSettings": "Flower 設定仍在載入。",
       "warmupTitle": "正在準備 Flower",
       "warmupDetail": "Desktop 會先啟動本機環境的執行階段，再讓 Flower 載入對話。",

@@ -4053,6 +4053,31 @@
       "modelSupportUnavailable": "添付ファイルの対応状況を確認できません"
     },
     "chat": {
+      "webSearch": {
+        "search": "検索",
+        "openPage": "ページを開く",
+        "findInPage": "ページ内検索",
+        "webActivity": "ウェブ検索",
+        "noDetails": "詳細情報は提供されていません",
+        "noSources": "ソースは返されませんでした",
+        "sourcesUnavailable": "ソースの詳細情報は提供されていません",
+        "sourcesTitle": "ソース",
+        "queryLabel": "検索語句",
+        "targetLabel": "ウェブページ",
+        "patternLabel": "検索するテキスト",
+        "showLess": "表示を減らす",
+        "sources": {
+          "one": "ソース {count} 件",
+          "other": "ソース {count} 件"
+        },
+        "queries": {
+          "one": "検索 {count} 件",
+          "other": "検索 {count} 件"
+        },
+        "showMore": {
+          "other": "残り {count} 件を表示"
+        }
+      },
       "loadingSettings": "Flower 設定を読み込み中です。",
       "warmupTitle": "Flower を準備しています",
       "warmupDetail": "Flower が会話を読み込む前に、デスクトップがローカル環境のランタイムを起動しています。",

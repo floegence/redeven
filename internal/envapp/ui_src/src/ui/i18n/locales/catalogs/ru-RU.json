@@ -4149,6 +4149,38 @@
       "modelSupportUnavailable": "Не удалось проверить поддержку вложений"
     },
     "chat": {
+      "webSearch": {
+        "search": "Поиск",
+        "openPage": "Открыть страницу",
+        "findInPage": "Найти на странице",
+        "webActivity": "Поиск в интернете",
+        "noDetails": "Подробности не предоставлены",
+        "noSources": "Источники не возвращены",
+        "sourcesUnavailable": "Сведения об источниках не предоставлены",
+        "sourcesTitle": "Источники",
+        "queryLabel": "Поисковые запросы",
+        "targetLabel": "Веб-страница",
+        "patternLabel": "Текст для поиска",
+        "showLess": "Показать меньше",
+        "sources": {
+          "one": "{count} источник",
+          "other": "{count} источников",
+          "few": "{count} источника",
+          "many": "{count} источников"
+        },
+        "queries": {
+          "one": "{count} запрос",
+          "other": "{count} запросов",
+          "few": "{count} запроса",
+          "many": "{count} запросов"
+        },
+        "showMore": {
+          "one": "Показать ещё {count}",
+          "few": "Показать ещё {count}",
+          "many": "Показать ещё {count}",
+          "other": "Показать ещё {count}"
+        }
+      },
       "loadingSettings": "Настройки Flower еще загружаются.",
       "warmupTitle": "Подготовка Flower",
       "warmupDetail": "Desktop запускает локальную среду выполнения, прежде чем Flower загрузит беседы.",

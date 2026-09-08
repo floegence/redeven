@@ -4068,6 +4068,31 @@
       "modelSupportUnavailable": "无法检查附件支持情况"
     },
     "chat": {
+      "webSearch": {
+        "search": "搜索",
+        "openPage": "打开网页",
+        "findInPage": "页内查找",
+        "webActivity": "网页搜索",
+        "noDetails": "未提供详情",
+        "noSources": "未返回来源",
+        "sourcesUnavailable": "未提供来源详情",
+        "sourcesTitle": "来源",
+        "queryLabel": "搜索词",
+        "targetLabel": "网页",
+        "patternLabel": "查找内容",
+        "showLess": "收起",
+        "sources": {
+          "one": "{count} 个来源",
+          "other": "{count} 个来源"
+        },
+        "queries": {
+          "one": "共 {count} 个查询",
+          "other": "共 {count} 个查询"
+        },
+        "showMore": {
+          "other": "显示其余 {count} 个"
+        }
+      },
       "loadingSettings": "Flower 设置仍在加载。",
       "warmupTitle": "正在准备 Flower",
       "warmupDetail": "Desktop 在 Flower 加载对话之前启动本地环境运行时。",

@@ -807,6 +807,9 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 	payload := activityPayloadFromFieldList(spec.CallPayloadFields, args)
 	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
 	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
+	if toolName == "web.search" {
+		payload["operation"] = "search"
+	}
 	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, _ = contractSafePayloadMap(payload, 0)
 	activity := &fltools.ActivityPresentation{
@@ -1185,6 +1188,9 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	if rows := structuredActivityRowsForTool(toolName, payload); len(rows) > 0 {
 		payload["rows"] = rows
 	}
+	if toolName == "web.search" {
+		payload["operation"] = "search"
+	}
 	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, payloadTruncated := contractSafePayloadMapForTool(toolName, payload, 0)
 	if payloadTruncated && !isOKFToolName(toolName) {
@@ -1534,10 +1540,11 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 			record, _ := item.(map[string]any)
 			title, url := strings.TrimSpace(anyToString(record["title"])), strings.TrimSpace(anyToString(record["url"]))
 			if title != "" || url != "" {
-				results = append(results, fltools.WebSearchActivityResult{Title: title, URL: url})
+				results = append(results, fltools.WebSearchActivityResult{Title: title, URL: url, Snippet: strings.TrimSpace(anyToString(record["snippet"]))})
 			}
 		}
-		return fltools.WebSearchActivityPayload{Query: strings.TrimSpace(anyToString(payload["query"])), Status: status, Results: results, Error: activityError()}
+		_, provided := payload["results"]
+		return fltools.WebSearchActivityPayload{Operation: strings.TrimSpace(anyToString(payload["operation"])), Query: strings.TrimSpace(anyToString(payload["query"])), Status: status, Results: results, ResultsProvided: provided, Error: activityError()}
 	case fltools.ActivityRendererTodos:
 		items := make([]fltools.TodoActivityItem, 0)
 		for _, item := range toAnySlice(payload["todos"]) {

@@ -61,6 +61,7 @@ main() {
       src/ui/FlowerSurface.directoryActions.test.tsx \
       src/ui/FlowerSurface.fork.test.tsx \
       src/ui/FlowerSurface.orderedPresentation.test.tsx \
+      src/ui/FlowerSurface.webSearch.test.tsx \
       src/ui/FlowerSurface.composerReferences.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.visibility.shared.test.tsx \
@@ -171,6 +172,8 @@ main() {
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
         src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
+        src/ui/FlowerSurface.webSearch.browser.test.tsx \
+        src/ui/flower/WebSearchActivity.browser.test.tsx \
         src/ui/FlowerSurface.disclosureInteraction.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx \

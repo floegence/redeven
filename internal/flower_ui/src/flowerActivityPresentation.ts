@@ -5,7 +5,7 @@ import type {
   FlowerActivityRenderer,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
-import type { FlowerSubagentsCopy } from './copy';
+import type { FlowerSubagentsCopy, FlowerWebSearchCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import { trimString } from './flowerSurfaceModel';
 
@@ -119,6 +119,14 @@ export type FlowerActivityWebSearchDetail = Readonly<{
   sections: readonly FlowerActivityWebSearchEntry[];
 }>;
 
+export type FlowerWebOperationDetail = Readonly<{
+  query: string;
+  url: string;
+  pattern: string;
+  results: readonly FlowerActivityWebSearchEntry[];
+  notice: string;
+}>;
+
 export type FlowerActivityWebFetchDetail = Readonly<{
   url: string;
   final_url: string;
@@ -212,6 +220,10 @@ export type FlowerActivityDetailBlock =
     search: FlowerActivityWebSearchDetail;
   }>
   | Readonly<{
+    kind: 'web_operation';
+    search: FlowerWebOperationDetail;
+  }>
+  | Readonly<{
     kind: 'web_fetch';
     fetch: FlowerActivityWebFetchDetail;
   }>
@@ -251,6 +263,8 @@ export type FlowerActivityPresentation = Readonly<{
 }>;
 
 type FlowerActivityPresentationCopy = Readonly<{
+  webSearch?: FlowerWebSearchCopy;
+  statuses?: Readonly<Record<FlowerActivityItem['status'], string>>;
   subagents?: FlowerSubagentsCopy;
   subagentSummaries?: readonly FlowerSubagentSummary[];
   terminal?: Readonly<{
@@ -1168,7 +1182,7 @@ function countFromPayload(payload: Readonly<Record<string, unknown>>): number | 
   return undefined;
 }
 
-function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPresentation {
+function presentationForKnowledgeSearch(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'web_search');
   const errorBlock = errorDetailBlockForItem(item, payload);
@@ -1193,6 +1207,41 @@ function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPrese
     detailLines,
     detailBlocks,
   };
+}
+
+function presentationForWebSearch(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
+  if (item.tool_name?.startsWith('okf.') || item.tool_name === 'sources') return presentationForKnowledgeSearch(item);
+  const words = copy?.webSearch ?? DEFAULT_FLOWER_SURFACE_COPY.chat.webSearch;
+  const payload = item.payload ?? {};
+  const query = payloadValue(payload, 'query');
+  const queries = query.split('\n').map((value) => value.trim()).filter(Boolean);
+  const url = payloadValue(payload, 'url');
+  const pattern = payloadValue(payload, 'pattern');
+  const operation = payloadValue(payload, 'operation');
+  const safeURL = safeWebFetchURL(url);
+  const domain = safeURL ? new URL(safeURL).host : url;
+  const results = asArray(payload.results).map((value) => {
+    const result = asRecord(value);
+    return {title:payloadValue(result, 'title'), url:payloadValue(result, 'url'), snippet:payloadValue(result, 'snippet'), source:''};
+  }).filter((result) => result.title || result.url);
+  const provided = payload.results_provided === true || results.length > 0;
+  const titleParts = operation === 'open_page' ? [words.openPage, domain]
+    : operation === 'find_in_page' ? [words.findInPage, pattern ? `“${pattern}”` : '', domain]
+      : [operation === 'search' ? words.search : words.webActivity, queries[0]];
+  const label = titleParts.filter(Boolean).join(' · ');
+  const active = item.status === 'running' || item.status === 'pending' || item.status === 'waiting';
+  const failed = item.status === 'error' || item.status === 'canceled' || item.status === 'declined';
+  const notice = active || failed || results.length > 0 ? '' : provided ? words.noSources : words.sourcesUnavailable;
+  const hasFacts = Boolean(query || url || pattern || results.length);
+  const status = (copy?.statuses ?? DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses)[item.status];
+  const meta = [queries.length > 1 ? words.queries(queries.length) : '', results.length ? words.sources(results.length) : '',
+    active || failed || !hasFacts ? status : '', !hasFacts && !active && !failed ? (provided ? words.noSources : words.noDetails) : '',
+  ].filter(Boolean).join(' · ');
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  const error = errorDetailBlockForItem(item, payload);
+  if (error) detailBlocks.push(error);
+  if (hasFacts) detailBlocks.push({kind:'web_operation', search:{query, url, pattern, results, notice}});
+  return {label, title:{kind:'plain',text:label},meta,detailLines:[],detailBlocks};
 }
 
 export function safeWebFetchURL(value: string): string {
@@ -1389,7 +1438,7 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   terminal: (item, context) => presentationForTerminal(item, context.copy),
   file: (item, context) => presentationForFile(item, context.fileActions),
   patch: (item, context) => presentationForPatch(item, context.fileActions),
-  web_search: (item) => presentationForWebSearch(item),
+  web_search: (item, context) => presentationForWebSearch(item, context.copy),
   web_fetch: (item) => presentationForWebFetch(item),
   todos: (item) => presentationForTodos(item),
   question: (item) => presentationForQuestion(item),
