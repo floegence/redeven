@@ -200,17 +200,18 @@ describe('shared Flower UI boundary', () => {
 		const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
 		const contractsSrc = readText(path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'));
 
-		expect(surfaceSrc).toContain('const selectedWaitingReasoningSelection = createMemo');
-		expect(surfaceSrc).toContain('const composerReasoningOverride = createMemo');
-		expect(surfaceSrc).toContain('const composerReasoningSelection = createMemo(() => composerReasoningOverride() ?? selectedWaitingReasoningSelection() ?? selectedThreadReasoningSelection())');
+		expect(surfaceSrc).toContain('? selectedThreadSettings()?.reasoning_selection');
+		expect(surfaceSrc).toContain(': currentComposerSessionDraft().reasoningOverride');
 		expect(surfaceSrc).toContain('const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined))');
 		expect(surfaceSrc).toContain('props.adapter.setThreadReasoningSelection(threadID, normalized)');
 		expect(surfaceSrc).toContain('const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection())');
-		expect(surfaceSrc).toContain('reasoning_selection: frozenReasoningSelection');
-		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? frozenDraft.reasoning_selection : undefined');
+		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? frozenReasoningSelection : undefined');
 		expect(surfaceSrc).toContain('...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {})');
-		expect(surfaceSrc).toContain('composerReasoningEnabled() ? composerReasoningOverride() ?? selectedWaitingReasoningSelection() : undefined');
-		expect(surfaceSrc).toContain('...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {})');
+		const submitInputStart = surfaceSrc.indexOf('await props.adapter.submitInput({');
+		const submitInputEnd = surfaceSrc.indexOf('});', submitInputStart);
+		expect(submitInputStart).toBeGreaterThanOrEqual(0);
+		expect(submitInputEnd).toBeGreaterThan(submitInputStart);
+		expect(surfaceSrc.slice(submitInputStart, submitInputEnd)).not.toContain('reasoning_selection');
 		expect(contractsSrc).toContain('model_id?: string');
 		expect(contractsSrc).toContain('setThreadModel?:');
 		expect(contractsSrc).toContain('persistDefaultModel:');
@@ -241,7 +242,7 @@ describe('shared Flower UI boundary', () => {
 
 		expect(surfaceSrc).toContain("type FlowerComposerControlID = 'working_dir' | 'permission' | 'model_reasoning' | 'read_only'");
 		expect(surfaceSrc).toContain("data-flower-composer-control=\"model_reasoning\"");
-		expect(surfaceSrc).toContain("data-has-reasoning={composerReasoningEnabled() ? 'true' : 'false'}");
+		expect(surfaceSrc).toContain("data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}");
 		expect(surfaceSrc).toContain('variant="segment"');
 		expect(surfaceSrc).toContain('label={reasoningControlLabel()}');
 		expect(surfaceSrc).not.toContain("data-flower-composer-control=\"model\"");
