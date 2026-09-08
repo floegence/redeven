@@ -1668,10 +1668,19 @@ describe('Workbench Plugin Center dialog continuity', () => {
     await page.viewport(1440, 1000);
     const host = fixedHost();
     const [open, setOpen] = createSignal(false);
+    const [canvas, setCanvas] = createSignal<WorkbenchState>({ version: 1, widgets: [{
+      id: 'saved-plugin', type: 'redeven.plugin', title: 'Metrics', x: 80, y: 100,
+      width: 720, height: 520, z_index: 3, created_at_unix_ms: 100,
+    }], viewport: { x: 40, y: 20, scale: 0.7 }, locked: false, filters: {}, selectedWidgetId: 'saved-plugin', theme: DEFAULT_WORKBENCH_THEME });
+    const definition: WorkbenchWidgetDefinition = { ...redevenWorkbenchWidgets.find((item) => item.type === 'redeven.plugin')!,
+      body: () => <div>Saved plugin component</div> };
     disposers.push(render(() => <>
       <div data-test-scaled-canvas inert={open()} style={{ transform: 'translate(80px, 40px) scale(0.7)', 'transform-origin': 'top left' }}>
         <button data-testid="center-entry" onClick={() => setOpen(true)}>Manage plugins</button>
         <button data-testid="canvas-input">Canvas input</button>
+        <div class="h-[800px] w-[1400px]">
+          <WorkbenchSurface state={canvas} setState={setCanvas} widgetDefinitions={[definition]} launcherWidgetTypes={[]} enableKeyboard={!open()} />
+        </div>
       </div>
       <PluginCenterDialog open={open()} onOpenChange={setOpen} title="Plugin Center"
         class="w-[min(1280px,calc(100vw-48px))] max-w-none">
@@ -1692,6 +1701,10 @@ describe('Workbench Plugin Center dialog continuity', () => {
     let isolated = host.querySelector('[data-testid="canvas-input"]') as HTMLElement | null;
     while (isolated && !isolated.inert) isolated = isolated.parentElement;
     expect(isolated).not.toBeNull();
+    const placement = structuredClone(canvas());
+    dialog.focus();
+    await userEvent.keyboard('{ArrowRight}{Delete}{Backspace}');
+    expect(canvas()).toEqual(placement);
     await userEvent.keyboard('{Escape}');
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
     expect(document.activeElement).toBe(host.querySelector('[data-testid="center-entry"]'));

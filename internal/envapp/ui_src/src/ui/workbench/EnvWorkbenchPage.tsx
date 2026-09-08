@@ -705,6 +705,7 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
 }
 
 export type EnvWorkbenchPageProps = Readonly<{
+  inputEnabled?: boolean;
   pluginSurfaceHost?: WorkbenchPluginSurfaceContextValue;
   registerPluginSurfaceController?: (controller: WorkbenchPluginSurfaceController | null) => void;
   onDockItemClick?: (item: WorkbenchDockItemActivation) => boolean | void;
@@ -1447,7 +1448,9 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     }
     const handleWindowKeyDown = (event: KeyboardEvent) => {
       if (
-        event.defaultPrevented
+        props.inputEnabled === false
+        || !runtimeLayoutReady()
+        || event.defaultPrevented
         || event.isComposing
         || event.key !== 'Escape'
         || event.altKey
@@ -2927,6 +2930,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
           <RedevenWorkbenchSurface
             state={workbenchState}
             setState={setSurfaceWorkbenchState}
+            enableKeyboard={props.inputEnabled !== false && runtimeLayoutReady()}
             widgetActivationMode="after-paint"
             onWidgetActivationEvent={createUIPresentationEventRecorder({
               surface: 'workbench',
