@@ -3,6 +3,11 @@ import './flower-feature.css';
 
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { afterEach, describe, expect, it } from 'vitest';
+import { commands, page } from 'vitest/browser';
+
+const mediaCommands = commands as unknown as {
+  emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
+};
 
 function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collapsed'): {
   companion: HTMLDivElement;
@@ -12,7 +17,7 @@ function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collap
   companion.className = 'flower-activity-companion floe-bottom-bar-companion';
   companion.dataset.companionPhase = phase;
   companion.innerHTML = `
-    <div class="flower-surface-companion${phase === 'collapsed' ? ' flower-surface-companion-collapsed' : ''}">
+    <div class="flower-component-shell flower-surface flower-surface-companion${phase === 'collapsed' || phase === 'collapsing' ? ' flower-surface-companion-collapsed' : ''}">
       <section class="flower-chat-shell">
         <header class="flower-chat-header">Flower</header>
         <main class="flower-chat-main">
@@ -24,7 +29,7 @@ function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collap
           </div>
         </main>
         <footer class="flower-chat-bottom-dock">
-          <div class="flower-composer" tabindex="0">Ask Flower</div>
+          <div class="flower-composer p-3"><textarea aria-label="Ask Flower"></textarea></div>
         </footer>
       </section>
     </div>
@@ -33,6 +38,17 @@ function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collap
   const composer = companion.querySelector('.flower-composer');
   if (!(composer instanceof HTMLDivElement)) throw new Error('Flower composer fixture did not mount.');
   return { companion, composer };
+}
+
+function expectUnframedComposer(composer: HTMLElement): void {
+  const style = getComputedStyle(composer);
+  for (const side of ['top', 'right', 'bottom', 'left']) {
+    expect(style.getPropertyValue(`border-${side}-width`)).toBe('0px');
+  }
+  expect(style.borderRadius).toBe('0px');
+  expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(style.boxShadow).toBe('none');
+  expect(style.backdropFilter).toBe('none');
 }
 
 function applyTheme(name: string, mode: 'light' | 'dark'): void {
@@ -65,24 +81,24 @@ function relativeLuminance(value: string): number {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
-afterEach(() => {
+afterEach(async () => {
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.removeAttribute('data-floe-shell-theme');
   document.documentElement.removeAttribute('style');
+  await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
 });
 
 describe('Flower bottom companion computed visual contract', () => {
   it('keeps the collapsed composer transparent and shadowless', () => {
     const { companion, composer } = mountCompanion('collapsed');
     const frameStyle = getComputedStyle(companion);
-    const composerStyle = getComputedStyle(composer);
-
     expect(frameStyle.boxShadow).toBe('none');
-    expect(composerStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
-    expect(composerStyle.borderTopWidth).toBe('0px');
-    expect(composerStyle.boxShadow).toBe('none');
-    expect(composerStyle.backdropFilter).toBe('none');
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+      expect(frameStyle.getPropertyValue(`border-${side}-width`)).toBe('1px');
+    }
+    expect(frameStyle.borderRadius).toBe('5px');
+    expectUnframedComposer(composer);
   });
 
   it('keeps the calm frame treatment continuous across drawer transition phases', () => {
@@ -90,12 +106,16 @@ describe('Flower bottom companion computed visual contract', () => {
       const { companion, composer } = mountCompanion(phase);
       const frameStyle = getComputedStyle(companion);
       const composerStyle = getComputedStyle(composer);
+      if (phase === 'collapsing') {
+        expectUnframedComposer(composer);
+      } else {
+        expect(composerStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+        expect(composerStyle.boxShadow).not.toBe('none');
+      }
       return {
         background: frameStyle.backgroundColor,
         border: frameStyle.borderColor,
         shadow: frameStyle.boxShadow,
-        composerBackground: composerStyle.backgroundColor,
-        composerShadow: composerStyle.boxShadow,
       };
     });
 
@@ -103,8 +123,53 @@ describe('Flower bottom companion computed visual contract', () => {
     expect(styles[1]).toEqual(styles[2]);
     expect(styles[0]?.background).not.toBe('rgba(0, 0, 0, 0)');
     expect(styles[0]?.shadow).not.toBe('none');
-    expect(styles[0]?.composerBackground).not.toBe('rgba(0, 0, 0, 0)');
-    expect(styles[0]?.composerShadow).not.toBe('none');
+  });
+
+  it.each(['classic-light', 'classic-dark', 'abyss', 'nord'])('keeps one outline through collapsed states in %s', async (theme) => {
+    applyTheme(theme, theme === 'classic-light' ? 'light' : 'dark');
+    for (const width of [1440, 390]) {
+      await page.viewport(width, 800);
+      for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+        await mediaCommands.emulateMediaPreferences({ reducedMotion });
+        const { companion, composer } = mountCompanion('collapsed');
+        const surface = companion.querySelector<HTMLElement>('.flower-surface')!;
+        const textarea = composer.querySelector('textarea')!;
+        expectUnframedComposer(composer);
+        surface.dataset.flowerWarmup = 'true';
+        composer.dataset.flowerAttachmentDrag = 'true';
+        composer.classList.add('flower-decision-surface');
+        textarea.focus();
+        expectUnframedComposer(composer);
+        for (const mode of ['approval', 'input_request', 'chat']) {
+          composer.dataset.flowerBottomMode = mode;
+          expectUnframedComposer(composer);
+        }
+        companion.dataset.companionPhase = 'collapsing';
+        expectUnframedComposer(composer);
+        companion.remove();
+      }
+    }
+  });
+
+  it.each(['full-page', 'workbench'])('retains the editor frame outside the companion in %s', (placement) => {
+    const { companion, composer } = mountCompanion('expanded');
+    const surface = companion.querySelector<HTMLElement>('.flower-surface')!;
+    surface.classList.remove('flower-surface-companion');
+    surface.dataset.flowerPresentation = 'full';
+    const host = document.createElement('div');
+    if (placement === 'workbench') host.className = 'workbench-widget';
+    document.body.append(host);
+    host.append(surface);
+    const style = getComputedStyle(composer);
+    expect(style.borderTopWidth).toBe('1px');
+    expect(style.borderRadius).toBe('14px');
+    expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(style.boxShadow).not.toBe('none');
+    for (const mode of ['approval', 'input_request']) {
+      composer.classList.add('flower-decision-surface');
+      composer.dataset.flowerBottomMode = mode;
+      expect(getComputedStyle(composer).borderRadius).toBe('14px');
+    }
   });
 
   it('does not leak companion surfaces into the full-page Flower shell', () => {

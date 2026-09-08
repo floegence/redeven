@@ -93,6 +93,7 @@ describe('Flower bottom companion visual contract', () => {
 
     expect(dockGlowRule.body).toBe('box-shadow: none;');
     expect(composerRule.body).toContain('backdrop-filter: none;');
+    expect(composerRule.selectors).toContain(':where(:not(.flower-surface-companion-collapsed))');
     expect(composerRule.body).toContain('var(--redeven-surface-shadow-source)');
     expect(composerRule.body).not.toContain('var(--foreground)');
     expect(focusRule).toBeUndefined();

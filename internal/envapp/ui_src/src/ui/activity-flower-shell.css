@@ -131,7 +131,7 @@ html.dark .flower-activity-companion {
   [data-companion-phase='expanding'],
   [data-companion-phase='expanded'],
   [data-companion-phase='collapsing']
-) .flower-composer {
+) .flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer {
   border-color: color-mix(in srgb, var(--flower-companion-border) 82%, transparent);
   background: var(--flower-companion-surface-elevated);
   box-shadow: 0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
