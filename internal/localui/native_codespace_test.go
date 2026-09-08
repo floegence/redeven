@@ -37,7 +37,9 @@ func TestNativeCodeSpaceLocalAccessAndGeneration(t *testing.T) {
 			}
 		}
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
-		io.Copy(w, r.Body)
+		if _, err := io.Copy(w, r.Body); err != nil {
+			t.Errorf("copy native response: %v", err)
+		}
 	}))
 	defer upstream.Close()
 	ctx, cancel := context.WithCancel(context.Background())
