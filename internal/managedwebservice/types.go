@@ -89,15 +89,17 @@ type HostLifecycleActionPlan struct {
 }
 
 type HostLifecyclePlan struct {
-	SchemaVersion int                     `json:"schema_version"`
-	Driver        string                  `json:"driver"`
-	RuntimeBundle string                  `json:"runtime_bundle,omitempty"`
-	Package       *HostLifecyclePackage   `json:"package,omitempty"`
-	NPM           *NPMHostPackageSpec     `json:"npm,omitempty"`
-	Install       HostLifecycleActionPlan `json:"install"`
-	Start         HostLifecycleActionPlan `json:"start"`
-	Stop          HostLifecycleActionPlan `json:"stop"`
-	Uninstall     HostLifecycleActionPlan `json:"uninstall"`
+	SchemaVersion int                      `json:"schema_version"`
+	Driver        string                   `json:"driver"`
+	RuntimeBundle string                   `json:"runtime_bundle,omitempty"`
+	Package       *HostLifecyclePackage    `json:"package,omitempty"`
+	NPM           *NPMHostPackageSpec      `json:"npm,omitempty"`
+	Install       HostLifecycleActionPlan  `json:"install"`
+	Start         HostLifecycleActionPlan  `json:"start"`
+	Open          *HostLifecycleActionPlan `json:"open,omitempty"`
+	OutputMode    string                   `json:"output_mode,omitempty"`
+	Stop          HostLifecycleActionPlan  `json:"stop"`
+	Uninstall     HostLifecycleActionPlan  `json:"uninstall"`
 }
 
 type Template struct {
@@ -170,20 +172,17 @@ type NPMHostPackageSpec struct {
 	Executable         string `json:"executable"`
 }
 
-type HostOpenTargetSpec struct {
-	Mode       string `json:"mode"`
-	LinePrefix string `json:"line_prefix"`
-}
-
 type HostTemplateSpec struct {
-	InstallScript   string              `json:"install_script,omitempty"`
-	StartScript     string              `json:"start_script"`
-	StopScript      string              `json:"stop_script,omitempty"`
-	UninstallScript string              `json:"uninstall_script,omitempty"`
-	Environment     map[string]string   `json:"environment,omitempty"`
-	Artifact        *HostArtifactSpec   `json:"artifact,omitempty"`
-	NPM             *NPMHostPackageSpec `json:"npm,omitempty"`
-	OpenTarget      *HostOpenTargetSpec `json:"open_target,omitempty"`
+	InstallScript    string              `json:"install_script,omitempty"`
+	StartScript      string              `json:"start_script"`
+	StopScript       string              `json:"stop_script,omitempty"`
+	UninstallScript  string              `json:"uninstall_script,omitempty"`
+	Environment      map[string]string   `json:"environment,omitempty"`
+	Artifact         *HostArtifactSpec   `json:"artifact,omitempty"`
+	NPM              *NPMHostPackageSpec `json:"npm,omitempty"`
+	AfterStartScript string              `json:"after_start_script,omitempty"`
+	OpenScript       string              `json:"open_script,omitempty"`
+	OutputMode       string              `json:"output_mode,omitempty"`
 }
 
 type ContainerMountSpec struct {
@@ -502,6 +501,8 @@ type ServiceView struct {
 	LastFailure        *ServiceFailure                 `json:"last_failure,omitempty"`
 	AccessMode         string                          `json:"access_mode"`
 	ContainerResources []ContainerResourceLink         `json:"container_resources,omitempty"`
+	Opening            ServiceOpening                  `json:"opening"`
+	PendingChanges     bool                            `json:"pending_changes"`
 	Actions            ServiceActions                  `json:"actions"`
 }
 
@@ -510,11 +511,18 @@ type ActionCapability struct {
 	ReasonCode string `json:"reason_code,omitempty"`
 }
 
+type ServiceOpening struct {
+	State     string `json:"state"`
+	ErrorCode string `json:"error_code,omitempty"`
+}
+
 type ServiceActions struct {
-	Start   ActionCapability `json:"start"`
-	Stop    ActionCapability `json:"stop"`
-	Restart ActionCapability `json:"restart"`
-	Retry   ActionCapability `json:"retry"`
+	Open              ActionCapability `json:"open"`
+	RestoreManagement ActionCapability `json:"restore_management"`
+	Start             ActionCapability `json:"start"`
+	Stop              ActionCapability `json:"stop"`
+	Restart           ActionCapability `json:"restart"`
+	Retry             ActionCapability `json:"retry"`
 }
 
 type ServiceFailure struct {
@@ -608,4 +616,6 @@ type Backend interface {
 	Subscribe(string) (<-chan pfregistry.ManagedOperation, func(), error)
 	Logs(context.Context, string, int) (*LogResult, error)
 	OpenSession(context.Context, string, OpenSessionRequest) (*OpenSession, error)
+	ReviewHostManagement(context.Context, string) (*HostManagementReview, error)
+	RestoreHostManagement(context.Context, string, RestoreManagementRequest) error
 }

@@ -15,7 +15,7 @@ func serviceFailureView(service pfregistry.ManagedService, operation *pfregistry
 		return nil
 	}
 	failure := &ServiceFailure{ErrorCode: code, Message: message}
-	if operation == nil || strings.TrimSpace(operation.ErrorCode) != code || strings.TrimSpace(operation.ErrorMessage) != message || operation.UpdatedAtUnixMs != service.UpdatedAtUnixMs {
+	if operation == nil || strings.TrimSpace(operation.ErrorCode) != code || strings.TrimSpace(operation.ErrorMessage) != message {
 		return failure
 	}
 	failure.Action = strings.TrimSpace(operation.Action)

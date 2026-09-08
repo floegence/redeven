@@ -42,6 +42,16 @@ func hostLifecyclePlan(spec TemplateSpec) *HostLifecyclePlan {
 			{Kind: "remove_managed_logs"},
 		}},
 	}
+	plan.OutputMode = host.OutputMode
+	if plan.OutputMode == "" {
+		plan.OutputMode = "discard"
+	}
+	if host.AfterStartScript != "" {
+		plan.Start.Steps = append(plan.Start.Steps, HostLifecycleStep{Kind: "run_after_start_hook", CommandTemplate: host.AfterStartScript})
+	}
+	if host.OpenScript != "" {
+		plan.Open = &HostLifecycleActionPlan{Ownership: lifecycleOwnershipRedevenWithTemplateHook, Steps: []HostLifecycleStep{{Kind: "run_template_script", CommandTemplate: host.OpenScript}}}
+	}
 	managedInstall := false
 	if host.NPM != nil {
 		managedInstall = true

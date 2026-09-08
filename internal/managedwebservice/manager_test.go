@@ -578,7 +578,7 @@ func TestOperationProgressIsNotPublishedWhenPersistenceFails(t *testing.T) {
 	}
 }
 
-func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
+func TestInterruptedInstallPreservesIntentAndWaitsForReview(t *testing.T) {
 	t.Parallel()
 	registry, err := pfregistry.Open(filepath.Join(t.TempDir(), "registry.sqlite"))
 	if err != nil {
@@ -624,11 +624,11 @@ func TestInterruptedInstallIsCleanedAndWaitsForRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated == nil || updated.DesiredState != "stopped" || updated.ObservedState != "error" || updated.LastErrorCode != "OPERATION_INTERRUPTED" || updated.RuntimeIdentity != "" {
+	if updated == nil || updated.DesiredState != "running" || updated.ObservedState != "stopped" || updated.LastErrorCode != "OPERATION_INTERRUPTED" || updated.RuntimeIdentity != service.RuntimeIdentity {
 		t.Fatalf("interrupted service = %+v", updated)
 	}
 	driver := manager.host.(*recoveryDriver)
-	if driver.cleanupCalls != 1 || driver.startCalls != 0 {
+	if driver.cleanupCalls != 0 || driver.startCalls != 0 {
 		t.Fatalf("recovery calls: cleanup=%d start=%d", driver.cleanupCalls, driver.startCalls)
 	}
 }
@@ -673,6 +673,10 @@ type recoveryDriver struct {
 	cleanupCalls int
 	startCalls   int
 	stopCalls    int
+}
+
+func (d *recoveryDriver) Observe(context.Context, *pfregistry.ManagedService) (bool, error) {
+	return false, nil
 }
 
 func (d *recoveryDriver) Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error) {

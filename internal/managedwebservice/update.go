@@ -112,6 +112,9 @@ func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.
 	}
 	journalPersisted, committed := false, false
 	defer func() {
+		if m.isClosing() {
+			return
+		}
 		if runErr == nil || committed || !journalPersisted {
 			return
 		}
@@ -191,7 +194,9 @@ func (m *Manager) runHostReleaseUpdate(ctx context.Context, service *pfregistry.
 func (m *Manager) rollbackHostReleaseUpdate(ctx context.Context, service *pfregistry.ManagedService, journal containerUpdateJournal, driver deploymentDriver) error {
 	target := serviceFromUpdateRelease(*service, journal.Target)
 	if target.RuntimeIdentity != "" {
-		_ = driver.Stop(ctx, &target)
+		if err := driver.Stop(ctx, &target); err != nil {
+			return err
+		}
 	}
 	old := serviceFromUpdateRelease(*service, journal.Old)
 	if journal.Old.DesiredState == "running" && phaseAtLeast(journal.Phase, updatePhaseOldStopped) {
@@ -276,6 +281,9 @@ func (m *Manager) runContainerUpdateTarget(ctx context.Context, service *pfregis
 	journalPersisted := false
 	committed := false
 	defer func() {
+		if m.isClosing() {
+			return
+		}
 		if runErr == nil || committed || !journalPersisted {
 			return
 		}
@@ -587,24 +595,24 @@ func (m *Manager) recoverInterruptedHostUpdate(service *pfregistry.ManagedServic
 	if journal.Kind != managedServiceUpdateJournalKind {
 		return serviceError("UPDATE_JOURNAL_INVALID", "The interrupted Host update does not use the supported update journal.", 409, false, nil)
 	}
-	if journal.Phase == updatePhaseTargetVerified {
+	if phaseAtLeast(journal.Phase, updatePhaseTargetCreating) && journal.Target.RuntimeIdentity != "" {
 		target := serviceFromUpdateRelease(*service, journal.Target)
-		resolved, resolveErr := m.resolveCurrentRuntime(context.Background(), &target)
-		if resolveErr != nil {
-			return resolveErr
+		observer, ok := driver.(runtimeObserver)
+		if !ok {
+			return serviceError("RUNTIME_INSPECTION_UNAVAILABLE", "The interrupted target cannot be inspected.", 409, true, nil)
 		}
-		resolved.applyTo(&target)
-		target.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
-		journal.Target.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
-		// The staged target identity was never committed, so it cannot authorize
-		// restart adoption. Start that exact release afresh and verify it before
-		// making the journal target authoritative.
-		target.RuntimeIdentity = ""
-		runtimeID, startErr := m.startRuntime(context.Background(), &target, driver)
-		if startErr == nil {
-			target.RuntimeIdentity = runtimeID
+		running, observeErr := observer.Observe(context.Background(), &target)
+		if observeErr != nil {
+			return observeErr
+		}
+		runtimeID := target.RuntimeIdentity
+		var startErr error
+		if !running {
+			startErr = serviceError("SERVICE_NOT_RUNNING", "The interrupted update target is no longer running.", 409, true, nil)
+		} else {
 			startErr = m.waitHealthy(context.Background(), &target)
 		}
+
 		if startErr == nil && journal.Old.DesiredState == "stopped" {
 			startErr = driver.Stop(context.Background(), &target)
 		}

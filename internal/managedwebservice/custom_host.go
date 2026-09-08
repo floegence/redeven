@@ -17,9 +17,10 @@ import (
 )
 
 type hostScriptDriver struct {
-	manager   *Manager
-	processMu sync.Mutex
-	processes map[string]hostProcess
+	manager    *Manager
+	recoveryMu sync.Mutex
+	processMu  sync.Mutex
+	processes  map[string]hostProcess
 }
 
 type hostProcess struct {
@@ -123,165 +124,120 @@ func (d *hostScriptDriver) Start(ctx context.Context, service *pfregistry.Manage
 	if spec.Host == nil {
 		return "", serviceError("CURRENT_TEMPLATE_INVALID", "The current template is not a Host deployment.", 409, false, nil)
 	}
-	dynamicOpenTarget := spec.Host.OpenTarget != nil
-	d.processMu.Lock()
-	if current, ok := d.processes[service.ServiceID]; ok && managedProcessRunning(current.pid) {
-		d.processMu.Unlock()
-		if service.RuntimeIdentity != "" && service.RuntimeIdentity != current.identity {
-			return "", serviceError("RUNTIME_IDENTITY_MISMATCH", "The custom host process identity does not match the saved instance.", 409, false, nil)
-		}
-		if dynamicOpenTarget {
-			if _, err := d.readOpenSession(service, current.identity); err != nil {
-				return "", err
-			}
-		}
-		return current.identity, nil
-	}
-	d.processMu.Unlock()
-	if recovered, ok, recoverErr := d.recoverPersistedProcess(service); recoverErr != nil {
-		return "", recoverErr
+	if recovered, ok, err := d.recoverPersistedProcess(service); err != nil {
+		return "", err
 	} else if ok {
-		if dynamicOpenTarget {
-			if _, err := d.readOpenSession(service, recovered.identity); err != nil {
-				return "", err
-			}
-		}
 		d.processMu.Lock()
-		d.processes[service.ServiceID] = recovered
+		if _, exists := d.processes[service.ServiceID]; !exists {
+			d.processes[service.ServiceID] = recovered
+		}
 		d.processMu.Unlock()
 		return recovered.identity, nil
 	}
-	d.removeOpenSession(service)
+	if _, err := d.manager.prepareWorkspace(service.WorkspacePath, workspaceVerifyExisting); err != nil {
+		return "", err
+	}
 	if err := d.prepareRuntimeDirectories(service); err != nil {
 		return "", err
 	}
-	logFile, err := os.OpenFile(d.logPath(service), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", serviceError("HOST_LOG_PREPARE_FAILED", "Redeven could not prepare the managed Host service log.", 500, true, err)
-	}
-	// The service process must outlive the short-lived install/start operation
-	// context. Lifecycle cancellation is handled through the exact process-group
-	// identity stored below.
-	cmd := exec.Command("/bin/sh", "-eu", "-c", spec.Host.StartScript)
-	cmd.Dir = service.WorkspacePath
-	cmd.Env, err = d.serviceEnvironment(ctx, service, service.ArtifactReference)
-	if err != nil {
-		_ = logFile.Close()
-		return "", err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		_ = logFile.Close()
-		return "", serviceError("START_FAILED", "The custom host service output could not be captured.", 502, true, err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		_ = logFile.Close()
-		return "", serviceError("START_FAILED", "The custom host service output could not be captured.", 502, true, err)
-	}
-	reporter := reporterFromContext(ctx)
-	commandID := reporter.StartCommand("host-start", hostCommandDisplay("start"))
-	configureManagedProcess(cmd)
-	if err := cmd.Start(); err != nil {
-		reporter.FinishCommand(commandID, "failed")
-		_ = logFile.Close()
-		return "", serviceError("START_FAILED", "The custom host service could not be started.", 502, true, err)
-	}
-	capture := newHostStartupTargetCapture(spec.Host.OpenTarget, spec.Endpoint, service.RuntimePort)
-	collector := &hostOutputCollector{logFile: logFile, reporter: reporter, commandID: commandID, capture: capture}
-	var readers sync.WaitGroup
-	collector.scan("stdout", stdout, &readers)
-	collector.scan("stderr", stderr, &readers)
-	fingerprint, processGroup, _, err := waitManagedProcessDetails(cmd.Process.Pid, 500*time.Millisecond)
-	if err != nil || processGroup != cmd.Process.Pid {
-		processExited := !managedProcessRunning(cmd.Process.Pid)
-		_ = terminateManagedProcess(cmd)
-		readers.Wait()
-		_ = cmd.Wait()
-		reporter.FinishCommand(commandID, "failed")
-		_ = logFile.Close()
-		if dynamicOpenTarget && processExited {
-			return "", serviceError("HOST_OPEN_TARGET_MISSING", "The Host service exited before emitting its startup URL.", 502, true, err)
-		}
-		return "", serviceError("HOST_PROCESS_IDENTITY_UNAVAILABLE", "Redeven could not record the managed Host process identity.", 500, true, err)
-	}
 	nonce, err := randomID("proc")
 	if err != nil {
-		_ = terminateManagedProcess(cmd)
-		readers.Wait()
-		_ = cmd.Wait()
-		reporter.FinishCommand(commandID, "failed")
-		_ = logFile.Close()
 		return "", err
 	}
-	identity := "host:v2:" + service.ServiceID + ":" + nonce + ":" + strconv.Itoa(cmd.Process.Pid) + ":" + fingerprint
-	done := make(chan struct{})
-	stateReady := make(chan struct{})
-	defer close(stateReady)
-	d.processMu.Lock()
-	d.processes[service.ServiceID] = hostProcess{cmd: cmd, identity: identity, pid: cmd.Process.Pid, fingerprint: fingerprint, done: done}
-	d.processMu.Unlock()
-	go func() {
-		readers.Wait()
-		_ = cmd.Wait()
-		_ = logFile.Close()
-		close(done)
-		<-stateReady
-		d.processMu.Lock()
-		if current, ok := d.processes[service.ServiceID]; ok && current.identity == identity {
-			delete(d.processes, service.ServiceID)
-		}
-		d.processMu.Unlock()
-		d.removeOpenSessionForIdentity(service, identity)
-	}()
-	if capture != nil {
-		timeout := spec.Endpoint.StartupTimeout
-		if timeout <= 0 {
-			timeout = 45
-		}
-		timer := time.NewTimer(time.Duration(timeout) * time.Second)
-		defer timer.Stop()
-		select {
-		case result := <-capture.result:
-			if result.err != nil {
-				_ = terminateHostProcess(hostProcess{cmd: cmd, identity: identity, pid: cmd.Process.Pid, fingerprint: fingerprint, done: done})
-				reporter.FinishCommand(commandID, "failed")
-				return "", result.err
-			}
-			select {
-			case <-done:
-				reporter.FinishCommand(commandID, "failed")
-				return "", serviceError("HOST_OPEN_TARGET_MISSING", "The Host service exited after emitting its startup URL.", 502, true, nil)
-			default:
-			}
-			if err := d.writeOpenSession(service, identity, result.appPath); err != nil {
-				_ = terminateHostProcess(hostProcess{cmd: cmd, identity: identity, pid: cmd.Process.Pid, fingerprint: fingerprint, done: done})
-				reporter.FinishCommand(commandID, "failed")
-				return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "Redeven could not save the Host service startup URL.", 500, true, err)
-			}
-		case <-done:
-			reporter.FinishCommand(commandID, "failed")
-			return "", serviceError("HOST_OPEN_TARGET_MISSING", "The Host service exited before emitting its startup URL.", 502, true, nil)
-		case <-ctx.Done():
-			_ = terminateHostProcess(hostProcess{cmd: cmd, identity: identity, pid: cmd.Process.Pid, fingerprint: fingerprint, done: done})
-			reporter.FinishCommand(commandID, "cancelled")
-			return "", ctx.Err()
-		case <-timer.C:
-			_ = terminateHostProcess(hostProcess{cmd: cmd, identity: identity, pid: cmd.Process.Pid, fingerprint: fingerprint, done: done})
-			reporter.FinishCommand(commandID, "failed")
-			return "", serviceError("HOST_OPEN_TARGET_MISSING", "The Host service did not emit its startup URL before the startup timeout.", 502, true, nil)
-		}
+	runs := filepath.Join(d.instanceRoot(service), "runs")
+	if err := privateDirectory(runs); err != nil {
+		return "", err
 	}
-	reporter.FinishCommand(commandID, "succeeded")
+	runRoot := filepath.Join(runs, nonce)
+	if err := privateDirectory(runRoot); err != nil {
+		return "", err
+	}
+	null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err != nil {
+		return "", err
+	}
+	defer null.Close()
+	output := null
+	if spec.Host.OutputMode == "private_file" {
+		output, err = os.OpenFile(filepath.Join(runRoot, "output"), os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, 0600)
+		if err != nil {
+			return "", err
+		}
+		defer output.Close()
+	}
+	// The short launch gate holds the same process that will execute the
+	// foreground template. EOF before persistence aborts without starting it.
+	gateRead, gateWrite, err := os.Pipe()
+	if err != nil {
+		return "", err
+	}
+	defer gateRead.Close()
+	defer gateWrite.Close()
+	cmd := exec.Command("/bin/sh", "-eu", "-c", `IFS= read -r launch <&3 || exit 1
+[ "$launch" = start ] || exit 1
+exec 3<&-
+exec /bin/sh -eu -c "$1"`, "managed-host-launch", spec.Host.StartScript)
+	cmd.Dir = service.WorkspacePath
+	cmd.Env, err = d.serviceEnvironmentForRun(ctx, service, service.ArtifactReference, runRoot)
+	if err != nil {
+		return "", err
+	}
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = null, output, output
+	cmd.ExtraFiles = []*os.File{gateRead}
+	configureManagedProcess(cmd)
+	if err := cmd.Start(); err != nil {
+		return "", serviceError("START_FAILED", "The Host service could not be started.", 502, true, nil)
+	}
+	_ = gateRead.Close()
+	fingerprint, group, _, err := waitManagedProcessDetails(cmd.Process.Pid, 500*time.Millisecond)
+	if err != nil || group != cmd.Process.Pid {
+		_ = gateWrite.Close()
+		_ = killManagedProcess(cmd)
+		_ = cmd.Wait()
+		return "", serviceError("HOST_PROCESS_IDENTITY_UNAVAILABLE", "The Host launch identity could not be recorded.", 500, true, nil)
+	}
+	identity := "host:v3:" + service.ServiceID + ":" + nonce + ":" + strconv.Itoa(cmd.Process.Pid) + ":" + fingerprint
+	service.RuntimeIdentity = identity
+	if service.RuntimeSpecSHA256 == "" {
+		service.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
+	}
+	state := hostRunState{SchemaVersion: 1, RuntimeIdentity: identity, RuntimeSpecSHA256: service.RuntimeSpecSHA256, Endpoint: spec.Endpoint, OutputMode: spec.Host.OutputMode}
+	if err := d.writeRunState(service, state); err != nil {
+		_ = gateWrite.Close()
+		_ = cmd.Wait()
+		return "", serviceError("HOST_RUNTIME_PREPARE_FAILED", "The Host launch record could not be saved.", 500, true, nil)
+	}
+	if err := d.persistLaunch(ctx, service, identity); err != nil {
+		_ = gateWrite.Close()
+		_ = cmd.Wait()
+		return "", err
+	}
+	done := make(chan struct{})
+	current := hostProcess{cmd: cmd, identity: identity, pid: cmd.Process.Pid, fingerprint: fingerprint, done: done}
+	d.processMu.Lock()
+	d.processes[service.ServiceID] = current
+	d.processMu.Unlock()
+	serviceID := service.ServiceID
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+		d.forgetProcess(serviceID, identity)
+	}()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if _, err := gateWrite.Write([]byte("start\n")); err != nil {
+		return "", serviceError("START_FAILED", "The Host launch could not be released.", 502, true, nil)
+	}
+	_ = gateWrite.Close()
+	// Opening preparation is independent of business process health. A failed
+	// hook stays visible in the private launch record and can be retried on Open.
+	_, _ = d.prepareOpening(ctx, service, spec)
 	return identity, nil
 }
 
 func (d *hostScriptDriver) Stop(ctx context.Context, service *pfregistry.ManagedService) error {
 	return d.stop(ctx, service, true)
-}
-
-func (d *hostScriptDriver) Shutdown(ctx context.Context, service *pfregistry.ManagedService) error {
-	return d.stop(ctx, service, false)
 }
 
 func (d *hostScriptDriver) stop(ctx context.Context, service *pfregistry.ManagedService, runTemplateScript bool) error {
@@ -307,6 +263,13 @@ func (d *hostScriptDriver) stop(ctx context.Context, service *pfregistry.Managed
 	}
 	if service.RuntimeIdentity != "" && current.identity != service.RuntimeIdentity {
 		return serviceError("RUNTIME_IDENTITY_MISMATCH", "Redeven will not stop a custom host process whose identity changed.", 409, false, nil)
+	}
+	if err := verifyHostSignalTarget(current); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			d.removeOpenSession(service)
+			return nil
+		}
+		return err
 	}
 	var stopScriptErr error
 	if runTemplateScript {
@@ -382,6 +345,14 @@ func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.Ma
 	if err := os.RemoveAll(logRoot); err != nil {
 		return err
 	}
+	// Private launch output and opening credentials are ephemeral, not user data.
+	// Uninstall has already verified and stopped the owned application above.
+	if err := os.RemoveAll(filepath.Join(root, "runs")); err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(root, "open-session.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	if deleteData {
 		if err := os.RemoveAll(d.dataRoot(service)); err != nil {
 			return err
@@ -448,6 +419,10 @@ func (d *hostScriptDriver) runOneShot(ctx context.Context, service *pfregistry.M
 }
 
 func (d *hostScriptDriver) serviceEnvironment(ctx context.Context, service *pfregistry.ManagedService, executable string) ([]string, error) {
+	return d.serviceEnvironmentForRun(ctx, service, executable, d.runDirectory(service))
+}
+
+func (d *hostScriptDriver) serviceEnvironmentForRun(ctx context.Context, service *pfregistry.ManagedService, executable, runRoot string) ([]string, error) {
 	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
 		return nil, err
@@ -460,13 +435,15 @@ func (d *hostScriptDriver) serviceEnvironment(ctx context.Context, service *pfre
 	}
 	root := d.instanceRoot(service)
 	base := map[string]string{
-		"REDEVEN_SERVICE_ID":         service.ServiceID,
-		"REDEVEN_SERVICE_HOST":       "127.0.0.1",
-		"REDEVEN_SERVICE_PORT":       strconv.Itoa(service.RuntimePort),
-		"REDEVEN_WORKSPACE":          service.WorkspacePath,
-		"REDEVEN_SERVICE_DATA_DIR":   d.dataRoot(service),
-		"REDEVEN_INSTALL_DIR":        filepath.Join(root, "install"),
-		"REDEVEN_INSTALL_EXECUTABLE": executable,
+		"REDEVEN_SERVICE_RUN_DIR":     runRoot,
+		"REDEVEN_SERVICE_OUTPUT_FILE": filepath.Join(runRoot, "output"),
+		"REDEVEN_SERVICE_ID":          service.ServiceID,
+		"REDEVEN_SERVICE_HOST":        "127.0.0.1",
+		"REDEVEN_SERVICE_PORT":        strconv.Itoa(service.RuntimePort),
+		"REDEVEN_WORKSPACE":           service.WorkspacePath,
+		"REDEVEN_SERVICE_DATA_DIR":    d.dataRoot(service),
+		"REDEVEN_INSTALL_DIR":         filepath.Join(root, "install"),
+		"REDEVEN_INSTALL_EXECUTABLE":  executable,
 	}
 	environment := map[string]string{}
 	for _, item := range os.Environ() {
@@ -553,37 +530,80 @@ type parsedHostIdentity struct {
 	fingerprint string
 	serviceID   string
 	version     string
+	nonce       string
 }
 
 func parseHostIdentity(identity string) parsedHostIdentity {
 	parts := strings.Split(strings.TrimSpace(identity), ":")
-	if len(parts) == 6 && parts[0] == "host" && parts[1] == "v2" {
+	if len(parts) == 6 && parts[0] == "host" && (parts[1] == "v2" || parts[1] == "v3") {
+		for _, c := range parts[3] {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' && c != '-' {
+				return parsedHostIdentity{}
+			}
+		}
+		if parts[3] == "" {
+			return parsedHostIdentity{}
+		}
 		pid, _ := strconv.Atoi(parts[4])
-		return parsedHostIdentity{pid: pid, fingerprint: parts[5], serviceID: parts[2], version: "v2"}
+		return parsedHostIdentity{pid: pid, fingerprint: parts[5], serviceID: parts[2], version: parts[1], nonce: parts[3]}
 	}
 	return parsedHostIdentity{}
 }
 
 func (d *hostScriptDriver) recoverPersistedProcess(service *pfregistry.ManagedService) (hostProcess, bool, error) {
-	parsed := parseHostIdentity(service.RuntimeIdentity)
-	if parsed.pid <= 0 || !managedProcessRunning(parsed.pid) {
+	d.recoveryMu.Lock()
+	defer d.recoveryMu.Unlock()
+	if strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return hostProcess{}, false, nil
 	}
-	if parsed.serviceID != service.ServiceID {
-		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process belongs to another managed service.", 409, false, nil)
+	if err := d.resumeHostIdentityUpgrade(service); err != nil {
+		return hostProcess{}, false, err
 	}
-	fingerprint, processGroup, _, err := managedProcessDetails(parsed.pid)
-	if err != nil || processGroup != parsed.pid {
-		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process could not be verified after Runtime restart.", 409, false, err)
+	parsed := parseHostIdentity(service.RuntimeIdentity)
+	if parsed.pid <= 0 || parsed.serviceID != service.ServiceID {
+		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host launch identity is invalid.", 409, false, nil)
 	}
-	identity := strings.TrimSpace(service.RuntimeIdentity)
-	if parsed.version != "v2" || parsed.fingerprint == "" || parsed.fingerprint != fingerprint {
-		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process start identity no longer matches.", 409, false, nil)
+	snapshot, err := readManagedProcess(parsed.pid)
+	if errors.Is(err, os.ErrNotExist) {
+		return hostProcess{}, false, nil
 	}
-	return hostProcess{identity: identity, pid: parsed.pid, fingerprint: fingerprint}, true, nil
+	if err != nil {
+		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_UNAVAILABLE", "The Host process identity cannot currently be checked.", 409, true, nil)
+	}
+	fingerprint := snapshot.fingerprint()
+	if snapshot.Group != parsed.pid {
+		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The Host process group no longer matches.", 409, false, nil)
+	}
+	if parsed.version == "v2" {
+		return d.upgradeLegacyHostIdentity(service, parsed, snapshot)
+	}
+	if parsed.fingerprint == "" || parsed.fingerprint != fingerprint {
+		return hostProcess{}, false, serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The saved Host process birth identity no longer matches.", 409, false, nil)
+	}
+	return hostProcess{identity: service.RuntimeIdentity, pid: parsed.pid, fingerprint: fingerprint}, true, nil
+}
+
+func verifyHostSignalTarget(process hostProcess) error {
+	snapshot, err := readManagedProcess(process.pid)
+	if errors.Is(err, os.ErrNotExist) {
+		return os.ErrNotExist
+	}
+	if err != nil {
+		return serviceError("HOST_PROCESS_IDENTITY_UNAVAILABLE", "The Host process cannot currently be verified for stopping.", 409, true, nil)
+	}
+	if snapshot.Group != process.pid || snapshot.fingerprint() != process.fingerprint {
+		return serviceError("HOST_PROCESS_IDENTITY_MISMATCH", "The Host process changed before the stop action.", 409, false, nil)
+	}
+	return nil
 }
 
 func terminateHostProcess(process hostProcess) error {
+	if err := verifyHostSignalTarget(process); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
 	if process.cmd != nil {
 		return terminateManagedProcess(process.cmd)
 	}
@@ -591,6 +611,12 @@ func terminateHostProcess(process hostProcess) error {
 }
 
 func killHostProcess(process hostProcess) error {
+	if err := verifyHostSignalTarget(process); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
 	if process.cmd != nil {
 		return killManagedProcess(process.cmd)
 	}

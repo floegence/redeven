@@ -107,6 +107,9 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 	}
 	journalPersisted, committed := false, false
 	defer func() {
+		if m.isClosing() {
+			return
+		}
 		if !journalPersisted {
 			m.removeReconfigureStage(service.ServiceID, op.OperationID)
 			return

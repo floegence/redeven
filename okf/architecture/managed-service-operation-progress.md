@@ -18,7 +18,7 @@ timestamp: 2026-09-03T00:00:00Z
 
 `ManagedOperationProgressDetail` schema v2 is the sole progress document. It retains stage timing and structured transfer facts, then adds ordered commands and output lines. A command has a stable operation-local ID, safe display template, state, and start and finish times. An output line has a monotonic sequence, owning command ID, `stdout` or `stderr` source, and redacted text. Duplicate proposed command IDs receive deterministic suffixes so output cannot become ambiguous.
 
-The concurrent Reporter owns every mutation to an in-flight progress document. Host, Container, and Compose continue to report the facts they genuinely possess: npm install, npm rebuild, and Host Hooks stream command output; image pulling retains structured layer and byte progress when no command stream exists. Ordinary output is persisted and broadcast no more often than every 500 milliseconds and no later than 500 milliseconds after a quiet burst. Command transitions, stage transitions, failure, cancellation, completion, and Reporter close flush immediately. Terminal state is written only after the Reporter closes, so delayed output cannot overwrite completion.
+The concurrent Reporter owns every mutation to an in-flight progress document. Host, Container, and Compose continue to report the facts they genuinely possess: npm install, npm rebuild, and Host installation/maintenance hooks stream redacted output; private after-start/open hooks never stream their results; image pulling retains structured layer and byte progress when no command stream exists. Ordinary output is persisted and broadcast no more often than every 500 milliseconds and no later than 500 milliseconds after a quiet burst. Command transitions, stage transitions, failure, cancellation, completion, and Reporter close flush immediately. Terminal state is written only after the Reporter closes, so delayed output cannot overwrite completion.
 
 The retained tail is at most 400 lines and 128 KiB, with at most 4 KiB per line and at most 64 commands. ANSI sequences and unsafe control characters are removed. Known Secret values, authorization fields, credential-shaped values, sensitive URL query values, the Manager state root, and the service workspace are replaced before any persistence, event publication, or service-log write. A truncation fact tells the UI that older content was removed; it does not reconstruct discarded output.
 
@@ -34,7 +34,7 @@ One Renderer presentation controller separates operation visibility from backend
 
 # Boundaries
 
-Operation output is observability data, not a terminal, shell, downloadable transcript, or raw debug channel. Renderer cannot request an unredacted variant. The Reporter does not invent percentages, byte totals, image commands, or missing process output. Dynamic Host opening observes the original startup line before redaction only inside the Runtime validator; its private query never enters this progress document.
+Operation output is observability data, not a terminal, shell, downloadable transcript, or raw debug channel. Renderer cannot request an unredacted variant. The Reporter does not invent percentages, byte totals, image commands, or missing process output. Application output used for dynamic opening goes directly to a private file. Template hooks parse it, and the generic URL validator keeps their result outside this progress document.
 
 # Evidence
 

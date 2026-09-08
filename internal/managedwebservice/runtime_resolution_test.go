@@ -271,7 +271,7 @@ func TestUpdateTemplateSerializesRuntimeEditsWithManagedOperations(t *testing.T)
 	}
 }
 
-func TestHostShutdownDoesNotRequireCurrentTemplateExecution(t *testing.T) {
+func TestRuntimeClosePreservesHostWithInvalidCurrentTemplate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("starts a local managed process")
 	}
@@ -295,10 +295,10 @@ func TestHostShutdownDoesNotRequireCurrentTemplateExecution(t *testing.T) {
 	if _, err := manager.resolveCurrentRuntime(context.Background(), service); err == nil {
 		t.Fatal("corrupt current template unexpectedly resolved")
 	}
-	if err := driver.Shutdown(context.Background(), service); err != nil {
+	if err := manager.Close(); err != nil {
 		t.Fatalf("identity-owned Host shutdown error = %v", err)
 	}
-	if managedProcessAlive(hostPIDFromIdentity(identity)) {
-		t.Fatal("identity-owned Host process remained alive")
+	if !managedProcessAlive(hostPIDFromIdentity(identity)) {
+		t.Fatal("Runtime close stopped the Host process")
 	}
 }

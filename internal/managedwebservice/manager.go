@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -48,21 +50,25 @@ type Manager struct {
 	compose           deploymentDriver
 	healthCheck       func(context.Context, *pfregistry.ManagedService) error
 
-	requestMu      sync.Mutex
-	releaseMu      sync.Mutex
-	releaseItems   map[string]cachedReleaseCandidate
-	releaseViews   map[string]ReleaseCandidateResult
-	releaseCursors map[string]cachedReleaseCursor
-	updatePlans    map[string]cachedUpdatePlan
-	releaseCancel  context.CancelFunc
-	releaseClient  *http.Client
-	mu             sync.Mutex
-	workers        sync.WaitGroup
-	cancelByOp     map[string]context.CancelFunc
-	listeners      map[string]map[uint64]chan pfregistry.ManagedOperation
-	reporters      map[string]*operationReporter
-	nextListener   uint64
-	closed         bool
+	requestMu         sync.Mutex
+	releaseMu         sync.Mutex
+	releaseItems      map[string]cachedReleaseCandidate
+	releaseViews      map[string]ReleaseCandidateResult
+	releaseCursors    map[string]cachedReleaseCursor
+	updatePlans       map[string]cachedUpdatePlan
+	releaseCancel     context.CancelFunc
+	releaseClient     *http.Client
+	mu                sync.Mutex
+	workers           sync.WaitGroup
+	cancelByOp        map[string]context.CancelFunc
+	listeners         map[string]map[uint64]chan pfregistry.ManagedOperation
+	reporters         map[string]*operationReporter
+	nextListener      uint64
+	managementCtx     context.Context
+	managementCancel  context.CancelFunc
+	maintenanceCancel context.CancelFunc
+	openFlights       singleflight.Group
+	closed            bool
 }
 
 func New(opts ManagerOptions) (*Manager, error) {
@@ -101,6 +107,7 @@ func New(opts ManagerOptions) (*Manager, error) {
 		copy.CheckRedirect = releaseMetadataRedirectPolicy
 		m.releaseClient = &copy
 	}
+	m.managementCtx, m.managementCancel = context.WithCancel(context.Background())
 	m.packageDownloader = &verifiedPackageDownloader{client: m.downloads.packageHTTPClient()}
 	m.host = &hostScriptDriver{manager: m, processes: map[string]hostProcess{}}
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
@@ -118,6 +125,7 @@ func (m *Manager) releaseHTTPClient() *http.Client {
 
 func (m *Manager) Start(ctx context.Context) {
 	m.startReleaseDiscovery()
+	m.startOutputMaintenance(ctx)
 	services, err := m.registry.ListManagedServices(ctx)
 	if err != nil {
 		m.log.Error("list managed services for recovery", "cause", safeManagedFailureCause(err))
@@ -133,7 +141,8 @@ func (m *Manager) Start(ctx context.Context) {
 			m.reconcileInterruptedService(&service, *latest)
 			continue
 		}
-		if service.DesiredState != "running" || service.ObservedState == "error" || service.LastErrorCode != "" {
+		running, observationErr := m.observe(ctx, &service)
+		if observationErr != nil || running || service.DesiredState != "running" || service.LastErrorCode != "" || (latest != nil && latest.State == "failed") {
 			continue
 		}
 		requestID := "runtime-recovery-" + service.ServiceID + "-" + fmt.Sprint(time.Now().UnixMilli())
@@ -144,6 +153,12 @@ func (m *Manager) Start(ctx context.Context) {
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	m.closed = true
+	if m.managementCancel != nil {
+		m.managementCancel()
+	}
+	if m.maintenanceCancel != nil {
+		m.maintenanceCancel()
+	}
 	cancels := make([]context.CancelFunc, 0, len(m.cancelByOp))
 	for _, cancel := range m.cancelByOp {
 		cancels = append(cancels, cancel)
@@ -160,29 +175,7 @@ func (m *Manager) Close() error {
 		cancel()
 	}
 	m.workers.Wait()
-	services, _ := m.registry.ListManagedServices(context.Background())
-	for i := range services {
-		if services[i].ObservedState == "running" {
-			binding, bindingErr := decodeRuntimeBinding(&services[i])
-			if bindingErr != nil {
-				m.log.Warn("skip unowned managed Web Service during runtime shutdown", "service_id", services[i].ServiceID, "cause", safeManagedFailureCause(bindingErr))
-				continue
-			}
-			driver := m.driver(binding.Deployment)
-			var stopErr error
-			if shutdown, ok := driver.(runtimeShutdownDriver); ok {
-				stopErr = shutdown.Shutdown(context.Background(), &services[i])
-			} else {
-				stopErr = driver.Stop(context.Background(), &services[i])
-			}
-			if stopErr != nil {
-				m.log.Warn("stop managed Web Service during runtime shutdown", "service_id", services[i].ServiceID, "cause", safeManagedFailureCause(stopErr))
-				continue
-			}
-			stopped := "stopped"
-			_ = m.registry.UpdateManagedService(context.Background(), services[i].ServiceID, pfregistry.ManagedServicePatch{ObservedState: &stopped})
-		}
-	}
+
 	return nil
 }
 
@@ -303,9 +296,13 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 		if err != nil {
 			return nil, err
 		}
+		var observationErr error
+		if active == nil {
+			_, observationErr = m.observe(ctx, &service)
+		}
 		var lastFailure *ServiceFailure
 		var latestFailure *pfregistry.ManagedOperation
-		if service.ObservedState == "error" {
+		if service.LastErrorCode != "" {
 			latestFailure, err = m.registry.GetLatestManagedOperationFailure(ctx, service.ServiceID)
 			if err != nil {
 				return nil, err
@@ -339,6 +336,29 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			AccessMode:         forward.AccessMode,
 			ContainerResources: containerResourceLinks(service, deployment),
 			Actions:            serviceActionCapabilities(service, resolved, active, latestFailure),
+		}
+		view.PendingChanges = resolved != nil && service.RuntimeSpecSHA256 != "" && service.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256
+		view.Opening.State = "unavailable"
+		if service.ObservedState == "running" {
+			view.Opening.State = "ready"
+			if deployment == DeploymentHost {
+				if driver, ok := m.host.(*hostScriptDriver); ok {
+					if state, err := driver.readRunState(&service); err != nil {
+						view.Opening.State, view.Opening.ErrorCode = "unavailable", "HOST_OPEN_TARGET_UNAVAILABLE"
+					} else if state.OpenErrorCode != "" {
+						view.Opening.State, view.Opening.ErrorCode = "error", state.OpenErrorCode
+					}
+				}
+			}
+		}
+		if observationErr != nil {
+			view.Opening.ErrorCode, _, _, _ = ErrorDetails(observationErr)
+		}
+		if active == nil && service.ObservedState == "running" {
+			if err := m.checkOpeningEndpoint(ctx, &service); err != nil {
+				view.Opening.State = "unavailable"
+				view.Opening.ErrorCode, _, _, _ = ErrorDetails(err)
+			}
 		}
 		identity, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
 		if identityErr != nil {
@@ -419,17 +439,24 @@ func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry
 func serviceActionCapabilities(service pfregistry.ManagedService, runtime *resolvedRuntime, active, failure *pfregistry.ManagedOperation) ServiceActions {
 	unavailable := func(code string) ActionCapability { return ActionCapability{ReasonCode: code} }
 	actions := ServiceActions{
+		Open: unavailable("SERVICE_NOT_RUNNING"), RestoreManagement: unavailable("HOST_RECOVERY_NOT_REQUIRED"),
 		Start: unavailable("SERVICE_STATE_UNAVAILABLE"), Stop: unavailable("SERVICE_STATE_UNAVAILABLE"),
 		Restart: unavailable("SERVICE_STATE_UNAVAILABLE"), Retry: unavailable("NO_RETRYABLE_FAILURE"),
 	}
 	if active != nil {
 		busy := unavailable("OPERATION_ACTIVE")
-		return ServiceActions{Start: busy, Stop: busy, Restart: busy, Retry: busy}
+		return ServiceActions{Start: busy, Stop: busy, Restart: busy, Retry: busy, Open: busy, RestoreManagement: busy}
+	}
+	if service.ObservedState == "running" {
+		actions.Open = ActionCapability{Available: true}
+	}
+	if service.ObservedState == "unknown" && parseHostIdentity(service.RuntimeIdentity).version == "v2" {
+		actions.RestoreManagement = ActionCapability{Available: true}
 	}
 	bindingReady := runtime != nil
 	runtimeReady := strings.TrimSpace(service.RuntimeIdentity) != ""
 	if runtime != nil && runtime.Template.Deployment == DeploymentHost {
-		runtimeReady = strings.TrimSpace(service.ArtifactReference) != ""
+		runtimeReady = runtime.Spec.Host != nil && ((runtime.Spec.Host.NPM == nil && runtime.Spec.Host.Artifact == nil) || strings.TrimSpace(service.ArtifactReference) != "")
 	}
 	if bindingReady && runtimeReady && service.ObservedState == "stopped" && service.LastErrorCode == "" {
 		actions.Start = ActionCapability{Available: true}
@@ -956,6 +983,13 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 		err = m.runUninstall(ctx, &service, &op, driver, inputs.DeleteData, inputs.DeleteWorkspace, inputs.WorkspaceCleanupOnly)
 	}
 	reporter.Close()
+	if err != nil && m.isClosing() {
+		op.State, op.Stage = "interrupted", "interrupted"
+		op.ErrorCode, op.ErrorMessage = "OPERATION_INTERRUPTED", "The Runtime stopped before the operation completed."
+		op.FinishedAtUnixMs = time.Now().UnixMilli()
+		m.finalizeAndPublish(&op, pfregistry.ManagedServicePatch{})
+		return
+	}
 	if err != nil {
 		if OperationAction(op.Action) == ActionUpdate {
 			m.finishUpdateFailure(&service, &op, err)
@@ -1046,6 +1080,9 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 	}
 	m.progress(op, "health_check", 6)
 	if err := m.waitHealthy(ctx, service); err != nil {
+		if m.isClosing() {
+			return context.Canceled
+		}
 		_ = driver.Stop(context.Background(), service)
 		return serviceError("HEALTH_CHECK_FAILED", "The managed Web Service did not become healthy on its loopback port.", 502, true, err)
 	}
@@ -1056,8 +1093,19 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 
 func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, resolved *resolvedRuntime) error {
 	running := "running"
+	service.DesiredState = running
 	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running}); err != nil {
 		return err
+	}
+	if observer, ok := driver.(runtimeObserver); ok {
+		alive, err := observer.Observe(ctx, service)
+		if err != nil {
+			return err
+		}
+		if alive {
+			service.ObservedState = running
+			return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running, ObservedState: &running})
+		}
 	}
 	if service.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256 {
 		stage := map[Deployment]string{DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[resolved.Template.Deployment]
@@ -1088,6 +1136,9 @@ func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedServi
 	}
 	m.progress(op, "health_check", 6)
 	if err := m.waitHealthy(ctx, service); err != nil {
+		if m.isClosing() {
+			return context.Canceled
+		}
 		_ = driver.Stop(context.Background(), service)
 		return serviceError("HEALTH_CHECK_FAILED", "The managed Web Service did not become healthy on its loopback port.", 502, true, err)
 	}
@@ -1118,8 +1169,12 @@ func (m *Manager) prepareOperationWorkspace(service *pfregistry.ManagedService, 
 }
 
 func (m *Manager) runStop(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
-	stopped := "stopped"
-	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &stopped}); err != nil {
+	stopped, desired := "stopped", "stopped"
+	if OperationAction(op.Action) == ActionRestart {
+		desired = "running"
+	}
+	service.DesiredState = desired
+	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired}); err != nil {
 		return err
 	}
 	m.progress(op, "stopping", 5)
@@ -1205,9 +1260,9 @@ func (m *Manager) finishUpdateFailure(service *pfregistry.ManagedService, op *pf
 	if rollbackErr != nil {
 		op.State, op.Stage = "failed", "failed"
 		op.ErrorCode, op.ErrorMessage = "UPDATE_ROLLBACK_FAILED", "The update failed and Redeven could not restore the previous verified runtime."
-		desired, observed := "stopped", "error"
+		observed := "unknown"
 		op.FinishedAtUnixMs = time.Now().UnixMilli()
-		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
+		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
 		m.log.Error("roll back managed Web Service update", "service_id", service.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(rollbackErr))
 		return
 	}
@@ -1231,9 +1286,9 @@ func (m *Manager) finishReconfigureFailure(service *pfregistry.ManagedService, o
 	if rollbackErr != nil {
 		op.State, op.Stage = "failed", "failed"
 		op.ErrorCode, op.ErrorMessage = "RECONFIGURE_ROLLBACK_FAILED", "The configuration change failed and Redeven could not restore the previous stopped Runtime."
-		desired, observed := "stopped", "error"
+		observed := "unknown"
 		op.FinishedAtUnixMs = time.Now().UnixMilli()
-		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
+		m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &op.ErrorCode, LastErrorMessage: &op.ErrorMessage})
 		m.log.Error("roll back managed Web Service reconfiguration", "service_id", service.ServiceID, "operation_id", op.OperationID, "cause", safeManagedFailureCause(rollbackErr))
 		return
 	}
@@ -1245,15 +1300,15 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 	binding, bindingErr := decodeRuntimeBinding(service)
 	if bindingErr != nil {
 		code, message, _, _ := ErrorDetails(bindingErr)
-		desired, observed := "stopped", "error"
-		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+		observed := "unknown"
+		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
 		return
 	}
 	driver := m.driver(binding.Deployment)
 	if driver == nil {
 		code, message := "DEPLOYMENT_INVALID", "The interrupted managed Web Service has an invalid deployment type."
-		desired, observed := "stopped", "error"
-		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+		observed := "unknown"
+		_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
 		return
 	}
 	if OperationAction(operation.Action) == ActionUpdate {
@@ -1265,8 +1320,8 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 			}
 			if err := m.recoverInterruptedHostUpdate(service, &operation, driver); err != nil {
 				code, message := "UPDATE_RECOVERY_FAILED", "The interrupted Host update could not restore or finalize a verified Runtime."
-				desired, observed := "stopped", "error"
-				_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+				observed := "unknown"
+				_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
 				m.log.Error("recover interrupted managed Web Service Host update", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
 			}
 			return
@@ -1274,14 +1329,14 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 		updateDriver, ok := driver.(containerUpdateDriver)
 		if !ok {
 			code, message := "UPDATE_UNSUPPORTED", "The interrupted update deployment cannot be recovered."
-			desired, observed := "stopped", "error"
-			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+			observed := "unknown"
+			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
 			return
 		}
 		if err := m.recoverInterruptedContainerUpdate(service, &operation, updateDriver); err != nil {
 			code, message := "UPDATE_RECOVERY_FAILED", "The interrupted update could not restore or finalize a verified runtime."
-			desired, observed := "stopped", "error"
-			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+			observed := "unknown"
+			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
 			m.log.Error("recover interrupted managed Web Service update", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
 		}
 		return
@@ -1289,35 +1344,15 @@ func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService
 	if OperationAction(operation.Action) == ActionReconfigure {
 		if err := m.recoverInterruptedReconfigure(service, &operation, driver); err != nil {
 			code, message := "RECONFIGURE_RECOVERY_FAILED", "The interrupted configuration change could not restore or finalize a verified stopped Runtime."
-			desired, observed := "stopped", "error"
-			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &desired, ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
+			observed := "unknown"
+			_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &observed, LastErrorCode: &code, LastErrorMessage: &message})
 			m.log.Error("recover interrupted managed Web Service reconfiguration", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
 		}
 		return
 	}
-	var err error
-	switch OperationAction(operation.Action) {
-	case ActionInstall, ActionRetryInstall:
-		err = driver.CleanupPartial(context.Background(), service)
-	case ActionStart, ActionStop, ActionRestart, ActionUninstall:
-		err = driver.Stop(context.Background(), service)
-	}
-	code, message := "OPERATION_INTERRUPTED", "The Runtime stopped before the operation completed. Retry the operation when ready."
-	patch := pfregistry.ManagedServicePatch{}
-	if err == nil && (OperationAction(operation.Action) == ActionInstall || OperationAction(operation.Action) == ActionRetryInstall) {
-		blank := ""
-		service.RuntimeIdentity = blank
-		patch.RuntimeIdentity = &blank
-	}
-	if err != nil {
-		code, message = "INTERRUPTED_CLEANUP_FAILED", "The interrupted operation could not clean up its verified runtime resource."
-		m.log.Warn("clean up interrupted managed Web Service operation", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(err))
-	}
-	desired, observed := "stopped", "error"
-	patch.DesiredState, patch.ObservedState, patch.LastErrorCode, patch.LastErrorMessage = &desired, &observed, &code, &message
-	if updateErr := m.registry.UpdateManagedService(context.Background(), service.ServiceID, patch); updateErr != nil {
-		m.log.Error("persist interrupted managed Web Service recovery", "service_id", service.ServiceID, "operation_id", operation.OperationID, "cause", safeManagedFailureCause(updateErr))
-	}
+	_, _ = m.observe(context.Background(), service)
+	code, message := "OPERATION_INTERRUPTED", "The Runtime stopped before the operation completed. Review the current service state before retrying."
+	_ = m.registry.UpdateManagedService(context.Background(), service.ServiceID, pfregistry.ManagedServicePatch{LastErrorCode: &code, LastErrorMessage: &message})
 }
 
 func (m *Manager) fail(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, code, message string, cause error) {
@@ -1338,8 +1373,8 @@ func (m *Manager) fail(service *pfregistry.ManagedService, op *pfregistry.Manage
 	op.ErrorCode = code
 	op.ErrorMessage = message
 	op.FinishedAtUnixMs = time.Now().UnixMilli()
-	errorState, stopped := "error", "stopped"
-	m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{DesiredState: &stopped, ObservedState: &errorState, LastErrorCode: &code, LastErrorMessage: &message})
+	_, _ = m.observe(context.Background(), service)
+	m.finalizeAndPublish(op, pfregistry.ManagedServicePatch{LastErrorCode: &code, LastErrorMessage: &message})
 }
 
 func safeManagedFailureCause(cause error) string {
@@ -1546,10 +1581,6 @@ type deploymentDriver interface {
 	Uninstall(context.Context, *pfregistry.ManagedService, bool, operationProgress) error
 	CleanupPartial(context.Context, *pfregistry.ManagedService) error
 	Logs(context.Context, *pfregistry.ManagedService, int) (*LogResult, error)
-}
-
-type runtimeShutdownDriver interface {
-	Shutdown(context.Context, *pfregistry.ManagedService) error
 }
 
 func (m *Manager) driver(deployment Deployment) deploymentDriver {

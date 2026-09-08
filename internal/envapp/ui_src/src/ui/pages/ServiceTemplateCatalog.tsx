@@ -25,7 +25,7 @@ export type ServiceTemplateIcon = Readonly<{
 }>;
 
 export type ServiceTemplateRuntimeSpec = Readonly<{
-  schema_version: 5;
+  schema_version: 6;
   kind: ServiceTemplateKind;
   endpoint: Readonly<{
     scheme: 'http' | 'https';
@@ -38,7 +38,9 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
   }>;
   parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
   host?: Readonly<{
-    open_target?: Readonly<{ mode: 'startup_output_url'; line_prefix: string }>;
+    after_start_script?: string;
+    open_script?: string;
+    output_mode?: 'discard' | 'private_file';
     install_script?: string;
     start_script: string;
     stop_script?: string;
@@ -76,7 +78,7 @@ export type ServiceTemplateRuntimeSpec = Readonly<{
 }>;
 
 export type HostLifecycleStep = Readonly<{
-	kind: 'prepare_managed_directories' | 'prepare_verified_package' | 'run_locked_dependency_install' | 'prepare_verified_node_runtime' | 'install_npm_package_without_scripts' | 'remove_temporary_registry_credentials' | 'run_npm_lifecycle_scripts' | 'verify_npm_release_identity' | 'run_template_script' | 'launch_managed_runtime' | 'terminate_managed_process_group' | 'remove_managed_installation' | 'remove_managed_logs' | 'remove_managed_data_on_request';
+	kind: 'run_after_start_hook' | 'prepare_managed_directories' | 'prepare_verified_package' | 'run_locked_dependency_install' | 'prepare_verified_node_runtime' | 'install_npm_package_without_scripts' | 'remove_temporary_registry_credentials' | 'run_npm_lifecycle_scripts' | 'verify_npm_release_identity' | 'run_template_script' | 'launch_managed_runtime' | 'terminate_managed_process_group' | 'remove_managed_installation' | 'remove_managed_logs' | 'remove_managed_data_on_request';
   reference?: string;
   command_template?: string;
 }>;
@@ -98,6 +100,8 @@ export type HostLifecyclePlan = Readonly<{
 	npm?: Readonly<{ package_name: string; version: string; registry_url: string; executable: string }>;
   install: HostLifecycleActionPlan;
   start: HostLifecycleActionPlan;
+  open?: HostLifecycleActionPlan;
+  output_mode?: 'discard' | 'private_file';
   stop: HostLifecycleActionPlan;
   uninstall: HostLifecycleActionPlan;
 }>;
@@ -267,9 +271,10 @@ function ContainerTemplateDetails(props: { spec: ServiceTemplateRuntimeSpec }): 
   );
 }
 
-type HostLifecycleAction = 'install' | 'start' | 'stop' | 'uninstall';
+type HostLifecycleAction = 'open' | 'install' | 'start' | 'stop' | 'uninstall';
 
 function lifecycleActionLabel(action: HostLifecycleAction, i18n: ReturnType<typeof useI18n>): string {
+  if (action === 'open') return i18n.t('webServices.managed.openScript');
   return i18n.t(`webServices.managed.lifecycleAction.${action}` as Parameters<typeof i18n.t>[0]);
 }
 
@@ -278,7 +283,9 @@ function lifecycleOwnershipLabel(ownership: HostLifecycleActionPlan['ownership']
 }
 
 function lifecycleStepLabel(step: HostLifecycleStep, action: HostLifecycleAction, managedInstall: boolean, i18n: ReturnType<typeof useI18n>): string {
+  if (step.kind === 'run_after_start_hook') return i18n.t('webServices.managed.afterStartScript');
   if (step.kind === 'run_template_script') {
+    if (action === 'open') return i18n.t('webServices.managed.openScript');
     if (action === 'install') return i18n.t(managedInstall ? 'webServices.managed.lifecycleStep.afterInstallHook' : 'webServices.managed.lifecycleStep.installScript');
     if (action === 'start') return i18n.t('webServices.managed.lifecycleStep.startScript');
     if (action === 'stop') return i18n.t('webServices.managed.lifecycleStep.beforeStopHook');
@@ -288,7 +295,7 @@ function lifecycleStepLabel(step: HostLifecycleStep, action: HostLifecycleAction
 }
 
 function actionPlan(plan: HostLifecyclePlan, action: HostLifecycleAction): HostLifecycleActionPlan {
-  return plan[action];
+  return plan[action] ?? { ownership: 'none', steps: [] };
 }
 
 export function HostLifecyclePlanDetails(props: {
@@ -296,7 +303,7 @@ export function HostLifecyclePlanDetails(props: {
   templateCommands?: 'show' | 'reference';
 }): JSX.Element {
   const i18n = useI18n();
-  const actions: readonly HostLifecycleAction[] = ['install', 'start', 'stop', 'uninstall'];
+  const actions = (): readonly HostLifecycleAction[] => ['install', 'start', ...(props.plan.open ? ['open' as const] : []), 'stop', 'uninstall'];
   const managedInstall = () => props.plan.install.steps.some((step) => step.kind === 'prepare_verified_package');
   const templateCommands = () => props.templateCommands ?? 'show';
 
@@ -320,7 +327,7 @@ export function HostLifecyclePlanDetails(props: {
         )}</Show>
       </dl>
       <div class="service-template-lifecycle-plan__actions mt-3 grid gap-2">
-        <For each={actions}>{(action) => {
+        <For each={actions()}>{(action) => {
           const current = () => actionPlan(props.plan, action);
           return (
             <div class="service-template-lifecycle-action rounded-md border px-3 py-2.5" data-lifecycle-action={action}>

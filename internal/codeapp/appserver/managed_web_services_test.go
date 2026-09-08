@@ -407,6 +407,13 @@ func (b *managedBackendStub) Subscribe(string) (<-chan pfregistry.ManagedOperati
 func (b *managedBackendStub) Logs(context.Context, string, int) (*managedwebservice.LogResult, error) {
 	return &managedwebservice.LogResult{}, nil
 }
+func (b *managedBackendStub) ReviewHostManagement(_ context.Context, serviceID string) (*managedwebservice.HostManagementReview, error) {
+	return &managedwebservice.HostManagementReview{ServiceID: serviceID, PID: 123, Executable: "server"}, nil
+}
+func (b *managedBackendStub) RestoreHostManagement(context.Context, string, managedwebservice.RestoreManagementRequest) error {
+	return nil
+}
+
 func (b *managedBackendStub) OpenSession(_ context.Context, serviceID string, request managedwebservice.OpenSessionRequest) (*managedwebservice.OpenSession, error) {
 	b.openSessionCalls++
 	b.lastOpenRequest = request
@@ -418,4 +425,29 @@ func (b *managedBackendStub) OpenSession(_ context.Context, serviceID string, re
 
 func managedwebserviceTestError(code string, status int) error {
 	return &managedwebservice.Error{Code: code, Message: code, HTTPStatus: status}
+}
+
+func TestManagedManagementRecoveryRequiresFullPermissionAndPrivateResponse(t *testing.T) {
+	for _, action := range []string{"management-review", "restore-management"} {
+		t.Run(action, func(t *testing.T) {
+			backend := &managedBackendStub{}
+			channelID := "ch_management_recovery"
+			for _, full := range []bool{false, true} {
+				server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: full, CanExecute: full})}
+				req := httptest.NewRequest(http.MethodPost, managedServicesAPIBase+"/mws_owned/"+action, strings.NewReader(`{"saved_identity":"reviewed","fingerprint":"birth","confirmed":true}`))
+				req.Header.Set("Origin", envOriginWithChannel(channelID))
+				response := httptest.NewRecorder()
+				server.handleManagedWebServicesAPI(response, req)
+				if !full {
+					if response.Code != http.StatusForbidden {
+						t.Fatal("read-only user could restore management")
+					}
+					continue
+				}
+				if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+					t.Fatalf("recovery response=%d cache=%s", response.Code, response.Header().Get("Cache-Control"))
+				}
+			}
+		})
+	}
 }

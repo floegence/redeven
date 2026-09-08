@@ -17,20 +17,22 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v2"
-	registryCurrentSchemaVersion = 2
+	registryCurrentSchemaVersion = 3
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:             registrySchemaKind,
 		CurrentVersion:   registryCurrentSchemaVersion,
+		MinimumVersion:   1,
+		Initialize:       initializeCurrentRegistry,
 		Pragmas:          []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA foreign_keys=ON;`},
 		ValidateExisting: validateExistingRegistry,
 		Migrations: []sqliteutil.Migration{
-			{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
 		},
-		Verify: verifyRegistryV2,
+		Verify: verifyRegistryV3,
 	}
 }
 
@@ -58,6 +60,14 @@ func validateExistingRegistry(tx *sql.Tx) error {
 		return &sqliteutil.SchemaVerifyError{Kind: kind, Err: err}
 	}
 	return nil
+}
+
+func initializeCurrentRegistry(tx *sql.Tx) error {
+	if err := initializeRegistryV1(tx); err != nil {
+		return err
+	}
+	_, err := tx.Exec(addDefaultAppPath)
+	return err
 }
 
 func initializeRegistryV1(tx *sql.Tx) error {
@@ -184,6 +194,8 @@ func verifyRegistryV2(tx *sql.Tx) error {
 	return verifyRegistryVersion(tx, 2)
 }
 
+func verifyRegistryV3(tx *sql.Tx) error { return verifyRegistryVersion(tx, 3) }
+
 const addDefaultAppPath = `ALTER TABLE port_forwards ADD COLUMN default_app_path TEXT NOT NULL DEFAULT '/'`
 
 func migrateRegistryV1ToV2(tx *sql.Tx) error {
@@ -212,7 +224,7 @@ func verifyRegistryShape(tx *sql.Tx, version int) error {
 	if err := initializeRegistryV1(expected); err != nil {
 		return err
 	}
-	if version == 2 {
+	if version >= 2 {
 		if _, err := expected.Exec(addDefaultAppPath); err != nil {
 			return err
 		}
@@ -248,6 +260,10 @@ func verifyRegistryShape(tx *sql.Tx, version int) error {
 }
 
 func verifyRegistryVersion(tx *sql.Tx, version int) error {
+	templateVersion := 5
+	if version >= 3 {
+		templateVersion = 6
+	}
 	if err := verifyRegistryShape(tx, version); err != nil {
 		return err
 	}
@@ -271,7 +287,7 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 		"managed_web_service_operations":        {"operation_id", "service_id", "request_id", "request_fingerprint", "retry_of_operation_id", "action", "delete_data", "delete_workspace", "state", "stage", "progress_current", "progress_total", "cancel_requested", "error_code", "error_message", "created_at_unix_ms", "updated_at_unix_ms", "finished_at_unix_ms", "progress_detail_json"},
 		"managed_web_service_release_checks":    {"service_id", "summary_json", "summary_sha256", "checked_at_unix_ms", "next_check_at_unix_ms", "stale", "last_error_code", "updated_at_unix_ms"},
 	}
-	if version == 2 {
+	if version >= 2 {
 		wantColumns["port_forwards"] = append(wantColumns["port_forwards"], "default_app_path")
 	}
 	for table, want := range wantColumns {
@@ -293,7 +309,7 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	if err := verifyRegistryDocuments(tx); err != nil {
 		return err
 	}
-	if err := verifyTemplateSpecDocuments(tx); err != nil {
+	if err := verifyTemplateSpecDocuments(tx, templateVersion); err != nil {
 		return err
 	}
 	if err := verifyReleaseCheckSchemaV2(tx); err != nil {
@@ -433,7 +449,7 @@ func verifyReleaseCheckSchemaV2(tx *sql.Tx) error {
 	return rows.Err()
 }
 
-func verifyTemplateSpecDocuments(tx *sql.Tx) error {
+func verifyTemplateSpecDocuments(tx *sql.Tx, templateVersion int) error {
 	rows, err := tx.Query(`SELECT template_id,spec_json FROM managed_web_service_templates ORDER BY template_id`)
 	if err != nil {
 		return err
@@ -450,7 +466,7 @@ func verifyTemplateSpecDocuments(tx *sql.Tx) error {
 				ReleasePolicy json.RawMessage `json:"release_policy"`
 			} `json:"container,omitempty"`
 		}
-		if err := json.Unmarshal([]byte(raw), &value); err != nil || value.SchemaVersion != 5 {
+		if err := json.Unmarshal([]byte(raw), &value); err != nil || value.SchemaVersion != templateVersion {
 			return fmt.Errorf("TemplateSpec %s schema version is invalid", id)
 		}
 		if value.Container != nil && len(value.Container.ReleasePolicy) != 0 {
