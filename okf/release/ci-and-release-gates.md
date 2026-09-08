@@ -128,7 +128,7 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v3.0.29` release manifest. The
+Redeven consumes only the coordinated ReDevPlugin `v3.0.30` release manifest. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree. Local-wiring scans cover maintained source, scripts,
@@ -275,7 +275,7 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction and file export are releasable only through the `v3.0.29`
+Workbench plugin interaction and file export are releasable only through the `v3.0.30`
 source/port-bound interaction ownership and exact-surface close contracts. The
 gate rejects overlays, pointer-event switching, copied interaction DTOs, a
 second bridge, session-wide close fallback, placement persistence before close,
@@ -289,6 +289,15 @@ Playwright package and requires task-owned state, user-data, cache, temporary,
 and report roots plus unique Local UI, CDP, and inspector ports. It removes only
 its two test plugin placements before the opening scenarios. Invoke it as
 `node scripts/smoke_desktop_plugin_opening.mjs /tmp/redeven-plugin-opening/config.json`.
+
+Startup changes also run `scripts/smoke_desktop_plugin_startup.mjs` against the
+same isolated profile with the two official plugins installed. Pass the profile
+configuration, report filename label, and optional UI-open delay in milliseconds
+(up to 10000). It restarts the real runtime, opens the saved canvas, and records
+runtime readiness, actual SDK first commits, and the completed recovery response
+with its request duration. Every installed test plugin must report `ready`.
+Compare repeated process restarts separately from the first cache-fill run;
+network-bound first installation is not an in-memory startup measurement.
 Evidence records real first commits while hidden or offscreen, retained iframe
 identities across mode and viewport changes, exact 35% and 100% zoom, restored
 canvas allocation, plugin actions, a genuine default-deadline timeout, lost

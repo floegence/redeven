@@ -1170,3 +1170,34 @@ func authenticatedRequest(method, path, channelID string) *http.Request {
 	req.Header.Set(sessionhop.HeaderChannelID, channelID)
 	return WithRouteRole(req, RouteRoleEnvTrusted)
 }
+
+func TestNewKeepsRemoteReleaseAvailableWithUnusableDocumentCache(t *testing.T) {
+	options := ownerScopeTestOptions(t, t.TempDir())
+	cachePath := filepath.Join(options.StateDir, "release-documents.sqlite")
+	original := []byte("unknown cache format")
+	if err := os.WriteFile(cachePath, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		Origin: "https://plugins.redeven.com", CachePath: filepath.Join(t.TempDir(), "market.json"),
+		HTTPClient: &http.Client{Transport: blockingMarketTransport(func(*http.Request) (*http.Response, error) { return nil, errors.New("market offline") })},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	options.PluginMarket = market
+	integration, err := New(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if integration.releaseProvider == nil || integration.releaseProvider.documentCache != nil {
+		t.Fatal("remote release fallback unavailable")
+	}
+	if err := integration.Close(); err != nil {
+		t.Fatal(err)
+	}
+	value, err := os.ReadFile(cachePath)
+	if err != nil || string(value) != string(original) {
+		t.Fatalf("unknown cache was changed: %q %v", value, err)
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/floegence/redevplugin/v3/pkg/httpadapter"
 	rpobservability "github.com/floegence/redevplugin/v3/pkg/observability"
 	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/v3/pkg/remoterelease"
 	"github.com/floegence/redevplugin/v3/pkg/secrets"
 )
 
@@ -119,7 +120,19 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			closeOnError()
 			return nil, releaseErr
 		}
-		releaseModule, releaseProvider, releaseErr = newOfficialReleaseModulePending(releaseFetcher)
+		// This disposable byte cache is owned and validated by ReDevPlugin. An
+		// unavailable cache must not prevent the verified remote path from opening.
+		documentCache, cacheErr := remoterelease.OpenDocumentCache(ctx, filepath.Join(root, "release-documents.sqlite"))
+		if cacheErr == nil {
+			closers = append(closers, documentCache.Close)
+		} else if opts.Diagnostics != nil {
+			opts.Diagnostics.Append(diagnostics.Event{
+				Scope: pluginDiagScope, Kind: pluginDiagKind,
+				Message: "Release document cache unavailable; using verified remote transport",
+				Detail:  map[string]any{"operation": "open_release_document_cache"},
+			})
+		}
+		releaseModule, releaseProvider, releaseErr = newOfficialReleaseModulePending(releaseFetcher, documentCache)
 		if releaseErr != nil {
 			closeOnError()
 			return nil, releaseErr
