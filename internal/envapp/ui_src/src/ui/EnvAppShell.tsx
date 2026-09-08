@@ -111,7 +111,6 @@ import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
 import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
 import { PluginCenterDialog } from './plugins/PluginCenterDialog';
-import { getWorkbenchLayoutSnapshot, removeWorkbenchPluginWidgets } from './services/workbenchLayoutApi';
 import type { PluginSurfaceResolution } from './plugins/PluginSurfaceContainer';
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
@@ -1654,6 +1653,7 @@ export function EnvAppShell() {
   const [workbenchPluginCenterVisited, setWorkbenchPluginCenterVisited] = createSignal(false);
   const [pluginWidgetCounts, setPluginWidgetCounts] = createSignal<Record<string, number>>({});
   const refreshPluginWidgetCounts = async () => {
+    const { getWorkbenchLayoutSnapshot } = await import('./services/workbenchLayoutApi');
     const snapshot = await getWorkbenchLayoutSnapshot();
     const counts: Record<string, number> = {};
     for (const entry of snapshot.widget_states) {
@@ -1923,6 +1923,7 @@ export function EnvAppShell() {
       if (command.type === 'uninstall' && outcome === 'committed' && item) throw new Error(i18n.t('uiCopy.plugin.continuity.unknown'));
       if (!confirmed) throw new Error(i18n.t('uiCopy.plugin.continuity.unknown'));
       if (command.type === 'uninstall' && !item && (outcome === 'committed' || outcome === 'unknown')) {
+        const { removeWorkbenchPluginWidgets } = await import('./services/workbenchLayoutApi');
         await removeWorkbenchPluginWidgets(id);
         await retireActivityPluginPages(id);
         setActivityPluginWindows((windows) => windows.filter((window) => window.target().pluginInstanceID !== id));
