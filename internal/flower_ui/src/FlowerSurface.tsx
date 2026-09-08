@@ -3,7 +3,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Switch, batch, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, Globe, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
@@ -9712,7 +9712,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         >
           <div class="flower-subagents-dropdown-header">
             <div class="flower-subagents-dropdown-title">
-              <GitBranch class="h-4 w-4" />
+              <Bot class="h-4 w-4" />
               <span>{subagentsCopy().title}</span>
             </div>
             <span class="flower-subagents-dropdown-count">{selectedSubagentItems().length}</span>
@@ -9733,7 +9733,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             when={selectedSubagentItems().length > 0}
             fallback={(
               <div class="flower-subagents-dropdown-empty">
-                <GitBranch class="h-4 w-4" />
+                <Bot class="h-4 w-4" />
                 <span>{subagentsCopy().emptyTitle}</span>
               </div>
             )}
@@ -10605,7 +10605,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 aria-controls="flower-subagents-dropdown"
                 onClick={openSubagents}
               >
-                <GitBranch class="h-4 w-4" />
+                <Bot class="h-4 w-4" />
                 <Show when={selectedSubagentItems().length > 0}>
                   <span
                     class="flower-header-icon-badge"
