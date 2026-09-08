@@ -218,9 +218,7 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | @floegence/flowersec-node-native-linux-arm64-gnu | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.0.1 |  |
 | @floegence/flowersec-node-native-linux-x64-gnu | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.0.1 |  |
 | @floegence/flowersec-node-native | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.0.1 |  |
-| @floegence/redevplugin-contracts | 3.0.28 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.28 |  |
 | @floegence/redevplugin-contracts | 3.0.29 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.29 |  |
-| @floegence/redevplugin-ui | 3.0.28 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.28 | License inherited from floegence/redevplugin root LICENSE. |
 | @floegence/redevplugin-ui | 3.0.29 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.29 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
