@@ -83,6 +83,14 @@ write permission. The shared picker owns navigation only. Its actual scroll
 viewports carry Workbench local-scroll markers; existing modal, keyboard, and
 focus ownership remains with the host and published presentation components.
 
+# Boundaries
+
+The published picker owns navigation and request lifetime. Redeven supplies
+runtime context and maps metadata without creating an alternate cache,
+navigation state machine, or permission grant. A validated selection represents
+the current form intent only; the runtime checks authorization again when the
+product operation executes.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts` - Runtime and Workbench adapter without independent navigation state.

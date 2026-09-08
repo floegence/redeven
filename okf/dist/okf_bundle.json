@@ -933,7 +933,7 @@
               "workbench"
             ],
             "summary": "Published Floe Webapp owns directory navigation, validation state, and asynchronous\nrequest lifetime. Redeven supplies the target runtime connection, authoritative\npath context, localized copy, and product form state. All picker paths are\nabsolute; `/` always means the target environment's filesystem root. Home and\nRoot are navigation shortcuts and cannot grant access. Failed navigation retains\nthe requested path and form, disables selection, and offers an explicit retry.\nThe runtime revalidates every create or execution request against current policy.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-working-directory-navigation",
@@ -4677,7 +4677,7 @@
         "title": "Native container console",
         "type": "Architecture Contract"
       },
-      "body_length": 17137,
+      "body_length": 17126,
       "summary": "Containers is one native Activity and multi-instance Workbench surface over the\ntargets authorized by [Native container resources](container-resources-capability.md).\nOne console controller owns loading, cache identity, selection, and navigation.\nThe UI never exposes endpoint selection, never commits a response from an old\ntarget, and never creates a lifecycle path outside `containerresource`.",
       "sections": [
         {
@@ -4717,8 +4717,8 @@
           "description": "Verifies Activity, Workbench, and narrow responsive interaction in Chromium."
         },
         {
-          "id": "redeven:internal/flower_ui/src/filePicker/createFilesystemPickerDataSource.ts:0:adapts the read-only product filesystem rpc to the shared picker.",
-          "source": "redeven:internal/flower_ui/src/filePicker/createFilesystemPickerDataSource.ts",
+          "id": "redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts:0:adapts the read-only product filesystem rpc to the shared picker.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts",
           "description": "Adapts the read-only product filesystem RPC to the shared picker."
         },
         {
@@ -10473,7 +10473,7 @@
         "title": "Absolute filesystem directory selection",
         "type": "UI Contract"
       },
-      "body_length": 5712,
+      "body_length": 6060,
       "summary": "Published Floe Webapp owns directory navigation, validation state, and asynchronous\nrequest lifetime. Redeven supplies the target runtime connection, authoritative\npath context, localized copy, and product form state. All picker paths are\nabsolute; `/` always means the target environment's filesystem root. Home and\nRoot are navigation shortcuts and cannot grant access. Failed navigation retains\nthe requested path and form, disables selection, and offers an explicit retry.\nThe runtime revalidates every create or execution request against current policy.",
       "sections": [
         {
@@ -10482,6 +10482,13 @@
           "level": 1,
           "body": "## Absolute paths and runtime authority\n\nDirectoryPicker, DirectoryInput, and file pickers consume the same released\nnavigation core. Context comes from `fs.getPathContext()` or the equivalent\nDesktop Local API. The runtime declares roots, their filesystem policy read/write\nflags, the default root ID, and a display-only Home path. A failed or malformed\ncontext cannot be replaced by synthesized Home or Root permissions.\n\nThe initial location is the caller's current absolute directory, otherwise the\nruntime's declared default root. Home, Root, custom roots, breadcrumbs, directory\nrows, and entered paths all use one direct directory-list operation. Navigation\ndoes not enumerate ancestors first. Inputs accept absolute paths, `~`, and\n`~/...`; relative paths are rejected rather than rebased to Home. Home formatting\nmay display `~` only at an exact path boundary. Entry paths, request paths, and\nselection results keep absolute semantics through the product adapter.\n\nThe filesystem service resolves real paths and symlinks. A directory readable\nunder current policy may be selected even when its root has write disabled.\nSelection neither changes policy nor promises a sandbox for code-server or other\nprocesses. Session, filesystem, OS, and process authorization remain governed by\n[permission policy and filesystem scope](../security/permission-policy-and-filesystem-scope.md).\n\n## Navigation state and failures\n\nEvery mounted picker owns its current directory, loaded entries, path input,\nhidden-item switch, and validity. Files uses the same runtime authority but keeps\nits own navigation state. Redeven has no picker directory cache or Home-relative\ntree. Upstream deduplicates only in-flight loads within one open session.\n\nEach open refreshes path context. Environment/session changes, closing, and\nunmounting invalidate pending work. Editing a path invalidates selection; only a\nsuccessful load for the current intent can make it selectable. Earlier successes\nor failures cannot overwrite newer input, navigation, error, or selection state.\nAn error does not become an empty-directory success or trigger a Home fallback.\n\nRuntime errors distinguish missing paths, non-directories, scope denial, session\nread denial, host filesystem denial, invalid paths, and connection failure. The\npath remains visible with localized recovery. A cached or previously validated\nselection is never an authorization token: creation and later operations can fail\nif policy, filesystem contents, or OS permissions change.\n\n## Product presentations\n\nFlower opens a directory modal at the draft directory and commits only on\nconfirmation. Canceling leaves the composer draft unchanged. A created\nconversation keeps its immutable runtime-normalized directory. The default shown\nfor a new conversation and its creation request use the declared default root;\na context from an earlier runtime session cannot supply that default.\n[Working-directory navigation](flower-working-directory-navigation.md) owns\nsubsequent Files and Terminal actions for existing conversations.\n\nSpaces keeps directory navigation inline in its creation form, with name and\ndescription editable alongside it. Successful navigation fills the final path\nsegment as the name, or the localized Root label for `/`. Each metadata field\nstops following directory defaults as soon as the user edits that field. Creation\nrequires a validated directory. A create failure retains all form data; closing\nresets the draft. Spaces and Flower store the backend-normalized absolute path\nwithout a new protocol or database schema.\n\nTerminal groups, managed services, container mounts, Compose file selection, and\narchive extraction retain their own initial positions, file-type constraints,\nselection counts, and operation authorization. Extraction still checks destination\nwrite permission. The shared picker owns navigation only. Its actual scroll\nviewports carry Workbench local-scroll markers; existing modal, keyboard, and\nfocus ownership remains with the host and published presentation components.",
           "char_count": 4052
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "The published picker owns navigation and request lifetime. Redeven supplies\nruntime context and maps metadata without creating an alternate cache,\nnavigation state machine, or permission grant. A validated selection represents\nthe current form intent only; the runtime checks authorization again when the\nproduct operation executes.",
+          "char_count": 332
         }
       ],
       "evidence": [
@@ -13707,5 +13714,5 @@
       ]
     }
   ],
-  "source_sha256": "79c90f5de3d1aac63768cabe305c752bc8e032a99cca1913c9af9467de909fcd"
+  "source_sha256": "a3fe05736770465638b507fd0d2f28389074103357916624a2bf85d1fbc158f7"
 }
