@@ -33,7 +33,14 @@ keeps the destination available and retries only detail, never the fork command.
 Untitled persisted threads use a localized display label plus a short ThreadID;
 that label is presentation only and never replaces the canonical title. Existing
 forks are not deleted or rewritten. New forks receive canonical fallback titles
-from published Floret v7.3.3 even when a caller omits an explicit product title.
+from published Floret v7.3.4 even when a caller omits an explicit product title.
+
+Published Floret v7.3.4 also owns canonical tool-call persistence across hosted
+search boundaries. Engine execution and live projection use the same complete
+call message and assistant fragment boundaries. Redeven consumes this upstream
+correction without cleaning history, synthesizing results, or weakening tool
+validation. Source threads and ordinary or nested forks created from corrected
+history can continue after restart; existing corrupt histories are unchanged.
 
 # Boundaries
 
@@ -46,3 +53,5 @@ Redeven never stores a fork saga, source/destination turn or run identity mappin
 - `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.
 - `redeven:internal/ai/thread_authority_boundary_test.go` - Proves foreign endpoint ThreadIDs fail before canonical mutation.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces the released typed v7 dependency boundary.
+- `redeven:internal/ai/thread_fork_tool_history_test.go` - Exercises hosted search, two local calls, fork, restart, and continuation through the product service and published DeepSeek gateway.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.fork.test.shared.tsx` - Checks fork selection, continued input, completed replies, refresh, and live-stream reconnection in the shared UI.
