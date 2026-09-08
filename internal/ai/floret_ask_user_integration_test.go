@@ -511,7 +511,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 }
 
 func deepSeekRequestHasStableSystemPrompt(request map[string]any, forbidden ...string) bool {
-	messages, _ := request["messages"].([]any)
+	messages, _ := request["input"].([]any)
 	for _, raw := range messages {
 		message, _ := raw.(map[string]any)
 		if strings.TrimSpace(anyToString(message["role"])) != "system" {
@@ -586,23 +586,11 @@ func writeAskUserIntegrationTextResponse(w http.ResponseWriter, flusher http.Flu
 }
 
 func writeDeepSeekIntegrationReasoningDelta(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{"reasoning_content": text}}},
-	})
+	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.reasoning_text.delta", "delta": text})
 }
 
 func writeDeepSeekIntegrationNaturalResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{"role": "assistant", "content": text}}},
-	})
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-pro",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "delta": map[string]any{}}},
-	})
-	_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	flusher.Flush()
+	writeDeepSeekIntegrationResponse(w, flusher, responseID, "Check receipt", text)
 }
 
 func waitForAskUserIntegrationThread(t *testing.T, svc *Service, meta *session.Meta, threadID string, ready func(*ThreadView) bool) *ThreadView {

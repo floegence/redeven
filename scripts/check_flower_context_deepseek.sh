@@ -31,10 +31,10 @@ fi
   exit 2
 }
 
-echo "Running Flower structured Ask User, context-prefix, Flash/Pro model-switch, and compaction qualification"
+echo "Running Flower structured Ask User, context-prefix, Flash/Pro model-switch, compaction, and native search qualification"
 cd "$ROOT_DIR"
 REDEVEN_FLOWER_CONTEXT_E2E=1 \
 REDEVEN_FLOWER_CONTEXT_E2E_BASE_URL="$base_url" \
 REDEVEN_FLOWER_CONTEXT_E2E_API_KEY="$api_key" \
 GOWORK=off \
-  go test ./internal/ai -run '^TestE2E_FlowerDeepSeekV4(FlashContextCompaction|ContextPrefixAndModelSwitch|AskUserStructuredContinuation)$' -count=1 -v
+  go test ./internal/ai -run '^TestE2E_FlowerDeepSeekV4(FlashContextCompaction|ContextPrefixAndModelSwitch|AskUserStructuredContinuation|NativeSearch)$' -count=1 -v

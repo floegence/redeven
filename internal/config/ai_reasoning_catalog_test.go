@@ -23,7 +23,7 @@ func TestAIReasoningCatalogRowsHaveProvenance(t *testing.T) {
 		{name: "gemini3", providerType: "openai_compatible", modelName: "gemini-3-pro-preview", wantWire: "gemini_thinking_level", wantLevels: []string{"minimal", "low", "medium", "high"}},
 		{name: "kimi_toggle", providerType: "moonshot", modelName: "kimi-k2.6", wantWire: "kimi_thinking_type", wantDisable: true},
 		{name: "glm_effort", providerType: "chatglm", modelName: "glm-5.2", wantWire: "glm_reasoning_effort", wantLevels: []string{"minimal", "low", "medium", "high", "xhigh", "max"}, wantDisable: true},
-		{name: "deepseek", providerType: "deepseek", modelName: "deepseek-v4-pro", wantWire: "deepseek_reasoning_effort", wantLevels: []string{"high", "max"}, wantDisable: true},
+		{name: "deepseek", providerType: "deepseek", modelName: "deepseek-v4-pro", wantWire: "deepseek_responses_reasoning_effort", wantLevels: []string{"high", "max"}, wantDisable: true},
 		{name: "qwen", providerType: "qwen", modelName: "qwen3.6-plus", wantWire: "qwen_enable_thinking", wantDisable: true},
 		{name: "openrouter", providerType: "openrouter", modelName: "gpt-oss-120b", wantWire: "openrouter_reasoning_metadata"},
 		{name: "xai", providerType: "xai", modelName: "grok-4.3", wantWire: "xai_reasoning_effort", wantLevels: []string{"low", "medium", "high"}, wantDisable: true},

@@ -62,7 +62,7 @@ func newFloretProviderAdapter(base ModelGateway, providerType string, modelName 
 			option(adapter)
 		}
 	}
-	adapter.continuationSupported = adapter.stateCompatibilityRoute() == "openai-responses"
+	adapter.continuationSupported = adapter.stateCompatibilityRoute() == "openai-responses" || adapter.providerType == "deepseek"
 	return adapter
 }
 
@@ -199,6 +199,10 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 		var streamedReasoning strings.Builder
 		onEvent := func(ev StreamEvent) {
 			switch ev.Type {
+			case StreamEventHostedTool:
+				if ev.HostedToolEvent != nil {
+					sendFloretProviderEvent(ctx, out, *ev.HostedToolEvent)
+				}
 			case StreamEventTextDelta:
 				if ev.Text == "" {
 					return
@@ -359,9 +363,13 @@ func flowerSourcesToFloret(in []SourceRef) []flprovider.Source {
 func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.Request) (ModelGatewayRequest, error) {
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
-	previousResponseID, err := p.previousResponseID(previous)
-	if err != nil {
-		return ModelGatewayRequest{}, err
+	previousResponseID := ""
+	if p.providerType != "deepseek" {
+		var err error
+		previousResponseID, err = p.previousResponseID(previous)
+		if err != nil {
+			return ModelGatewayRequest{}, err
+		}
 	}
 	controls.PreviousResponseID = previousResponseID
 	// Floret request-level reasoning is authoritative, including an explicit
@@ -387,13 +395,28 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	if req.MaxOutputTokens > 0 {
 		budgets.MaxOutputToken = int(req.MaxOutputTokens)
 	}
+	webSearch := p.webSearch
+	if p.providerType == "deepseek" {
+		webSearch = providerWebSearchModeDisabled
+		for _, hosted := range req.HostedTools {
+			if hosted.Name != "web_search" || hosted.Type != "web_search" || p.webSearch != providerWebSearchModeDeepSeekNative {
+				return ModelGatewayRequest{}, fmt.Errorf("unsupported DeepSeek hosted tool %q", hosted.Name)
+			}
+			webSearch = providerWebSearchModeDeepSeekNative
+		}
+	}
+	var previousState *ModelGatewayState
+	if p.providerType == "deepseek" && previous != nil {
+		previousState = &ModelGatewayState{Kind: previous.Kind, ID: previous.ID, Attributes: cloneStringMap(previous.Attributes)}
+	}
 	return ModelGatewayRequest{
+		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState,
 		Model:            p.modelName,
 		Messages:         messages,
 		Tools:            tools,
 		Budgets:          budgets,
 		ProviderControls: controls,
-		WebSearchMode:    p.webSearch,
+		WebSearchMode:    webSearch,
 	}, nil
 }
 
@@ -418,11 +441,13 @@ func (p *floretProviderAdapter) stateCompatibilityRoute() string {
 		return "openai-responses"
 	}
 	switch p.providerType {
+	case "deepseek":
+		return "deepseek-responses-v1"
 	case "anthropic":
 		return "anthropic-messages"
 	case DesktopModelSourceProviderType:
 		return "desktop-model-source"
-	case "openai_compatible", "openrouter", "xai", "groq", "ollama", "chatglm", "deepseek", "qwen":
+	case "openai_compatible", "openrouter", "xai", "groq", "ollama", "chatglm", "qwen":
 		if p.webSearch == providerWebSearchModeOpenAIResponsesBuiltin ||
 			p.webSearch == providerWebSearchModeQwenResponsesWebSearch ||
 			(p.providerType == "openai_compatible" && p.webSearch == providerWebSearchModeExternalBrave) {

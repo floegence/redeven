@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-08
+* **DeepSeek Responses**: Flower consumes the published Floret gateway for full
+  history requests, reasoning streams, validated tool calls, native web search,
+  and inclusive usage accounting. Search follows the Agent tool surface; titles
+  remain search-free and supplemental-context privacy remains unchanged.
+
 ## 2026-09-07
 * **Visible npm Host installation output**: Managed npm install and lifecycle
   commands now emit informational logs and drain stdout and stderr before the
