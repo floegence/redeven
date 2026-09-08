@@ -3716,8 +3716,9 @@ export function EnvAppShell() {
     });
   });
 
-  const renderPluginCenter = () => (
+  const renderPluginCenter = (embedded = false) => (
         <PluginCenterView
+          showTitle={!embedded}
           pluginWidgetCounts={pluginWidgetCounts()}
           projection={pluginInventoryProjection() ?? { items: [] }}
           loading={pluginInventoryInitialPending()}
@@ -3742,7 +3743,7 @@ export function EnvAppShell() {
           onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
           onCommitExternal={commitExternalPluginPackage}
           onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
-          onClose={closePluginCenter}
+          onClose={embedded ? undefined : closePluginCenter}
         />
   );
 
@@ -3782,7 +3783,7 @@ export function EnvAppShell() {
       id: PLUGIN_CENTER_ACTIVITY_ID,
       name: i18n.t('uiCopy.plugin.centerTitle'),
       icon: Grid3x3,
-      component: renderPluginCenter,
+      component: () => renderPluginCenter(),
       sidebar: { order: 98, fullScreen: true },
     });
     list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
@@ -4969,7 +4970,7 @@ export function EnvAppShell() {
         <PluginCenterDialog open={workbenchPluginCenterOpen() && viewMode() === 'workbench'}
           onOpenChange={setWorkbenchPluginCenterOpen} title={i18n.t('uiCopy.plugin.centerTitle')}
           class="w-[min(1280px,calc(100vw-48px))] max-w-none">
-          {renderPluginCenter()}
+          {renderPluginCenter(true)}
         </PluginCenterDialog>
       </Show>
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>

@@ -1684,7 +1684,7 @@ describe('Workbench Plugin Center dialog continuity', () => {
       </div>
       <PluginCenterDialog open={open()} onOpenChange={setOpen} title="Plugin Center"
         class="w-[min(1280px,calc(100vw-48px))] max-w-none">
-        <PluginCenterView projection={projection} loading={false} canManagePlugins canOpenPluginSurfaces
+        <PluginCenterView showTitle={false} projection={projection} loading={false} canManagePlugins canOpenPluginSurfaces
           onRefresh={() => undefined} onCommand={() => undefined} />
       </PluginCenterDialog>
     </>, host));
@@ -1693,6 +1693,7 @@ describe('Workbench Plugin Center dialog continuity', () => {
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expectInsideViewport(dialog, { width: 1440, height: 1000 });
     expectNoHorizontalOverflow(dialog);
+    expect(dialog.querySelectorAll('h1, h2')).toHaveLength(1);
     const search = dialog.querySelector<HTMLInputElement>('input[type="search"], input[placeholder]')!;
     expect(search).not.toBeNull();
     await userEvent.fill(search, 'Metrics');
