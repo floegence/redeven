@@ -236,8 +236,8 @@
       "threadSyncFailed": "Flower не удалось синхронизировать последний ответ. Повторите попытку.",
       "activeTurnBusy": "Предыдущий ответ ещё выполняется. Остановите его перед повторной отправкой.",
       "composerErrorTitle": "Flower не смог отправить сообщение.",
-    "expandThinking": "Развернуть все рассуждения",
-    "collapseThinking": "Свернуть рассуждения",
+      "expandThinking": "Развернуть все рассуждения",
+      "collapseThinking": "Свернуть рассуждения",
       "modelStatusPreparing": "Подготовка запроса к модели...",
       "modelStatusWaitingResponse": "Ожидание ответа модели...",
       "modelStatusStreaming": "Думает...",
@@ -2333,5 +2333,10 @@
     "startFailedDetail": "Redeven не удалось запустить эту среду. Повторите попытку.",
     "openFailedDetail": "Среда запущена, но Redeven не удалось открыть рабочую область. Повторите попытку.",
     "preflightFailedDetail": "Redeven не удалось проверить эту среду. Повторите попытку."
+  },
+  "codespaceNative": {
+    "portInUse": "Локальный порт, сохранённый для этого CodeSpace, занят. Закройте приложение, использующее этот порт, и повторите попытку.",
+    "unavailable": "Подключение к CodeSpace недоступно. Проверьте подключение к среде и откройте его снова.",
+    "profileInvalid": "Не удалось прочитать сохранённый профиль браузера CodeSpace. Восстановите codespace-profiles.json, прежде чем снова открыть этот CodeSpace."
   }
 }

@@ -4,9 +4,7 @@ import {
   desktopLoopbackBrowserDisplayURL,
   desktopLoopbackProtectedRouteURL,
   isAllowedAppNavigation,
-  isAllowedCodespaceWindowNavigation,
   isAllowedWebServiceWindowNavigation,
-  isCodespaceURLForCodeSpace,
   isPortForwardURLForForward,
   isDesktopLoopbackWebServiceURL,
   resolveDesktopLoopbackBrowserAddress,
@@ -65,41 +63,6 @@ describe('navigation', () => {
       'https://env-0123456789abcdef0123456789abcdef.sg.redeven.online/',
       'https://rt-123.sg.redeven.online/',
     )).toBe(true);
-  });
-
-  it('recognizes codespace URLs by local route or remote sandbox host', () => {
-    expect(isCodespaceURLForCodeSpace('http://127.0.0.1:43123/cs/demo/', 'demo')).toBe(true);
-    expect(isCodespaceURLForCodeSpace('http://127.0.0.1:43123/cs/demo-other/', 'demo')).toBe(false);
-    expect(isCodespaceURLForCodeSpace('https://cs-demo.sg.redeven.online/_redeven_boot/', 'demo')).toBe(true);
-    expect(isCodespaceURLForCodeSpace('https://env-demo.sg.redeven.online/', 'demo')).toBe(false);
-  });
-
-  it('allows codespace window navigation only inside the session and matching codespace', () => {
-    expect(isAllowedCodespaceWindowNavigation(
-      'http://localhost:43123/cs/demo/',
-      'http://127.0.0.1:43123/',
-      'demo',
-    )).toBe(true);
-    expect(isAllowedCodespaceWindowNavigation(
-      'http://localhost:43123/_redeven_proxy/env/',
-      'http://127.0.0.1:43123/',
-      'demo',
-    )).toBe(false);
-    expect(isAllowedCodespaceWindowNavigation(
-      'https://cs-demo.sg.redeven.online/',
-      'https://env-0123456789abcdef0123456789abcdef.sg.redeven.online/',
-      'demo',
-    )).toBe(true);
-    expect(isAllowedCodespaceWindowNavigation(
-      'https://cs-other.sg.redeven.online/',
-      'https://env-0123456789abcdef0123456789abcdef.sg.redeven.online/',
-      'demo',
-    )).toBe(false);
-    expect(isAllowedCodespaceWindowNavigation(
-      'https://cs-demo.usw.redeven.online/',
-      'https://env-0123456789abcdef0123456789abcdef.sg.redeven.online/',
-      'demo',
-    )).toBe(false);
   });
 
   it('binds Web Service windows to the exact forward route', () => {

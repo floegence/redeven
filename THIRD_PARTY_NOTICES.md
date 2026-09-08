@@ -40,7 +40,7 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.0 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.6.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.6.1 | Detected from LICENSE. |
-| github.com/floegence/flowersec/flowersec-go/v5 | v5.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.0.1 | Floegence first-party dependency. |
+| github.com/floegence/flowersec/flowersec-go/v5 | v5.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.1.0 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.5.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.5.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.31 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.31 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
@@ -207,16 +207,16 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.49.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.49.0 |  |
-| @floegence/floe-webapp-core | 0.49.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.49.0 |  |
-| @floegence/floe-webapp-protocol | 0.49.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.49.0 |  |
+| @floegence/floe-webapp-boot | 0.50.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.50.2 |  |
+| @floegence/floe-webapp-core | 0.50.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.50.2 |  |
+| @floegence/floe-webapp-protocol | 0.50.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.50.2 |  |
 | @floegence/floeterm-terminal-web | 0.19.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.0 package. |
-| @floegence/flowersec-core | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.0.1 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.0.1 |  |
-| @floegence/flowersec-node-native-darwin-x64 | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.0.1 |  |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.0.1 |  |
-| @floegence/flowersec-node-native-linux-x64-gnu | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.0.1 |  |
-| @floegence/flowersec-node-native | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.0.1 |  |
+| @floegence/flowersec-core | 5.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.1.0 |  |
+| @floegence/flowersec-node-native-darwin-arm64 | 5.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.1.0 |  |
+| @floegence/flowersec-node-native-darwin-x64 | 5.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.1.0 |  |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 5.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.1.0 |  |
+| @floegence/flowersec-node-native-linux-x64-gnu | 5.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.1.0 |  |
+| @floegence/flowersec-node-native | 5.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.1.0 |  |
 | @floegence/redevplugin-contracts | 3.0.31 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.31 |  |
 | @floegence/redevplugin-ui | 3.0.31 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.31 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
@@ -1116,7 +1116,7 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | wrap-ansi | 7.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/wrap-ansi/v/7.0.0 |  |
 | wrappy | 1.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
 | ws | 8.21.0 | MIT | Env App UI | https://www.npmjs.com/package/ws/v/8.21.0 |  |
-| ws | 8.21.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ws/v/8.21.2 | License verified from the exact registry package manifest. |
+| ws | 8.21.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ws/v/8.21.3 |  |
 | xml-name-validator | 5.0.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/xml-name-validator/v/5.0.0 |  |
 | xmlbuilder | 15.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/xmlbuilder/v/15.1.1 |  |
 | xmlchars | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/xmlchars/v/2.2.0 |  |

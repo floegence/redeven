@@ -59,8 +59,8 @@ github.com/floegence/floeterm/terminal-go v0.19.0 h1:fLx42q7R8CeEJLIhB2Uj+73+Kqw
 github.com/floegence/floeterm/terminal-go v0.19.0/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
 github.com/floegence/floret/v7 v7.6.1 h1:ZhUlzhiwldYLsOVedS/i2l/E5Ahe8idPa4NCpp9VbOM=
 github.com/floegence/floret/v7 v7.6.1/go.mod h1:A1LajUtkD+dfhK1B+HIVlqF9tWA1FQl39WiOzPJjvx0=
-github.com/floegence/flowersec/flowersec-go/v5 v5.0.1 h1:jMuspfynHlCnUwtSOZs6kc3Xd4qnFPkXitgV2w8d3Qo=
-github.com/floegence/flowersec/flowersec-go/v5 v5.0.1/go.mod h1:/y+M+qkr1aZyqHA1qXn4z7VFURSf1upQu/0FAdhYztc=
+github.com/floegence/flowersec/flowersec-go/v5 v5.1.0 h1:vqwmd3VMllnPbf0b/hS+3nM+UvdqCH0TrgkVo6as4yc=
+github.com/floegence/flowersec/flowersec-go/v5 v5.1.0/go.mod h1:2LEvswGb+xAVjjocxc5R8iaPGMWmID1jPeKr5ogKLug=
 github.com/floegence/redeven-service-templates v0.5.0 h1:RnYzWNilIQGO5iYD2LSA5T63v+cB/JfMrQsL/pu6/xg=
 github.com/floegence/redeven-service-templates v0.5.0/go.mod h1:5VamdBTQZUqTRZlEl8BqBI4GwaH33tcHYIJ+ddD334U=
 github.com/floegence/redevplugin/v3 v3.0.31 h1:Nr0GgyvymN1NehKQqizGPrOMuqTQyn/VUt1KiiWOZmY=

@@ -1,4 +1,5 @@
-export const DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL = 'redeven-desktop:shell-open-codespace-window';
+export const DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL =
+  'redeven-desktop:shell-open-codespace-window';
 
 export type DesktopShellOpenCodespaceWindowLoadingRequest = Readonly<{
   mode: 'loading';
@@ -8,15 +9,15 @@ export type DesktopShellOpenCodespaceWindowLoadingRequest = Readonly<{
   detail?: string;
 }>;
 
-export type DesktopShellOpenCodespaceWindowNavigateRequest = Readonly<{
-  mode: 'navigate';
-  url: string;
+export type DesktopShellOpenCodespaceWindowOpenRequest = Readonly<{
+  mode: 'open';
   code_space_id: string;
+  password?: string;
 }>;
 
 export type DesktopShellOpenCodespaceWindowRequest =
   | DesktopShellOpenCodespaceWindowLoadingRequest
-  | DesktopShellOpenCodespaceWindowNavigateRequest;
+  | DesktopShellOpenCodespaceWindowOpenRequest;
 
 export type DesktopShellOpenCodespaceWindowResponse = Readonly<{
   ok: boolean;
@@ -27,32 +28,23 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function normalizeAbsoluteHTTPURL(value: unknown): string {
-  const raw = compact(value);
-  if (!raw || raw === 'about:blank') {
-    return '';
-  }
-
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return '';
-    }
-    return url.toString();
-  } catch {
-    return '';
-  }
-}
-
-export function normalizeDesktopShellOpenCodespaceWindowRequest(value: unknown): DesktopShellOpenCodespaceWindowRequest | null {
+export function normalizeDesktopShellOpenCodespaceWindowRequest(
+  value: unknown,
+): DesktopShellOpenCodespaceWindowRequest | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
 
   const candidate = value as Record<string, unknown>;
   const codeSpaceID = compact(candidate.code_space_id);
-  const mode = compact(candidate.mode) || (compact(candidate.url) ? 'navigate' : '');
-  if (!codeSpaceID) {
+  const mode = compact(candidate.mode);
+  if (
+    !/^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/u.test(codeSpaceID) ||
+    'url' in candidate ||
+    'host' in candidate ||
+    'port' in candidate ||
+    'route' in candidate
+  ) {
     return null;
   }
 
@@ -69,22 +61,28 @@ export function normalizeDesktopShellOpenCodespaceWindowRequest(value: unknown):
     };
   }
 
-  if (mode === 'navigate') {
-    const url = normalizeAbsoluteHTTPURL(candidate.url);
-    if (!url) {
+  if (mode === 'open') {
+    if (
+      candidate.password !== undefined &&
+      (typeof candidate.password !== 'string' ||
+        candidate.password.length > 1024)
+    )
       return null;
-    }
     return {
-      mode: 'navigate',
-      url,
+      mode: 'open',
       code_space_id: codeSpaceID,
+      ...(typeof candidate.password === 'string'
+        ? { password: candidate.password }
+        : {}),
     };
   }
 
   return null;
 }
 
-export function normalizeDesktopShellOpenCodespaceWindowResponse(value: unknown): DesktopShellOpenCodespaceWindowResponse {
+export function normalizeDesktopShellOpenCodespaceWindowResponse(
+  value: unknown,
+): DesktopShellOpenCodespaceWindowResponse {
   if (!value || typeof value !== 'object') {
     return {
       ok: false,

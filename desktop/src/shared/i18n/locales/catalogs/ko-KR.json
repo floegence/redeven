@@ -227,8 +227,8 @@
       "threadSyncFailed": "Flower가 최신 답변을 동기화하지 못했습니다. 다시 시도하세요.",
       "activeTurnBusy": "이전 답변이 아직 실행 중입니다. 다시 보내기 전에 중지할 수 있습니다.",
       "composerErrorTitle": "Flower가 전송하지 못했습니다.",
-    "expandThinking": "전체 사고 펼치기",
-    "collapseThinking": "사고 접기",
+      "expandThinking": "전체 사고 펼치기",
+      "collapseThinking": "사고 접기",
       "modelStatusPreparing": "모델 요청을 준비 중...",
       "modelStatusWaitingResponse": "모델 응답을 기다리는 중...",
       "modelStatusStreaming": "생각 중...",
@@ -2300,5 +2300,10 @@
     "startFailedDetail": "Redeven이 이 환경을 시작하지 못했습니다. 다시 시도하세요.",
     "openFailedDetail": "환경은 시작되었지만 Redeven이 워크스페이스를 열지 못했습니다. 다시 시도하세요.",
     "preflightFailedDetail": "Redeven이 이 환경을 확인하지 못했습니다. 다시 시도하세요."
+  },
+  "codespaceNative": {
+    "portInUse": "이 CodeSpace에 저장된 로컬 포트가 사용 중입니다. 해당 포트를 사용하는 앱을 닫은 후 다시 시도하세요.",
+    "unavailable": "CodeSpace에 연결할 수 없습니다. 환경 연결을 확인한 후 다시 여세요.",
+    "profileInvalid": "저장된 CodeSpace 브라우저 프로필을 읽을 수 없습니다. codespace-profiles.json을 복원한 후 이 CodeSpace를 다시 여세요."
   }
 }

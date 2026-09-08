@@ -227,8 +227,8 @@
       "threadSyncFailed": "Flower konnte die neueste Antwort nicht synchronisieren. Versuche es erneut.",
       "activeTurnBusy": "Die vorherige Antwort ist noch aktiv. Du kannst sie stoppen, bevor du erneut sendest.",
       "composerErrorTitle": "Flower konnte nicht senden.",
-    "expandThinking": "Vollständige Überlegungen anzeigen",
-    "collapseThinking": "Überlegungen einklappen",
+      "expandThinking": "Vollständige Überlegungen anzeigen",
+      "collapseThinking": "Überlegungen einklappen",
       "modelStatusPreparing": "Modellanfrage wird vorbereitet...",
       "modelStatusWaitingResponse": "Warten auf Modellantwort...",
       "modelStatusStreaming": "Denkt nach...",
@@ -2304,5 +2304,10 @@
     "startFailedDetail": "Redeven konnte diese Umgebung nicht starten. Versuchen Sie es erneut.",
     "openFailedDetail": "Die Umgebung wurde gestartet, aber Redeven konnte den Arbeitsbereich nicht öffnen. Versuchen Sie es erneut.",
     "preflightFailedDetail": "Redeven konnte den Status dieser Umgebung nicht prüfen. Versuchen Sie es erneut."
+  },
+  "codespaceNative": {
+    "portInUse": "Der für diesen CodeSpace gespeicherte lokale Port ist belegt. Schließen Sie die Anwendung, die diesen Port verwendet, und versuchen Sie es erneut.",
+    "unavailable": "Die CodeSpace-Verbindung ist nicht verfügbar. Prüfen Sie die Verbindung zur Umgebung und öffnen Sie den CodeSpace erneut.",
+    "profileInvalid": "Das gespeicherte Browserprofil des CodeSpace konnte nicht gelesen werden. Stellen Sie codespace-profiles.json wieder her, bevor Sie diesen CodeSpace erneut öffnen."
   }
 }
