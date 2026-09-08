@@ -2,7 +2,6 @@ import '../../index.css';
 
 import { commands, page, userEvent } from 'vitest/browser';
 import { ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
-import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +15,7 @@ const browserHarness = vi.hoisted(() => ({
   resourceDetails: vi.fn(),
   imageBuildHistory: vi.fn(),
   volumeDiskUsage: vi.fn(),
+  listOperations: vi.fn(),
   preflight: vi.fn(),
   createExecSession: vi.fn(),
   deleteExecSession: vi.fn(),
@@ -25,10 +25,6 @@ const browserHarness = vi.hoisted(() => ({
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   useNotification: () => browserHarness.notify,
-}));
-
-vi.mock('../primitives/EnvAppDrawer', () => ({
-  EnvAppDrawer: (props: { open: boolean }) => <Show when={props.open}><aside data-drawer /></Show>,
 }));
 
 vi.mock('../widgets/ContainerExecTerminal', () => ({
@@ -78,7 +74,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   }),
   listContainerResources: browserHarness.listResources,
   getContainerResourceDetails: browserHarness.resourceDetails,
-  listContainerOperations: vi.fn().mockResolvedValue([]),
+  listContainerOperations: browserHarness.listOperations,
   listContainerOperationEvents: vi.fn().mockResolvedValue([]),
   subscribeContainerOperationEvents: vi.fn().mockResolvedValue(undefined),
   createComposeProjectDefinition: vi.fn(),
@@ -178,6 +174,7 @@ describe('native Containers responsive product surface', () => {
     }, { engine: 'podman', state: 'not_installed' }]);
     browserHarness.createExecSession.mockReset().mockResolvedValue({ session_id: 'exec-session-1' });
     browserHarness.volumeDiskUsage.mockReset().mockResolvedValue({ sampled_at_unix_ms: 1, volumes: [] });
+    browserHarness.listOperations.mockReset().mockResolvedValue([]);
     browserHarness.deleteExecSession.mockReset().mockResolvedValue(undefined);
     browserHarness.execTerminalProps.clear();
     browserHarness.listResources.mockReset().mockResolvedValue([
@@ -234,6 +231,30 @@ describe('native Containers responsive product surface', () => {
     document.body.replaceChildren();
     document.documentElement.classList.remove('dark');
     await page.viewport(1280, 720);
+  });
+
+  it('keeps operation hover feedback inside the portaled drawer', async () => {
+    await page.viewport(1440, 900);
+    browserHarness.listOperations.mockResolvedValue(['golang:1.26', 'postgres:17-alpine'].map((identity, index) => ({
+      operation_id: `operation-${index}`, request_id: `request-${index}`, request_hash: 'request', plan_hash: 'plan',
+      method: 'images.pull', engine: 'docker', resource_kind: 'image', resource_identity: identity,
+      state: index === 0 ? 'running' : 'succeeded', cancel_requested: false,
+      created_at_unix_ms: 1, started_at_unix_ms: 2, updated_at_unix_ms: 3,
+    })));
+    const mounted = mount();
+    dispose = mounted.dispose;
+    await settle();
+    mounted.host.querySelector<HTMLButtonElement>('button[aria-label="Operations"]')!.click();
+    await settle();
+    const workspace = document.querySelector<HTMLElement>('[data-container-operations]')!;
+    expect(workspace.closest('[data-container-page]')).toBeNull();
+    const card = workspace.querySelector<HTMLElement>('.container-operation-card[aria-selected="false"]')!;
+    const idleBackground = getComputedStyle(card).backgroundColor;
+    await page.elementLocator(card).hover();
+    await expect.poll(() => getComputedStyle(card).backgroundColor).not.toBe(idleBackground);
+    expect(getComputedStyle(card).transitionDuration).toBe('0.12s');
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    expect(getComputedStyle(card).transitionDuration).toBe('0s');
   });
 
   it.each([
