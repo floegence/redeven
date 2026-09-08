@@ -273,6 +273,6 @@ continue to belong to the released shared primitives.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies exact run serialization, localhost port defaults, Exec lifecycle, file selection, ordered Compose requests, navigation, actions, and failure behavior.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/ContainerExecTerminal.tsx` - Adapts a product-owned Exec session to the existing terminal renderer and transport.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.browser.test.tsx` - Verifies Activity, Workbench, and narrow responsive interaction in Chromium.
-- `redeven:internal/flower_ui/src/filePicker/createFilesystemPickerDataSource.ts` - Adapts the read-only product filesystem RPC to the shared picker.
+- `redeven:internal/envapp/ui_src/src/ui/services/filesystemPicker.ts` - Adapts the read-only product filesystem RPC to the shared picker.
 - `redeven:internal/containerengine/cli_client.go` - Preserves image runtime identity across list and detail reads.
 - `redeven:internal/containerengine/resources_v4_cli.go` - Returns canonical non-truncated Compose member container identities.
