@@ -898,6 +898,9 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), forked); err != nil {
 		return nil, err
 	}
+	if err := s.retainCanonicalUploadResources(ctxOrBackground(ctx), endpointID, current); err != nil {
+		return nil, err
+	}
 	if title != "" {
 		current, err = runtime.SetTitle(ctxOrBackground(ctx), flruntime.SetTitleInput{
 			ThreadID: current.ThreadID, Title: title, RequestKey: flruntime.RequestKey(clientRequestID + ":title"),
@@ -1234,11 +1237,11 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	}
 	s.forgetFlowerRuntimeThread(threadID)
 	if readStateCleaner != nil {
-		go func() {
+		s.startServiceWorker(func() {
 			if err := readStateCleaner.RetireFlowerThreadReadState(context.Background(), endpointID, threadID); err != nil && s.log != nil {
 				s.log.Warn("retire Flower thread read state after canonical delete", "thread_id", threadID, "error", err)
 			}
-		}()
+		})
 	}
 	s.scheduleThreadstoreCompaction("thread_delete")
 	return nil

@@ -14,7 +14,7 @@ export type RuntimeServiceOpenReadiness = Readonly<{
   message?: string;
 }>;
 
-export type RuntimeServiceAIReadinessState = 'starting' | 'ready' | 'degraded' | 'blocked' | 'recovering' | 'migrating';
+export type RuntimeServiceAIReadinessState = 'starting' | 'ready' | 'degraded' | 'blocked' | 'recovering' | 'migrating' | 'unavailable' | 'inspecting' | 'optimizing' | 'verifying' | 'backing_up' | 'restoring';
 
 export type RuntimeServiceAIReadiness = Readonly<{
   state: RuntimeServiceAIReadinessState;
@@ -118,7 +118,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 11;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 12;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.12.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.12.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
@@ -232,9 +232,7 @@ function normalizeOpenReadiness(
 function normalizeAIReadiness(value: unknown): RuntimeServiceAIReadiness | undefined {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const state = compact(record.state) as RuntimeServiceAIReadinessState;
-  if (state !== 'starting' && state !== 'ready' && state !== 'degraded' && state !== 'blocked' && state !== 'recovering' && state !== 'migrating') {
-    return undefined;
-  }
+  if (!['starting', 'ready', 'degraded', 'blocked', 'recovering', 'migrating', 'unavailable', 'inspecting', 'optimizing', 'verifying', 'backing_up', 'restoring'].includes(state)) return undefined;
   const issueCount = normalizeCount(record.issue_count);
   return {
     state,

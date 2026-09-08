@@ -42,6 +42,9 @@ const mocks = vi.hoisted(() => {
     created_at: '1970-01-01T00:00:10Z',
   }]);
   const fetchLocalApiJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/_redeven_proxy/api/ai/storage-generation' && init?.method === 'GET') {
+      return { storage_generation: 'b'.repeat(32) };
+    }
     if (url === '/_redeven_proxy/api/ai/readiness') {
       return { state: 'ready', reason_code: '', retryable: false, safe_to_retry: false };
     }
@@ -1055,6 +1058,7 @@ export function registerEnvAIPageSendTests() {
           input: Record<string, unknown>;
         };
         expect(turnBody).toEqual(expect.objectContaining({
+          storage_generation: 'b'.repeat(32),
           model: 'openai/gpt-5.2',
           input: expect.objectContaining({ text: '你好，Flower', attachments: [] }),
           create: expect.objectContaining({

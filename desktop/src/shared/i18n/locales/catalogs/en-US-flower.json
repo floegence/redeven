@@ -308,7 +308,10 @@
     "workingDirPickerTitle": "Select working directory",
     "workingDirPickerConfirm": "Select",
     "toolApprovalApproveBatch": "Allow all",
-    "toolApprovalApproveBatchAction": "Allow all {count} pending tool approvals"
+    "toolApprovalApproveBatchAction": "Allow all {count} pending tool approvals",
+    "restoredInputTitle": "Input preserved after restore",
+    "restoredInputDescription": "This input will not run automatically. Copy it into a new task to run it again.",
+    "restoredInputCopy": "Copy input"
   },
   "threadList": {
     "title": "Conversations",

@@ -180,6 +180,8 @@ main() {
         src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx \
         src/ui/plugins/PluginManagement.browser.test.tsx \
         src/ui/flower/AIReadinessBoundary.browser.test.tsx \
+        src/ui/pages/settings/FlowerStorageSettings.browser.test.tsx \
+        src/ui/FlowerSurface.storageRecovery.browser.test.tsx \
         src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
     fi
   )

@@ -32,7 +32,6 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/terminal"
-	"github.com/floegence/redeven/internal/threadreadstate"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 	redevpluginversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
@@ -105,7 +104,6 @@ type Service struct {
 	notes      *notes.Service
 	layouts    *workbenchlayout.Service
 	aiReady    *aiReadinessController
-	reads      *threadreadstate.Store
 	appSrv     *appserver.Server
 
 	pluginIntegration *redevpluginintegration.Integration
@@ -259,28 +257,15 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
-	threadReadStatePath, err := appServerThreadReadStatePath(stateAbs)
-	if err != nil {
-		_ = reg.Close()
-		_ = pfSvc.Close()
-		return nil, err
-	}
-	threadReadStateStore, err := threadreadstate.Open(threadReadStatePath)
-	if err != nil {
-		_ = reg.Close()
-		_ = pfSvc.Close()
-		return nil, err
-	}
-
 	aiReady := newAIReadinessController(ctx, ai.Options{
-		Logger:                 logger,
-		StateDir:               stateAbs,
-		AgentHomeDir:           agentHomeDir,
-		FilesystemScope:        scope,
-		Shell:                  strings.TrimSpace(opts.Shell),
-		Config:                 opts.AIConfig,
-		WorkloadAdmission:      opts.AIWorkloadAdmission,
-		FlowerReadStateCleaner: threadReadStateStore,
+		Logger:            logger,
+		StateDir:          stateAbs,
+		AgentHomeDir:      agentHomeDir,
+		FilesystemScope:   scope,
+		Shell:             strings.TrimSpace(opts.Shell),
+		Config:            opts.AIConfig,
+		WorkloadAdmission: opts.AIWorkloadAdmission,
+		BuildVersion:      opts.RedevenVersion,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetAIProviderAPIKey(providerID)
 		},
@@ -295,7 +280,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	workbenchLayoutPath := filepath.Join(stateAbs, "apps", "workbench", "layout.sqlite")
@@ -305,7 +289,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
 		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	if err := reconcileWorkbenchTerminalSessions(ctx, logger, workbenchLayoutSvc, opts.Terminal); err != nil {
@@ -314,7 +297,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
@@ -331,7 +313,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 
@@ -360,7 +341,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	appSrv, err := appserver.New(appserver.Options{
@@ -381,7 +361,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		EndPluginSession:      opts.EndPluginSession,
 		ConfigPath:            strings.TrimSpace(opts.ConfigPath),
 		SecretsStore:          secrets,
-		ThreadReadStateStore:  threadReadStateStore,
 		PluginPlatform:        pluginIntegration.Handler(),
 		PluginMarketSnapshot:  pluginIntegration.MarketSnapshot,
 		PluginMarketRefresh:   pluginIntegration.RefreshMarket,
@@ -400,7 +379,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	if err := appSrv.Start(ctx); err != nil {
@@ -411,14 +389,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
 		_ = aiReady.Close()
-		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	svc.appSrv = appSrv
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
 	svc.aiReady = aiReady
-	svc.reads = threadReadStateStore
 	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
 	aiReady.Start()
@@ -461,9 +437,6 @@ func (s *Service) Close() error {
 	}
 	if s.aiReady != nil {
 		_ = s.aiReady.Close()
-	}
-	if s.reads != nil {
-		_ = s.reads.Close()
 	}
 	if s.pluginIntegration != nil {
 		_ = s.pluginIntegration.Close()
@@ -529,66 +502,6 @@ func (s *Service) MaintainTerminalPluginSession(ctx context.Context, meta *sessi
 		return err
 	}
 	return s.pluginIntegration.MaintainTerminalGeneration(ctx, generation)
-}
-
-func appServerThreadReadStatePath(stateAbs string) (string, error) {
-	currentDir := filepath.Join(stateAbs, "apps", "appserver")
-	if err := os.MkdirAll(currentDir, 0o700); err != nil {
-		return "", err
-	}
-	currentPath := filepath.Join(currentDir, "thread_read_state.sqlite")
-	legacyPath := filepath.Join(stateAbs, "gateway", "thread_read_state.sqlite")
-	if err := migrateSQLiteStoreIfCurrentMissing(legacyPath, currentPath); err != nil {
-		return "", err
-	}
-	return currentPath, nil
-}
-
-func migrateSQLiteStoreIfCurrentMissing(legacyPath string, currentPath string) error {
-	if _, err := os.Stat(currentPath); err == nil {
-		return nil
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-
-	info, err := os.Stat(legacyPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return fmt.Errorf("legacy app server store path is a directory: %s", legacyPath)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(currentPath), 0o700); err != nil {
-		return err
-	}
-	var suffixesToMove []string
-	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-		from := legacyPath + suffix
-		to := currentPath + suffix
-		if _, err := os.Stat(from); errors.Is(err, os.ErrNotExist) {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if _, err := os.Stat(to); err == nil {
-			return fmt.Errorf("cannot migrate legacy app server store because destination exists: %s", to)
-		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		suffixesToMove = append(suffixesToMove, suffix)
-	}
-	for _, suffix := range suffixesToMove {
-		from := legacyPath + suffix
-		to := currentPath + suffix
-		if err := os.Rename(from, to); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *Service) AcquireAIService(ctx context.Context) (*ai.Service, context.Context, uint64, func(), error) {

@@ -1,0 +1,52 @@
+{
+  "approval_thread_id": "thread-5a68d16b9e8580c7b4f053a2d8144ff4",
+  "attachment_fork_id": "thread-e2ee80e853462e347472058814d3748b",
+  "attachment_id": "upl_F6b3-guMzdRchqRyKOCmdW7a",
+  "cancelled_thread_id": "thread-38b2bc9dede01f5b66ea047ae8b22baa",
+  "child_thread_id": "thread-0dc9eaa6706fe36f56f9c91de9054930",
+  "crashed_thread_id": "thread-17d77c05676a8f14565d6ee140594b55",
+  "endpoint_id": "fixture_endpoint",
+  "floret_version": "v7.5.0",
+  "parent_thread_id": "thread-99a9efebc81ecb7959e29dc5d430d494",
+  "redeven_commit": "10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a",
+  "scenarios": [
+    "conversation",
+    "attachment",
+    "tool_call_and_result",
+    "model_switch",
+    "fork",
+    "nested_fork",
+    "read_state",
+    "waiting_input",
+    "queue",
+    "waiting_approval",
+    "subagent",
+    "cancelled",
+    "uncertain_tool",
+    "process_exit_with_wal"
+  ],
+  "thread_ids": [
+    "thread-f0eadda67ba9a82b25590f16ff294039",
+    "thread-a143a788913ccf155cef8a564a764211",
+    "thread-9f9b0b23d4d13ea8317030b7fee4f3e2",
+    "thread-e4db01e4d0004139838c8a546f7851d9"
+  ],
+  "user_public_id": "fixture_user",
+  "waiting_thread_id": "thread-74361e8bd21fe83efe3761b6b1757458",
+  "archive_sha256": "32e9edb77a81dc043906ccacd106317dd877ed92de9b0ead2d6fcb902e761d0d",
+  "producer_sha256": "3e0f651e9e3098a2d8ebf3d5dee495936d850e002e75ecfb6e6ce36a3c712741",
+  "go_version": "go version go1.27.1 darwin/arm64",
+  "files": {
+    "ai/floret_threads.sqlite": "4895d45d792344eab11cba14e4f2a3e71203baac018755008f76356318593a0e",
+    "ai/floret_threads.sqlite-shm": "1afa9d4f2b11b3b04c4ce9e369b42f2e5a3ff0081d8ddf370904d8d547c75285",
+    "ai/floret_threads.sqlite-wal": "1a9a31279c5ace5ce7742519ce2024aa9b8bd168b279f0329fce5520a1d36619",
+    "ai/threads.sqlite": "52a371445ce0812ca930aea418e7d7e9d6459f1778a6e14cb56592f08f5a08af",
+    "ai/threads.sqlite-shm": "9cc84cde498fd48ac113b8f60c02f996f92b3b6b467c8c9b22014b54fb032ab8",
+    "ai/threads.sqlite-wal": "5192735ae238f13e58630b472fc4a19265b72975b78c459f0c9441d8abb432e2",
+    "ai/uploads/upl_F6b3-guMzdRchqRyKOCmdW7a.data": "a2eb4145b5b471486c35968b035cdf8f9f8b8ab255a71c5823a79c38df09f31f",
+    "apps/appserver/thread_read_state.sqlite": "dd413f14641df1e7146953bf2c236928b229259cde06b942207bd654ba271cbe",
+    "writer.json": "134db334e9f09e2189c55da5d1a3d29cf9078c8b49f911530b58442b5a0058af"
+  },
+  "writer_exit_code": 91,
+  "source_verified": true
+}

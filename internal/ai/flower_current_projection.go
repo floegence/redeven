@@ -69,6 +69,21 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 			projectCurrentAttachmentURLs(input, current.Queue[index].Input.Attachments, threadID, "", current.Queue[index].ID)
 		}
 	}
+	if restored, ok := root["restored_inputs"].([]any); ok {
+		for index, value := range restored {
+			entry, ok := value.(map[string]any)
+			if !ok || index >= len(current.RestoredInputs) {
+				continue
+			}
+			input, _ := entry["input"].(map[string]any)
+			if input != nil {
+				// Retained inputs are copyable history, without an executable
+				// queue or Turn scope from which to mint a preview URL.
+				projectCurrentAttachmentURLs(input, current.RestoredInputs[index].Input.Attachments, "", "", "")
+			}
+		}
+	}
+
 	// Floret's typed failure is consumed at this boundary. Its internal message
 	// must not become a second public UI contract.
 	delete(root, "failure")

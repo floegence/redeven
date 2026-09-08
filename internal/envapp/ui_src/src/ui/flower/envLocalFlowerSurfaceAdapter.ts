@@ -882,6 +882,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ),
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
+    resolveStorageGeneration: async () => {
+      const result = await fetchLocalApiJSON<{ storage_generation: string }>('/_redeven_proxy/api/ai/storage-generation', { method: 'GET' });
+      if (typeof result.storage_generation !== 'string' || (result.storage_generation && !/^[a-f0-9]{32}$/u.test(result.storage_generation))) throw new Error('Invalid Flower storage generation.');
+      return result.storage_generation;
+    },
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       const copy = adapterCopy(options);
       const prompt = input.prompt;

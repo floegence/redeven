@@ -222,18 +222,50 @@ describe('AIReadinessSettingsSection', () => {
     fixture.dispose();
   });
 
-  it('keeps three ownership groups distinct and marks non-Floret stores as not checked', () => {
+  it('checks Flower stores together and keeps backups in the same settings surface', () => {
     const fixture = mountSettings();
     const rows = fixture.host.querySelectorAll('.redeven-setting-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain('Conversation history, product settings, read status, and uploads are checked together.');
+    expect(rows[1]?.textContent).toContain('Flower backups');
+    expect(buttonWithText(fixture.host, 'View backups')).toBeTruthy();
+    fixture.dispose();
+  });
 
-    expect(rows).toHaveLength(3);
-    expect(rows[0]?.textContent).toContain('Floret Store');
-    expect(rows[0]?.textContent).toContain('Floret owns admitted Agent conversations and lifecycle state.');
-    expect(rows[1]?.textContent).toContain('Redeven product stores');
-    expect(rows[1]?.textContent).toContain('This Flower check does not inspect Redeven-owned product stores.');
-    expect(rows[2]?.textContent).toContain('Other upstream stores');
-    expect(rows[2]?.textContent).toContain('Each upstream component keeps its own maintenance authority.');
-    expect(Array.from(rows).filter((row) => row.textContent?.includes('Not checked here'))).toHaveLength(2);
+  it('requires review and explicit confirmation before restoring the selected backup', async () => {
+    const fixture = mountSettings();
+    const snapshot = { id: '12345678901234567890123456789012', created_at: '2026-09-08T10:00:00Z', source_build: 'v1', bytes: 10000, kind: 'automatic', protected: true };
+    fetchLocalApiJSON.mockResolvedValueOnce({ snapshots: [snapshot] });
+    buttonWithText(fixture.host, 'View backups').click();
+    await vi.waitFor(() => expect(buttonWithText(fixture.host, 'Review restore')).toBeTruthy());
+    expect(fetchLocalApiJSON).toHaveBeenCalledTimes(1);
+    buttonWithText(fixture.host, 'Review restore').click();
+    expect(fixture.host.textContent).toContain('Unfinished tasks will stop');
+    expect(fixture.host.textContent).toContain('Commands and external actions are not undone');
+    expect(fetchLocalApiJSON).toHaveBeenCalledTimes(1);
+    const response = deferred<unknown>();
+    fetchLocalApiJSON.mockReturnValueOnce(response.promise);
+    buttonWithText(fixture.host, 'Confirm restore').click();
+    buttonWithText(fixture.host, 'Confirm restore').click();
+    expect(fetchLocalApiJSON).toHaveBeenCalledTimes(2);
+    expect(fetchLocalApiJSON).toHaveBeenLastCalledWith('/_redeven_proxy/api/ai/maintenance/restore', { method: 'POST', body: JSON.stringify({ snapshot_id: snapshot.id, confirmed: true }) });
+    response.resolve({});
+    await vi.waitFor(() => expect(fixture.host.textContent).toContain('Restore started.'));
+    fixture.dispose();
+  });
+
+  it('discards a pending backup response when administrator access is revoked', async () => {
+    const fixture = mountSettings();
+    const response = deferred<unknown>();
+    fetchLocalApiJSON.mockReturnValueOnce(response.promise);
+    buttonWithText(fixture.host, 'View backups').click();
+    fixture.setCanAdmin(false);
+    response.resolve({ snapshots: [{ id: 'secret-backup' }] });
+    await Promise.resolve();
+    expect(fixture.host.textContent).toContain('Administrator access is required');
+    expect(fixture.host.textContent).not.toContain('secret-backup');
+    fixture.setCanAdmin(true);
+    expect(fixture.host.textContent).not.toContain('secret-backup');
     fixture.dispose();
   });
 

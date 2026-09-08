@@ -329,7 +329,7 @@ CREATE TABLE unexpected_schema_drift(id INTEGER PRIMARY KEY);
 	if _, err := Open(dbPath); err == nil {
 		t.Fatal("Open succeeded, want schema verification failure")
 	}
-	raw, err := sqliteutil.Open(dbPath, v2Spec)
+	raw, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("reopen rolled-back v2 store: %v", err)
 	}

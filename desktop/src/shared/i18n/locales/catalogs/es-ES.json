@@ -340,7 +340,10 @@
       "workingDirPickerConfirm": "Seleccionar",
       "linkedContextLabel": "Contexto vinculado",
       "toolApprovalApproveBatch": "Permitir todo",
-      "toolApprovalApproveBatchAction": "Permitir las {count} aprobaciones de herramientas pendientes"
+      "toolApprovalApproveBatchAction": "Permitir las {count} aprobaciones de herramientas pendientes",
+      "restoredInputTitle": "Entrada conservada tras la restauración",
+      "restoredInputDescription": "Esta entrada no se ejecutará automáticamente. Cópiala en una tarea nueva para volver a ejecutarla.",
+      "restoredInputCopy": "Copiar entrada"
     },
     "threadList": {
       "title": "Conversaciones",

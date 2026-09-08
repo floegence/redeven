@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { AlertTriangle, Check, Copy, Database, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
 
+import { FlowerStorageSettings } from './FlowerStorageSettings';
 import { useI18n } from '../../i18n';
 import type { AIReadinessController } from '../../flower/aiReadiness';
 import { createAIReadinessPresentation } from '../../flower/aiReadinessPresentation';
@@ -299,18 +300,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
             </div>
           )}</Show>
         </SettingRow>
-        <SettingRow
-          icon={Database}
-          title={i18n.t('aiReadiness.settings.redevenOwner')}
-          description={i18n.t('aiReadiness.settings.redevenDescription')}
-          control={<SettingsPill>{i18n.t('aiReadiness.settings.notChecked')}</SettingsPill>}
-        />
-        <SettingRow
-          icon={Database}
-          title={i18n.t('aiReadiness.settings.upstreamOwner')}
-          description={i18n.t('aiReadiness.settings.upstreamDescription')}
-          control={<SettingsPill>{i18n.t('aiReadiness.settings.notChecked')}</SettingsPill>}
-        />
+        <FlowerStorageSettings controller={props.controller} canAdmin={props.canAdmin} />
       </SettingsList>
     </SettingsSection>
   );

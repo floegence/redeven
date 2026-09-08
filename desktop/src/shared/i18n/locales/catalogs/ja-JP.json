@@ -340,7 +340,10 @@
       "workingDirPickerConfirm": "選択",
       "linkedContextLabel": "関連コンテキスト",
       "toolApprovalApproveBatch": "すべて許可",
-      "toolApprovalApproveBatchAction": "保留中のツール承認 {count} 件をすべて許可"
+      "toolApprovalApproveBatchAction": "保留中のツール承認 {count} 件をすべて許可",
+      "restoredInputTitle": "復元後に保持された入力",
+      "restoredInputDescription": "この入力は自動実行されません。再実行するには新しいタスクにコピーしてください。",
+      "restoredInputCopy": "入力をコピー"
     },
     "threadList": {
       "title": "会話",

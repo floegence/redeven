@@ -440,6 +440,7 @@ export function applyFlowerRuntimeCurrentView(
     input_request: inputRequest,
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
+    restored_inputs: current.restored_inputs ?? [],
     messages,
     error: trim(current.error)
       ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error) }

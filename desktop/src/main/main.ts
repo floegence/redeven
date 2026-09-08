@@ -9894,6 +9894,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/models', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/ai/storage-generation', methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/turns', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/attachments/capabilities', methods: ['GET'], allowsQuery: runtimeFlowerAttachmentCapabilityQuery },
   { path: '/_redeven_proxy/api/ai/upload-staging-scopes', methods: ['POST'] },

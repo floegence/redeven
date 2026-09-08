@@ -340,7 +340,10 @@
       "workingDirPickerConfirm": "선택",
       "linkedContextLabel": "연결된 컨텍스트",
       "toolApprovalApproveBatch": "모두 허용",
-      "toolApprovalApproveBatchAction": "대기 중인 도구 승인 {count}개 모두 허용"
+      "toolApprovalApproveBatchAction": "대기 중인 도구 승인 {count}개 모두 허용",
+      "restoredInputTitle": "복원 후 보존된 입력",
+      "restoredInputDescription": "이 입력은 자동으로 실행되지 않습니다. 다시 실행하려면 새 작업에 복사하세요.",
+      "restoredInputCopy": "입력 복사"
     },
     "threadList": {
       "title": "대화",

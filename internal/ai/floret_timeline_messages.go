@@ -349,6 +349,11 @@ func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
 		// provider execution, but must not cross the public Flower projection.
 		out.Queue[index].SupplementalContext = nil
 	}
+	out.RestoredInputs = append([]flruntime.RestoredInput(nil), current.RestoredInputs...)
+	for index := range out.RestoredInputs {
+		out.RestoredInputs[index].Input.Attachments = publicFloretAttachments(out.RestoredInputs[index].Input.Attachments)
+		out.RestoredInputs[index].Input.References = publicRuntimeReferences(out.RestoredInputs[index].Input.References)
+	}
 	out.Interactions = append([]flruntime.ThreadInteraction(nil), current.Interactions...)
 	for index := range out.Interactions {
 		out.Interactions[index] = publicFloretInteraction(out.Interactions[index])

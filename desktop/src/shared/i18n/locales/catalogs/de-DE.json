@@ -340,7 +340,10 @@
       "workingDirPickerConfirm": "Auswählen",
       "linkedContextLabel": "Verknüpfter Kontext",
       "toolApprovalApproveBatch": "Alle zulassen",
-      "toolApprovalApproveBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen zulassen"
+      "toolApprovalApproveBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen zulassen",
+      "restoredInputTitle": "Nach Wiederherstellung gespeicherte Eingabe",
+      "restoredInputDescription": "Diese Eingabe wird nicht automatisch ausgeführt. Kopieren Sie sie zur erneuten Ausführung in eine neue Aufgabe.",
+      "restoredInputCopy": "Eingabe kopieren"
     },
     "threadList": {
       "title": "Unterhaltungen",

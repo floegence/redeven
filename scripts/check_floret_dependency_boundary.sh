@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.5\.0$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.5.0"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.6\.1$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.6.1"
 if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v7\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
@@ -55,7 +55,7 @@ fi
 
 echo "[INFO] checking typed ThreadService production path"
 require_source internal/ai/floret_bootstrap.go 'host.ThreadService(effects)'
-require_source internal/ai/floret_bootstrap.go 'threadRuntime flruntime.ThreadService'
+require_source internal/ai/floret_bootstrap.go 'threadRuntime  flruntime.ThreadService'
 require_source internal/ai/send_user_turn.go 's.threadRuntime.Send'
 require_source internal/ai/stop_thread.go 'typed.Cancel'
 require_source internal/ai/approval_command.go '.Respond('

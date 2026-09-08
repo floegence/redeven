@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createTransportOutbox } from './transportOutbox';
+import { createTransportOutbox, restoreTransportOutbox } from './transportOutbox';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -9,6 +9,24 @@ afterEach(() => {
 });
 
 describe('TransportOutbox', () => {
+  it('reloads terminal restored-data input without changing its original generation', async () => {
+    const entry = { requestId: 'old-input', threadId: 'thread-a', input: { client_request_id: 'old-input', prompt: 'Preserve this', storage_generation: 'a'.repeat(32) }, attachmentLabels: [], createdAtMs: Date.now(), terminalError: 'storage_restored' };
+    vi.stubGlobal('indexedDB', { open: () => {
+      const request = { result: {
+        objectStoreNames: { contains: () => true }, close: () => undefined,
+        transaction: () => ({ objectStore: () => ({ getAll: () => {
+          const read = { result: [structuredClone(entry)], onsuccess: null as null | (() => void) };
+          queueMicrotask(() => read.onsuccess?.());
+          return read;
+        } }) }),
+      }, onsuccess: null as null | (() => void) };
+      queueMicrotask(() => request.onsuccess?.());
+      return request;
+    } });
+    const restored = await restoreTransportOutbox();
+    expect(restored.entries.get('old-input')).toEqual(entry);
+    restored.dispose();
+  });
   it('keeps only raw input until the typed current view confirms its request id', () => {
     let outbox = createTransportOutbox().put({
       requestId: 'request-1',

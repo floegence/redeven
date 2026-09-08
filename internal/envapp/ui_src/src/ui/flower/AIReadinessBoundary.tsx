@@ -53,7 +53,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   const projection = createMemo(() => createAIReadinessPresentation(
     props.controller.snapshot(),
     i18n,
-    { canRetryGeneration: props.canRetryGeneration, elapsedMs: elapsedMs() },
+    { canRetryGeneration: props.canRetryGeneration, canManageStorage: props.canReviewIssues, elapsedMs: elapsedMs() },
   ));
   const operational = createMemo(() => {
     const state = props.controller.snapshot().state;
@@ -136,6 +136,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
       case 'open_permissions':
         props.onOpenPermissions();
         return;
+      case 'open_backups':
       case 'review_issues':
         if (props.canReviewIssues) props.onReviewIssues();
         return;
@@ -155,6 +156,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         return i18n.t('aiReadiness.actions.openUpdate');
       case 'open_permissions':
         return i18n.t('aiReadiness.actions.openPermissions');
+      case 'open_backups': return i18n.t('aiReadiness.storage.view');
       case 'review_issues':
         return i18n.t('aiReadiness.actions.reviewIssues');
       case 'show_diagnostics':
@@ -187,6 +189,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         return <Download class="h-4 w-4" aria-hidden="true" />;
       case 'open_permissions':
         return <ShieldCheck class="h-4 w-4" aria-hidden="true" />;
+      case 'open_backups':
       case 'review_issues':
         return <AlertTriangle class="h-4 w-4" aria-hidden="true" />;
       case 'show_diagnostics':

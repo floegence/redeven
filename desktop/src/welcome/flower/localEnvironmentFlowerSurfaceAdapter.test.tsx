@@ -1291,3 +1291,12 @@ describe('Local Environment Flower surface adapter', () => {
     }, stagingScope('thread-preview'))).rejects.toThrow('Preview access expired.');
   });
 });
+
+it('reads the restored data generation through the Desktop runtime bridge', async () => {
+  const requestRuntimeFlower = vi.fn(async () => ({ ok: true as const, data: { storage_generation: 'b'.repeat(32) } }));
+  const bridge: DesktopSettingsBridge = { ...attachmentBridgeStubs(), save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })), requestRuntimeFlower, cancel: vi.fn() };
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+  expect(requestRuntimeFlower).not.toHaveBeenCalled();
+  await expect(adapter.resolveStorageGeneration?.()).resolves.toBe('b'.repeat(32));
+  expect(requestRuntimeFlower).toHaveBeenCalledWith(expect.objectContaining({ method: 'GET', path: '/_redeven_proxy/api/ai/storage-generation' }));
+});

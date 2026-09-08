@@ -33,8 +33,8 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the canonical Flower title compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(11);
+  it('publishes the Flower restore transport compatibility window', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(12);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.12.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.12.0');
   });
@@ -449,4 +449,10 @@ describe('runtimeService', () => {
       active_workload: {},
     }))).toBe('unsupported');
   });
+});
+
+it.each(['inspecting', 'optimizing', 'migrating', 'verifying', 'recovering', 'backing_up', 'restoring', 'blocked'])('keeps core surfaces openable during Flower %s', (state) => {
+  const snapshot = normalizeRuntimeServiceSnapshot({ runtime_version: 'dev', compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state }, active_workload: {} });
+  expect(snapshot.ai_readiness?.state).toBe(state);
+  expect(runtimeServiceIsOpenable(snapshot)).toBe(true);
 });

@@ -195,14 +195,11 @@ func (g *Server) ensureFlowerReadRecords(
 	if len(snapshots) == 0 {
 		return map[string]threadreadstate.Record{}, nil
 	}
-	if g == nil || g.threadReadState == nil || meta == nil {
-		userPublicID := ""
-		if meta != nil {
-			userPublicID = meta.UserPublicID
-		}
-		return seedFlowerRecords(userPublicID, snapshots), nil
+	service := aiServiceFromContext(ctx)
+	if g == nil || service == nil || service.ThreadReadState() == nil || meta == nil {
+		return nil, ErrAIServiceUnavailable
 	}
-	return g.threadReadState.EnsureFlower(ctx, meta.EndpointID, meta.UserPublicID, snapshots)
+	return service.ThreadReadState().EnsureFlower(ctx, meta.EndpointID, meta.UserPublicID, snapshots)
 }
 
 func (g *Server) validateFlowerReadSnapshot(
@@ -214,7 +211,7 @@ func (g *Server) validateFlowerReadSnapshot(
 	snapshot = normalizeFlowerSnapshot(snapshot)
 	aiSvc := aiServiceFromContext(ctx)
 	if g == nil || aiSvc == nil || meta == nil {
-		return snapshot, snapshot, nil
+		return threadreadstate.FlowerSnapshot{}, threadreadstate.FlowerSnapshot{}, ErrAIServiceUnavailable
 	}
 	thread, err := aiSvc.GetThread(ctx, meta, threadID)
 	if err != nil {
@@ -236,29 +233,11 @@ func (g *Server) advanceFlowerReadRecord(
 	threadID string,
 	snapshot threadreadstate.FlowerSnapshot,
 ) (threadreadstate.Record, error) {
-	if g == nil || g.threadReadState == nil || meta == nil {
-		scopeID, endpointID := "", ""
-		if meta != nil {
-			scopeID = strings.TrimSpace(meta.UserPublicID)
-			endpointID = strings.TrimSpace(meta.EndpointID)
-		}
-		if meta == nil {
-			return threadreadstate.Record{
-				Surface:                  threadreadstate.SurfaceFlower,
-				ScopeID:                  scopeID,
-				ThreadID:                 strings.TrimSpace(threadID),
-				LastSeenActivityRevision: snapshot.ActivityRevision,
-			}, nil
-		}
-		return threadreadstate.Record{
-			EndpointID:               endpointID,
-			ScopeID:                  scopeID,
-			Surface:                  threadreadstate.SurfaceFlower,
-			ThreadID:                 strings.TrimSpace(threadID),
-			LastSeenActivityRevision: snapshot.ActivityRevision,
-		}, nil
+	service := aiServiceFromContext(ctx)
+	if g == nil || service == nil || service.ThreadReadState() == nil || meta == nil {
+		return threadreadstate.Record{}, ErrAIServiceUnavailable
 	}
-	return g.threadReadState.AdvanceFlower(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
+	return service.ThreadReadState().AdvanceFlower(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
 }
 
 func buildAIThreadView(thread ai.ThreadView, record threadreadstate.Record) aiThreadView {
@@ -287,21 +266,6 @@ func flowerReadStatusView(snapshot threadreadstate.FlowerSnapshot, record thread
 			LastSeenActivityRevision: record.LastSeenActivityRevision,
 		},
 	}
-}
-
-func seedFlowerRecords(userPublicID string, snapshots map[string]threadreadstate.FlowerSnapshot) map[string]threadreadstate.Record {
-	out := make(map[string]threadreadstate.Record, len(snapshots))
-	scopeID := strings.TrimSpace(userPublicID)
-	for threadID, snapshot := range snapshots {
-		snapshot = normalizeFlowerSnapshot(snapshot)
-		out[threadID] = threadreadstate.Record{
-			ThreadID:                 strings.TrimSpace(threadID),
-			Surface:                  threadreadstate.SurfaceFlower,
-			ScopeID:                  scopeID,
-			LastSeenActivityRevision: snapshot.ActivityRevision,
-		}
-	}
-	return out
 }
 
 func normalizeFlowerSnapshot(snapshot threadreadstate.FlowerSnapshot) threadreadstate.FlowerSnapshot {

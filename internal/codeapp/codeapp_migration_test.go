@@ -48,7 +48,7 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 		t.Fatalf("legacy Close: %v", err)
 	}
 
-	currentPath, err := appServerThreadReadStatePath(stateDir)
+	currentPath, err := threadreadstate.PreparePath(t.Context(), stateDir)
 	if err != nil {
 		t.Fatalf("appServerThreadReadStatePath: %v", err)
 	}
@@ -107,8 +107,8 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreVersionIsUnsupported(t *testin
 	}
 	defer func() { _ = svc.Close() }()
 	waitForAIReadinessState(t, svc.aiReady, appserver.AIReadinessBlocked)
-	if got := svc.AIReadiness().ReasonCode; got != "ai_service_startup_error" {
-		t.Fatalf("AI readiness reason = %q, want sanitized startup error", got)
+	if got := svc.AIReadiness().ReasonCode; got != "unsupported_store" {
+		t.Fatalf("AI readiness reason = %q, want typed unsupported-store error", got)
 	}
 
 	raw, err := sql.Open("sqlite", dbPath)
@@ -144,6 +144,36 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreVersionIsUnsupported(t *testin
 	}
 	if settingsTables != 0 {
 		t.Fatal("unsupported database was rewritten with current settings schema")
+	}
+}
+
+func TestNewKeepsProductAvailableWhenFlowerReadStateIsCorrupt(t *testing.T) {
+	stateDir := t.TempDir()
+	path := filepath.Join(stateDir, "apps", "appserver", "thread_read_state.sqlite")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	before := []byte("damaged Flower read state")
+	if err := os.WriteFile(path, before, 0600); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := New(t.Context(), Options{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir: stateDir, StateRoot: stateDir, ConfigPath: filepath.Join(stateDir, "config.json"),
+		PermissionPolicy: testCodeappPermissionPolicy(t), ReDevPluginRuntimePath: testReDevPluginRuntimePath(t, stateDir),
+		AgentHomeDir: stateDir, Shell: "/bin/sh", ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("Flower read state stopped core runtime: %v", err)
+	}
+	defer svc.Close()
+	waitForAIReadinessState(t, svc.aiReady, appserver.AIReadinessBlocked)
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("source changed: %q %v", after, err)
+	}
+	if svc.appSrv == nil {
+		t.Fatal("core app server is unavailable")
 	}
 }
 
@@ -186,8 +216,8 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreSchemaDrifts(t *testing.T) {
 	}
 	defer func() { _ = svc.Close() }()
 	waitForAIReadinessState(t, svc.aiReady, appserver.AIReadinessBlocked)
-	if got := svc.AIReadiness().ReasonCode; got != "ai_service_startup_error" {
-		t.Fatalf("AI readiness reason = %q, want sanitized startup error", got)
+	if got := svc.AIReadiness().ReasonCode; got != "store_integrity_error" {
+		t.Fatalf("AI readiness reason = %q, want typed integrity error", got)
 	}
 
 	raw, err := sql.Open("sqlite", dbPath)

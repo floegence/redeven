@@ -7,6 +7,13 @@
 - Reproduce native open-page detail loss and cover live/timeline wire round trips,
   local search sources, explicit empty results, unknown details, and terminal errors.
 
+## 2026-09-08: Flower storage upgrade and controlled recovery
+
+- Consume published Floret v7.6.1 maintenance APIs and require compatibility epoch 12 for restored-data request isolation.
+- Put Floret, product storage, read state and cleanup under one deferred generation; preserve core Runtime availability on storage failure.
+- Capture complete upgrade snapshots, protect original retry sources, and restore verified collections through an interruptible durable file journal.
+- Freeze historical queue decoding and validate locked writer data through real continuation, WAL and recovery scenarios in the final main gate.
+
 ## 2026-09-08: Canonical Flower title synchronization
 
 - Adopt published Floret v7.5.0 title generation at compatibility epoch 11.

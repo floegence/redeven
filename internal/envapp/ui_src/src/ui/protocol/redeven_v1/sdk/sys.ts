@@ -38,6 +38,10 @@ export type RuntimeServiceAIReadinessState =
   | 'degraded'
   | 'unavailable'
   | 'inspecting'
+  | 'optimizing'
+  | 'recovering'
+  | 'backing_up'
+  | 'restoring'
   | 'migrating'
   | 'verifying'
   | 'blocked';

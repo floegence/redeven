@@ -1,0 +1,36 @@
+{
+  "attachment_fork_id": "thread-b6f173712ae5dc4dbed201e539eee26a",
+  "attachment_id": "upl_hBMGuHJ7fjhWxptUOOaEXV93",
+  "endpoint_id": "fixture_endpoint",
+  "floret_version": "v7.5.0",
+  "redeven_commit": "10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a",
+  "scenarios": [
+    "conversation",
+    "attachment",
+    "tool_call_and_result",
+    "model_switch",
+    "fork",
+    "nested_fork",
+    "read_state",
+    "waiting_input",
+    "queue"
+  ],
+  "thread_ids": [
+    "thread-60347f03b501b45c58e39599dbc7a1f9",
+    "thread-ecc778bf8a72124bb3e5bd789b00c51d",
+    "thread-7740bd153711c4eaffdec768aa108b8e",
+    "thread-5894f69f2be85e68b6bcc426c0b3c6d9"
+  ],
+  "user_public_id": "fixture_user",
+  "waiting_thread_id": "thread-755cbccf4278cc53066787f768e503c3",
+  "go_version": "go1.27.1 darwin/arm64",
+  "files": {
+    "ai/floret_threads.sqlite": "b9a39667e7f6d2a46264ae012fe039ce191bb3ec98a90107604566bf627e128b",
+    "ai/threads.sqlite": "7fa959d87b99d51c85c141b5a01315eda9c8d5d5fd462a54ae8f18c9b2d88c18",
+    "ai/uploads/upl_hBMGuHJ7fjhWxptUOOaEXV93.data": "a2eb4145b5b471486c35968b035cdf8f9f8b8ab255a71c5823a79c38df09f31f",
+    "apps/appserver/thread_read_state.sqlite": "c799c831de3c9eb4c80cab94b9d76ac973e24e136b5c87fd3ddb221856d7f930",
+    "writer.json": "3d7f2cce328d6fa210201dce566ba0b3ef1435bdc3ef5af7df3f0f3a53dddaf1"
+  },
+  "archive_sha256": "b8f7e6366deecc3ba964f98ca3c87fbb47de701c4f1a2af67975a151c5c6bc47",
+  "producer_sha256": "98bb7691947b98075e64b15d5f0be130a154b9e07033fd9e4155d5e43fe73639"
+}

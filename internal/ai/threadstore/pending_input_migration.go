@@ -150,7 +150,6 @@ func scanLegacyUploadRowV5(scan rowScanner, record *UploadRecord) error {
 		value := logicalLines.Int64
 		record.LogicalLineCount = &value
 	}
-	*record = normalizeUploadRecord(*record)
 	return nil
 }
 

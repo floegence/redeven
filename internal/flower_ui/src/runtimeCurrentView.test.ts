@@ -12,6 +12,13 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('keeps restored input separate from executable queues and canonical messages', () => {
+    const restored = [{ id: 'restored-input', input: { text: 'Keep this old queue input', attachments: [{ name: 'notes.txt' }] } }];
+    const result = applyFlowerRuntimeCurrentView(summary(), { thread_id: 'thread-a', view_version: 3, activity: 'idle', restored_inputs: restored, items: [] });
+    expect(result.restored_inputs).toEqual(restored);
+    expect(result.queued_turn_count).toBe(0);
+    expect(result.messages).toEqual([]);
+  });
   it('rejects a running current without canonical run progress', () => {
     expect(() => applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 6, activity: 'active', run_id: 'run-a', turn_id: 'turn-a',

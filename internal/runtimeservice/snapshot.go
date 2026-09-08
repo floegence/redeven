@@ -218,7 +218,7 @@ func NormalizeAIReadiness(readiness AIReadiness) AIReadiness {
 		if readiness.ReasonCode == "host_thread_settings_missing" && readiness.IssueCount > 0 {
 			return readiness
 		}
-	case "unavailable", "inspecting", "migrating", "verifying":
+	case "unavailable", "inspecting", "optimizing", "recovering", "migrating", "verifying", "backing_up", "restoring":
 		return AIReadiness{State: readiness.State}
 	case "blocked":
 		if readiness.ReasonCode != "" {

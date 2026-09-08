@@ -45,6 +45,10 @@ export const flowerSurfaceEnUS = {
     modelSupportUnavailable: 'Could not check attachment support',
   },
   chat: {
+    restoredInputTitle: "Input preserved after restore",
+    restoredInputDescription: "This input will not run automatically. Copy it into a new task to run it again.",
+    restoredInputCopy: "Copy input",
+
     loadingSettings: 'Flower settings are still loading.',
     warmupTitle: 'Preparing Flower',
     warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',

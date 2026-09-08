@@ -85,6 +85,7 @@ func newAIReadinessController(parent context.Context, opts ai.Options, create ai
 		return service.ReconcileCanonicalRootOwnership(ctx)
 	}
 	controller.opts.StoreStartupProgress = controller.observeStoreStartupPhase
+	controller.opts.DeferExecution = true
 	go func() {
 		<-ctx.Done()
 		_ = controller.Close()
@@ -217,6 +218,27 @@ func (c *aiReadinessController) applyAIReadinessIssueCount(generationID uint64, 
 }
 
 func (c *aiReadinessController) startAttempt() error {
+	return c.startAttemptWithRestore("")
+}
+
+func (c *aiReadinessController) ListFlowerSnapshots(ctx context.Context) ([]ai.FlowerSnapshotSummary, error) {
+	c.mu.Lock()
+	state := c.opts.StateDir
+	c.mu.Unlock()
+	return ai.ListFlowerSnapshots(ctx, state)
+}
+
+func (c *aiReadinessController) RestoreFlowerSnapshot(id string) error {
+	c.mu.Lock()
+	state := c.opts.StateDir
+	c.mu.Unlock()
+	if err := ai.CheckFlowerSnapshot(c.ctx, state, id); err != nil {
+		return err
+	}
+	return c.startAttemptWithRestore(id)
+}
+
+func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error {
 	c.mu.Lock()
 	if c.closed || c.terminalErr != nil {
 		c.mu.Unlock()
@@ -237,16 +259,19 @@ func (c *aiReadinessController) startAttempt() error {
 		}
 	}
 	c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable}
+	if restoreID != "" {
+		c.snapshot.State = appserver.AIReadinessRestoring
+	}
 	c.startupTraceID = newReadinessTraceID()
 	c.startupPhase = ""
 	c.workers.Add(1)
 	c.mu.Unlock()
 
-	go c.runAttempt(previous)
+	go c.runAttempt(previous, restoreID)
 	return nil
 }
 
-func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
+func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration, restoreID string) {
 	defer c.workers.Done()
 	if previous != nil {
 		select {
@@ -260,6 +285,19 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 		}
 	}
 
+	if restoreID != "" {
+		c.mu.Lock()
+		opts := c.opts
+		c.mu.Unlock()
+		if err := ai.RestoreFlowerSnapshot(c.ctx, opts, restoreID); err != nil {
+			if errors.Is(err, ai.ErrFlowerGenerationClose) {
+				c.finishCloseFailure(err)
+				return
+			}
+			c.finishFailure(err)
+			return
+		}
+	}
 	retryAttempt := 0
 	for {
 		c.setTransientState(appserver.AIReadinessInspecting)
@@ -270,6 +308,10 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 
 		service, err := c.create(c.ctx, opts)
 		if err != nil {
+			if errors.Is(err, ai.ErrFlowerGenerationClose) {
+				c.finishCloseFailure(err)
+				return
+			}
 			var startupErr *ai.FloretStoreStartupError
 			if errors.As(err, &startupErr) && isAutomaticStartupRecovery(startupErr) && retryAttempt < c.maxStartupRetries {
 				retryAttempt++
@@ -296,6 +338,15 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 		closed := c.closed || c.ctx.Err() != nil
 		stale := revision != c.optsRevision
 		if !closed && !stale {
+			if err := service.Activate(c.ctx); err != nil {
+				c.mu.Unlock()
+				if closeErr := c.close(service); closeErr != nil {
+					c.finishCloseFailure(closeErr)
+				} else {
+					c.finishFailure(err)
+				}
+				return
+			}
 			c.nextID++
 			generationCtx, generationCancel := context.WithCancel(c.ctx)
 			c.current = &aiServiceGeneration{
@@ -332,6 +383,10 @@ func isAutomaticStartupRecovery(startupErr *ai.FloretStoreStartupError) bool {
 func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreStartupPhase) {
 	var state appserver.AIReadinessState
 	switch phase {
+	case ai.FloretStoreStartupBackingUp:
+		state = appserver.AIReadinessBackingUp
+	case ai.FloretStoreStartupRestoring:
+		state = appserver.AIReadinessRestoring
 	case ai.FloretStoreStartupOptimizing:
 		state = appserver.AIReadinessOptimizing
 	case ai.FloretStoreStartupMigrating:
@@ -430,6 +485,10 @@ func (c *aiReadinessController) finishFailure(err error) {
 	c.mu.Unlock()
 	var startupErr *ai.FloretStoreStartupError
 	if errors.As(err, &startupErr) {
+		snapshot.Component = startupErr.Component
+		if startupErr.Phase != "" {
+			snapshot.StartupPhase = startupErr.Phase
+		}
 		snapshot.ReasonCode = string(startupErr.Class)
 		snapshot.Retryable = startupErr.Retryable
 		snapshot.SafeToRetry = startupErr.SafeToRetry

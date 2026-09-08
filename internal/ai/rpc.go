@@ -24,11 +24,12 @@ const (
 )
 
 type aiSendUserTurnReq struct {
-	ClientRequestID string     `json:"client_request_id,omitempty"`
-	ThreadID        string     `json:"thread_id"`
-	Model           string     `json:"model,omitempty"`
-	Input           RunInput   `json:"input"`
-	Options         RunOptions `json:"options"`
+	StorageGeneration string     `json:"storage_generation,omitempty"`
+	ClientRequestID   string     `json:"client_request_id,omitempty"`
+	ThreadID          string     `json:"thread_id"`
+	Model             string     `json:"model,omitempty"`
+	Input             RunInput   `json:"input"`
+	Options           RunOptions `json:"options"`
 }
 
 type aiSendUserTurnResp struct {
@@ -128,11 +129,12 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			clientRequestID = generatedRequestID
 		}
 		resp, err := service.SendUserTurn(leaseCtx, meta, SendUserTurnRequest{
-			ClientRequestID: clientRequestID,
-			ThreadID:        strings.TrimSpace(req.ThreadID),
-			Model:           strings.TrimSpace(req.Model),
-			Input:           req.Input,
-			Options:         req.Options,
+			StorageGeneration: req.StorageGeneration,
+			ClientRequestID:   clientRequestID,
+			ThreadID:          strings.TrimSpace(req.ThreadID),
+			Model:             strings.TrimSpace(req.Model),
+			Input:             req.Input,
+			Options:           req.Options,
 		})
 		if err != nil {
 			return nil, toAIRPCError(err)

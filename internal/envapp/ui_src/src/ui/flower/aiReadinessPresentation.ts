@@ -1,7 +1,7 @@
 import type { I18nHelpers } from '../i18n';
 import type { AIReadinessSnapshot } from './aiReadiness';
 
-export type AIReadinessAction = 'retry' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics';
+export type AIReadinessAction = 'retry' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics' | 'open_backups';
 
 export type AIReadinessDiagnosticRow = Readonly<{
   label: string;
@@ -28,6 +28,7 @@ function text(i18n: I18nHelpers, key: TranslationKey): string {
 
 function diagnosticStatus(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string {
   if (snapshot.state === 'ready') return text(i18n, 'aiReadiness.diagnostics.statusReady');
+  if (snapshot.state === 'restoring' || snapshot.startup_phase === 'restoring') return text(i18n, 'aiReadiness.storage.restoringDescription');
   if (snapshot.state === 'degraded') return text(i18n, 'aiReadiness.diagnostics.statusDegraded');
   if (snapshot.state === 'blocked') return text(i18n, 'aiReadiness.diagnostics.statusBlocked');
   return text(i18n, 'aiReadiness.diagnostics.statusChecking');
@@ -35,6 +36,8 @@ function diagnosticStatus(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): str
 
 function diagnosticPhase(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string {
   switch (snapshot.startup_phase || snapshot.state) {
+    case 'backing_up': return text(i18n, 'aiReadiness.storage.backingUp');
+    case 'restoring': return text(i18n, 'aiReadiness.storage.restoring');
     case 'inspecting':
     case 'unavailable':
       return text(i18n, 'aiReadiness.diagnostics.phaseChecking');
@@ -66,6 +69,7 @@ function diagnosticRows(
   elapsedMs: number,
 ): readonly AIReadinessDiagnosticRow[] {
   return [
+    ...(snapshot.component ? [{ label: text(i18n, 'aiReadiness.storage.component'), value: text(i18n, `aiReadiness.storage.${snapshot.component}`) }] : []),
     { label: text(i18n, 'aiReadiness.diagnostics.phase'), value: diagnosticPhase(snapshot, i18n) },
     { label: text(i18n, 'aiReadiness.diagnostics.elapsed'), value: diagnosticElapsed(elapsedMs, i18n) },
     { label: text(i18n, 'aiReadiness.diagnostics.status'), value: diagnosticStatus(snapshot, i18n) },
@@ -76,6 +80,7 @@ function diagnosticRows(
 function presentationActions(
   snapshot: AIReadinessSnapshot,
   canRetryGeneration: boolean,
+  canManageStorage: boolean,
 ): Readonly<{ primaryAction?: AIReadinessAction; secondaryAction?: AIReadinessAction }> {
   if (snapshot.state !== 'blocked') return {};
   const canRetry = canRetryGeneration && snapshot.retryable && snapshot.safe_to_retry;
@@ -90,9 +95,12 @@ function presentationActions(
       return { primaryAction: 'open_permissions', secondaryAction: 'show_diagnostics' };
     case 'unsupported_store':
     case 'store_integrity_error':
-      return canRetry
-        ? { primaryAction: 'show_diagnostics', secondaryAction: 'retry' }
-        : { primaryAction: 'show_diagnostics' };
+    case 'migration_failed':
+    case 'backup_failed':
+    case 'restore_failed':
+      return canManageStorage ? { primaryAction: 'open_backups', secondaryAction: 'show_diagnostics' } : { primaryAction: 'show_diagnostics' };
+    case 'insufficient_space':
+      return canRetry ? { primaryAction: 'retry', secondaryAction: 'show_diagnostics' } : { primaryAction: 'show_diagnostics' };
     case 'store_io_error':
       return canRetry
         ? { primaryAction: 'retry', secondaryAction: 'show_diagnostics' }
@@ -114,6 +122,10 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
   }
   if (snapshot.state !== 'blocked') {
     switch (snapshot.state) {
+      case 'backing_up':
+        return { title: 'aiReadiness.storage.backingUp', description: 'aiReadiness.storage.backingUpDescription', tone: 'neutral' };
+      case 'restoring':
+        return { title: 'aiReadiness.storage.restoring', description: 'aiReadiness.storage.restoringDescription', tone: 'neutral' };
       case 'inspecting':
         return { title: 'aiReadiness.states.inspectingTitle', description: 'aiReadiness.states.inspectingDescription', tone: 'neutral' };
       case 'optimizing':
@@ -132,6 +144,8 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
     }
   }
 
+  if (snapshot.reason_code === 'insufficient_space') return { title: 'aiReadiness.storage.spaceTitle', description: 'aiReadiness.storage.spaceDescription', tone: 'warning' };
+  if (['migration_failed', 'backup_failed', 'restore_failed'].includes(snapshot.reason_code)) return { title: 'aiReadiness.storage.failedTitle', description: 'aiReadiness.storage.failedDescription', tone: 'danger' };
   if (snapshot.retryable && snapshot.safe_to_retry) {
     return { title: 'aiReadiness.states.temporarilyUnavailableTitle', description: 'aiReadiness.states.temporarilyUnavailableDescription', tone: 'warning' };
   }
@@ -157,6 +171,7 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
 }
 
 function dataStatement(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string {
+  if (snapshot.state === 'restoring' || snapshot.startup_phase === 'restoring') return text(i18n, 'aiReadiness.storage.restoringDescription');
   if (snapshot.state === 'degraded') return text(i18n, 'aiReadiness.data.degraded');
   if (snapshot.state === 'blocked') return text(i18n, 'aiReadiness.data.preserved');
   return text(i18n, 'aiReadiness.data.processing');
@@ -165,7 +180,7 @@ function dataStatement(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string
 export function createAIReadinessPresentation(
   snapshot: AIReadinessSnapshot,
   i18n: I18nHelpers,
-  options: Readonly<{ canRetryGeneration?: boolean; elapsedMs?: number }> = {},
+  options: Readonly<{ canRetryGeneration?: boolean; canManageStorage?: boolean; elapsedMs?: number }> = {},
 ): AIReadinessPresentation {
   const copy = stateCopy(snapshot);
   const rows = diagnosticRows(snapshot, i18n, options.elapsedMs ?? -1);
@@ -175,7 +190,7 @@ export function createAIReadinessPresentation(
     title: text(i18n, copy.title),
     description: text(i18n, copy.description),
     dataStatement: dataStatement(snapshot, i18n),
-    ...(snapshot.state === 'degraded' ? { primaryAction: 'review_issues' as const } : presentationActions(snapshot, options.canRetryGeneration !== false)),
+    ...(snapshot.state === 'degraded' ? { primaryAction: 'review_issues' as const } : presentationActions(snapshot, options.canRetryGeneration !== false, options.canManageStorage === true)),
     diagnosticRows: rows,
     diagnosticText: rows.map((row) => `${row.label}: ${row.value}`).join('\n'),
   };

@@ -4321,6 +4321,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 				outboxRetryTimers.delete(entry.requestId);
 				applyAcceptedTurnLaunchReceipt(receipt);
 			}).catch((error) => {
+                if (error && typeof error === 'object' && error.code === 'AI_STORAGE_RESTORED') {
+                    pendingAdmissionHandoffs.delete(entry.requestId);
+                    setTransportOutbox((outbox) => outbox.put({ ...entry, terminalError: 'storage_restored' }));
+                    return;
+                }
 				if (flowerTurnAdmissionFailureKind(error) !== 'unknown') {
 					pendingAdmissionHandoffs.delete(entry.requestId);
 					setTransportOutbox((outbox) => outbox.drop(entry.requestId));
@@ -5009,7 +5014,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             presentation: { label: copy().chat.titleFallback, priority: 100 },
           }
           : undefined;
+        // Capture only for this explicit submission. Transport retries retain
+        // their original generation, so restored data cannot replay old input.
+        const storageGeneration = await props.adapter.resolveStorageGeneration?.();
+        if (!submissionCurrent()) return;
         const launchInput: FlowerTurnLaunchInput = {
+          ...(storageGeneration ? { storage_generation: storageGeneration } : {}),
           client_request_id: clientRequestID,
           thread_id: selectedID || undefined,
           ...(launchStagingScope ? { staging_scope: launchStagingScope } : {}),
@@ -9483,8 +9493,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             </Show>
             <Show when={submission().terminalError}>
-              <div class="flower-message-error flower-transport-outbox-error" role="alert">
-                {copy().attachments.restoreFailed}
+              <div class="flower-message-error flower-transport-outbox-error flower-preserved-input-notice" role="alert">
+                {submission().terminalError === 'storage_restored' ? copy().chat.restoredInputDescription : copy().attachments.restoreFailed}
+                <button type="button" class="flower-copy-input" onClick={() => void writeClipboardText(submission().input.prompt, copy().chat.restoredInputCopy).catch((error) => notifyThreadActionError(getErrorMessage(error)))}>{copy().chat.restoredInputCopy}</button>
               </div>
             </Show>
           </div>
@@ -10761,6 +10772,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       <span class="flower-composer-command-description">{copy().chat.commandCompactContext}</span>
                     </button>
                   </div>
+                </Show>
+                <Show when={(selectedThread()?.restored_inputs?.length ?? 0) > 0}>
+                  <section class="flower-restored-inputs" aria-label={copy().chat.restoredInputTitle}>
+                    <h4>{copy().chat.restoredInputTitle}</h4>
+                    <p>{copy().chat.restoredInputDescription}</p>
+                    <For each={selectedThread()?.restored_inputs}>{(item) => {
+                      const text = () => [item.input.text ?? '', ...(item.input.attachments ?? []).map((attachment) => attachment.name), ...(item.input.references ?? []).map((reference) => reference.text || reference.label)].filter(Boolean).join('\n');
+                      return <div class="flower-restored-input" data-flower-restored-input-id={item.id}>
+                        <pre>{text()}</pre>
+                        <button type="button" class="flower-copy-input" onClick={() => void writeClipboardText(text(), copy().chat.restoredInputCopy).catch((error) => notifyThreadActionError(getErrorMessage(error)))}>{copy().chat.restoredInputCopy}</button>
+                      </div>;
+                    }}</For>
+                  </section>
                 </Show>
                 {queuedTurnsDock()}
               </Show>

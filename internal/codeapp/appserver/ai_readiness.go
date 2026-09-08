@@ -20,6 +20,8 @@ const (
 	AIReadinessMigrating   AIReadinessState = "migrating"
 	AIReadinessVerifying   AIReadinessState = "verifying"
 	AIReadinessRecovering  AIReadinessState = "recovering"
+	AIReadinessBackingUp   AIReadinessState = "backing_up"
+	AIReadinessRestoring   AIReadinessState = "restoring"
 	AIReadinessReady       AIReadinessState = "ready"
 	AIReadinessDegraded    AIReadinessState = "degraded"
 	AIReadinessBlocked     AIReadinessState = "blocked"
@@ -40,6 +42,7 @@ var (
 // AIReadinessSnapshot contains only Redeven-owned, sanitized availability
 // facts. It must never contain Floret Store or Agent snapshots.
 type AIReadinessSnapshot struct {
+	Component    string           `json:"component,omitempty"`
 	State        AIReadinessState `json:"state"`
 	ReasonCode   string           `json:"reason_code,omitempty"`
 	Retryable    bool             `json:"retryable"`
@@ -70,6 +73,11 @@ type AIOrphanRootMaintenanceProvider interface {
 	ReviewOrphanCanonicalRoots(context.Context) (ai.OrphanCanonicalRootReview, error)
 	AdoptOrphanCanonicalRoot(context.Context, ai.AdoptOrphanCanonicalRootRequest) (int, error)
 	DeleteOrphanCanonicalRoot(context.Context, ai.DeleteOrphanCanonicalRootRequest) (int, error)
+}
+
+type AIStorageMaintenanceProvider interface {
+	ListFlowerSnapshots(context.Context) ([]ai.FlowerSnapshotSummary, error)
+	RestoreFlowerSnapshot(string) error
 }
 
 type aiServiceContextKey struct{}
@@ -111,6 +119,8 @@ func routeUsesAIService(r *http.Request) bool {
 	}
 	switch path {
 	case "/_redeven_proxy/api/ai/readiness",
+		"/_redeven_proxy/api/ai/maintenance/snapshots",
+		"/_redeven_proxy/api/ai/maintenance/restore",
 		"/_redeven_proxy/api/ai/readiness/retry",
 		"/_redeven_proxy/api/ai/maintenance/orphan_roots",
 		"/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt",
@@ -147,9 +157,9 @@ func (g *Server) aiReadinessSnapshot() AIReadinessSnapshot {
 
 func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapshot {
 	switch snapshot.State {
-	case AIReadinessUnavailable, AIReadinessInspecting, AIReadinessOptimizing, AIReadinessMigrating, AIReadinessVerifying:
+	case AIReadinessUnavailable, AIReadinessInspecting, AIReadinessOptimizing, AIReadinessMigrating, AIReadinessVerifying, AIReadinessBackingUp, AIReadinessRestoring:
 		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
-			State: snapshot.State, TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase,
+			State: snapshot.State, TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase, Component: snapshot.Component,
 		})
 	case AIReadinessRecovering:
 		if !knownAIReadinessReasonCode(snapshot.ReasonCode) || !snapshot.Retryable || !snapshot.SafeToRetry ||
@@ -159,7 +169,7 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
 			State: snapshot.State, ReasonCode: strings.TrimSpace(snapshot.ReasonCode),
 			Retryable: snapshot.Retryable, SafeToRetry: snapshot.SafeToRetry,
-			TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase, RetryReason: snapshot.RetryReason,
+			TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase, RetryReason: snapshot.RetryReason, Component: snapshot.Component,
 		})
 	case AIReadinessReady:
 		return AIReadinessSnapshot{State: AIReadinessReady}
@@ -182,6 +192,11 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 
 func sanitizeAIReadinessDiagnostics(snapshot AIReadinessSnapshot) AIReadinessSnapshot {
 	var ok bool
+	switch snapshot.Component {
+	case "", "product", "floret", "read_state", "uploads", "backup", "recovery":
+	default:
+		return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
+	}
 	if snapshot.TraceID, ok = sanitizeAIReadinessToken(snapshot.TraceID, 128); !ok {
 		return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
 	}
@@ -212,6 +227,10 @@ func sanitizeAIReadinessToken(value string, maxLength int) (string, bool) {
 func knownAIReadinessReasonCode(code string) bool {
 	switch strings.TrimSpace(code) {
 	case string(ai.FloretStoreStartupTemporarilyBlocked),
+		string(ai.FloretStoreStartupInsufficientSpace),
+		string(ai.FloretStoreStartupMigrationFailed),
+		string(ai.FloretStoreStartupBackupFailed),
+		string(ai.FloretStoreStartupRestoreFailed),
 		string(ai.FloretStoreStartupUpdateRequired),
 		string(ai.FloretStoreStartupUnsupportedStore),
 		string(ai.FloretStoreStartupIntegrityError),

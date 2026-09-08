@@ -1,0 +1,136 @@
+package ai
+
+import (
+	
+	"crypto/sha256"
+ "github.com/floegence/floret/v7/identity"
+ flruntime "github.com/floegence/floret/v7/runtime"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/threadreadstate"
+)
+
+// This producer is compiled with the unmodified 10ce4c152 production tree.
+func TestGenerateFlowerUpgradeBaseline(t *testing.T) {
+	dir := os.Getenv("FLOWER_BASELINE_OUTPUT")
+	if dir == "" { t.Skip("explicit historical fixture generation only") }
+	var calls, approvals, spawns, crashes atomic.Int32
+ marker := os.Getenv("FLOWER_BASELINE_MARKER")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil { t.Error(err); return }
+		flusher := w.(http.Flusher)
+		w.Header().Set("Content-Type", "text/event-stream")
+		model, _ := req["model"].(string)
+		tools, _ := req["tools"].([]any)
+		encoded,_:=json.Marshal(req["input"])
+        if len(tools)>0 && strings.Contains(string(encoded),"fixture-approval-input") && approvals.Add(1)==1 {
+            writeDeepSeekIntegrationToolCall(w,flusher,"fixture_approval","fixture_approval_call","terminal.exec",`{"command":"printf synthetic_approval","yield_ms":1000}`);return
+        }
+        if len(tools)>0 && strings.Contains(string(encoded),"fixture-parent-delegation") && spawns.Add(1)==1 {
+            writeDeepSeekIntegrationToolCall(w,flusher,"fixture_spawn","fixture_spawn_call","subagents",`{"action":"spawn","task_name":"Synthetic child","task_description":"Preserve child identity","message":"Return a synthetic child completion.","agent_type":"explore","context_mode":"mission_only"}`);return
+        }
+        if len(tools)>0 && strings.Contains(string(encoded),"fixture-crash-tool") && crashes.Add(1)==1 {
+            args,_:=json.Marshal(map[string]any{"command":"printf committed > '"+marker+"'; sleep 120","yield_ms":1000})
+            writeDeepSeekIntegrationToolCall(w,flusher,"fixture_crash","fixture_crash_call","terminal.exec",string(args));return
+        }
+        if len(tools)>0 && strings.Contains(string(encoded),"fixture-wait-input") {
+            args:=`{"reason_code":"missing_external_input","required_from_user":["Choose a target."],"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target?","response_mode":"write","is_secret":false}]}`
+            writeDeepSeekIntegrationToolCall(w,flusher,"fixture_wait","fixture_wait_call","ask_user",args)
+            return
+        }
+        if len(tools) > 0 && calls.Add(1) == 1 {
+			writeDeepSeekIntegrationToolCall(w, flusher, "fixture_tool", "fixture_tool_call", "retired_fixture_tool", `{"input":"synthetic baseline"}`)
+			return
+		}
+		writeDeepSeekIntegrationTextResponseForModel(w, flusher, "fixture_response", model, "Synthetic baseline response.")
+	}))
+	defer server.Close()
+	if err := os.MkdirAll(dir, 0700); err != nil { t.Fatal(err) }
+	svc, err := NewService(Options{Logger:slog.New(slog.NewTextHandler(io.Discard,nil)), StateDir:dir, AgentHomeDir:dir, Shell:"/bin/sh",
+		Config:&config.AIConfig{CurrentModelID:"deepseek/deepseek-v4-flash", Providers:[]config.AIProvider{{ID:"deepseek",Type:"deepseek",BaseURL:server.URL+"/v1",Models:[]config.AIProviderModel{{ModelName:"deepseek-v4-flash"},{ModelName:"deepseek-v4-pro"}}}}},
+		RunMaxWallTime:20*time.Second, RunIdleTimeout:10*time.Second, ResolveProviderAPIKey:func(string)(string,bool,error){return "synthetic-test-key",true,nil},
+	})
+	if err != nil { t.Fatal(err) }
+	defer svc.Close()
+	meta := &session.Meta{EndpointID:"fixture_endpoint",NamespacePublicID:"fixture_namespace",UserPublicID:"fixture_user",ChannelID:"fixture_channel",CanRead:true,CanWrite:true,CanExecute:true,CanAdmin:true}
+	thread, err := svc.CreateThread(t.Context(),meta,"Baseline conversation","deepseek/deepseek-v4-flash",config.AIPermissionFullAccess,"")
+	if err != nil { t.Fatal(err) }
+	owner, err := NewUploadOwner(meta.EndpointID,meta.UserPublicID,meta.ChannelID)
+	if err != nil { t.Fatal(err) }
+	scope, err := svc.CreateUploadStagingScope(t.Context(),owner,thread.ThreadID)
+	if err != nil { t.Fatal(err) }
+	content, name := "Synthetic attachment retained across upgrades.\n", "baseline.txt"
+	upload, err := svc.SaveUpload(t.Context(),SaveUploadRequest{Owner:owner,StagingScopeID:scope.StagingScopeID,StagingCapability:scope.Capability,Reader:strings.NewReader(content),DisplayName:name,UploadRequestID:"fixture-upload",ExpectedContentSHA256:fmt.Sprintf("%x",sha256.Sum256([]byte(content))),ExpectedSizeBytes:int64(len(content)),DisplayNameSHA256:fmt.Sprintf("%x",sha256.Sum256([]byte(name)))})
+	if err != nil { t.Fatal(err) }
+	_, err = svc.SendUserTurn(t.Context(),meta,SendUserTurnRequest{ClientRequestID:"fixture-turn-1",ThreadID:thread.ThreadID,StagingScopeID:scope.StagingScopeID,StagingCapability:scope.Capability,Model:thread.ModelID,Input:RunInput{Text:"Keep this synthetic conversation and attachment.",Attachments:[]RunAttachmentIn{{AttachmentID:upload.AttachmentID}}},Options:RunOptions{PermissionType:config.AIPermissionFullAccess}})
+	if err != nil { t.Fatal(err) }
+	waitForAskUserIntegrationThread(t,svc,meta,thread.ThreadID,func(view *ThreadView)bool{return view.RunStatus=="success"})
+	if err = svc.SetThreadModel(t.Context(),meta,thread.ThreadID,"deepseek/deepseek-v4-pro"); err != nil { t.Fatal(err) }
+	sendAndWaitForModelSwitch(t,svc,meta,thread.ThreadID,"A turn after a model switch.","deepseek/deepseek-v4-pro")
+	attachmentFork, err := svc.ForkThread(t.Context(),meta,thread.ThreadID,"Attachment fork regression")
+	if err != nil { t.Fatal(err) }
+	plain, err := svc.CreateThread(t.Context(),meta,"Plain conversation","deepseek/deepseek-v4-flash",config.AIPermissionFullAccess,"")
+	if err != nil { t.Fatal(err) }
+	sendAndWaitForModelSwitch(t,svc,meta,plain.ThreadID,"Plain conversation before fork.","")
+	fork, err := svc.ForkThread(t.Context(),meta,plain.ThreadID,"Baseline fork")
+	if err != nil { t.Fatal(err) }
+	sendAndWaitForModelSwitch(t,svc,meta,fork.ThreadID,"Continue the fork.","")
+	nested, err := svc.ForkThread(t.Context(),meta,fork.ThreadID,"Baseline nested fork")
+	if err != nil { t.Fatal(err) }
+	sendAndWaitForModelSwitch(t,svc,meta,nested.ThreadID,"Continue the nested fork.","")
+    approval,err:=svc.CreateThread(t.Context(),meta,"Waiting approval","deepseek/deepseek-v4-flash",config.AIPermissionApprovalRequired,"")
+    if err!=nil{t.Fatal(err)}
+    if _,err=svc.SendUserTurn(t.Context(),meta,SendUserTurnRequest{ClientRequestID:"fixture-approval",ThreadID:approval.ThreadID,Input:RunInput{Text:"fixture-approval-input"}});err!=nil{t.Fatal(err)}
+    deadline:=time.Now().Add(10*time.Second)
+    for { v,e:=svc.threadRuntime.View(t.Context(),identity.ThreadID(approval.ThreadID));if e!=nil{t.Fatal(e)};if len(v.Interactions)>0 && v.Interactions[0].Kind==flruntime.ThreadInteractionApproval{break};if time.Now().After(deadline){t.Fatalf("approval timeout: %+v",v)};time.Sleep(10*time.Millisecond) }
+    parent,err:=svc.CreateThread(t.Context(),meta,"Parent with child","deepseek/deepseek-v4-flash",config.AIPermissionFullAccess,"")
+    if err!=nil{t.Fatal(err)}
+    sendAndWaitForModelSwitch(t,svc,meta,parent.ThreadID,"fixture-parent-delegation","")
+    parentID:=identity.ThreadID(parent.ThreadID)
+    children,err:=svc.threadRuntime.List(t.Context(),flruntime.ThreadScope{ParentID:&parentID})
+    if err!=nil||len(children)!=1{t.Fatalf("children=%+v %v",children,err)}
+    deadline=time.Now().Add(10*time.Second)
+    for { v,e:=svc.threadRuntime.View(t.Context(),children[0].ID);if e!=nil{t.Fatal(e)};if v.Activity==flruntime.ThreadActivityIdle && v.LastOutcome!=nil{break};if time.Now().After(deadline){t.Fatalf("child timeout: %+v",v)};time.Sleep(10*time.Millisecond) }
+    cancelled,err:=svc.CreateThread(t.Context(),meta,"Cancelled input","deepseek/deepseek-v4-flash",config.AIPermissionFullAccess,"")
+    if err!=nil{t.Fatal(err)}
+    if _,err=svc.SendUserTurn(t.Context(),meta,SendUserTurnRequest{ClientRequestID:"fixture-cancel",ThreadID:cancelled.ThreadID,Input:RunInput{Text:"fixture-wait-input"}});err!=nil{t.Fatal(err)}
+    waitForAskUserIntegrationThread(t,svc,meta,cancelled.ThreadID,func(v *ThreadView)bool{return v.WaitingPrompt!=nil})
+    if _,err=svc.StopThread(t.Context(),meta,cancelled.ThreadID);err!=nil{t.Fatal(err)}
+	waiting,err:=svc.CreateThread(t.Context(),meta,"Waiting conversation","deepseek/deepseek-v4-flash",config.AIPermissionFullAccess,"")
+    if err!=nil{t.Fatal(err)}
+    if _,err=svc.SendUserTurn(t.Context(),meta,SendUserTurnRequest{ClientRequestID:"fixture-wait",ThreadID:waiting.ThreadID,Input:RunInput{Text:"fixture-wait-input"}});err!=nil{t.Fatal(err)}
+    waitForAskUserIntegrationThread(t,svc,meta,waiting.ThreadID,func(view *ThreadView)bool{return view.WaitingPrompt!=nil})
+    queued,err:=svc.SendUserTurn(t.Context(),meta,SendUserTurnRequest{ClientRequestID:"fixture-queued",ThreadID:waiting.ThreadID,Input:RunInput{Text:"Input queued while waiting for a response."}})
+    if err!=nil{t.Fatal(err)}
+    if queued.Kind!="queued"{t.Fatalf("queued kind=%s",queued.Kind)}
+	readPath := filepath.Join(dir,"apps","appserver","thread_read_state.sqlite")
+	reads, err := threadreadstate.Open(readPath)
+	if err != nil { t.Fatal(err) }
+	if _,err = reads.EnsureFlower(t.Context(),meta.EndpointID,meta.UserPublicID,map[string]threadreadstate.FlowerSnapshot{thread.ThreadID:{ActivityRevision:1}}); err != nil { t.Fatal(err) }
+	if err = reads.Close(); err != nil { t.Fatal(err) }
+	crashed,err:=svc.CreateThread(t.Context(),meta,"Uncertain tool at process exit","deepseek/deepseek-v4-flash",config.AIPermissionFullAccess,"")
+    if err!=nil{t.Fatal(err)}
+    if _,err=svc.SendUserTurn(t.Context(),meta,SendUserTurnRequest{ClientRequestID:"fixture-crash",ThreadID:crashed.ThreadID,Input:RunInput{Text:"fixture-crash-tool"}});err!=nil{t.Fatal(err)}
+    deadline=time.Now().Add(10*time.Second)
+    for { if _,err:=os.Stat(marker);err==nil{break};if time.Now().After(deadline){t.Fatal("tool did not execute")};time.Sleep(10*time.Millisecond) }
+
+	manifest := map[string]any{"redeven_commit":"10ce4c15212c7f4b6d2a449507b9e47d6bc31d1a","floret_version":"v7.5.0","endpoint_id":meta.EndpointID,"user_public_id":meta.UserPublicID,"thread_ids":[]string{thread.ThreadID,plain.ThreadID,fork.ThreadID,nested.ThreadID},"attachment_id":upload.AttachmentID,"attachment_fork_id":attachmentFork.ThreadID,"waiting_thread_id":waiting.ThreadID,"approval_thread_id":approval.ThreadID,"parent_thread_id":parent.ThreadID,"child_thread_id":string(children[0].ID),"cancelled_thread_id":cancelled.ThreadID,"crashed_thread_id":crashed.ThreadID,"scenarios":[]string{"conversation","attachment","tool_call_and_result","model_switch","fork","nested_fork","read_state","waiting_input","queue","waiting_approval","subagent","cancelled","uncertain_tool","process_exit_with_wal"}}
+	raw, err := json.MarshalIndent(manifest,"","  ")
+	if err != nil { t.Fatal(err) }
+	if err = os.WriteFile(filepath.Join(dir,"writer.json"),raw,0600); err != nil { t.Fatal(err) }
+ os.Exit(91)
+}

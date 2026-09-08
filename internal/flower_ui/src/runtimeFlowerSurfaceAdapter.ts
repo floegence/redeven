@@ -121,6 +121,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   readStagedLongText?: FlowerSurfaceAdapter['readStagedLongText'];
   loadStagedAttachmentPreview?: FlowerSurfaceAdapter['loadStagedAttachmentPreview'];
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
+  resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<unknown>;
   stopThread: (threadID: string) => Promise<unknown>;
@@ -377,6 +378,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),
     ...(options.canMutate !== false && options.loadStagedAttachmentPreview ? { loadStagedAttachmentPreview: options.loadStagedAttachmentPreview } : {}),
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
+    resolveStorageGeneration: options.resolveStorageGeneration,
     launchTurn: options.launchTurn,
     retryThread: async (threadID) => {
       const tid = trim(threadID);

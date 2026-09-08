@@ -85,6 +85,7 @@ export function buildFlowerTurnHTTPBody(input: Readonly<{
       ...(workingDir ? { working_dir: workingDir } : {}),
     };
   return {
+    ...(input.launch.storage_generation ? { storage_generation: input.launch.storage_generation } : {}),
     ...(existingThreadID ? { client_request_id: clientRequestID } : {}),
     ...(input.launch.staging_scope ? { staging_scope_id: input.launch.staging_scope.staging_scope_id } : {}),
     ...(modelID ? { model: modelID } : {}),

@@ -19,6 +19,20 @@ Turn admission has one result model. `not_sent` means local validation stopped b
 
 Respond, Approve, Reject, Stop, and Retry are ordinary idempotent commands. Reject All submits one Floret Answers batch so the visible approval set cannot partially settle. Their progress never applies `inert`, a pointer overlay, or a shared busy state to the rail, surface, or composer. Approval and waiting-user controls coexist with navigation and editable draft state. An unknown effect outcome is terminal: Flower shows the safe failure explanation, offers no replay control, and keeps the composer available for a new reply.
 
+## Restored data and preserved inputs
+
+An explicit new submission fetches the current storage generation before
+persisting its immutable outbox input. Env App and Desktop use the same public
+endpoint; retries keep the original generation. A restore changes that value,
+and `AI_STORAGE_RESTORED` rejects the old request before admission. The outbox
+keeps rejected text copyable and never silently resubmits it. Runtime/Desktop
+compatibility epoch 12 requires this contract in both clients.
+
+Floret restored queue inputs appear in a separate readonly section with text,
+attachment names, references and Copy. They have no promote, retry or run
+identity synthesized by the UI. Re-running preserved input requires an explicit
+new submission; old approvals and uncertain tool effects cannot resume.
+
 # Boundaries
 
 Composer drafts and the transport outbox own only unconfirmed browser input, stable request identity, and presentation-only launch settings. They never become authorization evidence or canonical queue, interaction, effect, turn, Thread settings, or Agent lifecycle state. Secret answers bypass the outbox, and canonical confirmation or terminal cleanup removes transport state instead of projecting a second durable command.

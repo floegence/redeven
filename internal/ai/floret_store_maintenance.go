@@ -13,6 +13,7 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 	flstorage "github.com/floegence/floret/v7/storage"
 	flstoragespi "github.com/floegence/floret/v7/storage/spi"
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 type FloretStoreStartupClass string
@@ -25,6 +26,8 @@ const (
 	FloretStoreStartupMigrating  FloretStoreStartupPhase = "migrating"
 	FloretStoreStartupVerifying  FloretStoreStartupPhase = "verifying"
 	FloretStoreStartupRecovering FloretStoreStartupPhase = "recovering"
+	FloretStoreStartupBackingUp  FloretStoreStartupPhase = "backing_up"
+	FloretStoreStartupRestoring  FloretStoreStartupPhase = "restoring"
 )
 
 const (
@@ -36,12 +39,18 @@ const (
 	FloretStoreStartupIOError                    FloretStoreStartupClass = "store_io_error"
 	FloretStoreStartupCancelled                  FloretStoreStartupClass = "cancelled"
 	FloretStoreStartupContractError              FloretStoreStartupClass = "contract_error"
+	FloretStoreStartupInsufficientSpace          FloretStoreStartupClass = "insufficient_space"
+	FloretStoreStartupMigrationFailed            FloretStoreStartupClass = "migration_failed"
+	FloretStoreStartupBackupFailed               FloretStoreStartupClass = "backup_failed"
+	FloretStoreStartupRestoreFailed              FloretStoreStartupClass = "restore_failed"
 )
 
 // FloretStoreStartupError is Redeven's readiness-safe projection of a public
-// Floret storage or migration error. It intentionally contains no schema rows
+// owner storage or migration error. It intentionally contains no schema rows
 // or backend implementation details.
 type FloretStoreStartupError struct {
+	Component   string
+	Phase       string
 	Class       FloretStoreStartupClass
 	Retryable   bool
 	SafeToRetry bool
@@ -50,9 +59,9 @@ type FloretStoreStartupError struct {
 
 func (e *FloretStoreStartupError) Error() string {
 	if e == nil {
-		return "Floret storage startup failed"
+		return "Flower storage startup failed"
 	}
-	return fmt.Sprintf("Floret storage startup failed: class=%s", e.Class)
+	return fmt.Sprintf("Flower storage startup failed: class=%s", e.Class)
 }
 
 func (e *FloretStoreStartupError) Unwrap() error {
@@ -113,7 +122,8 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 	}
 	source := flstorage.SQLite(path)
 	host, err := open(ctx, flruntime.Options{
-		Storage: source,
+		Storage:        source,
+		DeferExecution: true,
 		StartupProgress: flruntime.StartupProgressFunc(func(phase flruntime.StartupPhase) {
 			switch phase {
 			case flruntime.StartupPhaseMigrating:
@@ -161,25 +171,95 @@ func reportFloretStorePhase(progress func(FloretStoreStartupPhase), phase Floret
 }
 
 func classifyFloretStorageOpenError(err error) error {
+	return flowerStorageError("floret", "opening", err)
+}
+
+func flowerStorageError(component, phase string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var existing *FloretStoreStartupError
+	if errors.As(err, &existing) {
+		copy := *existing
+		copy.cause = err // Preserve joined close failures and their no-reopen guarantee.
+		if copy.Component == "" {
+			copy.Component = component
+		}
+		if copy.Phase == "" {
+			copy.Phase = phase
+		}
+		return &copy
+	}
+	classified := classifyFlowerStorageCause(err)
+	classified.Component, classified.Phase = component, phase
+	if classified.Class == FloretStoreStartupIOError {
+		switch phase {
+		case "migrating":
+			classified.Class = FloretStoreStartupMigrationFailed
+		case "backing_up":
+			classified.Class = FloretStoreStartupBackupFailed
+		case "restoring":
+			classified.Class = FloretStoreStartupRestoreFailed
+		}
+	}
+	return classified
+}
+
+func classifyFlowerStorageCause(err error) *FloretStoreStartupError {
+	makeError := func(class FloretStoreStartupClass, retryable, safe bool) *FloretStoreStartupError {
+		return &FloretStoreStartupError{Class: class, Retryable: retryable, SafeToRetry: safe, cause: err}
+	}
+	if errors.Is(err, flruntime.ErrRequestConflict) {
+		return makeError(FloretStoreStartupMigrationFailed, false, false)
+	}
+	var tooNew *sqliteutil.DatabaseTooNewError
+	if errors.As(err, &tooNew) || errors.Is(err, flruntime.ErrStoreTooNew) || errors.Is(err, flstorage.ErrSQLiteTooNew) {
+		return makeError(FloretStoreStartupUpdateRequired, false, false)
+	}
+	var wrongKind *sqliteutil.WrongDatabaseKindError
+	var tooOld *sqliteutil.DatabaseTooOldError
+	if errors.As(err, &wrongKind) || errors.As(err, &tooOld) || errors.Is(err, flruntime.ErrUnsupportedSchema) || errors.Is(err, flstorage.ErrUnsupportedSQLiteFormat) || errors.Is(err, flruntime.ErrMigrationRequired) {
+		return makeError(FloretStoreStartupUnsupportedStore, false, false)
+	}
+	var verification *sqliteutil.SchemaVerifyError
+	if errors.As(err, &verification) || errors.Is(err, flstorage.ErrSQLiteIntegrity) || errors.Is(err, errFlowerChecksum) {
+		return makeError(FloretStoreStartupIntegrityError, false, false)
+	}
+	var coded interface{ Code() int }
+	if errors.Is(err, syscall.ENOSPC) {
+		return makeError(FloretStoreStartupInsufficientSpace, true, true)
+	}
+	if errors.As(err, &coded) {
+		switch coded.Code() & 0xff {
+		case 5, 6:
+			return makeError(FloretStoreStartupTemporarilyBlocked, true, true)
+		case 13:
+			return makeError(FloretStoreStartupInsufficientSpace, true, true)
+		case 11, 26:
+			return makeError(FloretStoreStartupIntegrityError, false, false)
+		case 3, 8, 23:
+			return makeError(FloretStoreStartupEnvironmentPermissionError, false, false)
+		}
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
+		return makeError(FloretStoreStartupCancelled, true, true)
 	}
 	if errors.Is(err, flruntime.ErrAuthorityCorrupt) {
-		return floretStoreStartupError(FloretStoreStartupIntegrityError, false, false, err)
+		return makeError(FloretStoreStartupIntegrityError, false, false)
 	}
 	if errors.Is(err, flstoragespi.ErrInvalidArgument) {
-		return floretStoreStartupError(FloretStoreStartupUnsupportedStore, false, false, err)
+		return makeError(FloretStoreStartupUnsupportedStore, false, false)
 	}
 	if errors.Is(err, flstoragespi.ErrConflict) {
-		return floretStoreStartupError(FloretStoreStartupTemporarilyBlocked, true, true, err)
+		return makeError(FloretStoreStartupTemporarilyBlocked, true, true)
 	}
 	if isTemporaryFloretStorageError(err) {
-		return floretStoreStartupError(FloretStoreStartupTemporarilyBlocked, true, true, err)
+		return makeError(FloretStoreStartupTemporarilyBlocked, true, true)
 	}
 	if errors.Is(err, os.ErrPermission) || os.IsPermission(err) {
-		return floretStoreStartupError(FloretStoreStartupEnvironmentPermissionError, false, false, err)
+		return makeError(FloretStoreStartupEnvironmentPermissionError, false, false)
 	}
-	return floretStoreStartupError(FloretStoreStartupIOError, false, false, err)
+	return makeError(FloretStoreStartupIOError, false, false)
 }
 
 func floretStoreStartupClassOf(err error) FloretStoreStartupClass {
@@ -203,8 +283,6 @@ func isTemporaryFloretStorageError(err error) bool {
 		"database is busy",
 		"sqlite_busy",
 		"sqlite_locked",
-		"resource temporarily unavailable",
-		"temporarily unavailable",
 	} {
 		if strings.Contains(message, marker) {
 			return true

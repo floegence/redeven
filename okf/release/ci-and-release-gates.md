@@ -308,6 +308,17 @@ canvas allocation, plugin actions, a genuine default-deadline timeout, lost
 single-surface close response reconciliation, and saved widget identity after
 reload. Mock containers do not satisfy this check.
 
+## Flower storage compatibility
+
+The [historical writer contract](../ai/flower-upgrade-compatibility.md) is part
+of every final main integration, including Floret dependency upgrades. Ordinary
+CI checks immutable fixture digests, producer provenance and frozen decoder
+boundaries without opening databases or building a historical runtime. The
+uncached Go suite in the final main gate copies every fixture and runs the real
+product upgrade, new-turn continuation and second-start checks. Failure and
+restore tests cover WAL, cross-owner retry, zero execution during preparation,
+backup protection, full-set replacement interruption and stale outbox rejection.
+
 ## Other published boundaries
 
 Floret follows the same published-dependency discipline. The boundary guard

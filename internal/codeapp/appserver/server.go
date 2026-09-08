@@ -47,7 +47,6 @@ import (
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/terminal"
-	"github.com/floegence/redeven/internal/threadreadstate"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 )
 
@@ -74,8 +73,6 @@ type Options struct {
 	// SecretsStore holds user-managed secrets (such as AI provider API keys).
 	// If nil, the app server will derive a default secrets path from ConfigPath.
 	SecretsStore *settings.SecretsStore
-	// ThreadReadStateStore persists scoped per-surface thread read watermarks.
-	ThreadReadStateStore *threadreadstate.Store
 	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
 	PluginPlatform        http.Handler
 	PluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
@@ -241,7 +238,6 @@ type Server struct {
 	localPermissionCap    *config.PermissionSet
 	configMu              sync.Mutex
 	secrets               *settings.SecretsStore
-	threadReadState       *threadreadstate.Store
 	pluginPlatform        http.Handler
 	pluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
 	pluginMarketRefresh   func(context.Context) (pluginmarket.Snapshot, error)
@@ -435,7 +431,6 @@ func New(opts Options) (*Server, error) {
 		stateDir:              stateDir,
 		localPermissionPolicy: localPermissionPolicy,
 		secrets:               secrets,
-		threadReadState:       opts.ThreadReadStateStore,
 		pluginPlatform:        opts.PluginPlatform,
 		pluginMarketSnapshot:  opts.PluginMarketSnapshot,
 		pluginMarketRefresh:   opts.PluginMarketRefresh,
@@ -3172,6 +3167,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: g.aiReadinessSnapshot()})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/snapshots":
+		g.handleFlowerSnapshots(w, r)
+		return
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/restore":
+		g.handleFlowerRestore(w, r)
+		return
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/orphan_roots":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {
@@ -4154,6 +4155,15 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/storage-generation":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"storage_generation": aiSvc.StorageGeneration()}})
+		return
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/turns":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
@@ -4182,6 +4192,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		body.StagingCapability = stagingCapability
 		resp, err := aiSvc.SendUserTurn(r.Context(), meta, body)
+		if errors.Is(err, ai.ErrFlowerStorageRestored) {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: err.Error(), ErrorCode: "AI_STORAGE_RESTORED"})
+			return
+		}
 		if err != nil {
 			errorCode := ""
 			if errors.Is(err, ai.ErrLongTextAttachmentRequired) {
@@ -4512,6 +4526,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			body.StagingCapability = stagingCapability
 			resp, err := aiSvc.SendUserTurn(r.Context(), meta, body)
+			if errors.Is(err, ai.ErrFlowerStorageRestored) {
+				writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: err.Error(), ErrorCode: "AI_STORAGE_RESTORED"})
+				return
+			}
 			if err != nil {
 				errorCode := ""
 				if errors.Is(err, ai.ErrLongTextAttachmentRequired) {

@@ -421,6 +421,8 @@ func TestFlowerCurrentProjectionScopesAttachmentURLs(t *testing.T) {
 			Input: flruntime.UserInput{Attachments: []flruntime.MessageAttachment{{ResourceRef: resourceRef, Name: "photo.png", MIMEType: "image/png", SizeBytes: 12}}},
 		}},
 	}
+	current.RestoredInputs = []flruntime.RestoredInput{{ID: "restored-private-resource", Input: flruntime.UserInput{Text: "Preserved input", Attachments: []flruntime.MessageAttachment{{ResourceRef: resourceRef, Name: "photo.png", MIMEType: "image/png", SizeBytes: 12}}, References: []flruntime.MessageReference{{ResourceRef: "private-target-ref", Kind: "file", Label: "notes"}}}}}
+
 	encoded, err := json.Marshal(SendUserTurnResponse{ThreadID: current.ThreadID.String(), Current: current})
 	if err != nil {
 		t.Fatalf("marshal current: %v", err)

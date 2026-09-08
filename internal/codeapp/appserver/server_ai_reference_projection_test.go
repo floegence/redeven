@@ -63,14 +63,13 @@ func TestServer_AIThreadDetailProjectsCanonicalReferencesWithoutHostSecrets(t *t
 
 	channelID := "ch_reference_projection"
 	srv, err := New(Options{
-		Backend:              &stubBackend{},
-		DistFS:               fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("console.log('inject');")}},
-		ListenAddr:           "127.0.0.1:0",
-		Logger:               logger,
-		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
-		ConfigPath:           writeTestConfig(t),
-		ThreadReadStateStore: openTestThreadReadStateStore(t),
-		ResolveSessionMeta:   resolveMetaForTest(channelID, meta),
+		Backend:            &stubBackend{},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("console.log('inject');")}},
+		ListenAddr:         "127.0.0.1:0",
+		Logger:             logger,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

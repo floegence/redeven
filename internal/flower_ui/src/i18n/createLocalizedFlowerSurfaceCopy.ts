@@ -58,6 +58,10 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       modelSupportUnavailable: t(i18n, k('attachments.modelSupportUnavailable')),
     },
     chat: {
+      restoredInputTitle: t(i18n, k('chat.restoredInputTitle')),
+      restoredInputDescription: t(i18n, k('chat.restoredInputDescription')),
+      restoredInputCopy: t(i18n, k('chat.restoredInputCopy')),
+
       loadingSettings: t(i18n, k('chat.loadingSettings')),
       warmupTitle: t(i18n, k('chat.warmupTitle')),
       warmupDetail: t(i18n, k('chat.warmupDetail')),
