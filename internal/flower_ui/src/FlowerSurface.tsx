@@ -7939,6 +7939,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
     const canReadLiveOutput = () => (
+      terminal().operation !== 'write' && terminal().operation !== 'read' &&
       !!props.adapter.readTerminalProcess &&
       detailProps.context().runID !== '' &&
       processID() !== '' &&
@@ -7957,7 +7958,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if ((displayStatus() === 'running' || displayStatus() === 'pending') && processID() === '') {
         return 'Live output handle is not available yet.';
       }
-      return 'No output captured.';
+      return terminal().operation === 'read' ? copy().chat.terminalNoNewOutput : 'No output captured.';
     };
     const muted = () => !visibleOutput().trim() && !displayUserRejected();
     const copyTerminalCommand = async () => {
@@ -8066,13 +8067,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
             </Show>
           </span>
-          <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
+          <Show when={command()}><span class="flower-activity-terminal-prompt" aria-hidden="true">$</span></Show>
           <span class="flower-activity-terminal-command">
+            <Show when={command()} fallback={copy().chat.terminalSession}>
             <FlowerShellCommandHighlight
               command={terminal().command}
               class="flower-activity-terminal-command-code"
               tokenClassPrefix="flower-activity-terminal-command-token"
             />
+            </Show>
           </span>
           <div class="flower-activity-terminal-actions" aria-label="Terminal command actions">
             <Show when={command()}>
@@ -8110,6 +8113,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
           </div>
         </div>
+        <dl class="flower-activity-terminal-facts">
+          <div><dt>{copy().chat.terminalPurpose}</dt><dd>{terminal().purpose}</dd></div>
+          <div><dt>{copy().chat.terminalStatus}</dt><dd>{copy().chat.toolStatuses[displayStatus()]}</dd></div>
+          <Show when={!command() && processID()}><div><dt>{copy().chat.terminalSession}</dt><dd>{processID()}</dd></div></Show>
+          <Show when={terminal().operation === 'write' && terminal().input_bytes != null}>
+            <div><dt>{copy().chat.terminalInputBytes}</dt><dd>{terminal().input_bytes}</dd></div>
+          </Show>
+          <Show when={terminal().operation === 'read' && terminal().last_seq > 0}>
+            <div><dt>{copy().chat.terminalOutputSequence}</dt><dd>{terminal().first_seq}–{terminal().last_seq} / {terminal().latest_seq}</dd></div>
+          </Show>
+          <Show when={terminal().total_bytes != null}><div><dt>{copy().chat.terminalOutputBytes}</dt><dd>{terminal().total_bytes}</dd></div></Show>
+          <Show when={terminal().has_more}><div><dd>{copy().chat.terminalMoreOutput}</dd></div></Show>
+          <Show when={terminal().timed_out}><div><dd>{copy().chat.terminalTimedOut}</dd></div></Show>
+          <Show when={terminal().execution_location}><div><dt>{copy().chat.terminalLocation}</dt><dd>{terminal().execution_location}</dd></div></Show>
+        </dl>
         <Show when={command() && commandExpanded()}>
           <div id={commandPanelID()} class="flower-activity-terminal-command-panel">
             <pre class="flower-activity-terminal-command-full">
@@ -8121,6 +8139,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </pre>
           </div>
         </Show>
+        <Show when={terminal().operation !== 'write'}>
         <div
           ref={outputViewport.bind}
           class={cn('flower-activity-terminal-output', muted() && 'flower-activity-terminal-output-muted')}
@@ -8137,6 +8156,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
           </pre>
         </div>
+        </Show>
       </section>
     );
   };
@@ -8570,6 +8590,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const disclosureControl = createFlowerActivityDisclosureController({
       manualOpen: () => openActivityRuns()[disclosureKey()],
+      needsAttention: () => item().status === 'error' || item().status === 'waiting' || item().needs_attention === true,
       onManualOpenChange: (open) => {
         const key = disclosureKey();
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
@@ -8712,6 +8733,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               type="button"
               class="flower-activity-inline-button"
               aria-expanded={open()}
+              aria-controls={`flower-activity-detail-${disclosureKey()}`}
               onClick={toggleDisclosure}
             >
               {activityRowContent()}
@@ -8731,6 +8753,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               detailPanelRef = node;
               disclosure.bindViewport(node);
             }}
+            id={`flower-activity-detail-${disclosureKey()}`}
             class="flower-activity-inline-details"
             data-state={disclosure.state()}
             data-layout-motion={disclosure.layoutMotion()}

@@ -162,6 +162,7 @@ main() {
         src/ui/FlowerSurface.inputResponse.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
+        src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx \
         src/ui/plugins/PluginManagement.browser.test.tsx \

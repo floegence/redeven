@@ -10367,3 +10367,20 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     -webkit-text-fill-color: currentColor;
   }
 }
+
+.flower-activity-terminal-facts {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.flower-activity-terminal-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  min-width: 0;
+}
+.flower-activity-terminal-facts dt { color: var(--muted-foreground); }
+.flower-activity-terminal-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }

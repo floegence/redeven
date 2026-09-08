@@ -17,7 +17,7 @@ The process manager retains monotonic output chunks with fixed byte limits. `ter
 
 Tool approval is a typed Floret interaction. Accept continues only the matching effect; reject resolves that interaction and renders the outcome on the tool row without a global model failure. Cancel terminates active process resources and asks Floret to cancel the thread turn idempotently. Runtime restart resumes only canonically safe input and queue work; an uncertain terminal side effect remains on its tool row with an explicit Retry Effect action.
 
-Presentation is derived from the typed Floret Activity payload. A parseable but schema-invalid call may retain sanitized command presentation, but it fails before authorization or PTY creation. Browser payloads exclude local working paths, stdin, authorization proofs, and effect internals.
+Presentation is derived from the typed Floret Activity payload. Every terminal write requires a concise description in the user's language explaining its purpose without input values; reads name the task and distinguish later checks. The host enriches follow-up calls with an authorized process snapshot when available. Only safe description, command, byte counts, cursor facts, public execution location, and outcome enter Activity; raw input is used for execution only. Actual sent-byte counts and target identity survive write failure. See [Flower terminal activity](../ui/flower-terminal-activity.md) for disclosure and output presentation. A parseable but schema-invalid call may retain sanitized command presentation, but it fails before authorization or PTY creation. Browser payloads exclude local working paths, stdin, authorization proofs, and effect internals.
 
 # Boundaries
 

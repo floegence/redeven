@@ -2143,12 +2143,16 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("process permission denied: write and execute permissions required")
 		}
 		var p struct {
-			ProcessID string `json:"process_id"`
-			Input     string `json:"input"`
+			ProcessID   string `json:"process_id"`
+			Input       string `json:"input"`
+			Description string `json:"description"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
+		}
+		if strings.TrimSpace(p.Description) == "" || utf8.RuneCountInString(strings.TrimSpace(p.Description)) > terminalDescriptionMaxRunes {
+			return nil, errors.New("invalid args: description is required")
 		}
 		return r.toolTerminalWrite(p.ProcessID, p.Input)
 
@@ -3533,7 +3537,9 @@ func (r *run) toolTerminalRead(processID string, afterSeq int64) (any, error) {
 		return nil, err
 	}
 	r.observeTerminalOutputEncodingRepair(snapshot, "read")
-	return terminalProcessResultPayload(snapshot), nil
+	payload := terminalProcessResultPayload(snapshot)
+	payload["operation"] = "read"
+	return payload, nil
 }
 
 func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
@@ -3549,12 +3555,11 @@ func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
 	}
 	snapshot, err := proc.Write(input)
 	r.observeTerminalOutputEncodingRepair(snapshot, "write")
-	if err != nil {
-		return terminalProcessResultPayload(snapshot), err
-	}
 	payload := terminalProcessResultPayload(snapshot)
-	payload["input_bytes"] = len(input)
-	return payload, nil
+	payload["operation"] = "write"
+	payload["input_bytes"] = snapshot.InputBytes
+	delete(payload, "output")
+	return payload, err
 }
 
 func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any, error) {
@@ -3565,9 +3570,12 @@ func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any,
 	snapshot, err := proc.TerminateForActiveTurn(ctx)
 	r.observeTerminalOutputEncodingRepair(snapshot, "terminate")
 	if err != nil {
-		return terminalProcessResultPayload(snapshot), err
+		payload := terminalProcessResultPayload(snapshot)
+		payload["operation"] = "terminate"
+		return payload, err
 	}
 	payload := terminalProcessResultPayload(snapshot)
+	payload["operation"] = "terminate"
 	payload["terminated"] = true
 	return payload, nil
 }

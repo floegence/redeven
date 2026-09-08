@@ -88,10 +88,13 @@ export type FlowerActivityDiffFile = Readonly<{
 }>;
 
 export type FlowerActivityTerminalDetail = Readonly<{
+  operation: string;
+  purpose: string;
   command: string;
   output: string;
   status: FlowerActivityItem['status'];
   process_id: string;
+  input_bytes?: number;
   execution_location: string;
   exit_code?: number;
   duration_ms?: number;
@@ -1080,20 +1083,24 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
 
 function terminalOperationLabel(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): string {
   const terminalCopy = copy?.terminal ?? DEFAULT_TERMINAL_ACTIVITY_COPY;
-  switch (trimString(item.tool_name)) {
-    case 'terminal.read': return terminalCopy.readCommandOutput;
-    case 'terminal.write': return terminalCopy.writeCommandInput;
-    case 'terminal.terminate': return terminalCopy.terminateCommand;
-    case 'terminal.exec':
-    default:
-      return terminalCopy.runCommand;
+  switch (payloadValue(item.payload, 'operation') || trimString(item.tool_name)) {
+    case 'terminal.read':
+    case 'read': return terminalCopy.readCommandOutput;
+    case 'terminal.write':
+    case 'write': return terminalCopy.writeCommandInput;
+    case 'terminal.terminate':
+    case 'terminate': return terminalCopy.terminateCommand;
+    default: return terminalCopy.runCommand;
   }
 }
 
 function terminalTitleForItem(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityTitle {
   const operation = terminalOperationLabel(item, copy);
+  const label = trimString(item.label);
   const description = trimString(item.description);
-  return { kind: 'plain', text: description ? `${operation}: ${description}` : operation };
+  const generic = new Set<string>([...Object.values(DEFAULT_TERMINAL_ACTIVITY_COPY), trimString(item.tool_name), payloadValue(item.payload, 'command')]);
+  if (label && !generic.has(label)) return { kind: 'plain', text: label };
+  return { kind: 'plain', text: description || operation };
 }
 
 function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
@@ -1105,10 +1112,13 @@ function presentationForTerminal(item: FlowerActivityItem, copy?: FlowerActivity
   const title = terminalTitleForItem(item, copy);
   const detailLines: readonly FlowerActivityDetailLine[] = [];
   const terminal: FlowerActivityTerminalDetail = {
+    operation: payloadValue(payload, 'operation'),
+    purpose: trimString(item.description) || titleText(title),
     command: payloadValue(payload, 'command'),
-    output: terminalOutputFromPayload(payload),
+    output: payloadValue(payload, 'operation') === 'write' ? '' : terminalOutputFromPayload(payload),
     status: item.status,
     process_id: payloadValue(payload, 'process_id'),
+    input_bytes: optionalNumericValue(payload.input_bytes),
     execution_location: payloadValue(payload, 'execution_location'),
     exit_code: optionalNumericValue(payload.exit_code),
     duration_ms: optionalNumericValue(payload.duration_ms),
@@ -1123,18 +1133,7 @@ function presentationForTerminal(item: FlowerActivityItem, copy?: FlowerActivity
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = item.status === 'canceled' || item.approval_state === 'rejected' ? null : errorDetailBlockForItem(item, payload);
   if (errorBlock) detailBlocks.push(errorBlock);
-  const hasTerminalDetail = Boolean(
-    terminal.command.trim()
-    || terminal.output.trim()
-    || terminal.execution_location.trim()
-    || terminal.exit_code != null
-    || terminal.duration_ms != null
-    || terminal.total_bytes != null
-    || terminal.has_more
-    || terminal.truncated
-    || terminal.timed_out
-  );
-  if (hasTerminalDetail) detailBlocks.push({ kind: 'terminal_output', terminal });
+  detailBlocks.push({ kind: 'terminal_output', terminal });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
     label: titleText(title),
