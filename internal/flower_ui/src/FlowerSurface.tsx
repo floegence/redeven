@@ -8121,7 +8121,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <div><dt>{copy().chat.terminalInputBytes}</dt><dd>{terminal().input_bytes}</dd></div>
           </Show>
           <Show when={terminal().operation === 'read' && terminal().last_seq > 0}>
-            <div><dt>{copy().chat.terminalOutputSequence}</dt><dd>{terminal().first_seq}–{terminal().last_seq} / {terminal().latest_seq}</dd></div>
+            <div><dt>{copy().chat.terminalOutputSequence}</dt><dd><Show when={terminal().first_seq > 0}>{terminal().first_seq}–</Show>{terminal().last_seq} / {terminal().latest_seq}</dd></div>
           </Show>
           <Show when={terminal().total_bytes != null}><div><dt>{copy().chat.terminalOutputBytes}</dt><dd>{terminal().total_bytes}</dd></div></Show>
           <Show when={terminal().has_more}><div><dd>{copy().chat.terminalMoreOutput}</dd></div></Show>
