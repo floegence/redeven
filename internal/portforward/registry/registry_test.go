@@ -26,8 +26,8 @@ func TestOpenCreatesFreshRegistryV2Baseline(t *testing.T) {
 	if err := registry.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 1 {
-		t.Fatalf("user_version = %d, want 1", version)
+	if version != registryCurrentSchemaVersion {
+		t.Fatalf("user_version = %d, want %d", version, registryCurrentSchemaVersion)
 	}
 	var kind string
 	if err := registry.db.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton=1`).Scan(&kind); err != nil {
@@ -293,4 +293,98 @@ func mustRead(t *testing.T, path string) []byte {
 func digest(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+func createRegistryVersionOne(t *testing.T, path string) {
+	t.Helper()
+	db, err := sqliteutil.Open(path, sqliteutil.Spec{
+		Kind: registrySchemaKind, CurrentVersion: 1,
+		Migrations: []sqliteutil.Migration{{FromVersion: 0, ToVersion: 1, Apply: initializeRegistryV1}},
+		Verify:     verifyRegistryV1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO port_forwards(forward_id,target_url,name,created_at_unix_ms,updated_at_unix_ms,last_opened_at_unix_ms) VALUES('saved','http://localhost:3000','User service',1,2,3)`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenMigratesDefaultAppPathAndPreservesRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	createRegistryVersionOne(t, path)
+	reg, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	f, err := reg.GetForward(context.Background(), "saved")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f == nil || f.DefaultAppPath != "/" || f.Name != "User service" || f.TargetURL != "http://localhost:3000" || f.CreatedAtUnixMs != 1 || f.UpdatedAtUnixMs != 2 || f.LastOpenedAtUnixMs != 3 {
+		t.Fatalf("migrated record = %#v", f)
+	}
+	var version int
+	if err := reg.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != 2 {
+		t.Fatalf("version = %d", version)
+	}
+}
+
+func TestDefaultAppPathMigrationRollsBackOnVerificationFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	createRegistryVersionOne(t, path)
+	spec := registrySchemaSpec()
+	spec.Verify = func(tx *sql.Tx) error { return errors.New("injected final verification failure") }
+	if db, err := sqliteutil.Open(path, spec); err == nil {
+		db.Close()
+		t.Fatal("migration unexpectedly succeeded")
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tx := mustBegin(t, db)
+	if err := verifyRegistryV1(tx); err != nil {
+		t.Fatalf("migration did not roll back: %v", err)
+	}
+	var version int
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != 1 {
+		t.Fatalf("version = %d", version)
+	}
+	var name string
+	if err := tx.QueryRow(`SELECT name FROM port_forwards WHERE forward_id='saved'`).Scan(&name); err != nil || name != "User service" {
+		t.Fatalf("record = %q, %v", name, err)
+	}
+}
+
+func TestOpenRejectsVersionOneConstraintDriftReadOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.sqlite")
+	createRegistryVersionOne(t, path)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA writable_schema=ON; UPDATE sqlite_master SET sql=replace(sql, "name TEXT NOT NULL DEFAULT ''", "name TEXT DEFAULT ''") WHERE name='port_forwards'; PRAGMA writable_schema=OFF;`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before := mustRead(t, path)
+	if reg, err := Open(path); err == nil {
+		reg.Close()
+		t.Fatal("accepted schema drift")
+	}
+	if !slices.Equal(before, mustRead(t, path)) {
+		t.Fatal("drifted database was changed")
+	}
 }
