@@ -1,3 +1,5 @@
+import { classifyFilesystemPathError } from '../../../../../flower_ui/src/filePicker/filesystemPicker';
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Settings, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
@@ -509,17 +511,7 @@ function normalizeBrowserStateScope(value: unknown): string {
 }
 
 function classifyPathLoadError(err: unknown): PathLoadResult {
-  if (err instanceof RpcError) {
-    const message = String(err.message ?? '').trim().toLowerCase();
-    if (err.code === 403 && message.includes('outside filesystem scope')) return { status: 'outside_scope' };
-    if (err.code === 403 && message.includes('host filesystem permission denied')) return { status: 'host_permission_denied' };
-    if (err.code === 403) return { status: 'permission_denied' };
-    if (err.code === 404) return { status: 'not_found' };
-    if (err.code === 400 && message.includes('not a directory')) return { status: 'not_directory' };
-    if (err.code === 400 || err.code === 416) return { status: 'invalid_path' };
-    return { status: 'transport_error' };
-  }
-  return { status: 'transport_error' };
+  return { status: classifyFilesystemPathError(err) };
 }
 
 function isDeterministicPathFailure(status: PathLoadStatus): boolean {
@@ -630,6 +622,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitSurfacePrewarmed, setGitSurfacePrewarmed] = createSignal(false);
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
+  const filesystemPicker = useEnvFilesystemPicker();
   const ctx = useEnvContext();
   const i18n = useI18n();
   const floe = useResolvedFloeConfig();
@@ -5430,13 +5423,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   );
 
   const openArchiveExtraction = (item: FileItem, classification: ArchiveFileClassification) => {
-    const parentPath = getParentDir(item.path);
-    const root = rootForPath(parentPath);
     setArchiveExtractionRequest({
       item,
       classification,
-      pickerRootPath: root?.pathAbs ?? parentPath,
-      pickerRootLabel: root?.label,
     });
   };
 
@@ -5997,10 +5986,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       <ArchiveExtractionDialog
         open={Boolean(archiveExtractionRequest())}
         request={archiveExtractionRequest()}
-        listDirectory={async (path) => {
-          const response = await rpc.fs.list({ path, showHidden: false });
-          return response.entries ?? [];
-        }}
+        pickerProps={filesystemPicker}
         isWritablePath={canExtractToPath}
         onExtract={(request, options) => (
           createWorkspaceEffectRpc(requireProtocolSession(), rpc).fs.extract(request, options)

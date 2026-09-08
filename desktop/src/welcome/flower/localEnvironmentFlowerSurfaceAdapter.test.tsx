@@ -360,6 +360,7 @@ describe('Local Environment Flower surface adapter', () => {
       client_request_id: 'client_desktop-message',
       staging_scope: stagingScope('client_desktop-message'),
       prompt: 'hello',
+      working_dir: '/Volumes/team/redeven',
     });
 
     expect(receipt).toEqual({
@@ -379,7 +380,7 @@ describe('Local Environment Flower surface adapter', () => {
       model: 'default/gpt-4.1',
       input: { text: 'hello', attachments: [] },
       options: {},
-      create: { client_request_id: 'client_desktop-message', title: '', model_id: 'default/gpt-4.1' },
+      create: { client_request_id: 'client_desktop-message', title: '', model_id: 'default/gpt-4.1', working_dir: '/Volumes/team/redeven' },
     });
     expect(calls.at(-1)).toMatchObject({
       staging_scope_id: 'staging_client_desktop-message',
@@ -727,7 +728,7 @@ describe('Local Environment Flower surface adapter', () => {
         return {
           entries: [{
             name: 'redeven',
-            path: '/Users/alice/redeven',
+            path: '/Volumes/team/redeven',
             is_directory: true,
             size: 0,
             modified_at: 1234,
@@ -740,7 +741,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     const context = await adapter.getWorkingDirectoryPathContext?.();
     const entries = await adapter.listWorkingDirectoryEntries?.({
-      path: '/Users/alice',
+      path: '/Volumes/team',
       showHidden: true,
     });
 
@@ -758,7 +759,7 @@ describe('Local Environment Flower surface adapter', () => {
     });
     expect(entries).toEqual([{
       name: 'redeven',
-      path: '/Users/alice/redeven',
+      path: '/Volumes/team/redeven',
       isDirectory: true,
       size: 0,
       modifiedAt: 1234,
@@ -768,7 +769,7 @@ describe('Local Environment Flower surface adapter', () => {
       {
         method: 'POST',
         path: '/_redeven_proxy/api/fs/list',
-        body: { path: '/Users/alice', show_hidden: true },
+        body: { path: '/Volumes/team', show_hidden: true },
       },
     ]);
   });

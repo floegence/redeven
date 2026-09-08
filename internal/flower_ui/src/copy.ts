@@ -1,3 +1,5 @@
+import type { FilesystemPickerCopy } from './filePicker/filesystemPicker';
+import { filesystemPickerEnUS } from './i18n/filesystemPickerMessages';
 import type { FlowerActivityApprovalState, FlowerPermissionType, FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
 import type { FlowerProviderModelNoteKey } from './settings/providerModelNotes';
 import { localizedFlowerProviderModelNote } from './settings/providerModelNotes';
@@ -260,6 +262,7 @@ export type FlowerSubagentsCopy = Readonly<{
 }>;
 
 export type FlowerSurfaceCopy = Readonly<{
+  filesystemPicker: FilesystemPickerCopy;
   attachments: Readonly<{
     listLabel: string;
     add: string;
@@ -539,6 +542,7 @@ export type FlowerSurfaceCopy = Readonly<{
 }>;
 
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
+  filesystemPicker: { ...filesystemPickerEnUS, selectedCount: (count) => filesystemPickerEnUS.selectedCount.replace('{count}', String(count)) },
   attachments: {
     listLabel: 'Attachments',
     add: 'Add attachments',

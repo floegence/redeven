@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, Copy, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -39,9 +38,8 @@ import { writeTextToClipboard } from '../utils/clipboard';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { useEnvContext } from './EnvContext';
-import { useRedevenRpc } from '../protocol/redeven_v1';
 import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
-import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import {
   ServiceTemplateCatalog,
   HostLifecyclePlanDetails,
@@ -2225,8 +2223,6 @@ async function openWebServiceRoute(
 
 export function EnvPortForwardsPage() {
   const ctx = useEnvContext();
-  const protocol = useProtocol();
-  const rpc = useRedevenRpc();
   const notify = useNotification();
   const outlineControlClass = redevenSurfaceRoleClass('control');
   const i18n = useI18n();
@@ -2380,26 +2376,13 @@ export function EnvPortForwardsPage() {
     });
   });
 
-  const workspacePicker = createFilesystemPickerDataSource({
-    homePath: () => '/',
-    listDirectory: async (absolutePath) => {
-      if (!protocol.session?.()) return [];
-      const response = await rpc.fs.list({ path: absolutePath, showHidden: false });
-      return response.entries ?? [];
-    },
-  });
+  const workspacePicker = useEnvFilesystemPicker();
+  createEffect(() => { if (!templateDrawerOpen()) setWorkspacePickerOpen(false); });
 
   const openWorkspacePicker = () => {
-    workspacePicker.reset();
     setWorkspacePickerOpen(true);
-    void workspacePicker.ensureRootLoaded();
   };
 
-  createEffect(() => {
-    ctx.env_id();
-    protocol.session?.();
-    workspacePicker.reset();
-  });
 
   const loadManaged = async (refreshCatalog = true) => {
     if (!permissionReady() || !canRead()) return;
@@ -4060,16 +4043,13 @@ export function EnvPortForwardsPage() {
       </EnvAppDrawer>
 
       <DirectoryPicker
-        open={workspacePickerOpen()}
+        open={templateDrawerOpen() && workspacePickerOpen()}
         onOpenChange={setWorkspacePickerOpen}
-        files={workspacePicker.files()}
-        initialPath={workspacePickerInitialPath()}
-        homePath="/"
+        {...workspacePicker}
+        initialPath={workspacePickerInitialPath() || "/"}
         title={i18n.t('webServices.managed.selectWorkspace')}
         confirmText={i18n.t('common.actions.confirm')}
         cancelText={i18n.t('common.actions.cancel')}
-        onExpand={workspacePicker.expandPath}
-        ensurePath={workspacePicker.ensurePath}
         onSelect={setWorkspacePath}
       />
 

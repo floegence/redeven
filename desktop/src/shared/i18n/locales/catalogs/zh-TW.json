@@ -1,5 +1,36 @@
 {
   "flowerSurface": {
+    "filesystemPicker": {
+      "path": "目錄路徑",
+      "go": "前往",
+      "roots": "位置",
+      "root": "根目錄",
+      "showHidden": "顯示隱藏項目",
+      "loading": "正在載入目錄…",
+      "retry": "重試",
+      "empty": "此處沒有目錄",
+      "emptyFiles": "此目錄中沒有符合的檔案",
+      "invalidPath": "請輸入絕對路徑或以 ~/ 開頭的路徑",
+      "missingPath": "目錄不存在",
+      "unavailableContext": "無法取得檔案系統位置",
+      "loadFailed": "無法載入目錄",
+      "currentDirectory": "目前目錄",
+      "newFolder": "新增資料夾",
+      "folderName": "資料夾名稱",
+      "create": "建立",
+      "cancel": "取消",
+      "fileName": "檔案名稱",
+      "fileNameRequired": "請輸入檔案名稱",
+      "noFilesSelected": "尚未選取檔案",
+      "selectionLimit": "已達選取數量上限",
+      "selectedCount": "已選取：{count}",
+      "home": "家目錄",
+      "outsideScope": "此目錄不在允許存取的檔案系統範圍內。",
+      "permissionDenied": "你沒有讀取此目錄的權限。",
+      "hostPermissionDenied": "作業系統拒絕存取此目錄。",
+      "notDirectory": "此路徑不是目錄。",
+      "connectionFailed": "無法連線至環境，請檢查連線後重試。"
+    },
     "runtime": {
       "localEnvironment": "本機環境",
       "subtitle": "使用此 Mac 上的本機 AI 設定檔"

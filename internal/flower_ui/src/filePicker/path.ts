@@ -2,9 +2,8 @@ export function normalizeAbsolutePath(path: string): string {
   const raw = String(path ?? '').trim();
   if (!raw) return '';
 
-  const withSlashes = raw.replace(/\\+/g, '/');
-  if (!withSlashes.startsWith('/')) return '';
-  const collapsed = withSlashes.replace(/\/+/g, '/');
+  if (!raw.startsWith('/')) return '';
+  const collapsed = raw.replace(/\/+/g, '/');
 
   if (collapsed === '/') return '/';
   return collapsed.endsWith('/') ? collapsed.replace(/\/+$/g, '') || '/' : collapsed;

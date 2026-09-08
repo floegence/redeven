@@ -3129,6 +3129,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     snapshot().environments.find((environment) => environment.kind === 'local_environment')
       ?? null
   ));
+  const flowerFilesystemScopeKey = createMemo(() => {
+    const targetID = snapshot().default_flower_runtime_target_id;
+    const environment = targetID
+      ? snapshot().environments.find((entry) => entry.id === targetID || entry.managed_runtime_target_id === targetID)
+      : localEnvironmentEntry();
+    return JSON.stringify([targetID, environment?.id, environment?.runtime_started_at_unix_ms, environment?.runtime_health, environment?.open_session_key]);
+  });
   const flowerRuntimeLifecycleProgress = createMemo(() => {
     const environment = localEnvironmentEntry();
     return environment
@@ -6504,6 +6511,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         >
           <FlowerSurface
             draftCoordinator={flowerDraftCoordinator}
+            filesystemScopeKey={flowerFilesystemScopeKey()}
             adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
               runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),

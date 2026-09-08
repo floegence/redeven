@@ -1,6 +1,7 @@
 import { createMemo, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import type {
   FlowerCompanionPresenceProjection,
@@ -74,6 +75,7 @@ export type EnvAIPageProps = Readonly<{
 export function EnvAIPage(props: EnvAIPageProps) {
   const env = useEnvContext();
   const rpc = useRedevenRpc();
+  const filesystemPicker = useEnvFilesystemPicker();
   const i18n = useI18n();
   const notification = useNotification();
   const readinessController = env.aiReadinessController ?? createAIReadinessController();
@@ -165,6 +167,8 @@ export function EnvAIPage(props: EnvAIPageProps) {
       focusEnabled={props.engaged ?? true}
       renderContent={() => <FlowerSurface
         adapter={adapter()}
+        filesystemScopeKey={filesystemPicker.scopeKey}
+        filesystemScrollViewportProps={filesystemPicker.scrollViewportProps}
         notify={(notice: FlowerSurfaceNotification) => {
           const title = trim(notice.title) || (notice.tone === 'error'
             ? i18n.t('flower.errorNotificationTitle')

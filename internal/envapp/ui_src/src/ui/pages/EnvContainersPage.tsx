@@ -98,9 +98,8 @@ import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { LocalApiError } from '../services/localApi';
 import { consumeContainerResourceNavigation, subscribeContainerResourceNavigation, type ContainerResourceNavigation } from '../services/containerResourceNavigation';
 import { useI18n } from '../i18n';
-import { useRedevenRpc } from '../protocol/redeven_v1';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { useEnvContext } from './EnvContext';
 import { ContainerExecTerminal } from '../widgets/ContainerExecTerminal';
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
@@ -844,7 +843,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const i18n = useI18n();
   const notify = useNotification();
   const env = useEnvContext();
-  const rpc = useRedevenRpc();
   const storageKey = () => `containers:${compact(props.stateScope) || 'activity'}`;
   const restored = sanitizePersistedState(readUIStorageJSON(storageKey(), DEFAULT_STATE));
   const restoredTarget: ContainerConsoleTarget = normalizeConsoleTarget(restored);
@@ -998,17 +996,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   let storedInventoryScrollTop = 0;
   let relatedNavigationHistory: RelatedNavigationOrigin[] = [];
 
-  const composeFilePicker = createFilesystemPickerDataSource({
-    homePath: () => '/',
-    includeFiles: true,
-    listDirectory: async (path) => (await rpc.fs.list({ path, showHidden: true })).entries ?? [],
-  });
-
-  const containerPathDataSource = createFilesystemPickerDataSource({
-    homePath: () => '/',
-    includeFiles: true,
-    listDirectory: async (path) => (await rpc.fs.list({ path, showHidden: true })).entries ?? [],
-  });
+  const filesystemPicker = useEnvFilesystemPicker();
 
   const permissions = createMemo(() => env.env()?.permissions);
   const canRead = createMemo(() => Boolean(permissions()?.can_read));
@@ -2569,7 +2557,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const openContainerPathPicker = (target: ContainerPathPickerTarget) => {
-    containerPathDataSource.reset();
     setContainerPathPicker(target);
   };
 
@@ -2687,7 +2674,6 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
     setComposeProfiles([]);
     setComposeProfileInput('');
     setComposeProfileError('');
-    composeFilePicker.reset();
   };
 
   const addComposeConfigPaths = (paths: readonly string[]) => {
@@ -2737,17 +2723,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   };
 
   const openComposeFilePicker = (kind: 'config' | 'env') => {
-    composeFilePicker.reset();
     if (kind === 'config') setComposeConfigPickerOpen(true);
     else setComposeEnvPickerOpen(true);
-    void composeFilePicker.ensureRootLoaded().catch((cause) => {
-      if (kind === 'config') setComposeConfigPickerOpen(false);
-      else setComposeEnvPickerOpen(false);
-      notify.error(
-        i18n.t('containers.notifications.filePickerFailedTitle'),
-        cause instanceof Error ? cause.message : i18n.t('containers.notifications.filePickerFailedMessage'),
-      );
-    });
   };
 
   const addComposeProfile = (raw: string) => {
@@ -3901,8 +3878,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </div>
       </Dialog>
 
-      <FileOpenPicker open={composeConfigPickerOpen()} onOpenChange={setComposeConfigPickerOpen} files={composeFilePicker.files()} homePath="/" selectionMode="multiple" maxSelections={8} initialSelectedPaths={composeConfigPaths()} fileFilter={(item) => /\.ya?ml$/iu.test(item.name)} title={i18n.t('containers.compose.chooseFiles')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} emptyText={i18n.t('containers.compose.noComposeFiles')} onExpand={composeFilePicker.expandPath} ensurePath={composeFilePicker.ensurePath} onSelect={acceptComposeConfigSelection} />
-      <FileOpenPicker open={composeEnvPickerOpen()} onOpenChange={setComposeEnvPickerOpen} files={composeFilePicker.files()} homePath="/" selectionMode="single" initialSelectedPaths={composeEnvFilePath() ? [composeEnvFilePath()] : []} title={i18n.t('containers.compose.chooseEnvFile')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} emptyText={i18n.t('containers.compose.noEnvFiles')} onExpand={composeFilePicker.expandPath} ensurePath={composeFilePicker.ensurePath} onSelect={(paths) => setComposeEnvFilePath(paths[0] ?? '')} />
+      <FileOpenPicker open={composeConfigPickerOpen()} onOpenChange={setComposeConfigPickerOpen} {...filesystemPicker} initialPath={composeConfigPaths().length ? undefined : "/"} initialShowHidden={true} selectionMode="multiple" maxSelections={8} initialSelectedPaths={composeConfigPaths()} fileFilter={(item) => /\.ya?ml$/iu.test(item.name)} title={i18n.t('containers.compose.chooseFiles')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} copy={{ ...filesystemPicker.copy, emptyFiles: i18n.t('containers.compose.noComposeFiles') }} onSelect={acceptComposeConfigSelection} />
+      <FileOpenPicker open={composeEnvPickerOpen()} onOpenChange={setComposeEnvPickerOpen} {...filesystemPicker} initialPath={composeEnvFilePath() ? undefined : "/"} initialShowHidden={true} selectionMode="single" initialSelectedPaths={composeEnvFilePath() ? [composeEnvFilePath()] : []} title={i18n.t('containers.compose.chooseEnvFile')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} copy={{ ...filesystemPicker.copy, emptyFiles: i18n.t('containers.compose.noEnvFiles') }} onSelect={(paths) => setComposeEnvFilePath(paths[0] ?? '')} />
 
       <Dialog
         open={composeForget() !== null}
@@ -4021,8 +3998,8 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
         </div>
       </Dialog>
 
-      <FileOpenPicker open={containerPathPicker()?.kind === 'file'} onOpenChange={(open) => { if (!open) setContainerPathPicker(null); }} files={containerPathDataSource.files()} homePath="/" selectionMode="single" initialSelectedPaths={[]} title={i18n.t('containers.run.chooseHostFile')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} emptyText={i18n.t('containers.run.noFiles')} onExpand={containerPathDataSource.expandPath} ensurePath={containerPathDataSource.ensurePath} onSelect={(paths) => acceptContainerPath(paths[0] ?? '')} />
-      <DirectoryPicker open={containerPathPicker()?.kind === 'directory'} onOpenChange={(open) => { if (!open) setContainerPathPicker(null); }} files={containerPathDataSource.files()} homePath="/" initialPath="/" title={i18n.t('containers.run.chooseHostFolder')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} onExpand={containerPathDataSource.expandPath} ensurePath={containerPathDataSource.ensurePath} onSelect={acceptContainerPath} />
+      <FileOpenPicker open={containerPathPicker()?.kind === 'file'} onOpenChange={(open) => { if (!open) setContainerPathPicker(null); }} {...filesystemPicker} initialPath="/" initialShowHidden={true} selectionMode="single" initialSelectedPaths={[]} title={i18n.t('containers.run.chooseHostFile')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} copy={{ ...filesystemPicker.copy, emptyFiles: i18n.t('containers.run.noFiles') }} onSelect={(paths) => acceptContainerPath(paths[0] ?? '')} />
+      <DirectoryPicker open={containerPathPicker()?.kind === 'directory'} onOpenChange={(open) => { if (!open) setContainerPathPicker(null); }} {...filesystemPicker} initialShowHidden={true} initialPath="/" title={i18n.t('containers.run.chooseHostFolder')} confirmText={i18n.t('common.actions.confirm')} cancelText={i18n.t('common.actions.cancel')} onSelect={acceptContainerPath} />
 
       <Dialog open={creationMode() !== null} onOpenChange={(open) => !open && setCreationMode(null)} title={creationMode() === 'image-tag' ? i18n.t('containers.create.tagTitle') : i18n.t('containers.create.title')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setCreationMode(null)}>{i18n.t('containers.actions.cancel')}</Button><Button size="sm" onClick={submitCreation} disabled={mutationBusy() || creationTargets().length === 0 || !compact(creationName() || creationImage())}>{i18n.t('containers.actions.review')}</Button></div>}>
         <div class="space-y-4">

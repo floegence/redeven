@@ -26,7 +26,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         data-testid="directory-picker"
         onClick={() => {
           props.onOpenChange(false);
-          props.onSelect('/output');
+          props.onSelect('/workspace/output');
         }}
       >
         {props.title}
@@ -86,10 +86,8 @@ function renderDialog(overrides?: Partial<Parameters<typeof ArchiveExtractionDia
         kind: 'archive' as const,
         defaultOutputName: 'bundle',
       },
-      pickerRootPath: '/workspace',
-      pickerRootLabel: 'Home',
     },
-    listDirectory: vi.fn().mockResolvedValue([]),
+    pickerProps: { loadDirectory: vi.fn().mockResolvedValue([]) },
     isWritablePath: vi.fn().mockReturnValue(true),
     onExtract,
     onComplete,
@@ -218,7 +216,6 @@ describe('ArchiveExtractionDialog', () => {
       request: {
         item: { id: '/workspace/bundle.part01.rar', name: 'bundle.part01.rar', path: '/workspace/bundle.part01.rar', type: 'file' },
         classification: { format: 'rar', kind: 'multipart', defaultOutputName: 'bundle' },
-        pickerRootPath: '/workspace',
       },
     });
 

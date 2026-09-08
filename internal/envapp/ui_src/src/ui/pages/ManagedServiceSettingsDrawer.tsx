@@ -26,11 +26,9 @@ import {
   Textarea,
 } from "@floegence/floe-webapp-core/ui";
 
-import { createFilesystemPickerDataSource } from "../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource";
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { EnvAppDrawer } from "../primitives/EnvAppDrawer";
 import { fetchLocalApiJSON } from "../services/localApi";
-import { useProtocol } from "@floegence/floe-webapp-protocol";
-import { useRedevenRpc } from "../protocol/redeven_v1";
 import { useI18n, type EnvAppTranslationKey } from "../i18n";
 import { ManagedServiceShapingOrb } from "./ManagedServiceShapingOrb";
 
@@ -245,8 +243,6 @@ export function ManagedServiceSettingsDrawer(props: {
 }) {
   const i18n = useI18n();
   const notify = useNotification();
-  const protocol = useProtocol();
-  const rpc = useRedevenRpc();
   const settingText = (key: string, values?: Record<string, string | number>) =>
     i18n.t(
       `webServices.managed.settings.${key}` as EnvAppTranslationKey,
@@ -273,17 +269,8 @@ export function ManagedServiceSettingsDrawer(props: {
   const [scriptName, setScriptName] =
     createSignal<keyof HostSettings>("start_script");
 
-  const picker = createFilesystemPickerDataSource({
-    homePath: () => "/",
-    listDirectory: async (absolutePath) => {
-      if (!protocol.session?.()) return [];
-      const response = await rpc.fs.list({
-        path: absolutePath,
-        showHidden: false,
-      });
-      return response.entries ?? [];
-    },
-  });
+  const picker = useEnvFilesystemPicker();
+  createEffect(() => { if (!props.open) setPickerOpen(false); });
 
   const load = async () => {
     if (!props.open || !props.serviceID) return;
@@ -505,13 +492,11 @@ export function ManagedServiceSettingsDrawer(props: {
   };
 
   const openPathPicker = (resourceID: string) => {
-    picker.reset();
     setPickerTarget({
       service: draft()?.deployment === "compose" ? composeService() : undefined,
       resourceID,
     });
     setPickerOpen(true);
-    void picker.ensureRootLoaded();
   };
 
   const sectionVisible = (id: SectionID) => {
@@ -1838,16 +1823,13 @@ export function ManagedServiceSettingsDrawer(props: {
         </Show>
       </EnvAppDrawer>
       <DirectoryPicker
-        open={pickerOpen()}
+        open={props.open && pickerOpen()}
         onOpenChange={setPickerOpen}
-        files={picker.files()}
+        {...picker}
         initialPath="/"
-        homePath="/"
         title={settingText("selectDirectory")}
         confirmText={settingText("choose")}
         cancelText={settingText("cancel")}
-        onExpand={picker.expandPath}
-        ensurePath={picker.ensurePath}
         onSelect={(path) => {
           const target = pickerTarget();
           if (!target) return;

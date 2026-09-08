@@ -1,5 +1,36 @@
 {
   "flowerSurface": {
+    "filesystemPicker": {
+      "path": "Ruta del directorio",
+      "go": "Ir",
+      "roots": "Ubicaciones",
+      "root": "Raíz",
+      "showHidden": "Mostrar elementos ocultos",
+      "loading": "Cargando directorio…",
+      "retry": "Reintentar",
+      "empty": "No hay directorios aquí",
+      "emptyFiles": "No hay archivos coincidentes en este directorio",
+      "invalidPath": "Introduce una ruta absoluta o una ruta que empiece por ~/",
+      "missingPath": "No se encontró el directorio",
+      "unavailableContext": "Las ubicaciones del sistema de archivos no están disponibles",
+      "loadFailed": "No se pudo cargar el directorio",
+      "currentDirectory": "Directorio actual",
+      "newFolder": "Nueva carpeta",
+      "folderName": "Nombre de la carpeta",
+      "create": "Crear",
+      "cancel": "Cancelar",
+      "fileName": "Nombre del archivo",
+      "fileNameRequired": "El nombre del archivo es obligatorio",
+      "noFilesSelected": "No hay archivos seleccionados",
+      "selectionLimit": "Se alcanzó el límite de selección",
+      "selectedCount": "Selección: {count}",
+      "home": "Carpeta personal",
+      "outsideScope": "Este directorio está fuera de las ubicaciones permitidas.",
+      "permissionDenied": "No tienes permiso para leer este directorio.",
+      "hostPermissionDenied": "El sistema operativo denegó el acceso a este directorio.",
+      "notDirectory": "Esta ruta no es un directorio.",
+      "connectionFailed": "No se pudo conectar con el entorno. Comprueba la conexión y reintenta."
+    },
     "runtime": {
       "localEnvironment": "Entorno local",
       "subtitle": "Usa el perfil de IA local en este Mac"

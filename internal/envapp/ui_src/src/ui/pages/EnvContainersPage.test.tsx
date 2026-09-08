@@ -46,6 +46,8 @@ const harness = vi.hoisted(() => ({
   execTerminalProps: new Map<string, any>(),
 }));
 
+vi.mock('@floegence/floe-webapp-protocol', () => ({ useProtocol: () => ({ session: () => null }) }));
+
 vi.mock('@floegence/floe-webapp-core', () => ({
   useNotification: () => harness.notify,
 }));
@@ -105,7 +107,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       ? ['/workspace/my-app/compose.yaml', '/workspace/my-app/compose.override.yaml']
       : ['/workspace/my-app/.env']);
     props.onOpenChange?.(false);
-  }}>confirm files</button></section></Show>,
+  }}>confirm files</button><button type="button" data-picker-cancel onClick={() => props.onOpenChange?.(false)}>cancel files</button></section></Show>,
   Input: (props: any) => <input class={props.class} value={props.value} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} disabled={props.disabled} onInput={props.onInput} onKeyDown={props.onKeyDown} />,
   MonitoringChart: (props: any) => <div
     class={props.class}
@@ -1911,9 +1913,8 @@ describe('native Containers page', () => {
     });
   });
 
-  it('keeps manual Compose paths usable when the file picker is unavailable', async () => {
+  it('keeps manual Compose paths usable after dismissing the file picker', async () => {
     harness.listResources.mockImplementation((nextView: string) => Promise.resolve(nextView === 'compose-projects' ? [] : []));
-    harness.fsList.mockRejectedValueOnce(new Error('filesystem unavailable'));
     const host = document.createElement('div');
     document.body.append(host);
     dispose = render(() => <EnvContainersPage />, host);
@@ -1929,11 +1930,9 @@ describe('native Containers page', () => {
       .find((button) => button.textContent?.includes('containers.compose.chooseFiles'))?.click();
     await settle();
 
-    expect(host.querySelector('[data-file-open-picker]')).toBeNull();
-    expect(harness.notify.error).toHaveBeenCalledWith(
-      'containers.notifications.filePickerFailedTitle',
-      'filesystem unavailable',
-    );
+    expect(host.querySelector('[data-file-open-picker]')).not.toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-picker-cancel]')?.click();
+    await settle();
 
     const dialog = host.querySelector<HTMLElement>('[data-dialog]')!;
     const inputs = dialog.querySelectorAll<HTMLInputElement>('input');

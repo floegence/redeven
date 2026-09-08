@@ -85,13 +85,11 @@ describe('TerminalGroupEditorDialog', () => {
   it('selects the default path through the shared directory picker', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const onPickerOpen = vi.fn();
     render(() => (
       <TerminalGroupEditorDialog
         open
         group={null}
         defaultWorkingDir="/Users/demo"
-        onPickerOpen={onPickerOpen}
         onCancel={() => undefined}
         onSubmit={() => undefined}
       />
@@ -99,7 +97,6 @@ describe('TerminalGroupEditorDialog', () => {
 
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-group-path-picker-trigger"]')?.click();
     await Promise.resolve();
-    expect(onPickerOpen).toHaveBeenCalledOnce();
     expect(host.querySelector('[data-testid="group-editor-dialog"]')).toBeNull();
     const picker = host.querySelector<HTMLButtonElement>('[data-testid="mock-directory-picker"]');
     expect(picker).not.toBeNull();

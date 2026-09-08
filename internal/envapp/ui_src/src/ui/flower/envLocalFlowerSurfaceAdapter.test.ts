@@ -127,6 +127,18 @@ function typedCommandResponse(
 }
 
 describe('Env local Flower surface adapter', () => {
+  it('passes declared roots and external absolute directory requests through unchanged', async () => {
+    const context = { homePathAbs: '/Users/alice', agentHomePathAbs: '/Users/alice', defaultRootId: 'project', roots: [
+      { id: 'project', label: 'Project', pathAbs: '/Volumes/team', kind: 'custom', permissions: { read: true, write: false } },
+    ] };
+    const entries = [{ name: 'project', path: '/Volumes/team/project', isDirectory: true }];
+    const fs = { getPathContext: vi.fn(async () => context), list: vi.fn(async () => ({ entries })) };
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_external', envLabel: 'External', rpc: { fs } as any });
+    expect(await adapter.getWorkingDirectoryPathContext!()).toEqual(context);
+    expect(await adapter.listWorkingDirectoryEntries!({ path: '/Volumes/team', showHidden: true })).toEqual(entries);
+    expect(fs.list).toHaveBeenCalledExactlyOnceWith({ path: '/Volumes/team', showHidden: true });
+  });
+
 	it('deletes a canonical queued turn through the queue route before reloading detail', async () => {
 		fetchMock
 			.mockResolvedValueOnce(jsonResponse({ ok: true }))

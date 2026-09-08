@@ -5,11 +5,9 @@ import {
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
 import { FolderOpen } from '@floegence/floe-webapp-core/icons';
-import { Button, DirectoryPicker } from '@floegence/floe-webapp-core/ui';
+import { Button, DirectoryPicker, type PickerPanelProps } from '@floegence/floe-webapp-core/ui';
 
-import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
-import { toPickerTreeAbsolutePath } from '../../../../../flower_ui/src/filePicker/directoryPickerTree';
-import type { FsExtractRequest, FsExtractResponse, FsFileInfo } from '../protocol/redeven_v1';
+import type { FsExtractRequest, FsExtractResponse } from '../protocol/redeven_v1';
 import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import { getParentDir, validateFileBrowserEntryName } from './FileBrowserShared';
@@ -17,14 +15,12 @@ import { getParentDir, validateFileBrowserEntryName } from './FileBrowserShared'
 export type ArchiveExtractionRequest = {
   item: FileItem;
   classification: ArchiveFileClassification;
-  pickerRootPath: string;
-  pickerRootLabel?: string;
 };
 
 export type ArchiveExtractionDialogProps = {
   open: boolean;
   request: ArchiveExtractionRequest | null;
-  listDirectory: (path: string) => Promise<FsFileInfo[]>;
+  pickerProps: PickerPanelProps;
   isWritablePath: (path: string) => boolean;
   onExtract: (
     request: FsExtractRequest,
@@ -74,10 +70,6 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
   let activeController: AbortController | null = null;
   let activeRequestKey = '';
 
-  const picker = createFilesystemPickerDataSource({
-    homePath: () => props.request?.pickerRootPath,
-    listDirectory: props.listDirectory,
-  });
 
   const validationError = createMemo(() => {
     const name = outputName().trim();
@@ -101,7 +93,6 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
     setErrorMessage('');
     setPickerOpen(false);
     setStatus('idle');
-    picker.reset();
   };
 
   createEffect(() => {
@@ -172,8 +163,6 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
 
   const openPicker = () => {
     if (busy()) return;
-    picker.reset();
-    void picker.ensureRootLoaded();
     setPickerOpen(true);
   };
 
@@ -347,17 +336,13 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
       <DirectoryPicker
         open={props.open && pickerOpen()}
         onOpenChange={setPickerOpen}
-        files={picker.files()}
+        {...props.pickerProps}
         initialPath={destinationParent()}
-        homePath={props.request?.pickerRootPath ?? '/'}
-        homeLabel={props.request?.pickerRootLabel}
         title={i18n.t('files.archiveExtraction.selectDestination')}
         confirmText={i18n.t('common.actions.confirm')}
         cancelText={i18n.t('common.actions.cancel')}
-        onExpand={picker.expandPath}
-        ensurePath={picker.ensurePath}
         onSelect={(path) => {
-          setDestinationParent(toPickerTreeAbsolutePath(path, props.request?.pickerRootPath));
+          setDestinationParent(path);
           setErrorMessage('');
         }}
       />

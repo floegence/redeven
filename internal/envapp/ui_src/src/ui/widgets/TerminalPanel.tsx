@@ -138,7 +138,7 @@ import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
 import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
 import { REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR } from '../workbench/surface/workbenchInputRouting';
-import { createFilesystemPickerDataSource } from '../../../../../flower_ui/src/filePicker/createFilesystemPickerDataSource';
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 
 type pending_terminal_session_status = 'creating' | 'failed';
 
@@ -1057,19 +1057,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
   const terminalCatalog = useTerminalSessionCatalog();
-  const groupPathPicker = createFilesystemPickerDataSource({
-    homePath: () => '/',
-    listDirectory: async (absolutePath) => {
-      if (!protocol.session?.()) return [];
-      const response = await rpc.fs.list({ path: absolutePath, showHidden: false });
-      return response.entries ?? [];
-    },
-  });
-  createEffect(() => {
-    String(env.env_id() ?? '');
-    protocol.session?.();
-    groupPathPicker.reset();
-  });
+  const groupPathPicker = useEnvFilesystemPicker();
 
   const terminalLive = createRedevenTerminalLiveBundle(rpc, () => protocol.session?.(), connId);
   const transport = terminalLive.transport;
@@ -5268,12 +5256,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               open={groupEditorTarget() !== null}
               group={groupEditorTarget() === 'create' ? null : groupEditorTarget() as TerminalGroup | null}
               defaultWorkingDir={agentHomePathAbs() || '/'}
-              pickerFiles={groupPathPicker.files()}
-              pickerHomePath="/"
-              pickerHomeLabel={i18n.t('files.filesystemRootFallback')}
-              onPickerOpen={() => { void groupPathPicker.ensureRootLoaded(); }}
-              onPickerExpand={(path) => groupPathPicker.expandPath(path)}
-              ensurePickerPath={groupPathPicker.ensurePath}
+              pickerProps={groupPathPicker}
               onCancel={() => {
                 setGroupEditorTarget(null);
               }}
