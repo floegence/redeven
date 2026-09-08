@@ -9,6 +9,7 @@ import { buildFlowerSubagentPanelItems, presentSubagentTaskName } from './flower
 function summary(overrides: Partial<FlowerSubagentSummary>): FlowerSubagentSummary {
   const threadID = String(overrides.thread_id ?? 'child-1');
   return {
+    title: 'Child title', title_status: 'ready', title_generation: 1,
     parent_thread_id: 'parent-thread',
     thread_id: threadID,
     task_name: 'Review API',
@@ -45,6 +46,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     subagents: [],
     ...overrides,
     title_status: overrides.title_status ?? 'ready',
+    title_generation: overrides.title_generation ?? (overrides.title_status === 'unset' ? 0 : 1),
   };
 }
 

@@ -109,6 +109,7 @@ func applyThreadSummaryPresentation(view *ThreadView, summary *flruntime.ThreadS
 	}
 	view.Title = strings.TrimSpace(summary.Title)
 	view.TitleStatus = strings.TrimSpace(string(summary.TitleStatus))
+	view.TitleGeneration = summary.TitleGeneration
 	if !summary.CreatedAt.IsZero() {
 		view.CreatedAtUnixMs = summary.CreatedAt.UnixMilli()
 	}

@@ -490,6 +490,7 @@ export type FlowerThreadSnapshot = Readonly<{
   thread_id: string;
   title: string;
   title_status: FlowerTitleStatus;
+  title_generation: number;
   model_id: string;
   working_dir: string;
   pinned_at_ms?: number;
@@ -525,6 +526,9 @@ export type FlowerThreadSnapshot = Readonly<{
 }>;
 
 export type FlowerSubagentSummary = Readonly<{
+  title: string;
+  title_status: FlowerTitleStatus;
+  title_generation: number;
   parent_thread_id: string;
   thread_id: string;
   task_name: string;

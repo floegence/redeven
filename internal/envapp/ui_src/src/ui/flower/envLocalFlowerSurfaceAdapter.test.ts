@@ -67,7 +67,7 @@ function liveBootstrap(threadID: string, status = 'canceled') {
   const thread = {
     thread_id: threadID,
     title: 'Stopped thread',
-    title_status: 'ready',
+    title_status: 'ready', title_generation: 1,
     model_id: 'default/gpt-4.1',
     status,
     run_status: status,

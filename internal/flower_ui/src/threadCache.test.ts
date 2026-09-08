@@ -10,7 +10,7 @@ import {
 
 function thread(id: string, version: number, text: string): FlowerThreadSnapshot {
   return {
-    thread_id: id, title: id, title_status: 'ready', model_id: 'model', working_dir: '/',
+    thread_id: id, title: id, title_status: 'ready', title_generation: 1, model_id: 'model', working_dir: '/',
     settings_revision: 1, permission_type: 'approval_required',
     created_at_ms: 1, updated_at_ms: version, status: 'success', source_label: 'test', target_labels: [],
     messages: [{ id: `${id}-message`, role: 'assistant', content: text, status: 'complete', created_at_ms: version }],
@@ -376,7 +376,7 @@ describe('ThreadCache', () => {
 
   it('applies a Subagent inventory only to an existing parent detail', () => {
     const inventory = [{
-      parent_thread_id: 'root', thread_id: 'child', task_name: 'Research models', status: 'running',
+      parent_thread_id: 'root', thread_id: 'child', task_name: 'Research models', title: 'Research models', title_status: 'ready' as const, title_generation: 1, status: 'running',
       can_send_input: true, can_interrupt: true, can_close: true,
     }];
     let cache = receive(createThreadCache(), view('root', 2, 'root'));
@@ -387,5 +387,85 @@ describe('ThreadCache', () => {
     expect(cache.summaries.has('child')).toBe(false);
     expect(cache.views.has('child')).toBe(false);
     expect(cache.summaries.has('missing-parent')).toBe(false);
+  });
+});
+
+describe('canonical title ownership', () => {
+  it('preserves a generated title across a later runtime view built from untitled detail', () => {
+    const empty = { ...view('a', 1, 'thinking'), thread: { ...thread('a', 1, 'thinking'), title: '', title_status: 'unset' as const, title_generation: 0, } };
+    let cache = receive(createThreadCache(), empty);
+    const named = { ...thread('a', 2, ''), title: 'Hi', title_status: 'ready' as const, title_generation: 1, };
+    cache = cache.replaceSummary(named);
+    cache = cache.receiveCurrent({ version: 2, thread: { ...empty.thread, updated_at_ms: 2, read_status: named.read_status } }).cache;
+    expect(cache.summaries.get('a')?.title).toBe('Hi');
+    expect(cache.views.get('a')?.thread.title).toBe('Hi');
+    cache = receive(cache, { version: 2, thread: named });
+    expect(cache.summaries.get('a')?.title).toBe('Hi');
+    expect(cache.views.get('a')?.thread.title).toBe('Hi');
+  });
+});
+
+describe('title updates independent of runtime revisions', () => {
+  it('accepts a title from equal or older detail without replacing newer messages', () => {
+    let cache = receive(createThreadCache(), view('a', 8, 'Latest reply'));
+    for (const version of [8, 7]) {
+      const candidate = { ...thread('a', 4, 'Stale reply'), title: `Rename ${version}`, title_generation: 10 - version };
+      const result = cache.receiveView({ thread: candidate, version });
+      cache = result.cache;
+      expect(result.state).toBe('accepted');
+      expect(result.runtimeState).toBe(version === 8 ? 'unchanged' : 'stale');
+      expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('Latest reply');
+      expect(cache.views.get('a')?.thread.title).toBe(candidate.title);
+      expect(cache.summaries.get('a')?.title).toBe(candidate.title);
+    }
+  });
+
+  it('rejects stale list, detail, and reconnect titles after manual rename', () => {
+    const stale = thread('a', 20, 'Body');
+    const manual = { ...stale, title: 'Manual', title_generation: 4 };
+    let cache = receive(createThreadCache(), { version: 2, thread: manual }).select('a');
+    cache = cache.replaceSummary(stale).replaceSummaries([stale]).resetRootSummaries([stale]);
+    cache = receive(cache, { version: 3, thread: stale });
+    expect(cache.summaries.get('a')?.title).toBe('Manual');
+    expect(cache.views.get('a')?.thread.title).toBe('Manual');
+    expect(cache.selectedId).toBe('a');
+  });
+
+  it('updates titles without fetching details or changing activity, selection, and list order', () => {
+    let cache = receive(createThreadCache(), view('a', 2, 'A'));
+    cache = receive(cache, view('b', 3, 'B')).select('b');
+    const named = { ...thread('a', 2, ''), title: 'Named A', title_generation: 2 };
+    cache = cache.replaceSummary(named);
+    expect([...cache.summaries.keys()]).toEqual(['a', 'b']);
+    expect(cache.selectedId).toBe('b');
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('A');
+    expect(cache.views.get('a')?.thread.title).toBe('Named A');
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread)).toBe(false);
+    expect(cache.summaries.get('a')?.read_status).toEqual(named.read_status);
+  });
+
+  it('retains summary title after detail eviction and stale hydration', () => {
+    let cache = receive(createThreadCache(), { version: 1, thread: { ...thread('a', 1, 'A'), title: 'Named', title_generation: 2 } });
+    for (let i = 0; i < 12; i++) cache = receive(cache, view(`other-${i}`, 1, 'Other'));
+    expect(cache.views.has('a')).toBe(false);
+    cache = receive(cache.select('a'), view('a', 2, 'Loaded'));
+    expect(cache.views.get('a')?.thread.title).toBe('Named');
+  });
+
+  it('preserves the last accepted state on a conflicting terminal snapshot', () => {
+    const cache = receive(createThreadCache(), view('a', 1, 'A'));
+    expect(() => cache.replaceSummary({ ...thread('a', 3, ''), title: 'Conflict' })).toThrow('Flower contract error');
+    expect(cache.summaries.get('a')?.title).toBe('a');
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('A');
+  });
+
+  it('prevents adjunct callbacks and runtime currents from authoring titles', () => {
+    const cache = receive(createThreadCache(), view('a', 1, 'A'));
+    expect(() => cache.updateSummaryAdjuncts('a', (detail) => ({ ...detail, title: 'Bypass' }))).toThrow('cannot author titles');
+    expect(() => cache.updateDetailAdjuncts('a', (detail) => ({ ...detail, title: 'Bypass' }))).toThrow('cannot author titles');
+    const projected = { ...thread('a', 2, 'Next'), title: 'Bypass', title_generation: 999 };
+    const current = cache.receiveCurrent({ version: 2, thread: projected });
+    expect(current.cache.views.get('a')?.thread.title).toBe('a');
+    expect(current.cache.views.get('a')?.thread.messages[0]?.content).toBe('Next');
   });
 });

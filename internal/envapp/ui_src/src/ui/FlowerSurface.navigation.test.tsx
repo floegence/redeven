@@ -435,8 +435,8 @@ describe('FlowerSurface navigation', () => {
   });
 
 	it('replaces the visible fallback title from a canonical summary event without an empty flash', async () => {
-		const fallback = thread({ thread_id: 'thread-title-live', title: 'Review runtime', title_status: 'pending' });
-		const provider = thread({ ...fallback, title: 'Runtime review', title_status: 'ready', updated_at_ms: fallback.updated_at_ms + 1 });
+		const fallback = thread({ thread_id: 'thread-title-live', title: 'Review runtime', title_status: 'pending', title_generation: 1, });
+		const provider = thread({ ...fallback, title: 'Runtime review', title_status: 'ready', title_generation: 1, updated_at_ms: fallback.updated_at_ms + 1 });
 		const publishProviderTitle = deferred<void>();
 		const runtime = renderSurfaceWithAdapter({
 			...adapter(true),

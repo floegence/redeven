@@ -1,6 +1,22 @@
 import type {
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
+import { mergeThreadTitle, threadTitleSnapshot, type ThreadTitleSnapshot } from './threadTitleSnapshot';
+
+type ThreadDetail = Omit<FlowerThreadSnapshot, keyof ThreadTitleSnapshot>;
+type ThreadDetailView = Readonly<{ thread: ThreadDetail; version: number }>;
+
+function detailOnly(thread: ThreadDetail): ThreadDetail {
+  const { title: _title, title_status: _status, title_generation: _generation, ...detail } = thread as FlowerThreadSnapshot;
+  return detail;
+}
+
+function adjunctOnly(thread: ThreadDetail): ThreadDetail {
+  if ('title' in thread || 'title_status' in thread || 'title_generation' in thread) {
+    throw new Error('Flower contract error: adjunct updates cannot author titles.');
+  }
+  return thread;
+}
 
 export type ThreadView = Readonly<{
   thread: FlowerThreadSnapshot;
@@ -18,8 +34,8 @@ export type ThreadViewReceiveResult = Readonly<{
 }>;
 
 export function classifyThreadView(
-  current: ThreadView | undefined,
-  candidate: ThreadView,
+  current: ThreadDetailView | undefined,
+  candidate: ThreadDetailView,
 ): ThreadViewAcceptance {
   if (!current) return 'accepted';
   if (candidate.version > current.version) return 'accepted';
@@ -28,8 +44,8 @@ export function classifyThreadView(
 }
 
 function classifyThreadSettings(
-  current: ThreadView | undefined,
-  candidate: ThreadView,
+  current: ThreadDetailView | undefined,
+  candidate: ThreadDetailView,
 ): ThreadViewAcceptance {
   if (!current) return 'accepted';
   const currentRevision = threadSettingsRevision(current.thread);
@@ -40,8 +56,8 @@ function classifyThreadSettings(
 }
 
 function classifyThreadActivity(
-  current: ThreadView | undefined,
-  candidate: ThreadView,
+  current: ThreadDetailView | undefined,
+  candidate: ThreadDetailView,
 ): ThreadViewAcceptance {
   if (!current) return 'accepted';
   const currentRevision = threadSnapshotRevision(current.thread);
@@ -51,10 +67,10 @@ function classifyThreadActivity(
   return 'unchanged';
 }
 
-function mergeThreadSettings(
-  runtime: FlowerThreadSnapshot,
-  settings: FlowerThreadSnapshot,
-): FlowerThreadSnapshot {
+function mergeThreadSettings<T extends ThreadDetail>(
+  runtime: T,
+  settings: ThreadDetail,
+): T {
   return {
     ...runtime,
     model_id: settings.model_id,
@@ -67,10 +83,10 @@ function mergeThreadSettings(
   };
 }
 
-function mergeThreadActivity(
-  runtime: FlowerThreadSnapshot,
-  activity: FlowerThreadSnapshot,
-): FlowerThreadSnapshot {
+function mergeThreadActivity<T extends ThreadDetail>(
+  runtime: T,
+  activity: ThreadDetail,
+): T {
   return {
     ...runtime,
     updated_at_ms: activity.updated_at_ms,
@@ -78,10 +94,10 @@ function mergeThreadActivity(
   };
 }
 
-function mergeNewerSummaryMetadata(
-  base: FlowerThreadSnapshot,
-  candidate: FlowerThreadSnapshot,
-): FlowerThreadSnapshot {
+function mergeNewerSummaryMetadata<T extends ThreadDetail>(
+  base: T,
+  candidate: ThreadDetail,
+): T {
   const withActivity = threadSnapshotRevision(candidate) > threadSnapshotRevision(base)
     ? mergeThreadActivity(base, candidate)
     : base;
@@ -96,13 +112,14 @@ function aggregateAcceptance(
   runtimeState: ThreadViewAcceptance,
   activityState: ThreadViewAcceptance,
   settingsState: ThreadViewAcceptance,
+  titleState: ThreadViewAcceptance,
 ): ThreadViewAcceptance {
-  if (runtimeState === 'accepted' || activityState === 'accepted' || settingsState === 'accepted') return 'accepted';
+  if (runtimeState === 'accepted' || activityState === 'accepted' || settingsState === 'accepted' || titleState === 'accepted') return 'accepted';
   if (runtimeState === 'unchanged' || activityState === 'unchanged' || settingsState === 'unchanged') return 'unchanged';
   return 'stale';
 }
 
-export function threadSnapshotRevision(thread: FlowerThreadSnapshot | undefined): number {
+export function threadSnapshotRevision(thread: ThreadDetail | undefined): number {
   if (!thread) return 0;
   return Math.max(
     0,
@@ -111,7 +128,7 @@ export function threadSnapshotRevision(thread: FlowerThreadSnapshot | undefined)
   );
 }
 
-export function threadSettingsRevision(thread: FlowerThreadSnapshot | undefined): number {
+export function threadSettingsRevision(thread: ThreadDetail | undefined): number {
   return Math.max(0, Math.floor(Number(thread?.settings_revision) || 0));
 }
 
@@ -141,7 +158,7 @@ export function threadSummaryNeedsDetail(
 }
 
 type CacheEntry = {
-  view: ThreadView;
+  view: ThreadDetailView;
   usedAt: number;
 };
 
@@ -157,8 +174,9 @@ export type ThreadCache = {
     view: ThreadView,
     options?: Readonly<{ preserveSummary?: boolean }>,
   ): ThreadViewReceiveResult;
-  updateDetailAdjuncts(id: string, update: (thread: FlowerThreadSnapshot) => FlowerThreadSnapshot): ThreadCache;
-  updateSummaryAdjuncts(id: string, update: (thread: FlowerThreadSnapshot) => FlowerThreadSnapshot): ThreadCache;
+  receiveCurrent(view: ThreadDetailView, options?: Readonly<{ preserveSummary?: boolean }>): ThreadViewReceiveResult;
+  updateDetailAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
+  updateSummaryAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
   evict(id: string): ThreadCache;
 };
 
@@ -181,11 +199,12 @@ function receiveSummary(
   current: FlowerThreadSnapshot | undefined,
   candidate: FlowerThreadSnapshot,
 ): FlowerThreadSnapshot {
-  if (!current) return summaryOnly(candidate);
+  const title = mergeThreadTitle(current, candidate);
+  if (!current) return summaryOnly({ ...candidate, ...title });
   const activityIsStale = threadSnapshotRevision(candidate) < threadSnapshotRevision(current);
-  return summaryOnly(activityIsStale
+  return summaryOnly({ ...(activityIsStale
     ? mergeNewerSummaryMetadata(current, candidate)
-    : mergeNewerSummaryMetadata(candidate, current));
+    : mergeNewerSummaryMetadata(candidate, current)), ...title });
 }
 
 function createCache(
@@ -194,16 +213,74 @@ function createCache(
   views: Map<string, CacheEntry>,
   clock: number,
 ): ThreadCache {
+  const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean }>): ThreadViewReceiveResult => {
+    const id = view.thread.thread_id.trim();
+    if (!id) return {
+      cache,
+      state: 'stale',
+      runtimeState: 'stale',
+      activityState: 'stale',
+      settingsState: 'stale',
+    };
+    const current = views.get(id)?.view;
+    const runtimeState = classifyThreadView(current, view);
+    const activityState = classifyThreadActivity(current, view);
+    const settingsState = classifyThreadSettings(current, view);
+    const currentSummary = summaries.get(id);
+    const acceptedTitle = title ? mergeThreadTitle(currentSummary, title) : threadTitleSnapshot(currentSummary ?? { title: '', title_status: 'unset', title_generation: 0 });
+    const titleState = !currentSummary || acceptedTitle.title_generation !== currentSummary.title_generation
+      || acceptedTitle.title_status !== currentSummary.title_status || acceptedTitle.title !== currentSummary.title ? 'accepted' : 'unchanged';
+    const state = aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
+    if (state !== 'accepted') return {
+      cache,
+      state,
+      runtimeState,
+      activityState,
+      settingsState,
+    };
+    const runtimeView = current && runtimeState !== 'accepted' ? current : view;
+    const activityThread = current && activityState !== 'accepted' ? current.thread : view.thread;
+    const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
+    const mergedView: ThreadDetailView = {
+      version: runtimeView.version,
+      thread: mergeThreadSettings(
+        mergeThreadActivity(runtimeView.thread, activityThread),
+        settingsThread,
+      ),
+    };
+    const next = new Map(views);
+    next.set(id, { view: mergedView, usedAt: clock + 1 });
+    while (next.size > MAX_VIEWS) {
+      const oldest = [...next.entries()].sort((left, right) => left[1].usedAt - right[1].usedAt)[0];
+      if (!oldest) break;
+      next.delete(oldest[0]);
+    }
+    const summary = new Map(summaries);
+    const metadata = options?.preserveSummary && currentSummary
+      ? mergeNewerSummaryMetadata(currentSummary, mergedView.thread)
+      : mergeNewerSummaryMetadata(mergedView.thread, currentSummary ?? mergedView.thread);
+    summary.set(id, summaryOnly({ ...metadata, ...acceptedTitle }));
+    return {
+      cache: createCache(selectedId, summary, next, clock + 1),
+      state,
+      runtimeState,
+      activityState,
+      settingsState,
+    };
+  };
   const touch = (id: string): Map<string, CacheEntry> => {
     const next = new Map(views);
     const entry = next.get(id);
     if (entry) next.set(id, { ...entry, usedAt: clock + 1 });
     return next;
   };
-  return {
+  const cache: ThreadCache = {
     selectedId,
     summaries,
-    views: new Map([...views.entries()].map(([id, entry]) => [id, entry.view])),
+    views: new Map([...views.entries()].flatMap(([id, entry]) => {
+      const summary = summaries.get(id);
+      return summary ? [[id, { ...entry.view, thread: { ...entry.view.thread, ...threadTitleSnapshot(summary) } }] as const] : [];
+    })),
     select(id) {
       const nextID = id == null || id.trim() === '' ? null : id.trim();
       return createCache(nextID, summaries, touch(nextID ?? ''), clock + 1);
@@ -237,60 +314,10 @@ function createCache(
       return createCache(selectedId && next.has(selectedId) ? selectedId : null, next, nextViews, clock + 1);
     },
     receiveView(view, options) {
-      const id = view.thread.thread_id.trim();
-      if (!id) return {
-        cache: this,
-        state: 'stale',
-        runtimeState: 'stale',
-        activityState: 'stale',
-        settingsState: 'stale',
-      };
-      const current = views.get(id)?.view;
-      const runtimeState = classifyThreadView(current, view);
-      const activityState = classifyThreadActivity(current, view);
-      const settingsState = classifyThreadSettings(current, view);
-      const state = aggregateAcceptance(runtimeState, activityState, settingsState);
-      if (state !== 'accepted') return {
-        cache: this,
-        state,
-        runtimeState,
-        activityState,
-        settingsState,
-      };
-      const runtimeView = current && runtimeState !== 'accepted' ? current : view;
-      const activityThread = current && activityState !== 'accepted' ? current.thread : view.thread;
-      const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
-      const mergedView: ThreadView = {
-        version: runtimeView.version,
-        thread: mergeThreadSettings(
-          mergeThreadActivity(runtimeView.thread, activityThread),
-          settingsThread,
-        ),
-      };
-      const next = new Map(views);
-      next.set(id, { view: mergedView, usedAt: clock + 1 });
-      while (next.size > MAX_VIEWS) {
-        const oldest = [...next.entries()].sort((left, right) => left[1].usedAt - right[1].usedAt)[0];
-        if (!oldest) break;
-        next.delete(oldest[0]);
-      }
-      const summary = new Map(summaries);
-      const currentSummary = summary.get(id);
-      if (!options?.preserveSummary) {
-        const nextSummary = currentSummary
-          ? mergeNewerSummaryMetadata(mergedView.thread, currentSummary)
-          : mergedView.thread;
-        summary.set(id, summaryOnly(nextSummary));
-      } else if (currentSummary) {
-        summary.set(id, summaryOnly(mergeNewerSummaryMetadata(currentSummary, mergedView.thread)));
-      }
-      return {
-        cache: createCache(selectedId, summary, next, clock + 1),
-        state,
-        runtimeState,
-        activityState,
-        settingsState,
-      };
+      return receive({ ...view, thread: detailOnly(view.thread) }, threadTitleSnapshot(view.thread), options);
+    },
+    receiveCurrent(view, options) {
+      return receive({ ...view, thread: detailOnly(view.thread) }, undefined, options);
     },
     updateDetailAdjuncts(id, update) {
       const threadID = id.trim();
@@ -299,7 +326,7 @@ function createCache(
       const next = new Map(views);
       next.set(threadID, {
         ...current,
-        view: { ...current.view, thread: update(current.view.thread) },
+        view: { ...current.view, thread: adjunctOnly(update(current.view.thread)) },
         usedAt: clock + 1,
       });
       return createCache(selectedId, summaries, next, clock + 1);
@@ -309,10 +336,9 @@ function createCache(
       if (!threadID) return this;
       const nextSummaries = new Map(summaries);
       const currentSummary = nextSummaries.get(threadID);
-      if (currentSummary) nextSummaries.set(threadID, summaryOnly(update(currentSummary)));
+      if (currentSummary) nextSummaries.set(threadID, summaryOnly({ ...adjunctOnly(update(detailOnly(currentSummary))), ...threadTitleSnapshot(currentSummary) }));
       if (!currentSummary) return this;
-      // Summary mutations are intentionally scoped to the summary map. Detail
-      // views can only change through replaceView/current-state snapshots.
+      // Adjunct updates never author titles or replace runtime detail.
       return createCache(selectedId, nextSummaries, views, clock + 1);
     },
     evict(id) {
@@ -323,6 +349,7 @@ function createCache(
       return createCache(selectedId === id ? null : selectedId, nextSummaries, nextViews, clock + 1);
     },
   };
+  return cache;
 }
 
 export function createThreadCache(): ThreadCache {

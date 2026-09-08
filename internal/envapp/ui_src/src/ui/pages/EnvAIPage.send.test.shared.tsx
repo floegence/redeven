@@ -100,7 +100,7 @@ const mocks = vi.hoisted(() => {
       const thread = {
         thread_id: threadID,
         title: 'Loaded Env Flower thread',
-        title_status: 'ready',
+        title_status: 'ready', title_generation: 2,
         model_id: 'openai/gpt-5.2',
         run_status: waitingPromptID || active ? 'running' : 'success',
         working_dir: '/workspace/env-flower',
@@ -132,7 +132,7 @@ const mocks = vi.hoisted(() => {
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads?')) {
-      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', title_status: 'ready', model_id: 'openai/gpt-5.2', run_status: 'success', working_dir: '/workspace/env-flower', created_at_unix_ms: 1, updated_at_unix_ms: 2, read_status: readStatus(2_000) }] };
+      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', title_status: 'ready', title_generation: 1, model_id: 'openai/gpt-5.2', run_status: 'success', working_dir: '/workspace/env-flower', created_at_unix_ms: 1, updated_at_unix_ms: 2, read_status: readStatus(2_000) }] };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads/') && init?.method === 'POST' && url.endsWith('/read')) {
       return { read_status: readStatus(2_000) };
@@ -173,7 +173,7 @@ const mocks = vi.hoisted(() => {
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads') && init?.method === 'POST') {
-      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', title_status: 'ready', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4, read_status: readStatus(4_000) } };
+      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', title_status: 'ready', title_generation: 1, model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4, read_status: readStatus(4_000) } };
     }
     if (url.includes('/_redeven_proxy/api/ai/provider_bundle')) {
       return {};

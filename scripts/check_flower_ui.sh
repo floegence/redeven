@@ -60,6 +60,7 @@ main() {
       src/ui/FlowerSurface.navigation.test.tsx \
       src/ui/FlowerSurface.directoryActions.test.tsx \
       src/ui/FlowerSurface.fork.test.tsx \
+      src/ui/FlowerSurface.title.test.tsx \
       src/ui/FlowerSurface.orderedPresentation.test.tsx \
       src/ui/FlowerSurface.webSearch.test.tsx \
       src/ui/FlowerSurface.composerReferences.test.tsx \
@@ -100,6 +101,7 @@ main() {
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
       internal/flower_ui/src/threadCache.test.ts \
+      internal/flower_ui/src/threadTitleSnapshot.test.ts \
       internal/flower_ui/src/flowerThreadTitle.test.ts \
       internal/flower_ui/src/transportOutbox.test.ts \
       internal/flower_ui/src/runtimeCurrentView.test.ts \

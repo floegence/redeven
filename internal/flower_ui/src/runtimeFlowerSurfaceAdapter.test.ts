@@ -147,7 +147,7 @@ describe('runtime Flower surface adapter read state', () => {
     const forkThread = vi.fn(async () => ({
       client_request_id: 'fork-request',
       thread: {
-        thread_id: 'fork-result', title: 'Source · Fork', title_status: 'ready',
+        thread_id: 'fork-result', title: 'Source · Fork', title_status: 'ready', title_generation: 1,
         model_id: 'default/gpt-5', working_dir: '/workspace', run_status: 'idle',
         created_at_unix_ms: 1, updated_at_unix_ms: 2, read_status: readStatus(),
       },
@@ -179,7 +179,7 @@ describe('runtime Flower surface adapter read state', () => {
 	it('keeps read_status strict for thread detail after decoupling stop', async () => {
 		const loadThread = vi.fn(async () => ({
 			thread: {
-				thread_id: 'thread_detail', title: 'Detail', title_status: 'ready', model_id: 'default/gpt-5',
+				thread_id: 'thread_detail', title: 'Detail', title_status: 'ready', title_generation: 1, model_id: 'default/gpt-5',
 				permission_type: 'approval_required', working_dir: '/workspace', queued_turn_count: 0,
 				run_status: 'idle', created_at_unix_ms: 1, updated_at_unix_ms: 2,
 			},
@@ -194,8 +194,8 @@ describe('runtime Flower surface adapter read state', () => {
 		const loadThread = vi.fn(async () => ({
 			thread: {
 				thread_id: 'thread_detail',
-				title: '',
-				title_status: 'failed',
+				title: 'Fallback title',
+				title_status: 'failed', title_generation: 1,
 				model_id: 'default/gpt-5',
 				permission_type: 'approval_required',
 				working_dir: '/workspace',
@@ -223,7 +223,7 @@ describe('runtime Flower surface adapter read state', () => {
 		const detail = await adapter.loadThread('thread_detail');
 
 		expect(detail.thread.thread_id).toBe('thread_detail');
-		expect(detail.thread.title).toBe('');
+		expect(detail.thread.title).toBe('Fallback title');
 			expect(detail.current.view_version).toBe(7);
 		expect(detail.thread.messages).toEqual(expect.arrayContaining([
 			expect.objectContaining({ id: 'user:req-1', role: 'user', content: 'hello' }),
@@ -237,7 +237,7 @@ describe('runtime Flower surface adapter read state', () => {
 		const loadSubagentDetail = vi.fn(async () => ({
 			detail: {
 				summary: {
-					parent_thread_id: 'parent-detail', thread_id: 'child-detail', task_name: 'Inspect detail', status: 'running',
+					parent_thread_id: 'parent-detail', thread_id: 'child-detail', task_name: 'Inspect detail', title: 'Inspect detail', title_status: 'ready' as const, title_generation: 1, status: 'running',
 					can_send_input: false, can_interrupt: true, can_close: true,
 				},
 				current: { thread_id: 'child-detail', view_version: 4, activity: 'active' as const },
@@ -258,7 +258,7 @@ describe('runtime Flower surface adapter read state', () => {
 			thread: {
 				thread_id: 'thread_1',
 				title: 'Retry',
-				title_status: 'ready',
+				title_status: 'ready', title_generation: 1,
 				model_id: 'default/gpt-5',
 				permission_type: 'approval_required',
 				working_dir: '/workspace',
@@ -306,7 +306,7 @@ describe('runtime Flower surface adapter read state', () => {
 				thread: {
 				thread_id: 'thread_1',
 				title: 'Queue',
-				title_status: 'ready',
+				title_status: 'ready', title_generation: 1,
 				model_id: 'default/gpt-5',
 				permission_type: 'approval_required',
 				working_dir: '/workspace',
@@ -346,7 +346,7 @@ describe('runtime Flower surface adapter read state', () => {
 					summaries: [{
 						thread_id: 'thread_stream',
 						title: 'Streaming',
-						title_status: 'ready',
+						title_status: 'ready', title_generation: 1,
 						model_id: 'default/gpt-5',
 						permission_type: 'approval_required',
 						working_dir: '/workspace',
@@ -408,7 +408,7 @@ describe('runtime Flower surface adapter read state', () => {
 					subagents: [{
 						parent_thread_id: 'thread_stream',
 						thread_id: 'thread_child',
-						task_name: 'Research models',
+						task_name: 'Research models', title: 'Research models', title_status: 'ready' as const, title_generation: 1,
 						status: 'running',
 						can_send_input: true,
 						can_interrupt: true,
@@ -454,7 +454,7 @@ describe('runtime Flower surface adapter read state', () => {
 			expect(frames[3]).toMatchObject({
 				kind: 'thread.batch',
 				thread_id: 'thread_stream',
-				subagents: [{ thread_id: 'thread_child', task_name: 'Research models', status: 'running' }],
+				subagents: [{ thread_id: 'thread_child', task_name: 'Research models', title: 'Research models', title_status: 'ready' as const, title_generation: 1, status: 'running' }],
 			});
 			expect(frames[4]).toMatchObject({
 				kind: 'thread.batch',
@@ -470,8 +470,8 @@ describe('runtime Flower surface adapter read state', () => {
 				kind: 'ready',
 				summaries: [{
 					thread_id: 'thread_failed',
-					title: '',
-					title_status: 'failed',
+					title: 'Fallback title',
+					title_status: 'failed', title_generation: 1,
 					model_id: 'deepseek/chat',
 					permission_type: 'approval_required',
 					working_dir: '/workspace',
@@ -503,7 +503,7 @@ describe('runtime Flower surface adapter read state', () => {
         threads: [{
           thread_id: 'thread_summary',
           title: 'Running summary',
-          title_status: 'ready',
+          title_status: 'ready', title_generation: 1,
           model_id: 'default/gpt-5',
           permission_type: 'approval_required',
           working_dir: '/workspace',
@@ -677,7 +677,7 @@ describe('runtime Flower surface adapter read state', () => {
 	      thread: {
         thread_id: 'thread_permission',
         title: 'Permission thread',
-        title_status: 'ready',
+        title_status: 'ready', title_generation: 1,
           run_status: 'running',
           active_run_id: 'run_permission',
           run_progress: { run_id: 'run_permission', turn_id: 'turn_permission', phase: 'preparing' },
@@ -762,5 +762,18 @@ describe('runtime Flower surface adapter read state', () => {
       path: '/Users/alice',
       showHidden: true,
     });
+  });
+});
+
+
+describe('canonical title wire contract', () => {
+  it('rejects a summary from a runtime without title generation', async () => {
+    const listThreads = vi.fn(async () => ({ threads: [{
+      thread_id: 'old-runtime', title: 'Old title', title_status: 'ready',
+      run_status: 'idle', created_at_unix_ms: 1, updated_at_unix_ms: 1,
+      read_status: readStatus(),
+    }] }));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ listThreads }));
+    await expect(adapter.listThreads()).rejects.toThrow('Flower contract error: invalid canonical title snapshot');
   });
 });

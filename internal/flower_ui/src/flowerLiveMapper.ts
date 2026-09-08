@@ -1,3 +1,4 @@
+import { threadTitleSnapshot } from './threadTitleSnapshot';
 import type {
   FlowerActivityAttentionReason,
   FlowerActivityApprovalState,
@@ -868,6 +869,11 @@ function mapFlowerSubagentSummary(raw: unknown): FlowerSubagentSummary | null {
     parent_thread_id: trim(record.parent_thread_id),
     thread_id: threadID,
     task_name: taskName,
+    ...threadTitleSnapshot({
+      title: trim(record.title),
+      title_status: titleStatus(record.title_status, record.title),
+      title_generation: record.title_generation as number,
+    }),
     ...(trim(record.task_description) ? { task_description: trim(record.task_description) } : {}),
     ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
     ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
@@ -1193,8 +1199,11 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     : nonNegativeInteger(record.approval_pending_count, 'thread.approval_pending_count');
   const thread: FlowerThreadSnapshot = {
     thread_id: threadID,
-    title: trim(record.title),
-    title_status: titleStatus(record.title_status, record.title),
+    ...threadTitleSnapshot({
+      title: trim(record.title),
+      title_status: titleStatus(record.title_status, record.title),
+      title_generation: record.title_generation as number,
+    }),
     model_id: trim(record.model_id),
     working_dir: trim(record.working_dir),
     ...(Number(record.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(record.pinned_at_unix_ms)) } : {}),

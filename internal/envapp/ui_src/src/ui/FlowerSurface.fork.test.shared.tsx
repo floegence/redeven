@@ -116,7 +116,7 @@ describe('Flower fork results', () => {
   });
 
   it('lists every persisted untitled fork without fabricating a canonical title', async () => {
-    const forks = ['12345678', 'abcdefgh', '87654321', 'hgfedcba'].map((id) => thread({ thread_id: `thread-${id}`, title: '', title_status: 'unset', messages: [] }));
+    const forks = ['12345678', 'abcdefgh', '87654321', 'hgfedcba'].map((id) => thread({ thread_id: `thread-${id}`, title: '', title_status: 'unset', title_generation: 0, messages: [] }));
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => forks) });
     await waitFor(() => runtime.querySelectorAll('[data-flower-thread-card]').length === 4);
     for (const fork of forks) {

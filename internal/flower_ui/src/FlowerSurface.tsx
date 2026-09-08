@@ -2319,7 +2319,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return readStatusWithUnread(thread, false);
   };
-  const threadWithReadStatus = (thread: FlowerThreadSnapshot, readStatus: FlowerThreadReadStatus): FlowerThreadSnapshot => ({
+  const threadWithReadStatus = <T extends { read_status: FlowerThreadReadStatus }>(thread: T, readStatus: FlowerThreadReadStatus): T => ({
     ...thread,
     read_status: readStatus,
   });
@@ -3129,6 +3129,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     candidate: ThreadView,
     source: ThreadDetailSource,
     current?: FlowerRuntimeCurrentView,
+    canonicalTitle = true,
   ): ThreadDetailReceiveResult => {
     const threadID = trimString(candidate.thread.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) {
@@ -3145,10 +3146,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     let result: ReturnType<ReturnType<typeof createThreadCache>['receiveView']>;
     try {
       const summary = threadCache().summaries.get(threadID);
-      result = threadCache().receiveView(candidate, {
+      const cache = threadCache();
+      const options = {
         preserveSummary: source === 'summary_update'
           && threadSummaryNeedsDetail(summary, candidate.thread),
-      });
+      };
+      result = canonicalTitle ? cache.receiveView(candidate, options) : cache.receiveCurrent(candidate, options);
     } catch (error) {
       reportThreadDetailDiagnostic(threadID, 'cache_receive', source, error, candidate.version);
       throw error;
@@ -4200,7 +4203,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const base = threadCache().views.get(threadID)?.thread ?? threadCache().summaries.get(threadID) ?? {
       thread_id: threadID,
 		title: '',
-      title_status: 'pending',
+      title_status: 'unset',
+      title_generation: 0,
       model_id: selectedComposerModelID(),
       working_dir: draftWorkingDirectory(),
       created_at_ms: now,
@@ -4243,7 +4247,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const received = receiveThreadDetail({
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
-      }, source, current);
+      }, source, current, false);
       if (
         received.runtimeState === 'accepted'
         && current.last_outcome === 'completed'
@@ -4634,6 +4638,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return {
       parent_thread_id: parentThreadID,
       thread_id: childThreadID,
+      title: '', title_status: 'unset', title_generation: 0,
       task_name: trimString(item.taskName) || trimString(item.title),
       task_description: trimString(item.taskDescription),
       agent_type: trimString(item.agentType),

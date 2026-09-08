@@ -409,6 +409,7 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
     ],
     ...overrides,
     title_status: overrides.title_status ?? 'ready',
+    title_generation: overrides.title_generation ?? (overrides.title_status === 'unset' ? 0 : 1),
   };
   if (value.status === 'running' || value.status === 'waiting_approval' || value.status === 'waiting_user') {
     const activeRunID = value.active_run_id ?? value.run_progress?.run_id ?? `run:${value.thread_id}`;
@@ -683,7 +684,7 @@ export function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}):
   return {
     parent_thread_id: 'thread-parent-subagents',
     thread_id: 'thread-child-review',
-    task_name: 'Review API contract',
+    task_name: 'Review API contract', title: 'Review API contract', title_status: 'ready' as const, title_generation: 1,
     task_description: 'Review the API boundary.',
     agent_type: 'reviewer',
     status: 'running',

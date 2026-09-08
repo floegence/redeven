@@ -195,7 +195,7 @@ describe('mapFlowerThread title contract', () => {
     expect(() => mapFlowerThread({
       thread_id: 'thread-running-without-progress',
       title: '',
-      title_status: '',
+      title_status: '', title_generation: 0,
       model_id: 'openai/gpt-5-mini',
       working_dir: '/',
       created_at_unix_ms: 1,
@@ -215,7 +215,7 @@ describe('mapFlowerThread title contract', () => {
     expect(() => mapFlowerThread({
       thread_id: 'thread-invalid-title',
       title: 'Canonical title',
-      title_status: '',
+      title_status: '', title_generation: 0,
       model_id: 'openai/gpt-5-mini',
       working_dir: '/',
       created_at_unix_ms: 1,
@@ -234,7 +234,7 @@ describe('mapFlowerThread title contract', () => {
     const mapped = mapFlowerThread({
       thread_id: 'thread-settings-revision',
       title: '',
-      title_status: '',
+      title_status: '', title_generation: 0,
       model_id: 'openai/gpt-5-mini',
       working_dir: '/',
       permission_type: 'full_access',

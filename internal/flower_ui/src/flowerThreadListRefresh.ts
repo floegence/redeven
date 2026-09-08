@@ -25,6 +25,7 @@ export function sameThreadSnapshot(left: FlowerThreadSnapshot, right: FlowerThre
     left.thread_id === right.thread_id
     && left.title === right.title
     && left.title_status === right.title_status
+    && left.title_generation === right.title_generation
     && left.model_id === right.model_id
     && left.working_dir === right.working_dir
     && Number(left.pinned_at_ms ?? 0) === Number(right.pinned_at_ms ?? 0)

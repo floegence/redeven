@@ -141,6 +141,7 @@ type ThreadView struct {
 	ThreadID             string                       `json:"thread_id"`
 	Title                string                       `json:"title"`
 	TitleStatus          string                       `json:"title_status"`
+	TitleGeneration      int64                        `json:"title_generation"`
 	ModelID              string                       `json:"model_id"`
 	PermissionType       string                       `json:"permission_type"`
 	WorkingDir           string                       `json:"working_dir"`
@@ -187,6 +188,9 @@ type FlowerThreadDetail struct {
 }
 
 type FlowerSubagentSummary struct {
+	Title           string `json:"title"`
+	TitleStatus     string `json:"title_status"`
+	TitleGeneration int64  `json:"title_generation"`
 	ParentThreadID  string `json:"parent_thread_id"`
 	ThreadID        string `json:"thread_id"`
 	TaskName        string `json:"task_name,omitempty"`

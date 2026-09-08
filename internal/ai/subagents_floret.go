@@ -61,6 +61,9 @@ type subagentCapabilityContract struct {
 }
 
 type subagentSnapshot struct {
+	Title              string
+	TitleStatus        flruntime.ThreadTitleStatus
+	TitleGeneration    int64
 	ThreadID           string
 	Path               string
 	TaskName           string
@@ -618,6 +621,7 @@ func subagentSnapshotFromSummary(summary flruntime.ThreadSummary) subagentSnapsh
 
 func subagentThreadSummary(snapshot subagentSnapshot) flruntime.ThreadSummary {
 	return flruntime.ThreadSummary{
+		Title: snapshot.Title, TitleStatus: snapshot.TitleStatus, TitleGeneration: snapshot.TitleGeneration,
 		ID: identity.ThreadID(snapshot.ThreadID), ParentThreadID: identity.ThreadID(snapshot.ParentThreadID),
 		ParentTurnID: identity.TurnID(snapshot.ParentTurnID), TaskName: snapshot.TaskName,
 		TaskDescription: snapshot.TaskDescription, HostProfileRef: snapshot.AgentType,
@@ -658,6 +662,7 @@ func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.
 		}
 	}
 	return subagentSnapshot{
+		Title: summary.Title, TitleStatus: summary.TitleStatus, TitleGeneration: summary.TitleGeneration,
 		ThreadID: summary.ID.String(), TaskName: summary.TaskName, TaskDescription: summary.TaskDescription,
 		ParentThreadID: summary.ParentThreadID.String(), ParentTurnID: summary.ParentTurnID.String(),
 		AgentType: normalizeSubagentAgentType(summary.HostProfileRef), ContextMode: normalizeSubagentContextMode(summary.ForkMode),
@@ -717,6 +722,7 @@ func (service *Service) listFlowerSubagentsForParent(ctx context.Context, parent
 
 func flowerSubagentSummaryFromSnapshot(snapshot subagentSnapshot) FlowerSubagentSummary {
 	return FlowerSubagentSummary{
+		Title: snapshot.Title, TitleStatus: string(snapshot.TitleStatus), TitleGeneration: snapshot.TitleGeneration,
 		ParentThreadID: snapshot.ParentThreadID, ThreadID: snapshot.ThreadID,
 		TaskName: snapshot.TaskName, TaskDescription: snapshot.TaskDescription,
 		AgentType: snapshot.AgentType, ContextMode: snapshot.ContextMode, Status: snapshot.Status,

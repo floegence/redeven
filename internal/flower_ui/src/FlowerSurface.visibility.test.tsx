@@ -129,7 +129,7 @@ describe('Flower workspace stream visibility', () => {
     const summary = thread({
       thread_id: threadID,
       title: '',
-      title_status: 'unset',
+      title_status: 'unset', title_generation: 0,
       status: 'running',
       active_run_id: runID,
       run_progress: { phase: 'streaming', run_id: runID, turn_id: turnID },
