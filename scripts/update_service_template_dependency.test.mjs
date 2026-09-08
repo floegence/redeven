@@ -17,7 +17,7 @@ function fixture(t, { latest = 'v0.4.2', failure = '', indirect = false, replace
   const runGo = (args, cwd) => {
     calls.push(args.join(' '));
     if (args.join(' ') === 'mod edit -json') return JSON.stringify({
-      Go: '1.27.0', Replace: replacements,
+      Go: '1.27.1', Replace: replacements,
       Require: [{ Path: MODULE_PATH, Version: updated ? latest : 'v0.4.1', Indirect: indirect }],
     });
     if (args[0] === 'list') {
@@ -92,7 +92,7 @@ test('command environment cannot disable the public proxy and checksum boundary'
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-go-env-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const log = path.join(root, 'environment.json');
-  const fakeGo = `#!${process.execPath}\nconst fs=require('fs');fs.writeFileSync(process.env.WATCHER_ENV_LOG,JSON.stringify(process.env));const mod=${JSON.stringify(MODULE_PATH)};if(process.argv[2]==='mod')console.log(JSON.stringify({Go:'1.27.0',Require:[{Path:mod,Version:'v0.4.1'}]}));else console.log(JSON.stringify({Path:mod,Versions:['v0.4.1']}));\n`;
+  const fakeGo = `#!${process.execPath}\nconst fs=require('fs');fs.writeFileSync(process.env.WATCHER_ENV_LOG,JSON.stringify(process.env));const mod=${JSON.stringify(MODULE_PATH)};if(process.argv[2]==='mod')console.log(JSON.stringify({Go:'1.27.1',Require:[{Path:mod,Version:'v0.4.1'}]}));else console.log(JSON.stringify({Path:mod,Versions:['v0.4.1']}));\n`;
   fs.writeFileSync(path.join(root, 'go'), fakeGo, { mode: 0o755 });
   const result = spawnSync(process.execPath, [new URL('./update_service_template_dependency.mjs', import.meta.url).pathname, '--check'], {
     env: { ...process.env, PATH: root + path.delimiter + process.env.PATH, WATCHER_ENV_LOG: log, GOSUMDB: 'off', GOWORK: '/untrusted', GOPROXY: 'direct', GOFLAGS: '-modfile=/untrusted' }, encoding: 'utf8',

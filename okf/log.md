@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-09-08: DeepSeek runtime qualification
+
+- Align all first-party Go modules, CI-selected toolchains, scripts, and README prerequisites to Go 1.27.1.
+- Share staged attachment admission between initial and existing thread sends while retaining exact owner, capability, and target checks.
+- Consume Floret canonical hosted search activity, failure mapping, and restart continuation through the published module boundary.
+
+
 ## 2026-09-08
 * **DeepSeek Responses**: Flower consumes the published Floret gateway for full
   history requests, reasoning streams, validated tool calls, native web search,

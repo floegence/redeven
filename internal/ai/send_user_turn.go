@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/floegence/floret/v7/identity"
@@ -58,9 +57,7 @@ type SendUserTurnResponse struct {
 }
 
 type preparedUserTurn struct {
-	CreatedAtUnixMs       int64
 	UploadIDs             []string
-	OwnerUserHash         string
 	StagingScope          *threadstore.UploadStagingScope
 	AttachmentClaimPolicy threadstore.AttachmentClaimPolicy
 }
@@ -127,7 +124,7 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
-	if response, handled, err := s.sendTypedExistingThread(ctx, meta, req); handled {
+	if response, handled, err := s.sendTypedExistingThread(ctx, meta, req, threadID); handled {
 		if err != nil {
 			s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
 			return response, err
@@ -143,7 +140,7 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 // deliberately small: product authorization and run preparation happen once,
 // then Floret owns the thread lifecycle. No Redeven admission/queue row is
 // created for this path.
-func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, bool, error) {
+func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Meta, req SendUserTurnRequest, uploadTargetID string) (SendUserTurnResponse, bool, error) {
 	if s == nil || strings.TrimSpace(req.ClientRequestID) == "" || strings.TrimSpace(req.ThreadID) == "" {
 		return SendUserTurnResponse{}, false, nil
 	}
@@ -191,6 +188,25 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	if err := s.requireDesktopModelSourceForSend(ctx, meta, req); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
+	prepared, normalizedInput, err := s.prepareUserTurnForTarget(ctx, meta, meta.EndpointID, uploadTargetID, req.Model, req.Input, req.StagingScopeID, req.StagingCapability)
+	if err != nil {
+		return finish(SendUserTurnResponse{}, err)
+	}
+	if len(prepared.UploadIDs) > 0 && prepared.StagingScope == nil && uploadTargetID != req.ThreadID {
+		return finish(SendUserTurnResponse{}, errors.New("initial attachments require an upload staging scope"))
+	}
+	if len(prepared.UploadIDs) > 0 && prepared.StagingScope != nil {
+		s.mu.Lock()
+		db := s.threadsDB
+		s.mu.Unlock()
+		if db == nil {
+			return finish(SendUserTurnResponse{}, errors.New("threads store not ready"))
+		}
+		if err := db.ClaimStagedUploadsToThread(ctx, meta.EndpointID, req.ThreadID, prepared.UploadIDs, prepared.AttachmentClaimPolicy, *prepared.StagingScope); err != nil {
+			return finish(SendUserTurnResponse{}, err)
+		}
+	}
+	req.Input = normalizedInput
 	turnInput, simple, err := simpleTypedTurnInput(req.Input)
 	if err != nil {
 		return finish(SendUserTurnResponse{}, err)
@@ -482,7 +498,6 @@ func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Me
 		return preparedUserTurn{}, input, err
 	}
 	return preparedUserTurn{
-		CreatedAtUnixMs: time.Now().UnixMilli(), UploadIDs: uploadIDs,
-		OwnerUserHash: owner.OwnerUserHash, StagingScope: stagingScope, AttachmentClaimPolicy: attachmentPolicy,
+		UploadIDs: uploadIDs, StagingScope: stagingScope, AttachmentClaimPolicy: attachmentPolicy,
 	}, input, nil
 }

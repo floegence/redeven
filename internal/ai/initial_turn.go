@@ -13,7 +13,6 @@ import (
 
 const (
 	initialTurnPhaseLookupFrozenState     = "lookup_frozen_state"
-	initialTurnPhasePrepareAtomic         = "prepare_atomic"
 	initialTurnPhaseResumeCanonicalCreate = "resume_canonical_create"
 	initialTurnPhaseStartCommand          = "start_command"
 )
@@ -73,29 +72,10 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		replay.AppliedPermissionType = settings.PermissionType
 		return replay, nil
 	}
-	prepared, normalizedInput, err := s.prepareUserTurnForTarget(ctxOrBackground(ctx), meta, settings.EndpointID, clientRequestID, req.Model, req.Input, req.StagingScopeID, req.StagingCapability)
-	if err != nil {
-		return fail(initialTurnPhasePrepareAtomic, err)
-	}
-	if len(prepared.UploadIDs) > 0 {
-		if prepared.StagingScope == nil {
-			return fail(initialTurnPhasePrepareAtomic, errors.New("initial attachments require an upload staging scope"))
-		}
-		s.mu.Lock()
-		db := s.threadsDB
-		s.mu.Unlock()
-		if db == nil {
-			return fail(initialTurnPhasePrepareAtomic, errors.New("threads store not ready"))
-		}
-		if err := db.ClaimStagedUploadsToThread(ctxOrBackground(ctx), settings.EndpointID, thread.ThreadID, prepared.UploadIDs, prepared.AttachmentClaimPolicy, *prepared.StagingScope); err != nil {
-			return fail(initialTurnPhasePrepareAtomic, err)
-		}
-	}
 	req.ClientRequestID = clientRequestID
 	req.ThreadID = thread.ThreadID
 	req.Create = nil
-	req.Input = normalizedInput
-	response, handled, err := s.sendTypedExistingThread(ctxOrBackground(ctx), meta, req)
+	response, handled, err := s.sendTypedExistingThread(ctxOrBackground(ctx), meta, req, clientRequestID)
 	if !handled && err == nil {
 		err = errors.New("floret thread runtime not ready")
 	}
