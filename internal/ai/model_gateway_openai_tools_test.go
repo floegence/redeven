@@ -1151,6 +1151,8 @@ func TestNewProviderAdapter_OpenAIStrictPolicy(t *testing.T) {
 				strict = p.strictToolSchema
 			case *moonshotProvider:
 				strict = p.strictToolSchema
+			case *deepSeekProvider:
+				strict = p.strictTools
 			default:
 				t.Fatalf("unexpected provider type %T", provider)
 			}
