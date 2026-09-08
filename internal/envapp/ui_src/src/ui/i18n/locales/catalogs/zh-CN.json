@@ -4626,6 +4626,7 @@
         "enableAction": "启用插件",
         "permissionsAction": "管理权限",
         "retryAction": "再次检查",
+        "reloadAction": "重新加载页面",
         "detailsAction": "插件详情",
         "placing": "正在保存组件…",
         "placementFailed": "组件保存失败，请重试以将其保留在画布上。",

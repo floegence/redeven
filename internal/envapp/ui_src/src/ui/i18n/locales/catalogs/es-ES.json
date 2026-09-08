@@ -4611,6 +4611,7 @@
         "enableAction": "Activar plugin",
         "permissionsAction": "Gestionar permisos",
         "retryAction": "Comprobar de nuevo",
+        "reloadAction": "Recargar página",
         "detailsAction": "Detalles del plugin",
         "placing": "Guardando componente…",
         "placementFailed": "No se pudo guardar el componente. Vuelve a intentarlo para conservarlo en el lienzo.",

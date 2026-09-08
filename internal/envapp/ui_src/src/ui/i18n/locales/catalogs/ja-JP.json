@@ -4611,6 +4611,7 @@
         "enableAction": "プラグインを有効にする",
         "permissionsAction": "権限を管理",
         "retryAction": "再確認",
+        "reloadAction": "ページを再読み込み",
         "detailsAction": "プラグインの詳細",
         "placing": "コンポーネントを保存しています…",
         "placementFailed": "コンポーネントを保存できませんでした。再試行してキャンバスに保存してください。",

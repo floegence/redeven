@@ -4626,6 +4626,7 @@
         "enableAction": "啟用外掛",
         "permissionsAction": "管理權限",
         "retryAction": "再次檢查",
+        "reloadAction": "重新載入頁面",
         "detailsAction": "外掛詳細資訊",
         "placing": "正在儲存元件…",
         "placementFailed": "元件儲存失敗，請重試以將其保留在畫布上。",

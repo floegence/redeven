@@ -4611,6 +4611,7 @@
         "enableAction": "Ativar plugin",
         "permissionsAction": "Gerenciar permissões",
         "retryAction": "Verificar novamente",
+        "reloadAction": "Recarregar página",
         "detailsAction": "Detalhes do plugin",
         "placing": "Salvando componente…",
         "placementFailed": "Não foi possível salvar o componente. Tente novamente para mantê-lo na tela.",

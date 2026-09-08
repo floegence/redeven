@@ -187,6 +187,7 @@ export const enUS = defineDictionary({
         "enableAction": "Enable plugin",
         "permissionsAction": "Manage permissions",
         "retryAction": "Check again",
+        "reloadAction": "Reload page",
         "detailsAction": "Plugin details",
         "placing": "Saving component…",
         "placementFailed": "The component could not be saved. Retry to keep it on the canvas.",

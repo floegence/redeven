@@ -11,7 +11,7 @@ export type PluginSurfaceResolution = Readonly<{
   target: PluginSurfaceLaunchTarget | null;
   generation: number;
   status: PluginSurfaceStatus;
-  action?: Readonly<{ label: 'enable' | 'permissions' | 'retry' | 'details'; run: () => void }>;
+  action?: Readonly<{ label: 'enable' | 'permissions' | 'retry' | 'details' | 'reload'; run: () => void }>;
 }>;
 export type PluginSurfaceResolver = (target: PluginSurfaceLaunchTarget) => PluginSurfaceResolution;
 
