@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-09-08: Preserve web facts through the public Activity boundary
+
+- Include web operation, target URL, find pattern, and explicit source-list
+  availability in the product payload allowlist.
+- Reproduce native open-page detail loss and cover live/timeline wire round trips,
+  local search sources, explicit empty results, unknown details, and terminal errors.
+
 ## 2026-09-08: Canonical Flower title synchronization
 
 - Adopt published Floret v7.5.0 title generation at compatibility epoch 11.
