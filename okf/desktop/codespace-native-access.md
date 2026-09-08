@@ -39,6 +39,8 @@ The native gateway streams request/response bodies with backpressure, preserves 
 
 Compatibility epoch 13 adds this product HTTP/stream contract while preserving the epoch 12 storage-generation fence. The current v0.12.0 Desktop/Runtime pair and upgradeable earlier epochs are declared only in the Runtime Service compatibility manifest. Flowersec wire version is unchanged. Redeven consumes released Flowersec 5.1.0 and Floe Webapp 0.50.2 packages, without sibling source wiring.
 
+# Boundaries
+
 The opt-in Electron fixture exercises document, Worker and Service Worker requests and unauthenticated loopback rejection. The real editor fixture uses an explicitly selected installed code-server binary and task-owned state/ports to open a workspace, read and edit a file in Monaco, save it to disk, and execute terminal input. The native remote fixture uses a real TLS Flowersec Go peer with fixture control-plane acquisition and spend responses to exercise Node session startup, strict target binding, password authorization, and binary HTTP. These fixtures do not certify a deployed SSH placement or Redeven Cloud environment. It is separate from ordinary source CI and does not start or stop a user's environment. Focused HTTP tests cover authorization, generation rejection, raw bytes, upgrade heads, cookies, and origin conflicts.
 
 # Evidence

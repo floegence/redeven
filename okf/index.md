@@ -43,6 +43,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Desktop
 
+- [Desktop Web Service browser window](desktop/web-service-browser-window.md) - Preserve trusted chrome, isolated application state, exact navigation authority, and recoverable connection failures.
 - [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.
 - [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.
 - [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.
