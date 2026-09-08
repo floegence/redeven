@@ -35,7 +35,7 @@ Renderers do not persist a competing canonical selection, accept arbitrary color
 
 # Evidence
 
-- `redeven:desktop/src/build/fixtures/webServiceBrowserRuntime.ts` - Real Electron coverage verifies all published presets, matching chrome surfaces, contrast, isolated target views, and uninterrupted address drafts across multiple windows.
+- `redeven:desktop/src/build/test/webServiceBrowserRuntime.ts` - Real Electron coverage verifies all published presets, matching chrome surfaces, contrast, isolated target views, and uninterrupted address drafts across multiple windows.
 
 - `redeven:desktop/src/shared/desktopTheme.ts:1` - The shared contract derives light/dark ids and defaults from Floe's `/themes` entry and owns state keys plus snapshot validation.
 - `redeven:desktop/src/main/desktopThemeState.ts:29` - Main resolves the active preset and native window snapshot from source and remembered selections.
