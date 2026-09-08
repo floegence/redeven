@@ -252,7 +252,7 @@ export async function verifyWorkbenchPluginOpening(page, reportRoot, config) {
   // Response-stage interception preserves the Desktop's native request
   // authentication and loses only the real Host's completed response.
   await network.send('Fetch.enable', { patterns: [
-    { urlPattern: '*/_redevplugin/api/plugins/surfaces/*/prepare', requestStage: 'Request' },
+    { urlPattern: '*/_redevplugin/api/plugins/surfaces/*/prepare', requestStage: 'Response' },
     { urlPattern: '*/_redevplugin/api/plugins/surfaces/*/dispose', requestStage: 'Response' },
   ] });
   const activity = page.locator('[data-redeven-plugin-activity-window="true"] [data-plugin-surface-host][data-plugin-id="com.redeven.official.weather"]');
@@ -307,6 +307,7 @@ async function main() {
   const pages = browser.contexts().flatMap((context) => context.pages());
   const page = pages.find((candidate) => candidate.url().startsWith('http') && !candidate.url().includes('devtools'));
   assert(page, 'Isolated Desktop needs an open Env App with released Weather and Mind Map installed');
+  page.setDefaultTimeout(30_000);
   try {
     const report = await verifyWorkbenchPluginOpening(page, config.reportRoot, config);
     await fs.writeFile(path.join(config.reportRoot, 'opening.json'), JSON.stringify(report, null, 2) + '\n');
