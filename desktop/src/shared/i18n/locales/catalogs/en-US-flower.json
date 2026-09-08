@@ -48,6 +48,40 @@
     "modelSupportUnavailable": "Could not check attachment support"
   },
   "chat": {
+    "webSearch": {
+      "search": "Search",
+      "openPage": "Open page",
+      "findInPage": "Find on page",
+      "webActivity": "Web search",
+      "noDetails": "Details not provided",
+      "noSources": "No sources returned",
+      "sourcesUnavailable": "Source details not provided",
+      "sourcesTitle": "Sources",
+      "queryLabel": "Search queries",
+      "targetLabel": "Web page",
+      "patternLabel": "Find text",
+      "showLess": "Show less",
+      "sources": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} source",
+          "other": "{count} sources"
+        }
+      },
+      "queries": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} query",
+          "other": "{count} queries"
+        }
+      },
+      "showMore": {
+        "kind": "plural",
+        "forms": {
+          "other": "Show {count} more"
+        }
+      }
+    },
     "loadingSettings": "Flower settings are still loading.",
     "warmupTitle": "Preparing Flower",
     "warmupDetail": "Desktop is starting the Local Environment runtime before Flower loads conversations.",

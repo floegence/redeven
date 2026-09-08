@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-09-08 — Web search presentation
+
+Adopt published Floret v7.4.0 web operation facts. Share concise search, page,
+find, source-link, and missing-details presentation across Flower surfaces.
+
 ## 2026-09-08: Fork tool-history continuation
 
 - Consume published Floret v7.3.4 for canonical tool-call reasoning and matching hosted assistant fragment boundaries.

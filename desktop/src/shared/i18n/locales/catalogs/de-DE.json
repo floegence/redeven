@@ -49,6 +49,40 @@
       "modelSupportUnavailable": "Anhangsunterstützung konnte nicht geprüft werden"
     },
     "chat": {
+      "webSearch": {
+        "search": "Suchen",
+        "openPage": "Seite öffnen",
+        "findInPage": "Auf Seite suchen",
+        "webActivity": "Websuche",
+        "noDetails": "Keine Details bereitgestellt",
+        "noSources": "Keine Quellen zurückgegeben",
+        "sourcesUnavailable": "Keine Quellendetails bereitgestellt",
+        "sourcesTitle": "Quellen",
+        "queryLabel": "Suchanfragen",
+        "targetLabel": "Webseite",
+        "patternLabel": "Suchtext",
+        "showLess": "Weniger anzeigen",
+        "sources": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} Quelle",
+            "other": "{count} Quellen"
+          }
+        },
+        "queries": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} Suchanfrage",
+            "other": "{count} Suchanfragen"
+          }
+        },
+        "showMore": {
+          "kind": "plural",
+          "forms": {
+            "other": "{count} weitere anzeigen"
+          }
+        }
+      },
       "loadingSettings": "Flower-Einstellungen werden noch geladen.",
       "warmupTitle": "Flower wird vorbereitet",
       "warmupDetail": "Desktop startet die Laufzeit der lokalen Umgebung, bevor Flower Unterhaltungen lädt.",

@@ -1,3 +1,4 @@
+import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Switch, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -7696,6 +7697,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
       presentFlowerActivityItem(item, timeline.file_actions, {
+        webSearch: copy().chat.webSearch,
+        statuses: copy().chat.toolStatuses,
         subagents: subagentsCopy(),
         subagentSummaries: selectedThread()?.subagents ?? [],
         terminal: {
@@ -8576,6 +8579,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
+    if (block.kind === 'web_operation') return <WebSearchActivity search={block.search} copy={copy().chat.webSearch} openLabel={copy().chat.toolActivityOpenWebPage} />;
     if (block.kind === 'web_search') return webSearchBlock(block);
     if (block.kind === 'web_fetch') return webFetchBlock(block);
     if (block.kind === 'question') return questionBlock(block);
@@ -8593,6 +8597,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
     const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, {
+      webSearch: copy().chat.webSearch,
+      statuses: copy().chat.toolStatuses,
       subagents: subagentsCopy(),
       subagentSummaries: selectedThread()?.subagents ?? [],
       terminal: {
@@ -8623,10 +8629,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
       },
     });
-    const open = disclosureControl.open;
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
-    const expandable = createMemo(() => item().kind === 'tool' || hasDetails());
+    const expandable = createMemo(() => item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.') ? hasDetails() : item().kind === 'tool' || hasDetails());
+    const open = () => expandable() && disclosureControl.open();
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
     onCleanup(() => { if (toggleButtonRef) viewportScope.releaseDisclosure(toggleButtonRef); });
@@ -8703,7 +8709,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return (
       <div
-        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, subagentsDetail() && 'flower-activity-inline-row-subagents')}
+        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentsDetail() && 'flower-activity-inline-row-subagents')}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
         data-flower-activity-approval-state={item().approval_state}

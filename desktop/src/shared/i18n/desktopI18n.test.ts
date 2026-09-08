@@ -597,10 +597,15 @@ describe('Desktop shared i18n helpers', () => {
 
   it('uses Intl.PluralRules with locale-specific forms', () => {
     const en = createDesktopI18n('en-US');
+    expect(en.tn('flowerSurface.chat.webSearch.sources', 1)).toBe('1 source');
+    expect(en.tn('flowerSurface.chat.webSearch.sources', 2)).toBe('2 sources');
+    expect(createDesktopI18n('zh-CN').tn('flowerSurface.chat.webSearch.sources', 2)).toBe('2 个来源');
     expect(en.tn('plural.environmentCount', 1)).toBe('1 environment');
     expect(en.tn('plural.environmentCount', 2)).toBe('2 environments');
 
     const ru = createDesktopI18n('ru-RU');
+    expect(ru.tn('flowerSurface.chat.webSearch.queries', 2)).toBe('2 запроса');
+    expect(ru.tn('flowerSurface.chat.webSearch.queries', 5)).toBe('5 запросов');
     expect(ru.tn('plural.environmentCount', 1)).toBe('1 окружение');
     expect(ru.tn('plural.environmentCount', 2)).toBe('2 окружения');
     expect(ru.tn('plural.environmentCount', 5)).toBe('5 окружений');

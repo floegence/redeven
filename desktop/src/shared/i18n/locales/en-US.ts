@@ -4,6 +4,15 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 export const enUS = {
   flowerSurface: {
     ...flowerSurfaceEnUS,
+    chat: {
+      ...flowerSurfaceEnUS.chat,
+      webSearch: {
+        ...flowerSurfaceEnUS.chat.webSearch,
+        sources: plural(flowerSurfaceEnUS.chat.webSearch.sources.forms),
+        queries: plural(flowerSurfaceEnUS.chat.webSearch.queries.forms),
+        showMore: plural(flowerSurfaceEnUS.chat.webSearch.showMore.forms),
+      },
+    },
     attachments: {
       ...flowerSurfaceEnUS.attachments,
       lines: plural(flowerSurfaceEnUS.attachments.lines.forms),

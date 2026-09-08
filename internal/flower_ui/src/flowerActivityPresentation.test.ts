@@ -760,39 +760,45 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('retryable');
   });
 
-  it('renders web search payloads as result cards instead of a field table', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'web.search',
-      renderer: 'web_search',
-      status: 'success',
-      label: 'latest release',
-      payload: {
-        query: 'latest release',
-        provider: 'brave',
-        count: 1,
-        results: [{
-          title: 'Release notes',
-          url: 'https://example.test/release',
-          snippet: 'The release is available.',
-        }],
-        sources: [{ title: 'Example', url: 'https://example.test' }],
-      },
-    }));
+  it('renders canonical web search facts without duplicating answer citations', () => {
+    const presentation = presentFlowerActivityItem(item({tool_name:'web_search', renderer:'web_search', label:'Web search', payload:{
+      operation:'search', query:'latest release', results_provided:true,
+      results:[{title:'Release notes',url:'https://example.test/release',snippet:'The release is available.'}],
+      sources:[{title:'Answer citation',url:'https://example.test/answer'}],
+    }}));
+    expect(presentation.label).toBe('Search · latest release');
+    expect(presentation.meta).toBe('1 source');
+    expect(presentation.detailBlocks).toEqual([{kind:'web_operation',search:{query:'latest release',url:'',pattern:'',notice:'',
+      results:[{title:'Release notes',url:'https://example.test/release',snippet:'The release is available.',source:''}],
+    }}]);
+    expect(presentation.detailLines).toEqual([]);
+  });
 
-    expect(presentation.detailBlocks[0]).toEqual({
-      kind: 'web_search',
-      search: {
-        query: 'latest release',
-        provider: 'brave',
-        count: 1,
-        results: [{ title: 'Release notes', url: 'https://example.test/release', snippet: 'The release is available.', source: '' }],
-        sources: [{ title: 'Example', url: 'https://example.test', snippet: '', source: '' }],
-        matches: [],
-        sections: [],
-      },
-    });
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('results');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('sources');
+  it('does not invent query text or expandable details for an opaque search', () => {
+    for (const tool_name of ['web_search','web.search']) {
+      const p = presentFlowerActivityItem(item({tool_name,renderer:'web_search',label:'Web search',payload:{status:'success'}}));
+      expect(p.label).toBe('Web search');
+      expect(p.meta).toBe('Done · Details not provided');
+      expect(p.detailBlocks).toEqual([]);
+    }
+  });
+
+  it('distinguishes unavailable sources from an explicitly empty list', () => {
+    for (const provided of [false,true]) {
+      const p = presentFlowerActivityItem(item({tool_name:'web_search',renderer:'web_search',payload:{query:'weather',results_provided:provided}}));
+      const block = p.detailBlocks[0];
+      expect(block.kind).toBe('web_operation');
+      if (block.kind === 'web_operation') expect(block.search.notice).toBe(provided ? 'No sources returned' : 'Source details not provided');
+    }
+  });
+
+  it('names web operations and preserves multi-query order', () => {
+    const base = {tool_name:'web_search',renderer:'web_search' as const};
+    expect(presentFlowerActivityItem(item({...base,payload:{operation:'open_page',url:'https://example.test/weather'}})).label).toBe('Open page · example.test');
+    expect(presentFlowerActivityItem(item({...base,payload:{operation:'find_in_page',url:'https://example.test/weather',pattern:'forecast'}})).label).toBe('Find on page · “forecast” · example.test');
+    const p = presentFlowerActivityItem(item({...base,status:'running',payload:{operation:'search',query:'weather\nforecast'}}));
+    expect(p.label).toBe('Search · weather');
+    expect(p.meta).toBe('2 queries · Running');
   });
 
   it('renders the requested URL and bounded preview without page icon data', () => {

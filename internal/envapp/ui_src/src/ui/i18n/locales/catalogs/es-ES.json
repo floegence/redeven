@@ -4053,6 +4053,31 @@
       "modelSupportUnavailable": "No se pudo comprobar la compatibilidad con archivos adjuntos"
     },
     "chat": {
+      "webSearch": {
+        "search": "Buscar",
+        "openPage": "Abrir página",
+        "findInPage": "Buscar en la página",
+        "webActivity": "Búsqueda web",
+        "noDetails": "No se proporcionaron detalles",
+        "noSources": "No se devolvieron fuentes",
+        "sourcesUnavailable": "No se proporcionaron detalles de las fuentes",
+        "sourcesTitle": "Fuentes",
+        "queryLabel": "Consultas de búsqueda",
+        "targetLabel": "Página web",
+        "patternLabel": "Texto que buscar",
+        "showLess": "Mostrar menos",
+        "sources": {
+          "one": "{count} fuente",
+          "other": "{count} fuentes"
+        },
+        "queries": {
+          "one": "{count} consulta",
+          "other": "{count} consultas"
+        },
+        "showMore": {
+          "other": "Mostrar {count} más"
+        }
+      },
       "loadingSettings": "La configuración de Flower aún se está cargando.",
       "warmupTitle": "Preparando Flower",
       "warmupDetail": "Desktop está iniciando el tiempo de ejecución del entorno local antes de que Flower cargue las conversaciones.",

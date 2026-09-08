@@ -1230,7 +1230,7 @@
               "deepseek",
               "provider"
             ],
-            "summary": "Flower routes the DeepSeek provider to the published Floret v7.3.4 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
+            "summary": "Flower routes the DeepSeek provider to the published Floret v7.4.0 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
             "section_count": 2
           },
           {
@@ -2161,8 +2161,8 @@
         "title": "DeepSeek Responses",
         "type": "AI Provider Contract"
       },
-      "body_length": 2234,
-      "summary": "Flower routes the DeepSeek provider to the published Floret v7.3.4 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
+      "body_length": 3070,
+      "summary": "Flower routes the DeepSeek provider to the published Floret v7.4.0 Responses gateway.\nFloret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,\nfunction-call validation, and opaque provider history. Redeven only maps its\nmodel DTOs and canonical dotted tool names to provider-safe aliases.",
       "sections": [
         {
           "id": "contract",
@@ -2206,7 +2206,7 @@
           "description": "Turn surface switching and replay."
         }
       ],
-      "snippet": "Flower routes the DeepSeek provider to the published Floret v7.3.4 Responses gateway. Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization, function-call validation, and opaque provider history. Redeven only maps ",
+      "snippet": "Flower routes the DeepSeek provider to the published Floret v7.4.0 Responses gateway. Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization, function-call validation, and opaque provider history. Redeven only maps ",
       "links": [
         {
           "label": "Model and context runtime",
@@ -13215,5 +13215,5 @@
       ]
     }
   ],
-  "source_sha256": "265e3783309236fd1ef074ee3d42a203a52b14eb22931314f3008a70810e33a8"
+  "source_sha256": "343fe5e1abfff1cab2eb08aada0d6e14101e2cb11239aa41a8887f139cd4f01d"
 }

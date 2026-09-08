@@ -4053,6 +4053,31 @@
       "modelSupportUnavailable": "Impossible de vérifier la prise en charge des pièces jointes"
     },
     "chat": {
+      "webSearch": {
+        "search": "Rechercher",
+        "openPage": "Ouvrir la page",
+        "findInPage": "Rechercher dans la page",
+        "webActivity": "Recherche web",
+        "noDetails": "Détails non fournis",
+        "noSources": "Aucune source renvoyée",
+        "sourcesUnavailable": "Détails des sources non fournis",
+        "sourcesTitle": "Sources",
+        "queryLabel": "Requêtes de recherche",
+        "targetLabel": "Page web",
+        "patternLabel": "Texte à rechercher",
+        "showLess": "Afficher moins",
+        "sources": {
+          "one": "{count} source",
+          "other": "{count} sources"
+        },
+        "queries": {
+          "one": "{count} requête",
+          "other": "{count} requêtes"
+        },
+        "showMore": {
+          "other": "Afficher {count} de plus"
+        }
+      },
       "loadingSettings": "Le chargement des paramètres de Flower est toujours en cours.",
       "warmupTitle": "Préparation de Flower",
       "warmupDetail": "Desktop démarre l’environnement d’exécution local avant que Flower charge les conversations.",

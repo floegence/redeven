@@ -10404,3 +10404,23 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 .flower-thread-menu-item > svg {
   flex-shrink: 0;
 }
+
+.flower-web-operation { min-width: 0; }
+.flower-web-operation a { cursor: pointer; color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+.flower-web-operation a:hover { color: var(--primary); }
+.flower-web-operation a:focus-visible, .flower-web-operation-more:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 3px; }
+.flower-web-operation .flower-activity-web-list { list-style: none; padding: 0; margin: 0; }
+.flower-web-operation-value, .flower-web-operation-url { overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; margin: 0; }
+.flower-web-operation-url, .flower-web-operation-notice { color: var(--muted-foreground); font-size: 0.75rem; }
+.flower-web-operation .flower-activity-web-entry-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0; }
+.flower-web-operation-more { cursor: pointer; color: var(--muted-foreground); font-size: 0.75rem; padding: 0.375rem 0; }
+.flower-web-operation-more:hover { color: var(--foreground); }
+
+.flower-web-operation-address summary { cursor: pointer; width: fit-content; }
+.flower-web-operation-address summary:hover { color: var(--foreground); }
+.flower-web-operation-address summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.flower-web-operation .flower-activity-web-entry-snippet { font-size: 0.75rem; font-weight: 400; line-height: 1.5; }
+
+.flower-activity-inline-row-web-search .flower-activity-inline-title,
+.flower-activity-inline-row-web-search .flower-activity-inline-detail { font-family: var(--font-sans, system-ui, sans-serif); }
+.flower-activity-inline-row-web-search .flower-activity-inline-detail { color: var(--muted-foreground); font-weight: 400; }

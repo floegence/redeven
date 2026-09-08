@@ -8,7 +8,7 @@ timestamp: 2026-09-08T00:00:00Z
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.3.4 Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.4.0 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.
@@ -46,3 +46,17 @@ provider continuation state. There is no host history mirror or Chat fallback.
 - `redeven:internal/ai/thread_model_switch_integration_test.go` - Turn surface switching and replay.
 - [Official Responses guide](https://api-docs.deepseek.com/guides/responses_api/)
 - [Model and context runtime](model-context-runtime.md)
+
+## Web operation presentation
+
+Floret's public web Activity supplies search queries, open-page URLs,
+find-in-page patterns, source availability, and bounded snippets. Flower renders
+these same canonical facts live and after reopening a thread. Collapsed rows
+identify the operation and target; expanded rows provide safe clickable source
+links. An opaque completed operation has an explicit missing-details notice and
+no empty disclosure. Explicitly empty lists are distinct from missing details.
+Answer citations never become fabricated per-call search results.
+
+Desktop and Env App share [the web operation presentation](../../internal/flower_ui/src/WebSearchActivity.tsx).
+The source list initially shows five entries, with keyboard-accessible expansion;
+source titles, domains, full URLs, and two-line snippets support inspection.
