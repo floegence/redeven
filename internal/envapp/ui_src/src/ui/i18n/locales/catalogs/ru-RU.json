@@ -4181,6 +4181,8 @@
       "terminalTimedOut": "Время выполнения истекло",
       "terminalLocation": "Место выполнения",
       "terminalNoNewOutput": "Нового вывода нет.",
+      "toolActivityDetailsPending": "Ожидание сведений об инструменте",
+      "toolActivityNoAdditionalDetails": "Дополнительных сведений нет",
       "toolActivityRunCommand": "Выполнить команду",
       "toolActivityReadCommandOutput": "Просмотреть вывод команды",
       "toolActivityWriteCommandInput": "Отправить ввод команде",

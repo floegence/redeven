@@ -49,6 +49,8 @@ async function mount(items: readonly FlowerActivityItem[]) {
   await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="terminal-activity"] button')));
   (runtime.querySelector('[data-thread-id="terminal-activity"] button') as HTMLButtonElement).click();
   await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="write"]')));
+  await waitFor(() => runtime.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   return { runtime, live, base };
 }
 const rowFor = (runtime: HTMLElement, id: string) => runtime.querySelector(`[data-flower-activity-item-id="${id}"]`)!;

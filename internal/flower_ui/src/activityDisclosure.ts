@@ -75,7 +75,6 @@ export type FlowerActivityDisclosureMotionOptions = Readonly<{
   resizeDurationMs?: number;
   closeDurationMs?: number;
   onBeforeClose?: () => void;
-  onMotionStart?: () => void;
   onLayoutFrame?: () => void;
   onMotionEnd?: () => void;
   platform?: FlowerActivityDisclosureMotionPlatform;
@@ -183,7 +182,6 @@ export function createFlowerActivityDisclosureMotion(
     const revision = animationRevision;
     const targetOpen = targetState !== 'closing' && targetState !== 'closed';
     setState(targetState);
-    options.onMotionStart?.();
     if (reducedMotion() || durationMs === 0 || !viewport) {
       commitHeight(targetHeight);
       onFinish();
@@ -239,7 +237,6 @@ export function createFlowerActivityDisclosureMotion(
     const nextHeight = measuredContentHeight();
     if (!heightChanged(nextHeight) && state() === 'open') return;
     cancelAnimation();
-    options.onMotionStart?.();
     commitHeight(nextHeight);
     setState('open');
     options.onMotionEnd?.();
@@ -281,6 +278,7 @@ export function createFlowerActivityDisclosureMotion(
       if (reducedMotion()) {
         commitHeight(nextHeight);
         finishOpen();
+        options.onMotionEnd?.();
         return;
       }
       runAnimation('opening', nextHeight, openDurationMs, OPEN_EASING, finishOpen, start);
@@ -296,7 +294,6 @@ export function createFlowerActivityDisclosureMotion(
     }
     if (reducedMotion()) {
       cancelAnimation();
-      options.onMotionStart?.();
       finishClose();
       options.onLayoutFrame?.();
       options.onMotionEnd?.();

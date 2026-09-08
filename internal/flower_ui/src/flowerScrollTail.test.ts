@@ -100,7 +100,7 @@ describe('Flower scroll tail controller', () => {
     const metrics = createViewport();
     controller.bind(metrics.viewport);
     metrics.setScrollTop(220);
-    controller.onWheel({ deltaY: -1 } as WheelEvent);
+    controller.onWheel({ deltaY: -1, target: metrics.viewport } as unknown as WheelEvent);
 
     metrics.setScrollHeight(900);
     controller.measureAfterLayout();
@@ -116,9 +116,10 @@ describe('Flower scroll tail controller', () => {
     const metrics = createViewport();
     controller.bind(metrics.viewport);
     metrics.setScrollTop(220);
-    controller.onWheel({ deltaY: -1 } as WheelEvent);
+    controller.onWheel({ deltaY: -1, target: metrics.viewport } as unknown as WheelEvent);
 
     metrics.setScrollHeight(900);
+    controller.onWheel({ deltaY: 580, target: metrics.viewport } as unknown as WheelEvent);
     metrics.setScrollTop(800);
     controller.onScroll();
     metrics.setScrollHeight(980);
@@ -126,6 +127,20 @@ describe('Flower scroll tail controller', () => {
     raf.flushAll();
 
     expect(metrics.scrollTop()).toBe(880);
+    controller.dispose();
+  });
+
+  it('keeps a user pause across layout-generated scroll events near the bottom', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport();
+    controller.bind(metrics.viewport);
+    controller.stopFollowing();
+    metrics.setScrollTop(399);
+    controller.onScroll();
+    metrics.setScrollHeight(620);
+    controller.measureAfterLayout();
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(399);
     controller.dispose();
   });
 

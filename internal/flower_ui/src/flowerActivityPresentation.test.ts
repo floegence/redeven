@@ -1324,7 +1324,7 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
   });
 
-  it('keeps a successful Skill activity static when it has no meaningful detail block', () => {
+  it('leaves successful Skill content empty for the safe disclosure fallback', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'use_skill',
       renderer: 'structured',

@@ -4100,6 +4100,8 @@
       "terminalTimedOut": "執行已逾時",
       "terminalLocation": "執行位置",
       "terminalNoNewOutput": "暫無新輸出",
+      "toolActivityDetailsPending": "正在等待工具詳細資訊",
+      "toolActivityNoAdditionalDetails": "沒有更多詳細資訊",
       "toolActivityRunCommand": "執行命令",
       "toolActivityReadCommandOutput": "查看命令輸出",
       "toolActivityWriteCommandInput": "向命令傳送輸入",

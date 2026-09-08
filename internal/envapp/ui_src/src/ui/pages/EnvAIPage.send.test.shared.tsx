@@ -895,7 +895,11 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('frontend-design');
-        expect(host.querySelector('[data-flower-activity-item-id="tool-use-skill"] button.flower-activity-inline-button')).toBeNull();
+        const disclosure = host.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="tool-use-skill"] button.flower-activity-inline-button')!;
+        expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+        disclosure.click();
+        await flush();
+        expect(disclosure.getAttribute('aria-expanded')).toBe('true');
         expect(host.textContent).not.toContain('Loaded frontend design guidance.');
       } finally {
         dispose();

@@ -190,6 +190,8 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
           aria-hidden={presence.exiting() ? 'true' : undefined}
           class={`floe-floating-presence ${props.class ?? ''}`}
           style={{
+            display: 'flex',
+            'flex-direction': 'column',
             width: `${props.defaultSize?.width ?? 400}px`,
             height: `${props.defaultSize?.height ?? 300}px`,
           }}

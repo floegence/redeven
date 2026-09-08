@@ -313,6 +313,8 @@ export type FlowerSurfaceCopy = Readonly<{
     terminalTimedOut: string;
     terminalLocation: string;
     terminalNoNewOutput: string;
+    toolActivityDetailsPending: string;
+    toolActivityNoAdditionalDetails: string;
     toolActivityRunCommand: string;
     toolActivityReadCommandOutput: string;
     toolActivityWriteCommandInput: string;
@@ -584,6 +586,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     terminalTimedOut: "Execution timed out",
     terminalLocation: "Execution location",
     terminalNoNewOutput: "No new output.",
+    toolActivityDetailsPending: "Waiting for tool details",
+    toolActivityNoAdditionalDetails: "No additional details",
     toolActivityRunCommand: 'Run command',
     toolActivityReadCommandOutput: 'View command output',
     toolActivityWriteCommandInput: 'Send input to command',

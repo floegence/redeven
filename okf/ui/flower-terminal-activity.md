@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Flower terminal activity presentation
-description: Canonical terminal activity, disclosure, animation, scrolling, and read-only controls.
+description: Canonical terminal activity facts, safe details, output scrolling, and read-only controls.
 tags: [ai, flower, terminal, presentation]
 timestamp: 2026-07-18T00:00:00Z
 ---
@@ -21,19 +21,9 @@ Completed status, output, exit code, and duration come from canonical Activity. 
 
 Details are read-only, offer icon actions to reveal and copy the command, and cap output at five visual lines. Execution and settlement belong to [Terminal tool runtime](../ai/terminal-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md).
 
-## Disclosure identity and interaction
+## Interaction boundary
 
-Each stateful activity view uses thread, run, turn, and canonical `item_id` as its identity. Status, payload, block position, item position, and renderer object identity are excluded. A current-view replacement can move the item between message blocks while preserving the row, disclosure controller, detail component, and terminal viewport. If a stable item gains a renderer or payload later, its DOM identity and trigger binding remain stable; native disabled state follows detail availability.
-
-Ordinary pending, running, and completed details start closed. Errors, waiting items, and facts requiring attention start expanded. Manual choices persist across lifecycle updates, canonical replacements, and task navigation; explicit collapse wins over later status updates. Triggers expose `aria-controls`, native keyboard activation, pointer affordance, and focus restoration before closing. Background progress never opens ordinary running details or changes transcript geometry simply because time passed.
-
-Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. The composer exclusively owns actionable approve/reject controls. Completing a decision removes that dock without inserting an approval outcome into history.
-
-## Motion and scroll ownership
-
-The shared disclosure controller owns measured pixel height using Chromium `ResizeObserver` and Web Animations. Opening starts at `0px` and takes 360 ms; closing takes 300 ms. Content growth, shrinkage, and responsive reflow use 280 ms. One current animation owns opening, resizing, retargeting, reversal, and closing; its `finished` promise alone advances presence or unmounts content. CSS and elapsed timers never create a second completion clock. New content cancels the old animation and retargets the current measured height. The nearest disclosure owns dynamic resize; the Env App timeline wrapper animates only its own opening or closing.
-
-Details cap at `min(42rem, 72vh)` and terminal output at five visual lines; additional content scrolls locally. Manual disclosure stops transcript tail-following before layout changes. Every timeline supplies its viewport scope explicitly: the main transcript and SubAgent windows cannot change one another's follow intent or anchor revision. Opening, resize, reversal, and closing preserve the clicked title's viewport position; new wheel or touch input cancels this temporary anchor immediately. Animation establishes measured height before committing its target; `ResizeObserver` retargets only for a changed bounded content height. Intrinsic-height estimates and `content-visibility` placeholders must not create another jump. Terminal output owns its separate 24 px near-bottom following threshold. Reduced motion commits measured height immediately with the same title anchor and close/unmount path.
+[Activity disclosure interaction](flower-activity-interaction.md) owns stable triggers, manual choices, animation, transcript following, and floating controls across all renderers. Terminal output additionally owns its separate 24 px near-bottom following threshold and five-line viewport. Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. The composer exclusively owns actionable approve/reject controls. Completing a decision removes that dock without inserting an approval outcome into history.
 
 # Boundaries
 

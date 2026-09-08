@@ -76,6 +76,8 @@ export const flowerSurfaceEnUS = {
     terminalTimedOut: "Execution timed out",
     terminalLocation: "Execution location",
     terminalNoNewOutput: "No new output.",
+    toolActivityDetailsPending: 'Waiting for tool details',
+    toolActivityNoAdditionalDetails: 'No additional details',
     toolActivityRunCommand: 'Run command',
     toolActivityReadCommandOutput: 'View command output',
     toolActivityWriteCommandInput: 'Send input to command',

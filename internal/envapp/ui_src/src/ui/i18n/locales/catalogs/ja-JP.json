@@ -4085,6 +4085,8 @@
       "terminalTimedOut": "実行がタイムアウトしました",
       "terminalLocation": "実行場所",
       "terminalNoNewOutput": "新しい出力はありません。",
+      "toolActivityDetailsPending": "ツールの詳細を待っています",
+      "toolActivityNoAdditionalDetails": "追加の詳細はありません",
       "toolActivityRunCommand": "コマンドを実行",
       "toolActivityReadCommandOutput": "コマンド出力を表示",
       "toolActivityWriteCommandInput": "コマンドに入力を送信",

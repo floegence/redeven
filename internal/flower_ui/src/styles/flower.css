@@ -10384,3 +10384,23 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 }
 .flower-activity-terminal-facts dt { color: var(--muted-foreground); }
 .flower-activity-terminal-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+/* The viewport controller exclusively owns transcript position compensation. */
+.flower-chat-transcript,
+.flower-subagent-detail-transcript {
+  overflow-anchor: none;
+}
+
+.flower-scroll-to-latest-button[data-pointer-blocked="true"] {
+  pointer-events: none;
+}
+
+.flower-activity-empty-detail {
+  display: grid;
+  gap: 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.flower-activity-empty-detail-hint {
+  color: var(--muted-foreground);
+}

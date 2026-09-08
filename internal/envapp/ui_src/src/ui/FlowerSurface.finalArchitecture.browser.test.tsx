@@ -939,7 +939,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(toolRow.textContent).toContain('weather_gd.py');
     expect(toolRow.textContent).not.toContain('operation write');
     expect(toolRow.textContent).not.toContain('display name');
-    expect(toolRow.querySelector('button.flower-activity-inline-button')).toBeNull();
+    expect(toolRow.querySelector('button.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('false');
     expect(runtime.textContent).toContain('Using a tool');
     expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
 
@@ -1213,7 +1213,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
   });
 
-  it('expands typed OKF rows and keeps a successful Skill activity static', async () => {
+  it('expands typed OKF rows and safe empty Skill details', async () => {
     const threadID = 'thread-structured-activity-rows';
     const activityThread = thread({
       thread_id: threadID,
@@ -1272,12 +1272,14 @@ describe('Flower final thread cache and workspace transport', () => {
     const okfRow = runtime.querySelector('[data-flower-activity-item-id="okf-search"]') as HTMLElement;
     const skillRow = runtime.querySelector('[data-flower-activity-item-id="skill-success"]') as HTMLElement;
     const okfToggle = okfRow.querySelector('.flower-activity-inline-button') as HTMLElement;
-    const skillStatic = skillRow.querySelector('.flower-activity-inline-button') as HTMLElement;
+    const skillToggle = skillRow.querySelector('.flower-activity-inline-button') as HTMLElement;
     expect(okfToggle.tagName).toBe('BUTTON');
     expect(okfToggle.getAttribute('aria-expanded')).toBe('false');
-    expect(skillStatic.tagName).toBe('DIV');
-    expect(skillRow.querySelector('button.flower-activity-inline-button')).toBeNull();
-    expect(skillRow.querySelector('.flower-activity-inline-chevron')).toBeNull();
+    expect(skillToggle.tagName).toBe('BUTTON');
+    expect(skillToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(skillRow.querySelector('.flower-activity-inline-chevron')).not.toBeNull();
+    skillToggle.click();
+    await waitFor(() => skillRow.textContent?.includes('No additional details') === true);
 
     (okfToggle as HTMLButtonElement).click();
     await waitFor(() => okfRow.textContent?.includes('The current-view boundary.') === true);
