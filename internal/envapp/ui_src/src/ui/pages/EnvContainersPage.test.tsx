@@ -72,7 +72,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Layers: icon('layers'),
   Lock: icon('lock'),
   Maximize: icon('maximize'),
-  MoreVertical: icon('more-vertical'),
+  MoreHorizontal: icon('more-horizontal'),
   Package: icon('package'),
   Pause: icon('pause'),
   Play: icon('play'),
@@ -385,7 +385,7 @@ describe('native Containers page', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('.container-filter-switch button')).find((button) => button.textContent === 'containers.filters.all')!.click();
     usage.resolve({ sampled_at_unix_ms: 1, volumes: [{ name: 'a-data', size_bytes: 2048 }, { name: 'b-empty', size_bytes: 0 }, { name: 'c-unknown' }] });
     await settle();
-    expect(Array.from(host.querySelectorAll('.container-volume-size')).map((cell) => cell.textContent)).toEqual(['2.0 KB', '0 B', 'containers.volumeUsage.unavailable']);
+    expect(Array.from(host.querySelectorAll('tbody .container-volume-size')).map((cell) => cell.textContent)).toEqual(['2.0 KB', '0 B', 'containers.volumeUsage.unavailable']);
     const sizeSort = Array.from(host.querySelectorAll<HTMLButtonElement>('thead button')).find((button) => button.textContent?.includes('containers.volumeUsage.size'))!;
     sizeSort.click();
     expect(Array.from(host.querySelectorAll('tbody .container-name-cell')).map((cell) => cell.textContent)).toEqual(['b-empty', 'a-data', 'c-unknown']);
@@ -413,7 +413,7 @@ describe('native Containers page', () => {
     const openVolumes = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((button) => button.textContent?.includes('containers.views.volumes'))!.click();
     openVolumes();
     await settle();
-    expect(Array.from(host.querySelectorAll('.container-volume-size')).map((cell) => cell.textContent)).toEqual(['containers.volumeUsage.calculating', '1.0 KB']);
+    expect(Array.from(host.querySelectorAll('tbody .container-volume-size')).map((cell) => cell.textContent)).toEqual(['containers.volumeUsage.calculating', '1.0 KB']);
     const oldSignal = harness.volumeDiskUsage.mock.calls[0][2] as AbortSignal;
     harness.volumeDiskUsage.mockRejectedValue(new Error('unavailable'));
     host.querySelector<HTMLButtonElement>('[aria-label="containers.actions.refresh"]')!.click();
@@ -421,7 +421,7 @@ describe('native Containers page', () => {
     expect(oldSignal.aborted).toBe(true);
     stale.resolve({ volumes: [{ name: 'data', size_bytes: 99999 }] });
     await settle();
-    expect(Array.from(host.querySelectorAll('.container-volume-size')).map((cell) => cell.textContent)).toEqual(['containers.volumeUsage.unavailable', 'containers.volumeUsage.unavailable']);
+    expect(Array.from(host.querySelectorAll('tbody .container-volume-size')).map((cell) => cell.textContent)).toEqual(['containers.volumeUsage.unavailable', 'containers.volumeUsage.unavailable']);
     expect(host.querySelectorAll('tbody tr')).toHaveLength(2);
   });
 
@@ -1517,10 +1517,16 @@ describe('native Containers page', () => {
     };
     await openView('containers.views.images');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.size');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.created');
+    expect(host.querySelector('thead')?.textContent).not.toContain('containers.columns.created');
     await openView('containers.views.volumes');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.driver');
-    expect(host.querySelector('thead')?.textContent).toContain('containers.columns.created');
+    expect(host.querySelector('thead')?.textContent).not.toContain('containers.columns.driver');
+    expect(host.querySelector('thead')?.textContent).not.toContain('containers.columns.created');
+    for (const label of ['containers.columns.driver', 'containers.columns.created']) {
+      Array.from(host.querySelectorAll<HTMLButtonElement>('.container-column-picker button'))
+        .find((button) => button.textContent?.includes(label))!.click();
+      await settle();
+      expect(host.querySelector('thead')?.textContent).toContain(label);
+    }
     await openView('containers.views.compose-projects');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.running');
     expect(host.querySelector('thead')?.textContent).toContain('containers.columns.status');
