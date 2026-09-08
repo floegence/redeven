@@ -5,7 +5,6 @@ package managedwebservice
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -218,7 +217,7 @@ func waitBoundaryCondition(t *testing.T, condition func() bool) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal(fmt.Sprintf("process boundary condition timed out after %s", 10*time.Second))
+	t.Fatalf("process boundary condition timed out after %s", 10*time.Second)
 }
 
 func TestRuntimeKilledDuringOpeningHookPreservesApplicationAndEndsHook(t *testing.T) {

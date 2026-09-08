@@ -88,7 +88,7 @@ func writePrivateJSON(path string, value any) error {
 func (d *hostScriptDriver) writeRunState(service *pfregistry.ManagedService, state hostRunState) error {
 	root := d.runDirectory(service)
 	if root == "" {
-		return errors.New("Host launch identity is invalid")
+		return errors.New("host launch identity is invalid")
 	}
 	return writePrivateJSON(filepath.Join(root, "run.json"), state)
 }
@@ -105,7 +105,7 @@ func (d *hostScriptDriver) readRunState(service *pfregistry.ManagedService) (hos
 		return state, err
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 64*1024 {
-		return state, errors.New("Host launch record is invalid")
+		return state, errors.New("host launch record is invalid")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -115,7 +115,7 @@ func (d *hostScriptDriver) readRunState(service *pfregistry.ManagedService) (hos
 		return state, err
 	}
 	if state.SchemaVersion != 1 || state.RuntimeIdentity != service.RuntimeIdentity || state.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 || (state.OutputMode != "" && state.OutputMode != "discard" && state.OutputMode != "private_file") || (state.Endpoint.Scheme != "http" && state.Endpoint.Scheme != "https") || state.Endpoint.StartupTimeout < 0 || state.Endpoint.StartupTimeout > 600 {
-		return state, errors.New("Host launch record identity changed")
+		return state, errors.New("host launch record identity changed")
 	}
 	return state, nil
 }

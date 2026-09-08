@@ -115,15 +115,6 @@ func (d *hostScriptDriver) removeOpenSession(service *pfregistry.ManagedService)
 	_ = os.Remove(d.openSessionPath(service))
 }
 
-func (d *hostScriptDriver) removeOpenSessionForIdentity(service *pfregistry.ManagedService, runtimeIdentity string) {
-	if service == nil {
-		return
-	}
-	if _, err := d.readOpenSession(service, runtimeIdentity); err == nil {
-		d.removeOpenSession(service)
-	}
-}
-
 func (d *hostScriptDriver) resolveOpenSession(service *pfregistry.ManagedService) (string, error) {
 	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The Host service startup URL is unavailable. Retry opening the service.", 409, true, nil)

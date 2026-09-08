@@ -66,7 +66,7 @@ func (m *Manager) openExistingSession(ctx context.Context, serviceID string) (*O
 	if err != nil {
 		return nil, err
 	}
-	appPath := "/"
+	var appPath string
 	if binding.Deployment == DeploymentHost {
 		driver, ok := m.host.(*hostScriptDriver)
 		if !ok {

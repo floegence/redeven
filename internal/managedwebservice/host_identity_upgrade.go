@@ -73,7 +73,7 @@ func (d *hostScriptDriver) commitHostIdentityUpgrade(service *pfregistry.Managed
 
 func (d *hostScriptDriver) finishHostIdentityUpgrade(service *pfregistry.ManagedService, upgrade hostIdentityUpgrade) error {
 	if service.RuntimeIdentity != upgrade.OldIdentity && service.RuntimeIdentity != upgrade.NewIdentity {
-		return errors.New("Host identity upgrade no longer owns this launch")
+		return errors.New("host identity upgrade no longer owns this launch")
 	}
 	parsed := parseHostIdentity(upgrade.NewIdentity)
 	snapshot, err := readManagedProcess(parsed.pid)
@@ -93,7 +93,7 @@ func (d *hostScriptDriver) finishHostIdentityUpgrade(service *pfregistry.Managed
 	}
 	if upgrade.Session != nil {
 		if upgrade.Session.SchemaVersion != 1 || upgrade.Session.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 || upgrade.Session.ServiceID != service.ServiceID || upgrade.Session.RuntimeIdentity != upgrade.NewIdentity || !validServiceOpeningPath(upgrade.Session.AppPath, true) {
-			return errors.New("Host opening information does not match identity upgrade")
+			return errors.New("host opening information does not match identity upgrade")
 		}
 	}
 	if err := d.manager.registry.UpdateManagedServiceIfRuntimeMatches(context.Background(), service.ServiceID, service.RuntimeIdentity, service.RuntimeSpecSHA256, pfregistry.ManagedServicePatch{RuntimeIdentity: &upgrade.NewIdentity}); err != nil {
@@ -124,7 +124,7 @@ func (d *hostScriptDriver) resumeHostIdentityUpgrade(service *pfregistry.Managed
 		return err
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 64*1024 {
-		return errors.New("Host identity upgrade record is invalid")
+		return errors.New("host identity upgrade record is invalid")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
