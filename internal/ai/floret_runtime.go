@@ -188,6 +188,9 @@ func buildFloretThreadAgent(
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
 	}
+	if provider.providerType == "deepseek" && provider.webSearch == providerWebSearchModeDeepSeekNative {
+		agentOptions = append(agentOptions, flruntime.WithAgentHostedTools(flprovider.HostedToolDefinition{Name: "web_search", Type: "web_search"}))
+	}
 	if manualCompactions != nil {
 		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))
 	}

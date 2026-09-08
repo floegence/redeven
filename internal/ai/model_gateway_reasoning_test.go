@@ -191,41 +191,6 @@ func TestApplyChatReasoningGroqQwenDefaultAndOff(t *testing.T) {
 	}
 }
 
-func TestApplyChatReasoningDeepSeekOff(t *testing.T) {
-	t.Parallel()
-
-	params := openai.ChatCompletionNewParams{
-		Model:    oshared.ChatModel("deepseek-v4-pro"),
-		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
-	}
-	if err := applyChatReasoning(&params, ProviderControls{
-		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelOff},
-		ReasoningCapability: config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro"),
-	}); err != nil {
-		t.Fatalf("applyChatReasoning: %v", err)
-	}
-	payload := mustMarshalPayload(t, params)
-	if !strings.Contains(payload, `"thinking":{"type":"disabled"}`) {
-		t.Fatalf("payload missing DeepSeek disabled thinking: %s", payload)
-	}
-}
-
-func TestApplyChatReasoningRejectsDeepSeekNone(t *testing.T) {
-	t.Parallel()
-
-	params := openai.ChatCompletionNewParams{
-		Model:    oshared.ChatModel("deepseek-v4-pro"),
-		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
-	}
-	err := applyChatReasoning(&params, ProviderControls{
-		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelMinimal},
-		ReasoningCapability: config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro"),
-	})
-	if err == nil {
-		t.Fatalf("applyChatReasoning accepted minimal for DeepSeek")
-	}
-}
-
 func TestApplyChatReasoningXAIOffAndHigh(t *testing.T) {
 	t.Parallel()
 

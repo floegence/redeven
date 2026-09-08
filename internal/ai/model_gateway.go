@@ -1201,12 +1201,6 @@ func applyChatReasoning(params *openai.ChatCompletionNewParams, controls Provide
 		params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
 	case "kimi_thinking_type", "glm_thinking_type":
 		extraFields = mergeAnyFields(extraFields, map[string]any{"thinking": map[string]any{"type": thinkingTypeForSelection(selection)}})
-	case "deepseek_reasoning_effort":
-		if selection.Level == config.AIReasoningLevelOff {
-			extraFields = mergeAnyFields(extraFields, map[string]any{"thinking": map[string]any{"type": "disabled"}})
-		} else {
-			params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
-		}
 	case "qwen_enable_thinking":
 		extra := map[string]any{"enable_thinking": selection.Level != config.AIReasoningLevelOff}
 		if selection.BudgetTokens > 0 {
@@ -1300,8 +1294,6 @@ func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSea
 				},
 			}))
 		}
-	case providerWebSearchModeDeepSeekNative:
-		extraFields = mergeAnyFields(extraFields, map[string]any{"enable_search": true})
 	}
 	if len(extraFields) > 0 {
 		params.SetExtraFields(extraFields)
@@ -2263,7 +2255,9 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			forceChat:        true,
 			parallelTools:    parallelTools,
 		}, nil
-	case "chatglm", "deepseek":
+	case "deepseek":
+		return &deepSeekProvider{baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"), apiKey: strings.TrimSpace(apiKey), strictTools: strictToolSchema}, nil
+	case "chatglm":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	flidentity "github.com/floegence/floret/v7/identity"
+	flprovider "github.com/floegence/floret/v7/provider"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -12,6 +14,7 @@ import (
 type StreamEventType string
 
 const (
+	StreamEventHostedTool    StreamEventType = "hosted_tool"
 	StreamEventTextDelta     StreamEventType = "text_delta"
 	StreamEventToolCallStart StreamEventType = "tool_call_start"
 	StreamEventToolCallDelta StreamEventType = "tool_call_delta"
@@ -37,11 +40,12 @@ type PartialUsage struct {
 }
 
 type StreamEvent struct {
-	Type       StreamEventType  `json:"type"`
-	Text       string           `json:"text,omitempty"`
-	ToolCall   *PartialToolCall `json:"tool_call,omitempty"`
-	Usage      *PartialUsage    `json:"usage,omitempty"`
-	FinishHint string           `json:"finish_hint,omitempty"`
+	HostedToolEvent *flprovider.Event `json:"-"`
+	Type            StreamEventType   `json:"type"`
+	Text            string            `json:"text,omitempty"`
+	ToolCall        *PartialToolCall  `json:"tool_call,omitempty"`
+	Usage           *PartialUsage     `json:"usage,omitempty"`
+	FinishHint      string            `json:"finish_hint,omitempty"`
 }
 
 type ContentPart struct {
@@ -82,13 +86,16 @@ type ModeFlags struct {
 }
 
 type ModelGatewayRequest struct {
-	Model            string           `json:"model"`
-	Messages         []Message        `json:"messages"`
-	Tools            []ToolDef        `json:"tools"`
-	Budgets          TurnBudgets      `json:"budgets"`
-	ModeFlags        ModeFlags        `json:"mode_flags"`
-	ProviderControls ProviderControls `json:"provider_controls,omitempty"`
-	WebSearchMode    string           `json:"web_search_mode,omitempty"`
+	RunID            flidentity.RunID         `json:"run_id,omitempty"`
+	PromptScopeID    flidentity.PromptScopeID `json:"prompt_scope_id,omitempty"`
+	PreviousState    *ModelGatewayState       `json:"previous_state,omitempty"`
+	Model            string                   `json:"model"`
+	Messages         []Message                `json:"messages"`
+	Tools            []ToolDef                `json:"tools"`
+	Budgets          TurnBudgets              `json:"budgets"`
+	ModeFlags        ModeFlags                `json:"mode_flags"`
+	ProviderControls ProviderControls         `json:"provider_controls,omitempty"`
+	WebSearchMode    string                   `json:"web_search_mode,omitempty"`
 }
 
 type ToolCall struct {

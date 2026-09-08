@@ -297,13 +297,13 @@ func deepSeekReasoningCapability() AIReasoningCapability {
 		SupportedLevels:           []string{"high", "max"},
 		DefaultLevel:              "high",
 		DisableSupported:          true,
-		WireShape:                 "deepseek_reasoning_effort",
-		DisableShape:              "deepseek_thinking_disabled",
-		ResponseReasoningFields:   []string{"reasoning_content", "completion_tokens_details.reasoning_tokens"},
-		HistoryReplayRequirements: []string{"reasoning_content"},
-		SourceURLs:                []string{"https://api-docs.deepseek.com/api/create-chat-completion", "https://api-docs.deepseek.com/guides/thinking_mode"},
+		WireShape:                 "deepseek_responses_reasoning_effort",
+		DisableShape:              "responses_reasoning_none",
+		ResponseReasoningFields:   []string{"reasoning.content", "output_tokens_details.reasoning_tokens"},
+		HistoryReplayRequirements: []string{"reasoning.content"},
+		SourceURLs:                []string{"https://api-docs.deepseek.com/guides/responses_api/", "https://api-docs.deepseek.com/guides/thinking_mode"},
 		SourceCheckedAt:           aiReasoningSourceCheckedAt,
-		Fixture:                   "deepseek_reasoning_effort",
+		Fixture:                   "deepseek_responses_reasoning_effort",
 	}.Normalize()
 }
 

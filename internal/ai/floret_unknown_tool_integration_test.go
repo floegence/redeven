@@ -55,7 +55,7 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 		case 1:
 			writeDeepSeekIntegrationToolCall(w, flusher, "chat_unknown", "call_unknown", "web_search", `{"query":"weather projects"}`)
 		case 2:
-			messages, _ := request["messages"].([]any)
+			messages, _ := request["input"].([]any)
 			rawMessages, _ := json.Marshal(messages)
 			if !strings.Contains(string(rawMessages), `"name":"web_search"`) {
 				t.Fatalf("continuation omitted unknown assistant tool call: %s", rawMessages)
@@ -172,31 +172,19 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 }
 
 func writeDeepSeekIntegrationToolCall(w http.ResponseWriter, flusher http.Flusher, responseID string, callID string, name string, args string) {
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-flash",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
-			"role": "assistant", "tool_calls": []any{map[string]any{
-				"index": 0, "id": callID, "type": "function", "function": map[string]any{"name": name, "arguments": args},
-			}},
-		}}},
-	})
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-flash",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
-	})
-	_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	flusher.Flush()
+	item := map[string]any{"type": "function_call", "id": "item_" + callID, "call_id": callID, "name": name, "arguments": args}
+	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": responseID, "status": "completed", "output": []any{item}}})
 }
 
 func writeDeepSeekIntegrationTextResponse(w http.ResponseWriter, flusher http.Flusher, responseID string, text string) {
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-flash",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{"role": "assistant", "content": text}}},
-	})
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": "deepseek-v4-flash",
-		"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "delta": map[string]any{}}},
-	})
-	_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	flusher.Flush()
+	writeDeepSeekIntegrationResponse(w, flusher, responseID, "", text)
+}
+
+func writeDeepSeekIntegrationResponse(w http.ResponseWriter, flusher http.Flusher, responseID, reasoning, text string) {
+	output := []any{}
+	if reasoning != "" {
+		output = append(output, map[string]any{"type": "reasoning", "content": []any{map[string]any{"type": "reasoning_text", "text": reasoning}}})
+	}
+	output = append(output, map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": text}}})
+	writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": responseID, "status": "completed", "output": output}})
 }

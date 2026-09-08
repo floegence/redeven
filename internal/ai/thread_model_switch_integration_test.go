@@ -145,7 +145,7 @@ func assertModelSwitchRequestHistory(t *testing.T, requests []map[string]any) {
 	t.Helper()
 	messageJSON := make([][]byte, len(requests))
 	for i, request := range requests {
-		messages, ok := request["messages"].([]any)
+		messages, ok := request["input"].([]any)
 		if !ok {
 			t.Fatalf("request %d omitted messages", i+1)
 		}
@@ -164,10 +164,10 @@ func assertModelSwitchRequestHistory(t *testing.T, requests []map[string]any) {
 	if reflect.DeepEqual(requests[0]["tools"], requests[1]["tools"]) {
 		t.Fatal("new Pro turn did not receive the current readonly tool surface")
 	}
-	if !reflect.DeepEqual(requests[0]["messages"].([]any)[0], requests[2]["messages"].([]any)[0]) {
+	if !reflect.DeepEqual(requests[0]["input"].([]any)[0], requests[2]["input"].([]any)[0]) {
 		t.Fatal("Flash render lineage changed its first message prefix")
 	}
-	if reflect.DeepEqual(requests[0]["messages"].([]any)[0], requests[1]["messages"].([]any)[0]) {
+	if reflect.DeepEqual(requests[0]["input"].([]any)[0], requests[1]["input"].([]any)[0]) {
 		t.Fatal("new Pro turn did not receive the current readonly System Prompt")
 	}
 	for i, request := range requests {
@@ -178,14 +178,5 @@ func assertModelSwitchRequestHistory(t *testing.T, requests []map[string]any) {
 }
 
 func writeDeepSeekIntegrationTextResponseForModel(w http.ResponseWriter, flusher http.Flusher, responseID string, model string, text string) {
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": model,
-		"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{"role": "assistant", "content": text}}},
-	})
-	writeOpenAISSEJSON(w, flusher, map[string]any{
-		"id": responseID, "object": "chat.completion.chunk", "created": 1, "model": model,
-		"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "delta": map[string]any{}}},
-	})
-	_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	flusher.Flush()
+	writeDeepSeekIntegrationTextResponse(w, flusher, responseID, text)
 }

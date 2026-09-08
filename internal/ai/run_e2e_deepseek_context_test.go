@@ -53,7 +53,7 @@ type deepSeekContextRecorder struct {
 func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservation {
 	var envelope struct {
 		Model              string            `json:"model"`
-		Messages           []json.RawMessage `json:"messages"`
+		Messages           []json.RawMessage `json:"input"`
 		Tools              []json.RawMessage `json:"tools"`
 		PreviousResponseID json.RawMessage   `json:"previous_response_id"`
 		ResponseID         json.RawMessage   `json:"response_id"`
@@ -94,33 +94,24 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 	for messageIndex, message := range envelope.Messages {
 		observation.MessageHashes = append(observation.MessageHashes, sha256Hex(message))
 		var header struct {
-			Role       string `json:"role"`
-			ToolCallID string `json:"tool_call_id"`
-			ToolCalls  []struct {
-				ID       string `json:"id"`
-				Function struct {
-					Name string `json:"name"`
-				} `json:"function"`
-			} `json:"tool_calls"`
+			Type   string `json:"type"`
+			Role   string `json:"role"`
+			CallID string `json:"call_id"`
+			Name   string `json:"name"`
 		}
 		_ = json.Unmarshal(message, &header)
-		if observation.SystemHash == "" && strings.TrimSpace(header.Role) == "system" {
+		if observation.SystemHash == "" && header.Role == "system" {
 			observation.SystemHash = sha256Hex(message)
 		}
-		observation.MessageRoles = append(observation.MessageRoles, strings.TrimSpace(header.Role))
-		for _, call := range header.ToolCalls {
-			name := strings.TrimSpace(call.Function.Name)
-			if name == "" {
-				continue
-			}
-			observation.MessageToolCallNames = append(observation.MessageToolCallNames, name)
-			if callID := strings.TrimSpace(call.ID); callID != "" {
-				toolNamesByCallID[callID] = name
-			}
+		observation.MessageRoles = append(observation.MessageRoles, header.Role)
+		if header.Type == "function_call" {
+			observation.MessageToolCallNames = append(observation.MessageToolCallNames, header.Name)
+			toolNamesByCallID[header.CallID] = header.Name
 		}
-		if strings.TrimSpace(header.Role) == "tool" {
-			toolResultCallIDs = append(toolResultCallIDs, strings.TrimSpace(header.ToolCallID))
+		if header.Type == "function_call_output" {
+			toolResultCallIDs = append(toolResultCallIDs, header.CallID)
 		}
+
 		for markerIndex, marker := range r.markers {
 			if observation.MarkerMessageIndexes[markerIndex] < 0 && bytes.Contains(message, []byte(marker)) {
 				observation.MarkerMessageIndexes[markerIndex] = messageIndex
@@ -134,14 +125,10 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 	}
 	for _, rawTool := range envelope.Tools {
 		var tool struct {
-			Function struct {
-				Name string `json:"name"`
-			} `json:"function"`
+			Name string `json:"name"`
 		}
-		if json.Unmarshal(rawTool, &tool) == nil {
-			if name := strings.TrimSpace(tool.Function.Name); name != "" {
-				observation.DefinitionToolNames = append(observation.DefinitionToolNames, name)
-			}
+		if json.Unmarshal(rawTool, &tool) == nil && tool.Name != "" {
+			observation.DefinitionToolNames = append(observation.DefinitionToolNames, tool.Name)
 		}
 	}
 	toolsJSON, _ := json.Marshal(envelope.Tools)
@@ -489,30 +476,35 @@ func observeDeepSeekResponseLine(line []byte, toolNames *[]string, finishReasons
 		return
 	}
 	var event struct {
-		Choices []struct {
-			FinishReason string `json:"finish_reason"`
-			Delta        struct {
-				ToolCalls []struct {
-					Function struct {
-						Name string `json:"name"`
-					} `json:"function"`
-				} `json:"tool_calls"`
-			} `json:"delta"`
-		} `json:"choices"`
+		Type     string `json:"type"`
+		Response struct {
+			Status string `json:"status"`
+			Output []struct {
+				Type string `json:"type"`
+				Name string `json:"name"`
+			} `json:"output"`
+		} `json:"response"`
 	}
 	if json.Unmarshal(payload, &event) != nil {
 		return
 	}
-	for _, choice := range event.Choices {
-		if reason := strings.TrimSpace(choice.FinishReason); reason != "" {
-			*finishReasons = append(*finishReasons, reason)
-		}
-		for _, call := range choice.Delta.ToolCalls {
-			if name := strings.TrimSpace(call.Function.Name); name != "" {
-				*toolNames = append(*toolNames, name)
-			}
+	if event.Type != "response.completed" && event.Type != "response.incomplete" && event.Type != "response.failed" {
+		return
+	}
+	reason := "stop"
+	for _, item := range event.Response.Output {
+		if item.Type == "function_call" {
+			*toolNames = append(*toolNames, item.Name)
+			reason = "tool_calls"
 		}
 	}
+	if event.Type == "response.incomplete" {
+		reason = "length"
+	}
+	if event.Type == "response.failed" {
+		reason = "error"
+	}
+	*finishReasons = append(*finishReasons, reason)
 }
 
 func shortHash(value string) string {
