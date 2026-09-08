@@ -66,7 +66,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
   return {
     thread_id: 'thread-live',
     title: 'Live task',
-    title_status: 'ready',
+    title_status: 'ready', title_generation: 1,
     model_id: 'default/model',
     working_dir: '/workspace/redeven',
     settings_revision: 1,

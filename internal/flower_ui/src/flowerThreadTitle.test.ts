@@ -12,7 +12,7 @@ describe('Flower thread titles', () => {
 
   it('keeps untitled persisted forks visible after detail, summary refresh, and reconnect', () => {
     const thread = {
-      thread_id: 'thread-12345678', title: '', title_status: 'unset', messages: [],
+      thread_id: 'thread-12345678', title: '', title_status: 'unset', title_generation: 0, messages: [],
       updated_at_ms: 1, settings_revision: 1,
       read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } },
     } as unknown as FlowerThreadSnapshot;

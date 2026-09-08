@@ -10,7 +10,7 @@ import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 const baseSummary: FlowerSubagentSummary = {
   parent_thread_id: 'parent-1',
   thread_id: 'child-1',
-  task_name: 'Review boundary',
+  task_name: 'Review boundary', title: 'Review boundary', title_status: 'ready' as const, title_generation: 1,
   agent_type: 'reviewer',
   status: 'running',
   can_send_input: false,

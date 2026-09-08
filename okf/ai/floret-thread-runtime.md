@@ -68,6 +68,12 @@ canonical permission snapshot before model dispatch.
 
 Redeven keeps one typed adapter over the published Floret v7 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
+Published Floret v7.5.0 exposes existing `ThreadSummary.TitleGeneration` with
+canonical title text and status. Redeven forwards the complete snapshot in HTTP
+and live summaries, including child details. No product store owns title state;
+no schema migration or title regeneration is required. The UI ordering contract
+is documented in [Flower live timeline](../ui/flower-live-timeline.md).
+
 Floret title events are settlement notifications, not a second title source.
 The synchronous event sink requests one Service-owned, per-thread coalesced
 summary publication and returns without reading `ThreadService`. That publisher

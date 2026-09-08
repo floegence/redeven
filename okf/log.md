@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-09-08: Canonical Flower title synchronization
+
+- Adopt published Floret v7.5.0 title generation at compatibility epoch 11.
+- Give ThreadCache summaries sole title ownership and compose detail titles on
+  read. Runtime body updates cannot overwrite titles; late responses use the
+  same generation/status merge. Existing conversation data is unchanged.
+- Cover title/body interleaving, equal runtime versions, manual rename, retries,
+  cache eviction, two windows, and browser interaction.
+
+
+
 ## 2026-09-08 — Web search presentation
 
 Adopt published Floret v7.4.0 web operation facts. Share concise search, page,

@@ -68,7 +68,7 @@ func TestCreateThreadReturnsReadyCanonicalTitle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if thread.Title != "Created title" || thread.TitleStatus != string(flruntime.ThreadTitleStatusReady) {
+	if thread.Title != "Created title" || thread.TitleStatus != string(flruntime.ThreadTitleStatusReady) || thread.TitleGeneration != 1 {
 		t.Fatalf("created title projection = (%q, %q), want (%q, %q)", thread.Title, thread.TitleStatus, "Created title", flruntime.ThreadTitleStatusReady)
 	}
 }
@@ -88,7 +88,7 @@ func TestForkThreadReturnsReadyCanonicalTitle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if forked.Title != "Forked title" || forked.TitleStatus != string(flruntime.ThreadTitleStatusReady) {
+	if forked.Title != "Forked title" || forked.TitleStatus != string(flruntime.ThreadTitleStatusReady) || forked.TitleGeneration <= 0 {
 		t.Fatalf("forked title projection = (%q, %q), want (%q, %q)", forked.Title, forked.TitleStatus, "Forked title", flruntime.ThreadTitleStatusReady)
 	}
 }

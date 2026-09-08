@@ -73,7 +73,7 @@ function threadView(overrides: Record<string, unknown> = {}) {
   return {
     thread_id: 'thread-1',
     title: 'Conversation',
-    title_status: 'ready',
+    title_status: 'ready', title_generation: 1,
     model_id: 'default/gpt-4.1',
     run_status: 'idle',
     working_dir: '/workspace/redeven',
@@ -302,7 +302,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     expect(mapped).toMatchObject({
       thread_id: 'thread-1',
-      title_status: 'ready',
+      title_status: 'ready', title_generation: 1,
       home_runtime_id: 'env:local-environment',
       home_runtime_kind: 'local_environment',
       source_label: 'Local Environment',
@@ -946,7 +946,7 @@ describe('Local Environment Flower surface adapter', () => {
       return {
         client_request_id: 'fork-request',
         thread: {
-          thread_id: 'fork-result', title: 'Source · Fork', title_status: 'ready',
+          thread_id: 'fork-result', title: 'Source · Fork', title_status: 'ready', title_generation: 1,
           run_status: 'idle', created_at_unix_ms: 1, updated_at_unix_ms: 2,
           read_status: readStatus(), model_id: 'default/gpt-4.1', working_dir: '/workspace',
         },

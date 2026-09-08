@@ -8,7 +8,7 @@ import { flowerRunProgress } from './flowerLiveProgress';
 
 function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnapshot {
   return {
-    thread_id: 'thread-live', title: 'Live task', title_status: 'ready', model_id: 'model', working_dir: '/',
+    thread_id: 'thread-live', title: 'Live task', title_status: 'ready', title_generation: 1, model_id: 'model', working_dir: '/',
     settings_revision: 1, created_at_ms: 1, updated_at_ms: 2, status: 'running', active_run_id: 'run-live',
     run_progress: { phase: 'waiting_response', run_id: 'run-live', turn_id: 'turn-live' },
     source_label: 'local', target_labels: [], messages: [],

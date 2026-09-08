@@ -85,7 +85,7 @@ History is requested only by a mounted semantic Runtime when its user scrolls or
 
 # Boundaries
 
-Compatibility depends on these published transport and terminal interfaces staying aligned. Redeven compatibility epoch 10 requires Desktop and Runtime v0.12.0 or newer and upgrades from epoch 9 only. Replacing or bypassing them can break placement multiplexing, liveness teardown, bounded RPC, TLS admission, terminal ownership, Presentation ordering, history generation, controller arbitration, or session lifecycle. History and session diagnostics are observability only; neither Redeven nor Floeterm uses session count to reject creation, close a PTY, or pause a running session.
+Compatibility depends on these published transport and terminal interfaces staying aligned. Redeven compatibility epoch 11 requires Desktop and Runtime v0.12.0 or newer and upgrades from epochs 9 and 10. Replacing or bypassing them can break placement multiplexing, liveness teardown, bounded RPC, TLS admission, terminal ownership, Presentation ordering, history generation, controller arbitration, or session lifecycle. History and session diagnostics are observability only; neither Redeven nor Floeterm uses session count to reject creation, close a PTY, or pause a running session.
 
 # Evidence
 
@@ -114,7 +114,7 @@ Compatibility depends on these published transport and terminal interfaces stayi
 - `redeven:internal/localui/secure_server.go` - Redeven owns the HTTPS and independent Flowersec WSS listener boundary.
 - `redeven:internal/localui/device_ca.go` - Local UI startup validates the CA identity and creates an ephemeral exact-SAN leaf without claiming client-side trust.
 - `redeven:internal/runtimeproxy/runtimeproxy.go:15` - Redeven declares the three embedding-policy response headers blocked by its product adapter.
-- `redeven:internal/runtimeservice/compatibility_contract.json:2` - Local UI exposure requires compatibility epoch 10 and a matched v0.12.0 Desktop and Runtime pair.
+- `redeven:internal/runtimeservice/compatibility_contract.json:2` - Local UI exposure requires compatibility epoch 11 and a matched v0.12.0 Desktop and Runtime pair.
 - `redeven:internal/terminal/semantic_history_rpc_test.go` - Deterministic fixtures verify viewport requests, continuation chunks, direct targets, lane isolation, generation fencing, and RPC payload budgets.
 - `redeven:internal/envapp/ui_src/scripts/terminalCarrierRunnerPolicy.node-test.mjs:1` - Carrier policy fixes automatic headless ownership, explicit diagnostics, and display-server independence.
 - `redeven:scripts/check_renderer_e2e.sh:1` - The exact-main renderer gate runs the 64 KiB and 448 KiB process carrier classes.

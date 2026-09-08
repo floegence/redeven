@@ -146,20 +146,20 @@ func TestAutomaticTitleSettlementPublishesCanonicalWorkspaceSummary(t *testing.T
 				t.Fatal("automatic title provider request did not start")
 			}
 			pending := nextFlowerTitleSummary(t, subscription, thread.ThreadID, flruntime.ThreadTitleStatusPending)
-			if pending.Title != "First user request" {
+			if pending.Title != "First user request" || pending.TitleGeneration != 2 {
 				t.Fatalf("pending title=%q, want fallback", pending.Title)
 			}
 
 			mock.release()
 			settled := nextFlowerTitleSummary(t, subscription, thread.ThreadID, test.finalStatus)
-			if settled.Title != test.finalTitle {
+			if settled.Title != test.finalTitle || settled.TitleGeneration != pending.TitleGeneration {
 				t.Fatalf("settled title=%q, want %q", settled.Title, test.finalTitle)
 			}
 			summary, err := threadSummaryFromRuntime(t.Context(), svc.threadRuntime, identity.ThreadID(thread.ThreadID))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if summary.Title != test.finalTitle || summary.TitleStatus != test.finalStatus {
+			if summary.Title != test.finalTitle || summary.TitleStatus != test.finalStatus || summary.TitleGeneration != settled.TitleGeneration {
 				t.Fatalf("canonical title=(%q, %q), want (%q, %q)", summary.Title, summary.TitleStatus, test.finalTitle, test.finalStatus)
 			}
 		})

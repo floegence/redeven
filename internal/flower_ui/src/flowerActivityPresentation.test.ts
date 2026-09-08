@@ -59,6 +59,7 @@ function approvalAction(overrides: Partial<FlowerApprovalAction> = {}): FlowerAp
 
 function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): FlowerSubagentSummary {
   return {
+    title: 'Child title', title_status: 'ready', title_generation: 1,
     parent_thread_id: 'parent-thread-1',
     thread_id: 'child-thread-1',
     task_name: 'Review API boundary',

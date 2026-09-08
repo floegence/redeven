@@ -6,7 +6,7 @@ function snapshot(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSn
   return {
     thread_id: 'thread-active-evidence',
     title: 'Active evidence',
-    title_status: 'ready',
+    title_status: 'ready', title_generation: 1,
     model_id: 'provider/model',
     working_dir: '/workspace',
     settings_revision: 1,

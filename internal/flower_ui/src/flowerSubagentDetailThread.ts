@@ -1,4 +1,5 @@
 import type { FlowerSubagentDetail, FlowerThreadReadStatus, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import { threadTitleSnapshot } from './threadTitleSnapshot';
 import { trimString } from './flowerSurfaceModel';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 
@@ -22,8 +23,7 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null)
   const updatedAt = Math.max(0, Math.floor(Number(summary.updated_at_ms ?? 0)));
   const base: FlowerThreadSnapshot = {
     thread_id: threadID,
-    title,
-    title_status: 'ready',
+    ...threadTitleSnapshot(summary),
     model_id: '',
     working_dir: '',
     settings_revision: 0,

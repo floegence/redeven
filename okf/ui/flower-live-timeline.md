@@ -18,7 +18,7 @@ stream.
 
 # Contract
 
-`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, state-bearing action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those three authorities independently, so an unchanged runtime view cannot discard newer product metadata.
+`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, state-bearing action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those authorities independently. Canonical title text, status, and generation have one owner in the summary record; cached details store no title and compose it from that record when read. An unchanged runtime view cannot discard newer product metadata or titles.
 
 Flower read state is a Redeven-owned per-user activity revision watermark. Requests contain only the displayed `activity_revision`; equal or older acknowledgements are valid and cannot advance beyond current activity, while a future revision is rejected. The browser keeps one per-thread, per-selection-cycle coordinator: one request may be in flight, only the greatest newer revision remains pending, and a failed revision is not retried until a newer revision or a new genuine presentation cycle. Signature, prompt, message-time, polling, timer, and error-class retry paths do not exist.
 
@@ -150,14 +150,19 @@ permission change applies only to later tool operations; running tools and
 already-created approvals are not reconsidered.
 
 Floret installs a canonical fallback title with the first accepted user message.
-Automatic-title pending and failure summaries retain it, provider success
-replaces it through the existing summary stream, and a host rename remains
-authoritative. Flower never renders an untitled label: list and switcher rows
-without a canonical title are omitted, while a legacy detail snapshot with an
-empty title may derive the same whitespace-normalized, 200-rune fallback from
-its first canonical user message or first attachment/reference label. The
-selected header reads the latest summary title before its cached detail title,
-so a provider update cannot flash empty or wait for transcript replacement.
+Automatic-title pending and failure summaries retain it. Flower consumes title,
+status, and `title_generation` as one canonical snapshot from the published
+Floret API. A higher generation wins; within one generation pending may settle
+to ready or failed. Late pending snapshots cannot replace a terminal title, and
+conflicting terminal snapshots fail explicitly without replacing accepted data.
+
+ThreadCache summaries are the only browser title owner. List, detail, creation,
+fork, rename, and live-summary responses use one title merge. Runtime current
+views and adjunct updates cannot author titles. Detail reads compose the title
+from the summary without persisting another copy, so title-only events update
+headers and lists without fetching history or changing selection, unread state,
+or list order. Untitled persisted threads remain visible with a localized label
+and short ThreadID. Display labels never become canonical titles.
 
 # Boundaries
 
@@ -182,5 +187,5 @@ so a provider update cannot flash empty or wait for transcript replacement.
 - `redeven:internal/flower_ui/src/chat/flowerContextPresentation.test.ts` - Covers cache-hit formula, unavailable data, exact 100 percent, and near-perfect rounding.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Cold-load deduplication, latest-revision coalescing, explicit failure, retry, and stale-selection coverage.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Covers persistent bottom-dock sync errors, blocked submission, retained draft and Stop, successful Retry, and control-failure recovery.
-- `redeven:internal/flower_ui/src/flowerThreadTitle.ts` - Shared canonical title consumption and legacy first-message derivation.
+- `redeven:internal/flower_ui/src/flowerThreadTitle.ts` - Canonical title display without history-derived substitutes.
 - `redeven:internal/ai/flower_live_stream_test.go` - Complete baseline, byte-budget, oversized-frame, terminal-state, and reconnect coverage.

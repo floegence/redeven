@@ -220,7 +220,9 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
 
 function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetail {
   if (!raw.detail?.current || !raw.detail.summary) throw new Error('Missing subagent detail.');
-  return raw.detail;
+  const summary = mapFlowerSubagents([raw.detail.summary], 'subagent.detail.summary')?.[0];
+  if (!summary) throw new Error('Flower contract error: missing subagent summary.');
+  return { ...raw.detail, summary };
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {

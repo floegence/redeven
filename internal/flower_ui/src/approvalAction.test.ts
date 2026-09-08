@@ -10,7 +10,7 @@ const action = (overrides: Partial<FlowerApprovalAction> = {}): FlowerApprovalAc
 } as FlowerApprovalAction);
 
 const thread = (actions: readonly FlowerApprovalAction[]): FlowerThreadSnapshot => ({
-  thread_id: 'thread-1', title: 'Approval', title_status: 'ready', model_id: 'model', working_dir: '/',
+  thread_id: 'thread-1', title: 'Approval', title_status: 'ready', title_generation: 1, model_id: 'model', working_dir: '/',
   settings_revision: 1,
   created_at_ms: 1, updated_at_ms: 2, status: 'waiting_approval', source_label: 'Local', target_labels: [], messages: [],
   approval_actions: actions,

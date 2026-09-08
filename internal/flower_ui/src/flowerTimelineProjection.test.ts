@@ -66,6 +66,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     },
     ...overrides,
     title_status: overrides.title_status ?? 'ready',
+    title_generation: overrides.title_generation ?? (overrides.title_status === 'unset' ? 0 : 1),
   };
 }
 
