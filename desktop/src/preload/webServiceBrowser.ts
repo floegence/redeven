@@ -12,12 +12,57 @@ import {
   type DesktopWebServiceBrowserState,
 } from '../shared/desktopWebServiceBrowserIPC';
 
+import {
+  DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_THEME_UPDATED_CHANNEL,
+  normalizeDesktopThemeSnapshot,
+} from '../shared/desktopThemeIPC';
+import {
+  DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL,
+} from '../shared/windowChromeIPC';
+import {
+  desktopWindowChromeCSSVariables,
+  normalizeDesktopWindowChromeSnapshot,
+} from '../shared/windowChromeContract';
+
+// The trusted toolbar observes Desktop appearance without exposing a page bridge.
+function installAppearanceSubscription(): void {
+  const applyTheme = (value: unknown): void => {
+    const snapshot = normalizeDesktopThemeSnapshot(value);
+    if (!snapshot || !document.documentElement) return;
+    document.documentElement.dataset.floeShellTheme = snapshot.activeShellTheme;
+    document.documentElement.style.colorScheme = snapshot.resolvedTheme;
+  };
+  const applyChrome = (value: unknown): void => {
+    const snapshot = normalizeDesktopWindowChromeSnapshot(value);
+    const root = document.documentElement;
+    if (!snapshot || !root) return;
+    root.dataset.redevenDesktopWindowChromeMode = snapshot.mode;
+    root.dataset.redevenDesktopWindowControlsSide = snapshot.controlsSide;
+    for (const [name, value] of Object.entries(desktopWindowChromeCSSVariables(snapshot))) {
+      root.style.setProperty(name, value);
+    }
+  };
+  const readAppearance = (): void => {
+    applyTheme(ipcRenderer.sendSync(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL));
+    applyChrome(ipcRenderer.sendSync(DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL));
+  };
+  ipcRenderer.on(DESKTOP_THEME_UPDATED_CHANNEL, (_event, value) => applyTheme(value));
+  ipcRenderer.on(DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL, (_event, value) => applyChrome(value));
+  readAppearance();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', readAppearance, { once: true });
+  }
+}
+
 function elementByID<T extends HTMLElement>(id: string): T | null {
   const element = document.getElementById(id);
   return element instanceof HTMLElement ? element as T : null;
 }
 
 function bootstrap(): void {
+  const title = elementByID<HTMLParagraphElement>('browser-title');
   const form = elementByID<HTMLFormElement>('browser-form');
   const address = elementByID<HTMLInputElement>('browser-address');
   const back = elementByID<HTMLButtonElement>('browser-back');
@@ -29,7 +74,7 @@ function bootstrap(): void {
   const progress = elementByID<HTMLDivElement>('browser-progress');
   const reloadIcon = reload?.querySelector<SVGElement>('.reload-icon') ?? null;
   const stopIcon = reload?.querySelector<SVGElement>('.stop-icon') ?? null;
-  if (!form || !address || !back || !forward || !reload || !developerTools || !openExternal || !status || !progress) return;
+  if (!title || !form || !address || !back || !forward || !reload || !developerTools || !openExternal || !status || !progress) return;
 
   let state = normalizeDesktopWebServiceBrowserState(null);
   let editingAddress = false;
@@ -52,6 +97,8 @@ function bootstrap(): void {
     status.textContent = next.error_message ?? '';
     status.dataset.visible = String(Boolean(next.error_message));
     document.title = next.title ? `${next.title} - ${browserTitle}` : browserTitle;
+    title.textContent = document.title;
+    title.title = document.title;
   };
 
   reload.dataset.reloadLabel = reload.getAttribute('title') ?? '';
@@ -81,8 +128,11 @@ function bootstrap(): void {
     address.select();
   });
   address.addEventListener('blur', () => {
-    editingAddress = false;
-    if (address.value.trim() === '') address.value = state.address;
+    // An unfinished address remains a draft while the user visits another window.
+    if (address.value.trim() === '' || address.value === state.address) {
+      editingAddress = false;
+      address.value = state.address;
+    }
   });
   address.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -103,6 +153,8 @@ function bootstrap(): void {
     render(normalizeDesktopWebServiceBrowserState(value));
   });
 }
+
+installAppearanceSubscription();
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootstrap, { once: true });

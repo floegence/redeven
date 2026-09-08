@@ -5,9 +5,11 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 import electronPath from 'electron';
+import { build } from 'esbuild';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { buildDesktopPreloads } from './desktopPreloadBundle';
+import { desktopShellThemeCatalog } from '../main/desktopTheme';
 
 const tempDirs: string[] = [];
 const activeRuntimeProcesses = new Set<ChildProcess>();
@@ -311,6 +313,39 @@ describe('desktop preload runtime', () => {
       ),
     ).toBe(payload);
   });
+
+  it('keeps Web Service chrome unified and preserves drafts across every published theme in Electron', async () => {
+    const runtimeCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-web-service-chrome-'));
+    tempDirs.push(runtimeCwd);
+    const outDir = path.join(runtimeCwd, 'preload');
+    await buildDesktopPreloads({ outDir });
+    const runtimeScript = path.join(runtimeCwd, 'runtime.cjs');
+    await build({
+      stdin: {
+        contents: `
+          import { app } from 'electron';
+          import { verifyWebServiceBrowserRuntime } from './src/build/fixtures/webServiceBrowserRuntime';
+          app.setPath('userData', process.env.${electronRuntimeUserDataEnvName});
+          app.whenReady().then(async () => {
+            const result = await verifyWebServiceBrowserRuntime(process.env.${electronRuntimePreloadEnvName}, process.env.REDEVEN_DESKTOP_TEST_SCREENSHOT_DIR);
+            await new Promise(resolve => process.stdout.write('${electronRuntimePayloadStartMarker}' + JSON.stringify(result) + '${electronRuntimePayloadEndMarker}', resolve));
+            app.quit();
+          }).catch(error => { console.error(error); app.exit(1); });
+        `,
+        resolveDir: process.cwd(), loader: 'ts',
+      },
+      outfile: runtimeScript, bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
+    });
+    const userDataDir = path.join(runtimeCwd, 'user-data');
+    const launch = getElectronRuntimeLaunch(process.platform, String(electronPath), runtimeScript,
+      Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY), userDataDir, randomUUID());
+    const stdout = await runElectronRuntimeProcess(launch, runtimeCwd, {
+      ...process.env,
+      [electronRuntimePreloadEnvName]: path.join(outDir, 'web-service-browser.js'),
+      [electronRuntimeUserDataEnvName]: userDataDir,
+    }, 'Web Service appearance');
+    expect(JSON.parse(extractElectronRuntimePayload(stdout))).toEqual({ presets: Object.keys(desktopShellThemeCatalog).length, loadCounts: [1, 1], toolbarLoads: [1, 1] });
+  }, electronRuntimeIntegrationTestTimeoutMs);
 
   it('exposes the expected desktop bridges for utility and session preload surfaces', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preload-runtime-'));

@@ -267,6 +267,7 @@ import {
 } from './navigation';
 import { resolveBundledRuntimePath, resolveDesktopBundleRoot, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
+import { webServiceBrowserContentBounds } from '../shared/webServiceBrowserLayout';
 import { openWebServiceInSystemBrowser } from './webServiceBrowserExternal';
 import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
 import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcuts';
@@ -945,7 +946,7 @@ type DesktopWebServiceBrowserController = Readonly<{
   contentView: WebContentsView;
   navigate: (address: string) => DesktopWebServiceBrowserActionResponse;
   perform: (action: DesktopWebServiceBrowserAction) => Promise<DesktopWebServiceBrowserActionResponse>;
-  refreshTheme: () => void;
+  refreshUnavailableTheme: () => void;
   snapshot: () => DesktopWebServiceBrowserState;
   accessMode: NormalizedDesktopShellOpenWebServiceWindowRequest['access_mode'];
   targetURL: string;
@@ -954,9 +955,9 @@ type DesktopWebServiceBrowserController = Readonly<{
 const webServiceBrowserByToolbarWebContentsID = new Map<number, DesktopWebServiceBrowserController>();
 const webServiceWindowOpenTasks = new Map<string, Promise<DesktopShellOpenWebServiceWindowResponse>>();
 
-function refreshWebServiceBrowserDocuments(): void {
+function refreshWebServiceUnavailableDocuments(): void {
   for (const controller of webServiceBrowserByToolbarWebContentsID.values()) {
-    controller.refreshTheme();
+    controller.refreshUnavailableTheme();
   }
 }
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
@@ -3802,7 +3803,7 @@ function desktopThemeState(): DesktopThemeState {
       process.platform,
       () => {
         refreshCodespaceLoadingDocuments();
-        refreshWebServiceBrowserDocuments();
+        refreshWebServiceUnavailableDocuments();
       },
     );
   }
@@ -8352,7 +8353,6 @@ function clearWebServiceWindowPartition(partition: string): void {
   ]).catch(() => undefined);
 }
 
-const WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT = 54;
 const WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS = 600;
 
 function webServiceBrowserDocumentURL(): string {
@@ -8412,7 +8412,6 @@ function createWebServiceBrowserController(
     stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
     role: 'web_service_child',
     diagnostics: sessionRecord.diagnostics,
-    chrome: 'native',
     preload: 'web_service_browser',
     stealAppFocus: true,
     onClosed: (closedWindow) => {
@@ -8449,12 +8448,7 @@ function createWebServiceBrowserController(
   const layoutContent = (): void => {
     if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
     const [width, height] = win.getContentSize();
-    contentView.setBounds({
-      x: 0,
-      y: WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT,
-      width: Math.max(1, width),
-      height: Math.max(1, height - WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT),
-    });
+    contentView.setBounds(webServiceBrowserContentBounds(width, height));
   };
   win.on('resize', layoutContent);
   layoutContent();
@@ -8526,9 +8520,8 @@ function createWebServiceBrowserController(
     }
     publishState();
   };
-  const refreshTheme = (): void => {
+  const refreshUnavailableTheme = (): void => {
     if (win.isDestroyed()) return;
-    void win.loadURL(webServiceBrowserDocumentURL());
     if (!unavailablePageURL || contentView.webContents.isDestroyed()) return;
     unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);
     loadingUnavailablePage = true;
@@ -8727,7 +8720,7 @@ function createWebServiceBrowserController(
     contentView,
     navigate,
     perform,
-    refreshTheme,
+    refreshUnavailableTheme,
     snapshot,
     accessMode: request.access_mode,
     targetURL: request.target_url,
