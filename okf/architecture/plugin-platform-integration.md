@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v3.0.28 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v3.0.29 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v3.0.28` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v3.0.29` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux or Darwin runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -95,7 +95,7 @@ digests. A declaration mismatch refreshes the market before a new attempt.
 Confirmed retained-data deletion treats an
 already-absent binding as success and reconciles an unknown mutation outcome
 against the exact generation and binding revision before reinstalling.
-ReDevPlugin `v3.0.28` also preserves the deleted instance's durable revoke-epoch
+ReDevPlugin `v3.0.29` also preserves the deleted instance's durable revoke-epoch
 floor across both retained-data and delete-data reinstalls. Previously issued
 credentials therefore remain revoked, while the newly installed instance can
 open surfaces with credentials minted at the current floor.
@@ -148,7 +148,7 @@ user pin.
 ## Runtime boundary
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`v3.0.28`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+`v3.0.29`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux and Darwin runtime bytes are built
 with Rust 1.88.0 from the attested release manifest and travel with SBOM,
 provenance, notices, and signature evidence. Linux admission requires the
@@ -303,7 +303,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v3.0.28` assembly.
+This concept owns only Redeven's concrete `v3.0.29` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout

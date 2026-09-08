@@ -128,7 +128,7 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v3.0.28` release manifest. The
+Redeven consumes only the coordinated ReDevPlugin `v3.0.29` release manifest. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree. Local-wiring scans cover maintained source, scripts,
@@ -275,12 +275,25 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction and file export are releasable only through the `v3.0.28`
+Workbench plugin interaction and file export are releasable only through the `v3.0.29`
 source/port-bound interaction ownership and exact-surface close contracts. The
 gate rejects overlays, pointer-event switching, copied interaction DTOs, a
 second bridge, session-wide close fallback, placement persistence before close,
 local disposal presented as server revocation, or an export path that bypasses
 the released action-window, payload, cancellation, and cleanup contracts.
+
+Plugin opening changes also run `scripts/smoke_desktop_plugin_opening.mjs` with
+an isolated Desktop smoke configuration and the published Weather and Mind Map
+installed through Plugin Center. The runner uses the current checkout's
+Playwright package and requires task-owned state, user-data, cache, temporary,
+and report roots plus unique Local UI, CDP, and inspector ports. It removes only
+its two test plugin placements before the opening scenarios. Invoke it as
+`node scripts/smoke_desktop_plugin_opening.mjs /tmp/redeven-plugin-opening/config.json`.
+Evidence records real first commits while hidden or offscreen, retained iframe
+identities across mode and viewport changes, exact 35% and 100% zoom, restored
+canvas allocation, plugin actions, a genuine default-deadline timeout, lost
+single-surface close response reconciliation, and saved widget identity after
+reload. Mock containers do not satisfy this check.
 
 ## Other published boundaries
 

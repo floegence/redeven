@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows and pinned pages, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
-timestamp: 2026-07-29T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 ---
 # Summary
@@ -219,10 +219,25 @@ Each Activity window owns one fresh `PluginSurfaceSlot` and opens it only throug
 worker readiness, and first-commit boundary. Redeven creates no iframe,
 bootstrap, asset session, or bridge.
 
-Opening and closing show quiet placement-owned status layers. An opening or
-bridge failure replaces the iframe area with a recovery panel. Retry first
-retires the failed slot, then creates and opens a fresh slot; it never reuses the
-failed iframe, host, bridge, or surface instance.
+Short openings keep the content area steady. Delayed SDK progress shows a
+localized preparation, connection, access, startup, or content-loading status.
+Closing has its own quiet placement-owned status layer. An opening or bridge
+failure replaces the iframe area with a recovery panel; timeouts explain that
+the plugin took too long and offer Retry. Collapsed technical details contain
+the error and bounded SDK stage, elapsed time, and pending milestones. Copy
+diagnostics includes only the stable error code and those allowlisted fields;
+clipboard failure leaves selectable text and explicit feedback.
+
+Retry first retires the failed slot, then creates and opens a fresh slot; it
+never reuses the failed iframe, host, bridge, or surface instance. Unknown close
+outcomes keep the first failure and explain that Retry must finish exact cleanup
+before reopening. Pending cleanup disables duplicate retry input. Progress and
+copy callbacks from an old slot cannot change its replacement.
+
+The released SDK opens retained hidden, offscreen, and zero-size surfaces without
+waiting for browser paint. Actual worker first commit remains the opening
+boundary. Host mode, zoom, pan, and filtering keep healthy iframes mounted;
+visibility still controls interaction and lifecycle hints, never authority.
 
 The Shell owns the only Activity registry, exact-target deduplication, activation
 stack, bounded z-order, and geometry persistence. Reopening activates the stable

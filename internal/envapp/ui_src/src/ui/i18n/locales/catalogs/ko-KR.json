@@ -4891,6 +4891,17 @@
       "surfaceTitle": "플러그인 화면",
       "closeSurface": "플러그인 화면 닫기",
       "openingSurface": "플러그인 화면 여는 중...",
+      "surfaceTimedOut": "플러그인을 여는 데 시간이 너무 오래 걸립니다. 다시 시도하세요.",
+      "surfaceRetryCleanup": "이전 플러그인 화면이 닫혔는지 확인하지 못했습니다. 다시 시도하면 먼저 정리 작업을 완료합니다.",
+      "copySurfaceDiagnostics": "진단 정보 복사",
+      "copySurfaceDiagnosticsFailed": "복사할 수 없습니다. 위의 진단 텍스트를 선택할 수 있습니다.",
+      "openingStages": {
+        "preparing": "플러그인 준비 중…",
+        "connecting": "플러그인 연결 중…",
+        "authorizing": "플러그인 접근 권한 확인 중…",
+        "initializing": "플러그인 시작 중…",
+        "committing": "플러그인 콘텐츠 불러오는 중…"
+      },
       "closingSurface": "플러그인 화면 닫는 중...",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - {surface} 플러그인 콘텐츠",

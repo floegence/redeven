@@ -4891,6 +4891,17 @@
       "surfaceTitle": "Interface du plugin",
       "closeSurface": "Fermer l’interface du plugin",
       "openingSurface": "Ouverture de l’interface du plugin...",
+      "surfaceTimedOut": "Ce plugin a mis trop de temps à s’ouvrir. Réessayez.",
+      "surfaceRetryCleanup": "La fermeture de la vue précédente du plugin n’a pas pu être confirmée. La nouvelle tentative terminera d’abord le nettoyage.",
+      "copySurfaceDiagnostics": "Copier le diagnostic",
+      "copySurfaceDiagnosticsFailed": "Copie indisponible. Vous pouvez sélectionner le texte du diagnostic ci-dessus.",
+      "openingStages": {
+        "preparing": "Préparation du plugin…",
+        "connecting": "Connexion au plugin…",
+        "authorizing": "Vérification de l’accès au plugin…",
+        "initializing": "Démarrage du plugin…",
+        "committing": "Chargement du contenu du plugin…"
+      },
       "iframeUnavailable": "La fenêtre iframe du plugin est indisponible.",
       "surfaceFailed": "Échec du chargement de l’interface du plugin.",
       "surfaceCleanupFailed": "Le contenu du plugin est fermé, mais le nettoyage côté serveur n’a pas pu être confirmé. Laissez cette fenêtre ouverte ou mettez fin à la session des plugins pour rétablir le fonctionnement.",

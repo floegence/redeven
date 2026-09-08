@@ -4891,6 +4891,17 @@
       "surfaceTitle": "プラグインサーフェス",
       "closeSurface": "プラグインサーフェスを閉じる",
       "openingSurface": "プラグインサーフェスを開いています...",
+      "surfaceTimedOut": "プラグインを開くのに時間がかかりすぎています。もう一度お試しください。",
+      "surfaceRetryCleanup": "前のプラグイン画面が閉じたことを確認できませんでした。再試行時に、まず終了処理を完了します。",
+      "copySurfaceDiagnostics": "診断情報をコピー",
+      "copySurfaceDiagnosticsFailed": "コピーできません。上の診断テキストを選択してください。",
+      "openingStages": {
+        "preparing": "プラグインを準備中…",
+        "connecting": "プラグインに接続中…",
+        "authorizing": "プラグインへのアクセス権を確認中…",
+        "initializing": "プラグインを起動中…",
+        "committing": "プラグインのコンテンツを読み込み中…"
+      },
       "closingSurface": "プラグインサーフェスを閉じています...",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - {surface} のプラグインコンテンツ",

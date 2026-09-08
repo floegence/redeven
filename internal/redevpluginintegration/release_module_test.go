@@ -140,7 +140,7 @@ func officialMarketReleaseFixture(t *testing.T, pluginID, version, hashDigit str
 		TransportAssets: []pluginmarket.TransportAsset{{Locator: locator, ReleaseAsset: metadataAsset}},
 		SignerKeyID:     officialSigningKeyID,
 		Compatibility: pluginmarket.Compatibility{
-			MinRedevenVersion: "1.0.0", MinReDevPluginVersion: "3.0.28",
+			MinRedevenVersion: "1.0.0", MinReDevPluginVersion: "3.0.29",
 		},
 		ReleaseIdentityDigest: "sha256:" + digest,
 	}
