@@ -28,7 +28,9 @@ same platform instance. Retaining layout does not restore unsaved plugin memory.
 
 Plugin Center uses the current mode's management container. Workbench keeps a
 large retained dialog above its inert canvas, with the existing overlay, focus,
-and keyboard contracts. Search, filters, scroll, and selection survive closing.
+and keyboard contracts. Canvas shortcuts are suspended while the management
+dialog covers it or its mode is inactive. Search, filters, scroll, and selection
+survive closing.
 Successful placement dismisses management and focuses the component; placement
 failure retains management and error feedback. Activity retains its management
 page. Neither path creates a plugin-center canvas widget.

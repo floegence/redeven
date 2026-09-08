@@ -1433,7 +1433,7 @@ describe('EnvWorkbenchPage', () => {
     expect(surface.dataset.selectedWidgetId).toBe('');
   });
 
-  it('maps Escape to the global min-scale action when no widget is selected', async () => {
+  it.each([true, false])('routes Escape only when canvas input is enabled: %s', async (inputEnabled) => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1455,7 +1455,7 @@ describe('EnvWorkbenchPage', () => {
       ],
       widget_states: [],
     });
-    mount(() => <EnvWorkbenchPage />, host);
+    mount(() => <EnvWorkbenchPage inputEnabled={inputEnabled} />, host);
     await flushMicrotasks();
     setMockCanvasFrameRect(host, 1200, 800);
     surfaceApiMocks.lastSetState((previous: any) => ({
@@ -1474,15 +1474,15 @@ describe('EnvWorkbenchPage', () => {
     window.dispatchEvent(escapeEvent);
     await flushMicrotasks();
 
-    expect(escapeEvent.defaultPrevented).toBe(true);
+    expect(escapeEvent.defaultPrevented).toBe(inputEnabled);
     expect(surface.dataset.viewportScale).toBe('1.25');
 
     vi.advanceTimersByTime(210);
     await flushMicrotasks();
 
-    expect(Number(surface.dataset.viewportScale)).toBeCloseTo(0.45, 6);
-    expect(Number(surface.dataset.viewportX)).toBeCloseTo(448.8, 6);
-    expect(Number(surface.dataset.viewportY)).toBeCloseTo(299.2, 6);
+    expect(Number(surface.dataset.viewportScale)).toBeCloseTo(inputEnabled ? 0.45 : 1.25, 6);
+    expect(Number(surface.dataset.viewportX)).toBeCloseTo(inputEnabled ? 448.8 : 180, 6);
+    expect(Number(surface.dataset.viewportY)).toBeCloseTo(inputEnabled ? 299.2 : 120, 6);
   });
 
   it('ignores Escape canvas minimize when a widget is selected', async () => {

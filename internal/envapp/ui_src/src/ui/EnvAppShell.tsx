@@ -4934,6 +4934,7 @@ export function EnvAppShell() {
       >
         <Show when={!accessGateVisible() || recoveryVisible()}>
           <EnvWorkbenchPage
+            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterOpen() && !recoveryVisible()}
             dockItems={pluginDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
             dockActions={[{
