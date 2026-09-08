@@ -4906,6 +4906,17 @@
       "surfaceTitle": "插件界面",
       "closeSurface": "关闭插件界面",
       "openingSurface": "正在打开插件界面...",
+      "surfaceTimedOut": "插件打开时间过长，请重试。",
+      "surfaceRetryCleanup": "尚未确认上一个插件界面已关闭。重试时会先完成清理。",
+      "copySurfaceDiagnostics": "复制诊断信息",
+      "copySurfaceDiagnosticsFailed": "暂时无法复制，你可以选中上方的诊断文本。",
+      "openingStages": {
+        "preparing": "正在准备插件…",
+        "connecting": "正在连接插件…",
+        "authorizing": "正在检查插件访问权限…",
+        "initializing": "正在启动插件…",
+        "committing": "正在加载插件内容…"
+      },
       "iframeUnavailable": "插件 iframe 窗口不可用。",
       "surfaceFailed": "插件界面加载失败。",
       "surfaceCleanupFailed": "插件内容已关闭，但无法确认服务端清理是否完成。请保持此窗口打开，或结束插件会话以恢复正常使用。",

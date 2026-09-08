@@ -4994,6 +4994,17 @@
       "surfaceTitle": "Окно плагина",
       "closeSurface": "Закрыть окно плагина",
       "openingSurface": "Открытие окна плагина...",
+      "surfaceTimedOut": "Открытие плагина заняло слишком много времени. Повторите попытку.",
+      "surfaceRetryCleanup": "Не удалось подтвердить закрытие предыдущего представления плагина. При повторной попытке сначала завершится очистка.",
+      "copySurfaceDiagnostics": "Копировать диагностику",
+      "copySurfaceDiagnosticsFailed": "Копирование недоступно. Можно выделить текст диагностики выше.",
+      "openingStages": {
+        "preparing": "Подготовка плагина…",
+        "connecting": "Подключение плагина…",
+        "authorizing": "Проверка доступа к плагину…",
+        "initializing": "Запуск плагина…",
+        "committing": "Загрузка содержимого плагина…"
+      },
       "closingSurface": "Закрытие окна плагина...",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - {surface}: содержимое плагина",

@@ -4891,6 +4891,17 @@
       "surfaceTitle": "Plugin-Oberfläche",
       "closeSurface": "Plugin-Oberfläche schließen",
       "openingSurface": "Plugin-Oberfläche wird geöffnet...",
+      "surfaceTimedOut": "Das Öffnen dieses Plugins hat zu lange gedauert. Versuche es erneut.",
+      "surfaceRetryCleanup": "Das Schließen der vorherigen Plugin-Ansicht konnte nicht bestätigt werden. Beim erneuten Versuch wird zuerst die Bereinigung abgeschlossen.",
+      "copySurfaceDiagnostics": "Diagnosedaten kopieren",
+      "copySurfaceDiagnosticsFailed": "Kopieren nicht möglich. Du kannst den Diagnosetext oben auswählen.",
+      "openingStages": {
+        "preparing": "Plugin wird vorbereitet…",
+        "connecting": "Plugin wird verbunden…",
+        "authorizing": "Plugin-Zugriff wird geprüft…",
+        "initializing": "Plugin wird gestartet…",
+        "committing": "Plugin-Inhalt wird geladen…"
+      },
       "closingSurface": "Plugin-Oberfläche wird geschlossen...",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - Plugin-Inhalt für {surface}",

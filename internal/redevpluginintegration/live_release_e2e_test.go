@@ -61,7 +61,7 @@ func TestLiveOfficialMarketReleaseInstallCompletes(t *testing.T) {
 	}
 	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
 		Origin: "https://plugins.redeven.com", CachePath: cachePath,
-		RedevenVersion: "1.0.0", ReDevPluginVersion: "3.0.28",
+		RedevenVersion: "1.0.0", ReDevPluginVersion: "3.0.29",
 	})
 	if err != nil {
 		t.Fatal(err)

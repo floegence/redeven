@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { PluginBridgeError, PluginSurfaceHost } from '@floegence/redevplugin-ui';
+import type { PluginBridgeError, PluginSurfaceHost, PluginSurfaceOpeningProgress } from '@floegence/redevplugin-ui';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   AlertTriangle: () => <span />,
+  Copy: () => <span />,
   Loader2: () => <span />,
   Refresh: () => <span />,
   X: () => <span />,
@@ -28,6 +29,7 @@ let dispose: (() => void) | undefined;
 
 beforeEach(() => {
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, get: () => undefined });
 });
 
 afterEach(() => {
@@ -88,6 +90,84 @@ async function flushAsync(): Promise<void> {
 }
 
 describe('PluginSurfaceBody', () => {
+  const progress = {
+    phase: 'opening' as const, stage: 'initializing' as const,
+    elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['worker_ready'],
+  } satisfies PluginSurfaceOpeningProgress;
+
+  it('shows delayed SDK progress, then removes it without replacing a ready surface', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    let resolveOpen!: (value: PluginSurfaceHost) => void;
+    vi.mocked(coordinator.open).mockImplementation(() => new Promise((resolve) => { resolveOpen = resolve; }));
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible onRetirementError={vi.fn()} />, mount);
+    const options = vi.mocked(coordinator.open).mock.calls[0]![2]!;
+    expect(mount.querySelector('[data-plugin-surface-opening]')).toBeNull();
+    options.onOpeningProgress?.(progress);
+    expect(mount.querySelector('[role="status"]')?.textContent).toContain('Starting plugin');
+    const committing = { ...progress, stage: 'committing' as const, pendingMilestones: ['first_commit'] } satisfies PluginSurfaceOpeningProgress;
+    options.onOpeningProgress?.(committing);
+    expect(mount.querySelector('[role="status"]')?.textContent).toContain('Loading plugin content');
+    resolveOpen(host);
+    await flushAsync();
+    options.onOpeningProgress?.(progress);
+    expect(mount.querySelector('[data-plugin-surface-opening]')).toBeNull();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(mount.querySelector('[data-plugin-surface-host]')?.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('copies bounded timeout diagnostics and preserves the first failure through cleanup and retry', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    const error = Object.assign(new Error('Plugin surface opening timed out'), {
+      errorCode: 'PLUGIN_BRIDGE_TIMEOUT', details: { ...progress, token: 'must-not-copy', nonce: 'must-not-copy' },
+    });
+    vi.mocked(coordinator.open).mockRejectedValueOnce(error).mockResolvedValueOnce(createHost());
+    const cleanupError = new Error('unknown close outcome');
+    vi.mocked(coordinator.release).mockRejectedValueOnce(cleanupError);
+    const onRetirementError = vi.fn();
+    const writeText = vi.fn(async (_text: string) => undefined);
+    vi.spyOn(navigator, 'clipboard', 'get').mockReturnValue({ writeText } as unknown as Clipboard);
+    dispose = render(() => <PluginSurfaceBody coordinator={coordinator} confirmationQueue={createConfirmationQueue()}
+      target={target} visible onRetirementError={onRetirementError} />, mount);
+    await flushAsync();
+    expect(mount.textContent).toContain('This plugin took too long to open');
+    (mount.querySelector('[data-plugin-surface-copy-diagnostics]') as HTMLButtonElement).click();
+    await flushAsync();
+    const copied = JSON.parse(writeText.mock.calls[0]![0]);
+    expect(copied).toEqual({ error_code: 'PLUGIN_BRIDGE_TIMEOUT', opening: {
+      stage: 'initializing', elapsedMs: 900, stageElapsedMs: 400, pendingMilestones: ['worker_ready'],
+    } });
+    expect(mount.textContent).toContain('Copied');
+    writeText.mockRejectedValueOnce(new Error('clipboard unavailable'));
+    (mount.querySelector('[data-plugin-surface-copy-diagnostics]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(mount.textContent).toContain('You can select the diagnostic text above');
+    (mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement).click();
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(onRetirementError).toHaveBeenCalledWith(cleanupError);
+    expect(mount.textContent).toContain('Retry will finish cleanup first');
+    expect(mount.querySelector('[data-plugin-surface-diagnostics]')?.textContent).toBe(writeText.mock.calls[0]![0]);
+    let resolveRelease!: () => void;
+    vi.mocked(coordinator.release).mockImplementationOnce(() => new Promise((resolve) => { resolveRelease = resolve; }));
+    const retry = mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement;
+    retry.click();
+    retry.click();
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledOnce();
+    expect(retry.disabled).toBe(true);
+    resolveRelease();
+    await flushAsync();
+    expect(coordinator.open).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(coordinator.open).mock.calls[1]![0]).not.toBe(vi.mocked(coordinator.open).mock.calls[0]![0]);
+    expect(mount.querySelector('[data-plugin-surface-error]')).toBeNull();
+  });
+
   it('opens through the shared placement coordinator without exposing internal readiness loading', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);

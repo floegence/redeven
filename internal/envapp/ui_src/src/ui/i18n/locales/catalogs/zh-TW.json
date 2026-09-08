@@ -4906,6 +4906,17 @@
       "surfaceTitle": "外掛程式介面",
       "closeSurface": "關閉外掛程式介面",
       "openingSurface": "正在開啟外掛程式介面...",
+      "surfaceTimedOut": "外掛程式開啟時間過長，請重試。",
+      "surfaceRetryCleanup": "尚未確認上一個外掛程式介面已關閉。重試時會先完成清理。",
+      "copySurfaceDiagnostics": "複製診斷資訊",
+      "copySurfaceDiagnosticsFailed": "目前無法複製，你可以選取上方的診斷文字。",
+      "openingStages": {
+        "preparing": "正在準備外掛程式…",
+        "connecting": "正在連線至外掛程式…",
+        "authorizing": "正在檢查外掛程式存取權限…",
+        "initializing": "正在啟動外掛程式…",
+        "committing": "正在載入外掛程式內容…"
+      },
       "closingSurface": "正在關閉外掛程式介面...",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - {surface} 外掛程式內容",

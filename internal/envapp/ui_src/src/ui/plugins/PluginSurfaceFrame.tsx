@@ -3,7 +3,7 @@ import {
   type PluginSurfaceHost,
 } from '@floegence/redevplugin-ui';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, Loader2, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Copy, Loader2, Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 
@@ -13,6 +13,7 @@ import type { PluginSurfaceInteractionEvent, PluginSurfacePlacementCoordinator }
 import { createRedevenPluginSurfaceContext, pluginSurfaceContextFingerprint } from './pluginSurfaceContext';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
+import { surfaceOpeningFeedback, surfaceOpeningStageKeys, surfaceFailureDiagnostic, type SurfaceOpeningFeedback } from './pluginSurfaceOpeningFeedback';
 
 export type PluginSurfaceBodyProps = {
   coordinator: PluginSurfacePlacementCoordinator;
@@ -43,6 +44,12 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const [loadState, setLoadState] = createSignal<SurfaceLoadState>('opening');
   const [errorMessage, setErrorMessage] = createSignal('');
   const [retrying, setRetrying] = createSignal(false);
+  const [openingProgress, setOpeningProgress] = createSignal<SurfaceOpeningFeedback>();
+  const [openingFailure, setOpeningFailure] = createSignal<SurfaceOpeningFeedback>();
+  const [errorCode, setErrorCode] = createSignal('');
+  const [copyState, setCopyState] = createSignal<'idle' | 'copied' | 'failed'>('idle');
+  const [cleanupPending, setCleanupPending] = createSignal(false);
+  const diagnostic = () => surfaceFailureDiagnostic(errorCode(), openingFailure());
   const confirmationOwner: PluginConfirmationOwner = {
     pluginID: props.target.pluginID,
     displayName: props.target.displayName,
@@ -60,17 +67,25 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     firstTerminalError ??= error instanceof Error
       ? error
       : new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
-    const errorCode = 'errorCode' in firstTerminalError && typeof firstTerminalError.errorCode === 'string'
+    const code = 'errorCode' in firstTerminalError && typeof firstTerminalError.errorCode === 'string'
       ? firstTerminalError.errorCode
       : '';
+    setErrorCode(code);
+    setOpeningFailure(surfaceOpeningFeedback('details' in firstTerminalError ? firstTerminalError.details : undefined));
+    setOpeningProgress(undefined);
     setLoadState('error');
-    setErrorMessage(firstTerminalError.message || errorCode || i18n.t('uiCopy.plugin.surfaceFailed'));
+    setErrorMessage(firstTerminalError.message || code || i18n.t('uiCopy.plugin.surfaceFailed'));
     return { error: firstTerminalError, first };
   };
 
   const openFreshSurface = () => {
     setLoadState('opening');
     setErrorMessage('');
+    setErrorCode('');
+    setOpeningProgress(undefined);
+    setOpeningFailure(undefined);
+    setCopyState('idle');
+    setCleanupPending(false);
     setHost(undefined);
     firstTerminalError = undefined;
     const ownedSlot = PluginSurfaceSlot.create({ stage });
@@ -85,6 +100,10 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       onInteraction: props.onInteraction,
       onCleanupError: props.onRetirementError,
       surfaceContext: currentSurfaceContext,
+      onOpeningProgress(progress) {
+        if (!mounted || slot !== ownedSlot || firstTerminalError || loadState() !== 'opening') return;
+        setOpeningProgress(surfaceOpeningFeedback(progress));
+      },
       onError(error) {
         const terminal = recordTerminalError(ownedSlot, error);
         if (!terminal?.first) return;
@@ -97,6 +116,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       if (currentSurfaceContext.revision > initialSurfaceContextRevision) {
         openedHost.updateContext(currentSurfaceContext);
       }
+      setOpeningProgress(undefined);
       setLoadState('ready');
     }).catch((error: unknown) => {
       recordTerminalError(ownedSlot, error);
@@ -194,9 +214,20 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       openFreshSurface();
     } catch (error) {
       if (!mounted || slot !== failedSlot) return;
+      setCleanupPending(true);
       props.onRetirementError(error);
     } finally {
       if (mounted) setRetrying(false);
+    }
+  };
+
+  const copyDiagnostic = async () => {
+    const ownedSlot = slot;
+    try {
+      await navigator.clipboard.writeText(diagnostic());
+      if (mounted && slot === ownedSlot) setCopyState('copied');
+    } catch {
+      if (mounted && slot === ownedSlot) setCopyState('failed');
     }
   };
 
@@ -205,6 +236,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   return (
     <section
       data-plugin-surface-host
+      aria-busy={loadState() === 'opening' || loadState() === 'closing'}
       data-plugin-id={props.target.pluginID}
       data-plugin-instance-id={props.target.pluginInstanceID}
       data-surface-id={props.target.surfaceID}
@@ -212,6 +244,13 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       class="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
       <div class="relative min-h-0 flex-1 bg-muted/20">
+        <Show when={loadState() === 'opening' && openingProgress()}>
+          {(progress) => <div role="status" aria-live="polite" data-plugin-surface-opening
+            class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground">
+            <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
+            <span>{i18n.t(surfaceOpeningStageKeys[progress().stage])}</span>
+          </div>}
+        </Show>
         <Show when={loadState() === 'closing'}>
           <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">
             <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
@@ -225,9 +264,26 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
                 <AlertTriangle class="h-5 w-5" />
               </span>
               <h2 class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.surfaceFailed')}</h2>
+              <Show when={errorCode() === 'PLUGIN_BRIDGE_TIMEOUT'}>
+                <p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceTimedOut')}</p>
+              </Show>
+              <Show when={cleanupPending()}>
+                <p role="status" class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceRetryCleanup')}</p>
+              </Show>
               <details class="mt-2 break-words text-sm leading-6 text-muted-foreground">
                 <summary class="cursor-pointer">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
                 <p>{errorMessage()}</p>
+                <Show when={errorCode() || openingFailure()}>
+                  <pre data-plugin-surface-diagnostics class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-start text-xs select-text">{diagnostic()}</pre>
+                  <Button type="button" size="sm" variant="ghost" icon={Copy}
+                    class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} mt-2`}
+                    data-plugin-surface-copy-diagnostics onClick={() => void copyDiagnostic()}>
+                    {copyState() === 'copied' ? i18n.t('common.actions.copied') : i18n.t('uiCopy.plugin.copySurfaceDiagnostics')}
+                  </Button>
+                  <Show when={copyState() === 'failed'}>
+                    <p role="status">{i18n.t('uiCopy.plugin.copySurfaceDiagnosticsFailed')}</p>
+                  </Show>
+                </Show>
               </details>
               <Button
                 type="button"

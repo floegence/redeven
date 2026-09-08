@@ -4891,6 +4891,17 @@
       "surfaceTitle": "Interface do plugin",
       "closeSurface": "Fechar a interface do plugin",
       "openingSurface": "Abrindo a interface do plugin...",
+      "surfaceTimedOut": "Este plugin demorou muito para abrir. Tente novamente.",
+      "surfaceRetryCleanup": "Não foi possível confirmar o fechamento da visualização anterior do plugin. Ao tentar novamente, a limpeza será concluída primeiro.",
+      "copySurfaceDiagnostics": "Copiar diagnóstico",
+      "copySurfaceDiagnosticsFailed": "Não foi possível copiar. Você pode selecionar o texto de diagnóstico acima.",
+      "openingStages": {
+        "preparing": "Preparando o plugin…",
+        "connecting": "Conectando o plugin…",
+        "authorizing": "Verificando o acesso ao plugin…",
+        "initializing": "Iniciando o plugin…",
+        "committing": "Carregando o conteúdo do plugin…"
+      },
       "closingSurface": "Fechando a interface do plugin...",
       "activityWindowTitle": "{plugin} - {surface}",
       "surfaceIframeTitle": "{plugin} - conteúdo do plugin: {surface}",
