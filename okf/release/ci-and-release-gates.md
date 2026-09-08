@@ -170,6 +170,10 @@ Redeven emits the binary, SPDX SBOM, resolved-package provenance, notices, and a
 signature/certificate. Release builds use Sigstore keyless identity bound to
 the exact Redeven tag workflow; local builds use a fresh ephemeral Ed25519 key
 and are rejected by `--require-release`.
+Cosign 3 signing explicitly selects `--new-bundle-format=false` and
+`--use-signing-config=false` to retain the released detached signature and
+certificate contract. Verification selects the same detached format while
+retaining the exact workflow identity, OIDC issuer, and transparency-log checks.
 
 The deterministic `redeven.redevplugin_runtime_build.v1` marker embeds the
 verified upstream publication and binds every product-built file, target, Rust

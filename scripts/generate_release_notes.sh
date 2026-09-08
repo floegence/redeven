@@ -289,7 +289,7 @@ curl -fLO ${release_url}/download/${release_tag}/SHA256SUMS
 curl -fLO ${release_url}/download/${release_tag}/SHA256SUMS.sig
 curl -fLO ${release_url}/download/${release_tag}/SHA256SUMS.pem
 
-cosign verify-blob \\
+cosign verify-blob --new-bundle-format=false \\
   --certificate SHA256SUMS.pem \\
   --signature SHA256SUMS.sig \\
   --certificate-identity-regexp '^https://github.com/floegence/redeven/.github/workflows/release\.yml@refs/tags/v.*$' \\
