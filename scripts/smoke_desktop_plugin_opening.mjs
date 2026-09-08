@@ -175,8 +175,12 @@ export async function verifyWorkbenchPluginOpening(page, reportRoot, config) {
   await assertRetained(before, 'widget_fit_and_overview');
 
   const canvas = page.locator('.floe-infinite-canvas').first();
-  const canvasBox = await canvas.boundingBox();
-  assert(canvasBox);
+  // Mode and fit transitions can briefly hide the retained viewport.
+  const canvasBox = await eventually(async () => {
+    const settled = await canvas.evaluate((node) =>
+      node.closest('[data-redeven-workbench-layout-interacting]')?.getAttribute('data-redeven-workbench-layout-interacting') !== 'true');
+    return settled ? canvas.boundingBox() : null;
+  }, 'visible settled canvas viewport');
   for (const scale of [0.35, 1]) {
     const current = await canvas.evaluate((node) => new DOMMatrixReadOnly(getComputedStyle(node.firstElementChild).transform).a);
     await canvas.dispatchEvent('wheel', {
