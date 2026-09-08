@@ -81,6 +81,8 @@
       "terminalTimedOut": "Zeitüberschreitung bei der Ausführung",
       "terminalLocation": "Ausführungsort",
       "terminalNoNewOutput": "Keine neue Ausgabe.",
+      "toolActivityDetailsPending": "Warten auf Tool-Details",
+      "toolActivityNoAdditionalDetails": "Keine weiteren Details",
       "toolActivityRunCommand": "Befehl ausführen",
       "toolActivityReadCommandOutput": "Befehlsausgabe anzeigen",
       "toolActivityWriteCommandInput": "Eingabe an Befehl senden",

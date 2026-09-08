@@ -41,8 +41,11 @@ export type SubagentDetailWindowProps = Readonly<{
   bindScroll: (node: HTMLDivElement) => void;
   onScroll: () => void;
   onWheel: (event: WheelEvent) => void;
-  onPointerDown: () => void;
-  onTouchMove: () => void;
+  onPointerDown: (event: PointerEvent) => void;
+  onTouchMove: (event: TouchEvent) => void;
+  onKeyDown?: (event: KeyboardEvent) => void;
+  latestPointerBlocked?: boolean;
+  onDisclosureClick?: (title: HTMLElement) => void;
   showScrollToLatest: boolean;
   onScrollToLatest: () => void;
   onRetryLoad: () => void;
@@ -173,7 +176,7 @@ function ledgerEntry(
         role="listitem"
         onToggle={(event) => setOpen(event.currentTarget.open)}
       >
-        <summary>{header()}</summary>
+        <summary data-flower-disclosure-trigger onClick={(event) => props.onDisclosureClick?.(event.currentTarget)}>{header()}</summary>
         <div class="flower-subagent-ledger-entry-body">{props.renderEntry(entry)}</div>
       </details>
     </Show>
@@ -232,6 +235,8 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         }}
       >
         <summary
+          data-flower-disclosure-trigger
+          onClick={(event) => props.onDisclosureClick?.(event.currentTarget)}
           class={singleOperation() ? 'flower-subagent-ledger-single-activity-summary' : undefined}
           aria-hidden={singleOperation() ? 'true' : undefined}
         >
@@ -350,6 +355,8 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             onWheel={props.onWheel}
             onPointerDown={props.onPointerDown}
             onTouchMove={props.onTouchMove}
+            onKeyDown={props.onKeyDown}
+            tabIndex={0}
           >
             <div class="flower-subagent-ledger">
               <Show
@@ -374,6 +381,8 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
                 <button
                   type="button"
                   class="flower-scroll-to-latest-button"
+                  data-flower-scroll-to-latest
+                  data-pointer-blocked={props.latestPointerBlocked ? 'true' : undefined}
                   aria-label={props.scrollToLatestLabel}
                   title={props.scrollToLatestLabel}
                   onClick={props.onScrollToLatest}

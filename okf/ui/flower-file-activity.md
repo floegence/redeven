@@ -11,8 +11,8 @@ Flower presents file reads and mutations only from canonical typed Floret
 Activity. A mutation row shows the user-facing file name and aggregate added and
 deleted line counts; its detail contains the matching unified diff. Protocol
 fields, private paths, and internal action IDs never become display metadata.
-An older activity without typed mutation detail remains a concise,
-non-expandable row instead of inventing an empty diff panel.
+An activity without typed mutation detail exposes safe purpose and status through
+the shared disclosure, without inventing a diff panel.
 
 # Contract
 
@@ -29,7 +29,8 @@ Flower sums its `additions` and `deletions` for the compact green/red statistic
 and renders each mutation's `unified_diff` in order when the user expands the
 row. A typed unavailable reason may produce the localized generic empty-diff
 message, and truncation uses localized copy. Missing typed mutation evidence
-does not create statistics, detail, or an expand affordance.
+does not create statistics or diff content. [Activity disclosure interaction](flower-activity-interaction.md)
+owns the stable detail affordance, safe empty state, and file-read error expansion.
 
 File preview and directory actions are referenced through ordered
 `target_refs` whose kinds contain opaque `file_action` identities. Redeven uses
@@ -51,5 +52,5 @@ recomputes a diff merely to populate a historical row.
 - `redeven:internal/ai/activity_file_actions.go` - Public Activity sanitization removes private paths and transient action IDs.
 - `redeven:internal/ai/activity_timeline_test.go` - Read, mutation, patch, target-reference, and chip coverage.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - One presenter derives compact statistics, actions, and diff detail.
-- `redeven:internal/flower_ui/src/flowerActivityPresentation.test.ts` - New typed rows and legacy non-expandable rows are covered.
+- `redeven:internal/flower_ui/src/flowerActivityPresentation.test.ts` - Typed mutation content and absent-diff payloads are covered.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Localized compact statistics and unified-diff detail rendering.

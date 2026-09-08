@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-08: Flower disclosure interaction
+
+- Consolidate transcript following, native gesture protection, and temporary anchoring in one viewport controller.
+- Preserve floating return-to-latest placement without consuming reading height; prevent mid-press hit-target changes.
+- Give every tool stable safe details and document interaction ownership separately from terminal and file facts.
+
 ## 2026-09-08: DeepSeek runtime qualification
 
 - Align all first-party Go modules, CI-selected toolchains, scripts, and README prerequisites to Go 1.27.1.

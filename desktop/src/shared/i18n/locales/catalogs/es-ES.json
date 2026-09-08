@@ -81,6 +81,8 @@
       "terminalTimedOut": "Se agotó el tiempo de ejecución",
       "terminalLocation": "Ubicación de ejecución",
       "terminalNoNewOutput": "No hay nueva salida.",
+      "toolActivityDetailsPending": "Esperando los detalles de la herramienta",
+      "toolActivityNoAdditionalDetails": "No hay más detalles",
       "toolActivityRunCommand": "Ejecutar comando",
       "toolActivityReadCommandOutput": "Ver salida del comando",
       "toolActivityWriteCommandInput": "Enviar entrada al comando",

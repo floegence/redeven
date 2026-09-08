@@ -4085,6 +4085,8 @@
       "terminalTimedOut": "실행 시간이 초과되었습니다",
       "terminalLocation": "실행 위치",
       "terminalNoNewOutput": "새 출력이 없습니다.",
+      "toolActivityDetailsPending": "도구 세부 정보를 기다리는 중",
+      "toolActivityNoAdditionalDetails": "추가 세부 정보 없음",
       "toolActivityRunCommand": "명령 실행",
       "toolActivityReadCommandOutput": "명령 출력 보기",
       "toolActivityWriteCommandInput": "명령에 입력 보내기",

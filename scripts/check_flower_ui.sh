@@ -74,6 +74,7 @@ main() {
       src/ui/flower/aiReadiness.test.ts \
       src/ui/flower/aiReadinessPresentation.test.ts \
       src/ui/flower/activityDisclosure.test.ts \
+      src/ui/flower/flowerScrollInteraction.test.ts \
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
@@ -163,6 +164,7 @@ main() {
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
+        src/ui/FlowerSurface.disclosureInteraction.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx \
         src/ui/plugins/PluginManagement.browser.test.tsx \
