@@ -58,6 +58,11 @@ saved component identity and geometry survive SDK instance replacement. Initial
 layout read failure never enables autosave; failed or conflicting saves retain
 local edits and expose explicit retry without reviving remote removals.
 
+[Flower working directory navigation](flower-working-directory-navigation.md)
+requests a new Files or Terminal widget at the current viewport center for each
+explicit directory action. Its product target snapshot and terminal anchor opt-out
+are owned by that contract; the shared widget lifecycle remains unchanged.
+
 # Boundaries
 
 Lazy loading is a module-delivery boundary only. It must not pre-mount inactive Workbench features, eagerly initialize Flower providers, or weaken existing permission, state restoration, input ownership, and error recovery contracts.

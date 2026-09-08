@@ -9,6 +9,9 @@ const FilePreviewContextMock = createContext({} as any);
 const FileBrowserSurfaceContextMock = createContext({} as any);
 let floeRegistryComponents = (): any[] => [];
 
+const fileBrowserOpenSurfaceMock = vi.fn(() => ({ requestId: 'req-1' }));
+let directoryNavigationContext: any;
+
 const filePreviewOpenPreviewMock = vi.fn(async () => undefined);
 const filePreviewClosePreviewMock = vi.fn();
 const filePreviewSaveCurrentMock = vi.fn(async () => undefined);
@@ -411,7 +414,7 @@ vi.mock('./widgets/createFilePreviewController', () => ({
 
 vi.mock('./widgets/createFileBrowserSurfaceController', () => ({
   createFileBrowserSurfaceController: () => ({
-    openSurface: vi.fn(() => ({ requestId: 'req-1' })),
+    openSurface: fileBrowserOpenSurfaceMock,
     closeSurface: vi.fn(),
     surface: () => null,
   }),
@@ -424,6 +427,7 @@ vi.mock('./TopBarBrandButton', () => ({
 vi.mock('./workbench/EnvWorkbenchPage', () => ({
   EnvWorkbenchPage: () => {
     const env = useContext(EnvContextMock);
+    directoryNavigationContext = env;
     const filePreview = useContext(FilePreviewContextMock);
     const fileBrowser = useContext(FileBrowserSurfaceContextMock);
     return (
@@ -519,6 +523,7 @@ vi.mock('./pages/EnvAIPage', () => ({
   EnvAIPage: (props: any) => {
     const mountID = `activity-flower-${++envAIPageMountSequence}`;
     const env = useContext(EnvContextMock);
+    directoryNavigationContext = env;
     const [composerText, setComposerText] = createSignal('');
     return (
       <div
@@ -1266,6 +1271,49 @@ describe('EnvAppShell desktop floating surfaces', () => {
     } finally {
       dispose();
     }
+  });
+
+  it('routes Flower directory actions through Activity without replacing existing terminal input', async () => {
+    desktopViewMode = 'activity';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushAsync();
+      await flushAsync();
+      fileBrowserOpenSurfaceMock.mockClear();
+      const request = { thread_id: 'thread-directory', path: '/workspace/flower' };
+      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInFileBrowser(request);
+      expect(fileBrowserOpenSurfaceMock).toHaveBeenCalledExactlyOnceWith({ path: request.path, homePath: undefined, title: 'flower' });
+      expect(directoryNavigationContext.openTerminalInDirectoryRequest()).toBeNull();
+      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInTerminal(request);
+      expect(directoryNavigationContext.activeSurface()).toBe('terminal');
+      expect(directoryNavigationContext.openTerminalInDirectoryRequest()).toMatchObject({ workingDir: request.path, preferredName: 'flower', targetMode: 'activity' });
+      expect(directoryNavigationContext.workbenchSurfaceActivation()).toBeNull();
+    } finally { dispose(); }
+  });
+
+  it('creates Flower file and terminal widgets at the viewport center despite a recent pointer anchor', async () => {
+    desktopViewMode = 'workbench';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushAsync();
+      await flushAsync();
+      window.dispatchEvent(new MouseEvent('contextmenu', { clientX: 777, clientY: 444 }));
+      const request = { thread_id: 'thread-directory', path: '/workspace/flower' };
+      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInFileBrowser(request);
+      expect(directoryNavigationContext.workbenchSurfaceActivation()).toMatchObject({ surfaceId: 'files', openStrategy: 'create_new', ensureVisible: true, fileBrowserPayload: { path: request.path } });
+      const filesID = directoryNavigationContext.workbenchSurfaceActivation().requestId;
+      await directoryNavigationContext.flowerWorkingDirectoryActions.openWorkingDirectoryInTerminal(request);
+      expect(directoryNavigationContext.workbenchSurfaceActivation()).toMatchObject({ surfaceId: 'terminal', openStrategy: 'create_new', ensureVisible: true, terminalPayload: { workingDir: request.path } });
+      expect(directoryNavigationContext.workbenchSurfaceActivation().workbenchAnchor).toBeUndefined();
+      expect(directoryNavigationContext.workbenchSurfaceActivation().requestId).not.toBe(filesID);
+      expect(directoryNavigationContext.openTerminalInDirectoryRequest()).toBeNull();
+    } finally { dispose(); }
   });
 
   it('routes workbench terminal handoffs into an anchored new Terminal widget', async () => {

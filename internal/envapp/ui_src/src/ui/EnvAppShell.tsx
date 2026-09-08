@@ -70,6 +70,7 @@ import {
   createFlowerComposerDraftCoordinator,
 } from '../../../../flower_ui/src';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
+import { createFlowerWorkingDirectoryNavigation } from './flower/workingDirectoryNavigation';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
@@ -2283,7 +2284,7 @@ export function EnvAppShell() {
     options?: {
       preferredName?: string;
       openStrategy?: 'focus_latest_or_create' | 'create_new';
-      workbenchAnchor?: EnvWorkbenchHandoffAnchor;
+      workbenchAnchor?: EnvWorkbenchHandoffAnchor | null;
     },
   ) => {
     const normalizedWorkingDir = normalizeAbsolutePath(workingDir);
@@ -2294,7 +2295,7 @@ export function EnvAppShell() {
 
     const preferredName = String(options?.preferredName ?? '').trim();
     const targetMode = viewMode();
-    const workbenchAnchor = targetMode === 'workbench'
+    const workbenchAnchor = targetMode === 'workbench' && options?.workbenchAnchor !== null
       ? resolveWorkbenchHandoffAnchor(options?.workbenchAnchor)
       : undefined;
     if (targetMode !== 'workbench') {
@@ -2361,6 +2362,27 @@ export function EnvAppShell() {
       controller: fileBrowserSurfaceController,
     });
   };
+
+  const flowerWorkingDirectoryActions = createFlowerWorkingDirectoryNavigation({
+    availability: () => {
+      const connected = protocol.status() === 'connected';
+      const permissions = env()?.permissions;
+      const disconnectedReason = i18n.t('flowerSurface.threadList.workingDirectoryDisconnected');
+      return {
+        browse: {
+          enabled: connected && Boolean(permissions?.can_read),
+          reason: connected ? i18n.t('flowerSurface.threadList.browseWorkingDirectoryReadDenied') : disconnectedReason,
+        },
+        terminal: {
+          enabled: connected && Boolean(permissions?.can_read && permissions?.can_write && permissions?.can_execute),
+          reason: connected ? i18n.t('flowerSurface.threadList.workingDirectoryTerminalDenied') : disconnectedReason,
+        },
+      };
+    },
+    invalidDirectoryMessage: () => i18n.t('flowerSurface.threadList.workingDirectoryUnavailable'),
+    openFileBrowserAtPath,
+    openTerminalInDirectory,
+  });
 
   const openFilePreview = async (
     item: FileItem,
@@ -5126,6 +5148,7 @@ export function EnvAppShell() {
         openTerminalInDirectory,
         openFileBrowserAtPath,
         openFilePreview,
+        flowerWorkingDirectoryActions,
         openFlowerFileBrowser,
         openFlowerFilePreview,
         openFlowerCanonicalReferenceTarget,

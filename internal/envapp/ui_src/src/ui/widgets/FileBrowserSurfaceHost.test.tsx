@@ -16,6 +16,8 @@ vi.mock('./PersistentFloatingWindow', () => ({
     <Show when={props.open}>
       {(
         <div
+          ref={(node) => props.surfaceRef?.(node)}
+          tabIndex={-1}
           data-testid="floating-window"
           data-persistence-key={props.persistenceKey}
           data-stack-id={String(props.stackId ?? '')}
@@ -54,6 +56,34 @@ async function flush(): Promise<void> {
 }
 
 describe('FileBrowserSurfaceHost', () => {
+  it('focuses each explicit open and restores a connected visible origin on close', async () => {
+    const controller = createFileBrowserSurfaceController();
+    const host = document.createElement('div');
+    const origin = document.createElement('button');
+    document.body.append(origin, host);
+    origin.getClientRects = () => [origin.getBoundingClientRect()] as unknown as DOMRectList;
+    const dispose = render(() => (
+      <FileBrowserSurfaceContext.Provider value={{ controller, openBrowser: async (params) => { controller.openSurface(params); }, closeBrowser: controller.closeSurface }}>
+        <FileBrowserSurfaceHost />
+      </FileBrowserSurfaceContext.Provider>
+    ), host);
+    try {
+      origin.focus();
+      controller.openSurface({ path: '/workspace' });
+      await flush();
+      const window = host.querySelector('[data-testid="floating-window"]');
+      expect(document.activeElement).toBe(window);
+      origin.focus();
+      controller.openSurface({ path: '/workspace/another' });
+      await flush();
+      expect(host.querySelector('[data-testid="floating-window"]')).toBe(window);
+      expect(document.activeElement).toBe(window);
+      controller.closeSurface();
+      await flush();
+      expect(document.activeElement).toBe(origin);
+    } finally { dispose(); }
+  });
+
   it('renders the requested browser surface and remounts on a new open request', async () => {
     let requestSeq = 0;
     const controller = createFileBrowserSurfaceController({

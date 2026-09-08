@@ -1,8 +1,11 @@
 import type { Component, JSX } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
-import { Input, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Copy, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { Input } from '@floegence/floe-webapp-core/ui';
+
+import { FlowerContextMenu } from '../FlowerContextMenu';
+import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAvailability } from '../FlowerDirectoryMenuItems';
 
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -11,10 +14,8 @@ import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems,
 import { canForkThreadItem, canPinThreadItem, canRenameThreadItem, canStopThreadItem } from './threadListActions';
 
 type TimeGroup = FlowerThreadTimeGroup;
-export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete';
+export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete' | 'browse_workdir' | 'terminal_workdir';
 export type { FlowerThreadGroup };
-
-const THREAD_CONTEXT_MENU_WIDTH = 212;
 
 type FlowerThreadRenderGroup = Readonly<{
   key: string;
@@ -182,90 +183,20 @@ type FlowerThreadContextMenuProps = Readonly<{
   showDeleteAction: boolean;
   actionsBusy: boolean;
   busyAction: FlowerThreadMenuAction | null;
+  workingDirectory: string;
+  directoryActions?: FlowerDirectoryMenuAvailability;
   resolveRestore: () => HTMLElement | undefined;
   onAction: (action: FlowerThreadMenuAction, item: FlowerThreadListItem) => void;
   onClose: () => void;
 }>;
 
 const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props) => {
-  let menuRef: HTMLDivElement | undefined;
-  let disposed = false;
-  const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? []);
-  const focusItem = (delta: number) => {
-    const items = focusableItems();
-    if (items.length === 0) return;
-    const current = document.activeElement instanceof HTMLButtonElement ? items.indexOf(document.activeElement) : -1;
-    items[(current + delta + items.length) % items.length]?.focus();
-  };
-  const focusMenu = () => {
-    const first = focusableItems()[0];
-    if (first) {
-      first.focus({ preventScroll: true });
-      return;
-    }
-    menuRef?.focus({ preventScroll: true });
-  };
-  const eventPathContains = (event: Event, node: Node | undefined): boolean => {
-    if (!node) return false;
-    const path = event.composedPath();
-    return path.includes(node) || (event.target instanceof Node && node.contains(event.target));
-  };
-  createEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      if (eventPathContains(event, menuRef) || eventPathContains(event, props.resolveRestore())) return;
-      props.onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!menuRef) return;
-      if (event.key === 'Escape' || event.key === 'Tab') {
-        event.preventDefault();
-        props.onClose();
-        return;
-      }
-      if (!(event.target instanceof Node) || !menuRef.contains(event.target)) return;
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        focusItem(1);
-        return;
-      }
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        focusItem(-1);
-        return;
-      }
-      if (event.key === 'Home') {
-        event.preventDefault();
-        focusableItems()[0]?.focus();
-        return;
-      }
-      if (event.key === 'End') {
-        event.preventDefault();
-        const items = focusableItems();
-        items[items.length - 1]?.focus();
-      }
-    };
-    const onResize = () => props.onClose();
-    document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('resize', onResize);
-    const focusFrame = requestAnimationFrame(() => {
-      focusMenu();
-    });
-    onCleanup(() => {
-      disposed = true;
-      cancelAnimationFrame(focusFrame);
-      document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('resize', onResize);
-    });
-  });
   const action = (kind: FlowerThreadMenuAction) => {
     if (kind === 'fork' && !canForkThreadItem(props.item)) return;
     if (kind === 'pin' && !canPinThreadItem(props.item)) return;
     if (kind === 'rename' && !canRenameThreadItem(props.item)) return;
     props.onAction(kind, props.item);
   };
-  const workdir = () => String(props.item.working_dir ?? '').trim();
   const itemButton = (
     kind: FlowerThreadMenuAction,
     label: string,
@@ -286,47 +217,33 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
     </button>
   );
   return (
-    <SurfaceFloatingLayer
-      position={{ x: props.x, y: props.y }}
-      estimatedSize={{
-        width: THREAD_CONTEXT_MENU_WIDTH,
-        height: 232 + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0),
-      }}
-      class="flower-thread-context-menu-layer"
-      data-flower-floating-layer="true"
+    <FlowerContextMenu
+      x={props.x}
+      y={props.y}
+      label={props.copy.contextMenuLabel(props.item.title.trim())}
+      height={340 + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0)}
+      resolveRestore={props.resolveRestore}
+      onClose={props.onClose}
     >
-      <div
-        ref={menuRef}
-        role="menu"
-        tabIndex={-1}
-        class="flower-thread-context-menu"
-        aria-label={props.copy.contextMenuLabel(props.item.title.trim())}
-        onFocusOut={(event) => {
-          const next = event.relatedTarget;
-          if (next instanceof Node && (menuRef?.contains(next) || props.resolveRestore()?.contains(next))) return;
-          queueMicrotask(() => {
-            if (disposed) return;
-            const active = document.activeElement;
-            if (active instanceof Node && (menuRef?.contains(active) || props.resolveRestore()?.contains(active))) return;
-            props.onClose();
-          });
-        }}
-      >
-        {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
-        {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
-        {itemButton('copy_workdir', props.copy.copyWorkingDirectory, <Folder class="h-3.5 w-3.5" />, workdir() === '')}
+      {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
+      {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
+      <FlowerDirectoryMenuItems
+        path={props.workingDirectory}
+        copy={props.copy}
+        availability={props.directoryActions}
+        onAction={(kind) => props.onAction(kind, { ...props.item, working_dir: props.workingDirectory })}
+      />
+      <div class="flower-thread-menu-separator" />
+      <Show when={props.showStopAction && canStopThreadItem(props.item)}>
+        {itemButton('stop', props.copy.stop, <XCircle class="h-3.5 w-3.5" />)}
+      </Show>
+      {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
+      {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
+      <Show when={props.showDeleteAction}>
         <div class="flower-thread-menu-separator" />
-        <Show when={props.showStopAction && canStopThreadItem(props.item)}>
-          {itemButton('stop', props.copy.stop, <XCircle class="h-3.5 w-3.5" />)}
-        </Show>
-        {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
-        {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
-        <Show when={props.showDeleteAction}>
-          <div class="flower-thread-menu-separator" />
-          {itemButton('delete', props.copy.deleteMenuAction, <Trash class="h-3.5 w-3.5" />)}
-        </Show>
-      </div>
-    </SurfaceFloatingLayer>
+        {itemButton('delete', props.copy.deleteMenuAction, <Trash class="h-3.5 w-3.5" />)}
+      </Show>
+    </FlowerContextMenu>
   );
 };
 
@@ -342,6 +259,8 @@ export type FlowerThreadListProps = Readonly<{
   onSelect: (threadID: string) => void;
   onRefresh: () => void;
   onMenuAction?: (action: FlowerThreadMenuAction, thread: FlowerThreadListItem, restore?: HTMLElement) => void;
+  directoryActions?: FlowerDirectoryMenuAvailability;
+  visible?: boolean;
   canFork?: boolean;
   canRename?: boolean;
   canPin?: boolean;
@@ -371,6 +290,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     x: number;
     y: number;
     restoreControl: 'menu' | 'select';
+    workingDirectory: string;
   } | null>(null);
   const menuPresentation = createMemo(() => {
     const state = menu();
@@ -388,19 +308,19 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     let x = 0;
     let y = 0;
     let restoreControl: 'menu' | 'select' = 'select';
-    if (event instanceof MouseEvent && event.clientX > 0 && event.clientY > 0) {
+    if (event instanceof MouseEvent && event.type === 'contextmenu') {
       x = event.clientX;
       y = event.clientY;
     } else {
       const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
       const rect = target?.getBoundingClientRect();
-      x = rect ? rect.left + 18 : 24;
-      y = rect ? rect.top + 18 : 24;
+      x = rect ? rect.left : 24;
+      y = rect ? rect.bottom + 4 : 24;
     }
     if (event.currentTarget instanceof HTMLButtonElement) {
       restoreControl = event.currentTarget.classList.contains('flower-thread-card-menu-button') ? 'menu' : 'select';
     }
-    setMenu({ threadID: item.thread_id, x, y, restoreControl });
+    setMenu({ threadID: item.thread_id, x, y, restoreControl, workingDirectory: item.working_dir });
   };
 
   const resolveMenuRestore = (state: NonNullable<ReturnType<typeof menu>>): HTMLElement | undefined => {
@@ -430,7 +350,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   ));
 
   createEffect(() => {
-    if (menu() && !menuPresentation()) setMenu(null);
+    if (menu() && (!menuPresentation() || props.visible === false)) setMenu(null);
   });
 
   return (
@@ -530,6 +450,8 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         {(state) => (
           <FlowerThreadContextMenu
             item={state().item}
+            workingDirectory={state().workingDirectory}
+            directoryActions={props.directoryActions}
             x={state().x}
             y={state().y}
             copy={copy()}

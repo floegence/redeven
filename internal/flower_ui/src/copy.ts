@@ -43,6 +43,13 @@ export type FlowerThreadListCopy = Readonly<{
   contextMenuLabel: (title: string) => string;
   copyThreadID: string;
   copyWorkingDirectory: string;
+  browseWorkingDirectory: string;
+  openTerminalInWorkingDirectory: string;
+  copySelectedText: string;
+  workingDirectoryUnavailable: string;
+  browseWorkingDirectoryReadDenied: string;
+  workingDirectoryTerminalDenied: string;
+  workingDirectoryDisconnected: string;
   threadIDLabel: string;
   workingDirectoryLabel: string;
   copied: (label: string) => string;
@@ -831,6 +838,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     contextMenuLabel: (title) => `Actions for ${title}`,
     copyThreadID: 'Copy thread id',
     copyWorkingDirectory: 'Copy working directory',
+    browseWorkingDirectory: 'Browse working directory',
+    openTerminalInWorkingDirectory: 'Open terminal in working directory',
+    copySelectedText: 'Copy selected text',
+    workingDirectoryUnavailable: 'The conversation working directory is unavailable.',
+    browseWorkingDirectoryReadDenied: 'Read permission is required to browse the working directory.',
+    workingDirectoryTerminalDenied: 'Read, write, and execute permissions are required to open a terminal.',
+    workingDirectoryDisconnected: 'Connect to the environment to open its working directory.',
     threadIDLabel: 'thread id',
     workingDirectoryLabel: 'working directory',
     copied: (label) => `Copied ${label}.`,
