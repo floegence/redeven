@@ -76,6 +76,7 @@ type terminalProcessOutputChunk struct {
 }
 
 type terminalProcessSnapshot struct {
+	InputBytes         int64              `json:"-"`
 	ProcessID          string             `json:"process_id"`
 	EndpointID         string             `json:"endpoint_id,omitempty"`
 	ThreadID           string             `json:"thread_id,omitempty"`
@@ -512,12 +513,12 @@ func (p *terminalProcess) Write(input string) (terminalProcessSnapshot, error) {
 	tty := p.tty
 	p.mu.Unlock()
 	if tty == nil {
-		return terminalProcessSnapshot{}, errors.New("terminal process input unavailable")
+		return p.Snapshot(), errors.New("terminal process input unavailable")
 	}
-	if _, err := tty.Write([]byte(input)); err != nil {
-		return terminalProcessSnapshot{}, err
-	}
-	return p.Snapshot(), nil
+	written, err := tty.Write([]byte(input))
+	snapshot := p.Snapshot()
+	snapshot.InputBytes = int64(written)
+	return snapshot, err
 }
 
 func (p *terminalProcess) Terminate(ctx context.Context) (terminalProcessSnapshot, error) {
@@ -881,6 +882,8 @@ func (p *terminalProcess) snapshotWithOutputLocked(output string, firstSeq int64
 
 func terminalProcessResultPayload(snapshot terminalProcessSnapshot) map[string]any {
 	out := map[string]any{
+		"operation":          "exec",
+		"timed_out":          snapshot.Error != nil && snapshot.Error.Code == aitools.ErrorCodeTimeout,
 		"status":             strings.TrimSpace(snapshot.Status),
 		"process_id":         strings.TrimSpace(snapshot.ProcessID),
 		"command":            strings.TrimSpace(snapshot.Command),

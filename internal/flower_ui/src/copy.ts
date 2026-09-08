@@ -303,6 +303,16 @@ export type FlowerSurfaceCopy = Readonly<{
     permissionSelectorLabel: string;
     permissionSelectorSaving: string;
     permissionSelectorErrorTitle: string;
+    terminalPurpose: string;
+    terminalStatus: string;
+    terminalSession: string;
+    terminalInputBytes: string;
+    terminalOutputSequence: string;
+    terminalOutputBytes: string;
+    terminalMoreOutput: string;
+    terminalTimedOut: string;
+    terminalLocation: string;
+    terminalNoNewOutput: string;
     toolActivityRunCommand: string;
     toolActivityReadCommandOutput: string;
     toolActivityWriteCommandInput: string;
@@ -564,6 +574,16 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     permissionSelectorLabel: 'Thread permission',
     permissionSelectorSaving: 'Saving permission...',
     permissionSelectorErrorTitle: 'Flower could not save permission.',
+    terminalPurpose: "Purpose",
+    terminalStatus: "Status",
+    terminalSession: "Terminal session",
+    terminalInputBytes: "Bytes sent",
+    terminalOutputSequence: "Output sequence",
+    terminalOutputBytes: "Output bytes",
+    terminalMoreOutput: "More output is available",
+    terminalTimedOut: "Execution timed out",
+    terminalLocation: "Execution location",
+    terminalNoNewOutput: "No new output.",
     toolActivityRunCommand: 'Run command',
     toolActivityReadCommandOutput: 'View command output',
     toolActivityWriteCommandInput: 'Send input to command',

@@ -144,7 +144,7 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
-	if presentation.Label != "pwd; sleep 5; ls -1" || presentation.Description != "" || presentation.Renderer != fltools.ActivityRendererTerminal {
+	if presentation.Label != "Run command: pwd; sleep 5; ls -1" || presentation.Description != "" || presentation.Renderer != fltools.ActivityRendererTerminal {
 		t.Fatalf("presentation=%+v", presentation)
 	}
 	payload := activityPayloadMap(presentation.Payload)

@@ -265,7 +265,7 @@ describe('presentFlowerActivityItem', () => {
       payload: { command },
     }));
 
-    expect(presentation.title).toEqual({ kind: 'plain', text: `Run command: 运行 ${command}` });
+    expect(presentation.title).toEqual({ kind: 'plain', text: `运行 ${command}` });
     expect(presentation.meta).not.toContain(command);
   });
 
@@ -303,8 +303,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('View command output: Check the latest Docker build output again');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'View command output: Check the latest Docker build output again' });
+    expect(presentation.label).toBe('Check the latest Docker build output again');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Check the latest Docker build output again' });
     expect(presentation.meta).not.toContain('docker compose up --build -d');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
@@ -405,7 +405,7 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Run command: Compiling the workspace' });
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Compiling the workspace' });
     expect(presentation.meta).toBe('');
     expect(presentation.meta).not.toContain('512ms');
   });
@@ -425,9 +425,9 @@ describe('presentFlowerActivityItem', () => {
       },
     });
 
-    expect(presentation.label).toBe('终止命令执行: 停止挂起的维基百科搜索请求');
+    expect(presentation.label).toBe('停止挂起的维基百科搜索请求');
     expect(JSON.stringify(presentation)).not.toContain('terminal.terminate');
-    expect(presentation.detailBlocks).toHaveLength(0);
+    expect(presentation.detailBlocks[0]?.kind).toBe('terminal_output');
   });
 
   it('routes every terminal tool through the semantic terminal presenter', () => {
@@ -437,7 +437,7 @@ describe('presentFlowerActivityItem', () => {
       tool_name: 'terminal.exec',
     }));
 
-    expect(presentation.label).toBe('Run command');
+    expect(presentation.label).toBe('Resolve workspace status');
   });
 
   it('renders subagent tool activity as delegation instead of raw structured payload', () => {
@@ -1245,7 +1245,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.title).toEqual({ kind: 'plain', text: 'Run command' });
     expect(presentation.meta).toBe('');
     expect(presentation.detailLines).toHaveLength(0);
-    expect(presentation.detailBlocks).toHaveLength(0);
+    expect(presentation.detailBlocks[0]?.kind).toBe('terminal_output');
   });
 
   it('uses a neutral semantic fallback without exposing unknown protocol JSON', () => {
@@ -1395,5 +1395,31 @@ describe('presentFlowerActivityItem', () => {
       }],
     }]);
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('must-not-be-invented');
+  });
+});
+
+describe('terminal interaction facts', () => {
+  it.each(['write', 'read', 'terminate'] as const)('keeps %s expandable without command or output', (operation) => {
+    const value = presentFlowerActivityItem(item({ renderer: 'terminal', tool_name: 'custom.terminal', label: '检查 GPU/LM Studio 诊断输出', payload: { operation } }));
+    expect(value.label).toBe('检查 GPU/LM Studio 诊断输出');
+    expect(value.detailBlocks).toContainEqual(expect.objectContaining({ kind: 'terminal_output', terminal: expect.objectContaining({ operation, output: '' }) }));
+  });
+  it('excludes interactive input and echoed output from write detail', () => {
+    const value = presentFlowerActivityItem(item({ renderer: 'terminal', label: '向 SSH 登录会话提交密码', payload: { operation: 'write', command: 'ssh host', input: 'password', stdin: 'secret', output: 'password', input_bytes: 9 } }));
+    expect(value.label).toBe('向 SSH 登录会话提交密码');
+    const raw = JSON.stringify(value);
+    expect(raw).not.toContain('password');
+    expect(raw).not.toContain('secret');
+    expect(value.detailBlocks).toContainEqual(expect.objectContaining({ terminal: expect.objectContaining({ input_bytes: 9, command: 'ssh host' }) }));
+  });
+  it('uses the typed operation when no semantic text was authored', () => {
+    const value = presentFlowerActivityItem(item({ renderer: 'terminal', tool_name: 'custom.terminal', payload: { operation: 'write' } }));
+    expect(value.label).toBe('Send input to command');
+  });
+  it('preserves intent and drained cursors across serialized history', () => {
+    const history = item({ renderer: 'terminal', label: '再次检查诊断输出', payload: { operation: 'read', output: 'GPU ready', first_seq: 3, last_seq: 4, latest_seq: 4, has_more: false } });
+    const before = presentFlowerActivityItem(history);
+    expect(presentFlowerActivityItem(JSON.parse(JSON.stringify(history)))).toEqual(before);
+    expect(before.detailBlocks).toContainEqual(expect.objectContaining({ terminal: expect.objectContaining({ first_seq: 3, last_seq: 4, latest_seq: 4, has_more: false }) }));
   });
 });

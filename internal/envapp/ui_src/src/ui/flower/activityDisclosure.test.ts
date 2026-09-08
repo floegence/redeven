@@ -62,6 +62,22 @@ describe('createFlowerActivityDisclosureController', () => {
     harness.dispose();
   });
 
+  it('opens actionable facts by default and preserves a manual collapse through updates', () => {
+    createRoot((dispose) => {
+      const [manualOpen, setManualOpen] = createSignal<boolean>();
+      const [needsAttention, setNeedsAttention] = createSignal(false);
+      const control = createFlowerActivityDisclosureController({ manualOpen, needsAttention, onManualOpenChange: setManualOpen });
+      expect(control.open()).toBe(false);
+      setNeedsAttention(true);
+      expect(control.open()).toBe(true);
+      control.toggle();
+      setNeedsAttention(false);
+      setNeedsAttention(true);
+      expect(control.open()).toBe(false);
+      dispose();
+    });
+  });
+
   it('does not schedule background timers for a closed activity row', () => {
     vi.useFakeTimers();
     const harness = createControllerHarness();

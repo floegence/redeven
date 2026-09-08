@@ -801,6 +801,9 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 	}
 	spec, hasSpec := aitools.PresentationSpec(toolName)
 	renderer := activityRendererFromSpec(spec, hasSpec)
+	if renderer == fltools.ActivityRendererTerminal {
+		args = terminalActivityInput(args)
+	}
 	payload := activityPayloadFromFieldList(spec.CallPayloadFields, args)
 	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
 	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
@@ -1099,7 +1102,10 @@ func activityTodoCountValue(source map[string]any, field string) (any, bool) {
 	return nil, false
 }
 
-func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ fltools.ActivityRenderer, args map[string]any, payload map[string]any) string {
+func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, args map[string]any, payload map[string]any) string {
+	if renderer == fltools.ActivityRendererTerminal {
+		return terminalActivityLabel(spec.Operation, args)
+	}
 	if label := activityLabelFromFields(spec.ActivityLabelFields, args, payload); label != "" {
 		return label
 	}
@@ -1107,7 +1113,13 @@ func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSp
 	return activityFallbackLabel(fallback, toolName)
 }
 
-func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ fltools.ActivityRenderer, payload map[string]any) string {
+func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, payload map[string]any) string {
+	if renderer == fltools.ActivityRendererTerminal {
+		if strings.TrimSpace(anyToString(payload["description"])) == "" {
+			return ""
+		}
+		return terminalActivityLabel(spec.Operation, payload)
+	}
 	if label := activityLabelFromFields(spec.ActivityLabelFields, payload); label != "" {
 		return label
 	}
@@ -1143,6 +1155,14 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	}
 	if renderer == fltools.ActivityRendererSubAgentOperation {
 		rawPayload = subAgentOperationResultActivitySource(result.activityInput, rawPayload)
+	}
+	if renderer == fltools.ActivityRendererTerminal {
+		rawPayload["description"] = terminalActivityInput(result.activityInput)["description"]
+		if strings.TrimSpace(anyToString(rawPayload["command"])) == "" && r != nil {
+			if proc, err := r.terminalProcessForTool(anyToString(result.activityInput["process_id"])); err == nil {
+				rawPayload["command"] = proc.Snapshot().Command
+			}
+		}
 	}
 	payload := activityPayloadFromFieldListWithRegistry(r, spec.ResultPayloadFields, rawPayload)
 	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
@@ -1436,11 +1456,17 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 	switch renderer {
 	case fltools.ActivityRendererTerminal:
 		value := fltools.TerminalActivityPayload{
-			Command: firstNonEmptyString(anyToString(payload["command"]), anyToString(payload["description"])),
-			Status:  status, ProcessID: strings.TrimSpace(anyToString(payload["process_id"])),
+			Operation: strings.TrimSpace(anyToString(payload["operation"])),
+			Command:   strings.TrimSpace(anyToString(payload["command"])),
+			Status:    status, ProcessID: strings.TrimSpace(anyToString(payload["process_id"])),
+			InputBytes:   readInt64Field(payload, "input_bytes"),
 			LatestOutput: anyToString(payload["latest_output"]), Output: anyToString(payload["output"]),
 			Stdout: anyToString(payload["stdout"]), Stderr: anyToString(payload["stderr"]),
-			DurationMS: readInt64Field(payload, "duration_ms"), Truncated: readBoolField(payload, "truncated"),
+			DurationMS: readInt64Field(payload, "duration_ms"), FirstSeq: readInt64Field(payload, "first_seq"),
+			LastSeq: readInt64Field(payload, "last_seq"), LatestSeq: readInt64Field(payload, "latest_seq"),
+			HasMore: readBoolField(payload, "has_more"), TotalBytes: readInt64Field(payload, "total_bytes"),
+			ExecutionLocation: strings.TrimSpace(anyToString(payload["execution_location"])),
+			Truncated:         readBoolField(payload, "truncated"), TimedOut: readBoolField(payload, "timed_out"),
 			PendingResult: strings.TrimSpace(anyToString(payload["pending_result"])),
 			Terminated:    readBoolField(payload, "terminated"), Error: activityError(),
 		}
@@ -2090,4 +2116,48 @@ func activityScalarString(value any) string {
 
 func isFlowerControlTool(name string) bool {
 	return strings.TrimSpace(name) == "ask_user"
+}
+
+// terminalActivityInput copies display facts only. Interactive input is never
+// retained as activity input, even when a model repeats it in the description.
+func terminalActivityInput(args map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, key := range []string{"description", "command", "process_id", "after_seq", "yield_ms"} {
+		if value, ok := args[key]; ok {
+			out[key] = value
+		}
+	}
+	description := strings.TrimSpace(anyToString(out["description"]))
+	for _, key := range []string{"input", "stdin"} {
+		if secret := strings.TrimSpace(anyToString(args[key])); secret != "" {
+			description = strings.ReplaceAll(description, secret, "[redacted]")
+		}
+	}
+	out["description"] = description
+	return out
+}
+
+func terminalActivityLabel(operation string, source map[string]any) string {
+	description := strings.TrimSpace(anyToString(source["description"]))
+	generic := isNonInformativeToolActivityText(description)
+	switch strings.ToLower(description) {
+	case "terminal output", "view command output", "send input to command", "terminate terminal", "run command", "check output", "read output":
+		generic = true
+	}
+	if description != "" && !generic {
+		return activityPresentationLabel(description)
+	}
+	action := "Run command"
+	switch operation {
+	case "read":
+		action = "Check command output"
+	case "write":
+		action = "Send input to command"
+	case "terminate":
+		action = "Stop command"
+	}
+	if target := strings.TrimSpace(anyToString(source["command"])); target != "" {
+		action += ": " + target
+	}
+	return activityPresentationLabel(action)
 }

@@ -56,15 +56,26 @@ func toolSuccessSummary(toolName string) string {
 }
 
 func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result ToolResult, err error) {
-	defer func() {
-		result.activityInput = cloneAnyMap(call.Args)
-	}()
 	if h == nil || h.r == nil {
 		return ToolResult{}, fmt.Errorf("tool handler unavailable")
 	}
 	toolName := strings.TrimSpace(call.Name)
 	if toolName == "" {
 		toolName = strings.TrimSpace(h.toolName)
+	}
+	defer func() {
+		if strings.HasPrefix(toolName, "terminal.") {
+			result.activityInput = terminalActivityInput(call.Args)
+		} else {
+			result.activityInput = cloneAnyMap(call.Args)
+		}
+	}()
+	if h.activityUpdater != nil && (toolName == "terminal.read" || toolName == "terminal.write" || toolName == "terminal.terminate") {
+		displayArgs := terminalActivityInput(call.Args)
+		if proc, lookupErr := h.r.terminalProcessForTool(anyToString(call.Args["process_id"])); lookupErr == nil {
+			displayArgs["command"] = proc.Snapshot().Command
+		}
+		h.activityUpdater(floretActivityForToolCall(toolName, displayArgs), nil)
 	}
 	outcome, err := h.r.handleToolCall(ctx, strings.TrimSpace(call.ID), toolName, cloneAnyMap(call.Args), h.activityUpdater)
 	if err != nil {
@@ -162,7 +173,7 @@ func extractStringSlice(v any) []string {
 func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
-	case "terminal.exec", "terminal.read":
+	case "terminal.exec", "terminal.read", "terminal.terminate":
 		m, _ := payload.(map[string]any)
 		if m == nil {
 			return payload, false
@@ -631,8 +642,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.write",
-			Description:      "Send input to a running terminal process started by terminal.exec. Include trailing newlines when the shell program expects Enter.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "input": map[string]any{"type": "string", "maxLength": 200000}}, "required": []string{"process_id", "input"}, "additionalProperties": false}),
+			Description:      "Send input to a running terminal process started by terminal.exec. Include trailing newlines when the shell program expects Enter. Every call must include concise user-facing text in the user's language describing why the input is being sent; never include the input itself in that description.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "input": map[string]any{"type": "string", "maxLength": 200000}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "Concise user-facing text in the user's language explaining why input is being sent. Never include the input value, passwords, tokens, or other secrets."}}, "required": []string{"process_id", "input", "description"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,

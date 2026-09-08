@@ -1434,7 +1434,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runningTarget.title).toBe('https://example.test/a/very/long/path/that/must/remain/truncated/while-the-title-sweep-is-running');
   });
 
-  it('uses semantic terminal titles and omits empty terminal disclosures', async () => {
+  it('uses semantic terminal titles and keeps safe empty terminal disclosures', async () => {
     const threadID = 'thread-terminal-semantic-presentation';
     const terminalThread = thread({
       thread_id: threadID,
@@ -1486,13 +1486,17 @@ describe('Flower final thread cache and workspace transport', () => {
 
     const execRow = runtime.querySelector('[data-flower-activity-item-id="terminal-exec-semantic"]') as HTMLElement;
     const terminateRow = runtime.querySelector('[data-flower-activity-item-id="terminal-terminate-semantic"]') as HTMLElement;
-    expect(execRow.textContent).toContain('Run command: Fetch official specifications');
-    expect(terminateRow.textContent).toContain('Terminate command execution: Stop the stalled request');
+    expect(execRow.textContent).toContain('Fetch official specifications');
+    expect(terminateRow.textContent).toContain('Stop the stalled request');
     expect(runtime.textContent).not.toContain('terminal.exec');
     expect(runtime.textContent).not.toContain('terminal.terminate');
     expect(execRow.querySelector('button.flower-activity-inline-button')).not.toBeNull();
-    expect(terminateRow.querySelector('button.flower-activity-inline-button')).toBeNull();
-    expect(terminateRow.querySelector('.flower-activity-inline-chevron')).toBeNull();
+    const terminateToggle = terminateRow.querySelector<HTMLButtonElement>('button.flower-activity-inline-button')!;
+    expect(terminateToggle).not.toBeNull();
+    expect(terminateRow.querySelector('.flower-activity-inline-chevron')).not.toBeNull();
+    terminateToggle.click();
+    await waitFor(() => terminateToggle.getAttribute('aria-expanded') === 'true');
+    expect(terminateRow.querySelector('.flower-activity-terminal-facts')).not.toBeNull();
   });
 
   it('keeps waiting-user navigation interactive and applies background state without pointer activity', async () => {
