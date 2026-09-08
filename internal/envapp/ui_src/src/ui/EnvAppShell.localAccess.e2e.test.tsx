@@ -156,6 +156,7 @@ const pluginLayoutMocks = vi.hoisted(() => ({
 }));
 vi.mock('./services/workbenchLayoutApi', () => pluginLayoutMocks);
 const workbenchPluginSurfaceState = vi.hoisted(() => ({
+  host: null as any,
   open: vi.fn(async () => undefined),
   close: vi.fn(async () => undefined),
   releasePlugin: vi.fn(async () => undefined),
@@ -1174,6 +1175,7 @@ vi.mock('./accessResume', () => ({
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./workbench/EnvWorkbenchPage', () => ({
   EnvWorkbenchPage: (props: any) => {
+    workbenchPluginSurfaceState.host = props.pluginSurfaceHost;
     props.registerPluginSurfaceController?.(workbenchPluginSurfaceState);
     onCleanup(() => props.registerPluginSurfaceController?.(null));
     return (
@@ -1595,6 +1597,7 @@ beforeEach(async () => {
   pluginLayoutMocks.getWorkbenchLayoutSnapshot.mockClear();
   pluginLayoutMocks.removeWorkbenchPluginWidgets.mockReset();
   pluginLayoutMocks.removeWorkbenchPluginWidgets.mockResolvedValue({ widget_states: [] });
+  workbenchPluginSurfaceState.host = null;
   workbenchPluginSurfaceState.open.mockClear();
   workbenchPluginSurfaceState.close.mockClear();
   workbenchPluginSurfaceState.releasePlugin.mockClear();
@@ -3725,6 +3728,62 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally {
       dispose();
     }
+  }, 10000);
+
+  it.each((['official', 'external'] as const).flatMap((source) =>
+    (['committed', 'committed_error', 'unknown', 'not_committed', 'unknown_unresolved'] as const).map((outcome) => ({ source, outcome })),
+  ))('preserves placed surfaces through $source update outcome $outcome', async ({ source, outcome }) => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const before = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(before);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 60);
+      const target = before.items[0].defaultLaunchTarget!;
+      await pluginPanelState.lastProps.onOpenPluginSurface(target);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 60);
+      const resolve = () => workbenchPluginSurfaceState.host.resolveSurface(target);
+      expect(resolve().status).toBe('ready');
+      const previousGeneration = resolve().generation;
+      workbenchPluginSurfaceState.open.mockClear();
+      const mutation = source === 'official' ? pluginLifecycleMocks.execute : pluginLifecycleMocks.installExternalPackage;
+      let complete!: () => void;
+      const error = new PluginPlatformRequestError('PLUGIN_INVALID_REQUEST', 'update response failed', {},
+        outcome === 'committed_error' ? 'committed' : outcome === 'unknown_unresolved' ? 'unknown' : outcome === 'committed' ? 'committed' : outcome);
+      mutation.mockImplementationOnce(() => new Promise((resolve, reject) => {
+        complete = () => outcome === 'committed' ? resolve({}) : reject(error);
+      }));
+      const request = source === 'official'
+        ? pluginCenterViewState.lastProps.onCommand({ type: 'update', pluginID: target.pluginID, pluginInstanceID: target.pluginInstanceID,
+          expectedManagementRevision: 11, targetVersion: '2.0.0' }, new AbortController().signal)
+        : pluginCenterViewState.lastProps.onCommitExternal({ inspection_id: 'inspection_update_continuity', intent: {
+          action: 'update', plugin_instance_id: target.pluginInstanceID, expected_management_revision: 11,
+        } }, new AbortController().signal);
+      const settled = request.then(() => undefined, (error: unknown) => error);
+      await flushUntil(() => Boolean(complete));
+      expect(resolve().status).toBe('pending');
+      const advanced = outcome !== 'not_committed' && outcome !== 'unknown_unresolved';
+      if (advanced) pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({ items: before.items.map((item: any) => ({
+        ...item, managementRevision: 12, defaultLaunchTarget: { ...item.defaultLaunchTarget, expectedManagementRevision: 12 },
+      })) });
+      complete();
+      expect(await settled).toBe(outcome === 'committed' ? undefined : error);
+      expect(resolve().status).toBe(outcome === 'unknown_unresolved' ? 'unknown' : 'ready');
+      if (outcome === 'unknown_unresolved') expect(resolve().target).toBeNull();
+      else expect(resolve().target.expectedManagementRevision).toBe(advanced ? 12 : 11);
+      if (outcome !== 'not_committed' || source === 'external') expect(resolve().generation).toBeGreaterThan(previousGeneration);
+      expect(pluginLayoutMocks.removeWorkbenchPluginWidgets).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.releasePlugin).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.releaseAll).not.toHaveBeenCalled();
+      if (source === 'external') expect(pluginPlatformMocks.coordinator.closePlugin).toHaveBeenCalledTimes(1);
+      else expect(pluginPlatformMocks.coordinator.closePlugin).not.toHaveBeenCalled();
+    } finally { dispose(); }
   }, 10000);
 
   it('does not install an external update when projected surface cleanup fails', async () => {
