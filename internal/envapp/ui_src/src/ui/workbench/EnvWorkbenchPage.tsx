@@ -1,3 +1,4 @@
+import { Button } from '@floegence/floe-webapp-core/ui';
 import {
   createDefaultWorkbenchState,
   sanitizeWorkbenchState,
@@ -42,6 +43,7 @@ import {
   deleteWorkbenchTerminalSession,
   getWorkbenchLayoutSnapshot,
   openWorkbenchPreview,
+  openWorkbenchPlugin,
   putWorkbenchLayout,
   putWorkbenchWidgetState,
   WorkbenchLayoutConflictError,
@@ -59,6 +61,7 @@ import {
   redevenWorkbenchInitialCanvasWidgetTypes,
 } from './redevenWorkbenchWidgets';
 import { arrangeWorkbenchWidgetsByType } from './workbenchAutoArrange';
+import { mergeWorkbenchLayoutChanges } from './workbenchLayoutMerge';
 import { createRedevenWorkbenchInitialLayout } from './workbenchInitialCanvas';
 import {
   EnvWorkbenchInstancesContext,
@@ -735,7 +738,13 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   const [runtimeSnapshot, setRuntimeSnapshot] = createSignal<RuntimeWorkbenchLayoutSnapshot>(
     createEmptyRuntimeWorkbenchLayoutSnapshot(),
   );
+  let runtimeLayoutGeneration = 0;
   const [runtimeLayoutReady, setRuntimeLayoutReady] = createSignal(false);
+  const [layoutError, setLayoutError] = createSignal<'load' | 'save' | 'conflict' | null>(null);
+  const [layoutLoadAttempt, setLayoutLoadAttempt] = createSignal(0);
+  const [pluginPlacementState, setPluginPlacementState] = createSignal<{
+    target: PluginSurfaceLaunchTarget; placement?: WorkbenchCanvasWidgetPlacement; pending: boolean;
+  } | null>(null);
   const [submitQueued, setSubmitQueued] = createSignal(false);
   const [submitInFlight, setSubmitInFlight] = createSignal(false);
   const [activeLayoutInteractions, setActiveLayoutInteractions] = createSignal(0);
@@ -985,6 +994,18 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     });
   };
 
+  const applySnapshotPreservingEdits = (snapshot: RuntimeWorkbenchLayoutSnapshot, base = runtimeSnapshot()) => {
+    if (snapshot.seq < runtimeSnapshot().seq) return;
+    const local = extractRuntimeWorkbenchLayoutFromSurfaceState(workbenchState());
+    const merged = mergeWorkbenchLayoutChanges(base, local, snapshot);
+    batch(() => {
+      applyRuntimeSnapshot(snapshot);
+      setWorkbenchState((previous) => projectWorkbenchStateFromRuntimeLayout({
+        snapshot: { ...snapshot, ...merged }, localState: localState(), existingState: previous, widgetDefinitions: redevenWorkbenchWidgets,
+      }));
+    });
+  };
+
   const beginLocalOwnerHandoff = () => {
     const token = ++localOwnerHandoffToken;
     setLocalOwnerHandoffActive(true);
@@ -1039,7 +1060,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       bufferRuntimeSnapshot(snapshot);
       return;
     }
-    applyRuntimeSnapshot(snapshot);
+    applySnapshotPreservingEdits(snapshot);
   };
 
   const applyLocalRuntimeSnapshotWhenReady = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
@@ -1449,6 +1470,10 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   });
 
   createEffect(() => {
+    layoutLoadAttempt();
+    runtimeLayoutGeneration += 1;
+    setLayoutError(null);
+    setPluginPlacementState(null);
     const localKey = localPreferencesKey();
     const instanceKey = instanceStateKey();
     const nextLocalState = readPersistedWorkbenchLocalState(localKey, redevenWorkbenchWidgets);
@@ -1556,13 +1581,14 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
           return;
         }
         console.warn('Failed to load runtime workbench layout:', error);
-        setRuntimeLayoutReady(true);
+        setLayoutError('load');
       }
     };
 
     void loadRuntimeLayout();
 
     onCleanup(() => {
+      runtimeLayoutGeneration += 1;
       abortController.abort();
     });
   });
@@ -1589,7 +1615,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   });
 
   createEffect(() => {
-    if (!runtimeLayoutReady()) {
+    if (!runtimeLayoutReady() || layoutError() === 'save' || layoutError() === 'conflict') {
       return;
     }
 
@@ -1616,6 +1642,8 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       }
 
       setSubmitInFlight(true);
+      const submittedBase = runtimeSnapshot();
+      const generation = runtimeLayoutGeneration;
       try {
         const nextSnapshot = await putWorkbenchLayout({
           base_revision: runtimeSnapshot().revision,
@@ -1624,21 +1652,31 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
           annotations: nextDesiredLayout.annotations,
           background_layers: nextDesiredLayout.background_layers,
         });
-        applyLocalRuntimeSnapshotWhenReady(nextSnapshot);
+        if (generation !== runtimeLayoutGeneration) return;
+        applySnapshotPreservingEdits(nextSnapshot, { ...submittedBase, ...nextDesiredLayout });
+        setLayoutError(null);
       } catch (error) {
+        if (generation !== runtimeLayoutGeneration) return;
         if (error instanceof WorkbenchLayoutConflictError) {
           try {
             const latestSnapshot = await getWorkbenchLayoutSnapshot();
-            applyLocalRuntimeSnapshotWhenReady(latestSnapshot);
+            if (generation !== runtimeLayoutGeneration) return;
+            applySnapshotPreservingEdits(latestSnapshot, submittedBase);
+            setLayoutError('conflict');
           } catch (refreshError) {
+            if (generation !== runtimeLayoutGeneration) return;
+            setLayoutError('save');
             console.warn('Failed to refresh workbench layout after conflict:', refreshError);
           }
         } else {
+          setLayoutError('save');
           console.warn('Failed to persist workbench layout:', error);
         }
       } finally {
-        setSubmitQueued(false);
-        setSubmitInFlight(false);
+        if (generation === runtimeLayoutGeneration) {
+          setSubmitQueued(false);
+          setSubmitInFlight(false);
+        }
       }
     }, delayMs);
 
@@ -1653,7 +1691,8 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       return;
     }
     setPendingRemoteSnapshot(null);
-    applyRuntimeSnapshot(bufferedSnapshot);
+    if (layoutError() === 'save' || layoutError() === 'conflict') applySnapshotPreservingEdits(bufferedSnapshot);
+    else applyRuntimeSnapshot(bufferedSnapshot);
   });
 
   createEffect(() => {
@@ -2171,113 +2210,79 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     && state.state.plugin_instance_id === target.pluginInstanceID
     && state.state.surface_id === target.surfaceID;
 
-  const waitForRuntimePluginWidget = async (widgetId: string): Promise<void> => {
-    const deadline = Date.now() + 5_000;
-    while (Date.now() < deadline) {
-      if (runtimeSnapshot().widgets.some((widget) => (
-        widget.widget_id === widgetId && widget.widget_type === 'redeven.plugin'
-      ))) {
-        return;
-      }
-      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 20));
-    }
-    throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
-  };
+  const pluginWidgetState = (target: PluginSurfaceLaunchTarget) => ({
+    kind: 'plugin' as const,
+    plugin_instance_id: target.pluginInstanceID,
+    plugin_id: target.pluginID,
+    surface_id: target.surfaceID,
+    display_name: target.displayName ?? target.pluginID,
+    expected_management_revision: target.expectedManagementRevision,
+  });
 
   const openPluginWorkbenchSurface = async (
     target: PluginSurfaceLaunchTarget,
     placement?: WorkbenchCanvasWidgetPlacement,
   ): Promise<void> => {
     const api = surfaceApi();
-    if (!api || !runtimeLayoutReady()) {
-      throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
-    }
-
-    const currentState = runtimeSnapshot().widget_states.find((state) => (
-      pluginStateMatchesTarget(state, target)
-    ));
-    let widget = currentState ? api.findWidgetById(currentState.widget_id) : null;
-    const created = !widget;
-    if (!widget) {
-      widget = api.createWidget('redeven.plugin', {
-        centerViewport: false,
-        ...(placement?.centerWorld ?? {}),
-      });
-    }
-    if (!widget) {
-      throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
-    }
-
-    const widgetID = widget.id;
-    const title = target.displayName ?? target.pluginID;
-    updateWidgetTitle(widgetID, title);
-    api.focusWidget(widget, { centerViewport: !created || !placement });
+    if (!api || !runtimeLayoutReady()) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    const definition = redevenWorkbenchWidgets.find((entry) => entry.type === 'redeven.plugin')!;
+    const center = placement
+      ? { x: placement.centerWorld.worldX, y: placement.centerWorld.worldY }
+      : resolveViewportWorldCenter(workbenchState().viewport, resolveCanvasFrameSize());
+    const request = {
+      state: pluginWidgetState(target),
+      viewport: {
+        ...(center ? { center_x: center.x, center_y: center.y } : {}),
+        default_width: definition.defaultSize.width,
+        default_height: definition.defaultSize.height,
+      },
+    };
+    const generation = runtimeLayoutGeneration;
+    setPluginPlacementState({ target, placement, pending: true });
     try {
-      if (created) await waitForRuntimePluginWidget(widgetID);
-      if (
-        currentState?.state.kind === 'plugin'
-        && (
-          currentState.state.plugin_id !== target.pluginID
-          || currentState.state.expected_management_revision !== target.expectedManagementRevision
-        )
-      ) {
-        const close = pluginSurfaceCloseByWidgetID.get(widgetID);
-        if (close && !(await close())) throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
-        pluginSurfaceCloseByWidgetID.delete(widgetID);
-      }
-      const persisted = await putSharedWidgetState(widgetID, 'redeven.plugin', {
-        kind: 'plugin',
-        plugin_instance_id: target.pluginInstanceID,
-        plugin_id: target.pluginID,
-        surface_id: target.surfaceID,
-        display_name: target.displayName ?? target.pluginID,
-        expected_management_revision: target.expectedManagementRevision,
-      }, true, created);
-      if (!persisted) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+      const result = await openWorkbenchPlugin(request);
+      if (generation !== runtimeLayoutGeneration) throw new Error(i18n.t('uiCopy.plugin.continuity.loading'));
+      // An explicit open may follow a locally removed but not yet saved widget.
+      // Reusing its authoritative placement is itself the new user intent.
+      const base = runtimeSnapshot();
+      applySnapshotPreservingEdits(result.snapshot, {
+        ...base, widgets: workbenchState().widgets.some((widget) => widget.id === result.widget_id)
+          ? base.widgets : base.widgets.filter((widget) => widget.widget_id !== result.widget_id),
+      });
+      const widget = api.findWidgetById(result.widget_id);
+      if (widget) api.focusWidget(widget, { centerViewport: !result.created || !placement });
+      setPluginPlacementState(null);
     } catch (error) {
-      if (created) removeWidget(widgetID);
+      if (generation !== runtimeLayoutGeneration) throw error;
+      // A lost response may follow a committed placement. Reconcile the exact
+      // saved target before presenting a retry, without deleting any component.
+      try {
+        const snapshot = await getWorkbenchLayoutSnapshot();
+        if (generation !== runtimeLayoutGeneration) throw error;
+        applySnapshotPreservingEdits(snapshot);
+        const saved = snapshot.widget_states.find((state) => pluginStateMatchesTarget(state, target)
+          && state.state.kind === 'plugin' && state.state.plugin_id === target.pluginID
+          && state.state.expected_management_revision >= target.expectedManagementRevision);
+        if (saved) {
+          const widget = api.findWidgetById(saved.widget_id);
+          if (widget) api.focusWidget(widget, { centerViewport: !placement });
+          setPluginPlacementState(null);
+          return;
+        }
+      } catch { /* The original placement error remains the action outcome. */ }
+      if (generation !== runtimeLayoutGeneration) throw error;
+      setPluginPlacementState({ target, placement, pending: false });
       throw error;
     }
   };
 
-  const closePluginWorkbenchSurface = async (
-    target: Pick<PluginSurfaceLaunchTarget, 'pluginInstanceID' | 'surfaceID'>,
-  ): Promise<void> => {
-    const matching = runtimeSnapshot().widget_states.filter((state) => pluginStateMatchesTarget(state, target));
-    for (const state of matching) {
+  const releasePluginWorkbenchSurfaces = async (pluginInstanceID?: string): Promise<void> => {
+    for (const state of runtimeSnapshot().widget_states) {
+      if (state.widget_type !== 'redeven.plugin' || state.state.kind !== 'plugin'
+        || (pluginInstanceID && state.state.plugin_instance_id !== pluginInstanceID)) continue;
       const close = pluginSurfaceCloseByWidgetID.get(state.widget_id);
-      if (close && !(await close())) {
-        throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
-      }
+      if (close && !(await close())) throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
       pluginSurfaceCloseByWidgetID.delete(state.widget_id);
-      removeWidget(state.widget_id);
-    }
-  };
-
-  const closePluginWorkbenchSurfaces = async (pluginInstanceID: string): Promise<void> => {
-    const matching = runtimeSnapshot().widget_states.filter((state) => (
-      state.widget_type === 'redeven.plugin'
-      && state.state.kind === 'plugin'
-      && state.state.plugin_instance_id === pluginInstanceID
-    ));
-    for (const state of matching) {
-      const close = pluginSurfaceCloseByWidgetID.get(state.widget_id);
-      if (close && !(await close())) {
-        throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
-      }
-      pluginSurfaceCloseByWidgetID.delete(state.widget_id);
-      removeWidget(state.widget_id);
-    }
-  };
-
-  const closeAllPluginWorkbenchSurfaces = async (): Promise<void> => {
-    const instanceIDs = Array.from(new Set(runtimeSnapshot().widget_states.flatMap((state) => (
-      state.widget_type === 'redeven.plugin' && state.state.kind === 'plugin'
-        ? [state.state.plugin_instance_id]
-        : []
-    ))));
-    for (const pluginInstanceID of instanceIDs) {
-      await closePluginWorkbenchSurfaces(pluginInstanceID);
     }
   };
 
@@ -2289,23 +2294,13 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   };
   const pluginSurfaceController: WorkbenchPluginSurfaceController = {
     open: (target, placement) => serializePluginControllerOperation(() => openPluginWorkbenchSurface(target, placement)),
-    close: (target) => serializePluginControllerOperation(() => closePluginWorkbenchSurface(target)),
-    closePlugin: (pluginInstanceID) => serializePluginControllerOperation(() => closePluginWorkbenchSurfaces(pluginInstanceID)),
-    closeAll: () => serializePluginControllerOperation(closeAllPluginWorkbenchSurfaces),
-    listPluginTargets: (pluginInstanceID) => runtimeSnapshot().widget_states.flatMap((state) => (
-      state.widget_type === 'redeven.plugin'
-      && state.state.kind === 'plugin'
-      && state.state.plugin_instance_id === pluginInstanceID
-        ? [{
-          pluginID: state.state.plugin_id,
-          pluginInstanceID: state.state.plugin_instance_id,
-          surfaceID: state.state.surface_id,
-          displayName: state.state.display_name,
-          expectedManagementRevision: state.state.expected_management_revision,
-          preferredPlacement: 'workbench' as const,
-        }]
-        : []
-    )),
+    releasePlugin: (pluginInstanceID) => serializePluginControllerOperation(() => releasePluginWorkbenchSurfaces(pluginInstanceID)),
+    releaseAll: () => serializePluginControllerOperation(() => releasePluginWorkbenchSurfaces()),
+    focus: (target) => {
+      const state = runtimeSnapshot().widget_states.find((state) => pluginStateMatchesTarget(state, target));
+      const widget = state && surfaceApi()?.findWidgetById(state.widget_id);
+      if (widget) surfaceApi()?.focusWidget(widget, { centerViewport: false });
+    },
   };
   const reconcilingPluginWidgetIDs = new Set<string>();
   createEffect(() => {
@@ -2314,25 +2309,17 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     for (const state of runtimeSnapshot().widget_states) {
       if (state.widget_type !== 'redeven.plugin' || state.state.kind !== 'plugin') continue;
       const target = resolver({
-        pluginID: state.state.plugin_id,
-        pluginInstanceID: state.state.plugin_instance_id,
-        surfaceID: state.state.surface_id,
-        displayName: state.state.display_name,
+        pluginID: state.state.plugin_id, pluginInstanceID: state.state.plugin_instance_id,
+        surfaceID: state.state.surface_id, displayName: state.state.display_name,
         expectedManagementRevision: state.state.expected_management_revision,
-        preferredPlacement: 'workbench',
       });
-      if (
-        !target
-        || (
-          target.expectedManagementRevision === state.state.expected_management_revision
-          && (target.displayName ?? target.pluginID) === state.state.display_name
-        )
-        || reconcilingPluginWidgetIDs.has(state.widget_id)
-      ) {
-        continue;
-      }
+      if (!target || runtimeWorkbenchWidgetStateDataEqual(pluginWidgetState(target), state.state)
+        || reconcilingPluginWidgetIDs.has(state.widget_id)) continue;
       reconcilingPluginWidgetIDs.add(state.widget_id);
-      void pluginSurfaceController.open(target)
+      // Refresh only this existing binding; a concurrent explicit removal must
+      // never turn a background refresh into a new placement or focus request.
+      void putSharedWidgetState(state.widget_id, 'redeven.plugin', pluginWidgetState(target))
+        .then((saved) => { if (!saved) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed')); })
         .catch(props.pluginSurfaceHost.onRetirementError)
         .finally(() => reconcilingPluginWidgetIDs.delete(state.widget_id));
     }
@@ -2936,7 +2923,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         data-redeven-workbench-layout-interacting={layoutInteractionVisualActive() ? 'true' : 'false'}
         data-redeven-workbench-render-transaction={renderTransactionReason() ?? undefined}
       >
-        <div ref={setSurfaceHost} class="h-full min-h-0">
+        <div ref={setSurfaceHost} class="h-full min-h-0" inert={!runtimeLayoutReady()} aria-hidden={!runtimeLayoutReady() ? 'true' : undefined}>
           <RedevenWorkbenchSurface
             state={workbenchState}
             setState={setSurfaceWorkbenchState}
@@ -2962,6 +2949,21 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
             onViewportInteractionEnd={endSurfaceViewportInteraction}
           />
         </div>
+        <Show when={layoutError()}>
+          {(error) => <div class="absolute left-1/2 top-4 z-30 flex max-w-[90%] -translate-x-1/2 items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg" role="status" data-workbench-layout-error={error()}>
+            <span class="text-sm">{i18n.t(`uiCopy.plugin.continuity.${error()}Layout`)}</span>
+            <Button size="sm" onClick={() => error() === 'load' ? setLayoutLoadAttempt((n) => n + 1) : setLayoutError(null)}>{i18n.t('common.actions.retry')}</Button>
+          </div>}
+        </Show>
+        <Show when={pluginPlacementState()}>
+          {(request) => <div class="absolute bottom-20 left-1/2 z-30 flex max-w-[90%] -translate-x-1/2 items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg" role="status" data-workbench-plugin-placement>
+            <span class="text-sm">{i18n.t(request().pending ? 'uiCopy.plugin.continuity.placing' : 'uiCopy.plugin.continuity.placementFailed')}</span>
+            <Show when={!request().pending}>
+              <Button size="sm" onClick={() => void pluginSurfaceController.open(request().target, request().placement).catch(props.pluginSurfaceHost?.onRetirementError)}>{i18n.t('common.actions.retry')}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setPluginPlacementState(null)}>{i18n.t('common.actions.cancel')}</Button>
+            </Show>
+          </div>}
+        </Show>
         <RedevenWorkbenchHudActions
           mount={workbenchHudMount}
           selectedWidget={selectedWidget}
@@ -2969,7 +2971,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
           onFitSelectedWidget={fitSelectedWidgetToViewport}
         />
         <WorkbenchProgressCurtain
-          visible={workbenchCurtainVisible()}
+          visible={workbenchCurtainVisible() && layoutError() !== 'load'}
           stage={workbenchCurtainStage()}
         />
         </div>

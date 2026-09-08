@@ -56,6 +56,7 @@ const layoutApiMocks = vi.hoisted(() => ({
     updated_at_unix_ms: 300,
     state: input?.state,
   })),
+  openWorkbenchPlugin: vi.fn(),
   openWorkbenchPreview: vi.fn(async (input: any): Promise<any> => {
     const widgetId = 'widget-preview-command';
     const now = 400;
@@ -549,6 +550,7 @@ vi.mock('../services/workbenchLayoutApi', () => ({
   getWorkbenchLayoutSnapshot: layoutApiMocks.getWorkbenchLayoutSnapshot,
   putWorkbenchLayout: layoutApiMocks.putWorkbenchLayout,
   putWorkbenchWidgetState: layoutApiMocks.putWorkbenchWidgetState,
+  openWorkbenchPlugin: layoutApiMocks.openWorkbenchPlugin,
   openWorkbenchPreview: layoutApiMocks.openWorkbenchPreview,
   createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
@@ -805,6 +807,7 @@ describe('EnvWorkbenchPage', () => {
       updated_at_unix_ms: 300,
       state: input?.state,
     }));
+    layoutApiMocks.openWorkbenchPlugin.mockReset();
     layoutApiMocks.openWorkbenchPreview.mockReset();
     layoutApiMocks.openWorkbenchPreview.mockImplementation(async (input: any) => {
       const widgetId = 'widget-preview-command';
@@ -3885,155 +3888,127 @@ describe('EnvWorkbenchPage', () => {
     expect(surface?.dataset.viewportY).toBe('60');
   });
 
-  it('places a dragged plugin at the Workbench-resolved world point without recentering', async () => {
+  function mockPluginPlacement() {
+    let seq = 1;
+    const widget = runtimeWidget('widget-plugin-1', 'redeven.plugin', 1, 500);
+    layoutApiMocks.openWorkbenchPlugin.mockImplementation(async (input) => {
+      const widgetState = { widget_id: widget.widget_id, widget_type: widget.widget_type,
+        revision: ++seq, updated_at_unix_ms: 500, state: input.state };
+      return { widget_id: widget.widget_id, created: seq === 2, widget_state: widgetState,
+        snapshot: { seq, revision: seq, updated_at_unix_ms: 500, widgets: [widget],
+          widget_states: [widgetState], sticky_notes: [], annotations: [], background_layers: [] } };
+    });
+    surfaceApiMocks.findWidgetById.mockImplementation((id) => surfaceApiMocks.lastStateAccessor?.().widgets.find((widget: any) => widget.id === id));
+  }
+
+  const pluginTarget = { pluginID: 'io.example.metrics', pluginInstanceID: 'instance-containers',
+    surfaceID: 'containers', displayName: 'Containers', expectedManagementRevision: 7 };
+
+  it('atomically places a dragged plugin at the resolved world point without recentering', async () => {
+    mockPluginPlacement();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const pluginWidget = persistedWidget('widget-plugin-drop', 'redeven.plugin', 'Plugin', 1, 500);
-    surfaceApiMocks.createWidget.mockImplementation(() => {
-      surfaceApiMocks.lastSetState((previous: any) => ({
-        ...previous,
-        widgets: [...previous.widgets, pluginWidget],
-        selectedWidgetId: pluginWidget.id,
-      }));
-      return pluginWidget;
-    });
     let controller: any;
-    mount(() => (
-      <EnvWorkbenchPage
-        pluginSurfaceHost={{} as any}
-        registerPluginSurfaceController={(next) => { controller = next; }}
-      />
-    ), host);
+    mount(() => <EnvWorkbenchPage pluginSurfaceHost={{} as any} registerPluginSurfaceController={(value) => { controller = value; }} />, host);
     await flushMicrotasks();
-
-    const target = {
-      pluginID: 'io.example.metrics',
-      pluginInstanceID: 'instance-containers',
-      surfaceID: 'containers',
-      displayName: 'Containers',
-      expectedManagementRevision: 7,
-      preferredPlacement: 'workbench' as const,
-    };
-    const placement = {
-      widgetType: 'redeven.plugin' as const,
-      centerWorld: { worldX: 820, worldY: 440 },
-      frame: { x: 260, y: 60, width: 1120, height: 760 },
-    };
-    const opened = controller.open(target, placement);
-    await vi.advanceTimersByTimeAsync(200);
-    await flushMicrotasks();
-    await opened;
-
-    expect(surfaceApiMocks.createWidget).toHaveBeenCalledWith('redeven.plugin', {
-      centerViewport: false,
-      worldX: 820,
-      worldY: 440,
+    const placement = { widgetType: 'redeven.plugin' as const, centerWorld: { worldX: 820, worldY: 440 },
+      frame: { x: 260, y: 60, width: 1120, height: 760 } };
+    await controller.open(pluginTarget, placement);
+    expect(layoutApiMocks.openWorkbenchPlugin).toHaveBeenCalledWith({
+      state: expect.objectContaining({ kind: 'plugin', surface_id: 'containers', expected_management_revision: 7 }),
+      viewport: { center_x: 820, center_y: 440, default_width: 1120, default_height: 760 },
     });
-    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(pluginWidget, { centerViewport: false });
-    expect(placement.frame).toEqual({ x: 260, y: 60, width: 1120, height: 760 });
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(layoutApiMocks.putWorkbenchWidgetState).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(expect.objectContaining({ id: 'widget-plugin-1' }), { centerViewport: false });
   });
 
-  it('creates, persists, reuses, and revision-refreshes plugin widgets through the real controller', async () => {
+  it('reuses the saved plugin identity and preserves local geometry during explicit opens', async () => {
+    mockPluginPlacement();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const pluginWidget = persistedWidget('widget-plugin-1', 'redeven.plugin', 'Plugin', 1, 500);
-    const closeSurface = vi.fn(async () => true);
-    widgetBodyMocks.renderPluginBody = (bodyProps: any) => {
-      const workbench = useEnvWorkbenchInstancesContext();
-      workbench.registerPluginSurfaceClose(bodyProps.widgetId, closeSurface);
-      createEffect(() => {
-        contextProbeState.pluginState = workbench.pluginSurfaceState(bodyProps.widgetId);
-      });
-      return null;
-    };
-    surfaceApiMocks.createWidget.mockImplementation(() => {
-      surfaceApiMocks.lastSetState((previous: any) => ({
-        ...previous,
-        widgets: [...previous.widgets, pluginWidget],
-        selectedWidgetId: pluginWidget.id,
-      }));
-      return pluginWidget;
-    });
-    surfaceApiMocks.findWidgetById.mockImplementation((widgetID?: unknown) => (
-      typeof widgetID === 'string'
-        ? surfaceApiMocks.lastStateAccessor?.().widgets.find((widget: any) => widget.id === widgetID) ?? null
-        : null
-    ));
     let controller: any;
-    mount(() => (
-      <EnvWorkbenchPage
-        pluginSurfaceHost={{} as any}
-        registerPluginSurfaceController={(next) => { controller = next; }}
-      />
-    ), host);
+    mount(() => <EnvWorkbenchPage pluginSurfaceHost={{} as any} registerPluginSurfaceController={(value) => { controller = value; }} />, host);
     await flushMicrotasks();
+    await controller.open(pluginTarget);
+    const first = surfaceApiMocks.lastStateAccessor().widgets[0];
+    await controller.open(pluginTarget);
+    expect(surfaceApiMocks.lastStateAccessor().widgets).toEqual([first]);
+    await controller.open({ ...pluginTarget, expectedManagementRevision: 8 });
+    expect(surfaceApiMocks.lastStateAccessor().widgets).toEqual([first]);
+    expect(layoutApiMocks.openWorkbenchPlugin).toHaveBeenCalledTimes(3);
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.focusWidget).toHaveBeenLastCalledWith(expect.objectContaining({ id: first.id }), { centerViewport: true });
+  });
 
-    const target = {
-      pluginID: 'io.example.metrics',
-      pluginInstanceID: 'instance-containers',
-      surfaceID: 'containers',
-      displayName: 'Containers',
-      expectedManagementRevision: 7,
-      preferredPlacement: 'workbench' as const,
-    };
-    const firstOpen = controller.open(target);
-    await vi.advanceTimersByTimeAsync(200);
-    await flushMicrotasks();
-    await firstOpen;
-
-    expect(surfaceApiMocks.createWidget).toHaveBeenCalledTimes(1);
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledWith('widget-plugin-1', {
-      base_revision: 0,
-      widget_type: 'redeven.plugin',
-      state: {
-        kind: 'plugin',
-        plugin_instance_id: 'instance-containers',
-        plugin_id: 'io.example.metrics',
-        surface_id: 'containers',
-        display_name: 'Containers',
-        expected_management_revision: 7,
-      },
+  it('recovers a committed plugin placement after response loss without rollback or duplicate creation', async () => {
+    mockPluginPlacement();
+    const commit = layoutApiMocks.openWorkbenchPlugin.getMockImplementation()!;
+    layoutApiMocks.openWorkbenchPlugin.mockImplementationOnce(async (request) => {
+      const result = await commit(request);
+      layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue(result.snapshot);
+      throw new Error('response lost');
     });
-    expect(contextProbeState.pluginState).toEqual(expect.objectContaining({
-      kind: 'plugin',
-      expected_management_revision: 7,
-    }));
-
-    await controller.open(target);
-    expect(surfaceApiMocks.createWidget).toHaveBeenCalledTimes(1);
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(1);
-    expect(surfaceApiMocks.focusWidget).toHaveBeenLastCalledWith(pluginWidget, { centerViewport: true });
-
-    await controller.open(target, {
-      widgetType: 'redeven.plugin',
-      centerWorld: { worldX: 960, worldY: 540 },
-      frame: { x: 400, y: 160, width: 1120, height: 760 },
-    });
-    expect(surfaceApiMocks.createWidget).toHaveBeenCalledTimes(1);
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(1);
-    expect(surfaceApiMocks.focusWidget).toHaveBeenLastCalledWith(pluginWidget, { centerViewport: true });
-
-    const renamedTarget = { ...target, displayName: 'Containers renamed' };
-    await controller.open(renamedTarget);
-    expect(closeSurface).not.toHaveBeenCalled();
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(2);
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenLastCalledWith('widget-plugin-1', expect.objectContaining({
-      base_revision: 1,
-      state: expect.objectContaining({ display_name: 'Containers renamed' }),
-    }));
-
-    let resolveClose!: (closed: boolean) => void;
-    closeSurface.mockImplementationOnce(() => new Promise<boolean>((resolve) => { resolveClose = resolve; }));
-    const refreshed = controller.open({ ...renamedTarget, expectedManagementRevision: 8 });
+    const host = document.createElement('div'); document.body.append(host);
+    let controller: any;
+    mount(() => <EnvWorkbenchPage pluginSurfaceHost={{} as any} registerPluginSurfaceController={(value) => { controller = value; }} />, host);
     await flushMicrotasks();
-    expect(closeSurface).toHaveBeenCalledTimes(1);
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(2);
-    resolveClose(true);
-    await refreshed;
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenLastCalledWith('widget-plugin-1', expect.objectContaining({
-      base_revision: 2,
-      state: expect.objectContaining({ expected_management_revision: 8 }),
-    }));
+    await expect(controller.open(pluginTarget)).resolves.toBeUndefined();
+    expect(surfaceApiMocks.lastStateAccessor().widgets.map((widget: any) => widget.id)).toEqual(['widget-plugin-1']);
+    expect(host.querySelector('[data-workbench-plugin-placement]')).toBeNull();
+    expect(layoutApiMocks.openWorkbenchPlugin).toHaveBeenCalledOnce();
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed plugin placement retryable until the atomic operation succeeds', async () => {
+    mockPluginPlacement();
+    layoutApiMocks.openWorkbenchPlugin.mockRejectedValueOnce(new Error('save unavailable'));
+    const host = document.createElement('div'); document.body.append(host);
+    let controller: any;
+    mount(() => <EnvWorkbenchPage pluginSurfaceHost={{ onRetirementError: vi.fn() } as any} registerPluginSurfaceController={(value) => { controller = value; }} />, host);
+    await flushMicrotasks();
+    await expect(controller.open(pluginTarget)).rejects.toThrow('save unavailable');
+    const retry = host.querySelector<HTMLButtonElement>('[data-workbench-plugin-placement] button')!;
+    expect(retry).not.toBeNull(); retry.click();
+    await flushMicrotasks();
+    expect(layoutApiMocks.openWorkbenchPlugin).toHaveBeenCalledTimes(2);
+    expect(surfaceApiMocks.lastStateAccessor().widgets.map((widget: any) => widget.id)).toEqual(['widget-plugin-1']);
+    expect(host.querySelector('[data-workbench-plugin-placement]')).toBeNull();
+  });
+
+  it('does not save an empty layout after its initial read fails and offers an explicit retry', async () => {
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockRejectedValueOnce(new Error('read failed'));
+    const host = document.createElement('div'); document.body.append(host);
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalled();
+    const retry = host.querySelector<HTMLButtonElement>('[data-workbench-layout-error="load"] button')!;
+    expect(retry).not.toBeNull(); retry.click();
+    await flushMicrotasks();
+    expect(layoutApiMocks.getWorkbenchLayoutSnapshot).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-workbench-layout-error]')).toBeNull();
+  });
+
+  it('preserves unsaved geometry after a save failure and remote updates until retry succeeds', async () => {
+    const base = { seq: 1, revision: 1, updated_at_unix_ms: 100,
+      widgets: [runtimeWidget('a', 'redeven.files', 1, 100), runtimeWidget('b', 'redeven.files', 2, 100)],
+      widget_states: [], sticky_notes: [], annotations: [], background_layers: [] };
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue(base);
+    layoutApiMocks.putWorkbenchLayout.mockRejectedValueOnce(new Error('offline'));
+    const host = document.createElement('div'); document.body.append(host);
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    surfaceApiMocks.lastSetState((state: any) => ({ ...state, widgets: state.widgets.map((widget: any) => ({ ...widget, x: 777 })) }));
+    await vi.advanceTimersByTimeAsync(1000); await flushMicrotasks();
+    expect(host.querySelector('[data-workbench-layout-error="save"]')).not.toBeNull();
+    layoutApiMocks.lastStreamArgs.onEvent({ seq: 2, type: 'layout.replaced', payload: { ...base, seq: 2, revision: 2, widgets: [{ ...base.widgets[0], width: 900 }] } });
+    await flushMicrotasks();
+    expect(surfaceApiMocks.lastStateAccessor().widgets).toEqual([expect.objectContaining({ id: 'a', x: 777, width: 900 })]);
+    host.querySelector<HTMLButtonElement>('[data-workbench-layout-error="save"] button')!.click();
+    await vi.advanceTimersByTimeAsync(1000); await flushMicrotasks();
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenLastCalledWith(expect.objectContaining({ base_revision: 2, widgets: [expect.objectContaining({ widget_id: 'a', x: 777, width: 900 })] }));
+    expect(host.querySelector('[data-workbench-layout-error]')).toBeNull();
   });
 
   it('keeps a plugin widget when its standard close cannot retire the slot', async () => {
@@ -4087,9 +4062,9 @@ describe('EnvWorkbenchPage', () => {
     expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalledWith(expect.objectContaining({ widgets: [] }));
 
     closeSurface.mockResolvedValueOnce(true);
-    await controller.closeAll();
+    await controller.releaseAll();
     expect(closeSurface).toHaveBeenCalledTimes(2);
-    expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids')).toBe('');
+    expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids')).toBe('widget-plugin-1');
   });
 
   it('reconciles a restored plugin widget to the current inventory revision before mounting', async () => {
@@ -4164,6 +4139,7 @@ describe('EnvWorkbenchPage', () => {
   });
 
   it('waits for direct plugin widget removal before reopening the same target', async () => {
+    mockPluginPlacement();
     const host = document.createElement('div');
     document.body.appendChild(host);
     const pluginWidget = persistedWidget('widget-plugin-1', 'redeven.plugin', 'Containers', 1, 500);
@@ -4226,7 +4202,6 @@ describe('EnvWorkbenchPage', () => {
       surfaceID: 'containers',
       displayName: 'Containers',
       expectedManagementRevision: 7,
-      preferredPlacement: 'workbench' as const,
     };
     surfaceApiMocks.lastSurfaceProps.onRequestDelete(pluginWidget.id);
     const reopened = controller.open(target);
@@ -4243,14 +4218,8 @@ describe('EnvWorkbenchPage', () => {
     await flushMicrotasks();
     await reopened;
 
-    expect(surfaceApiMocks.createWidget).toHaveBeenCalledOnce();
-    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledWith(
-      'widget-plugin-1',
-      expect.objectContaining({
-        widget_type: 'redeven.plugin',
-        state: expect.objectContaining({ expected_management_revision: 7 }),
-      }),
-    );
+    expect(layoutApiMocks.openWorkbenchPlugin).toHaveBeenCalledOnce();
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
     expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids'))
       .toBe('widget-plugin-1');
   });

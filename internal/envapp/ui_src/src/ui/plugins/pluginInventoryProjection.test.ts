@@ -128,7 +128,6 @@ describe('plugin inventory projection', () => {
         pluginInstanceID: examplePlugin.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
-        preferredPlacement: 'activity',
       },
     });
   });
@@ -919,4 +918,18 @@ describe('plugin inventory projection', () => {
       })).toThrow('canonical strict SemVer');
     },
   );
+});
+
+it('retains every Host-verified view surface as a restoration target without replacing the original with the default', () => {
+  const record = installedRecord();
+  record.manifest.surfaces.push({ ...record.manifest.surfaces[0], surface_id: 'secondary', intent: 'secondary' });
+  const projection = projectPluginInventory({ officialCatalog: [examplePlugin], installedPlugins: [record] });
+  const item = projection.items.find((item) => item.pluginInstanceID === record.plugin_instance_id)!;
+  expect(item.declaredSurfaceIDs).toEqual(['metrics.dashboard', 'secondary']);
+  expect(item.launchTargets?.find((target) => target.surfaceID === 'secondary')).toMatchObject({
+    pluginInstanceID: record.plugin_instance_id, expectedManagementRevision: 7,
+  });
+  expect(item.defaultLaunchTarget?.surfaceID).toBe('metrics.dashboard');
+  const disabled = projectPluginInventory({ officialCatalog: [examplePlugin], installedPlugins: [{ ...record, action_state: { ...record.action_state!, can_open: false } }] });
+  expect(disabled.items.find((item) => item.pluginInstanceID === record.plugin_instance_id)?.launchTargets).toEqual([]);
 });

@@ -375,6 +375,18 @@ func (s *Store) putWidgetState(ctx context.Context, widgetID string, req PutWidg
 		return WidgetState{}, Event{}, err
 	}
 
+	if current != nil && actualWidgetType == WidgetTypePlugin {
+		if current.State.PluginInstanceID != normalizedReq.State.PluginInstanceID || current.State.PluginID != normalizedReq.State.PluginID || current.State.SurfaceID != normalizedReq.State.SurfaceID {
+			return WidgetState{}, Event{}, &ValidationError{Message: "a placed plugin target cannot change identity"}
+		}
+		if current.State.ExpectedManagementRevision > normalizedReq.State.ExpectedManagementRevision {
+			if err := tx.Commit(); err != nil {
+				return WidgetState{}, Event{}, err
+			}
+			return *current, Event{}, nil
+		}
+	}
+
 	currentRevision := int64(0)
 	if current != nil {
 		currentRevision = current.Revision
@@ -919,7 +931,7 @@ func resolveOpenPreviewWidget(snapshot Snapshot, req OpenPreviewRequest, nowUnix
 			LayoutChanged: changed,
 		}, nil
 	}
-	widget, err := newPreviewWidget(snapshot.Widgets, req.Viewport, nowUnixMs)
+	widget, err := newWorkbenchWidget(snapshot.Widgets, req.Viewport, nowUnixMs, WidgetTypePreview)
 	if err != nil {
 		return openPreviewWidgetResolution{}, err
 	}
@@ -980,7 +992,7 @@ func previewWidgetsByLatest(widgets []WidgetLayout) []WidgetLayout {
 	return next
 }
 
-func newPreviewWidget(widgets []WidgetLayout, hint OpenPreviewViewportHint, nowUnixMs int64) (WidgetLayout, error) {
+func newWorkbenchWidget(widgets []WidgetLayout, hint OpenPreviewViewportHint, nowUnixMs int64, widgetType string) (WidgetLayout, error) {
 	width := normalizePositiveFloat(hint.DefaultWidth, DefaultPreviewWidgetWidth)
 	height := normalizePositiveFloat(hint.DefaultHeight, DefaultPreviewWidgetHeight)
 	x := 96 + float64(len(widgets))*32
@@ -997,13 +1009,13 @@ func newPreviewWidget(widgets []WidgetLayout, hint OpenPreviewViewportHint, nowU
 		}
 		widgetIDs[widget.WidgetID] = struct{}{}
 	}
-	widgetID, err := uniquePreviewWidgetID(widgetIDs)
+	widgetID, err := uniqueWorkbenchWidgetID(widgetIDs, widgetType)
 	if err != nil {
 		return WidgetLayout{}, err
 	}
 	return WidgetLayout{
 		WidgetID:        widgetID,
-		WidgetType:      WidgetTypePreview,
+		WidgetType:      widgetType,
 		X:               x,
 		Y:               y,
 		Width:           width,
@@ -1013,18 +1025,18 @@ func newPreviewWidget(widgets []WidgetLayout, hint OpenPreviewViewportHint, nowU
 	}, nil
 }
 
-func uniquePreviewWidgetID(existing map[string]struct{}) (string, error) {
+func uniqueWorkbenchWidgetID(existing map[string]struct{}, widgetType string) (string, error) {
 	for range 32 {
 		token, err := randomWorkbenchIDToken()
 		if err != nil {
 			return "", err
 		}
-		id := fmt.Sprintf("widget-preview-%s", token)
+		id := fmt.Sprintf("widget-%s-%s", strings.TrimPrefix(widgetType, "redeven."), token)
 		if _, ok := existing[id]; !ok {
 			return id, nil
 		}
 	}
-	return "", errors.New("unable to allocate unique preview widget id")
+	return "", errors.New("unable to allocate unique workbench widget id")
 }
 
 func randomWorkbenchIDToken() (string, error) {

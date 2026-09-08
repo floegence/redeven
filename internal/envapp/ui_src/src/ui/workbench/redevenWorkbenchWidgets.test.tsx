@@ -383,7 +383,6 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
         surfaceID: 'containers',
         displayName: 'Containers',
         expectedManagementRevision: 7,
-        preferredPlacement: 'workbench',
       },
       visible: true,
     }));
@@ -436,9 +435,9 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
     dispose();
   });
 
-  it.each(['stale', 'disabled', 'uninstalled'] as const)(
+  it.each(['disabled', 'uninstalled'] as const)(
     'does not mount a restored %s plugin target before inventory reconciliation',
-    (state) => {
+    () => {
       const definition = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.plugin');
       if (!definition) throw new Error('missing plugin widget definition');
       const Body = definition.body;
@@ -450,9 +449,7 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
           coordinator: {} as any,
           confirmationQueue: {} as any,
           workbenchVisible: () => true,
-          resolveTarget: (target) => state === 'stale'
-            ? { ...target, expectedManagementRevision: target.expectedManagementRevision + 1 }
-            : null,
+          resolveTarget: () => null,
           onOpenPluginDetails,
           onRetirementError: vi.fn(),
         }}>
@@ -462,13 +459,11 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
 
       expect(pluginSurfaceMocks.render).not.toHaveBeenCalled();
       expect(host.querySelector('[data-testid="plugin-surface-body"]')).toBeNull();
-      expect(host.textContent).toContain('Containers');
-      expect(host.textContent).toContain('Needs attention');
-      expect(host.textContent).toContain('Unavailable');
+      expect(host.textContent).toContain('Plugin information is unavailable');
       const recoveryButton = host.querySelector('[data-plugin-workbench-view-issue]') as HTMLButtonElement | null;
       expect(recoveryButton).not.toBeNull();
-      expect(recoveryButton?.textContent).toContain('Plugin Center');
-      expect(recoveryButton?.className).toContain('min-h-[46px]');
+      expect(recoveryButton?.textContent).toContain('Plugin details');
+      expect(recoveryButton?.className).toContain('min-h-11');
       expect(recoveryButton?.getAttribute('data-redeven-workbench-action-surface')).toBe('true');
       recoveryButton?.click();
       expect(onOpenPluginDetails).toHaveBeenCalledOnce();

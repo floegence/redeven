@@ -22,7 +22,6 @@ const target: PluginSurfaceLaunchTarget = {
   pluginInstanceID: 'plugini_redeven_official_metrics',
   surfaceID: 'metrics.dashboard',
   expectedManagementRevision: 7,
-  preferredPlacement: 'activity',
 };
 
 let dispose: (() => void) | undefined;
@@ -75,6 +74,8 @@ function createCoordinator(host: PluginSurfaceHost): PluginSurfacePlacementCoord
     }),
     fail: vi.fn(async () => undefined),
     release: vi.fn(async () => undefined),
+    closePlugin: async () => undefined,
+    invalidateAll: async () => undefined,
     invalidatePlugin: vi.fn(async () => undefined),
     closeAll: vi.fn(async () => undefined),
     dispose: vi.fn(async () => undefined),

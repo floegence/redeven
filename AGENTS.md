@@ -660,19 +660,22 @@ The current released platform contract also fixes the host-integration shape:
   menus use the released bar-item request and surface-aware floating layer,
   including keyboard menu keys, focus restoration, and Workbench-local
   projection.
-- Moving a plugin surface between Activity and Workbench must await closure of
-  the old floating-window, full-page, or widget slot and open a fresh slot lease
-  and iframe. Redeven must not move, adopt, or reuse an existing iframe or
-  `surface_instance_id`. Placement changes are globally serialized, and the new
-  placement or persisted Workbench widget state must not commit until the old
-  slot has closed successfully.
+- Activity and Workbench open independently in the user's current mode. Each
+  container owns a distinct SDK slot and iframe; opening or closing one mode
+  must not move, reuse, close, or remove the other mode's container. Workbench
+  placement belongs to the saved product layout, independently of SDK leases.
+  Update, disable, permission mutation, reconnect, and failure release or
+  invalidate runtime authority while retaining widget identity and geometry.
+  Only explicit widget removal or confirmed exact-instance uninstall removes
+  placement. Product placement and removal use Redeven-owned layout transactions;
+  they neither grant platform authority nor inspect ReDevPlugin stores.
 - Workbench wheel, text-selection, action, activation, focus, and floating-layer
   markers remain Redeven-owned product interaction policy around the SDK-owned
   element. They must not be encoded into the plugin manifest or implemented by
   a second bridge layer.
 - Redeven projects visibility with the released `visible` and `hidden`
   lifecycle. `PluginSurfaceSlot.close()` owns graceful quiesce and server
-  revocation for placement moves, explicit window/widget removal, and orderly
+  revocation for explicit window/widget removal, pre-update cleanup, and orderly
   Shell disposal; `dispose()` is irreversible local teardown. Disable, update,
   downgrade, uninstall, permission/policy mutation, and owner-scope mutation use
   the released Host mutation contract: the server revokes affected authority and

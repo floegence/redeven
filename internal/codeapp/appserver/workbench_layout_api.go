@@ -48,6 +48,42 @@ func (g *Server) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Request
 	}
 
 	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/workbench/actions/open_plugin":
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return true
+		}
+		var body workbenchlayout.OpenPluginRequest
+		if err := decodeWorkbenchLayoutJSON(r.Body, &body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return true
+		}
+		result, err := g.layouts.OpenPlugin(r.Context(), body)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return true
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/workbench/actions/remove_plugin":
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return true
+		}
+		var body struct {
+			PluginInstanceID string `json:"plugin_instance_id"`
+		}
+		if err := decodeWorkbenchLayoutJSON(r.Body, &body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return true
+		}
+		result, err := g.layouts.RemovePluginWidgets(r.Context(), body.PluginInstanceID)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		return true
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/workbench/layout/snapshot":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return true

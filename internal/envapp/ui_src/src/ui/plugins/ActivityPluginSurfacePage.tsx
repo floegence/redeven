@@ -4,9 +4,10 @@ import { Show, type Accessor, type JSX } from 'solid-js';
 import type { PluginConfirmationQueue } from './PluginConfirmationQueue';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
-import { PluginSurfaceBody } from './PluginSurfaceFrame';
+import { PluginSurfaceContainer, type PluginSurfaceResolver } from './PluginSurfaceContainer';
 
 export type ActivityPluginSurfacePageProps = Readonly<{
+  resolveSurface?: PluginSurfaceResolver;
   coordinator: PluginSurfacePlacementCoordinator;
   confirmationQueue: PluginConfirmationQueue;
   target: Accessor<PluginSurfaceLaunchTarget | null>;
@@ -21,7 +22,7 @@ export function ActivityPluginSurfacePage(props: ActivityPluginSurfacePageProps)
     <div class="h-full min-h-0 w-full" data-activity-plugin-surface-page>
       <Show when={props.target()} keyed>
         {(target) => (
-          <PluginSurfaceBody
+          <PluginSurfaceContainer resolveSurface={props.resolveSurface}
             coordinator={props.coordinator}
             confirmationQueue={props.confirmationQueue}
             target={target}

@@ -37,7 +37,6 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
       pluginInstanceID: 'plugininst_metrics',
       surfaceID: 'metrics.dashboard',
       expectedManagementRevision: 23,
-      preferredPlacement: 'activity',
     },
     ...overrides,
   };
@@ -70,7 +69,6 @@ function panelModelWithPluginCount(count: number): PluginPanelModel {
             pluginInstanceID: `plugininst_${index}`,
             surfaceID: `plugin-${index}.main`,
             expectedManagementRevision: 23,
-            preferredPlacement: 'activity' as const,
           },
         });
         return { kind: 'plugin' as const, item, action: 'open_surface' as const };
@@ -411,7 +409,6 @@ describe('PluginPanel', () => {
     dragItem.canvasPlacement.onDrop(placement);
     expect(onDropPlugin).toHaveBeenCalledWith(expect.objectContaining({
       pluginInstanceID: 'plugininst_metrics',
-      preferredPlacement: 'workbench',
     }), placement);
     expect(document.querySelector('[data-plugin-workbench-drag-ghost]')).toBeNull();
 
@@ -529,7 +526,6 @@ describe('PluginPanel', () => {
     expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
       pluginInstanceID: 'plugininst_metrics',
       surfaceID: 'metrics.dashboard',
-      preferredPlacement: 'activity',
     }));
     expect(onOpenPluginDetails).not.toHaveBeenCalled();
   });
@@ -640,7 +636,6 @@ describe('PluginPanel', () => {
         pluginInstanceID: 'plugininst_toolbox',
         surfaceID: 'toolbox.main',
         expectedManagementRevision: 23,
-        preferredPlacement: 'activity',
       },
     });
     const model = panelModelWithPluginCount(6);

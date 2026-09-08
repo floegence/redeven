@@ -339,7 +339,6 @@ describe('PluginCenterView', () => {
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 23,
-        preferredPlacement: 'activity' as const,
       },
     };
     dispose = render(() => (
@@ -357,7 +356,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
 
     expect(findDocumentButton('Open')).not.toBeNull();
-    expect(findDocumentButton('Open in Workbench')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Open in Workbench');
     findDocumentButton('View plugin details').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Metrics');
@@ -377,7 +376,6 @@ describe('PluginCenterView', () => {
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 23,
-        preferredPlacement: 'activity' as const,
       },
     };
     const onCommand = vi.fn();
@@ -417,7 +415,6 @@ describe('PluginCenterView', () => {
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 23,
-        preferredPlacement: 'activity' as const,
       },
     };
     const onCommand = vi.fn();
@@ -672,8 +669,8 @@ describe('PluginCenterView', () => {
     expect(row?.className).not.toContain('flex-col');
   });
 
-  it('offers both open destinations from the detail overflow for a runnable update', () => {
-    const target = { pluginID: 'com.example.metrics', pluginInstanceID: 'plugininst_metrics', surfaceID: 'metrics.dashboard', expectedManagementRevision: 13, preferredPlacement: 'activity' as const };
+  it('offers one mode-independent open action from the detail overflow for a runnable update', () => {
+    const target = { pluginID: 'com.example.metrics', pluginInstanceID: 'plugininst_metrics', surfaceID: 'metrics.dashboard', expectedManagementRevision: 13 };
     const updateItem = {
       ...metricsPlugin,
       pluginInstanceID: 'plugininst_metrics',
@@ -700,7 +697,7 @@ describe('PluginCenterView', () => {
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
     expect(menu.textContent).toContain('Open');
-    expect(menu.textContent).toContain('Open in Workbench');
+    expect(menu.textContent).not.toContain('Open in Workbench');
   });
 
   it('keeps identity and primary actions outside the independently scrolling detail body', () => {
@@ -1908,7 +1905,6 @@ describe('PluginCenterView', () => {
         pluginInstanceID: metricsPlugin.officialCatalog.pluginInstanceID,
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
-        preferredPlacement: 'activity' as const,
       },
     };
     setCurrentProjection({ items: [installed] });
@@ -2031,7 +2027,6 @@ describe('PluginCenterView', () => {
             pluginInstanceID: 'plugininst_metrics',
             surfaceID: 'metrics.dashboard',
             expectedManagementRevision: 7,
-            preferredPlacement: 'activity',
           },
         },
       ],
@@ -2058,7 +2053,7 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-action="open-workbench"]')).toBeNull();
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
-    expect(findDocumentButton('Open in Workbench').disabled).toBe(false);
+    expect(findDocumentButton('Open').disabled).toBe(false);
     expect(findDocumentButton('Disable').disabled).toBe(true);
     expect(findDocumentButton('Uninstall').disabled).toBe(true);
     openActivity.click();
@@ -2066,11 +2061,10 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect((mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).disabled).toBe(false));
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
-    findDocumentButton('Open in Workbench').click();
+    findDocumentButton('Open').click();
     await vi.waitFor(() => expect(onCommand).toHaveBeenCalledTimes(2));
-    expect(onCommand).toHaveBeenNthCalledWith(1, expect.objectContaining({ type: 'open_surface', placement: 'activity' }), expect.any(AbortSignal));
-    expect(onCommand).toHaveBeenNthCalledWith(1, expect.objectContaining({ keepPluginCenter: true }), expect.any(AbortSignal));
-    expect(onCommand).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: 'open_surface', placement: 'workbench' }), expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenNthCalledWith(1, expect.objectContaining({ type: 'open_surface' }), expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: 'open_surface' }), expect.any(AbortSignal));
   });
 
   it('keeps Disable available for an enabled plugin that needs permission attention', async () => {
@@ -2324,7 +2318,6 @@ describe('PluginCenterView', () => {
             pluginInstanceID: 'plugininst_metrics',
             surfaceID: 'metrics.dashboard',
             expectedManagementRevision: 11,
-            preferredPlacement: 'activity',
           },
         },
       ],
@@ -2354,8 +2347,6 @@ describe('PluginCenterView', () => {
       pluginInstanceID: 'plugininst_metrics',
       surfaceID: 'metrics.dashboard',
       expectedManagementRevision: 11,
-      placement: 'activity',
-      keepPluginCenter: true,
     }, expect.any(AbortSignal));
   });
 
@@ -2743,7 +2734,6 @@ describe('PluginCenterView', () => {
         pluginID: 'com.example.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
-        preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
     };
@@ -2792,7 +2782,6 @@ describe('PluginCenterView', () => {
         pluginID: 'com.example.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
-        preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
     } as const;
@@ -2861,7 +2850,6 @@ describe('PluginCenterView', () => {
         pluginID: 'com.example.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
-        preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
     };
@@ -2902,7 +2890,6 @@ describe('PluginCenterView', () => {
         pluginID: 'com.example.metrics',
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
-        preferredPlacement: 'activity',
         expectedManagementRevision: 7,
       },
     };
@@ -2973,7 +2960,6 @@ describe('PluginCenterView', () => {
         pluginInstanceID: 'plugininst_metrics',
         surfaceID: 'metrics.dashboard',
         expectedManagementRevision: 7,
-        preferredPlacement: 'activity',
       },
     };
     const mount = document.createElement('div');

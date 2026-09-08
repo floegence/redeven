@@ -237,7 +237,6 @@ export type PluginSurfaceLaunchTarget = {
   surfaceID: string;
   displayName?: string;
   expectedManagementRevision: number;
-  preferredPlacement: 'activity' | 'workbench';
 };
 
 export type PluginInventoryItem = {
@@ -260,6 +259,8 @@ export type PluginInventoryItem = {
   pinned: boolean;
   lastOpenedAt?: string;
   defaultLaunchTarget?: PluginSurfaceLaunchTarget;
+  launchTargets?: readonly PluginSurfaceLaunchTarget[];
+  declaredSurfaceIDs?: readonly string[];
   attentionReason?: PluginAttentionReason;
   authorization?: PluginAuthorizationInventory;
   officialCatalog?: OfficialPluginCatalogItem;
@@ -430,9 +431,6 @@ export type PluginOpenSurfaceCommand = {
   pluginInstanceID: string;
   surfaceID: string;
   expectedManagementRevision: number;
-  placement: 'activity' | 'workbench';
-  /** Keep the Plugin Center route as the owning surface while Activity opens. */
-  keepPluginCenter?: boolean;
 };
 
 export type PluginLifecycleCommand = PluginManagementCommand | PluginOpenSurfaceCommand;

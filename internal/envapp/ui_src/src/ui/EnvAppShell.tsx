@@ -110,6 +110,9 @@ import type {
 import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
 import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
+import { PluginCenterDialog } from './plugins/PluginCenterDialog';
+import { getWorkbenchLayoutSnapshot, removeWorkbenchPluginWidgets } from './services/workbenchLayoutApi';
+import type { PluginSurfaceResolution } from './plugins/PluginSurfaceContainer';
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
   MAX_ACTIVITY_PLUGIN_WINDOWS,
@@ -558,11 +561,16 @@ export function EnvAppShell() {
   }>>();
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
   const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
-  const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
-  const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
-    const previous = retiredPluginManagementRevisionByInstanceID.get(pluginInstanceID) ?? 0;
-    if (revision > previous) retiredPluginManagementRevisionByInstanceID.set(pluginInstanceID, revision);
-  };
+  const [pluginSurfacePhases, setPluginSurfacePhases] = createSignal<Record<string, 'pending' | 'refreshing' | 'unknown'>>({});
+  const [pluginSurfaceGenerations, setPluginSurfaceGenerations] = createSignal<Record<string, number>>({});
+  const pluginSurfaceReconciliations = new Map<string, () => Promise<void>>();
+  const setPluginSurfacePhase = (id: string, phase?: 'pending' | 'refreshing' | 'unknown') => setPluginSurfacePhases((previous) => {
+    const next = { ...previous };
+    if (phase) next[id] = phase;
+    else delete next[id];
+    return next;
+  });
+  const renewPluginSurfaces = (id: string) => setPluginSurfaceGenerations((previous) => ({ ...previous, [id]: (previous[id] ?? 0) + 1 }));
   const reportPluginSurfaceRetirementError = (error: unknown) => {
     notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
   };
@@ -570,39 +578,21 @@ export function EnvAppShell() {
   const pluginPlatform = createRedevenPluginPlatform({
     onMutationOutcomeUnknown: (pluginInstanceID) => {
       pluginConfirmationQueue.cancelAll();
-      for (const item of pluginInventoryProjection()?.items ?? []) {
-        if (
-          item.pluginInstanceID
-          && item.managementRevision
-          && (!pluginInstanceID || item.pluginInstanceID === pluginInstanceID)
-        ) {
-          retirePluginManagementRevision(item.pluginInstanceID, item.managementRevision);
-        }
-      }
       pendingPluginUnknownOutcomeCleanup = (async () => {
         try {
-          await retireActivityPluginPages(pluginInstanceID || undefined);
           if (pluginInstanceID) {
             await pluginSurfaceCoordinator.invalidatePlugin(pluginInstanceID);
-            await workbenchPluginSurfaceController?.closePlugin(pluginInstanceID);
+            setPluginSurfacePhase(pluginInstanceID, 'unknown');
+            renewPluginSurfaces(pluginInstanceID);
           } else {
-            await pluginSurfaceCoordinator.closeAll();
-            await workbenchPluginSurfaceController?.closeAll();
+            await pluginSurfaceCoordinator.invalidateAll();
+            setPluginSessionRetired(true);
           }
-          return undefined;
         } catch (error) {
           reportPluginSurfaceRetirementError(error);
           return error;
-        } finally {
-          setActivityPluginWindows((windows) => (
-            pluginInstanceID
-              ? windows.filter((window) => window.target().pluginInstanceID !== pluginInstanceID)
-              : []
-          ));
         }
       })();
-      notify.error(i18n.t('uiCopy.plugin.needsAttention'), i18n.t('uiCopy.plugin.surfaceFailed'));
-      queueMicrotask(() => void refetchPluginInventory());
     },
   });
   const pluginSurfaceCoordinator = createPluginSurfacePlacementCoordinator(pluginPlatform.client);
@@ -610,10 +600,9 @@ export function EnvAppShell() {
   let pluginInstallCoordinator: PluginInstallCoordinator | undefined;
   const performEndPluginSession = async (): Promise<boolean> => {
     pluginConfirmationQueue.cancelAll();
-    await retireActivityPluginPages();
     const localCleanup = await Promise.allSettled([
       pluginSurfaceCoordinator.dispose(),
-      workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
+      workbenchPluginSurfaceController?.releaseAll() ?? Promise.resolve(),
     ]);
     try {
       await pluginPlatform.close();
@@ -1135,11 +1124,11 @@ export function EnvAppShell() {
         inventoryKey: tile.item.inventoryKey,
         request,
       }),
-      onActivate: () => tile.item.defaultLaunchTarget && void openPluginSurface({ ...tile.item.defaultLaunchTarget, preferredPlacement: 'workbench' }).catch(reportPluginNavigationFailure),
+      onActivate: () => tile.item.defaultLaunchTarget && void openPluginSurface({ ...tile.item.defaultLaunchTarget }).catch(reportPluginNavigationFailure),
       canvasPlacement: tile.item.defaultLaunchTarget ? {
         widgetType: 'redeven.plugin',
         onDrop: (placement: WorkbenchCanvasWidgetPlacement) => void openPluginSurface(
-          { ...tile.item.defaultLaunchTarget!, preferredPlacement: 'workbench' },
+          { ...tile.item.defaultLaunchTarget! },
           { workbenchPlacement: placement },
         ).catch(reportPluginNavigationFailure),
       } : undefined,
@@ -1169,30 +1158,10 @@ export function EnvAppShell() {
     runtime.setClose(null);
     runtime.setTarget(null);
   };
-  const retireMatchingActivityPluginPages = async (
-    target: Pick<PluginSurfaceLaunchTarget, 'pluginInstanceID' | 'surfaceID'>,
-  ): Promise<void> => {
-    for (const [inventoryKey, runtime] of activityPluginPageRuntimes) {
-      const current = runtime.target();
-      if (
-        current?.pluginInstanceID !== target.pluginInstanceID
-        || current.surfaceID !== target.surfaceID
-      ) continue;
-      await retireActivityPluginPage(inventoryKey);
-    }
-  };
-  const activityPluginPageTargets = (
-    pluginInstanceID?: string,
-  ): readonly Readonly<{ inventoryKey: string; target: PluginSurfaceLaunchTarget }>[] => (
-    [...activityPluginPageRuntimes.entries()].flatMap(([inventoryKey, runtime]) => {
-      const target = runtime.target();
-      if (!target || (pluginInstanceID && target.pluginInstanceID !== pluginInstanceID)) return [];
-      return [{ inventoryKey, target }];
-    })
-  );
   const retireActivityPluginPages = async (pluginInstanceID?: string): Promise<void> => {
-    for (const { inventoryKey } of activityPluginPageTargets(pluginInstanceID)) {
-      await retireActivityPluginPage(inventoryKey);
+    for (const [inventoryKey, runtime] of activityPluginPageRuntimes) {
+      const target = runtime.target();
+      if (target && (!pluginInstanceID || target.pluginInstanceID === pluginInstanceID)) await retireActivityPluginPage(inventoryKey);
     }
   };
   let workbenchPluginSurfaceController: WorkbenchPluginSurfaceController | null = null;
@@ -1319,7 +1288,7 @@ export function EnvAppShell() {
         if (!controller.signal.aborted) setPluginInventoryFailure(null);
         return { owner, projection };
       } catch (error) {
-        if (!controller.signal.aborted && !previous) setPluginInventoryFailure({ owner, error });
+        if (!controller.signal.aborted) setPluginInventoryFailure({ owner, error });
         return { owner, ...(previous ? { projection: previous } : {}) };
       } finally {
         if (pluginInventoryAbort === controller) pluginInventoryAbort = undefined;
@@ -1343,7 +1312,7 @@ export function EnvAppShell() {
   );
   const refetchPluginInventory = async () => {
     const state = await refetchPluginInventorySession();
-    return state?.owner === pluginInventorySource() ? state.projection : undefined;
+    return !pluginInventoryError() && state?.owner === pluginInventorySource() ? state.projection : undefined;
   };
   const synchronizePluginInventoryForMarket = (result: PluginMarketCatalogResult): Promise<void> => {
     const requestedOwner = pluginInventorySource();
@@ -1440,12 +1409,6 @@ export function EnvAppShell() {
         inventory,
         signal,
       });
-      // Uninstall retires the old management revision so existing surfaces
-      // cannot be reused. A reinstall creates a fresh instance generation
-      // that may legitimately reuse the same revision number.
-      if (pluginInventoryProjection()?.items.some((item) => item.pluginInstanceID === pluginInstanceID)) {
-        retiredPluginManagementRevisionByInstanceID.delete(pluginInstanceID);
-      }
       return result;
     },
     createRequestID: () => createClientId('plugin-install'),
@@ -1607,6 +1570,15 @@ export function EnvAppShell() {
     }
   });
 
+  let pluginSurfaceOwner: object | undefined;
+  createEffect(() => {
+    const owner = pluginInventorySource();
+    if (!owner || owner === pluginSurfaceOwner) return;
+    pluginSurfaceOwner = owner;
+    pluginSurfaceReconciliations.clear();
+    setPluginSurfacePhases({});
+  });
+
   const pluginPanelModel = createMemo(() => buildPluginPanelModel(
     pluginInventoryProjection() ?? { items: [] },
     pluginInventoryError() ? getErrorMessage(pluginInventoryError()) : undefined,
@@ -1638,6 +1610,7 @@ export function EnvAppShell() {
         let ownedClose: (() => Promise<boolean>) | null = null;
         return (
           <ActivityPluginSurfacePage
+            resolveSurface={resolvePluginSurface}
             coordinator={pluginSurfaceCoordinator}
             confirmationQueue={pluginConfirmationQueue}
             target={runtime.target}
@@ -1677,21 +1650,38 @@ export function EnvAppShell() {
     activateActivitySurface(lastActivitySurface(), { persist: false });
   });
 
+  const [workbenchPluginCenterOpen, setWorkbenchPluginCenterOpen] = createSignal(false);
+  const [workbenchPluginCenterVisited, setWorkbenchPluginCenterVisited] = createSignal(false);
+  const [pluginWidgetCounts, setPluginWidgetCounts] = createSignal<Record<string, number>>({});
+  const refreshPluginWidgetCounts = async () => {
+    const snapshot = await getWorkbenchLayoutSnapshot();
+    const counts: Record<string, number> = {};
+    for (const entry of snapshot.widget_states) {
+      if (entry.state.kind === 'plugin') counts[entry.state.plugin_instance_id] = (counts[entry.state.plugin_instance_id] ?? 0) + 1;
+    }
+    setPluginWidgetCounts(counts);
+  };
   const openPluginCenter = async (selectedInventoryKey?: string) => {
+    if (pluginsPanelOpen()) pluginsPanelTrigger()?.focus({ preventScroll: true });
     updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(selectedInventoryKey);
     setPluginCenterFocusRequest((request) => request + 1);
-    setViewMode('activity', { surfaceId: activeSurface() });
-    activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID);
+    void refreshPluginWidgetCounts().catch(reportPluginNavigationFailure);
+    if (viewMode() === 'workbench') {
+      setWorkbenchPluginCenterVisited(true);
+      setWorkbenchPluginCenterOpen(true);
+    } else {
+      activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID);
+    }
   };
 
   const closePluginCenter = () => {
-    setPluginCenterSelectedInventoryKey(undefined);
+    if (viewMode() === 'workbench') { setWorkbenchPluginCenterOpen(false); return; }
     activateActivitySurface(lastActivitySurface(), { persist: false });
   };
 
   const pluginSurfaceTargetKey = (target: PluginSurfaceLaunchTarget) => (
-    `${target.pluginInstanceID}\u0000${target.surfaceID}\u0000${target.preferredPlacement}`
+    `${target.pluginInstanceID}\u0000${target.surfaceID}`
   );
 
   const resolveCurrentPluginSurfaceTarget = (
@@ -1700,20 +1690,47 @@ export function EnvAppShell() {
     const inventoryItem = pluginInventoryProjection()?.items.find((item) => (
       item.pluginInstanceID === target.pluginInstanceID
     ));
-    const currentTarget = inventoryItem?.defaultLaunchTarget;
+    const currentTarget = inventoryItem?.launchTargets?.find((candidate) => candidate.surfaceID === target.surfaceID)
+      ?? (inventoryItem?.defaultLaunchTarget?.surfaceID === target.surfaceID ? inventoryItem.defaultLaunchTarget : undefined);
     if (
-      !currentTarget
+      !canOpenPluginSurfaces()
+      || pluginSessionRetired()
+      || pluginSurfacePhases()[target.pluginInstanceID] === 'pending'
+      || pluginSurfacePhases()[target.pluginInstanceID] === 'refreshing'
+      || pluginSurfacePhases()[target.pluginInstanceID] === 'unknown'
+      || !currentTarget
       || inventoryItem?.pluginID !== target.pluginID
       || currentTarget.surfaceID !== target.surfaceID
-      || (retiredPluginManagementRevisionByInstanceID.get(target.pluginInstanceID) ?? 0)
-        >= currentTarget.expectedManagementRevision
     ) {
       return null;
     }
     return {
       ...currentTarget,
-      preferredPlacement: target.preferredPlacement,
     };
+  };
+
+  const resolvePluginSurface = (target: PluginSurfaceLaunchTarget): PluginSurfaceResolution => {
+    const id = target.pluginInstanceID;
+    const item = pluginInventoryProjection()?.items.find((entry) => entry.pluginInstanceID === id && entry.pluginID === target.pluginID);
+    const phase = pluginSurfacePhases()[id];
+    const generation = pluginSurfaceGenerations()[id] ?? 0;
+    const currentTarget = resolveCurrentPluginSurfaceTarget(target);
+    const details = { label: 'details' as const, run: () => void openPluginCenter(`instance:${id}`).catch(reportPluginNavigationFailure) };
+    if (phase === 'unknown' || phase === 'refreshing') return { target: null, generation, status: phase === 'unknown' ? 'unknown' : 'loading',
+      action: { label: 'retry', run: () => void pluginSurfaceReconciliations.get(id)?.().catch(reportPluginNavigationFailure) } };
+    if (!canOpenPluginSurfaces() || pluginSessionRetired()) return { target: null, generation, status: 'loading' };
+    if (phase === 'pending') return { target: currentTarget, generation, status: 'pending' };
+    if (!currentTarget && pluginRuntimeRecoveryByInstanceID()[id]?.state === 'failed') return { target: null, generation, status: 'runtimeFailed',
+      action: canAdmin() ? { label: 'retry', run: () => retryPluginRuntimeRecovery(id) } : details };
+    if (item?.lifecycleState === 'disabled') return { target: null, generation, status: 'disabled', action: canAdmin()
+      ? { label: 'enable', run: () => void handlePluginCenterCommand({ type: 'enable', pluginInstanceID: id, expectedManagementRevision: item.managementRevision! }, new AbortController().signal).catch(reportPluginNavigationFailure) }
+      : undefined };
+    if (item?.authorization?.permissions.some((permission) => permission.blockedToOpen)) return { target: null, generation, status: 'permission', action: canAdmin() ? { ...details, label: 'permissions' } : undefined };
+    if (item?.declaredSurfaceIDs && !item.declaredSurfaceIDs.includes(target.surfaceID)) return { target: null, generation, status: 'surfaceMissing', action: details };
+    if (pluginInventoryError() || !item) return { target: null, generation, status: pluginInventoryInitialPending() ? 'loading' : 'unavailable',
+      action: { label: 'retry', run: () => void refetchPluginInventory() } };
+    if (!currentTarget) return { target: null, generation, status: 'unavailable', action: details };
+    return { target: currentTarget, generation, status: 'ready' };
   };
 
   const activatePluginSurfaceWindow = (instanceID: string) => {
@@ -1751,8 +1768,9 @@ export function EnvAppShell() {
   type PluginSurfaceOpenOptions = Readonly<{ workbenchPlacement?: WorkbenchCanvasWidgetPlacement }>;
 
   const performOpenPluginSurface = async (
-    target: PluginSurfaceLaunchTarget & { keepPluginCenter?: boolean },
-    options: PluginSurfaceOpenOptions = {},
+    target: PluginSurfaceLaunchTarget,
+    options: PluginSurfaceOpenOptions,
+    mode: EnvViewMode,
   ) => {
     if (pluginSessionRetired()) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     const currentTarget = resolveCurrentPluginSurfaceTarget(target);
@@ -1762,30 +1780,28 @@ export function EnvAppShell() {
     ) {
       throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     }
-    updatePluginPanel({ open: false });
-    if (!target.keepPluginCenter) setPluginCenterSelectedInventoryKey(undefined);
-    if (currentTarget.preferredPlacement === 'workbench') {
-      setViewMode('workbench', { surfaceId: lastActivitySurface() });
+    if (mode === 'workbench') {
       const controller = await resolveWorkbenchPluginSurfaceController();
-      await retireMatchingActivityPluginPages(currentTarget);
-      await closeMatchingActivityPluginWindows(currentTarget);
       if (options.workbenchPlacement) {
         await controller.open(currentTarget, options.workbenchPlacement);
       } else {
         await controller.open(currentTarget);
       }
+      updatePluginPanel({ open: false });
+      setWorkbenchPluginCenterOpen(false);
+      if (viewMode() === mode) queueMicrotask(() => controller.focus(currentTarget));
       return;
     }
-    if (workbenchPluginSurfaceController) {
-      await workbenchPluginSurfaceController.close(currentTarget);
+    const existingPage = [...activityPluginPageRuntimes.entries()].find(([, runtime]) => {
+      const target = runtime.target();
+      return target && pluginSurfaceTargetKey(target) === pluginSurfaceTargetKey(currentTarget);
+    });
+    if (existingPage) {
+      existingPage[1].setTarget(currentTarget);
+      if (viewMode() === mode) setEnvSidebarActiveTab(pluginActivityComponentID(existingPage[0]), { openSidebar: false });
+      updatePluginPanel({ open: false });
+      return;
     }
-    await retireMatchingActivityPluginPages(currentTarget);
-    const staleActivityWindow = activityPluginWindows().find((window) => (
-      window.target().pluginInstanceID === currentTarget.pluginInstanceID
-      && window.target().surfaceID === currentTarget.surfaceID
-      && window.target().expectedManagementRevision !== currentTarget.expectedManagementRevision
-    ));
-    if (staleActivityWindow) await closeMatchingActivityPluginWindows(currentTarget);
     const targetKey = pluginSurfaceTargetKey(currentTarget);
     const existingWindow = activityPluginWindows().find((window) => window.targetKey === targetKey);
     if (!existingWindow && activityPluginWindows().length >= MAX_ACTIVITY_PLUGIN_WINDOWS) {
@@ -1811,13 +1827,8 @@ export function EnvAppShell() {
         [existingInstanceID!]: (requests[existingInstanceID!] ?? 0) + 1,
       }));
     }
-    if (target.keepPluginCenter) {
-      setViewMode('activity');
-      activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID, { persist: false });
-    } else {
-      setViewMode('activity', { surfaceId: lastActivitySurface() });
-      activateActivitySurface(lastActivitySurface(), { persist: false });
-    }
+    updatePluginPanel({ open: false });
+    if (viewMode() === mode) activateActivitySurface(lastActivitySurface(), { persist: false });
   };
 
   let pluginPlacementTail: Promise<unknown> = Promise.resolve();
@@ -1830,11 +1841,12 @@ export function EnvAppShell() {
     return next;
   };
   const openPluginSurface = (
-    target: PluginSurfaceLaunchTarget & { keepPluginCenter?: boolean },
+    target: PluginSurfaceLaunchTarget,
     options: PluginSurfaceOpenOptions = {},
-  ): Promise<void> => (
-    serializePluginPlacementOperation(() => performOpenPluginSurface(target, options))
-  );
+  ): Promise<void> => {
+    const mode = viewMode();
+    return serializePluginPlacementOperation(() => performOpenPluginSurface(target, options, mode));
+  };
   const performOpenPinnedActivityPlugin = async (inventoryKey: string): Promise<void> => {
     const tile = pluginPanelModel().tiles.find((candidate) => (
       candidate.kind === 'plugin'
@@ -1847,17 +1859,19 @@ export function EnvAppShell() {
     }
     const requestedTarget = {
       ...tile.item.defaultLaunchTarget,
-      preferredPlacement: 'activity' as const,
     };
     const currentTarget = resolveCurrentPluginSurfaceTarget(requestedTarget);
     if (!currentTarget) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
 
     updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(undefined);
-    if (workbenchPluginSurfaceController) {
-      await workbenchPluginSurfaceController.close(currentTarget);
+    const existingWindow = activityPluginWindows().find((window) => window.targetKey === pluginSurfaceTargetKey(currentTarget));
+    if (existingWindow) {
+      activatePluginSurfaceWindow(existingWindow.instanceID);
+      setActivityPluginFocusRequests((requests) => ({ ...requests, [existingWindow.instanceID]: (requests[existingWindow.instanceID] ?? 0) + 1 }));
+      if (viewMode() === 'activity') activateActivitySurface(lastActivitySurface(), { persist: false });
+      return;
     }
-    await closeMatchingActivityPluginWindows(currentTarget);
 
     const runtime = ensureActivityPluginPageRuntime(inventoryKey);
     const mountedTarget = runtime.target();
@@ -1866,10 +1880,7 @@ export function EnvAppShell() {
     }
     if (!runtime.target()) runtime.setTarget({ ...currentTarget });
 
-    if (viewMode() !== 'activity') {
-      setViewMode('activity', { surfaceId: lastActivitySurface() });
-    }
-    setEnvSidebarActiveTab(pluginActivityComponentID(inventoryKey), { openSidebar: false });
+    if (viewMode() === 'activity') setEnvSidebarActiveTab(pluginActivityComponentID(inventoryKey), { openSidebar: false });
   };
   const openPinnedActivityPlugin = (inventoryKey: string): Promise<void> => (
     serializePluginPlacementOperation(() => performOpenPinnedActivityPlugin(inventoryKey))
@@ -1879,156 +1890,51 @@ export function EnvAppShell() {
     command: Exclude<PluginLifecycleCommand, { type: 'open_surface' } | { type: 'install' }>,
     signal: AbortSignal,
   ) => {
-    const invalidatesManagementRevision = (
-      command.type !== 'grant_permission'
-      && command.type !== 'revoke_permission'
-    );
-    const invalidatesPluginSurfaces = (
-      (
-        activityPluginWindows().some((window) => window.target().pluginInstanceID === command.pluginInstanceID)
-        || activityPluginPageTargets(command.pluginInstanceID).length > 0
-        || (workbenchPluginSurfaceController?.listPluginTargets(command.pluginInstanceID).length ?? 0) > 0
-      )
-    );
-    const permissionMutationPluginInstanceID = (
-      command.type === 'grant_permission' || command.type === 'revoke_permission'
-    ) ? command.pluginInstanceID : undefined;
-    const preservedPermissionTargets = permissionMutationPluginInstanceID
-      ? activityPluginWindows().filter((window) => (
-        window.target().pluginInstanceID === permissionMutationPluginInstanceID
-      )).map((window) => window.target()) : [];
-    const preservedActivityPageTargets = permissionMutationPluginInstanceID
-      ? activityPluginPageTargets(permissionMutationPluginInstanceID)
-      : [];
-    const preservedWorkbenchPermissionTargets = permissionMutationPluginInstanceID
-      ? workbenchPluginSurfaceController?.listPluginTargets(permissionMutationPluginInstanceID) ?? []
-      : [];
+    const owner = pluginInventorySource();
+    const id = command.pluginInstanceID;
+    setPluginSurfacePhase(id, 'pending');
     let mutationError: unknown;
-    try {
-      await pluginLifecycle.execute(command, { signal });
-    } catch (error) {
-      mutationError = error;
+    try { await pluginLifecycle.execute(command, { signal }); } catch (error) { mutationError = error; }
+    if (pluginInventorySource() !== owner) throw mutationError ?? new Error(i18n.t('uiCopy.plugin.continuity.loading'));
+    const outcome = mutationError === undefined ? 'committed' : pluginMutationOutcome(mutationError);
+    if (outcome === 'committed' || outcome === 'unknown') {
+      // The SDK already revoked/disposed affected leases. Retire the local
+      // registry before reactive presentation can release their containers.
+      await pluginSurfaceCoordinator.invalidatePlugin(id);
+      setPluginSurfacePhase(id, outcome === 'unknown' ? 'unknown' : 'refreshing');
+      renewPluginSurfaces(id);
     }
-    if (
-      invalidatesManagementRevision
-      && 'pluginInstanceID' in command
-      && 'expectedManagementRevision' in command
-      && (mutationError === undefined || pluginMutationOutcome(mutationError) !== 'not_committed')
-    ) {
-      retirePluginManagementRevision(command.pluginInstanceID, command.expectedManagementRevision);
-    }
-    let unknownOutcomeCleanupError: unknown;
-    try {
-      await consumePluginUnknownOutcomeCleanup();
-    } catch (error) {
-      unknownOutcomeCleanupError = error;
-    }
-    if (mutationError !== undefined && unknownOutcomeCleanupError !== undefined) {
-      throw new AggregateError([mutationError, unknownOutcomeCleanupError], 'Plugin mutation outcome and local teardown both require attention');
-    }
-    if (mutationError !== undefined) {
-      let committedCleanupError: unknown;
-      if (invalidatesPluginSurfaces && pluginMutationOutcome(mutationError) === 'committed') {
-        pluginConfirmationQueue.cancelAll();
-        try {
-          await retireActivityPluginPages(command.pluginInstanceID);
-          await pluginSurfaceCoordinator.invalidatePlugin(command.pluginInstanceID);
-          await workbenchPluginSurfaceController?.closePlugin(command.pluginInstanceID);
-        } catch (error) {
-          committedCleanupError = error;
-          reportPluginSurfaceRetirementError(error);
-        } finally {
-          setActivityPluginWindows((windows) => windows.filter((window) => (
-            window.target().pluginInstanceID !== command.pluginInstanceID
-          )));
-        }
+    await consumePluginUnknownOutcomeCleanup();
+    const reconcile = async () => {
+      if (pluginInventorySource() !== owner) throw new Error(i18n.t('uiCopy.plugin.continuity.loading'));
+      const projection = await refetchPluginInventory();
+      if (pluginInventorySource() !== owner) throw new Error(i18n.t('uiCopy.plugin.continuity.loading'));
+      if (!projection) throw new Error(i18n.t('uiCopy.plugin.continuity.unavailable'));
+      const item = projection.items.find((entry) => entry.pluginInstanceID === id);
+      const confirmed = outcome !== 'unknown'
+        || (command.type === 'uninstall' && !item)
+        || (item?.managementRevision ?? 0) > command.expectedManagementRevision
+        || (command.type === 'enable' && Boolean(item?.defaultLaunchTarget))
+        || (command.type === 'disable' && item?.lifecycleState === 'disabled')
+        || (('expectedRevokeEpoch' in command) && (item?.authorization?.revisions.revokeEpoch ?? 0) > command.expectedRevokeEpoch)
+        || (('expectedPolicyRevision' in command) && (item?.authorization?.revisions.policyRevision ?? 0) > command.expectedPolicyRevision);
+      if (command.type === 'uninstall' && outcome === 'committed' && item) throw new Error(i18n.t('uiCopy.plugin.continuity.unknown'));
+      if (!confirmed) throw new Error(i18n.t('uiCopy.plugin.continuity.unknown'));
+      if (command.type === 'uninstall' && !item && (outcome === 'committed' || outcome === 'unknown')) {
+        await removeWorkbenchPluginWidgets(id);
+        await retireActivityPluginPages(id);
+        setActivityPluginWindows((windows) => windows.filter((window) => window.target().pluginInstanceID !== id));
+        await refreshPluginWidgetCounts();
       }
-      await Promise.resolve(refetchPluginInventory()).catch(() => undefined);
-      if (committedCleanupError !== undefined) {
-        throw new AggregateError([mutationError, committedCleanupError], 'Committed plugin mutation and local teardown both require attention');
-      }
-      throw mutationError;
+      pluginSurfaceReconciliations.delete(id);
+      setPluginSurfacePhase(id);
+    };
+    pluginSurfaceReconciliations.set(id, reconcile);
+    try { await reconcile(); } catch (error) {
+      if (outcome !== 'committed' && outcome !== 'unknown') setPluginSurfacePhase(id);
+      if (!mutationError) throw error;
     }
-    if (unknownOutcomeCleanupError !== undefined) throw unknownOutcomeCleanupError;
-    if (invalidatesPluginSurfaces) {
-      pluginConfirmationQueue.cancelAll();
-      try {
-        await retireActivityPluginPages(command.pluginInstanceID);
-        await pluginSurfaceCoordinator.invalidatePlugin(command.pluginInstanceID);
-        await workbenchPluginSurfaceController?.closePlugin(command.pluginInstanceID);
-      } catch (error) {
-        reportPluginSurfaceRetirementError(error);
-      }
-      setActivityPluginWindows((windows) => windows.filter((window) => (
-        window.target().pluginInstanceID !== command.pluginInstanceID
-      )));
-    }
-    const refreshedProjection = await refetchPluginInventory();
-    if (
-      command.type !== 'grant_permission'
-      && command.type !== 'revoke_permission'
-      && 'pluginInstanceID' in command
-      && command.pluginInstanceID
-    ) {
-      const refreshedItem = refreshedProjection?.items.find((item) => (
-        item.pluginInstanceID === command.pluginInstanceID
-      ));
-      const retiredRevision = retiredPluginManagementRevisionByInstanceID.get(command.pluginInstanceID);
-      // Some lifecycle mutations (notably enable) are committed without
-      // advancing management_revision. Keep the authoritative current
-      // revision openable instead of treating it as the stale revision that
-      // was retired before the mutation completed.
-      if (
-        refreshedItem
-        && refreshedItem.managementRevision !== undefined
-        && retiredRevision !== undefined
-        && refreshedItem.managementRevision <= retiredRevision
-      ) {
-        retiredPluginManagementRevisionByInstanceID.delete(command.pluginInstanceID);
-      }
-    }
-    if (permissionMutationPluginInstanceID && preservedPermissionTargets.length > 0) {
-      const refreshedItem = refreshedProjection?.items.find((item) => item.pluginInstanceID === permissionMutationPluginInstanceID);
-      if (refreshedItem?.defaultLaunchTarget) {
-        const freshWindows = preservedPermissionTargets.map((target) => {
-          const instanceID = `activity_plugin_surface_${++nextActivityPluginWindowID}`;
-          setActivityPluginFocusRequests((requests) => ({ ...requests, [instanceID]: 1 }));
-          const freshTarget = {
-            ...target,
-            expectedManagementRevision: refreshedItem.defaultLaunchTarget!.expectedManagementRevision,
-          };
-          return createActivityPluginWindow(instanceID, pluginSurfaceTargetKey(freshTarget), freshTarget);
-        });
-        setActivityPluginWindows((windows) => [...windows, ...freshWindows]);
-      }
-    }
-    if (permissionMutationPluginInstanceID && preservedWorkbenchPermissionTargets.length > 0) {
-      const refreshedItem = refreshedProjection?.items.find((item) => item.pluginInstanceID === permissionMutationPluginInstanceID);
-      const nextRevision = refreshedItem?.managementRevision;
-      if (nextRevision && workbenchPluginSurfaceController) {
-        for (const target of preservedWorkbenchPermissionTargets) {
-          await workbenchPluginSurfaceController.open({
-            ...target,
-            expectedManagementRevision: nextRevision,
-          });
-        }
-      }
-    }
-    if (permissionMutationPluginInstanceID && preservedActivityPageTargets.length > 0) {
-      const refreshedItem = refreshedProjection?.items.find((item) => (
-        item.pluginInstanceID === permissionMutationPluginInstanceID
-      ));
-      const nextTarget = refreshedItem?.defaultLaunchTarget;
-      if (nextTarget) {
-        for (const preserved of preservedActivityPageTargets) {
-          if (!hasPluginPlacementPin(pluginPlacementPins(), 'activity', preserved.inventoryKey)) continue;
-          ensureActivityPluginPageRuntime(preserved.inventoryKey).setTarget({
-            ...nextTarget,
-            preferredPlacement: 'activity',
-          });
-        }
-      }
-    }
+    if (mutationError) throw mutationError;
   };
 
   const handlePluginCenterCommand = (
@@ -2041,8 +1947,6 @@ export function EnvAppShell() {
         pluginInstanceID: command.pluginInstanceID,
         surfaceID: command.surfaceID,
         expectedManagementRevision: command.expectedManagementRevision,
-        preferredPlacement: command.placement,
-        keepPluginCenter: command.keepPluginCenter,
       });
     }
     if (command.type === 'install') {
@@ -2062,75 +1966,41 @@ export function EnvAppShell() {
     inspection: ExternalPluginInspection,
     signal: AbortSignal,
   ): Promise<ExternalPluginCommitResult> => serializePluginPlacementOperation(async () => {
-    const updatePluginInstanceID = inspection.intent.action === 'update'
-      ? inspection.intent.plugin_instance_id
-      : undefined;
-    const updateExpectedManagementRevision = inspection.intent.action === 'update'
-      ? inspection.intent.expected_management_revision
-      : undefined;
-    let cleanup: Promise<void> | undefined;
-    const retireUpdatedPluginSurfaces = () => {
-      if (!updatePluginInstanceID || cleanup) return cleanup;
-      pluginConfirmationQueue.cancelAll();
-      cleanup = (async () => {
-        await retireActivityPluginPages(updatePluginInstanceID);
-        const results = await Promise.allSettled([
-          pluginSurfaceCoordinator.invalidatePlugin(updatePluginInstanceID),
-          workbenchPluginSurfaceController?.closePlugin(updatePluginInstanceID) ?? Promise.resolve(),
-        ]);
-        setActivityPluginWindows((windows) => windows.filter((window) => (
-          window.target().pluginInstanceID !== updatePluginInstanceID
-        )));
-        const errors = results.flatMap((result) => (
-          result.status === 'rejected' ? [result.reason] : []
-        ));
-        if (errors.length > 0) {
-          throw new AggregateError(errors, 'External update surface cleanup requires attention');
-        }
-      })();
-      void cleanup.catch(() => undefined);
-      return cleanup;
-    };
-    let result: ExternalPluginCommitResult;
+    if (inspection.intent.action !== 'update') return pluginLifecycle.installExternalPackage(inspection, { signal });
+    const owner = pluginInventorySource();
+    const id = inspection.intent.plugin_instance_id;
+    const expectedRevision = inspection.intent.expected_management_revision;
+    setPluginSurfacePhase(id, 'pending');
+    let result: ExternalPluginCommitResult | undefined;
+    let mutationError: unknown;
     try {
-      if (updatePluginInstanceID) await retireUpdatedPluginSurfaces();
+      await pluginSurfaceCoordinator.closePlugin(id);
       result = await pluginLifecycle.installExternalPackage(inspection, { signal });
-    } catch (error) {
-      if (updatePluginInstanceID && updateExpectedManagementRevision && pluginMutationOutcome(error) === 'unknown') {
-        retirePluginManagementRevision(
-          updatePluginInstanceID,
-          updateExpectedManagementRevision,
-        );
-      }
-      const cleanupResults = await Promise.allSettled([
-        consumePluginUnknownOutcomeCleanup(),
-      ]);
-      const cleanupErrors = cleanupResults.flatMap((cleanupResult) => (
-        cleanupResult.status === 'rejected' ? [cleanupResult.reason] : []
-      ));
-      if (cleanupErrors.length > 0) {
-        throw new AggregateError(
-          [error, ...cleanupErrors],
-          'External update and local surface cleanup both require attention',
-        );
-      }
-      throw error;
+    } catch (error) { mutationError = error; }
+    if (pluginInventorySource() !== owner) throw mutationError ?? new Error(i18n.t('uiCopy.plugin.continuity.loading'));
+    const outcome = mutationError === undefined ? 'committed' : pluginMutationOutcome(mutationError);
+    if (outcome === 'committed' || outcome === 'unknown') await pluginSurfaceCoordinator.invalidatePlugin(id);
+    // Even a failed multi-slot close may have retired one sibling slot.
+    // A fresh container lease retries only exact-slot cleanup through the SDK.
+    {
+      setPluginSurfacePhase(id, outcome === 'unknown' ? 'unknown' : 'refreshing');
+      renewPluginSurfaces(id);
     }
-    if (updatePluginInstanceID && updateExpectedManagementRevision) {
-      retirePluginManagementRevision(
-        updatePluginInstanceID,
-        updateExpectedManagementRevision,
-      );
-    }
-    const terminalCleanup = updatePluginInstanceID ? retireUpdatedPluginSurfaces() : undefined;
-    const cleanupResults = await Promise.allSettled([
-      consumePluginUnknownOutcomeCleanup(),
-      terminalCleanup ?? Promise.resolve(),
-    ]);
-    for (const cleanupResult of cleanupResults) {
-      if (cleanupResult.status === 'rejected') reportPluginSurfaceRetirementError(cleanupResult.reason);
-    }
-    return result;
+    await consumePluginUnknownOutcomeCleanup();
+    const reconcile = async () => {
+      if (pluginInventorySource() !== owner) throw new Error(i18n.t('uiCopy.plugin.continuity.loading'));
+      const projection = await refetchPluginInventory();
+      if (pluginInventorySource() !== owner) throw new Error(i18n.t('uiCopy.plugin.continuity.loading'));
+      if (!projection) throw new Error(i18n.t('uiCopy.plugin.continuity.unavailable'));
+      const item = projection.items.find((entry) => entry.pluginInstanceID === id);
+      if (outcome === 'unknown' && (item?.managementRevision ?? 0) <= expectedRevision) throw new Error(i18n.t('uiCopy.plugin.continuity.unknown'));
+      pluginSurfaceReconciliations.delete(id);
+      setPluginSurfacePhase(id);
+    };
+    pluginSurfaceReconciliations.set(id, reconcile);
+    try { await reconcile(); } catch (error) { if (!mutationError) throw error; }
+    if (mutationError) throw mutationError;
+    return result!;
   });
 
   const reportPluginNavigationFailure = (error: unknown) => {
@@ -2795,12 +2665,10 @@ export function EnvAppShell() {
       setPluginRuntimeRecoveryComplete(false);
       if (!readPluginSessionCredential()) return;
       pluginConfirmationQueue.cancelAll();
-      await retireActivityPluginPages();
       await Promise.allSettled([
         pluginSurfaceCoordinator.closeAll(),
-        workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
+        workbenchPluginSurfaceController?.releaseAll() ?? Promise.resolve(),
       ]);
-      setActivityPluginWindows([]);
       clearPluginSessionCredential();
     },
     afterCredentialStaged: (binding: PluginSessionCredentialBinding) => {
@@ -3848,6 +3716,36 @@ export function EnvAppShell() {
     });
   });
 
+  const renderPluginCenter = () => (
+        <PluginCenterView
+          pluginWidgetCounts={pluginWidgetCounts()}
+          projection={pluginInventoryProjection() ?? { items: [] }}
+          loading={pluginInventoryInitialPending()}
+          preparing={isLocalMode() && protocol.status() === 'connected' && !pluginSessionReady() && !pluginSessionRetired()}
+          error={pluginInventoryError()}
+          selectedInventoryKey={pluginCenterSelectedInventoryKey()}
+          focusRequest={pluginCenterFocusRequest()}
+          canManagePlugins={protocol.status() === 'connected' && (!isLocalMode() || pluginSessionReady()) && canAdmin()}
+          canOpenPluginSurfaces={canOpenPluginSurfaces()}
+          runtimeRecovery={undefined}
+          runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}
+          onRetryRuntimeRecovery={retryPluginRuntimeRecovery}
+          installOperations={pluginInstallCoordinator?.projections() ?? []}
+          onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
+          onReviewOfficialInstall={(pluginInstanceID) => pluginInstallCoordinator?.forget(pluginInstanceID)}
+          onDiscardRetainedDataAndRetry={(pluginInstanceID) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID)}
+          onRefresh={async () => {
+            await refreshPluginMarket();
+            await pluginInstallCoordinator?.resume();
+          }}
+          onCommand={handlePluginCenterCommand}
+          onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
+          onCommitExternal={commitExternalPluginPackage}
+          onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
+          onClose={closePluginCenter}
+        />
+  );
+
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
       { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: EnvTerminalPage, sidebar: { order: 1, fullScreen: true } },
@@ -3884,34 +3782,7 @@ export function EnvAppShell() {
       id: PLUGIN_CENTER_ACTIVITY_ID,
       name: i18n.t('uiCopy.plugin.centerTitle'),
       icon: Grid3x3,
-      component: () => (
-        <PluginCenterView
-          projection={pluginInventoryProjection() ?? { items: [] }}
-          loading={pluginInventoryInitialPending()}
-          preparing={isLocalMode() && protocol.status() === 'connected' && !pluginSessionReady() && !pluginSessionRetired()}
-          error={pluginInventoryError()}
-          selectedInventoryKey={pluginCenterSelectedInventoryKey()}
-          focusRequest={pluginCenterFocusRequest()}
-          canManagePlugins={protocol.status() === 'connected' && (!isLocalMode() || pluginSessionReady()) && canAdmin()}
-          canOpenPluginSurfaces={canOpenPluginSurfaces()}
-          runtimeRecovery={undefined}
-          runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}
-          onRetryRuntimeRecovery={retryPluginRuntimeRecovery}
-          installOperations={pluginInstallCoordinator?.projections() ?? []}
-          onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
-          onReviewOfficialInstall={(pluginInstanceID) => pluginInstallCoordinator?.forget(pluginInstanceID)}
-          onDiscardRetainedDataAndRetry={(pluginInstanceID) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID)}
-          onRefresh={async () => {
-            await refreshPluginMarket();
-            await pluginInstallCoordinator?.resume();
-          }}
-          onCommand={handlePluginCenterCommand}
-          onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
-          onCommitExternal={commitExternalPluginPackage}
-          onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
-          onClose={closePluginCenter}
-        />
-      ),
+      component: renderPluginCenter,
       sidebar: { order: 98, fullScreen: true },
     });
     list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
@@ -5058,8 +4929,8 @@ export function EnvAppShell() {
     <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden outline-none" tabindex={-1}>
       <div
         class={`h-full min-h-0 ${recoveryVisible() ? 'pointer-events-none' : ''}`}
-        inert={recoveryVisible()}
-        aria-hidden={recoveryVisible() ? 'true' : undefined}
+        inert={recoveryVisible() || workbenchPluginCenterOpen()}
+        aria-hidden={recoveryVisible() || workbenchPluginCenterOpen() ? 'true' : undefined}
       >
         <Show when={!accessGateVisible() || recoveryVisible()}>
           <EnvWorkbenchPage
@@ -5078,8 +4949,9 @@ export function EnvAppShell() {
             pluginSurfaceHost={{
               coordinator: pluginSurfaceCoordinator,
               confirmationQueue: pluginConfirmationQueue,
-              workbenchVisible: () => viewMode() === 'workbench',
+              workbenchVisible: () => viewMode() === 'workbench' && !workbenchPluginCenterOpen(),
               resolveTarget: resolveCurrentPluginSurfaceTarget,
+              resolveSurface: resolvePluginSurface,
               onOpenPluginDetails: (inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure),
               onRetirementError: reportPluginSurfaceRetirementError,
             }}
@@ -5092,6 +4964,13 @@ export function EnvAppShell() {
           {accessGatePanel()}
         </Show>
       </div>
+      <Show when={workbenchPluginCenterVisited()}>
+        <PluginCenterDialog open={workbenchPluginCenterOpen() && viewMode() === 'workbench'}
+          onOpenChange={setWorkbenchPluginCenterOpen} title={i18n.t('uiCopy.plugin.centerTitle')}
+          class="w-[min(1280px,calc(100vw-48px))] max-w-none">
+          {renderPluginCenter()}
+        </PluginCenterDialog>
+      </Show>
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>
         <Show
           when={accessGatePhase() === 'unlock_required'}
@@ -5172,6 +5051,7 @@ export function EnvAppShell() {
       <For each={activityPluginWindows()}>
         {(window, index) => (
           <ActivityPluginSurfaceWindow
+            resolveSurface={resolvePluginSurface}
             instanceID={window.instanceID}
             target={window.target()}
             coordinator={pluginSurfaceCoordinator}
@@ -5262,9 +5142,8 @@ export function EnvAppShell() {
         onClose={() => updatePluginPanel({ open: false })}
         onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
         onOpenPluginDetails={(inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure)}
-        onOpenPluginSurface={(target) => void openPluginSurface({
+        onOpenPluginSurface={(target) => openPluginSurface({
           ...target,
-          preferredPlacement: pluginsPanelPlacement() === 'workbench' ? 'workbench' : target.preferredPlacement,
         }).catch(reportPluginNavigationFailure)}
         onDropPlugin={(target, placement) => void openPluginSurface(target, { workbenchPlacement: placement }).catch(reportPluginNavigationFailure)}
         externalDockDragController={externalDockDragController()}

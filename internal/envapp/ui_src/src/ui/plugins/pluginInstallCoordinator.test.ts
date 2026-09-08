@@ -88,7 +88,6 @@ function approvalInventory(granted: boolean): PluginInventoryProjection {
       pluginInstanceID,
       surfaceID: 'metrics.dashboard',
       expectedManagementRevision: 11,
-      preferredPlacement: 'activity',
     } : undefined,
     authorization: {
       grants: [],

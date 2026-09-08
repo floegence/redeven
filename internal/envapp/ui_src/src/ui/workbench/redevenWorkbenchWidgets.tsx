@@ -3,8 +3,8 @@ import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
-import { AlertTriangle, DockCpu, DockFolder, DockLayers, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
-import { Button, WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import { DockCpu, DockFolder, DockLayers, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
+import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX } from 'solid-js';
 
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
@@ -12,8 +12,7 @@ import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { hasRWXPermissions } from '../pages/aiPermissions';
-import { PluginSurfaceBody } from '../plugins/PluginSurfaceFrame';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from '../plugins/pluginPresentation';
+import { PluginSurfaceContainer } from '../plugins/PluginSurfaceContainer';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import { useWorkbenchPluginSurfaceContext } from './WorkbenchPluginSurfaceContext';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
@@ -130,7 +129,6 @@ function MonitorWidget() {
 }
 
 function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
-  const i18n = useI18n();
   const workbench = useEnvWorkbenchInstancesContext();
   const pluginHost = useWorkbenchPluginSurfaceContext();
   const state = () => workbench.pluginSurfaceState(props.widgetId);
@@ -147,87 +145,33 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
       surfaceID: current.surface_id,
       displayName: current.display_name,
       expectedManagementRevision: current.expected_management_revision,
-      preferredPlacement: 'workbench',
     });
   });
-  const surfaceLease = createMemo((previous: { mountKey: string } | undefined) => {
-    const target = currentTarget();
-    const persisted = state();
-    if (!target || !persisted || target.expectedManagementRevision !== persisted.expected_management_revision) return undefined;
-    const mountKey = [
-      target.pluginID,
-      target.pluginInstanceID,
-      target.surfaceID,
-      target.expectedManagementRevision,
-    ].join('\u0000');
-    return previous?.mountKey === mountKey ? previous : { mountKey };
-  });
-
   return (
-    <Show
-      keyed
-      when={pluginHost && surfaceLease()}
-      fallback={(
-        <div class="flex h-full min-h-0 items-center justify-center bg-background p-5 animate-in fade-in duration-150 motion-reduce:animate-none" data-plugin-workbench-unavailable>
-          <div class={`w-full max-w-md text-center ${PLUGIN_ENTER_MOTION_CLASS}`}>
-            <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border bg-muted text-muted-foreground">
-              <Package class="h-5 w-5" />
-            </span>
-            <div class="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-[var(--redeven-status-warning-foreground)]">
-              <AlertTriangle class="h-3.5 w-3.5" />
-              {i18n.t('uiCopy.plugin.needsAttention')}
-            </div>
-            <h2 class="mt-2 truncate text-sm font-semibold">{state()?.display_name ?? props.title}</h2>
-            <p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.unavailable')}</p>
-            <Show when={pluginHost && inventoryKey()}>
-              <div class="mt-4 flex justify-center">
-            <Button
-              {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
-              data-plugin-workbench-view-issue
-              size="sm"
-              class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS}
-              variant="default"
-              icon={DockLayers}
-              onClick={() => {
-                const currentInventoryKey = inventoryKey();
-                if (currentInventoryKey) pluginHost!.onOpenPluginDetails(currentInventoryKey);
-              }}
-            >
-              {i18n.t('uiCopy.plugin.centerTitle')}
-            </Button>
-              </div>
-            </Show>
-          </div>
-        </div>
-      )}
-    >
-      {(_lease) => {
-        return (
-        <div
-          {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-          {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
-          {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: 'true' }}
-          class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden animate-in fade-in duration-200 motion-reduce:animate-none"
-          data-redeven-plugin-workbench-surface
-        >
-          <PluginSurfaceBody
-            coordinator={pluginHost!.coordinator}
-            confirmationQueue={pluginHost!.confirmationQueue}
-            target={currentTarget()!}
-            visible={pluginHost!.workbenchVisible() && props.lifecycle !== 'cold' && !props.filtered}
+    <Show when={state()}>
+      {(persisted) => <div
+        {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
+        {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
+        {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: 'true' }}
+        class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden"
+        data-redeven-plugin-workbench-surface>
+        <Show when={pluginHost}>
+          {(host) => <PluginSurfaceContainer
+            coordinator={host().coordinator} confirmationQueue={host().confirmationQueue}
+            target={{ pluginID: persisted().plugin_id, pluginInstanceID: persisted().plugin_instance_id,
+              surfaceID: persisted().surface_id, displayName: persisted().display_name,
+              expectedManagementRevision: persisted().expected_management_revision }}
+            resolveSurface={host().resolveSurface ?? (() => ({ target: currentTarget(), generation: 0, status: currentTarget() ? 'ready' : 'unavailable',
+              action: { label: 'details', run: () => host().onOpenPluginDetails(inventoryKey()!) } }))}
+            visible={host().workbenchVisible() && props.lifecycle !== 'cold' && !props.filtered}
             registerClose={(close) => workbench.registerPluginSurfaceClose(props.widgetId, close)}
             onInteraction={(event) => {
-              if (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action') {
-                // Selection/stacking must not reclaim focus from an embedded
-                // plugin document while it is editing or holding pointer capture.
-                props.requestActivate?.({ focus: false });
-              }
+              if (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action') props.requestActivate?.({ focus: false });
             }}
-            onRetirementError={pluginHost!.onRetirementError}
-          />
-        </div>
-        );
-      }}
+            onRetirementError={host().onRetirementError}
+          />}
+        </Show>
+      </div>}
     </Show>
   );
 }

@@ -34,6 +34,7 @@ import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
+  pluginWidgetCounts?: Readonly<Record<string, number>>;
   projection: PluginInventoryProjection;
   loading: boolean;
   preparing?: boolean;
@@ -654,7 +655,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     }
   };
 
-  const openItemSurface = (item: PluginInventoryItem, placement: 'activity' | 'workbench') => {
+  const openItemSurface = (item: PluginInventoryItem) => {
     const target = item.defaultLaunchTarget;
     if (!target || !canOpenSurfaces()) return;
     void runCommand({
@@ -663,8 +664,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       pluginInstanceID: target.pluginInstanceID,
       surfaceID: target.surfaceID,
       expectedManagementRevision: target.expectedManagementRevision,
-      placement,
-      keepPluginCenter: placement === 'activity',
     });
   };
 
@@ -796,8 +795,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                     setMobileDetailOpen(true);
                     setUninstallChoiceFor(item.pluginInstanceID);
                   }}
-                  onOpenActivity={() => openItemSurface(item, 'activity')}
-                  onOpenWorkbench={() => openItemSurface(item, 'workbench')}
+                  onOpenSurface={() => openItemSurface(item)}
                   onRetryInstall={() => {
                     const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
                     if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
@@ -853,6 +851,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                 || retainedDataRecoveryItem()?.inventoryKey === item.inventoryKey
                 ? undefined
                 : installOperationForItem(item)}
+              pluginWidgetCounts={props.pluginWidgetCounts}
               uninstallChoiceFor={uninstallChoiceFor()}
               onCommand={(command) => void runCommand(command)}
               onAskUninstall={setUninstallChoiceFor}
@@ -914,7 +913,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               const flow = officialInstallFlow();
               if (flow.status !== 'installed' || !flow.item.defaultLaunchTarget) return;
               setOfficialInstallDialogOpen(false);
-              openItemSurface(flow.item, 'activity');
+              openItemSurface(flow.item);
             }
           : undefined}
         onConfirm={confirmOfficialInstall}
@@ -1010,9 +1009,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           await props.onRefresh();
         }}
         onCommitted={() => setUpdateSuccess(true)}
-        onOpenActivity={() => {
+        onOpenSurface={() => {
           const item = currentUpdateReviewItem();
-          if (item) openItemSurface(item, 'activity');
+          if (item) openItemSurface(item);
           setUpdateReviewOpen(false);
         }}
         onViewPermissions={() => {
@@ -1523,6 +1522,7 @@ export function PluginCenterDetails(props: {
   managementPending: boolean;
   commandPendingType?: PluginPendingCommandType;
   installOperation?: PluginInstallExecutionProjection;
+  pluginWidgetCounts?: Readonly<Record<string, number>>;
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
@@ -1639,6 +1639,7 @@ export function PluginCenterDetails(props: {
                   <code class="mt-3 block break-all text-[11px] text-muted-foreground">{item().pluginID}</code>
                 </details>
                 <PluginUninstallDialog
+                  widgetCount={props.pluginWidgetCounts?.[item().pluginInstanceID!]}
                   item={item()}
                   open={props.uninstallChoiceFor === item().pluginInstanceID}
                   pending={props.managementPending}
@@ -2145,7 +2146,7 @@ function PluginActions(props: {
       : element;
     focusTarget.focus({ preventScroll: true });
   };
-  const openSurface = (placement: 'activity' | 'workbench') => {
+  const openSurface = () => {
     const target = item().defaultLaunchTarget;
     if (!target) return;
     props.onCommand({
@@ -2154,15 +2155,13 @@ function PluginActions(props: {
       pluginInstanceID: target.pluginInstanceID,
       surfaceID: target.surfaceID,
       expectedManagementRevision: target.expectedManagementRevision,
-      placement,
-      keepPluginCenter: placement === 'activity',
     });
   };
   const primaryActionLabel = (action: PluginPrimaryAction) => {
     switch (action) {
       case 'install': return i18n.t('uiCopy.plugin.install');
       case 'enable': return i18n.t('uiCopy.plugin.enable');
-      case 'open_activity': return i18n.t('common.actions.open');
+      case 'open': return i18n.t('common.actions.open');
       case 'review_update': return i18n.t('uiCopy.plugin.reviewUpdate');
       case 'view_policy': return i18n.t('uiCopy.plugin.viewPolicyRestriction');
       case 'view_runtime': return i18n.t('uiCopy.plugin.viewRuntimeRequirement');
@@ -2182,7 +2181,7 @@ function PluginActions(props: {
           expectedManagementRevision: item().managementRevision!,
         });
         break;
-      case 'open_activity': openSurface('activity'); break;
+      case 'open': openSurface(); break;
       case 'review_update': props.onExternalUpdate(item()); break;
       case 'view_runtime':
       case 'view_trust':
@@ -2192,13 +2191,12 @@ function PluginActions(props: {
   };
   const primaryDisabled = () => {
     const action = presentation().primaryAction;
-    if (action === 'open_activity') return disabledOpen();
+    if (action === 'open') return disabledOpen();
     if (action === 'install' || action === 'enable' || action === 'review_update') return disabledManagement();
     return false;
   };
   const overflowItems = (): DropdownItem[] => [
-    ...(presentation().canOpenActivity ? [{ id: 'activity', label: i18n.t('common.actions.open'), disabled: disabledOpen() }] : []),
-    ...(presentation().canOpenWorkbench ? [{ id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: disabledOpen() }] : []),
+    ...(presentation().canOpenSurface ? [{ id: 'open', label: i18n.t('common.actions.open'), disabled: disabledOpen() }] : []),
     ...(presentation().canDisable ? [{ id: 'disable', label: i18n.t('uiCopy.plugin.disable'), disabled: disabledManagement() }] : []),
     ...(presentation().canCheckForUpdate ? [{ id: 'update', label: i18n.t('uiCopy.plugin.checkForUpdate'), disabled: disabledManagement() }] : []),
     ...(presentation().canUninstall ? [
@@ -2207,10 +2205,9 @@ function PluginActions(props: {
     ] : []),
   ];
   const selectOverflowAction = (action: string) => {
-    if (action === 'activity') {
-      openSurface('activity');
-    } else if (action === 'workbench') {
-      openSurface('workbench');
+    if (action === 'open') {
+      openSurface();
+
     } else if (action === 'disable') {
       props.onCommand({
         type: 'disable',
@@ -2279,6 +2276,7 @@ function PluginActions(props: {
 }
 
 function PluginUninstallDialog(props: {
+  widgetCount?: number;
   item: PluginInventoryItem;
   open: boolean;
   pending: boolean;
@@ -2326,6 +2324,8 @@ function PluginUninstallDialog(props: {
     >
       <div class="space-y-4">
         <PluginIdentityHeader item={props.item} />
+        <p class="text-sm text-muted-foreground" data-plugin-uninstall-layout-impact>{i18n.t('uiCopy.plugin.continuity.uninstallImpact')}</p>
+        <Show when={props.widgetCount !== undefined}><p class="text-sm">{i18n.t('uiCopy.plugin.continuity.widgetCount', { count: props.widgetCount ?? 0 })}</p></Show>
         <div class="space-y-2" role="radiogroup" aria-label={i18n.t('uiCopy.plugin.uninstallDataChoice')}>
           <DataRetentionChoice
             checked={retention() === 'keep_data'}
@@ -2391,7 +2391,7 @@ function DataRetentionChoice(props: {
 }
 
 function primaryActionDataID(action: PluginPrimaryAction): string {
-  if (action === 'open_activity') return 'open';
+  if (action === 'open') return 'open';
   if (action === 'review_update') return 'update-external';
   return action.replace('review_', '').replace('view_', '');
 }
@@ -2399,7 +2399,7 @@ function primaryActionDataID(action: PluginPrimaryAction): string {
 function primaryActionIcon(action: PluginPrimaryAction) {
   switch (action) {
     case 'install': return Download;
-    case 'open_activity': return CheckCircle;
+    case 'open': return CheckCircle;
     case 'review_update': return RefreshIcon;
     case 'enable': return Play;
     case 'view_policy':

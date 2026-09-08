@@ -42,7 +42,6 @@ function item(
       pluginInstanceID,
       surfaceID: 'metrics.dashboard',
       expectedManagementRevision: revisions.managementRevision,
-      preferredPlacement: 'activity',
     } : undefined,
     authorization: {
       grants: [],

@@ -96,7 +96,9 @@ export type PluginSurfacePlacementCoordinator = Readonly<{
   setVisible: (slot: PluginSurfaceSlot, visible: boolean) => void;
   fail: (slot: PluginSurfaceSlot, error: Error) => Promise<void>;
   release: (slot: PluginSurfaceSlot) => Promise<void>;
+  closePlugin: (pluginInstanceID: string) => Promise<void>;
   invalidatePlugin: (pluginInstanceID: string) => Promise<void>;
+  invalidateAll: () => Promise<void>;
   closeAll: () => Promise<void>;
   dispose: () => Promise<void>;
 }>;
@@ -278,6 +280,10 @@ export function createPluginSurfacePlacementCoordinator(
       if (current) return retire(current);
       return disposeInactiveSlot(slot);
     },
+    closePlugin(pluginInstanceID) {
+      return awaitAll([...entries.values()].filter((entry) => entry.pluginInstanceID === pluginInstanceID).map(retire), 'Plugin surface closure failed');
+    },
+    invalidateAll() { return invalidateEntries([...entries.values()]); },
     invalidatePlugin(pluginInstanceID) {
       return invalidateEntries([...entries.values()].filter((entry) => entry.pluginInstanceID === pluginInstanceID));
     },

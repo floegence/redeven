@@ -188,9 +188,7 @@ action, activation, focus, and floating-layer policy.
 Interaction observations arrive only through ReDevPlugin's source/port-bound
 surface channel and remain tied to the current frame generation and opaque
 surface. Redeven uses them for host placement behavior, never as identity,
-authorization, or permission evidence. A placement move is globally serialized:
-the old slot must close before a fresh lease, iframe, or new persisted placement
-is opened. Lost close responses reconcile through the released idempotent
+authorization, or permission evidence. Each mode owns independent slots; a current-mode open never closes another mode. Saved Workbench bindings belong to Redeven layout transactions and survive runtime retirement. External pre-update cleanup awaits exact-slot closure before the platform mutation. Lost close responses reconcile through the released idempotent
 exact-surface contract and must not widen into session-scope revocation or affect
 sibling surfaces. Management mutations are different: the released Host revokes
 affected authority, then the SDK tears down the shared scope for committed or

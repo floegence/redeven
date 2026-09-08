@@ -36,7 +36,7 @@ export type PluginUpdateReviewDialogProps = {
   onOfficialUpdate: (item: PluginInventoryItem, targetVersion: string) => Promise<unknown>;
   onRefresh: () => Promise<unknown> | unknown;
   onCommitted: () => void;
-  onOpenActivity: () => void;
+  onOpenSurface: () => void;
   onViewPermissions: () => void;
 };
 
@@ -337,7 +337,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
               </button>
             </Show>
             <Show when={stage() === 'complete' && completedLaunchTarget()}>
-              <button data-plugin-update-open-activity type="button" class={primaryButtonClass} onClick={props.onOpenActivity}>
+              <button data-plugin-update-open type="button" class={primaryButtonClass} onClick={props.onOpenSurface}>
                 {i18n.t('common.actions.open')}
               </button>
             </Show>
