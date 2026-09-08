@@ -142,16 +142,12 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   });
 
   const pluginTiles = createMemo(() => props.model.tiles.filter(isPluginTile));
-  const centerTile = createMemo(() => props.model.tiles.find((tile) => tile.kind === 'open_center'));
   const normalizedQuery = createMemo(() => normalizeSearchText(query(), i18n.locale()));
   const visibleTiles = createMemo(() => pluginTiles().filter((tile) => {
     if (category() !== 'all' && tile.item.category !== category()) return false;
     const search = normalizedQuery();
     return search === '' || pluginSearchText(tile.item, i18n, i18n.locale()).includes(search);
   }));
-  const attentionCount = createMemo(() => pluginTiles().filter((tile) => (
-    tile.item.lifecycleState === 'needs_attention' || tile.item.lifecycleState === 'update_available'
-  )).length);
   const visible = () => props.open || mounted();
   const dismiss = () => {
     restoreFocusAfterClose = true;
@@ -432,13 +428,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               </Show>
             </div>
 
-            <Show when={!isWorkbenchPopup() && centerTile()}>
-              <footer class="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/25 px-4 py-3 sm:px-5">
-                  <div class="min-w-0 text-xs leading-5 text-muted-foreground">
-                    {i18n.t('uiCopy.plugin.launcherSummary', { count: pluginTiles().length, attention: attentionCount() })}
-                  </div>
-              </footer>
-            </Show>
     </>
   );
 

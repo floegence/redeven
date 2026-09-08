@@ -442,7 +442,6 @@ export const enUS = defineDictionary({
       launcherApplications: 'Applications',
       launcherResultCount: '{count} results',
       launcherNoResults: 'No applications match these filters.',
-      launcherSummary: '{count} installed · {attention} need attention',
       categories: 'Plugin categories',
       clearFilters: 'Clear filters',
       filterSelection: '{dimension}: {value}',

@@ -25,7 +25,7 @@ The Activity Bar `Plugins` entry opens a Shell-root Launcher without changing
 the current normal surface. On desktop it is the permanent first Activity Bar
 entry, followed by built-in Activities, Flower, and then user-pinned plugins in
 saved order. Desktop uses a centered modal with a search field,
-responsive icon grid, stable scrolling body, and fixed footer; mobile uses a
+responsive icon grid and stable scrolling body without a summary footer; mobile uses a
 bottom sheet with the same controls and at least 44px touch targets. Search normalizes Unicode with
 NFKC and locale-aware case folding, matches display name, canonical keywords,
 and the locale's explicit alias key, and intersects with the selected category.
@@ -79,7 +79,8 @@ background, border, radius, shadow, blur, and theme material. Its product-owned
 content has no header or footer divider and omits the installed and attention
 summary. Size, content layout, search, focus loop, and close behavior remain
 product-owned. Activity placement keeps the existing Shell-root modal behavior,
-including its fixed summary footer and dividers.
+including its header divider; both placements omit the installed and attention
+summary footer.
 Plugin Center opens in the current mode: a dedicated Activity page or a retained Workbench management dialog above the canvas. Both use the same content and category/search projection. The Workbench dialog preserves search, filters, scroll, and selection across close/reopen, isolates canvas input, and restores entry focus. A successful Open dismisses management and focuses the current mode's container; failed placement leaves management available. Its local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding
 identity. Every filter trigger permanently names its dimension and current
