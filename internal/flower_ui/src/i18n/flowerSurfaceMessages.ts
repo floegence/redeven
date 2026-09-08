@@ -60,6 +60,7 @@ export const flowerSurfaceEnUS = {
     fromSource: 'From {source}',
     modelLabel: 'Model',
     reasoningLabel: 'Reasoning',
+    reasoningLoading: 'Loading reasoning setting…',
     noModelSelected: 'No model selected',
     linkedContextLabel: 'Linked context',
 		truncatedLabel: 'Truncated',

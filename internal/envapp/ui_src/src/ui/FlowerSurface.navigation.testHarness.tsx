@@ -1021,7 +1021,9 @@ export function renderSurfaceWithDraftCoordinator(
   document.body.appendChild(runtime);
   const dispose = render(() => (
     <FlowerSurfaceComponent
-      adapter={surfaceAdapter}
+      adapter={surfaceAdapter.connectLiveStream
+        ? surfaceAdapter
+        : { ...surfaceAdapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(surfaceAdapter, input) }}
       draftCoordinator={draftCoordinator}
       notify={(notification) => notifications.push(notification)}
     />

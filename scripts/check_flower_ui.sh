@@ -163,6 +163,7 @@ main() {
         src/ui/FlowerSurface.inputResponse.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
+        src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
         src/ui/FlowerSurface.disclosureInteraction.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \

@@ -4085,6 +4085,7 @@
       "fromSource": "來自 {source}",
       "modelLabel": "模型",
       "reasoningLabel": "推理等級",
+      "reasoningLoading": "正在載入推理設定…",
       "noModelSelected": "未選擇模型",
       "truncatedLabel": "已截斷",
       "permissionSelectorLabel": "執行緒權限",

@@ -4070,6 +4070,7 @@
       "fromSource": "De {source}",
       "modelLabel": "Modelo",
       "reasoningLabel": "Raciocínio",
+      "reasoningLoading": "Carregando a configuração de raciocínio…",
       "noModelSelected": "Nenhum modelo selecionado",
       "truncatedLabel": "Truncado",
       "permissionSelectorLabel": "Permissão da conversa",

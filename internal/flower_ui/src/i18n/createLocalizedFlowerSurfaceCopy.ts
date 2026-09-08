@@ -73,6 +73,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       fromSource: (source) => t(i18n, k('chat.fromSource'), { source }),
       modelLabel: t(i18n, k('chat.modelLabel')),
       reasoningLabel: t(i18n, k('chat.reasoningLabel')),
+      reasoningLoading: t(i18n, k('chat.reasoningLoading')),
       noModelSelected: t(i18n, k('chat.noModelSelected')),
       linkedContextLabel: t(i18n, k('chat.linkedContextLabel')),
 			truncatedLabel: t(i18n, 'activityChrome.truncated'),

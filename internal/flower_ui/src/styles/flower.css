@@ -2395,6 +2395,16 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, currentColor 72%, transparent);
 }
 
+.flower-reasoning-loading {
+  display: inline-flex;
+  width: 3.75rem;
+  flex: 0 0 3.75rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
 .flower-reasoning-segment-button,
 .flower-reasoning-segment-static {
   display: inline-flex;

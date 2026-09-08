@@ -66,6 +66,7 @@
       "fromSource": "Depuis {source}",
       "modelLabel": "Modèle",
       "reasoningLabel": "Raisonnement",
+      "reasoningLoading": "Chargement du réglage de raisonnement…",
       "noModelSelected": "Aucun modèle sélectionné",
       "truncatedLabel": "Tronqué",
       "permissionSelectorLabel": "Autorisation du fil",

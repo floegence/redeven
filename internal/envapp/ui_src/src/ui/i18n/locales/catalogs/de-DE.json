@@ -4070,6 +4070,7 @@
       "fromSource": "Von {source}",
       "modelLabel": "Modell",
       "reasoningLabel": "Reasoning",
+      "reasoningLoading": "Denkeinstellung wird geladen…",
       "noModelSelected": "Kein Modell ausgewählt",
       "truncatedLabel": "Gekürzt",
       "permissionSelectorLabel": "Thread-Berechtigung",

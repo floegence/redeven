@@ -66,6 +66,7 @@
       "fromSource": "{source}에서",
       "modelLabel": "모델",
       "reasoningLabel": "추론",
+      "reasoningLoading": "추론 설정을 불러오는 중…",
       "noModelSelected": "선택한 모델 없음",
       "truncatedLabel": "잘림",
       "permissionSelectorLabel": "스레드 권한",
