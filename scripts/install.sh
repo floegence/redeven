@@ -314,7 +314,7 @@ verify_signature() {
 
     COSIGN_CERT_IDENTITY="https://github.com/floegence/redeven/.github/workflows/release.yml@refs/tags/${LATEST_VERSION}"
     log_info "Verifying release signature..."
-    if ! cosign verify-blob \
+    if ! cosign verify-blob --new-bundle-format=false \
         --certificate "$cert_file" \
         --signature "$sig_file" \
         --certificate-identity "$COSIGN_CERT_IDENTITY" \

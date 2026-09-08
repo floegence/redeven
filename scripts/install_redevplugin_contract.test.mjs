@@ -88,6 +88,7 @@ test('binds cosign verification to the exact selected tag identity', () => {
     const args = readFileSync(argsFile, 'utf8');
     assert.match(args, /--certificate-identity\nhttps:\/\/github\.com\/floegence\/redeven\/\.github\/workflows\/release\.yml@refs\/tags\/v1\.2\.3\n/u);
     assert.doesNotMatch(args, /certificate-identity-regexp/u);
+    assert.match(args, /--new-bundle-format=false\n/u);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -299,5 +300,24 @@ test('retains only the active and newly activated runtime suites', () => {
     assert.equal(readlinkSync(path.join(install, 'redeven')), `.redeven-runtime-suites/${hashes[2]}/redeven`);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('release signing and verification explicitly preserve detached Sigstore evidence with Cosign 3', () => {
+  for (const file of ['scripts/stage_redevplugin_release_artifacts.sh', '.github/workflows/release.yml']) {
+    const source = readFileSync(path.join(repositoryRoot, file), 'utf8');
+    const commands = source.match(/cosign sign-blob[^\n]*/gu) ?? [];
+    assert.equal(commands.length, file.endsWith('.yml') ? 2 : 1, file);
+    for (const command of commands) {
+      assert.match(command, /--new-bundle-format=false/u, file);
+      assert.match(command, /--use-signing-config=false/u, file);
+      assert.doesNotMatch(command, /--tlog-upload=false/u, file);
+    }
+  }
+  for (const file of ['scripts/check_redevplugin_consumption_gate.sh', 'scripts/generate_release_notes.sh']) {
+    const source = readFileSync(path.join(repositoryRoot, file), 'utf8');
+    assert.match(source, /cosign verify-blob --new-bundle-format=false/u, file);
+    assert.doesNotMatch(source, /--insecure-ignore-tlog/u, file);
   }
 });

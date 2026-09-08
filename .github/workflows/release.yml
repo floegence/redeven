@@ -560,7 +560,7 @@ jobs:
             --tag "${GITHUB_REF_NAME}"
           for manifest in dist/redeven-runtime-compatibility_*.json; do
             base="${manifest%.json}"
-            cosign sign-blob --yes \
+            cosign sign-blob --yes --new-bundle-format=false --use-signing-config=false \
               --output-signature "${base}.sig" \
               --output-certificate "${base}.pem" \
               "$manifest"
@@ -594,7 +594,7 @@ jobs:
       - name: Sign checksums with keyless OIDC
         run: |
           set -euo pipefail
-          cosign sign-blob --yes \
+          cosign sign-blob --yes --new-bundle-format=false --use-signing-config=false \
             --output-signature dist/SHA256SUMS.sig \
             --output-certificate dist/SHA256SUMS.pem \
             dist/SHA256SUMS

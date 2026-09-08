@@ -72,7 +72,7 @@ verify_signature() {
     require_command cosign
     identity=$(jq -er '.runtime.signature.certificate_identity' "$root/$RUNTIME_MARKER")
     issuer=$(jq -er '.runtime.signature.oidc_issuer' "$root/$RUNTIME_MARKER")
-    cosign verify-blob \
+    cosign verify-blob --new-bundle-format=false \
       --certificate "$root/$RUNTIME_CERTIFICATE" \
       --signature "$root/$RUNTIME_SIGNATURE" \
       --certificate-identity "$identity" \

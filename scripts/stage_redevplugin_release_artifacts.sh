@@ -283,7 +283,7 @@ node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-build-evidence \
 signature="$tmpdir/$RUNTIME_SIGNATURE"
 certificate="$tmpdir/$RUNTIME_CERTIFICATE"
 if [[ "$profile" == "release" ]]; then
-  cosign sign-blob --yes \
+  cosign sign-blob --yes --new-bundle-format=false --use-signing-config=false \
     --output-signature "$signature" \
     --output-certificate "$certificate" \
     "$runtime"
