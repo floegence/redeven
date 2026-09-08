@@ -1,4 +1,8 @@
 import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
+import { desktopShellThemeCatalog, desktopShellThemeSemanticCatalog } from './desktopTheme';
+import { buildDesktopWindowChromeStyleText } from '../shared/windowChromeContract';
+import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
+import { WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT, WEB_SERVICE_BROWSER_CHROME_HEIGHT } from '../shared/webServiceBrowserLayout';
 
 export type WebServiceBrowserCopy = Readonly<{
   locale: string;
@@ -24,9 +28,24 @@ function htmlEscape(value: unknown): string {
     .replaceAll("'", '&#39;');
 }
 
+function browserThemeStyleText(): string {
+  return Object.entries(desktopShellThemeCatalog).map(([name, preset]) => {
+    const palette = desktopShellThemeSemanticCatalog[name];
+    return `:root[data-floe-shell-theme="${htmlEscape(name)}"] {
+      color-scheme: ${preset.mode};
+      --chrome: ${preset.window.backgroundColor};
+      --foreground: ${preset.window.symbolColor};
+      --border: ${palette.border};
+      --primary: ${palette.primary};
+      --error: ${palette.error};
+    }`;
+  }).join('\n');
+}
+
 export function buildWebServiceBrowserDocumentURL(
   copy: WebServiceBrowserCopy,
   theme: DesktopThemeSnapshot,
+  platform: NodeJS.Platform = process.platform,
 ): string {
   const palette = theme.semantic;
   const document = `<!doctype html>
@@ -38,51 +57,64 @@ export function buildWebServiceBrowserDocumentURL(
   <title>${htmlEscape(copy.title)}</title>
   <style>
     :root {
-      color-scheme: ${theme.resolvedTheme};
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --background: ${palette.background};
-      --surface: ${palette.surface};
-      --muted: ${palette.muted};
-      --foreground: ${palette.foreground};
-      --muted-foreground: ${palette.mutedForeground};
-      --border: ${palette.border};
-      --primary: ${palette.primary};
-      --primary-foreground: ${palette.primaryForeground};
-      --error: ${palette.error};
-      --chrome: color-mix(in srgb, var(--surface) 88%, var(--background));
+      --toolbar-height: ${WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT}px;
+      --chrome-height: ${WEB_SERVICE_BROWSER_CHROME_HEIGHT}px;
+      --control-border: color-mix(in srgb, var(--border) 70%, var(--chrome));
+      --divider: color-mix(in srgb, var(--border) 55%, var(--chrome));
+      --address: color-mix(in srgb, var(--foreground) 4%, var(--chrome));
       --hover: color-mix(in srgb, var(--foreground) 8%, transparent);
-      --primary-soft: color-mix(in srgb, var(--primary) 16%, var(--surface));
-      --error-soft: color-mix(in srgb, var(--error) 12%, var(--surface));
-      --error-border: color-mix(in srgb, var(--error) 38%, var(--surface));
-      --shadow: color-mix(in srgb, var(--foreground) 7%, transparent);
+      --primary-soft: color-mix(in srgb, var(--primary) 16%, var(--chrome));
+      --error-soft: color-mix(in srgb, var(--error) 12%, var(--chrome));
+      --error-border: color-mix(in srgb, var(--error) 38%, var(--chrome));
     }
+    ${browserThemeStyleText()}
+    ${buildDesktopWindowChromeStyleText(resolveDesktopWindowChromeSnapshot(platform))}
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-    body { background: var(--background); color: var(--foreground); }
-    .browser-bar { height: 54px; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--chrome); }
-    .nav-button { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: default; }
+    body { background: var(--chrome); color: var(--foreground); }
+    .browser-titlebar { height: var(--redeven-desktop-titlebar-height); display: flex; align-items: center; padding-inline: var(--redeven-desktop-titlebar-start-inset) var(--redeven-desktop-titlebar-end-inset); background: var(--chrome); }
+    .browser-title { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: 1.4; }
+    .browser-bar { height: var(--toolbar-height); display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--divider); background: var(--chrome); }
+    .nav-button { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
     .nav-button:not(:disabled):hover { background: var(--hover); cursor: pointer; }
     .nav-button[aria-pressed="true"] { background: var(--primary-soft); color: var(--primary); }
-    .nav-button:focus-visible, .address-input:focus-visible, .go-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-    .nav-button:disabled { opacity: .34; }
+    .nav-button:focus-visible, .go-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .nav-button:disabled { opacity: .34; cursor: default; }
     .nav-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .nav-button svg[hidden] { display: none; }
-    .address-wrap { min-width: 0; height: 38px; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); box-shadow: 0 1px 2px var(--shadow); }
-    .route-mark { width: 16px; height: 16px; flex: 0 0 16px; color: var(--muted-foreground); }
+    .address-wrap { min-width: 0; height: 38px; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--address); }
+    .address-wrap:has(.address-input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .address-input::placeholder { color: inherit; opacity: 1; }
+    .route-mark { width: 16px; height: 16px; flex: 0 0 16px; color: var(--foreground); }
     .route-mark svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .address-input { min-width: 0; height: 100%; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: inherit; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: 0; }
-    .go-button { width: 30px; height: 28px; flex: 0 0 30px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+    .go-button { width: 30px; height: 28px; flex: 0 0 30px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--foreground); cursor: pointer; }
     .go-button:hover { background: var(--hover); }
     .go-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    .status { position: fixed; left: 124px; right: 44px; top: 47px; z-index: 2; min-height: 0; padding: 0 12px; color: var(--error); background: var(--error-soft); border: 1px solid var(--error-border); border-radius: 0 0 6px 6px; font-size: 12px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: translateY(-4px); opacity: 0; pointer-events: none; transition: opacity .12s ease, transform .12s ease; }
+    .status { position: fixed; left: 124px; right: 44px; top: calc(var(--chrome-height) - 28px); z-index: 2; min-height: 0; padding: 0 12px; color: var(--error); background: var(--error-soft); border: 1px solid var(--error-border); border-radius: 0 0 6px 6px; font-size: 12px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: translateY(-4px); opacity: 0; pointer-events: none; transition: opacity .12s ease, transform .12s ease; }
     .status[data-visible="true"] { opacity: 1; transform: translateY(0); }
-    .progress { position: fixed; left: 0; right: 0; top: 52px; z-index: 3; height: 2px; overflow: hidden; pointer-events: none; }
+    .progress { position: fixed; left: 0; right: 0; top: calc(var(--chrome-height) - 2px); z-index: 3; height: 2px; overflow: hidden; pointer-events: none; }
     .progress::after { content: ""; display: block; width: 34%; height: 100%; background: var(--primary); transform: translateX(-110%); opacity: 0; }
     .progress[data-loading="true"]::after { opacity: 1; animation: load 1.05s ease-in-out infinite; }
+    :root[data-floe-shell-theme="hc-light"] { --control-border: var(--border); --divider: var(--border); }
+    @media (forced-colors: active) {
+      :root[data-floe-shell-theme] { --chrome: Canvas; --foreground: CanvasText; --address: Canvas; --control-border: ButtonText; --divider: CanvasText; --primary: Highlight; --primary-soft: Highlight; --hover: ButtonFace; --error: CanvasText; --error-soft: Canvas; --error-border: CanvasText; }
+      .nav-button[aria-pressed="true"] { color: HighlightText; }
+      .nav-button:disabled { opacity: 1; color: GrayText; }
+      .progress::after { forced-color-adjust: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .status { transition: none; }
+      .progress[data-loading="true"]::after { animation: none; transform: none; width: 100%; }
+    }
     @keyframes load { to { transform: translateX(310%); } }
   </style>
 </head>
 <body>
+  <header class="browser-titlebar" data-redeven-desktop-titlebar-drag-region="true">
+    <p id="browser-title" class="browser-title">${htmlEscape(copy.title)}</p>
+  </header>
   <form id="browser-form" class="browser-bar" novalidate>
     <button id="browser-back" class="nav-button" type="button" aria-label="${htmlEscape(copy.backLabel)}" title="${htmlEscape(copy.backLabel)}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
