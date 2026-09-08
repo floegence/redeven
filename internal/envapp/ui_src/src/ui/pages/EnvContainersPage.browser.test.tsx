@@ -47,8 +47,25 @@ vi.mock('../services/uiStorage', async (importOriginal) => ({
   writeUIStorageJSON: vi.fn(),
 }));
 
+vi.mock('@floegence/floe-webapp-protocol', () => ({
+  useProtocol: () => ({ session: () => null }),
+}));
+
 vi.mock('../protocol/redeven_v1', () => ({
-  useRedevenRpc: () => ({ fs: { list: vi.fn().mockResolvedValue({ entries: [] }) } }),
+  useRedevenRpc: () => ({
+    fs: {
+      getPathContext: async () => ({
+        agentHomePathAbs: '/home/demo',
+        homePathAbs: '/home/demo',
+        defaultRootId: 'home',
+        roots: [
+          { id: 'home', label: 'Home', pathAbs: '/home/demo', kind: 'home', permissions: { read: true, write: true } },
+          { id: 'computer', label: 'Computer', pathAbs: '/', kind: 'computer', permissions: { read: true, write: false } },
+        ],
+      }),
+      list: vi.fn().mockResolvedValue({ entries: [] }),
+    },
+  }),
 }));
 
 vi.mock('../services/containerResourcesApi', () => ({
