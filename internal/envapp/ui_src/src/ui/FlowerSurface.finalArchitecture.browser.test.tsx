@@ -2085,7 +2085,8 @@ describe('Flower final thread cache and workspace transport', () => {
     (runtime.querySelector(`[data-thread-id="${failed.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
 
-    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('invalid interaction control signal');
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('could not generate a valid question');
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('reply so far has been preserved');
     expect(runtime.querySelector('.flower-error-card')?.textContent).not.toContain('private invalid control payload');
     const retry = runtime.querySelector('.flower-error-actions button') as HTMLButtonElement;
     expect(retry.textContent).toContain('Retry reply');
