@@ -1,6 +1,6 @@
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { ModelCatalogControls } from './ModelCatalogControls';
-import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, setFlowerModelsEnabled } from './modelSelection';
+import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, flowerProviderModelChoices, setFlowerModelsEnabled } from './modelSelection';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import { For, Show, createEffect, createSignal } from 'solid-js';
 import { createStore, produce, reconcile } from 'solid-js/store';
@@ -22,7 +22,6 @@ import {
   flowerProviderTypeRequiresBaseURL,
   flowerProviderUsesCustomName,
   formatFlowerTokenCount,
-  recommendedModelsForFlowerProviderType,
 } from './providerCatalog';
 import {
   FlowerFieldLabel,
@@ -61,11 +60,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [query, setQuery] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [discoveryError, setDiscoveryError] = createSignal('');
-  const catalog = () => store.draft?.catalog_models ?? recommendedModelsForFlowerProviderType(store.draft?.type ?? 'openai');
-  const visibleModels = () => {
-    const known = new Set(catalog().map((model) => model.model_name));
-    return filterFlowerModels([...catalog(), ...(store.draft?.models ?? []).filter((model) => !known.has(model.model_name))], query());
-  };
+  const catalog = () => store.draft ? flowerProviderModelChoices(store.draft) : [];
+  const visibleModels = () => filterFlowerModels(catalog(), query());
   const discover = async () => {
     const draft = store.draft;
     if (!draft || !props.onDiscoverModels || loading()) return;

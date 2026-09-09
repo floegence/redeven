@@ -1,5 +1,5 @@
 import { modelCatalogCopy } from '../../../../../../../flower_ui/src/settings/modelCatalogCopy';
-import { hydrateFlowerProviderCatalog, applyFlowerModelDiscovery, setFlowerModelsEnabled, defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../../flower_ui/src/settings/modelSelection';
+import { hydrateFlowerProviderCatalog, applyFlowerModelDiscovery, flowerProviderModelChoices, setFlowerModelsEnabled, defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Bot, Eye, Globe, Image, Key, Pencil, Plus, ShieldCheck, Sparkles, Trash, Zap } from '@floegence/floe-webapp-core/icons';
@@ -18,7 +18,7 @@ import {
   localizedProviderDisplayName, localizedProviderTypeLabel, normalizeAIProviderRowDraft,
   providerNeedsWebSearchConfig, providerPresetForType, providerTypeLabel,
   providerTypeRequiresBaseURL, providerUsesCustomConnectionName,
-  recommendedModelsForProviderType, normalizeContextWindowByProvider,
+  normalizeContextWindowByProvider,
   normalizeEffectiveContextPercent, normalizeInputModalities, normalizePositiveInteger,
   defaultContextWindowForProviderType,
 } from '../aiCatalog';
@@ -275,7 +275,10 @@ export function FlowerSection() {
   const closeAIProviderDialog = () => { setProviderDialogOpen(false); setProviderDialogProvider(null); setProviderDialogIndex(null); };
   const confirmAIProviderDialog = () => { const d = providerDialogProvider(); if (!d) return; const idx = providerDialogIndex(); let nps: AIProviderRow[]; if (idx != null) nps = normalizeAIProviders(providers().map((p, i) => (i === idx ? normalizeAIProviderRowDraft(d) : p))); else nps = normalizeAIProviders([...providers(), normalizeAIProviderRowDraft(d)]); const current = String(currentModelID() ?? '').trim(); const nid = current || collectAIModelOptions(nps)[0]?.id || ''; void saveAIProviderBundle(nps, nid, d.id).then((s) => { if (s) closeAIProviderDialog(); }); };
   const updateAIProviderDialogDraft = (fn: (c: AIProviderRow) => AIProviderRow) => { setProviderDialogProvider((p) => p ? fn(p) : null); };
-  const providerDialogRecommendedModels = createMemo(() => (providerDialogProvider()?.catalog_models ?? recommendedModelsForProviderType(providerDialogProvider()?.type ?? 'openai')) as readonly AIProviderModel[]);
+  const providerDialogRecommendedModels = createMemo(() => {
+    const provider = providerDialogProvider();
+    return provider ? flowerProviderModelChoices(provider as FlowerProviderDraft) as readonly AIProviderModel[] : [];
+  });
   const addRecommendedModelToDialog = (modelName?: string) => updateAIProviderDialogDraft((current) => {
     const presets = providerDialogRecommendedModels();
     const preset = modelName
