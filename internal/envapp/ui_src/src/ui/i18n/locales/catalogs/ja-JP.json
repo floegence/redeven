@@ -4349,7 +4349,7 @@
       "runErrorProviderModelUnavailable": "選択したモデルはこのプロバイダーでは利用できません。Local AI Profile で別のモデルを選択してください。",
       "runErrorModelGatewayContractFailed": "モデルソースから不完全なツール呼び出しが返されたため、ツールは実行されませんでした。再試行するか、別のモデルを選択してください。",
       "runErrorFloretEngineFailed": "Flower は、オーケストレーション エンジンが失敗したため、このターンを終了できませんでした。",
-      "runErrorFloretControlContractFailed": "モデルが無効な対話制御シグナルを返したため、Flower はこのターンを完了できませんでした。",
+      "runErrorFloretControlContractFailed": "Flower は有効な質問を生成できませんでした。生成済みの回答は保存されています。再試行して続けてください。",
       "runErrorFloretAuthorityConsistencyFailed": "確定済みのツール結果を検証できなかったため、Flower はこのターンを完了できませんでした。ツールは再実行されません。新しいメッセージを送信して続行してください。",
       "runErrorFloretEffectOutcomeUnknown": "一部の操作が完了したか確認できません。重複実行を防ぐため、タスクを停止しました。",
       "runErrorRuntimeRestarted": "この返信が完了する前にローカル実行環境が再起動しました。実行環境の準備ができたら新しい返信を開始してください。",

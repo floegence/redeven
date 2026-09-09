@@ -505,7 +505,10 @@ function diffStats(files: readonly FlowerActivityDiffFile[]): FlowerActivityPres
 
 function metaForTerminalItem(item: FlowerActivityItem): string {
   const error = errorMessageFromPayload(item.payload);
-  return [item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
+  const executionFacts = (item.chips ?? [])
+    .filter((chip) => chip.kind === 'target' || chip.kind === 'execution_location')
+    .map((chip) => trimString(chip.value));
+  return [...executionFacts, trimString(typeof item.payload?.execution_location === 'string' ? item.payload.execution_location : ''), item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
     .filter(Boolean)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(' · ');

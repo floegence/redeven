@@ -45,9 +45,11 @@ export type EnvironmentFlowerContextActionEnvelope = Readonly<{
 
 function environmentMetadataContent(environment: DesktopEnvironmentEntry, label: string): string {
   return [
-    `Environment: ${label}`,
+    `User-selected device: ${label}`,
     `Kind: ${environment.kind}`,
     `Environment ID: ${environment.id}`,
+    `Target ID: ${environmentFlowerPrimaryTargetID(environment)}`,
+    'This selection identifies the device requested by the user; it does not change where terminal.exec runs.',
     trimString(environment.local_ui_url) ? `Local UI URL: ${trimString(environment.local_ui_url)}` : '',
     trimString(environment.provider_origin) ? `Provider origin: ${trimString(environment.provider_origin)}` : '',
     trimString(environment.provider_id) ? `Provider ID: ${trimString(environment.provider_id)}` : '',

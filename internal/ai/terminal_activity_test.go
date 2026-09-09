@@ -93,6 +93,40 @@ func TestTerminalActivityRedactsInputRepeatedInDescription(t *testing.T) {
 	}
 }
 
+func TestTerminalActivityUsesActualResultTargetAndLocation(t *testing.T) {
+	for _, op := range []string{"exec", "read", "write", "terminate"} {
+		t.Run(op, func(t *testing.T) {
+			activity, err := floretActivityForToolResult(nil, ToolResult{
+				ToolName: "terminal." + op, Status: toolResultStatusSuccess,
+				Data:          map[string]any{"target_id": "ssh:host:actual", "execution_location": "ssh_target", "process_id": "proc-1"},
+				activityInput: map[string]any{"target_id": "ssh:host:requested", "description": "Inspect memory"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			chips := map[string]string{}
+			for _, chip := range activity.Chips {
+				chips[chip.Kind] = chip.Value
+			}
+			if chips["target"] != "ssh:host:actual" || chips["execution_location"] != "ssh_target" {
+				t.Fatalf("lost actual execution facts: %#v", activity)
+			}
+		})
+	}
+	activity, err := floretActivityForToolResult(nil, ToolResult{
+		ToolName: "terminal.exec", Status: toolResultStatusSuccess,
+		Data: map[string]any{"command": "redeven targets exec --target ssh:host:remote --json -- uname", "execution_location": "local_runtime"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, chip := range activity.Chips {
+		if chip.Kind == "target" || (chip.Kind == "execution_location" && chip.Value != "local_runtime") {
+			t.Fatalf("CLI launcher location was inferred from command text: %#v", activity)
+		}
+	}
+}
+
 func TestTerminalActivityFallbackAndEmptyRead(t *testing.T) {
 	for _, desc := range []string{"", "View command output", "Terminal output"} {
 		call := floretActivityForToolCall("terminal.read", map[string]any{"description": desc, "command": "GPU diagnostic", "process_id": "proc-1"})

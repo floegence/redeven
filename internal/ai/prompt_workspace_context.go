@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	promptRepoRuleMaxFiles       = 6
-	promptRepoRulePerFileBytes   = 4096
-	promptRepoRuleTotalBytes     = 12288
-	promptDelegationPreviewItems = 3
-	promptGitProbeTimeout        = 3 * time.Second
+	floretRuntimeContextTextRunes = 16_384
+	promptRepoRuleMaxFiles        = 6
+	promptRepoRulePerFileBytes    = 4096
+	promptRepoRuleTotalBytes      = 12288
+	promptDelegationPreviewItems  = 3
+	promptGitProbeTimeout         = 3 * time.Second
 )
 
 var promptRepoRuleCandidateNames = []string{
@@ -455,9 +456,14 @@ func buildPromptWorkspaceContextSection(workspace promptWorkspaceContext) prompt
 	return newPromptSection("workspace_context", lines...)
 }
 
-func (r *run) floretTurnRuntimeContext() flruntime.TurnSupplementalContextItem {
+func (r *run) floretTurnRuntimeContext() flruntime.MessageContextItem {
 	capability := runCapabilityContract{AllowUserInteraction: r == nil || !r.noUserInteraction}
+	runtimeLines := []string{"Tool execution environment: terminal.exec runs on the AI runtime host. A user-selected device may be different; selection does not route a command."}
+	if r != nil && strings.TrimSpace(r.endpointID) != "" {
+		runtimeLines = append(runtimeLines, "Runtime endpoint ID: "+strings.TrimSpace(r.endpointID))
+	}
 	sections := []promptSection{
+		newPromptSection("tool_execution_environment", runtimeLines...),
 		newPromptSection("current_context", buildBasicPromptCurrentContextLines(promptWorkingDirForRun(r), currentPromptLocalTimeContext(time.Now))...),
 		buildPromptWorkspaceContextSection(collectPromptWorkspaceContext(r, capability)),
 	}
@@ -466,9 +472,9 @@ func (r *run) floretTurnRuntimeContext() flruntime.TurnSupplementalContextItem {
 			sections = append(sections, catalog)
 		}
 	}
-	text := truncateRunes(renderPromptSections(sections), flruntime.MaxTurnSupplementalContextTextRunes)
-	return flruntime.TurnSupplementalContextItem{
-		Kind: "runtime_context", Title: "Current environment context", Text: text, Sensitive: true,
+	text := truncateRunes(renderPromptSections(sections), floretRuntimeContextTextRunes)
+	return flruntime.MessageContextItem{
+		Kind: "runtime_context", Title: "Tool execution environment", Text: text,
 	}
 }
 

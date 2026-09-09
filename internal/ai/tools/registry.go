@@ -233,8 +233,8 @@ var builtinDefinitions = map[string]Definition{
 			labelFields("description"),
 			resultFallback(""),
 			callPayloadFields("command", "yield_ms", "description"),
-			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"),
-			chipFields("execution_location", "process_id", "exit_code", "duration_ms", "truncated"),
+			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"),
+			chipFields("target_id", "execution_location", "process_id", "exit_code", "duration_ms", "truncated"),
 		),
 	},
 	"terminal.read": {
@@ -246,8 +246,8 @@ var builtinDefinitions = map[string]Definition{
 			operation("read"),
 			labelFields("description"),
 			callPayloadFields("process_id", "command", "after_seq", "description"),
-			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"),
-			chipFields("process_id", "last_seq", "truncated"),
+			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"),
+			chipFields("target_id", "execution_location", "process_id", "last_seq", "truncated"),
 		),
 	},
 	"terminal.write": {
@@ -259,8 +259,8 @@ var builtinDefinitions = map[string]Definition{
 			operation("write"),
 			labelFields("description"),
 			callPayloadFields("process_id", "command", "description"),
-			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "input_bytes"),
-			chipFields("process_id", "input_bytes"),
+			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "input_bytes"),
+			chipFields("target_id", "execution_location", "process_id", "input_bytes"),
 		),
 	},
 	"terminal.terminate": {
@@ -272,8 +272,8 @@ var builtinDefinitions = map[string]Definition{
 			operation("terminate"),
 			labelFields("description"),
 			callPayloadFields("process_id", "command", "description"),
-			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated", "terminated"),
-			chipFields("process_id", "terminated"),
+			resultPayloadFields("status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated", "terminated"),
+			chipFields("target_id", "execution_location", "process_id", "terminated"),
 		),
 	},
 	"web.search": {

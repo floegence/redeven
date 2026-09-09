@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "action_id": "assistant.ask.flower",
+  "provider": "flower",
+  "target": {
+    "target_id": "ssh:host:udesk26:7afba939",
+    "locality": "auto"
+  },
+  "source": {
+    "surface": "desktop_welcome_environment_card",
+    "surface_id": "ssh:host:udesk26:7afba939"
+  },
+  "execution_context": {
+    "current_target_id": "ssh:host:udesk26:7afba939",
+    "runtime_hint": "auto",
+    "session_source": "ssh_environment"
+  },
+  "context": [
+    {
+      "kind": "text_snapshot",
+      "title": "udesk26",
+      "detail": "SSH · Configured",
+      "content": "User-selected device: udesk26\nKind: ssh_environment\nEnvironment ID: ssh:host:udesk26:7afba939\nTarget ID: ssh:host:udesk26:7afba939\nThis selection identifies the device requested by the user; it does not change where terminal.exec runs."
+    }
+  ],
+  "presentation": {
+    "label": "Ask Flower",
+    "priority": 100
+  }
+}

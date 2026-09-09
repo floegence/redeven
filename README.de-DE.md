@@ -125,6 +125,8 @@ Weitere Ausführungsmodi und den optionalen lokalen Passwortschutz beschreibt `r
 | Flower | Optionale KI-Oberflächen mit von der Laufzeit geprüften Werkzeugen und lokaler Modell- und Hostkonfiguration. |
 | Desktop | Nativer Starter für lokale, in Redeven Cloud gehostete, per SSH initialisierte und gespeicherte Local UI-Umgebungen. |
 
+Flower speichert übermittelte Referenzen und die Geräteauswahl im Gespräch, damit Folgefragen ihren Kontext behalten. Das ausgewählte Gerät und der Rechner, auf dem die Werkzeuge laufen, werden getrennt ausgewiesen. Vorübergehende geheime Eingaben werden nicht im Verlauf gespeichert.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

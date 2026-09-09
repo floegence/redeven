@@ -110,8 +110,8 @@ func TestUserFacingRunErrorPresentsFloretControlContractFailure(t *testing.T) {
 	if strings.Contains(lower, "shape") {
 		t.Fatalf("msg=%q exposed provider contract details", msg)
 	}
-	if !strings.Contains(lower, "invalid") || !strings.Contains(lower, "control signal") {
-		t.Fatalf("msg=%q, want interaction-control presentation", msg)
+	if !strings.Contains(lower, "valid question") || !strings.Contains(lower, "preserved") || !strings.Contains(lower, "retry") {
+		t.Fatalf("msg=%q, want a preserved reply and actionable question-generation failure", msg)
 	}
 }
 

@@ -125,6 +125,8 @@ Pour découvrir les autres modes d'exécution et la protection locale facultativ
 | Flower | Surfaces d'IA facultatives utilisant des outils validés par l'environnement d'exécution et une configuration locale du modèle et de l'hôte. |
 | Desktop | Lanceur natif pour les environnements locaux, les environnements hébergés par Redeven Cloud, ceux initialisés via SSH et les environnements Local UI enregistrés. |
 
+Flower conserve dans la conversation les références et le choix de l’appareil que vous transmettez, afin que les questions suivantes gardent leur contexte. L’appareil sélectionné et la machine qui exécute les outils sont identifiés séparément. Les données confidentielles saisies temporairement ne sont pas enregistrées dans l’historique.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

@@ -216,13 +216,12 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		return finish(SendUserTurnResponse{}, err)
 	}
 	var effect *threadEffect
-	var supplemental []flruntime.TurnSupplementalContextItem
 	if simple {
 		runtimeContext, contextErr := s.floretTurnRuntimeContextForAdmission(ctx, meta, req)
 		if contextErr != nil {
 			return finish(SendUserTurnResponse{}, contextErr)
 		}
-		supplemental = []flruntime.TurnSupplementalContextItem{runtimeContext}
+		turnInput.Context = []flruntime.MessageContextItem{runtimeContext}
 	} else {
 		effect, err = s.prepareThreadEffect(meta, executionKey, RunStartRequest{
 			ThreadID:          strings.TrimSpace(req.ThreadID),
@@ -239,22 +238,21 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		if projectionErr != nil {
 			return finish(SendUserTurnResponse{}, projectionErr)
 		}
-		projection.Items = append(projection.Items, effect.builder.floretTurnRuntimeContext())
+		projection.Context = append(projection.Context, effect.builder.floretTurnRuntimeContext())
 		turnInput, err = effect.builder.floretTurnInput(ctx, effect.req.Input, projection.References)
 		if err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
-		supplemental = projection.Items
+		turnInput.Context = projection.Context
 	}
 	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, ""); err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
 	s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req, effect: effect})
 	result, err := s.threadRuntime.Send(ctx, flruntime.SendInput{
-		ThreadID:            identity.ThreadID(req.ThreadID),
-		Input:               turnInput,
-		SupplementalContext: supplemental,
-		RequestKey:          flruntime.RequestKey(executionKey),
+		ThreadID:   identity.ThreadID(req.ThreadID),
+		Input:      turnInput,
+		RequestKey: flruntime.RequestKey(executionKey),
 	})
 	if err != nil {
 		s.floretEffects.drop(identity.ThreadID(req.ThreadID), executionKey)
@@ -333,21 +331,21 @@ func simpleTypedTurnInput(input RunInput) (flruntime.TurnInput, bool, error) {
 	return turnInput, true, nil
 }
 
-func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (flruntime.TurnSupplementalContextItem, error) {
+func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (flruntime.MessageContextItem, error) {
 	settings, err := s.threadSettingsForRead(ctx, meta, req.ThreadID)
 	if err != nil {
-		return flruntime.TurnSupplementalContextItem{}, err
+		return flruntime.MessageContextItem{}, err
 	}
 	if settings == nil {
-		return flruntime.TurnSupplementalContextItem{}, errors.New("thread not found")
+		return flruntime.MessageContextItem{}, errors.New("thread not found")
 	}
 	permission, err := threadPermissionType(settings)
 	if err != nil {
-		return flruntime.TurnSupplementalContextItem{}, err
+		return flruntime.MessageContextItem{}, err
 	}
 	workingDir, err := threadWorkingDir(settings)
 	if err != nil {
-		return flruntime.TurnSupplementalContextItem{}, err
+		return flruntime.MessageContextItem{}, err
 	}
 	metaCopy := *meta
 	r := newRun(runOptions{

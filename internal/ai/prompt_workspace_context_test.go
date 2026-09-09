@@ -274,7 +274,7 @@ func TestFloretTurnRuntimeContextCarriesMutableFactsOutsideSystemPrompt(t *testi
 	workingDir := t.TempDir()
 	r := newRun(runOptions{WorkingDir: workingDir, AgentHomeDir: t.TempDir(), Shell: "/bin/zsh"})
 	item := r.floretTurnRuntimeContext()
-	if item.Kind != "runtime_context" || !item.Sensitive {
+	if item.Kind != "runtime_context" || item.Title != "Tool execution environment" {
 		t.Fatalf("runtime context item=%#v", item)
 	}
 	for _, want := range []string{"## Current Context", workingDir, "- Current date:", "- Timezone:", "## Workspace Context", "- Shell: /bin/zsh"} {

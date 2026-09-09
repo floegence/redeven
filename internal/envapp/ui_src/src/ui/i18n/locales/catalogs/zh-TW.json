@@ -4364,7 +4364,7 @@
       "runErrorProviderModelUnavailable": "該模型供應商無法提供所選模型。請在本機 AI 設定檔中選擇其他模型。",
       "runErrorModelGatewayContractFailed": "模型來源傳回了不完整的工具呼叫，因此未執行任何工具。請重試或切換模型。",
       "runErrorFloretEngineFailed": "編排引擎失敗，Flower 未能完成本輪回覆。",
-      "runErrorFloretControlContractFailed": "模型傳回了無效的互動控制訊號，Flower 未能完成本輪回覆。",
+      "runErrorFloretControlContractFailed": "Flower 未能產生有效的提問。已產生的回覆已保留，請重試以繼續。",
       "runErrorFloretAuthorityConsistencyFailed": "已提交的工具結果無法完成一致性驗證，Flower 未能完成本輪回覆。工具不會重複執行；請傳送新訊息繼續。",
       "runErrorFloretEffectOutcomeUnknown": "部分操作是否完成無法確認。任務已停止，以避免重複執行。",
       "runErrorRuntimeRestarted": "本機執行環境在這次回覆完成前重新啟動。請在執行環境就緒後重新開始回覆。",

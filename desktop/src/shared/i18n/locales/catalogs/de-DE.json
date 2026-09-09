@@ -204,7 +204,7 @@
       "runErrorProviderModelUnavailable": "Das ausgewählte Modell ist bei diesem KI-Modellanbieter nicht verfügbar. Wähle im lokalen KI-Profil ein anderes Modell aus.",
       "runErrorModelGatewayContractFailed": "Die Modellquelle hat einen unvollständigen Tool-Aufruf zurückgegeben. Es wurde kein Tool ausgeführt. Versuche es erneut oder wähle ein anderes Modell.",
       "runErrorFloretEngineFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da die Orchestrierungs-Engine ausgefallen ist.",
-      "runErrorFloretControlContractFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da das Modell ein ungültiges Interaktions-Steuersignal zurückgegeben hat.",
+      "runErrorFloretControlContractFailed": "Flower konnte keine gültige Frage erstellen. Die bisherige Antwort wurde gespeichert. Versuchen Sie es erneut, um fortzufahren.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da das festgeschriebene Tool-Ergebnis nicht verifiziert werden konnte. Das Tool wurde nicht erneut ausgeführt; sende zum Fortfahren eine neue Nachricht.",
       "runErrorFloretEffectOutcomeUnknown": "Bei einigen Vorgängen lässt sich nicht bestätigen, ob sie abgeschlossen wurden. Die Aufgabe wurde gestoppt, um eine doppelte Ausführung zu vermeiden.",
       "runErrorRuntimeRestarted": "Die lokale Laufzeit wurde neu gestartet, bevor diese Antwort abgeschlossen war. Starte eine neue Antwort, sobald die Laufzeit bereit ist.",

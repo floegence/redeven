@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
@@ -40,6 +42,25 @@ function snapshotEnvironment(
 }
 
 describe('environment Flower context envelope', () => {
+  it('matches the environment card fixture exercised through Send and DeepSeek HTTP', () => {
+    const local = snapshotEnvironment((entry) => entry.kind === 'local_environment');
+    const environment: DesktopEnvironmentEntry = {
+      ...local,
+      id: 'ssh:host:udesk26:7afba939',
+      kind: 'ssh_environment',
+      label: 'udesk26',
+      local_ui_url: '',
+      env_public_id: undefined,
+      provider_origin: undefined,
+      provider_id: undefined,
+      managed_runtime_target_id: 'ssh:host:udesk26:7afba939',
+      provider_runtime_link_target: undefined,
+      managed_runtime_placement_target_id: undefined,
+    };
+    const fixture = JSON.parse(readFileSync(new URL('../../../internal/ai/testdata/environment_flower_context.json', import.meta.url), 'utf8'));
+    expect(buildEnvironmentFlowerContextAction(environment, 'SSH · Configured')).toEqual(fixture);
+  });
+
   it('builds a run-start compatible target for provider environment cards', () => {
     const environment = snapshotEnvironment((entry) => (
       entry.kind === 'provider_environment' && entry.env_public_id === 'env_demo'
@@ -135,7 +156,7 @@ describe('environment Flower context envelope', () => {
     const action = buildEnvironmentFlowerContextAction(environment, 'Local · Ready', 'This environment');
 
     expect(action.context[0]?.title).toBe('This environment');
-    expect(action.context[0]?.content).toContain('Environment: This environment');
+    expect(action.context[0]?.content).toContain('User-selected device: This environment');
   });
 
   it('maps gateway environments to runtime_gateway session source', () => {

@@ -125,6 +125,8 @@ Run `redeven help run` for other run modes and optional local password protectio
 | Flower | Optional AI surfaces that use runtime-validated tools and local model/host configuration. |
 | Desktop | Native launcher for local, Redeven Cloud-hosted, SSH-bootstrapped, and saved Local UI environments. |
 
+Flower keeps the references and device selection you submit with the conversation, so follow-up questions retain their context. The selected device and the machine running tools are identified separately. Temporary secret inputs stay out of saved history.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

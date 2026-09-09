@@ -125,6 +125,8 @@ redeven run
 | Flower | 選用的 AI 介面，使用經執行階段驗證的工具及本機模型和主機設定。 |
 | Desktop | 用於本機環境、Redeven Cloud 託管環境、透過 SSH 引導初始化的環境及已儲存 Local UI 環境的原生啟動器。 |
 
+Flower 會在對話中保留你提交的參照和裝置選擇，讓後續提問延續既有脈絡。使用者選擇的裝置與實際執行工具的裝置會分別標示。暫時性的機密輸入不會寫入已儲存的歷史紀錄。
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

@@ -693,7 +693,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
       modelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
-      floretControlContractFailed: 'Flower could not finish this turn because the model returned an invalid interaction control signal.',
+      floretControlContractFailed: 'Flower could not generate a valid question. The reply so far has been preserved. Retry to continue.',
       floretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
       floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',

@@ -158,16 +158,16 @@ func TestFloretContextProjectionKeepsEnvironmentRoutingMetadataWithoutResourceAu
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
-	if len(projection.Items) != 1 || len(projection.References) != 1 {
+	if len(projection.Context) != 2 || len(projection.References) != 1 {
 		t.Fatalf("projection=%#v, want one item and one reference", projection)
 	}
-	metadata := projection.Items[0].Metadata
+	metadata := contextSnapshotMetadata(t, projection.Context[0])
 	for key, want := range map[string]string{
 		"source_surface":       contextActionSurfaceWelcomeEnv,
 		"source_surface_id":    "saved:ssh:orange",
 		"target_id":            "ssh:orange",
 		"target_locality":      contextActionLocalityAuto,
-		"current_target_id":    "ssh:orange",
+		"selected_target_id":   "ssh:orange",
 		"source_env_public_id": "env_orange",
 		"runtime_hint":         contextActionRuntimeHintAuto,
 		"session_source":       contextActionSessionSSH,
@@ -224,7 +224,7 @@ func TestFloretContextProjectionKeepsFileReferencesBoundToServerAuthority(t *tes
 	}
 }
 
-func TestFloretSupplementalContextFormatsProcessSnapshot(t *testing.T) {
+func TestFloretDurableContextFormatsProcessSnapshot(t *testing.T) {
 	t.Parallel()
 
 	projection, err := floretContextProjectionForInput(RunInput{
@@ -251,11 +251,11 @@ func TestFloretSupplementalContextFormatsProcessSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
-	if len(projection.Items) != 1 {
-		t.Fatalf("items=%#v, want one process context item", projection.Items)
+	if len(projection.Context) != 1 {
+		t.Fatalf("items=%#v, want one process context item", projection.Context)
 	}
-	item := projection.Items[0]
-	if item.Kind != "process_snapshot" || item.Text != "" {
+	item := projection.Context[0]
+	if item.Kind != "process_snapshot" || item.Text == "" {
 		t.Fatalf("process item=%#v, want metadata-only process snapshot", item)
 	}
 	for key, want := range map[string]string{
@@ -268,16 +268,16 @@ func TestFloretSupplementalContextFormatsProcessSnapshot(t *testing.T) {
 		"captured_at":    "2026-07-10T10:00:00Z",
 		"source_surface": "monitoring",
 	} {
-		if got := item.Metadata[key]; got != want {
-			t.Fatalf("metadata[%q]=%q, want %q in %#v", key, got, want, item.Metadata)
+		if got := contextSnapshotMetadata(t, item)[key]; got != want {
+			t.Fatalf("metadata[%q]=%q, want %q in %#v", key, got, want, contextSnapshotMetadata(t, item))
 		}
 	}
-	if projection.ContextHash == "" || projection.RenderedChars <= 0 || projection.Truncated {
-		t.Fatalf("projection=%#v, want hash/rendered chars without truncation", projection)
+	if err := item.Validate(); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestFloretSupplementalContextKeepsFileContextOnly(t *testing.T) {
+func TestFloretDurableContextKeepsFileContextOnly(t *testing.T) {
 	t.Parallel()
 
 	projection, err := floretContextProjectionForInput(RunInput{
@@ -298,23 +298,23 @@ func TestFloretSupplementalContextKeepsFileContextOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
-	if len(projection.Items) != 1 {
-		t.Fatalf("items=%#v, want file path context only", projection.Items)
+	if len(projection.Context) != 1 {
+		t.Fatalf("items=%#v, want file path context only", projection.Context)
 	}
-	for _, item := range projection.Items {
+	for _, item := range projection.Context {
 		if item.Title != "User-selected file" || !strings.Contains(item.Text, "explicitly selected") || !strings.Contains(item.Text, "secret.txt") {
 			t.Fatalf("file item=%#v, want explicit selected-file instruction", item)
 		}
-		if item.Metadata["label"] != "secret.txt" || item.Metadata["path"] != "" || item.Metadata["suggested_working_dir_abs"] != "" {
-			t.Fatalf("file metadata=%#v, want safe label without path", item.Metadata)
+		if contextSnapshotMetadata(t, item)["label"] != "secret.txt" || contextSnapshotMetadata(t, item)["path"] != "" || contextSnapshotMetadata(t, item)["suggested_working_dir_abs"] != "" {
+			t.Fatalf("file metadata=%#v, want safe label without path", contextSnapshotMetadata(t, item))
 		}
-		if strings.Contains(item.Metadata["name"], "upl_secret") || strings.Contains(item.Metadata["path"], "package main") {
-			t.Fatalf("metadata leaked forbidden content: %#v", item.Metadata)
+		if strings.Contains(contextSnapshotMetadata(t, item)["name"], "upl_secret") || strings.Contains(contextSnapshotMetadata(t, item)["path"], "package main") {
+			t.Fatalf("metadata leaked forbidden content: %#v", contextSnapshotMetadata(t, item))
 		}
 	}
 }
 
-func TestFloretSupplementalContextTruncatesLargeTerminalSelection(t *testing.T) {
+func TestFloretDurableContextTruncatesLargeTerminalSelection(t *testing.T) {
 	t.Parallel()
 
 	projection, err := floretContextProjectionForInput(RunInput{
@@ -331,11 +331,11 @@ func TestFloretSupplementalContextTruncatesLargeTerminalSelection(t *testing.T) 
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
-	if len(projection.Items) != 1 {
-		t.Fatalf("items=%#v, want one terminal item", projection.Items)
+	if len(projection.Context) != 1 {
+		t.Fatalf("items=%#v, want one terminal item", projection.Context)
 	}
-	item := projection.Items[0]
-	if !item.Truncated || item.Text != "" || item.Metadata["selection_truncated"] != "true" || item.Metadata["selection_chars"] == "" {
+	item := projection.Context[0]
+	if !projection.References[0].Truncated || item.Text == "" || contextSnapshotMetadata(t, item)["selection_truncated"] != "true" || contextSnapshotMetadata(t, item)["selection_chars"] == "" {
 		t.Fatalf("terminal item=%#v, want metadata-only truncated selection", item)
 	}
 }
@@ -357,16 +357,16 @@ func TestFloretContextProjectionOmitsUnverifiedTerminalWorkingDirectory(t *testi
 	if err != nil {
 		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
-	if len(projection.References) != 0 || len(projection.Items) != 1 {
-		t.Fatalf("projection=%#v, want no empty reference and one supplemental item", projection)
+	if len(projection.References) != 0 || len(projection.Context) != 1 {
+		t.Fatalf("projection=%#v, want no empty reference and one context snapshot item", projection)
 	}
-	item := projection.Items[0]
-	if item.Text != "" || item.Metadata["working_dir"] != "" || item.Metadata["suggested_working_dir_abs"] != "" {
-		t.Fatalf("terminal supplemental item=%#v, want no unverified working-directory context", item)
+	item := projection.Context[0]
+	if contextSnapshotMetadata(t, item)["working_dir"] != "" || contextSnapshotMetadata(t, item)["suggested_working_dir_abs"] != "" {
+		t.Fatalf("terminal context snapshot item=%#v, want no unverified working-directory context", item)
 	}
 }
 
-func TestFloretContextProjectionBuildsCanonicalReferencesAndSupplementalContextTogether(t *testing.T) {
+func TestFloretContextProjectionBuildsCanonicalReferencesAndDurableContextTogether(t *testing.T) {
 	t.Parallel()
 
 	newAction := func(surface string, item ContextActionContextItem) *ContextActionEnvelope {
@@ -411,15 +411,15 @@ func TestFloretContextProjectionBuildsCanonicalReferencesAndSupplementalContextT
 			if err != nil {
 				t.Fatalf("floretContextProjectionForInput: %v", err)
 			}
-			if len(projection.References) != 1 || len(projection.Items) != 1 {
-				t.Fatalf("projection=%#v, want one durable reference and one supplemental item", projection)
+			if len(projection.References) != 1 || len(projection.Context) != 1 {
+				t.Fatalf("projection=%#v, want one durable reference and one context snapshot item", projection)
 			}
 			ref := projection.References[0]
 			if ref.Kind != test.wantKind || ref.ReferenceID != "context:"+strconv.Itoa(0) || strings.TrimSpace(ref.Label) == "" {
 				t.Fatalf("reference=%#v, want canonical %q reference", ref, test.wantKind)
 			}
-			if projection.Items[0].Kind != strings.TrimSpace(projection.Items[0].Kind) {
-				t.Fatalf("supplemental=%#v, want normalized kind", projection.Items[0])
+			if projection.Context[0].Kind != strings.TrimSpace(projection.Context[0].Kind) {
+				t.Fatalf("context snapshot=%#v, want normalized kind", projection.Context[0])
 			}
 			if test.wantText != "" && !strings.Contains(ref.Text, test.wantText) {
 				t.Fatalf("reference=%#v, want display text containing %q", ref, test.wantText)
@@ -502,4 +502,17 @@ func TestFloretTurnInputAdmitsReferencesWithoutPersistingContextAction(t *testin
 	if strings.Contains(string(encoded), "context_action") || strings.Contains(string(encoded), "assistant.ask.flower") {
 		t.Fatalf("canonical turn input retained host ContextAction envelope: %s", encoded)
 	}
+}
+
+func contextSnapshotMetadata(t *testing.T, item flruntime.MessageContextItem) map[string]string {
+	t.Helper()
+	_, raw, found := strings.Cut(item.Text, "\n")
+	if !found {
+		t.Fatalf("snapshot metadata missing: %#v", item)
+	}
+	var metadata map[string]string
+	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
+		t.Fatal(err)
+	}
+	return metadata
 }

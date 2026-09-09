@@ -13,7 +13,9 @@ Use this skill for Redeven environment requests, including environment status, l
 - Use `redeven env ... --json` for environment status and lifecycle requests: list, resolve, status, diagnose, start, stop, restart, and update.
 - Use `redeven targets exec ... --json` for arbitrary OS-level diagnostics on a Redeven target. Choose the OS command from the target facts and command output; do not expect Redeven to provide a dedicated subcommand for every diagnostic.
 - If a Redeven command returns unsupported, unavailable, or blocked, explain the structured result and next product action. Do not invent lower-level Docker, SSH, systemd, launchctl, or process-manager workarounds.
-- When using Ask Flower context, choose the target in this order: `execution_context.current_target_id`, then `target.target_id`, then `execution_context.source_env_public_id`, then `current`.
+- An environment card records the user-selected device; the runtime snapshot separately identifies where tools run. Use the selected device's `target_id` (or `selected_target_id`) for that request. A later user selection supersedes the earlier one from that point onward; a follow-up without a new selection retains the established device.
+- Use `current` only when the user is asking about the tool runtime itself and no selected device applies. If a selected target cannot be resolved, show its actionable error; never substitute a local diagnostic.
+- Report the actual `target_id` and `execution_location` from command results. The terminal Activity describes the CLI launcher process; the nested target result describes where its diagnostic ran.
 
 ## Status and Lifecycle
 

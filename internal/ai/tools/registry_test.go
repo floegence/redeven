@@ -44,22 +44,22 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 		{
 			toolName: "terminal.exec", operation: "exec", labelFields: []string{"description"},
 			callPayloadFields:   []string{"command", "yield_ms", "description"},
-			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"},
+			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"},
 		},
 		{
 			toolName: "terminal.read", operation: "read", labelFields: []string{"description"},
 			callPayloadFields:   []string{"process_id", "command", "after_seq", "description"},
-			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"},
+			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"},
 		},
 		{
 			toolName: "terminal.write", operation: "write", labelFields: []string{"description"},
 			callPayloadFields:   []string{"process_id", "command", "description"},
-			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "input_bytes"},
+			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "input_bytes"},
 		},
 		{
 			toolName: "terminal.terminate", operation: "terminate", labelFields: []string{"description"},
 			callPayloadFields:   []string{"process_id", "command", "description"},
-			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated", "terminated"},
+			resultPayloadFields: []string{"status", "process_id", "command", "description", "exit_code", "duration_ms", "target_id", "execution_location", "timed_out", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated", "terminated"},
 		},
 		{
 			toolName:          "file.read",
