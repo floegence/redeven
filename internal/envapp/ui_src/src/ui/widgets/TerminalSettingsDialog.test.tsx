@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_THEME_DEFINITIONS } from '@floegence/floeterm-terminal-web';
@@ -55,6 +56,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     ) : null
   ),
+  Input: (props: any) => <input {...props} />,
   NumberInput: (props: any) => (
     <input
       data-testid="font-size-input"
@@ -81,6 +83,40 @@ afterEach(() => {
 });
 
 describe('TerminalSettingsDialog', () => {
+  it('searches the available catalog without changing the saved font and resets search on close', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [open, setOpen] = createSignal(true);
+    const onFontFamilyChange = vi.fn();
+    const dispose = render(() => <TerminalSettingsDialog open={open()} userTheme="system" fontSize={12}
+      fontFamilyId="monaco" mobileInputMode="floe" workIndicatorEnabled minFontSize={10} maxFontSize={20}
+      onOpenChange={setOpen} onThemeChange={() => true} onFontSizeChange={() => undefined}
+      onFontFamilyChange={onFontFamilyChange} onMobileInputModeChange={() => undefined}
+      onWorkIndicatorEnabledChange={() => undefined} />, host);
+    const options = () => [...host.querySelectorAll('[data-terminal-font-group] button[aria-pressed]')];
+    await vi.waitFor(() => expect(options()).toHaveLength(20));
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const filter = (value: string) => {
+      search.value = value;
+      search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    };
+    filter('  FiRa  ');
+    expect(options()).toHaveLength(2);
+    expect(options().map((button) => button.textContent)).toEqual([expect.stringContaining('Fira Code'), expect.stringContaining('Fira Mono')]);
+    const preview = options()[0]!.querySelector<HTMLElement>('[aria-hidden="true"]')!;
+    expect(preview.style.fontFamily).toContain('Redeven Terminal fira-code');
+    filter('no-such-font');
+    expect(options()).toHaveLength(0);
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('No available fonts match your search.');
+    expect(onFontFamilyChange).not.toHaveBeenCalled();
+    setOpen(false);
+    setOpen(true);
+    expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('');
+    expect(options()).toHaveLength(20);
+    expect(options().find((button) => button.getAttribute('aria-pressed') === 'true')?.textContent).toContain('Monaco');
+    dispose();
+  });
+
   it('renders the desktop layout and forwards terminal preference changes', async () => {
     const onOpenChange = vi.fn();
     const onThemeChange = vi.fn().mockReturnValue(true);

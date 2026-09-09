@@ -2274,6 +2274,8 @@
       "fontRecommended": "Recomendada",
       "fontCompact": "Compacta",
       "fontUnavailable": "Indisponível neste dispositivo",
+      "fontSearch": "Buscar fontes disponíveis...",
+      "fontNoMatches": "Nenhuma fonte disponível corresponde à sua busca.",
       "fontNoLocal": "Nenhuma fonte local compatível disponível. As fontes incluídas funcionam em todas as plataformas.",
       "fontLoading": "Carregando a fonte do terminal…",
       "fontFallback": "{requested} está indisponível neste dispositivo. Usando {actual}; a escolha salva permanece inalterada.",

@@ -1,6 +1,6 @@
-import { createEffect, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button, Checkbox, NumberInput } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 import { Check } from '@floegence/floe-webapp-core/icons';
 import {
@@ -248,8 +248,14 @@ function TerminalThemeOptionCard(props: {
 export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
   const i18n = useI18n();
   const resolvedFont = createResolvedTerminalFont(() => props.fontFamilyId);
+  const [fontQuery, setFontQuery] = createSignal('');
+  const availableFonts = createMemo(() => TERMINAL_FONT_OPTIONS.filter((option) =>
+    option.kind === 'bundled' || terminalFontCatalog.state(option.id) === 'ready' || props.fontFamilyId === option.id));
+  const filteredFonts = createMemo(() => availableFonts().filter((option) =>
+    option.label.toLowerCase().includes(fontQuery().trim().toLowerCase())));
   createEffect(() => {
     if (props.open) for (const option of TERMINAL_FONT_OPTIONS) void terminalFontCatalog.ensure(option.id);
+    else setFontQuery('');
   });
   const layout = useLayout();
   const isMobile = () => layout.isMobile();
@@ -426,8 +432,13 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             ? i18n.t('terminal.settings.sharedWorkbenchFontDescription')
             : i18n.t('terminal.settings.localFontDescription')}
         />
+        <Show when={availableFonts().length > 8}>
+          <Input type="search" value={fontQuery()} onInput={(event) => setFontQuery(event.currentTarget.value)}
+            aria-label={i18n.t('terminal.settings.fontSearch')} placeholder={i18n.t('terminal.settings.fontSearch')} />
+        </Show>
         <For each={['bundled', 'local'] as const}>
           {(kind) => (
+            <Show when={!fontQuery().trim() || filteredFonts().some((option) => option.kind === kind)}>
             <div class="space-y-2" data-terminal-font-group={kind}
               aria-busy={TERMINAL_FONT_OPTIONS.some((option) => option.kind === kind && ['idle', 'loading'].includes(terminalFontCatalog.state(option.id)))}>
               <div class="flex items-center justify-between gap-2 text-xs font-semibold text-muted-foreground">
@@ -439,9 +450,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
                 </Show>
               </div>
               <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <For each={TERMINAL_FONT_OPTIONS.filter((option) => option.kind === kind && (
-                  kind === 'bundled' || terminalFontCatalog.state(option.id) === 'ready' || props.fontFamilyId === option.id
-                ))}>
+                <For each={filteredFonts().filter((option) => option.kind === kind)}>
                   {(option) => (
                     <Button size="sm" variant={props.fontFamilyId === option.id ? 'primary' : 'outline'}
                       aria-pressed={props.fontFamilyId === option.id}
@@ -449,6 +458,12 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
                       disabled={terminalFontCatalog.state(option.id) !== 'ready'}
                       onClick={() => props.onFontFamilyChange(option.id)}>
                       <span>{option.label}</span>
+                      <Show when={terminalFontCatalog.state(option.id) === 'ready'}>
+                        <span aria-hidden="true" class="text-sm font-normal"
+                          style={{ 'font-family': terminalFontCatalog.resolve(option.id).family, 'font-feature-settings': '"liga" 0, "calt" 0' }}>
+                          {TERMINAL_FONT_PREVIEW_SAMPLE.split('\n')[0]}
+                        </span>
+                      </Show>
                       <span class="text-xs opacity-80">
                         {terminalFontCatalog.state(option.id) === 'loading' ? i18n.t('terminal.settings.fontLoading')
                           : terminalFontCatalog.state(option.id) !== 'ready' ? i18n.t('terminal.settings.fontUnavailable')
@@ -463,8 +478,12 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
                 <p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.fontNoLocal')}</p>
               </Show>
             </div>
+            </Show>
           )}
         </For>
+        <Show when={fontQuery().trim() && filteredFonts().length === 0}>
+          <p role="status" class="text-xs text-muted-foreground">{i18n.t('terminal.settings.fontNoMatches')}</p>
+        </Show>
         <TerminalFontStatus font={resolvedFont()} showReady />
         <pre class="overflow-x-auto rounded-md border border-border/70 bg-muted/[0.14] p-3"
           aria-label={i18n.t('terminal.settings.fontPreview')}

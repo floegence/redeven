@@ -4,10 +4,12 @@ import { createTerminalFontCatalog, TERMINAL_FONT_OPTIONS } from './terminalFont
 describe('terminal font resolution', () => {
   it('offers stable candidates across Windows, Linux and macOS without platform gating', () => {
     expect(TERMINAL_FONT_OPTIONS.map((font) => font.id)).toEqual([
-      'jetbrains', 'iosevka', 'cascadia-mono', 'consolas', 'dejavu-sans-mono',
+      'jetbrains', 'iosevka', 'source-code-pro', 'ibm-plex-mono', 'cascadia-mono', 'consolas', 'dejavu-sans-mono',
       'liberation-mono', 'ubuntu-mono', 'sfmono', 'menlo', 'monaco',
+      'cascadia-code', 'fira-code', 'fira-mono', 'hack', 'inconsolata',
+      'roboto-mono', 'noto-sans-mono', 'ubuntu-sans-mono',
     ]);
-    expect(new Set(TERMINAL_FONT_OPTIONS.map((font) => font.family)).size).toBe(10);
+    expect(new Set(TERMINAL_FONT_OPTIONS.map((font) => font.family)).size).toBe(20);
   });
 
   it('keeps the shared selection when one device falls back and another has the requested font', async () => {
@@ -26,6 +28,16 @@ describe('terminal font resolution', () => {
     await fonts.prepare('consolas');
     expect(fonts.resolve('consolas')).toMatchObject({ effectiveID: 'consolas', family: '"Redeven Terminal consolas", monospace', status: 'ready' });
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ label: 'Consolas', kind: 'local' }), expect.any(AbortSignal));
+  });
+
+  it.each(TERMINAL_FONT_OPTIONS.filter((font) => font.kind === 'local'))('keeps $label client-local when unavailable on a second device', async ({ id }) => {
+    const present = createTerminalFontCatalog(async () => {});
+    const missing = createTerminalFontCatalog(async (font) => { if (font.kind === 'local') throw new Error('not installed'); });
+    const saved = Object.freeze({ fontFamilyId: id, fontSize: 15 });
+    await Promise.all([present.prepare(id), missing.prepare(id)]);
+    expect(present.resolve(id)).toMatchObject({ requestedID: id, effectiveID: id, status: 'ready' });
+    expect(missing.resolve(id)).toMatchObject({ requestedID: id, effectiveID: 'jetbrains', status: 'fallback' });
+    expect(saved).toEqual({ fontFamilyId: id, fontSize: 15 });
   });
 
   it('deduplicates concurrent loads and requires an explicit retry after failure', async () => {

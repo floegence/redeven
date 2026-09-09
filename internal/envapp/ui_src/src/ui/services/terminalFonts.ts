@@ -16,6 +16,8 @@ const font = (id: string, label: string, kind: TerminalFontOption['kind'], local
 export const TERMINAL_FONT_OPTIONS: readonly TerminalFontOption[] = [
   font('jetbrains', 'JetBrains Mono', 'bundled'),
   font('iosevka', 'Iosevka', 'bundled'),
+  font('source-code-pro', 'Source Code Pro', 'bundled'),
+  font('ibm-plex-mono', 'IBM Plex Mono', 'bundled'),
   font('cascadia-mono', 'Cascadia Mono', 'local', ['Cascadia Mono', 'Cascadia Mono Regular', 'CascadiaMono-Regular']),
   font('consolas', 'Consolas', 'local'),
   font('dejavu-sans-mono', 'DejaVu Sans Mono', 'local', ['DejaVu Sans Mono', 'DejaVuSansMono']),
@@ -24,6 +26,14 @@ export const TERMINAL_FONT_OPTIONS: readonly TerminalFontOption[] = [
   font('sfmono', 'SF Mono', 'local', ['SF Mono', 'SF Mono Regular', 'SFMono-Regular']),
   font('menlo', 'Menlo', 'local', ['Menlo', 'Menlo Regular', 'Menlo-Regular']),
   font('monaco', 'Monaco', 'local'),
+  font('cascadia-code', 'Cascadia Code', 'local', ['Cascadia Code', 'Cascadia Code Regular', 'CascadiaCode-Regular']),
+  font('fira-code', 'Fira Code', 'local', ['Fira Code', 'Fira Code Regular', 'FiraCode-Regular']),
+  font('fira-mono', 'Fira Mono', 'local', ['Fira Mono', 'Fira Mono Regular', 'FiraMono-Regular']),
+  font('hack', 'Hack', 'local', ['Hack', 'Hack Regular', 'Hack-Regular']),
+  font('inconsolata', 'Inconsolata', 'local', ['Inconsolata', 'Inconsolata Regular', 'Inconsolata-Regular']),
+  font('roboto-mono', 'Roboto Mono', 'local', ['Roboto Mono', 'Roboto Mono Regular', 'RobotoMono-Regular']),
+  font('noto-sans-mono', 'Noto Sans Mono', 'local', ['Noto Sans Mono', 'Noto Sans Mono Regular', 'NotoSansMono-Regular']),
+  font('ubuntu-sans-mono', 'Ubuntu Sans Mono', 'local', ['Ubuntu Sans Mono', 'Ubuntu Sans Mono Regular', 'UbuntuSansMono-Regular']),
 ];
 
 // This literal intentionally mixes code and Chinese to preview wide-cell fallback.

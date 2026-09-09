@@ -2274,6 +2274,8 @@
       "fontRecommended": "Recommandée",
       "fontCompact": "Compacte",
       "fontUnavailable": "Indisponible sur cet appareil",
+      "fontSearch": "Rechercher des polices disponibles...",
+      "fontNoMatches": "Aucune police disponible ne correspond à votre recherche.",
       "fontNoLocal": "Aucune police locale compatible disponible. Les polices intégrées fonctionnent sur toutes les plateformes.",
       "fontLoading": "Chargement de la police du terminal…",
       "fontFallback": "{requested} est indisponible sur cet appareil. {actual} est utilisée ; le choix enregistré reste inchangé.",

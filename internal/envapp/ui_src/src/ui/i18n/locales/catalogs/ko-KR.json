@@ -2274,6 +2274,8 @@
       "fontRecommended": "권장",
       "fontCompact": "좁은 글꼴",
       "fontUnavailable": "이 기기에서 사용 불가",
+      "fontSearch": "사용 가능한 글꼴 검색...",
+      "fontNoMatches": "검색어와 일치하는 사용 가능한 글꼴이 없습니다.",
       "fontNoLocal": "사용 가능한 로컬 후보 글꼴이 없습니다. 내장 글꼴은 모든 플랫폼에서 사용할 수 있습니다.",
       "fontLoading": "터미널 글꼴 불러오는 중…",
       "fontFallback": "이 기기에서 {requested}을(를) 사용할 수 없어 {actual}을(를) 사용합니다. 저장된 선택은 변경되지 않습니다.",

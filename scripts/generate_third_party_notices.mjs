@@ -768,7 +768,7 @@ SOFTWARE.`;
 }
 
 function renderTerminalFontLicenses() {
-  return ['iosevka', 'jetbrains-mono'].map((name) => {
+  return ['iosevka', 'jetbrains-mono', 'source-code-pro', 'ibm-plex-mono'].map((name) => {
     const root = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@fontsource', name);
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     const license = fs.readFileSync(path.join(root, 'LICENSE'), 'utf8').replace(/[ \t]+$/gm, '').trim();
@@ -848,7 +848,7 @@ ${floetermThemeNotices.tokyoNightLicenseText}
 
 ## Bundled Terminal Font Licenses
 
-The Env App bundles JetBrains Mono and Iosevka font files. System font candidates are loaded from the client device and are not redistributed by Redeven.
+The Env App bundles JetBrains Mono, Iosevka, Source Code Pro, and IBM Plex Mono font files. System font candidates are loaded from the client device and are not redistributed by Redeven.
 
 ${renderTerminalFontLicenses()}
 

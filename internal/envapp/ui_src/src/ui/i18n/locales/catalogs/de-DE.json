@@ -2274,6 +2274,8 @@
       "fontRecommended": "Empfohlen",
       "fontCompact": "Kompakt",
       "fontUnavailable": "Auf diesem Gerät nicht verfügbar",
+      "fontSearch": "Verfügbare Schriftarten suchen...",
+      "fontNoMatches": "Keine verfügbaren Schriftarten entsprechen deiner Suche.",
       "fontNoLocal": "Keine unterstützten lokalen Schriftarten verfügbar. Mitgelieferte Schriftarten funktionieren auf allen Plattformen.",
       "fontLoading": "Terminal-Schriftart wird geladen…",
       "fontFallback": "{requested} ist auf diesem Gerät nicht verfügbar. {actual} wird verwendet; die gespeicherte Auswahl bleibt unverändert.",

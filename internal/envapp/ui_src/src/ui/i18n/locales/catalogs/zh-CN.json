@@ -2274,6 +2274,8 @@
       "fontRecommended": "推荐",
       "fontCompact": "紧凑",
       "fontUnavailable": "当前设备不可用",
+      "fontSearch": "搜索可用字体...",
+      "fontNoMatches": "没有与搜索内容匹配的可用字体。",
       "fontNoLocal": "未发现可用的候选本机字体。内置字体可在各平台使用。",
       "fontLoading": "正在加载终端字体…",
       "fontFallback": "{requested} 在当前设备不可用，实际使用 {actual}；已保存的选择保持不变。",

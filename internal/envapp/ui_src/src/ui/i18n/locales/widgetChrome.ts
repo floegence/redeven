@@ -762,6 +762,8 @@ export const enUSWidgetChrome = defineDictionary({
       fontRecommended: 'Recommended',
       fontCompact: 'Compact',
       fontUnavailable: 'Unavailable on this device',
+      fontSearch: 'Search available fonts...',
+      fontNoMatches: 'No available fonts match your search.',
       fontNoLocal: 'No supported local fonts are available. Bundled fonts work on every platform.',
       fontLoading: 'Loading terminal font…',
       fontFallback: '{requested} is unavailable on this device. Using {actual}; the saved choice is unchanged.',
