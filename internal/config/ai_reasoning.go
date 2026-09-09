@@ -166,7 +166,7 @@ func ValidateAIReasoningSelection(capability AIReasoningCapability, selection AI
 	}
 	if selection.BudgetTokens > 0 {
 		if capability.WireShape == "qwen_reasoning_effort" && selection.Level != "" && selection.Level != AIReasoningLevelDefault {
-			return fmt.Errorf("Qwen reasoning effort and thinking budget cannot be combined")
+			return fmt.Errorf("qwen reasoning effort and thinking budget cannot be combined")
 		}
 		if selection.Level == AIReasoningLevelOff {
 			return errors.New("reasoning budget cannot be set when reasoning is off")

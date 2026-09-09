@@ -72,7 +72,7 @@ func TestModelCatalogOllamaIncludesOnlyInstalledToolModels(t *testing.T) {
 func TestModelCatalogDoesNotForwardCredentialsOnRedirect(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("followed catalog redirect") }))
 	defer target.Close()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, 302) }))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, http.StatusFound) }))
 	defer server.Close()
 	if _, err := discoverModelCatalog(context.Background(), ModelCatalogRequest{Type: "openrouter", BaseURL: server.URL, APIKey: "test-key"}, server.Client()); err == nil {
 		t.Fatal("redirect should be reported")

@@ -172,10 +172,6 @@ func modalitiesSupportImage(modalities []string) bool {
 	return false
 }
 
-func boolPtr(v bool) *bool {
-	return &v
-}
-
 func providerModelByName(provider config.AIProvider, modelName string) (config.AIProviderModel, bool) {
 	target := strings.TrimSpace(modelName)
 	if target == "" {

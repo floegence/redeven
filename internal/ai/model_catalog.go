@@ -258,7 +258,7 @@ func resolveModelCatalogs(ctx context.Context, cfg *config.AIConfig, resolveKey 
 		}
 		models, err := discoverModelCatalog(ctx, ModelCatalogRequest{Type: p.Type, BaseURL: p.BaseURL, APIKey: key}, &http.Client{Timeout: 20 * time.Second})
 		if err != nil {
-			failures = append(failures, fmt.Errorf("Ollama catalog for %s: %w", p.ID, err))
+			failures = append(failures, fmt.Errorf("ollama catalog for %s: %w", p.ID, err))
 			continue
 		}
 		next.Providers[i] = p.WithDiscoveredModels(models)
