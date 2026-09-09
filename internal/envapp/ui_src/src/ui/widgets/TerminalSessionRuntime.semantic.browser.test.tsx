@@ -144,6 +144,7 @@ function harness(options: Readonly<{
   const [viewActive, setViewActive] = createSignal(true);
   const [active, setActive] = createSignal(true);
   let geometryGeneration = 1;
+  let controllerEpoch = 1;
   let latestWidth = 80;
   const sendInput = vi.fn(async (_sessionId: string, _data: string) => undefined);
   const sendInputIntent = vi.fn(async (_sessionId: string, _intent: TerminalKeyInputIntent) => undefined);
@@ -210,7 +211,7 @@ function harness(options: Readonly<{
         cols,
         rows,
       },
-      controller: { epoch: 2, isController: true },
+      controller: { epoch: ++controllerEpoch, isController: true },
     };
   });
   const attachWithPresentation = vi.fn(async (_sessionId: string, cols: number, rows: number) => {
@@ -327,7 +328,10 @@ function harness(options: Readonly<{
       presentationHandler?.(value);
     },
     emitGeometry: (value: Parameters<NonNullable<typeof geometryHandler>>[0]) => geometryHandler?.(value),
-    emitController: (value: Parameters<NonNullable<typeof controllerHandler>>[0]) => controllerHandler?.(value),
+    emitController: (value: Parameters<NonNullable<typeof controllerHandler>>[0]) => {
+      controllerEpoch = Math.max(controllerEpoch, value.epoch);
+      controllerHandler?.(value);
+    },
     semanticHistory,
     attachWithPresentation,
     resizeWithEffectiveGeometry,
@@ -437,6 +441,32 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.activate).not.toHaveBeenCalled();
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('observer-output');
     expect(runtime.statuses.some((status) => status.state === 'blocking')).toBe(false);
+  });
+
+  it('keeps observer typography and viewport changes local until explicit activation', async () => {
+    const runtime = harness({ autoFocus: true });
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'same canonical cells'));
+    await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')
+      ?.getAttribute('data-terminal-is-controller')).toBe('true'));
+    runtime.emitController({ sessionId: SESSION.id, epoch: 2, isController: false });
+    await waitForPaint();
+    runtime.resizeWithEffectiveGeometry.mockClear();
+    runtime.activate.mockClear();
+    runtime.setFontSize(20);
+    runtime.setFontFamily('monospace');
+    runtime.root.style.width = '450px';
+    window.dispatchEvent(new Event('resize'));
+    await waitForPaint();
+    expect(runtime.resizeWithEffectiveGeometry).not.toHaveBeenCalled();
+    expect(runtime.activate).not.toHaveBeenCalled();
+    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('same canonical cells');
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')
+      ?.getAttribute('data-terminal-frame-cols')).toBe('80');
+    await runtime.getViewport()?.activate();
+    expect(runtime.activate).toHaveBeenCalledTimes(1);
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')
+      ?.getAttribute('data-terminal-is-controller')).toBe('true');
   });
 
   it('routes structured keys to the native intent channel while IME commits once as text', async () => {

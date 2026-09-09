@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from 'solid-js';
+import { createEffect, createSignal, For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Checkbox, NumberInput } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
@@ -11,10 +11,11 @@ import {
   type TerminalThemeName,
 } from '@floegence/floeterm-terminal-web';
 import {
-  DEFAULT_TERMINAL_FONT_FAMILY_ID,
   type TerminalMobileInputMode,
 } from '../services/terminalPreferences';
 import { useI18n, type I18nHelpers } from '../i18n';
+import { createResolvedTerminalFont, terminalFontCatalog, TERMINAL_FONT_OPTIONS, TERMINAL_FONT_PREVIEW_SAMPLE } from '../services/terminalFonts';
+import { TerminalFontStatus } from './TerminalFontStatus';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 type TerminalThemeOptionId = 'system' | TerminalThemeName;
@@ -53,39 +54,6 @@ const TERMINAL_THEME_GROUPS = [
     items: TERMINAL_THEME_ITEMS.filter((item) => item.definition?.appearance === 'light'),
   },
 ] as const;
-
-export const TERMINAL_FONT_OPTIONS: Array<{ id: string; label: string; family: string }> = [
-  {
-    id: 'iosevka',
-    label: 'Iosevka',
-    family: '"Iosevka", "JetBrains Mono", "SF Mono", Menlo, Monaco, monospace',
-  },
-  {
-    id: 'jetbrains',
-    label: 'JetBrains Mono',
-    family: '"JetBrains Mono", "Iosevka", "SF Mono", Menlo, Monaco, monospace',
-  },
-  {
-    id: 'sfmono',
-    label: 'SF Mono',
-    family: '"SF Mono", Menlo, Monaco, "JetBrains Mono", "Iosevka", monospace',
-  },
-  {
-    id: 'menlo',
-    label: 'Menlo',
-    family: 'Menlo, Monaco, "SF Mono", "JetBrains Mono", "Iosevka", monospace',
-  },
-  {
-    id: 'monaco',
-    label: 'Monaco',
-    family: 'Monaco, Menlo, "SF Mono", "JetBrains Mono", "Iosevka", monospace',
-  },
-];
-
-export function resolveTerminalFontFamily(id: string): string {
-  const fallback = TERMINAL_FONT_OPTIONS.find((option) => option.id === DEFAULT_TERMINAL_FONT_FAMILY_ID) ?? TERMINAL_FONT_OPTIONS[0]!;
-  return TERMINAL_FONT_OPTIONS.find((option) => option.id === id)?.family ?? fallback.family;
-}
 
 type TerminalSettingsDialogProps = {
   open: boolean;
@@ -279,6 +247,10 @@ function TerminalThemeOptionCard(props: {
 
 export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
   const i18n = useI18n();
+  const resolvedFont = createResolvedTerminalFont(() => props.fontFamilyId);
+  createEffect(() => {
+    if (props.open) for (const option of TERMINAL_FONT_OPTIONS) void terminalFontCatalog.ensure(option.id);
+  });
   const layout = useLayout();
   const isMobile = () => layout.isMobile();
   const [themeAnnouncement, setThemeAnnouncement] = createSignal('');
@@ -454,20 +426,44 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             ? i18n.t('terminal.settings.sharedWorkbenchFontDescription')
             : i18n.t('terminal.settings.localFontDescription')}
         />
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <For each={TERMINAL_FONT_OPTIONS}>
-            {(option) => (
-              <Button
-                size="sm"
-                variant={props.fontFamilyId === option.id ? 'primary' : 'outline'}
-                class="w-full justify-start"
-                onClick={() => props.onFontFamilyChange(option.id)}
-              >
-                {option.label}
-              </Button>
-            )}
-          </For>
-        </div>
+        <For each={['bundled', 'local'] as const}>
+          {(kind) => (
+            <div class="space-y-2" data-terminal-font-group={kind}>
+              <div class="text-xs font-semibold text-muted-foreground">
+                {i18n.t(kind === 'bundled' ? 'terminal.settings.fontBundled' : 'terminal.settings.fontLocal')}
+              </div>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <For each={TERMINAL_FONT_OPTIONS.filter((option) => option.kind === kind && (
+                  kind === 'bundled' || terminalFontCatalog.state(option.id) === 'ready' || props.fontFamilyId === option.id
+                ))}>
+                  {(option) => (
+                    <Button size="sm" variant={props.fontFamilyId === option.id ? 'primary' : 'outline'}
+                      class="h-auto w-full flex-col items-start gap-1 py-2 text-left"
+                      disabled={terminalFontCatalog.state(option.id) !== 'ready'}
+                      onClick={() => props.onFontFamilyChange(option.id)}>
+                      <span>{option.label}</span>
+                      <span class="text-xs opacity-80">
+                        {terminalFontCatalog.state(option.id) === 'loading' ? i18n.t('terminal.settings.fontLoading')
+                          : terminalFontCatalog.state(option.id) !== 'ready' ? i18n.t('terminal.settings.fontUnavailable')
+                          : option.id === 'jetbrains' ? i18n.t('terminal.settings.fontRecommended')
+                          : option.id === 'iosevka' ? i18n.t('terminal.settings.fontCompact') : ''}
+                      </span>
+                    </Button>
+                  )}
+                </For>
+              </div>
+              <Show when={kind === 'local' && TERMINAL_FONT_OPTIONS.filter((option) => option.kind === 'local').every((option) => terminalFontCatalog.state(option.id) === 'unavailable')}>
+                <p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.fontNoLocal')}</p>
+              </Show>
+            </div>
+          )}
+        </For>
+        <TerminalFontStatus font={resolvedFont()} showReady />
+        <pre class="overflow-x-auto rounded-md border border-border/70 bg-muted/[0.14] p-3"
+          aria-label={i18n.t('terminal.settings.fontPreview')}
+          style={{ 'font-family': resolvedFont().family, 'font-size': `${props.fontSize}px`, 'line-height': '1.5' }}>
+          {TERMINAL_FONT_PREVIEW_SAMPLE}
+        </pre>
 
         <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_THEME_DEFINITIONS } from '@floegence/floeterm-terminal-web';
 
 import { TerminalSettingsDialog } from './TerminalSettingsDialog';
@@ -62,6 +62,16 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     />
   ),
 }));
+
+beforeAll(() => {
+  vi.stubGlobal('FontFace', class {
+    constructor(public family: string) {}
+    load() { return Promise.resolve(this); }
+  });
+  Object.defineProperty(document, 'fonts', { configurable: true, value: { add: vi.fn() } });
+});
+
+afterAll(() => { vi.unstubAllGlobals(); });
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -131,7 +141,9 @@ describe('TerminalSettingsDialog', () => {
     expect(systemPreview?.style.backgroundColor).toBe('rgb(255, 255, 255)');
 
     themeRadios.find((input) => input.value === 'dark')?.click();
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('JetBrains Mono'))?.click();
+    const jetbrains = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('JetBrains Mono'))!;
+    await vi.waitFor(() => expect(jetbrains.disabled).toBe(false));
+    jetbrains.click();
     const activityBorderInput = host.querySelector('input[aria-label="Shown"]') as HTMLInputElement | null;
     activityBorderInput!.checked = false;
     activityBorderInput!.dispatchEvent(new Event('change', { bubbles: true }));

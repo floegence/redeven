@@ -78,6 +78,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.
 - [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.
 - [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.
+- [Terminal fonts across client devices](ui/terminal-fonts.md) - Resolve bundled and available local fonts without rewriting shared preferences or observer-controlled geometry.
 - [Terminal session groups](ui/terminal-session-groups.md) - Persist one Environment group catalog and project it consistently through Activity and Workbench placement trees.
 - [Official installation progress](ui/plugin-installation-progress.md) - Observe durable installation and permission setup across management close and reconnect.
 - [Plugin package review](ui/plugin-package-review.md) - Review exact update and external-package evidence before mutation.

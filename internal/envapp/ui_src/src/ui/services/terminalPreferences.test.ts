@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 describe('terminalPreferences defaults', () => {
-  it('initializes new users with dark theme and Monaco font', async () => {
+  it('initializes new users with dark theme and bundled JetBrains Mono', async () => {
     vi.resetModules();
     const {
       DEFAULT_TERMINAL_FONT_FAMILY_ID,
@@ -40,7 +40,7 @@ describe('terminalPreferences defaults', () => {
       DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED,
     );
     expect(prefs.userTheme()).toBe(DEFAULT_TERMINAL_THEME);
-    expect(prefs.fontFamilyId()).toBe(DEFAULT_TERMINAL_FONT_FAMILY_ID);
+    expect(prefs.fontFamilyId()).toBe('jetbrains');
     expect(prefs.workIndicatorEnabled()).toBe(DEFAULT_TERMINAL_WORK_INDICATOR_ENABLED);
 
     prefs.setWorkIndicatorEnabled(false);

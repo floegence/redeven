@@ -2,13 +2,13 @@ import { createEffect, createMemo, onCleanup } from 'solid-js';
 import { useResolvedFloeConfig, useTheme } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { getThemeColors } from '@floegence/floeterm-terminal-web';
-import '@fontsource/iosevka/400.css';
 
 import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { createRedevenTerminalLiveBundle, createTerminalConnId } from '../services/terminalTransport';
 import { ensureTerminalPreferencesInitialized, resolveTerminalUserTheme, useTerminalPreferences } from '../services/terminalPreferences';
-import { resolveTerminalFontFamily } from './TerminalSettingsDialog';
+import { createResolvedTerminalFont } from '../services/terminalFonts';
+import { TerminalFontStatus } from './TerminalFontStatus';
 import { TerminalSessionRuntime } from './TerminalSessionRuntime';
 
 export type ContainerExecTerminalProps = Readonly<{
@@ -28,6 +28,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
   const live = createRedevenTerminalLiveBundle(rpc, () => protocol.session?.(), connID);
   ensureTerminalPreferencesInitialized(floe.persist);
   const preferences = useTerminalPreferences();
+  const resolvedFont = createResolvedTerminalFont(preferences.fontFamilyId);
   const createdAt = Date.now();
 
   createEffect(() => {
@@ -53,6 +54,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
 
   return (
     <div class="container-exec-terminal-surface">
+      <TerminalFontStatus font={resolvedFont()} />
       <TerminalSessionRuntime
         session={session()}
         variant="panel"
@@ -63,7 +65,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
         autoFocus={props.active}
         themeColors={terminalTheme}
         fontSize={preferences.fontSize}
-        fontFamily={() => resolveTerminalFontFamily(preferences.fontFamilyId())}
+        fontFamily={() => resolvedFont().family}
         agentHomePathAbs={() => '/'}
         canOpenFilePreview={() => false}
         bottomInsetPx={() => 0}

@@ -1,7 +1,6 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
-import '@fontsource/iosevka/400.css';
 
 import {
   Button,
@@ -75,7 +74,9 @@ import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherContextItem } f
 import { basenameFromAbsolutePath, normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
 import { canonicalAbsolutePath } from '../utils/canonicalAbsolutePath';
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
-import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
+import { TerminalSettingsDialog } from './TerminalSettingsDialog';
+import { createResolvedTerminalFont } from '../services/terminalFonts';
+import { TerminalFontStatus } from './TerminalFontStatus';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
@@ -1199,9 +1200,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const mobileInputMode = terminalPrefs.mobileInputMode;
   const workIndicatorEnabled = terminalPrefs.workIndicatorEnabled;
 
-  const fontFamily = createMemo<string>(() => {
-    return resolveTerminalFontFamily(fontFamilyId());
-  });
+  const resolvedFont = createResolvedTerminalFont(fontFamilyId);
+  const fontFamily = () => resolvedFont().family;
 
   const isMobileLayout = () => layout.isMobile();
 
@@ -4787,6 +4787,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         });
       }}
     >
+      <TerminalFontStatus font={resolvedFont()} />
       <div class="sr-only" aria-live="polite" aria-atomic="true" data-terminal-status-live-region="">
         <Show when={terminalStatusAnnouncement()} keyed>
           {(announcement) => (
