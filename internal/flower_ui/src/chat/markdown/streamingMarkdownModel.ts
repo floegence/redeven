@@ -1,4 +1,5 @@
 import type { Links, Marked, Token, TokensList } from 'marked';
+import { retainEqualValue } from '../../presentationIdentity';
 
 export type MarkdownCommittedSegment = Readonly<{
   key: string;
@@ -18,6 +19,40 @@ export type MarkdownRenderSnapshot = Readonly<{
 }>;
 
 type MarkdownParser = Pick<Marked<string, string>, 'lexer' | 'parser'>;
+
+// Each mounted message owns only the tokens used by its latest render. Full
+// lexing still resolves references and block boundaries before HTML is reused.
+export function createMarkdownRenderModel(markdown: MarkdownParser) {
+  let previous: MarkdownRenderSnapshot | undefined;
+  let previousLinks: Links | undefined;
+  let cache = new Map<string, { token: Token; html: string }>();
+  return (content: string, streaming: boolean): MarkdownRenderSnapshot => {
+    const nextCache = new Map<string, { token: Token; html: string }>();
+    const cachedParser: MarkdownParser = {
+      lexer(source, options) {
+        const tokens = markdown.lexer(source, options);
+        const links = retainEqualValue(previousLinks, tokens.links);
+        if (links !== previousLinks) cache.clear();
+        previousLinks = links;
+        return tokens;
+      },
+      parser(tokens, options) {
+        const token = tokens[0]!;
+        const key = `${token.type}:${token.raw}`;
+        const cached = cache.get(key);
+        const result = cached && retainEqualValue(cached.token, token) === cached.token
+          ? cached
+          : { token, html: String(markdown.parser(tokens, options) ?? '') };
+        nextCache.set(key, result);
+        return result.html;
+      },
+    };
+    const snapshot = buildMarkdownRenderSnapshot(cachedParser, content, streaming);
+    cache = nextCache;
+    previous = retainEqualValue(previous, snapshot);
+    return previous;
+  };
+}
 
 type TokenEntry = {
   token: Token;

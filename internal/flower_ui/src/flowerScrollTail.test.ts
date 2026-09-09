@@ -17,6 +17,7 @@ function createRafHarness() {
     cancelAnimationFrame(id: number): void {
       queue.delete(id);
     },
+    pending: () => queue.size,
     flushAll(): void {
       while (queue.size > 0) {
         const [id, callback] = queue.entries().next().value as [number, RafCallback];
@@ -68,6 +69,33 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('shares one geometry pass across 300 layout and tail notifications and stops when idle', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport();
+    controller.bind(metrics.viewport);
+    raf.flushAll();
+    let reads = 0;
+    let writes = 0;
+    Object.defineProperty(metrics.viewport, 'scrollHeight', { get: () => { reads += 1; return 900; } });
+    Object.defineProperty(metrics.viewport, 'scrollTop', {
+      get: metrics.scrollTop,
+      set: (value: number) => { writes += 1; metrics.setScrollTop(value); },
+    });
+    for (let index = 0; index < 300; index += 1) {
+      controller.measureAfterLayout();
+      controller.scheduleTailScroll();
+    }
+    expect(raf.pending()).toBe(1);
+    expect(reads).toBe(0);
+    expect(writes).toBe(0);
+    raf.flushAll();
+    expect(reads).toBe(1);
+    expect(writes).toBe(1);
+    expect(metrics.scrollTop()).toBe(800);
+    expect(raf.pending()).toBe(0);
+    controller.dispose();
+  });
+
   it('follows assistant and tool content growth while following latest', () => {
     const { controller, raf } = createController();
     const metrics = createViewport();

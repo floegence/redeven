@@ -37,13 +37,12 @@ export function createFlowerScrollTailController(
 ): FlowerScrollTailController {
   const [nearBottom, setNearBottom] = createSignal(true);
   let node: HTMLDivElement | undefined;
-  let measureFrame = 0;
-  let scrollFrame = 0;
-  let smoothScrollFrame = 0;
-  let scrollToBottomInProgress = false;
+  let layoutFrame = 0;
+  let pendingScroll: Readonly<{ smooth?: boolean; force?: boolean }> | undefined;
+  let smoothScroll: { startedAt: number; startTop: number } | undefined;
   const [followingLatest, setFollowingLatest] = createSignal(true);
   let userInterruptionRevision = 0;
-  let anchor: { title: HTMLElement; top: number; activated: boolean } | undefined;
+  let anchor: { title: HTMLElement; top: number; activated: boolean; finished?: boolean } | undefined;
   type Gesture = {
     target: Element;
     pointerID?: number;
@@ -55,7 +54,6 @@ export function createFlowerScrollTailController(
     latestVisible: boolean;
   };
   const [gesture, setGesture] = createSignal<Gesture>();
-  let interactionFrame = 0;
   let releaseFrame = 0;
   let scrollIntentFrame = 0;
   let disconnect: (() => void) | undefined;
@@ -82,19 +80,8 @@ export function createFlowerScrollTailController(
     if (!node) return true;
     return node.scrollHeight - node.scrollTop - node.clientHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
   };
-  const cancelScheduledScroll = () => {
-    if (scrollFrame) {
-      options.cancelAnimationFrame(scrollFrame);
-      scrollFrame = 0;
-    }
-  };
-  const cancelSmoothScroll = () => {
-    if (smoothScrollFrame) {
-      options.cancelAnimationFrame(smoothScrollFrame);
-      smoothScrollFrame = 0;
-    }
-    scrollToBottomInProgress = false;
-  };
+  const cancelScheduledScroll = () => { pendingScroll = undefined; };
+  const cancelSmoothScroll = () => { smoothScroll = undefined; };
   const stopFollowing = () => {
     setFollowingLatest(false);
     userInterruptionRevision += 1;
@@ -107,82 +94,60 @@ export function createFlowerScrollTailController(
     // Our own position writes cannot count as user scrolling.
     if (userScroll) userScroll.top = target.scrollTop;
   };
+  // Resize, tail-follow, smooth scrolling and disclosure anchoring share one
+  // read/write pass. Notifications never cancel and restart the frame deadline.
+  const scheduleLayout = () => {
+    if (layoutFrame) return;
+    layoutFrame = options.requestAnimationFrame((timestamp) => {
+      layoutFrame = 0;
+      const target = node;
+      if (!target) return;
+      if (gesture() && !gesture()!.target.isConnected) finishGesture();
+      if (anchor && (!anchor.title.isConnected || !target.contains(anchor.title))) clearAnchor();
+      const scrollTop = target.scrollTop;
+      const scrollHeight = target.scrollHeight;
+      const viewportHeight = target.clientHeight;
+      const anchorDelta = anchor ? anchor.title.getBoundingClientRect().top - anchor.top : 0;
+      const request = pendingScroll;
+      pendingScroll = undefined;
+      if (request?.smooth && !options.reducedMotionPreferred()) {
+        smoothScroll = { startedAt: timestamp, startTop: scrollTop };
+      } else if (request) smoothScroll = undefined;
+      let nextTop = scrollTop + anchorDelta;
+      if (followingLatest()) {
+        const bottom = Math.max(0, scrollHeight - viewportHeight);
+        if (smoothScroll) {
+          const progress = Math.min(1, Math.max(0, (timestamp - smoothScroll.startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
+          nextTop = smoothScroll.startTop + (bottom - smoothScroll.startTop) * (1 - (1 - progress) ** 3);
+          if (progress >= 1) smoothScroll = undefined;
+        } else nextTop = bottom;
+      }
+      if (nextTop !== scrollTop) setScrollTop(target, nextTop);
+      setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
+      if (anchor?.finished) clearAnchor();
+      if (gesture() || anchor || smoothScroll) scheduleLayout();
+    });
+  };
   const scrollToBottom = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
-    const target = node;
-    if (!target) return;
+    if (!node) return;
     startFollowing();
-    const targetScrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
-    cancelSmoothScroll();
-    if (!scrollOptions.smooth || options.reducedMotionPreferred() || typeof performance === 'undefined') {
-      scrollToBottomInProgress = false;
-      setScrollTop(target, targetScrollTop);
-      setNearBottom(isNearBottom());
-      return;
+    if (scrollOptions.smooth && !options.reducedMotionPreferred()) {
+      pendingScroll = scrollOptions;
+      scheduleLayout();
+    } else {
+      cancelSmoothScroll();
+      pendingScroll = undefined;
+      setScrollTop(node, Math.max(0, node.scrollHeight - node.clientHeight));
+      setNearBottom(true);
     }
-    const startScrollTop = target.scrollTop;
-    const delta = targetScrollTop - startScrollTop;
-    if (Math.abs(delta) <= 1) {
-      setScrollTop(target, targetScrollTop);
-      setNearBottom(isNearBottom());
-      return;
-    }
-    const startedAt = performance.now();
-    const step = (timestamp: number) => {
-      const progress = Math.min(1, (timestamp - startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS);
-      const eased = 1 - ((1 - progress) ** 3);
-      if (!followingLatest()) {
-        cancelSmoothScroll();
-        setNearBottom(isNearBottom());
-        return;
-      }
-      setScrollTop(target, startScrollTop + (delta * eased));
-      if (progress < 1) {
-        smoothScrollFrame = options.requestAnimationFrame(step);
-        return;
-      }
-      smoothScrollFrame = 0;
-      scrollToBottomInProgress = false;
-      setScrollTop(target, targetScrollTop);
-      setNearBottom(isNearBottom());
-    };
-    scrollToBottomInProgress = true;
-    smoothScrollFrame = options.requestAnimationFrame(step);
-    setNearBottom(isNearBottom());
   };
   const scheduleTailScroll = (scrollOptions: Readonly<{ smooth?: boolean; force?: boolean }> = {}) => {
-    const force = scrollOptions.force === true;
-    if ((!force && !followingLatest()) || scrollFrame) return;
-    if (force) {
-      startFollowing();
-    }
-    scrollFrame = options.requestAnimationFrame(() => {
-      scrollFrame = 0;
-      if (!force && !followingLatest()) return;
-      scrollToBottom(scrollOptions);
-    });
+    if (!scrollOptions.force && !followingLatest()) return;
+    if (scrollOptions.force) startFollowing();
+    pendingScroll = scrollOptions;
+    scheduleLayout();
   };
-  const measureAfterLayout = () => {
-    stabilizeAnchor();
-    if (measureFrame) {
-      options.cancelAnimationFrame(measureFrame);
-    }
-    measureFrame = options.requestAnimationFrame(() => {
-      measureFrame = 0;
-      stabilizeAnchor();
-      if (scrollToBottomInProgress) {
-        setNearBottom(isNearBottom());
-        return;
-      }
-      if (followingLatest()) {
-        // Content growth can move the viewport beyond the near-bottom threshold
-        // before the queued scroll runs. Follow intent, not the new distance.
-        setNearBottom(isNearBottom());
-        scheduleTailScroll();
-        return;
-      }
-      setNearBottom(isNearBottom());
-    });
-  };
+  const measureAfterLayout = scheduleLayout;
 
   const ownsScrollInput = (target: EventTarget | null): boolean => {
     if (!node) return false;
@@ -246,16 +211,7 @@ export function createFlowerScrollTailController(
     // Leave hit testing unchanged through pointerup and native click dispatch.
     releaseFrame = options.requestAnimationFrame(finishGesture);
   };
-  const trackInteraction = () => {
-    if (interactionFrame) return;
-    const tick = () => {
-      interactionFrame = 0;
-      if (gesture() && !gesture()!.target.isConnected) finishGesture();
-      stabilizeAnchor();
-      if (gesture() || anchor) interactionFrame = options.requestAnimationFrame(tick);
-    };
-    interactionFrame = options.requestAnimationFrame(tick);
-  };
+  const trackInteraction = scheduleLayout;
   const beginAnchor = (title: HTMLElement, activated: boolean) => {
     if (!node || !node.contains(title)) return;
     if (anchor?.title === title) {
@@ -331,8 +287,8 @@ export function createFlowerScrollTailController(
   };
   const finishDisclosure = (title: HTMLElement) => {
     if (anchor?.title !== title || !anchor.activated) return;
-    stabilizeAnchor();
-    clearAnchor();
+    anchor.finished = true;
+    scheduleLayout();
   };
   const bind = (nextNode: HTMLDivElement | undefined) => {
     disconnect?.();
@@ -404,9 +360,8 @@ export function createFlowerScrollTailController(
       setGesture(undefined);
       clearAnchor();
       endUserScroll();
-      interactionFrame = clearFrame(interactionFrame);
       releaseFrame = clearFrame(releaseFrame);
-      measureFrame = clearFrame(measureFrame);
+      layoutFrame = clearFrame(layoutFrame);
       cancelScheduledScroll();
       cancelSmoothScroll();
     },

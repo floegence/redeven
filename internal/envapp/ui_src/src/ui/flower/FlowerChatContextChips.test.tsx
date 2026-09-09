@@ -120,12 +120,13 @@ describe('Flower linked context chips', () => {
 		expect(chips[0]?.querySelector('.flower-chat-context-chip-truncated')?.textContent).toBe('Truncated');
 	});
 
-	it('preserves the focused canonical reference node across equivalent snapshot refreshes', async () => {
+	it('preserves reference controls and icons through 300 snapshots and activates the latest data', async () => {
 		const firstDisplay = parseChatMessageReferences([
 			{ reference_id: 'context:file', kind: 'file', label: 'main.ts' },
 		]);
 		if (!firstDisplay) throw new Error('Expected canonical reference display.');
 		const [display, setDisplay] = createSignal(firstDisplay);
+		const activate = vi.fn();
 		const host = document.createElement('div');
 		document.body.appendChild(host);
 		disposers.push(render(() => (
@@ -133,12 +134,25 @@ describe('Flower linked context chips', () => {
 				contextDisplay={display()}
 				linkedContextLabel="Linked references"
 				truncatedLabel="Truncated"
-				onChipClick={vi.fn()}
+				onChipClick={activate}
 			/>
 		), host));
 
 		const focusedChip = host.querySelector('button') as HTMLButtonElement;
 		focusedChip.focus();
+		const icon = focusedChip.querySelector('.flower-chat-context-chip-icon')!;
+		const nodes = [...icon.childNodes];
+		const records: MutationRecord[] = [];
+		const observer = new MutationObserver((values) => records.push(...values));
+		observer.observe(host, { childList: true, subtree: true });
+		for (let index = 0; index < 300; index += 1) {
+			setDisplay(parseChatMessageReferences([{ reference_id: 'context:file', kind: 'file', label: 'main.ts' }])!);
+			await Promise.resolve();
+		}
+		records.push(...observer.takeRecords());
+		observer.disconnect();
+		expect(records).toHaveLength(0);
+		expect([...icon.childNodes]).toEqual(nodes);
 		const refreshedDisplay = parseChatMessageReferences([
 			{ reference_id: 'context:file', kind: 'file', label: 'renamed-main.ts' },
 		]);
@@ -150,6 +164,8 @@ describe('Flower linked context chips', () => {
 		expect(refreshedChip).toBe(focusedChip);
 		expect(document.activeElement).toBe(focusedChip);
 		expect(refreshedChip.textContent).toContain('renamed-main.ts');
+		refreshedChip.click();
+		expect(activate).toHaveBeenCalledExactlyOnceWith(refreshedDisplay.chips[0]);
 	});
 
 	it('prevents duplicate activation while pending and restores focus after completion', async () => {

@@ -437,23 +437,58 @@ function messageTimelineEntries(
   });
 }
 
+const emptyDecorations: readonly FlowerTimelineDecoration[] = [];
+type MessageProjection = Readonly<{
+  threadID: string;
+  activeCursor: boolean;
+  decorations: readonly FlowerTimelineDecoration[];
+  entries: readonly FlowerTimelineEntry[];
+}>;
+const messageProjections = new WeakMap<FlowerChatMessage, MessageProjection>();
+const decorationProjections = new WeakMap<readonly FlowerTimelineDecoration[], ReadonlyMap<string, readonly FlowerTimelineDecorationEntry[]>>();
+const timelineProjections = new WeakMap<readonly FlowerChatMessage[], Readonly<{
+  threadID: string;
+  cursorID: string;
+  decorations: readonly FlowerTimelineDecoration[];
+  queued: FlowerThreadSnapshot['queued_turns'];
+  input: FlowerThreadSnapshot['input_request'];
+  error: FlowerThreadSnapshot['error'];
+  entries: readonly FlowerTimelineEntry[];
+}>>();
+const queueProjections = new WeakMap<FlowerQueuedTurn, Readonly<{ threadID: string; entry: FlowerTimelineEntry }>>();
+
 export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
   const threadRunning = thread.status === 'running';
   const activeCursorMessageID = threadRunning
     ? [...thread.messages].reverse().find((message) => message.role === 'assistant' && message.active_cursor === true)?.id ?? ''
     : '';
-  const decorations = decorationsByTimelineAnchor(thread.timeline_decorations ?? []);
+  const sourceDecorations = thread.timeline_decorations ?? emptyDecorations;
+  const input = thread.status === 'waiting_user' ? thread.input_request : undefined;
+  const previous = timelineProjections.get(thread.messages);
+  if (previous && previous.threadID === thread.thread_id && previous.cursorID === activeCursorMessageID
+    && previous.decorations === sourceDecorations && previous.queued === thread.queued_turns
+    && previous.input === input && previous.error === thread.error) return previous.entries;
+  let decorations = decorationProjections.get(sourceDecorations);
+  if (!decorations) {
+    decorations = decorationsByTimelineAnchor(sourceDecorations);
+    decorationProjections.set(sourceDecorations, decorations);
+  }
   const seenMessageIDs = new Set<string>();
   const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
     const messageID = trimString(message.id);
     if (!messageID || seenMessageIDs.has(messageID)) return [];
     seenMessageIDs.add(messageID);
     const activeCursor = message.id === activeCursorMessageID;
+    const prior = messageProjections.get(message);
+    if (prior && prior.threadID === thread.thread_id && prior.activeCursor === activeCursor
+      && prior.decorations === sourceDecorations) return prior.entries;
     const projectedMessage = activeCursor === message.active_cursor
       ? message
       : { ...message, active_cursor: activeCursor };
-    return messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
+    const entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
+    messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: sourceDecorations, entries });
+    return entries;
   });
   const queuedIDs = new Set<string>();
   for (const turn of thread.queued_turns ?? []) {
@@ -461,14 +496,21 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     if (!queueID) throw new Error('Flower contract error: queued turn requires queue_id.');
     if (queuedIDs.has(queueID)) throw new Error(`Flower contract error: queued turn ${queueID} is duplicated.`);
     queuedIDs.add(queueID);
+    const retained = queueProjections.get(turn);
+    if (retained?.threadID === thread.thread_id) {
+      entries.push(retained.entry);
+      continue;
+    }
     const blocks = queuedTurnBlocks(turn);
     if (blocks.length === 0) throw new Error(`Flower contract error: queued turn ${queueID} has no content.`);
-    entries.push({
+    const entry: FlowerTimelineEntry = {
       type: 'queued_turn',
       key: `queued-turn:${thread.thread_id}:${queueID}`,
       turn,
       blocks,
-    });
+    };
+    queueProjections.set(turn, { threadID: thread.thread_id, entry });
+    entries.push(entry);
   }
   if (thread.status === 'waiting_user' && thread.input_request) {
     entries.push({
@@ -484,5 +526,9 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
       error: thread.error,
     });
   }
+  timelineProjections.set(thread.messages, {
+    threadID: thread.thread_id, cursorID: activeCursorMessageID, decorations: sourceDecorations,
+    queued: thread.queued_turns, input, error: thread.error, entries,
+  });
   return entries;
 }

@@ -279,7 +279,7 @@ describe('Flower final thread cache and workspace transport', () => {
       .mockResolvedValue(subagentDetail({
         summary: { ...child, status: 'completed' },
         current: {
-          thread_id: child.thread_id, view_version: 20, activity: 'idle', turn_id: 'child-turn',
+          thread_id: child.thread_id, view_version: 420, activity: 'idle', turn_id: 'child-turn',
           last_outcome: 'completed',
           items: [{
             id: 'child-final', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1,
@@ -433,23 +433,24 @@ describe('Flower final thread cache and workspace transport', () => {
     const terminalViewport = detail.querySelector('.flower-activity-terminal-output');
 
     Object.defineProperty(childViewport, 'scrollHeight', { configurable: true, value: 1_600 });
-    for (let viewVersion = 10; viewVersion <= 14; viewVersion += 1) {
+    for (let viewVersion = 10; viewVersion <= 309; viewVersion += 1) {
       stream.push({
         schema_version: 1,
         kind: 'thread.batch',
         thread_id: parent.thread_id,
         subagent_current: runningChildCurrent(viewVersion, `stream chunk ${viewVersion - 8}`),
       });
-      await wait(55);
+      await Promise.resolve();
       expect(detail.querySelector('[data-flower-activity-item-id="child-tool-live"]')).toBe(runningToolRow);
       expect(detail.querySelector('.flower-activity-terminal-output')).toBe(terminalViewport);
       expect(runningToolButton.getAttribute('aria-expanded')).toBe('true');
     }
+    await waitFor(() => terminalViewport?.textContent?.includes('stream chunk 301') === true);
     await waitFor(() => runningToolRow.dataset.state === 'open');
     expect(detail.querySelector('[data-flower-subagent-ledger-kind="activity"]')?.textContent).toContain('2 operations');
     expect(childViewport.scrollTop).toBeLessThan(1_180);
     expect(parentViewport.scrollTop).toBe(800);
-    expect(terminalViewport?.textContent).toContain('stream chunk 6');
+    expect(terminalViewport?.textContent).toContain('stream chunk 301');
 
     Object.defineProperty(parentViewport, 'scrollHeight', { configurable: true, value: 1_600 });
     parentDetailVersion = 2;
@@ -486,7 +487,7 @@ describe('Flower final thread cache and workspace transport', () => {
       schema_version: 1,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
-      subagent_current: runningChildCurrent(15, 'stream chunk 7'),
+      subagent_current: runningChildCurrent(310, 'stream chunk 302'),
     });
     await wait(55);
     expect(childViewport.scrollTop).toBe(900);
@@ -528,13 +529,13 @@ describe('Flower final thread cache and workspace transport', () => {
       schema_version: 1,
       kind: 'thread.batch',
       thread_id: 'other-parent',
-      subagent_current: { thread_id: child.thread_id, view_version: 99, items: [] },
+      subagent_current: { thread_id: child.thread_id, view_version: 399, items: [] },
     });
     stream.push({
       schema_version: 1,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
-      subagent_current: { thread_id: 'other-child', view_version: 99, items: [] },
+      subagent_current: { thread_id: 'other-child', view_version: 399, items: [] },
     });
     stream.push({
       schema_version: 1,
@@ -542,7 +543,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: parent.thread_id,
       subagent_current: {
         thread_id: child.thread_id,
-        view_version: 100,
+        view_version: 400,
         items: [{ id: 'incomplete-child-item', ordinal: 1, kind: 'assistant', text: 'Invalid child content.' }],
       } as unknown as FlowerRuntimeCurrentView,
     });

@@ -13,6 +13,7 @@ import type {
 import { mapFlowerActivityItem } from './flowerLiveMapper';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
+import { retainThreadPresentation } from './presentationIdentity';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
@@ -446,5 +447,5 @@ export function applyFlowerRuntimeCurrentView(
       ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error) }
       : undefined,
   };
-  return projected;
+  return retainThreadPresentation(base, projected);
 }
