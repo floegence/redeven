@@ -56,7 +56,11 @@ func TestNativeCodeSpaceBrowserEditorFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer runner.StopAll()
+	defer func() {
+		if err := runner.StopAll(); err != nil {
+			t.Errorf("stop fixture editor: %v", err)
+		}
+	}()
 	binding := appserver.NativeCodeSpaceBinding{CodeSpaceID: "native-smoke", InstanceID: instance.InstanceID, Port: instance.Port, WorkspacePath: workspace, Context: instance.Lifetime(), AdmitConnection: instance.AdmitNativeConnection}
 	cfg := writeTestConfig(t)
 	s := newTestServerWithAppServer(t, nil, newTestAppServerWithBackend(t, cfg, nativeBrowserFixtureBackend{binding: binding}), cfg)
