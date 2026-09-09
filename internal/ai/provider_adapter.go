@@ -46,20 +46,12 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 		return resolvedProviderAdapter{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
 	}
 
-	apiKey := ""
-	if providerType != "ollama" {
-		if s.resolveProviderKey == nil {
-			return resolvedProviderAdapter{}, errors.New("missing provider key resolver")
-		}
-		var ok bool
-		var err error
-		apiKey, ok, err = s.resolveProviderKey(resolved.ProviderID)
-		if err != nil {
-			return resolvedProviderAdapter{}, fmt.Errorf("resolve provider key failed: %w", err)
-		}
-		if !ok || strings.TrimSpace(apiKey) == "" {
-			return resolvedProviderAdapter{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
-		}
+	apiKey, available, err := resolveModelProviderKey(providerType, resolved.ProviderID, s.resolveProviderKey)
+	if err != nil {
+		return resolvedProviderAdapter{}, fmt.Errorf("resolve provider key failed: %w", err)
+	}
+	if !available {
+		return resolvedProviderAdapter{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
 	}
 	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey), resolved.Provider.StrictToolSchema)
 	if err != nil {
@@ -79,4 +71,19 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Model
 		responseFormat = ""
 	}
 	return adapter.Adapter, responseFormat, nil
+}
+
+// Ollama may run without authentication, but a configured key still applies to
+// both discovery and execution. Every execution route uses the same decision.
+func resolveModelProviderKey(providerType, providerID string, resolve func(string) (string, bool, error)) (string, bool, error) {
+	optional := strings.EqualFold(strings.TrimSpace(providerType), "ollama")
+	if resolve == nil {
+		if optional {
+			return "", true, nil
+		}
+		return "", false, errors.New("missing provider key resolver")
+	}
+	key, available, err := resolve(providerID)
+	key = strings.TrimSpace(key)
+	return key, optional || (available && key != ""), err
 }

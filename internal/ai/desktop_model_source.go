@@ -1129,11 +1129,11 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	if !desktopModelSourceSnapshotHasModel(snapshot, publicModelID) {
 		return ModelGatewayResult{}, errors.New("desktop model is missing its local API key")
 	}
-	apiKey, ok, err := secretStore.GetAIProviderAPIKey(entry.ProviderID)
+	apiKey, available, err := resolveModelProviderKey(entry.ProviderCfg.Type, entry.ProviderID, secretStore.GetAIProviderAPIKey)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
-	if !ok || strings.TrimSpace(apiKey) == "" {
+	if !available {
 		return ModelGatewayResult{}, errors.New("desktop provider is missing its local API key")
 	}
 	adapter, err := newProviderAdapter(strings.TrimSpace(entry.ProviderCfg.Type), strings.TrimSpace(entry.ProviderCfg.BaseURL), strings.TrimSpace(apiKey), entry.ProviderCfg.StrictToolSchema, parallelToolCallsWireOmit)
