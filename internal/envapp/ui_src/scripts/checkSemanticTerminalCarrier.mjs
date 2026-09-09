@@ -197,7 +197,7 @@ async function stopRuntime(runtime) {
   }
 }
 
-async function startRuntime(tempDir) {
+async function startRuntime(tempDir, { bind = '127.0.0.1:0' } = {}) {
   const binaryPath = path.join(tempDir, 'redeven');
   await runCommand('go', ['build', '-tags', 'floeterm_native', '-o', binaryPath, './cmd/redeven'], {
     env: { ...process.env, GOWORK: 'off', CGO_ENABLED: '1' },
@@ -220,7 +220,7 @@ async function startRuntime(tempDir) {
     'run',
     '--mode', 'local',
     '--state-root', stateRoot,
-    '--local-ui-bind', '127.0.0.1:0',
+    '--local-ui-bind', bind,
     '--presentation', 'machine',
     '--startup-report-file', startupReportPath,
   ], {
@@ -1338,6 +1338,13 @@ async function main(options) {
   }
 }
 
+export {
+  startRuntime, stopRuntime, readTLSServerSPKIHash, openEnvPage, selectSurface,
+  activateSession, createSession, sendTerminalCommand, runtimeTrace,
+  waitForTrace, canvasEvidence, waitForRuntimePairToConverge, verifyTopResize,
+};
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const args = process.argv.slice(2).filter((value) => value !== '--');
 const browserMode = resolveTerminalCarrierBrowserMode(args);
 const reportPath = readOption(args, '--report');
@@ -1384,3 +1391,5 @@ main({
   console.error(formatted);
   process.exitCode = 1;
 });
+
+}

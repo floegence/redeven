@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTerminalFontCatalog } from './terminalFonts';
 
 describe('packaged terminal font files', () => {
@@ -30,5 +30,21 @@ describe('packaged terminal font files', () => {
     const available = await localFace.load().then(() => true, () => false);
     expect(fonts.resolve('consolas').effectiveID).toBe(available ? 'consolas' : 'jetbrains');
     expect(fonts.state('consolas')).toBe(available ? 'ready' : 'unavailable');
+  });
+
+  it('recovers a failed resource request through explicit retry and a real loaded face', async () => {
+    const fetch = globalThis.fetch.bind(globalThis);
+    const request = vi.spyOn(globalThis, 'fetch').mockImplementation((url, init) =>
+      String(url).includes('iosevka') ? Promise.resolve(new Response(null, { status: 503 })) : fetch(url, init));
+    const fonts = createTerminalFontCatalog();
+    try {
+      await fonts.prepare('iosevka');
+      expect(fonts.resolve('iosevka')).toMatchObject({ requestedID: 'iosevka', effectiveID: 'jetbrains', status: 'fallback' });
+    } finally {
+      request.mockRestore();
+    }
+    await fonts.prepare('iosevka', true);
+    expect(fonts.resolve('iosevka')).toMatchObject({ effectiveID: 'iosevka', status: 'ready' });
+    expect((await document.fonts.load('14px "Redeven Terminal iosevka"', 'M')).every((face) => face.status === 'loaded')).toBe(true);
   });
 });

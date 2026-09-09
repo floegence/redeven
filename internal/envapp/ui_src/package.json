@@ -22,6 +22,8 @@
     "test:browser": "node scripts/runVitestBrowser.mjs",
     "test:browser:headed": "node scripts/runVitestBrowser.mjs --browser.headless=false",
     "test:built-dist-shell": "node scripts/checkPackagedRenderer.mjs",
+    "test:terminal-font-carrier": "node scripts/checkTerminalFontCarrier.mjs",
+    "test:terminal-font-electron": "node scripts/checkTerminalFontElectron.mjs",
     "test:terminal-carrier": "node scripts/checkSemanticTerminalCarrier.mjs",
     "test:terminal-performance": "node scripts/checkTerminalInteractionPerformance.mjs"
   },
@@ -30,7 +32,7 @@
     "@floegence/floe-webapp-boot": "0.50.2",
     "@floegence/floe-webapp-core": "0.50.2",
     "@floegence/floe-webapp-protocol": "0.50.2",
-    "@floegence/floeterm-terminal-web": "0.19.0",
+    "@floegence/floeterm-terminal-web": "0.19.1",
     "@floegence/flowersec-core": "5.1.0",
     "@floegence/redevplugin-contracts": "3.0.31",
     "@floegence/redevplugin-ui": "3.0.31",

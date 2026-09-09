@@ -3,7 +3,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../i18n';
 import { terminalFontCatalog, type ResolvedTerminalFont } from '../services/terminalFonts';
 
-export function TerminalFontStatus(props: { font: ResolvedTerminalFont; showReady?: boolean }) {
+export function TerminalFontStatus(props: { font: ResolvedTerminalFont; showReady?: boolean; inline?: boolean }) {
   const i18n = useI18n();
   const message = () => {
     const font = props.font;
@@ -16,11 +16,13 @@ export function TerminalFontStatus(props: { font: ResolvedTerminalFont; showRead
   };
   return (
     <Show when={props.showReady || props.font.status === 'fallback' || props.font.status === 'failed'}>
-      <div class="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3 py-1 text-xs text-muted-foreground"
+      <div class={props.inline
+        ? 'flex min-w-0 items-center gap-1 text-muted-foreground'
+        : 'flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3 py-1 text-xs text-muted-foreground'}
         role="status" data-terminal-font-status={props.font.status}>
-        <span>{message()}</span>
+        <span class={props.inline ? 'min-w-0 truncate' : undefined} title={message()}>{message()}</span>
         <Show when={props.font.status === 'fallback' || props.font.status === 'failed'}>
-          <Button size="sm" variant="ghost" onClick={() => { void terminalFontCatalog.prepare(props.font.requestedID, true); }}>
+          <Button size="sm" variant="ghost" class={props.inline ? 'h-6 shrink-0 px-1 text-[10px]' : undefined} onClick={() => { void terminalFontCatalog.prepare(props.font.requestedID, true); }}>
             {i18n.t('terminal.settings.fontRetry')}
           </Button>
         </Show>

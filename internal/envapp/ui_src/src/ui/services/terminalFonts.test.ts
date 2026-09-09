@@ -25,7 +25,7 @@ describe('terminal font resolution', () => {
     const fonts = createTerminalFontCatalog(load);
     await fonts.prepare('consolas');
     expect(fonts.resolve('consolas')).toMatchObject({ effectiveID: 'consolas', family: '"Redeven Terminal consolas", monospace', status: 'ready' });
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ label: 'Consolas', kind: 'local' }));
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ label: 'Consolas', kind: 'local' }), expect.any(AbortSignal));
   });
 
   it('deduplicates concurrent loads and requires an explicit retry after failure', async () => {
@@ -56,5 +56,27 @@ describe('terminal font resolution', () => {
     const fonts = createTerminalFontCatalog(async () => {});
     await fonts.prepare('future-font');
     expect(fonts.resolve('future-font')).toMatchObject({ requestedID: 'future-font', effectiveID: 'jetbrains', status: 'fallback' });
+  });
+
+  it('bounds stalled loads and ignores a late completion after the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      let finish: () => void = () => {};
+      let signal: AbortSignal | undefined;
+      const fonts = createTerminalFontCatalog((_, nextSignal) => {
+        signal = nextSignal;
+        return new Promise<void>((resolve) => { finish = resolve; });
+      });
+      const pending = fonts.prepare('jetbrains');
+      await vi.advanceTimersByTimeAsync(10_000);
+      await pending;
+      expect(signal?.aborted).toBe(true);
+      expect(fonts.resolve('jetbrains')).toMatchObject({ status: 'failed', family: 'monospace' });
+      finish();
+      await Promise.resolve();
+      expect(fonts.state('jetbrains')).toBe('unavailable');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

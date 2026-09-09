@@ -1205,22 +1205,25 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const isMobileLayout = () => layout.isMobile();
 
+  const resizeAfterFontSelection = () => queueMicrotask(() => {
+    const sid = activeSessionId();
+    if (sid) viewportRegistry.get(sid)?.forceResize();
+  });
+
   const persistFontSize = (value: number) => {
     const shared = sharedGeometryPreferences();
     if (shared) {
       shared.onFontSizeChange(normalizeTerminalFontSize(value));
-      return;
-    }
-    terminalPrefs.setFontSize(value);
+    } else terminalPrefs.setFontSize(value);
+    resizeAfterFontSelection();
   };
 
   const persistFontFamily = (id: string) => {
     const shared = sharedGeometryPreferences();
     if (shared) {
       shared.onFontFamilyChange(normalizeTerminalFontFamilyId(id));
-      return;
-    }
-    terminalPrefs.setFontFamily(id);
+    } else terminalPrefs.setFontFamily(id);
+    resizeAfterFontSelection();
   };
 
   const persistMobileInputMode = (value: TerminalMobileInputMode) => {
@@ -2494,21 +2497,24 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return Boolean(surfaceRegistry.get(intent.sessionId)?.contains(owner));
   };
 
-  const restoreTerminalSessionFocus = (intent: TerminalFocusRestoreIntent) => {
+  const restoreTerminalSessionFocus = (intent: TerminalFocusRestoreIntent, options: { activate?: boolean } = {}) => {
     requestAnimationFrame(async () => {
       if (!terminalFocusOwner() || !shouldRestoreTerminalFocus()) return;
       if (activeSessionId() !== intent.sessionId || !focusOwnerMatchesRestoreIntent(intent)) return;
       const viewport = viewportRegistry.get(intent.sessionId);
       if (!viewport) return;
-      try {
-        await viewport.activate();
-      } catch {
-        // TerminalSessionRuntime already publishes the precise fail-closed status.
-        return;
+      if (options.activate !== false) {
+        try {
+          await viewport.activate();
+        } catch {
+          // TerminalSessionRuntime already publishes the precise fail-closed status.
+          return;
+        }
       }
       if (!terminalFocusOwner() || activeSessionId() !== intent.sessionId) return;
       if (!focusOwnerMatchesRestoreIntent(intent)) return;
-      actionsRegistry.get(intent.sessionId)?.focusIfInteractive();
+      if (options.activate === false) viewport.focus({ preventScroll: true });
+      else actionsRegistry.get(intent.sessionId)?.focusIfInteractive();
     });
   };
 
@@ -3897,7 +3903,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const handleSettingsOpenChange = (open: boolean) => {
     setSettingsOpen(open);
     if (!open) {
-      restoreActiveTerminalFocus();
+      const sid = activeSessionId();
+      if (sid) restoreTerminalSessionFocus(captureTerminalFocusRestoreIntent(sid), { activate: false });
     }
   };
 
@@ -4773,6 +4780,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       ref={(n) => (rootEl = n)}
       tabIndex={-1}
       data-terminal-panel-variant={variant}
+      data-terminal-font-requested={resolvedFont().requestedID}
+      data-terminal-font-effective={resolvedFont().effectiveID ?? 'monospace'}
       data-terminal-display-mode-selected={displayModeSelected() ? 'true' : 'false'}
       data-terminal-workbench-selected={workbenchSelected() ? 'true' : 'false'}
       class="terminal-shared-geometry-container h-full min-h-0 flex flex-col outline-none"
@@ -4787,7 +4796,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         });
       }}
     >
-      <TerminalFontStatus font={resolvedFont()} />
       <div class="sr-only" aria-live="polite" aria-atomic="true" data-terminal-status-live-region="">
         <Show when={terminalStatusAnnouncement()} keyed>
           {(announcement) => (
@@ -5290,6 +5298,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 }}
               >
                 <div class="flex min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap">
+                  <TerminalFontStatus font={resolvedFont()} inline />
                   <span
                     class="min-w-0 max-w-[40%] truncate"
                     classList={{ hidden: useMobileRecoveryStatusBar() }}

@@ -64,6 +64,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 beforeAll(() => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([0]))));
   vi.stubGlobal('FontFace', class {
     constructor(public family: string) {}
     load() { return Promise.resolve(this); }
