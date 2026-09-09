@@ -83,6 +83,26 @@ function mountDialog(mode: 'create' | 'edit' = 'create') {
 }
 
 describe('shared Flower provider dialog', () => {
+  it('keeps a disabled custom vision model visible after clearing and reopening', () => {
+    const dialog = mountDialog('edit');
+    try {
+      const custom = { model_name: 'custom-vision', context_window: 32000, input_modalities: ['text', 'image'] };
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: [...defaultFlowerProviderModels('deepseek'), custom] });
+      dialog.button('Clear selection').click();
+      expect(dialog.selected()).toBe(0);
+      expect(dialog.host.textContent).toContain(custom.model_name);
+      dialog.button('Save provider').click();
+      const saved = serializeFlowerProvider(dialog.confirmed());
+      dialog.setOpen(false);
+      dialog.setProvider({ ...saved, models: resolveFlowerProviderModels(saved) });
+      dialog.setOpen(true);
+      expect(dialog.host.textContent).toContain(custom.model_name);
+      dialog.button('Select all').click();
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed().models).toContainEqual(custom);
+    } finally { dialog.dispose(); }
+  });
+
   it('selects every model on creation and provider switch, including DeepSeek Vision', () => {
     const dialog = mountDialog();
     try {

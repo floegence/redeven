@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createStore } from 'solid-js/store';
-import { applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
+import { applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, flowerProviderModelChoices, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
 import * as catalog from '../../../../../../flower_ui/src/settings/providerCatalog';
 import type { FlowerProviderDraft, FlowerProviderModel } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -64,6 +64,23 @@ describe('model catalog preferences', () => {
 
 
 describe('model parameter preservation', () => {
+  it('keeps custom model definitions when clearing selection and reopening', () => {
+    const custom = { ...model('custom-vision'), input_modalities: ['text', 'image'] };
+    const draft: FlowerProviderDraft = { id: 'brand', type: 'deepseek', models: [...defaultFlowerProviderModels('deepseek'), custom] };
+    const cleared = setFlowerModelsEnabled(draft, draft.models, false);
+    const saved = serializeFlowerProvider(cleared);
+    expect(saved.model_selection?.custom_models).toEqual([custom]);
+    expect(saved.model_selection?.disabled_models).toContain(custom.model_name);
+    const reopened = { ...saved, models: resolveFlowerProviderModels(saved) };
+    expect(reopened.models).toEqual([]);
+    const choices = flowerProviderModelChoices(reopened);
+    expect(choices).toContainEqual(custom);
+    const enabled = setFlowerModelsEnabled(reopened, choices, true);
+    const resaved = serializeFlowerProvider(enabled);
+    expect(resaved.model_selection?.disabled_models).toEqual([]);
+    expect(resolveFlowerProviderModels(resaved)).toContainEqual(custom);
+  });
+
   it('retains edited parameters when disabling, reopening, and selecting again', () => {
     const models = defaultFlowerProviderModels('deepseek');
     const edited = { ...models[0], context_window: 81920, max_output_tokens: 4096, input_modalities: ['text', 'image'] };
@@ -79,13 +96,18 @@ describe('model parameter preservation', () => {
 
   it('retains a custom model override when the upstream catalog gains the same name', () => {
     const models = defaultFlowerProviderModels('openai');
-    const custom = { ...models[0], context_window: 87654 };
+    const custom = { ...models[0], context_window: 87654, max_output_tokens: 4096 };
     const provider: FlowerProviderDraft = { id: 'brand', type: 'openai', models: [], model_selection: { custom_models: [custom] } };
     const resolved = resolveFlowerProviderModels(provider);
     expect(resolved.filter((entry) => entry.model_name === custom.model_name)).toEqual([custom]);
     const saved = serializeFlowerProvider({ ...provider, models: resolved });
     expect(saved.model_selection?.custom_models).toEqual([]);
-    expect(saved.model_selection?.model_overrides).toEqual([{ model_name: custom.model_name, context_window: 87654 }]);
+    expect(saved.model_selection?.model_overrides).toEqual([{ model_name: custom.model_name, context_window: 87654, max_output_tokens: 4096 }]);
+    const disabled = { ...provider, model_selection: { custom_models: [custom], disabled_models: [custom.model_name] } };
+    const choice = flowerProviderModelChoices(disabled).find((entry) => entry.model_name === custom.model_name)!;
+    expect(choice.context_window).toBe(custom.context_window);
+    const enabled = setFlowerModelsEnabled(disabled, [choice], true);
+    expect(resolveFlowerProviderModels(serializeFlowerProvider(enabled))).toContainEqual(custom);
   });
 });
 

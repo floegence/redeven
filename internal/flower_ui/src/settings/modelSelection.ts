@@ -14,6 +14,15 @@ export function defaultFlowerProviderModels(type: FlowerProviderType): FlowerPro
   return flowerProviderUsesCatalog(type) ? recommendedModelsForFlowerProviderType(type).map((model) => cloneFlowerModel(model)) : [];
 }
 
+export function flowerProviderModelChoices(provider: FlowerProviderDraft): FlowerProviderModel[] {
+  const choices = new Map((provider.catalog_models ?? recommendedModelsForFlowerProviderType(provider.type)).map((model) => [model.model_name, model]));
+  for (const model of provider.model_selection?.custom_models ?? []) choices.set(model.model_name, applyModelOverride(choices.get(model.model_name) ?? { model_name: model.model_name }, model));
+  for (const model of provider.models) {
+    if (!choices.has(model.model_name)) choices.set(model.model_name, model);
+  }
+  return [...choices.values()];
+}
+
 function applyModelOverride(model: FlowerProviderModel, override?: FlowerProviderModel): FlowerProviderModel {
   const merged = { ...model, ...override };
   if (!override?.max_output_tokens && merged.context_window && (merged.max_output_tokens ?? 0) > merged.context_window) merged.max_output_tokens = merged.context_window;
@@ -51,8 +60,9 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
   const catalogByName = new Map(catalog.map((model) => [model.model_name, model]));
   const selected = new Set(provider.models.map((model) => model.model_name));
   const disabled = new Set((provider.model_selection?.disabled_models ?? []).filter((name) => !catalogByName.has(name)));
+  for (const name of selected) disabled.delete(name);
   for (const model of catalog) if (!selected.has(model.model_name)) disabled.add(model.model_name);
-  const customModels: FlowerProviderModel[] = [];
+  const customModels = (provider.model_selection?.custom_models ?? []).filter((model) => disabled.has(model.model_name) && !selected.has(model.model_name)).map(cloneFlowerModel);
   const overrides = new Map((provider.model_selection?.model_overrides ?? []).filter((model) => !selected.has(model.model_name)).map((model) => [model.model_name, model]));
   for (const model of provider.models) {
     const preset = catalogByName.get(model.model_name);
@@ -78,14 +88,19 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
 // Capture edits before disabling a model, so re-enabling restores its parameters.
 export function setFlowerModelsEnabled(provider: FlowerProviderDraft, models: readonly FlowerProviderModel[], enabled: boolean): FlowerProviderDraft {
   const preferences = serializeFlowerProvider(provider).model_selection;
+  const disabled = new Set(preferences?.disabled_models ?? []);
   const overrides = new Map((preferences?.model_overrides ?? []).map((model) => [model.model_name, model]));
   const selected = new Map(provider.models.map((model) => [model.model_name, model]));
   for (const model of models) {
     if (enabled) {
+      disabled.delete(model.model_name);
       if (!selected.has(model.model_name)) selected.set(model.model_name, cloneFlowerModel(applyModelOverride(model, overrides.get(model.model_name))));
-    } else selected.delete(model.model_name);
+    } else {
+      disabled.add(model.model_name);
+      selected.delete(model.model_name);
+    }
   }
-  return { ...provider, model_selection: preferences, models: [...selected.values()] };
+  return { ...provider, model_selection: preferences ? { ...preferences, disabled_models: [...disabled].sort() } : undefined, models: [...selected.values()] };
 }
 
 export function filterFlowerModels<T extends FlowerProviderModel>(models: readonly T[], query: string): readonly T[] {
