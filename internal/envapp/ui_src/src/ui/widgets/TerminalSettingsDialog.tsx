@@ -253,6 +253,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
     option.kind === 'bundled' || terminalFontCatalog.state(option.id) === 'ready' || props.fontFamilyId === option.id));
   const filteredFonts = createMemo(() => availableFonts().filter((option) =>
     option.label.toLowerCase().includes(fontQuery().trim().toLowerCase())));
+  // Keep search reachable for this visit when an unavailable saved option disappears.
+  const fontSearchVisible = createMemo((visible: boolean) => props.open && (visible || availableFonts().length > 8), false);
   createEffect(() => {
     if (props.open) for (const option of TERMINAL_FONT_OPTIONS) void terminalFontCatalog.ensure(option.id);
     else setFontQuery('');
@@ -432,7 +434,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             ? i18n.t('terminal.settings.sharedWorkbenchFontDescription')
             : i18n.t('terminal.settings.localFontDescription')}
         />
-        <Show when={availableFonts().length > 8}>
+        <Show when={fontSearchVisible()}>
           <Input type="search" value={fontQuery()} onInput={(event) => setFontQuery(event.currentTarget.value)}
             aria-label={i18n.t('terminal.settings.fontSearch')} placeholder={i18n.t('terminal.settings.fontSearch')} />
         </Show>
