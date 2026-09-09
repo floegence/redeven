@@ -14,14 +14,20 @@ export function defaultFlowerProviderModels(type: FlowerProviderType): FlowerPro
   return flowerProviderUsesCatalog(type) ? recommendedModelsForFlowerProviderType(type).map((model) => cloneFlowerModel(model)) : [];
 }
 
+function applyModelOverride(model: FlowerProviderModel, override?: FlowerProviderModel): FlowerProviderModel {
+  const merged = { ...model, ...override };
+  if (!override?.max_output_tokens && merged.context_window && (merged.max_output_tokens ?? 0) > merged.context_window) merged.max_output_tokens = merged.context_window;
+  return merged;
+}
+
 export function resolveFlowerProviderModels(provider: FlowerProvider, discovered: readonly FlowerProviderModel[] = []): FlowerProviderModel[] {
   if (!provider.model_selection) return (provider.models ?? []).map((model) => cloneFlowerModel(model));
   const selection = provider.model_selection;
   const disabled = new Set(selection.disabled_models ?? []);
   const overrides = new Map((selection.model_overrides ?? []).map((model) => [model.model_name, model]));
   const catalog = provider.type === 'ollama' ? discovered : recommendedModelsForFlowerProviderType(provider.type);
-  const models = new Map(catalog.map((model) => [model.model_name, { ...model, ...overrides.get(model.model_name) }]));
-  for (const custom of selection.custom_models ?? []) models.set(custom.model_name, { ...models.get(custom.model_name), ...custom });
+  const models = new Map(catalog.map((model) => [model.model_name, applyModelOverride(model, overrides.get(model.model_name))]));
+  for (const custom of selection.custom_models ?? []) models.set(custom.model_name, applyModelOverride(models.get(custom.model_name) ?? { model_name: custom.model_name }, custom));
   return [...models.values()].filter((model) => !disabled.has(model.model_name)).map(cloneFlowerModel);
 }
 
@@ -56,6 +62,7 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
     }
     const changes = Object.fromEntries(overrideKeys.flatMap((key) => {
       const value = model[key];
+      if (key === 'max_output_tokens' && model.context_window && value === model.context_window && (preset.max_output_tokens ?? 0) > model.context_window) return [];
       if (value == null || equalValue(value, preset[key]) || (key === 'effective_context_window_percent' && value === 95)) return [];
       return [[key, value]];
     }));
@@ -75,7 +82,7 @@ export function setFlowerModelsEnabled(provider: FlowerProviderDraft, models: re
   const selected = new Map(provider.models.map((model) => [model.model_name, model]));
   for (const model of models) {
     if (enabled) {
-      if (!selected.has(model.model_name)) selected.set(model.model_name, cloneFlowerModel({ ...model, ...overrides.get(model.model_name) }));
+      if (!selected.has(model.model_name)) selected.set(model.model_name, cloneFlowerModel(applyModelOverride(model, overrides.get(model.model_name))));
     } else selected.delete(model.model_name);
   }
   return { ...provider, model_selection: preferences, models: [...selected.values()] };

@@ -114,6 +114,8 @@ func applyAIModelOverride(model, override AIProviderModel) AIProviderModel {
 	}
 	if override.MaxOutputTokens != 0 {
 		model.MaxOutputTokens = override.MaxOutputTokens
+	} else if model.ContextWindow > 0 && model.MaxOutputTokens > model.ContextWindow {
+		model.MaxOutputTokens = model.ContextWindow
 	}
 	if override.EffectiveContextWindowPercent != 0 {
 		model.EffectiveContextWindowPercent = override.EffectiveContextWindowPercent
