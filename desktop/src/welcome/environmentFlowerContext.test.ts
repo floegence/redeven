@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -57,7 +58,8 @@ describe('environment Flower context envelope', () => {
       provider_runtime_link_target: undefined,
       managed_runtime_placement_target_id: undefined,
     };
-    const fixture = JSON.parse(readFileSync(new URL('../../../internal/ai/testdata/environment_flower_context.json', import.meta.url), 'utf8'));
+    const fixturePath = join(__dirname, '../../../internal/ai/testdata/environment_flower_context.json');
+    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
     expect(buildEnvironmentFlowerContextAction(environment, 'SSH · Configured')).toEqual(fixture);
   });
 
