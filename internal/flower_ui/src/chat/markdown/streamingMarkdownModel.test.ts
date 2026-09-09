@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Marked } from 'marked';
 
 import { createFlowerMarkdownRenderer } from './markedConfig';
-import { buildMarkdownRenderSnapshot } from './streamingMarkdownModel';
+import { buildMarkdownRenderSnapshot, createMarkdownRenderModel } from './streamingMarkdownModel';
 
 function createMarked(): Marked<string, string> {
   const marked = new Marked<string, string>({
@@ -63,5 +63,39 @@ describe('buildMarkdownRenderSnapshot', () => {
     expect(first.committedSegments.map((segment) => segment.key)).toEqual(
       second.committedSegments.map((segment) => segment.key),
     );
+  });
+});
+
+describe('incremental markdown rendering', () => {
+  it('lexes the full source but reuses unchanged token HTML across 300 appends', () => {
+    const markdown = createMarked();
+    const lexer = vi.spyOn(markdown, 'lexer');
+    const parser = vi.spyOn(markdown, 'parser');
+    const render = createMarkdownRenderModel(markdown);
+    const prefix = Array.from({ length: 200 }, (_, index) => `Paragraph ${index}\n\n`).join('');
+    const first = render(`${prefix}tail`, true);
+    const initialParses = parser.mock.calls.length;
+    for (let index = 1; index <= 300; index += 1) {
+      const next = render(`${prefix}tail ${index}`, true);
+      expect(next.committedSegments).toBe(first.committedSegments);
+    }
+    expect(lexer).toHaveBeenCalledTimes(301);
+    expect(parser.mock.calls.length - initialParses).toBe(300);
+  });
+
+  it('invalidates reference definitions, replacements and completion without stale HTML', () => {
+    const markdown = createMarked();
+    const render = createMarkdownRenderModel(markdown);
+    for (const [content, streaming] of [
+      ['[guide][ref]\n\nTail', true],
+      ['[guide][ref]\n\nTail\n\n[ref]: https://example.com/one', true],
+      ['[guide][ref]\n\nTail\n\n[ref]: https://example.com/two', true],
+      ['Changed\n\n```ts\nconst value = 1;', true],
+      ['Changed\n\n```ts\nconst value = 1;\n```', true],
+      ['Changed\n\n```ts\nconst value = 1;\n```', false],
+      ['', false],
+    ] as const) {
+      expect(render(content, streaming)).toEqual(buildMarkdownRenderSnapshot(markdown, content, streaming));
+    }
   });
 });

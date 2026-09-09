@@ -52,7 +52,7 @@ describe('Flower approval command presentation', () => {
     expect(surface).toContain('<FlowerShellCommandHighlight command={command()} />');
     expect(surface).toContain('pendingApprovalCommandForActivityItem(item(), selectedApprovalActions())');
     expect(surface).toContain('activityTitle(displayTitle())');
-    expect(surface).toContain('subagentSummaries: selectedThread()?.subagents ?? []');
+    expect(surface).toContain('subagentSummaries: selectedSubagentSummaries() ?? []');
     expect(surface).not.toContain('innerHTML');
   });
 

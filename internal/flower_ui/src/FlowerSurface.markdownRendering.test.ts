@@ -46,9 +46,9 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const src = surfaceSource();
     const webFetchBlock = src.indexOf("const webFetchBlock = (");
     const preview = src.indexOf('flower-activity-web-fetch-preview-section', webFetchBlock);
-    const detailDispatch = src.indexOf("if (block.kind === 'web_fetch') return webFetchBlock(block)", preview);
+    const detailDispatch = src.indexOf("webFetchBlock(blockOfKind('web_fetch'))", preview);
     const mountedDisclosure = src.indexOf('<Show when={disclosure.mounted()}>', detailDispatch);
-    const detailRender = src.indexOf('activityDetailBlock(', mountedDisclosure);
+    const detailRender = src.indexOf('<ActivityDetailBlock ', mountedDisclosure);
 
     expect(webFetchBlock).toBeGreaterThanOrEqual(0);
     expect(preview).toBeGreaterThan(webFetchBlock);

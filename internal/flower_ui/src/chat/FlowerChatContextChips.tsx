@@ -14,12 +14,12 @@ type FlowerChatContextChipsProps = Readonly<{
 
 function chipIcon(tone: string): Component<{ class?: string }> {
   switch (tone) {
-    case 'environment': return (props) => <Activity class={props.class} />;
-    case 'directory': return (props) => <Folder class={props.class} />;
-    case 'attachment': return (props) => <Paperclip class={props.class} />;
-    case 'process': return (props) => <Activity class={props.class} />;
-    case 'terminal': return (props) => <Terminal class={props.class} />;
-    default: return (props) => <FileText class={props.class} />;
+    case 'environment': return Activity;
+    case 'directory': return Folder;
+    case 'attachment': return Paperclip;
+    case 'process': return Activity;
+    case 'terminal': return Terminal;
+    default: return FileText;
   }
 }
 

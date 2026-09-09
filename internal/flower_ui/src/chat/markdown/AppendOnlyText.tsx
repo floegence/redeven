@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, type Component } from 'solid-js';
+import { createEffect, onCleanup, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
 export interface AppendOnlyTextProps {
@@ -7,91 +7,34 @@ export interface AppendOnlyTextProps {
   class?: string;
 }
 
-const APPEND_ONLY_TEXT_GUARD_LEN = 64;
-
 export const AppendOnlyText: Component<AppendOnlyTextProps> = (props) => {
-  const [el, setEl] = createSignal<HTMLSpanElement | null>(null);
-  let lastOffset = 0;
-  let lastLen = 0;
-  let lastGuard = '';
+  let element!: HTMLSpanElement;
+  let textNode: Text | undefined;
   let pending = '';
-  let rafId: number | null = null;
-
-  const scheduleFlush = () => {
-    if (rafId !== null) return;
-    const schedule = typeof requestAnimationFrame === 'function'
-      ? requestAnimationFrame
-      : ((callback: FrameRequestCallback) => setTimeout(() => callback(Date.now()), 0) as unknown as number);
-    rafId = schedule(() => {
-      rafId = null;
-      const node = el();
-      if (!node || !pending) return;
-      const text = pending;
-      pending = '';
-      const span = document.createElement('span');
-      span.className = 'flower-chat-md-streaming-fade-in';
-      span.appendChild(document.createTextNode(text));
-      node.appendChild(span);
-    });
-  };
-
-  const reset = (fullText: string, offset: number) => {
-    const node = el();
-    if (!node) return;
-    node.textContent = '';
-    pending = fullText.slice(offset);
-    lastOffset = offset;
-    lastLen = fullText.length;
-    const guardLen = Math.min(APPEND_ONLY_TEXT_GUARD_LEN, lastLen);
-    lastGuard = guardLen > 0 ? fullText.slice(lastLen - guardLen, lastLen) : '';
-    scheduleFlush();
-  };
+  let rafId: number | undefined;
 
   createEffect(() => {
-    const node = el();
-    if (!node) return;
-
-    const fullText = String(props.text ?? '');
-    const rawOffset = typeof props.offset === 'number' && Number.isFinite(props.offset) ? props.offset : 0;
-    const offset = Math.max(0, Math.min(rawOffset, fullText.length));
-
-    if (offset !== lastOffset || fullText.length < lastLen) {
-      reset(fullText, offset);
-      return;
-    }
-
-    const guardLen = Math.min(APPEND_ONLY_TEXT_GUARD_LEN, lastLen);
-    if (guardLen > 0) {
-      const currentGuard = fullText.slice(lastLen - guardLen, lastLen);
-      if (currentGuard !== lastGuard) {
-        reset(fullText, offset);
-        return;
+    const text = String(props.text ?? '');
+    const offset = typeof props.offset === 'number' && Number.isFinite(props.offset)
+      ? Math.max(0, Math.min(props.offset, text.length)) : 0;
+    pending = text.slice(offset);
+    if (rafId !== undefined) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = undefined;
+      if (!textNode) {
+        textNode = document.createTextNode(pending);
+        element.appendChild(textNode);
+      } else if (pending.startsWith(textNode.data)) {
+        textNode.appendData(pending.slice(textNode.length));
+      } else {
+        textNode.data = pending;
       }
-    }
-
-    if (fullText.length === lastLen) return;
-    pending += fullText.slice(lastLen);
-    lastLen = fullText.length;
-    const newGuardLen = Math.min(APPEND_ONLY_TEXT_GUARD_LEN, lastLen);
-    lastGuard = newGuardLen > 0 ? fullText.slice(lastLen - newGuardLen, lastLen) : '';
-    scheduleFlush();
+    });
   });
 
   onCleanup(() => {
-    if (rafId === null) return;
-    if (typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(rafId);
-    } else {
-      clearTimeout(rafId);
-    }
-    rafId = null;
+    if (rafId !== undefined) cancelAnimationFrame(rafId);
   });
 
-  return (
-    <span
-      ref={(node) => setEl(node)}
-      class={cn('flower-chat-md-raw-tail', props.class)}
-      style={{ 'white-space': 'pre-wrap' }}
-    />
-  );
+  return <span ref={element} class={cn('flower-chat-md-raw-tail', props.class)} style={{ 'white-space': 'pre-wrap' }} />;
 };

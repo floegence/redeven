@@ -1,3 +1,6 @@
+import { FlowerKeyedList } from './FlowerKeyedList';
+import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
+import { retainEqualValue, retainKeyedItems } from './presentationIdentity';
 import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
@@ -780,7 +783,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		pendingAdmissionHandoffs.clear();
 		transportOutbox().dispose();
 	});
-	const threads = createMemo<readonly FlowerThreadSnapshot[]>(() => [...threadCache().summaries.values()]);
+	const threads = createMemo<readonly FlowerThreadSnapshot[]>((previous) => retainEqualValue(previous, [...threadCache().summaries.values()]));
 	const selectedThreadID = createMemo(() => threadCache().selectedId ?? '');
 	const setSelectedThreadID = (threadID: string) => {
 		setThreadCache((cache) => cache.select(trimString(threadID) || null));
@@ -4454,12 +4457,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // explicitly allowed to remain live in the background.
     const visible = keepLiveWhenHidden ? true : documentVisible();
     if (!connect || (!visible && !keepLiveWhenHidden)) return;
+    const frames = createFlowerLiveFrameQueue({
+      apply: applyFlowerLiveStreamEnvelope,
+      requestFrame: requestTranscriptAnimationFrame,
+      cancelFrame: cancelTranscriptAnimationFrame,
+      validateAppend: (envelope) => {
+        const current = envelope.current;
+        const base = current ? threadCache().views.get(current.thread_id)?.thread : undefined;
+        if (!base || !current) return false;
+        try {
+          // Validate every complete input before it can replace a pending frame.
+          // Application still runs the normal acceptance and security path.
+          const projected = applyFlowerRuntimeCurrentView({
+            ...base,
+            ...(envelope.timeline_decorations ? { timeline_decorations: envelope.timeline_decorations } : {}),
+          }, current);
+          buildFlowerTimelineEntries(projected);
+          return true;
+        } catch {
+          // Invalid input is applied immediately through the diagnostic path.
+          return false;
+        }
+      },
+    });
     const stop = liveTransport.start({
       connect,
-      onCurrent: (envelope) => applyFlowerLiveStreamEnvelope(envelope),
+      onCurrent: frames.push,
+      onBoundary: frames.boundary,
       onTerminalError: (error) => setThreadLoadError(threadDetailUserError(error)),
     });
-    onCleanup(stop);
+    onCleanup(() => { frames.dispose(); stop(); });
   });
 
 
@@ -5433,7 +5460,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setContextSnapshotPreview(null);
     }
   });
-  const selectedSubagentItems = createMemo(() => buildFlowerSubagentPanelItems(selectedThread()));
+  const selectedSubagentSummaries = createMemo(() => selectedThread()?.subagents);
+  const selectedSubagentItems = createMemo<readonly FlowerSubagentPanelItem[]>((previous) => {
+    const threadID = selectedThreadID();
+    const subagents = selectedSubagentSummaries();
+    const projected = untrack(() => buildFlowerSubagentPanelItems(selectedThread() ? { ...selectedThread()!, thread_id: threadID, subagents } : null));
+    return retainKeyedItems(previous, projected, (item) => JSON.stringify([item.parentThreadID, item.threadID]));
+  });
   const subagentStatusIsActive = (status: FlowerSubagentPanelStatus): boolean => (
     status === 'waiting_input' || status === 'running' || status === 'queued' || status === 'unknown'
   );
@@ -5447,7 +5480,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!active) return null;
     return selectedSubagentItems().find((item) => trimString(item.threadID) === active.childThreadID) ?? active.item;
   });
-  const subagentDetailThread = createMemo(() => projectSubagentDetailThread(subagentDetail()));
+  const subagentDetailThread = createMemo<FlowerThreadSnapshot | null>((previous) => projectSubagentDetailThread(subagentDetail(), previous));
 
   const subagentDetailActiveStatus = createMemo<FlowerSubagentPanelStatus>(() => {
     const itemStatus = activeSubagentItem()?.status ?? 'unknown';
@@ -5628,16 +5661,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onDragOver={previewQueuedTurnDropAtEnd}
         onDrop={commitQueuedTurnReorder}
       >
-        <For each={selectedQueuedTurns()}>
+        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={selectedQueuedTurns()} identity={(turn) => JSON.stringify([selectedThreadID(), turn.queue_id])}>
           {(turn) => {
-            const queueID = () => trimString(turn.queue_id);
+            const queueID = () => trimString(turn().queue_id);
             const dragging = () => queuedTurnReorder()?.draggedQueueID === queueID();
-            const attachmentCount = () => turn.attachments?.length ?? 0;
+            const attachmentCount = () => turn().attachments?.length ?? 0;
             return (
               <div
                 class="flower-queued-turn-item"
                 role="listitem"
-                aria-label={`${copy().chat.pendingQueued}: ${queuedTurnDisplayLabel(turn)}`}
+                aria-label={`${copy().chat.pendingQueued}: ${queuedTurnDisplayLabel(turn())}`}
                 draggable={queuedTurnReorderEnabled()}
                 data-flower-queued-turn-dock-id={queueID()}
                 data-flower-queued-turn-dragging={dragging() && queuedTurnReorder()?.phase === 'dragging' ? 'true' : undefined}
@@ -5651,14 +5684,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               >
                 <GripVertical class="flower-queued-turn-handle" aria-hidden="true" />
                 <div class="flower-queued-turn-content">
-                  <span class="flower-queued-turn-label">{queuedTurnDisplayLabel(turn)}</span>
+                  <span class="flower-queued-turn-label">{queuedTurnDisplayLabel(turn())}</span>
                   <Show when={attachmentCount() > 0}>
-                    <span class="flower-queued-turn-compact-meta" title={(turn.attachments ?? []).map((attachment) => attachment.name).join(', ')}>
+                    <span class="flower-queued-turn-compact-meta" title={(turn().attachments ?? []).map((attachment) => attachment.name).join(', ')}>
                       <Paperclip aria-hidden="true" />
                       <span>{attachmentCount()}</span>
                     </span>
                   </Show>
-                  <Show when={turn.context_action}>
+                  <Show when={turn().context_action}>
                     <span class="flower-queued-turn-compact-meta" title={copy().chat.linkedContextLabel}>
                       <FileText aria-hidden="true" />
                     </span>
@@ -5673,7 +5706,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     title={copy().chat.queuedSendNow}
                     onClick={(event) => {
                       event.stopPropagation();
-                      void promoteQueuedTurn(turn);
+                      void promoteQueuedTurn(turn());
                     }}
                   >
                     <Send aria-hidden="true" />
@@ -5687,7 +5720,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       data-flower-queued-turn-delete={queueID()}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void deleteQueuedTurn(turn);
+                        void deleteQueuedTurn(turn());
                       }}
                     >
                       <Trash aria-hidden="true" />
@@ -5697,7 +5730,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             );
           }}
-        </For>
+        </FlowerKeyedList>
       </div>
     </Show>
   );
@@ -5873,18 +5906,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     fallback: string,
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
-  const selectedRunProgress = createMemo<FlowerLiveProgress | null>(() => (
-    selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread())
+  const selectedRunProgress = createMemo<FlowerLiveProgress | null>((previous) => retainEqualValue(
+    previous, selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread()),
   ));
-  const selectedContextUsage = createMemo<FlowerComposerContextUsageModel | null>(() => {
+  const selectedContextUsage = createMemo<FlowerComposerContextUsageModel | null>((previous) => {
     const thread = selectedThread();
     const usage = thread?.context_usage ?? null;
     if (!thread || !usage) return null;
     const activeRunID = trimString(thread.active_run_id);
     if (!activeRunID || trimString(usage.run_id) === activeRunID) {
-      return { usage, freshness: 'current' };
+      return retainEqualValue(previous, { usage, freshness: 'current' });
     }
-    return { usage, freshness: 'last_known' };
+    return retainEqualValue(previous, { usage, freshness: 'last_known' });
   });
   const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
   const showScrollToLatestButton = createMemo(() => (
@@ -7125,8 +7158,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const focusComposerIfConnected = () => { if (composerRef?.isConnected) composerRef.focus({ preventScroll: true }); };
+
   const inputRequestPrompt = (
-    request: FlowerInputRequest | null | undefined,
+    request: Accessor<FlowerInputRequest | null | undefined>,
     options: Readonly<{ surface?: 'history' | 'composer' }> = {},
   ) => {
     const composerSurface = options.surface === 'composer';
@@ -7136,7 +7171,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : inputRequest.questions
     );
     return (
-    <Show when={request}>
+    <Show when={request()}>
       {(inputRequest) => (
         <section
           class={cn('flower-input-request-panel', composerSurface && 'flower-input-request-surface')}
@@ -7150,35 +7185,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
           </Show>
           <div class="flower-input-request-questions">
-            <For each={visibleQuestions(inputRequest())}>
+            <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={visibleQuestions(inputRequest())} identity={(question) => JSON.stringify([selectedThreadID(), inputRequest().prompt_id, inputRequest().tool_id, question.id])}>
               {(question) => {
-                const selectedChoiceID = () => questionDraft(question.id).answer_kind === 'choice'
-                  ? trimString(questionDraft(question.id).choice_id)
+                const selectedChoiceID = () => questionDraft(question().id).answer_kind === 'choice'
+                  ? trimString(questionDraft(question().id).choice_id)
                   : '';
-                const customSelected = () => questionDraft(question.id).answer_kind === 'custom';
-                const showCustomChoice = questionMode(question) === 'select_or_write';
-                const summary = trimString(inputRequest().public_summary);
-                const questionText = trimString(question.question);
-                const showSummary = summary.length > 0 && summary !== questionText && question.id === inputRequest().questions[0]?.id;
+                const customSelected = () => questionDraft(question().id).answer_kind === 'custom';
+                const showCustomChoice = () => questionMode(question()) === 'select_or_write';
+                const summary = () => trimString(inputRequest().public_summary);
+                const questionText = () => trimString(question().question);
+                const showSummary = () => summary().length > 0 && summary() !== questionText() && question().id === inputRequest().questions[0]?.id;
                 return (
                   <div
                     class={cn(
                       'flower-input-request-question',
-                      activeInputQuestion()?.id === question.id && 'flower-input-request-question-active',
+                      activeInputQuestion()?.id === question().id && 'flower-input-request-question-active',
                     )}
                   >
                     <div class="flower-input-request-question-copy">
-                      <div class="flower-input-request-question-header">{question.header}</div>
-                      <Show when={showSummary}>
-                        <div class="flower-input-request-description">{summary}</div>
+                      <div class="flower-input-request-question-header">{question().header}</div>
+                      <Show when={showSummary()}>
+                        <div class="flower-input-request-description">{summary()}</div>
                       </Show>
-                      <div class="flower-input-request-question-text">{question.question}</div>
+                      <div class="flower-input-request-question-text">{question().question}</div>
                     </div>
-                    <Show when={(question.choices?.length ?? 0) > 0 || showCustomChoice}>
+                    <Show when={(question().choices?.length ?? 0) > 0 || showCustomChoice()}>
                       <div
                         class="flower-input-request-choice-grid"
                         role="radiogroup"
-                        aria-label={question.question}
+                        aria-label={question().question}
                         onKeyDown={(event) => {
                           if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
                           const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'));
@@ -7191,32 +7226,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           next?.click();
                         }}
                       >
-                        <For each={question.choices ?? []}>
+                        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={question().choices ?? []} identity={(choice) => choice.choice_id}>
                           {(choice) => (
                             <button
                               type="button"
                               role="radio"
                               class={cn(
                                 'flower-input-request-choice',
-                                selectedChoiceID() === choice.choice_id && 'flower-input-request-choice-selected',
+                                selectedChoiceID() === choice().choice_id && 'flower-input-request-choice-selected',
                               )}
-                              aria-checked={selectedChoiceID() === choice.choice_id}
+                              aria-checked={selectedChoiceID() === choice().choice_id}
                               data-flower-input-answer-kind="choice"
-                              onClick={() => selectInputChoice(question, choice)}
+                              onClick={() => selectInputChoice(question(), choice())}
                               onKeyDown={(event) => {
                                 if (event.key !== ' ') return;
                                 event.preventDefault();
-                                selectInputChoice(question, choice);
+                                selectInputChoice(question(), choice());
                               }}
                             >
-                              <span class="flower-input-request-choice-label">{choice.label}</span>
-                              <Show when={choice.description}>
+                              <span class="flower-input-request-choice-label">{choice().label}</span>
+                              <Show when={choice().description}>
                                 {(description) => <span class="flower-input-request-choice-description">{description()}</span>}
                               </Show>
                             </button>
                           )}
-                        </For>
-                        <Show when={showCustomChoice}>
+                        </FlowerKeyedList>
+                        <Show when={showCustomChoice()}>
                           <button
                             type="button"
                             role="radio"
@@ -7226,16 +7261,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             )}
                             aria-checked={customSelected()}
                             data-flower-input-answer-kind="custom"
-                            onClick={() => selectInputCustomAnswer(question)}
+                            onClick={() => selectInputCustomAnswer(question())}
                             onKeyDown={(event) => {
                               if (event.key !== ' ') return;
                               event.preventDefault();
-                              selectInputCustomAnswer(question);
+                              selectInputCustomAnswer(question());
                             }}
                           >
                             <Pencil class="flower-input-request-choice-custom-icon h-4 w-4" aria-hidden="true" />
                             <span class="flower-input-request-choice-label">
-                              {trimString(question.write_label) || chatCopyValue('inputRequestOther', 'None of the above / Other')}
+                              {trimString(question().write_label) || chatCopyValue('inputRequestOther', 'None of the above / Other')}
                             </span>
                           </button>
                         </Show>
@@ -7244,25 +7279,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </div>
                 );
               }}
-            </For>
+            </FlowerKeyedList>
           </div>
           <Show when={!composerSurface && inputTextQuestions().length > 1}>
             <div class="flower-input-request-text-targets" role="tablist" aria-label={chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.')}>
-              <For each={inputTextQuestions()}>
+              <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={inputTextQuestions()} identity={(question) => JSON.stringify([inputRequest().prompt_id, question.id])}>
                 {(question) => (
                   <button
                     type="button"
                     class={cn(
                       'flower-input-request-text-target',
-                      activeInputQuestion()?.id === question.id && 'flower-input-request-text-target-active',
+                      activeInputQuestion()?.id === question().id && 'flower-input-request-text-target-active',
                     )}
-                    aria-selected={activeInputQuestion()?.id === question.id}
-                    onClick={() => updateCurrentComposerSessionDraft((draft) => (draft.activeInputQuestionID === question.id ? draft : { ...draft, activeInputQuestionID: question.id }))}
+                    aria-selected={activeInputQuestion()?.id === question().id}
+                    onClick={() => updateCurrentComposerSessionDraft((draft) => (draft.activeInputQuestionID === question().id ? draft : { ...draft, activeInputQuestionID: question().id }))}
                   >
-                    {question.write_label || question.header}
+                    {question().write_label || question().header}
                   </button>
                 )}
-              </For>
+              </FlowerKeyedList>
             </div>
           </Show>
           <Show when={composerSurface && inputRequest().questions.length > 1}>
@@ -7573,9 +7608,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div class="flower-thread-approval-heading">
           <div class="flower-thread-approval-title">{copy().chat.threadApprovalPanelTitle(selectedThreadLevelApprovalActions().length)}</div>
         </div>
-        <For each={selectedThreadLevelApprovalActions()}>
-          {(action) => approvalActionCard(action.action_id, () => action)}
-        </For>
+        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={selectedThreadLevelApprovalActions()} identity={(action) => JSON.stringify([selectedThreadID(), action.turn_id, action.run_id, action.action_id])}>
+          {(action) => approvalActionCard(action().action_id, action)}
+        </FlowerKeyedList>
       </section>
     </Show>
   );
@@ -7683,7 +7718,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         webSearch: copy().chat.webSearch,
         statuses: copy().chat.toolStatuses,
         subagents: subagentsCopy(),
-        subagentSummaries: selectedThread()?.subagents ?? [],
+        subagentSummaries: selectedSubagentSummaries() ?? [],
         terminal: {
           runCommand: copy().chat.toolActivityRunCommand,
           readCommandOutput: copy().chat.toolActivityReadCommandOutput,
@@ -7777,55 +7812,55 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const fileActionButtons = (
-    messageID: string,
-    blockIndex: number,
-    itemID: string,
-    action: FlowerActivityFileAction | null,
-    attachmentTarget: FlowerMessageAttachmentPreviewTarget | null = null,
+    messageID: Accessor<string>,
+    blockIndex: Accessor<number>,
+    itemID: Accessor<string>,
+    action: Accessor<FlowerActivityFileAction | null>,
+    attachmentTarget: Accessor<FlowerMessageAttachmentPreviewTarget | null> = () => null,
   ) => {
-    const canonicalActionID = trimString(action?.action_id);
-    const canPreview = Boolean(
-      attachmentTarget
-      || (action?.can_preview && canonicalActionID && props.adapter.openFilePreview),
+    const canonicalActionID = () => trimString(action()?.action_id);
+    const canPreview = () => Boolean(
+      attachmentTarget()
+      || (action()?.can_preview && canonicalActionID() && props.adapter.openFilePreview),
     );
-    const canBrowseDirectory = Boolean(
-      action?.can_browse_directory
-      && canonicalActionID
+    const canBrowseDirectory = () => Boolean(
+      action()?.can_browse_directory
+      && canonicalActionID()
       && props.adapter.openFileBrowser,
     );
-    const displayName = trimString(attachmentTarget?.name) || trimString(action?.display_name) || 'file';
+    const displayName = () => trimString(attachmentTarget()?.name) || trimString(action()?.display_name) || 'file';
     return (
-      <Show when={canPreview || canBrowseDirectory}>
+      <Show when={canPreview() || canBrowseDirectory()}>
         <div class="flower-activity-file-actions" aria-label="File actions">
-          <Show when={canPreview}>
+          <Show when={canPreview()}>
             <button
               type="button"
               class="flower-activity-file-action-button"
               title="Preview file"
-              aria-label={`Preview ${displayName}`}
-              disabled={!attachmentTarget && selectedThreadDetailPending()}
+              aria-label={`Preview ${displayName()}`}
+              disabled={!attachmentTarget() && selectedThreadDetailPending()}
               onClick={(event) => {
                 event.stopPropagation();
-                if (attachmentTarget) {
-                  openMessageAttachmentPreview(attachmentTarget);
+                if (attachmentTarget()) {
+                  openMessageAttachmentPreview(attachmentTarget()!);
                   return;
                 }
-                if (action) openActivityFilePreview(messageID, blockIndex, itemID, action);
+                if (action()) openActivityFilePreview(messageID(), blockIndex(), itemID(), action()!);
               }}
             >
               <FileText class="h-3.5 w-3.5" />
             </button>
           </Show>
-          <Show when={canBrowseDirectory && action}>
+          <Show when={canBrowseDirectory() && action()}>
             <button
               type="button"
               class="flower-activity-file-action-button"
               title="Browse folder"
-              aria-label={`Browse folder for ${displayName}`}
+              aria-label={`Browse folder for ${displayName()}`}
               disabled={selectedThreadDetailPending()}
               onClick={(event) => {
                 event.stopPropagation();
-                openActivityFileBrowser(messageID, blockIndex, itemID, action!);
+                openActivityFileBrowser(messageID(), blockIndex(), itemID(), action()!);
               }}
             >
               <FolderOpen class="h-3.5 w-3.5" />
@@ -7836,9 +7871,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const detailLinesBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured' }>) => (
+  const detailLinesBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'structured' }>>) => (
     <>
-      <For each={block.lines}>
+      <For each={block().lines}>
         {(line) => (
           <div class="flower-activity-inline-detail-line">
             <span class="flower-activity-inline-detail-key">{line.label}</span>
@@ -7849,9 +7884,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </>
   );
 
-  const structuredRowsBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured_rows' }>) => (
+  const structuredRowsBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'structured_rows' }>>) => (
     <div class="flower-activity-structured-rows" role="list">
-      <For each={block.rows}>
+      <For each={block().rows}>
         {(row) => (
           <div class="flower-activity-structured-row" role="listitem" data-format={row.format}>
             <Show when={row.title || row.meta}>
@@ -7918,7 +7953,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   type FlowerNonTerminalDetailBlock = Exclude<FlowerActivityDetailBlock, { kind: 'terminal_output' }>;
 
   const TerminalOutputBlock: Component<FlowerTerminalOutputBlockProps> = (detailProps) => {
-    const terminal = () => detailProps.block().terminal;
+    const terminal = createMemo(() => detailProps.block().terminal);
     const [commandExpanded, setCommandExpanded] = createSignal(false);
     const [commandCopied, setCommandCopied] = createSignal(false);
     const [liveLastSeq, setLiveLastSeq] = createSignal(terminal().last_seq);
@@ -7932,7 +7967,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       turnID: detailProps.context().turnID,
       itemID: detailProps.context().itemID,
     }).replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
-    const processID = () => trimString(terminal().process_id);
+    const processID = createMemo(() => trimString(terminal().process_id));
+    const liveRunID = createMemo(() => detailProps.context().runID);
+    const liveExecutionIdentity = createMemo(() => {
+      const context = detailProps.context();
+      return JSON.stringify([context.ownerThreadID, context.renderThreadID, context.turnID, context.runID, context.itemID, context.toolID]);
+    });
     const terminalIdentity = (): TerminalVisibleOutputIdentity => {
       const context = detailProps.context();
       return {
@@ -7957,13 +7997,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       truncated: terminal().truncated,
     });
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
-    const canReadLiveOutput = () => (
+    const canReadLiveOutput = createMemo(() => (
       terminal().operation !== 'write' && terminal().operation !== 'read' &&
       !!props.adapter.readTerminalProcess &&
       detailProps.context().runID !== '' &&
       processID() !== '' &&
       (detailProps.canonicalStatus() === 'running' || detailProps.canonicalStatus() === 'pending')
-    );
+    ));
     const displayStatus = detailProps.canonicalStatus;
     const displayCanceled = () => displayStatus() === 'canceled';
     const displayUserRejected = () => detailProps.approvalState() === 'rejected';
@@ -8025,16 +8065,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setLiveLastSeq(Math.max(0, Math.floor(snapshot.last_seq)));
     };
 
-    createEffect(() => {
-      if (!canReadLiveOutput()) return;
+    createEffect(on([canReadLiveOutput, liveRunID, processID, liveExecutionIdentity], ([enabled, runID, process]) => {
+      if (!enabled) return;
       let disposed = false;
       let timer: number | undefined;
       const poll = async () => {
         if (disposed || !canReadLiveOutput() || !props.adapter.readTerminalProcess) return;
         try {
           const snapshot = await props.adapter.readTerminalProcess({
-            run_id: detailProps.context().runID,
-            process_id: processID(),
+            run_id: runID,
+            process_id: process,
             after_seq: untrack(() => liveLastSeq()),
           });
           if (disposed) return;
@@ -8058,9 +8098,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           window.clearTimeout(timer);
         }
       });
-    });
+    }));
 
-    createEffect(() => {
+    createEffect(on([terminal, liveExecutionIdentity, processID], () => {
       const canonicalOutput = terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), {
         output: payloadOutput(),
         first_seq: terminal().first_seq,
@@ -8071,7 +8111,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setLiveOutput(canonicalOutput);
       }
       setLiveLastSeq((current) => Math.max(current, Math.max(0, Math.floor(terminal().last_seq))));
-    });
+    }));
 
     createEffect(() => {
       visibleOutput();
@@ -8174,12 +8214,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const webEntryList = (label: string, entries: readonly { title: string; url: string; snippet: string; source: string }[]) => (
-    <Show when={entries.length > 0}>
+  const webEntryList = (label: string, entries: Accessor<readonly { title: string; url: string; snippet: string; source: string }[]>) => (
+    <Show when={entries().length > 0}>
       <div class="flower-activity-web-section">
         <div class="flower-activity-detail-heading">{label}</div>
         <div class="flower-activity-web-list" role="list">
-          <For each={entries}>
+          <For each={entries()}>
             {(entry) => (
               <div class="flower-activity-web-entry" role="listitem">
                 <div class="flower-activity-web-entry-title">{entry.title}</div>
@@ -8197,26 +8237,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const webSearchBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'web_search' }>) => {
-    const search = block.search;
-    const resultCount = search.count === 1 ? '1 result' : `${search.count} results`;
+  const webSearchBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'web_search' }>>) => {
+    const search = () => block().search;
+    const resultCount = () => search().count === 1 ? '1 result' : `${search().count} results`;
     return (
       <section class="flower-activity-web-panel">
         <div class="flower-activity-web-summary">
-          <Show when={search.query}>
+          <Show when={search().query}>
             {(query) => <span class="flower-activity-web-query">{query()}</span>}
           </Show>
-          <Show when={search.provider}>
+          <Show when={search().provider}>
             {(provider) => <span class="flower-activity-web-chip">{provider()}</span>}
           </Show>
-          <Show when={search.count !== undefined}>
-            <span class="flower-activity-web-chip">{resultCount}</span>
+          <Show when={search().count !== undefined}>
+            <span class="flower-activity-web-chip">{resultCount()}</span>
           </Show>
         </div>
-        {webEntryList('Results', search.results)}
-        {webEntryList('Matches', search.matches)}
-        {webEntryList('Sections', search.sections)}
-        {webEntryList('Sources', search.sources)}
+        {webEntryList('Results', () => search().results)}
+        {webEntryList('Matches', () => search().matches)}
+        {webEntryList('Sections', () => search().sections)}
+        {webEntryList('Sources', () => search().sources)}
       </section>
     );
   };
@@ -8227,21 +8267,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const webFetchBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'web_fetch' }>) => {
-    const fetch = block.fetch;
-    const openURL = safeWebFetchURL(fetch.final_url || fetch.url);
-    const redirected = fetch.url && fetch.final_url && fetch.url !== fetch.final_url;
+  const webFetchBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'web_fetch' }>>) => {
+    const fetch = () => block().fetch;
+    const openURL = () => safeWebFetchURL(fetch().final_url || fetch().url);
+    const redirected = () => fetch().url && fetch().final_url && fetch().url !== fetch().final_url;
     return (
       <section class="flower-activity-web-fetch-panel">
         <div class="flower-activity-web-fetch-route">
-          <Show when={fetch.url}>
+          <Show when={fetch().url}>
             {(url) => <span class="flower-activity-web-fetch-url" title={url()}>{url()}</span>}
           </Show>
-          <Show when={redirected}>
+          <Show when={redirected()}>
             <span class="flower-activity-web-fetch-arrow" aria-hidden="true">→</span>
-            <span class="flower-activity-web-fetch-url" title={fetch.final_url}>{fetch.final_url}</span>
+            <span class="flower-activity-web-fetch-url" title={fetch().final_url}>{fetch().final_url}</span>
           </Show>
-          <Show when={openURL}>
+          <Show when={openURL()}>
             {(url) => (
               <a
                 class="flower-activity-web-fetch-open"
@@ -8258,31 +8298,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
         </div>
         <div class="flower-activity-web-summary">
-          <Show when={fetch.status_code !== undefined}>
-            <span class="flower-activity-web-chip">HTTP {fetch.status_code}</span>
+          <Show when={fetch().status_code !== undefined}>
+            <span class="flower-activity-web-chip">HTTP {fetch().status_code}</span>
           </Show>
-          <Show when={fetch.content_type}>
+          <Show when={fetch().content_type}>
             {(contentType) => <span class="flower-activity-web-chip">{contentType()}</span>}
           </Show>
-          <Show when={fetch.format}>
+          <Show when={fetch().format}>
             {(format) => <span class="flower-activity-web-chip">{format()}</span>}
           </Show>
-          <Show when={fetch.bytes_read !== undefined}>
-            <span class="flower-activity-web-chip">{formatWebFetchBytes(fetch.bytes_read ?? 0)}</span>
+          <Show when={fetch().bytes_read !== undefined}>
+            <span class="flower-activity-web-chip">{formatWebFetchBytes(fetch().bytes_read ?? 0)}</span>
           </Show>
-          <Show when={fetch.truncated}>
+          <Show when={fetch().truncated}>
             <span class="flower-activity-web-chip flower-activity-web-fetch-truncated">{copy().chat.truncatedLabel}</span>
           </Show>
         </div>
-        <Show when={fetch.content_preview}>
+        <Show when={fetch().content_preview}>
           {(preview) => (
             <div class="flower-activity-web-fetch-preview-section">
               <div class="flower-activity-web-fetch-untrusted" role="note">
                 {copy().chat.toolActivityExternalContentNotice}
               </div>
-              <div class="flower-activity-web-fetch-preview" data-format={fetch.format || 'text'}>
+              <div class="flower-activity-web-fetch-preview" data-format={fetch().format || 'text'}>
                 <Show
-                  when={fetch.format === 'markdown'}
+                  when={fetch().format === 'markdown'}
                   fallback={<pre>{preview()}</pre>}
                 >
                   <FlowerMarkdownBlock
@@ -8294,7 +8334,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   />
                 </Show>
               </div>
-              <Show when={fetch.preview_truncated}>
+              <Show when={fetch().preview_truncated}>
                 <div class="flower-activity-web-fetch-preview-truncated">{copy().chat.toolActivityPreviewTruncated}</div>
               </Show>
             </div>
@@ -8304,21 +8344,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const questionBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'question' }>) => (
+  const questionBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'question' }>>) => (
     <section class="flower-activity-question-panel">
-      <Show when={block.question.reason}>
+      <Show when={block().question.reason}>
         {(reason) => <div class="flower-activity-question-reason">{reason()}</div>}
       </Show>
-      <Show when={block.question.required.length > 0}>
+      <Show when={block().question.required.length > 0}>
         <div class="flower-activity-question-required">
-          <For each={block.question.required}>
+          <For each={block().question.required}>
             {(required) => <span class="flower-activity-question-chip">{required}</span>}
           </For>
         </div>
       </Show>
-      <For each={block.question.questions}>
+      <For each={block().question.questions}>
         {(question) => {
-          const answer = () => block.question.answers.find((candidate) => candidate.question_id === question.id);
+          const answer = () => block().question.answers.find((candidate) => candidate.question_id === question.id);
           return (
           <div class="flower-activity-question-item">
             <div class="flower-activity-question-text">{question.question}</div>
@@ -8356,68 +8396,68 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           );
         }}
       </For>
-      <Show when={block.question.questions.length === 0}>
+      <Show when={block().question.questions.length === 0}>
         <div class="flower-activity-question-empty">Waiting for user input.</div>
       </Show>
     </section>
   );
 
-  const fileReadBlock = (messageID: string, blockIndex: number, itemID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>) => {
-    const lineSummary = (() => {
-      const start = Math.max(1, Math.floor(Number(block.line_offset || 1)));
-      const count = Math.max(0, Math.floor(Number(block.line_count || 0)));
-      const total = Math.max(0, Math.floor(Number(block.total_lines || 0)));
+  const fileReadBlock = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>>) => {
+    const lineSummary = () => {
+      const start = Math.max(1, Math.floor(Number(block().line_offset || 1)));
+      const count = Math.max(0, Math.floor(Number(block().line_count || 0)));
+      const total = Math.max(0, Math.floor(Number(block().total_lines || 0)));
       if (count <= 0) return total > 0 ? `0 lines of ${total}` : '0 lines';
       const end = start + count - 1;
       return total > 0 ? `lines ${start}-${end} of ${total}` : `lines ${start}-${end}`;
-    })();
+    };
     return (
       <div class="flower-activity-file-read">
         <div class="flower-activity-file-toolbar">
           <span class="flower-activity-file-meta">
-            {lineSummary}
-            <Show when={block.truncated}>
+            {lineSummary()}
+            <Show when={block().truncated}>
               <span class="flower-activity-file-truncated"> · truncated</span>
             </Show>
           </span>
-          {fileActionButtons(messageID, blockIndex, itemID, block.action)}
+          {fileActionButtons(messageID, blockIndex, itemID, () => block().action)}
         </div>
-        <pre class="flower-activity-file-read-content"><code>{block.content}</code></pre>
+        <pre class="flower-activity-file-read-content"><code>{block().content}</code></pre>
       </div>
     );
   };
 
-  const fileDiffBlock = (messageID: string, blockIndex: number, itemID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>) => (
+  const fileDiffBlock = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>>) => (
     <div class="flower-activity-file-diff-list">
-      <For each={block.files}>
+      <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().files} identity={(file) => file.action.action_id || file}>
         {(file) => fileDiffFile(messageID, blockIndex, itemID, file)}
-      </For>
+      </FlowerKeyedList>
     </div>
   );
 
-  const fileDiffFile = (messageID: string, blockIndex: number, itemID: string, file: FlowerActivityDiffFile) => (
+  const fileDiffFile = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, file: Accessor<FlowerActivityDiffFile>) => (
     <section class="flower-activity-file-diff-file">
       <div class="flower-activity-file-toolbar">
-        <span class="flower-activity-file-path">{file.display_name}</span>
-        <Show when={file.additions || file.deletions}>
+        <span class="flower-activity-file-path">{file().display_name}</span>
+        <Show when={file().additions || file().deletions}>
           <span class="flower-activity-file-change">
-            <span class="flower-activity-file-stat-add">+{file.additions}</span>
+            <span class="flower-activity-file-stat-add">+{file().additions}</span>
             {' / '}
-            <span class="flower-activity-file-stat-del">-{file.deletions}</span>
+            <span class="flower-activity-file-stat-del">-{file().deletions}</span>
           </span>
         </Show>
-        <Show when={file.truncated}>
+        <Show when={file().truncated}>
           <span class="flower-activity-file-truncated">{copy().chat.toolActivityDiffTruncated}</span>
         </Show>
-        {fileActionButtons(messageID, blockIndex, itemID, file.action)}
+        {fileActionButtons(messageID, blockIndex, itemID, () => file().action)}
       </div>
       <div class="flower-activity-file-diff-grid">
         <Show
-          when={getGitPatchRenderSnapshot(file.patch_text).renderedLines.length > 0}
+          when={getGitPatchRenderSnapshot(file().patch_text).renderedLines.length > 0}
           fallback={<div class="flower-activity-file-diff-empty">{copy().chat.toolActivityNoTextualDiff}</div>}
         >
           <div class="flower-activity-file-diff-unified">
-            <For each={getGitPatchRenderSnapshot(file.patch_text).renderedLines}>
+            <For each={getGitPatchRenderSnapshot(file().patch_text).renderedLines}>
               {(line) => fileDiffLine(line)}
             </For>
           </div>
@@ -8476,34 +8516,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
 
-  const errorDetailBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'error' }>) => (
+  const errorDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'error' }>>) => (
     <section class="flower-activity-error-panel" aria-label="Failure reason">
-      <div class="flower-activity-error-message">{block.error.message}</div>
+      <div class="flower-activity-error-message">{block().error.message}</div>
     </section>
   );
 
-  const subagentsDetailBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>) => {
-    const detail = block.subagents;
+  const subagentsDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>>) => {
+    const detail = () => block().subagents;
     return (
       <section class="flower-activity-subagents-panel" aria-label="Subagents">
-        <Show when={detail.items.length > 0}>
+        <Show when={detail().items.length > 0}>
           <div class="flower-activity-subagents-list" role="list">
-            <For each={detail.items}>
+            <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={detail().items} identity={(agent) => agent.open_messages?.thread_id ?? agent}>
               {(agent) => (
                 <div class="flower-activity-subagents-item" role="listitem">
                   <div class="flower-activity-subagents-item-main">
                     <div class="flower-activity-subagents-item-head">
                       <span class="flower-activity-subagents-item-title-row">
-                        <span class="flower-activity-subagents-item-title">{agent.name}</span>
-                        <Show when={agent.open_messages}>
+                        <span class="flower-activity-subagents-item-title">{agent().name}</span>
+                        <Show when={agent().open_messages}>
                           <button
                             type="button"
                             class="flower-activity-subagents-open"
-                            aria-label={`Open subagent messages for ${agent.name}`}
+                            aria-label={`Open subagent messages for ${agent().name}`}
                             title="Open subagent messages"
                             onClick={(event) => {
                               event.stopPropagation();
-                              openSubagentMessages(agent);
+                              openSubagentMessages(agent());
                             }}
                           >
                             <ExternalLink class="h-3.5 w-3.5" />
@@ -8511,36 +8551,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         </Show>
                       </span>
                       <span class="flower-activity-subagents-item-meta">
-                        {[agent.show_status ? agent.status : '', subagentElapsedText(agent, detail.elapsed_mode)].filter(Boolean).join(' · ')}
+                        {[agent().show_status ? agent().status : '', subagentElapsedText(agent(), detail().elapsed_mode)].filter(Boolean).join(' · ')}
                       </span>
                     </div>
-                    <Show when={agent.description}>
+                    <Show when={agent().description}>
                       {(description) => <div class="flower-activity-subagents-item-task">{description()}</div>}
                     </Show>
                   </div>
                 </div>
               )}
-            </For>
+            </FlowerKeyedList>
           </div>
         </Show>
       </section>
     );
   };
 
-  const activityDetailBlock = (
-    messageID: string,
-    blockIndex: number,
-    item: FlowerActivityItem,
-    timeline: FlowerActivityTimelineBlock,
-    block: FlowerNonTerminalDetailBlock,
-  ) => {
-    if (block.kind === 'error') return errorDetailBlock(block);
-    if (block.kind === 'structured_rows') return structuredRowsBlock(block);
-    if (block.kind === 'subagents') return subagentsDetailBlock(block);
-    if (block.kind === 'todos') {
-      return (
+  const ActivityDetailBlock: Component<{
+    messageID: string;
+    blockIndex: number;
+    itemID: string;
+    block: FlowerNonTerminalDetailBlock;
+  }> = (detailProps) => {
+    const blockOfKind = <K extends FlowerNonTerminalDetailBlock['kind']>(_kind: K) =>
+      () => detailProps.block as Extract<FlowerNonTerminalDetailBlock, { kind: K }>;
+    return <Switch>
+      <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
+      <Match when={detailProps.block.kind === 'structured_rows'}>{structuredRowsBlock(blockOfKind('structured_rows'))}</Match>
+      <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
+      <Match when={detailProps.block.kind === 'web_search'}>{webSearchBlock(blockOfKind('web_search'))}</Match>
+      <Match when={detailProps.block.kind === 'web_fetch'}>{webFetchBlock(blockOfKind('web_fetch'))}</Match>
+      <Match when={detailProps.block.kind === 'question'}>{questionBlock(blockOfKind('question'))}</Match>
+      <Match when={detailProps.block.kind === 'structured'}>{detailLinesBlock(blockOfKind('structured'))}</Match>
+      <Match when={detailProps.block.kind === 'file_read'}>{fileReadBlock(() => detailProps.messageID, () => detailProps.blockIndex, () => detailProps.itemID, blockOfKind('file_read'))}</Match>
+      <Match when={detailProps.block.kind === 'file_diff'}>{fileDiffBlock(() => detailProps.messageID, () => detailProps.blockIndex, () => detailProps.itemID, blockOfKind('file_diff'))}</Match>
+      <Match when={detailProps.block.kind === 'web_operation'}><WebSearchActivity search={(detailProps.block as Extract<FlowerActivityDetailBlock, { kind: 'web_operation' }>).search} copy={copy().chat.webSearch} openLabel={copy().chat.toolActivityOpenWebPage} /></Match>
+      <Match when={detailProps.block.kind === 'todos'}>
         <div class="flower-activity-todo-list" role="list" aria-label="Todos">
-          <For each={block.items}>
+          <For each={(detailProps.block as Extract<FlowerActivityDetailBlock, { kind: 'todos' }>).items}>
             {(todo) => (
               <div
                 class={cn('flower-activity-todo-item', `flower-activity-todo-item-${todo.status}`)}
@@ -8560,15 +8608,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             )}
           </For>
         </div>
-      );
-    }
-    if (block.kind === 'web_operation') return <WebSearchActivity search={block.search} copy={copy().chat.webSearch} openLabel={copy().chat.toolActivityOpenWebPage} />;
-    if (block.kind === 'web_search') return webSearchBlock(block);
-    if (block.kind === 'web_fetch') return webFetchBlock(block);
-    if (block.kind === 'question') return questionBlock(block);
-    if (block.kind === 'file_read') return fileReadBlock(messageID, blockIndex, item.item_id, block);
-    if (block.kind === 'file_diff') return fileDiffBlock(messageID, blockIndex, item.item_id, block);
-    return detailLinesBlock(block);
+</Match>
+    </Switch>;
   };
 
   const activityRow = (
@@ -8579,18 +8620,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     viewportScope: FlowerScrollTailController,
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
-    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, {
+    const presentation = createMemo<FlowerActivityPresentation>((previous) => retainEqualValue(previous, presentFlowerActivityItem(item(), timeline().file_actions, {
       webSearch: copy().chat.webSearch,
       statuses: copy().chat.toolStatuses,
       subagents: subagentsCopy(),
-      subagentSummaries: selectedThread()?.subagents ?? [],
+      subagentSummaries: selectedSubagentSummaries() ?? [],
       terminal: {
         runCommand: copy().chat.toolActivityRunCommand,
         readCommandOutput: copy().chat.toolActivityReadCommandOutput,
         writeCommandInput: copy().chat.toolActivityWriteCommandInput,
         terminateCommand: copy().chat.toolActivityTerminateCommand,
       },
-    }));
+    })));
     const pendingApprovalCommand = createMemo(() => pendingApprovalCommandForActivityItem(item(), selectedApprovalActions()));
     const displayTitle = createMemo<FlowerActivityTitle>(() => {
       const command = pendingApprovalCommand();
@@ -8718,11 +8759,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </button>
           </Show>
           {fileActionButtons(
-            messageID(),
-            blockIndex(),
-            item().item_id,
-            rowFileAction(),
-            rowAttachmentPreviewTarget(),
+            messageID,
+            blockIndex,
+            () => item().item_id,
+            rowFileAction,
+            rowAttachmentPreviewTarget,
           )}
         </div>
         <Show when={disclosure.mounted()}>
@@ -8734,7 +8775,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             id={`flower-activity-detail-${disclosureKey()}`}
             class="flower-activity-inline-details"
             data-state={disclosure.state()}
-            data-layout-motion={disclosure.layoutMotion()}
             style={{ height: disclosure.height() }}
           >
             <div class="flower-activity-inline-details-clip">
@@ -8791,13 +8831,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           )}
                         </Show>
                         <Show when={!terminalBlock()}>
-                          {activityDetailBlock(
-                            messageID(),
-                            blockIndex(),
-                            item(),
-                            timeline(),
-                            block() as FlowerNonTerminalDetailBlock,
-                          )}
+                          <ActivityDetailBlock messageID={messageID()} blockIndex={blockIndex()} itemID={item().item_id} block={block() as FlowerNonTerminalDetailBlock} />
                         </Show>
                       </>
                     );
@@ -9523,7 +9557,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     return (
       <Show when={request()}>
-        {(value) => inputRequestPrompt(value())}
+        {(value) => inputRequestPrompt(value)}
       </Show>
     );
   };
@@ -9654,27 +9688,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <span class="flower-subagents-dropdown-group-count">{items().length}</span>
       </div>
       <ul class="flower-subagents-dropdown-group-list">
-        <For each={items()}>
+        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={items()} identity={(value) => JSON.stringify([selectedThreadID(), value.threadID])}>
           {(item) => {
-            const title = () => subagentRowTitle(item);
-            const description = () => trimString(item.taskDescription);
-            const elapsed = () => subagentElapsedDuration(item);
+            const title = () => subagentRowTitle(item());
+            const description = () => trimString(item().taskDescription);
+            const elapsed = () => subagentElapsedDuration(item());
             return (
               <li class="flower-subagents-dropdown-list-item">
                 <button
                   type="button"
                   class={cn(
                     'flower-subagent-dropdown-row',
-                    `flower-subagent-dropdown-row-${item.status}`,
-                    activeSubagentID() === trimString(item.threadID) && 'flower-subagent-dropdown-row-active',
+                    `flower-subagent-dropdown-row-${item().status}`,
+                    activeSubagentID() === trimString(item().threadID) && 'flower-subagent-dropdown-row-active',
                   )}
-                  data-flower-subagent-row={selectedSubagentItems().findIndex((candidate) => candidate.key === item.key)}
-                  data-flower-subagent-status={item.status}
-                  aria-label={`${title()}. ${subagentStatusLabel(item.status)}. ${subagentsCopy().openThread}`}
+                  data-flower-subagent-row={selectedSubagentItems().findIndex((candidate) => candidate.key === item().key)}
+                  data-flower-subagent-status={item().status}
+                  aria-label={`${title()}. ${subagentStatusLabel(item().status)}. ${subagentsCopy().openThread}`}
                   title={[title(), description(), subagentsCopy().openThread].filter(Boolean).join('\n')}
-                  onClick={() => void openSubagentDetail(item)}
+                  onClick={() => void openSubagentDetail(item())}
                 >
-                  <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item.status)}</span>
+                  <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item().status)}</span>
                   <span class="flower-subagent-dropdown-copy">
                     <span class="flower-subagent-dropdown-name">{title()}</span>
                     <Show when={description()}>
@@ -9682,7 +9716,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </Show>
                   </span>
                   <span class="flower-subagent-dropdown-meta">
-                    <span class="flower-subagent-dropdown-status-label">{subagentStatusLabel(item.status)}</span>
+                    <span class="flower-subagent-dropdown-status-label">{subagentStatusLabel(item().status)}</span>
                     <Show when={elapsed()}>
                       {(value) => <span class="flower-subagent-dropdown-duration">{value()}</span>}
                     </Show>
@@ -9692,7 +9726,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </li>
             );
           }}
-        </For>
+        </FlowerKeyedList>
       </ul>
     </section>
   );
@@ -10948,9 +10982,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               </span>
                             </div>
                             <div class="flower-approval-queue-list">
-                              <For each={selectedComposerApprovalActions()}>
-                                {(approval) => approvalActionCard(approval.action_id, () => approval, { surface: 'composer', layout: 'multi' })}
-                              </For>
+                              <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={selectedComposerApprovalActions()} identity={(action) => JSON.stringify([selectedThreadID(), action.turn_id, action.run_id, action.action_id])}>
+                                {(approval) => approvalActionCard(approval().action_id, approval, { surface: 'composer', layout: 'multi' })}
+                              </FlowerKeyedList>
                             </div>
                             <div class="flower-composer-approval-actions flower-approval-queue-footer">
                               <span class="flower-approval-queue-progress" aria-live="polite">
@@ -10983,15 +11017,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           <div class="flower-approval-queue-header flower-approval-single-header">
                             <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
                           </div>
-                          <For each={selectedComposerApprovalActions()}>
-                            {(approval) => approvalActionCard(approval.action_id, () => approval, { surface: 'composer', layout: 'single' })}
-                          </For>
+                          <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={selectedComposerApprovalActions()} identity={(action) => JSON.stringify([selectedThreadID(), action.turn_id, action.run_id, action.action_id])}>
+                            {(approval) => approvalActionCard(approval().action_id, approval, { surface: 'composer', layout: 'single' })}
+                          </FlowerKeyedList>
                         </Show>
                       </section>
                     </Show>
                   </Match>
                   <Match when={bottomActionMode() === 'input_request'}>
-                    {inputRequestPrompt(selectedInputRequest(), { surface: 'composer' })}
+                    {inputRequestPrompt(selectedInputRequest, { surface: 'composer' })}
                     <Show when={activeInputQuestionUsesTextEditor()}>
                       {composerTextEditor()}
                     </Show>

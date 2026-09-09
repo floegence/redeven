@@ -8,7 +8,6 @@ import {
   createFlowerActivityDisclosureMotion,
   FLOWER_ACTIVITY_CLOSE_DURATION_MS,
   FLOWER_ACTIVITY_OPEN_DURATION_MS,
-  FLOWER_ACTIVITY_RESIZE_DURATION_MS,
   type FlowerActivityDisclosureAnimation,
   type FlowerActivityDisclosureController,
   type FlowerActivityDisclosureMotion,
@@ -132,6 +131,7 @@ function createMotionPlatformHarness() {
   };
 
   const platform: FlowerActivityDisclosureMotionPlatform = {
+    now: () => timestamp,
     requestAnimationFrame(callback) {
       const handle = nextFrame;
       nextFrame += 1;
@@ -252,53 +252,32 @@ function createMotionHarness(initialOpen = false, initialReducedMotion = false):
 
 describe('createFlowerActivityDisclosureMotion', () => {
   it('uses the calm motion timing contract', () => {
-    expect(FLOWER_ACTIVITY_OPEN_DURATION_MS).toBe(360);
-    expect(FLOWER_ACTIVITY_RESIZE_DURATION_MS).toBe(280);
-    expect(FLOWER_ACTIVITY_CLOSE_DURATION_MS).toBe(300);
+    expect(FLOWER_ACTIVITY_OPEN_DURATION_MS).toBe(180);
+    expect(FLOWER_ACTIVITY_CLOSE_DURATION_MS).toBe(140);
   });
 
-  it('measures opening height and retargets consecutive content changes', async () => {
+  it('retargets opening without extending its deadline and uses natural height afterward', async () => {
     const harness = createMotionHarness();
-
     harness.setOpen(true);
     expect(harness.motion.mounted()).toBe(true);
-    expect(harness.motion.state()).toBe('opening');
-    expect(harness.motion.height()).toBe('0px');
-
     harness.platform.flushFrame();
     expect(harness.motion.height()).toBe('120px');
-    expect(harness.platform.animations[0]?.options.duration).toBe(FLOWER_ACTIVITY_OPEN_DURATION_MS);
-    harness.platform.animations[0]?.finish();
+    const firstDuration = Number(harness.platform.animations[0]?.options.duration);
+    expect(firstDuration).toBeLessThanOrEqual(180);
+    harness.setContentHeight(210);
+    for (let index = 0; index < 300; index += 1) harness.platform.triggerResize(harness.content);
+    expect(harness.platform.pendingFrames()).toBe(1);
+    harness.platform.flushFrame();
+    expect(harness.platform.animations).toHaveLength(2);
+    expect(Number(harness.platform.animations[1]?.options.duration)).toBeLessThan(firstDuration);
+    harness.platform.animations[1]?.finish();
     await Promise.resolve();
     expect(harness.motion.state()).toBe('open');
-
-    harness.platform.triggerResize(harness.content);
-    harness.platform.flushFrame();
-    expect(harness.platform.animations).toHaveLength(1);
-
-    harness.setContentHeight(210);
-    harness.platform.triggerResize(harness.content);
-    harness.platform.flushFrame();
-    expect(harness.motion.height()).toBe('210px');
-    expect(harness.motion.layoutMotion()).toBe('resizing');
-    expect(harness.platform.animations[1]?.options.duration).toBe(FLOWER_ACTIVITY_RESIZE_DURATION_MS);
-
-    harness.platform.setPresentation({ height: 168, opacity: 1, transform: 'translateY(0px)' });
-    harness.setContentHeight(268);
-    harness.platform.triggerResize(harness.content);
-    harness.platform.flushUntilAnimationCount(3);
-    expect(harness.platform.animations[1]?.playState).toBe('idle');
-    expect(harness.platform.animations[2]?.keyframes[0]?.height).toBe('168px');
-    harness.platform.animations[2]?.finish();
-    await Promise.resolve();
-    expect(harness.motion.height()).toBe('268px');
-
-    harness.setContentHeight(156);
-    harness.platform.triggerResize(harness.content);
-    harness.platform.flushUntilAnimationCount(4);
-    harness.platform.animations[3]?.finish();
-    await Promise.resolve();
-    expect(harness.motion.height()).toBe('156px');
+    expect(harness.motion.height()).toBe('auto');
+    expect(harness.platform.observedElements()).toBe(0);
+    expect(harness.platform.pendingFrames()).toBe(0);
+    for (let index = 0; index < 300; index += 1) harness.setContentHeight(210 + index);
+    expect(harness.platform.animations).toHaveLength(2);
     harness.dispose();
   });
 
@@ -333,11 +312,11 @@ describe('createFlowerActivityDisclosureMotion', () => {
     harness.dispose();
   });
 
-  it('commits measured pixel height without animation for reduced motion', () => {
+  it('uses natural height without animation for reduced motion', () => {
     const reduced = createMotionHarness(false, true);
     reduced.setOpen(true);
     expect(reduced.motion.state()).toBe('open');
-    expect(reduced.motion.height()).toBe('120px');
+    expect(reduced.motion.height()).toBe('auto');
     expect(reduced.platform.animations).toHaveLength(0);
     reduced.setOpen(false);
     expect(reduced.motion.state()).toBe('closed');
@@ -350,7 +329,8 @@ describe('createFlowerActivityDisclosureMotion', () => {
 
     harness.setOpen(true);
     harness.platform.flushFrame();
-    expect(harness.platform.pendingFrames()).toBeGreaterThan(0);
+    harness.platform.triggerResize(harness.content);
+    expect(harness.platform.pendingFrames()).toBe(1);
     expect(harness.platform.animations[0]?.playState).toBe('running');
     harness.dispose();
 

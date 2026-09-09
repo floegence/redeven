@@ -2,6 +2,7 @@ import type {
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { mergeThreadTitle, threadTitleSnapshot, type ThreadTitleSnapshot } from './threadTitleSnapshot';
+import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
 
 type ThreadDetail = Omit<FlowerThreadSnapshot, keyof ThreadTitleSnapshot>;
 type ThreadDetailView = Readonly<{ thread: ThreadDetail; version: number }>;
@@ -203,9 +204,22 @@ function receiveSummary(
   const title = mergeThreadTitle(current, candidate);
   if (!current) return summaryOnly({ ...candidate, ...title });
   const activityIsStale = threadSnapshotRevision(candidate) < threadSnapshotRevision(current);
-  return summaryOnly({ ...(activityIsStale
+  return retainEqualValue(current, summaryOnly({ ...(activityIsStale
     ? mergeNewerSummaryMetadata(current, candidate)
-    : mergeNewerSummaryMetadata(candidate, current)), ...title });
+    : mergeNewerSummaryMetadata(candidate, current)), ...title }));
+}
+
+// Title overlays are derived from immutable cache entries. Unrelated summary
+// updates must not manufacture new detail objects for every cached thread.
+const titledViews = new WeakMap<ThreadDetailView, ThreadView>();
+function titledView(view: ThreadDetailView, summary: ThreadTitleSnapshot): ThreadView {
+  const previous = titledViews.get(view);
+  if (previous && previous.thread.title === summary.title
+    && previous.thread.title_status === summary.title_status
+    && previous.thread.title_generation === summary.title_generation) return previous;
+  const result = { ...view, thread: { ...view.thread, ...threadTitleSnapshot(summary) } };
+  titledViews.set(view, result);
+  return result;
 }
 
 function createCache(
@@ -244,10 +258,10 @@ function createCache(
     const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
     const mergedView: ThreadDetailView = {
       version: runtimeView.version,
-      thread: mergeThreadSettings(
+      thread: retainThreadPresentation(current?.thread, mergeThreadSettings(
         mergeThreadActivity(runtimeView.thread, activityThread),
         settingsThread,
-      ),
+      )),
     };
     const next = new Map(views);
     next.set(id, { view: mergedView, usedAt: clock + 1 });
@@ -260,7 +274,7 @@ function createCache(
     const metadata = options?.preserveSummary && currentSummary
       ? mergeNewerSummaryMetadata(currentSummary, mergedView.thread)
       : mergeNewerSummaryMetadata(mergedView.thread, currentSummary ?? mergedView.thread);
-    summary.set(id, summaryOnly({ ...metadata, ...acceptedTitle }));
+    summary.set(id, retainEqualValue(currentSummary, summaryOnly({ ...metadata, ...acceptedTitle })));
     return {
       cache: createCache(selectedId, summary, next, clock + 1),
       state,
@@ -280,7 +294,7 @@ function createCache(
     summaries,
     views: new Map([...views.entries()].flatMap(([id, entry]) => {
       const summary = summaries.get(id);
-      return summary ? [[id, { ...entry.view, thread: { ...entry.view.thread, ...threadTitleSnapshot(summary) } }] as const] : [];
+      return summary ? [[id, titledView(entry.view, summary)] as const] : [];
     })),
     select(id) {
       const nextID = id == null || id.trim() === '' ? null : id.trim();
@@ -327,7 +341,7 @@ function createCache(
       const next = new Map(views);
       next.set(threadID, {
         ...current,
-        view: { ...current.view, thread: adjunctOnly(update(current.view.thread)) },
+        view: { ...current.view, thread: retainThreadPresentation(current.view.thread, adjunctOnly(update(current.view.thread))) },
         usedAt: clock + 1,
       });
       return createCache(selectedId, summaries, next, clock + 1);

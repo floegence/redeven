@@ -1,8 +1,7 @@
-import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
+import { createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 
-export const FLOWER_ACTIVITY_OPEN_DURATION_MS = 360;
-export const FLOWER_ACTIVITY_RESIZE_DURATION_MS = 280;
-export const FLOWER_ACTIVITY_CLOSE_DURATION_MS = 300;
+export const FLOWER_ACTIVITY_OPEN_DURATION_MS = 180;
+export const FLOWER_ACTIVITY_CLOSE_DURATION_MS = 140;
 
 export type FlowerActivityDisclosureController = Readonly<{
   open: Accessor<boolean>;
@@ -34,8 +33,6 @@ export function createFlowerActivityDisclosureController(
 
 export type FlowerActivityDisclosureState = 'closed' | 'opening' | 'open' | 'closing';
 
-export type FlowerActivityDisclosureLayoutMotion = 'idle' | 'resizing';
-
 export type FlowerActivityDisclosureAnimation = Readonly<{
   finished: Promise<unknown>;
   playState: AnimationPlayState;
@@ -49,6 +46,7 @@ export type FlowerActivityDisclosurePresentation = Readonly<{
 }>;
 
 export type FlowerActivityDisclosureMotionPlatform = Readonly<{
+  now: () => number;
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame: (handle: number) => void;
   observeResize: (node: Element, callback: () => void) => () => void;
@@ -63,7 +61,6 @@ export type FlowerActivityDisclosureMotionPlatform = Readonly<{
 export type FlowerActivityDisclosureMotion = Readonly<{
   mounted: Accessor<boolean>;
   state: Accessor<FlowerActivityDisclosureState>;
-  layoutMotion: Accessor<FlowerActivityDisclosureLayoutMotion>;
   height: Accessor<string>;
   bindViewport: (node: HTMLDivElement) => void;
   bindContent: (node: HTMLDivElement) => void;
@@ -72,7 +69,6 @@ export type FlowerActivityDisclosureMotion = Readonly<{
 export type FlowerActivityDisclosureMotionOptions = Readonly<{
   reducedMotion?: Accessor<boolean>;
   openDurationMs?: number;
-  resizeDurationMs?: number;
   closeDurationMs?: number;
   onBeforeClose?: () => void;
   onLayoutFrame?: () => void;
@@ -87,6 +83,7 @@ const OPEN_TRANSFORM = 'translateY(0px)';
 
 function browserMotionPlatform(): FlowerActivityDisclosureMotionPlatform {
   return {
+    now: () => performance.now(),
     requestAnimationFrame: (callback) => window.requestAnimationFrame(callback),
     cancelAnimationFrame: (handle) => window.cancelAnimationFrame(handle),
     observeResize: (node, callback) => {
@@ -112,243 +109,116 @@ export function createFlowerActivityDisclosureMotion(
 ): FlowerActivityDisclosureMotion {
   const reducedMotion = options.reducedMotion ?? prefersReducedMotion;
   const openDurationMs = Math.max(0, options.openDurationMs ?? FLOWER_ACTIVITY_OPEN_DURATION_MS);
-  const resizeDurationMs = Math.max(0, options.resizeDurationMs ?? FLOWER_ACTIVITY_RESIZE_DURATION_MS);
   const closeDurationMs = Math.max(0, options.closeDurationMs ?? FLOWER_ACTIVITY_CLOSE_DURATION_MS);
   const platform = options.platform ?? browserMotionPlatform();
   const [mounted, setMounted] = createSignal(false);
   const [state, setState] = createSignal<FlowerActivityDisclosureState>('closed');
-  const [layoutMotion, setLayoutMotion] = createSignal<FlowerActivityDisclosureLayoutMotion>('idle');
   const [height, setHeight] = createSignal('0px');
   let viewport: HTMLDivElement | undefined;
   let content: HTMLDivElement | undefined;
   let disconnectResize: (() => void) | undefined;
   let measureFrame: number | undefined;
-  let layoutFrame: number | undefined;
   let animation: FlowerActivityDisclosureAnimation | undefined;
-  let animationRevision = 0;
+  let openingDeadline = 0;
+  let openingStart: FlowerActivityDisclosurePresentation | undefined;
 
-  const clearFrame = (handle: number | undefined): undefined => {
-    if (handle !== undefined) platform.cancelAnimationFrame(handle);
-    return undefined;
+  const stopMeasuring = () => {
+    if (measureFrame !== undefined) platform.cancelAnimationFrame(measureFrame);
+    measureFrame = undefined;
+    disconnectResize?.();
+    disconnectResize = undefined;
   };
-  const stopLayoutFrames = () => {
-    layoutFrame = clearFrame(layoutFrame);
-    setLayoutMotion('idle');
-  };
-  const cancelAnimation = () => {
-    animationRevision += 1;
-    animation?.cancel();
-    animation = undefined;
-    stopLayoutFrames();
-  };
-  const currentPresentation = (): FlowerActivityDisclosurePresentation => (
-    viewport
-      ? platform.readPresentation(viewport)
-      : { height: 0, opacity: 0, transform: CLOSED_TRANSFORM }
-  );
-  const measuredContentHeight = (): number => (
-    content ? Math.max(0, content.getBoundingClientRect().height) : 0
-  );
-  const committedHeight = (): number => Number.parseFloat(height()) || 0;
-  const heightChanged = (nextHeight: number): boolean => (
-    Math.abs(Math.max(0, nextHeight) - committedHeight()) > 0.5
-  );
-  const notifyLayoutWhile = (owner: FlowerActivityDisclosureAnimation) => {
-    options.onLayoutFrame?.();
-    setLayoutMotion('resizing');
-    const tick = () => {
-      layoutFrame = undefined;
-      options.onLayoutFrame?.();
-      if (animation === owner && owner.playState === 'running') {
-        layoutFrame = platform.requestAnimationFrame(tick);
-      }
-    };
-    layoutFrame = platform.requestAnimationFrame(tick);
-  };
-  const commitHeight = (nextHeight: number) => {
-    setHeight(`${Math.max(0, nextHeight)}px`);
-    options.onLayoutFrame?.();
-  };
-  const runAnimation = (
-    targetState: FlowerActivityDisclosureState,
-    targetHeight: number,
-    durationMs: number,
-    easing: string,
-    onFinish: () => void,
-    initialPresentation?: FlowerActivityDisclosurePresentation,
-  ) => {
-    const start = initialPresentation ?? currentPresentation();
-    cancelAnimation();
-    const revision = animationRevision;
-    const targetOpen = targetState !== 'closing' && targetState !== 'closed';
-    setState(targetState);
-    if (reducedMotion() || durationMs === 0 || !viewport) {
-      commitHeight(targetHeight);
-      onFinish();
-      options.onMotionEnd?.();
-      return;
-    }
-    setHeight(`${Math.max(0, start.height)}px`);
-    const nextAnimation = platform.animate(
-      viewport,
-      [
-        {
-          height: `${start.height}px`,
-          opacity: String(start.opacity),
-          transform: start.transform,
-        },
-        {
-          height: `${Math.max(0, targetHeight)}px`,
-          opacity: targetOpen ? '1' : '0',
-          transform: targetOpen ? OPEN_TRANSFORM : CLOSED_TRANSFORM,
-        },
-      ],
-      { duration: durationMs, easing },
-    );
-    animation = nextAnimation;
-    setHeight(`${Math.max(0, targetHeight)}px`);
-    notifyLayoutWhile(nextAnimation);
-    void nextAnimation.finished.then(
-      () => {
-        if (animation !== nextAnimation || animationRevision !== revision) return;
-        animation = undefined;
-        stopLayoutFrames();
-        onFinish();
-        options.onLayoutFrame?.();
-        options.onMotionEnd?.();
-      },
-      () => undefined,
-    );
-  };
+  const cancelAnimation = () => { animation?.cancel(); animation = undefined; };
+  const presentation = () => viewport ? platform.readPresentation(viewport)
+    : { height: 0, opacity: 0, transform: CLOSED_TRANSFORM };
   const finishOpen = () => {
-    if (!open() || !mounted()) return;
+    if (!open()) return;
+    stopMeasuring();
+    setHeight('auto');
     setState('open');
-    setLayoutMotion('idle');
+    options.onLayoutFrame?.();
+    options.onMotionEnd?.();
   };
   const finishClose = () => {
     if (open()) return;
-    stopLayoutFrames();
     setMounted(false);
     setState('closed');
     setHeight('0px');
-  };
-  const syncMeasuredHeight = () => {
-    if (!open() || !mounted() || !content) return;
-    const nextHeight = measuredContentHeight();
-    if (!heightChanged(nextHeight) && state() === 'open') return;
-    cancelAnimation();
-    commitHeight(nextHeight);
-    setState('open');
+    options.onLayoutFrame?.();
     options.onMotionEnd?.();
   };
-  const scheduleMeasuredHeight = (durationMs: number) => {
-    measureFrame = clearFrame(measureFrame);
-    measureFrame = platform.requestAnimationFrame(() => {
-      measureFrame = undefined;
-      if (!open() || !mounted() || state() === 'closing' || !content) return;
-      const nextHeight = measuredContentHeight();
-      if (!heightChanged(nextHeight)) return;
-      if (reducedMotion()) {
-        syncMeasuredHeight();
-        return;
-      }
-      const targetState = state() === 'opening' ? 'opening' : 'open';
-      const duration = targetState === 'opening' ? openDurationMs : durationMs;
-      runAnimation(targetState, nextHeight, duration, OPEN_EASING, finishOpen);
-    });
-  };
-  const beginOpen = () => {
-    const wasMounted = mounted();
-    const start = wasMounted
-      ? currentPresentation()
-      : { height: 0, opacity: 0, transform: CLOSED_TRANSFORM };
+  const animate = (start: FlowerActivityDisclosurePresentation, target: number, duration: number, closing: boolean) => {
     cancelAnimation();
-    measureFrame = clearFrame(measureFrame);
-    if (wasMounted) setHeight(`${start.height}px`);
-    setMounted(true);
-    setState(reducedMotion() ? 'open' : 'opening');
-    if (content && reducedMotion()) {
-      syncMeasuredHeight();
+    if (reducedMotion() || duration <= 0 || !viewport) {
+      if (closing) finishClose(); else finishOpen();
       return;
     }
+    const owner = platform.animate(viewport, [
+      { height: `${start.height}px`, opacity: String(start.opacity), transform: start.transform },
+      { height: `${target}px`, opacity: closing ? '0' : '1', transform: closing ? CLOSED_TRANSFORM : OPEN_TRANSFORM },
+    ], { duration, easing: closing ? CLOSE_EASING : OPEN_EASING });
+    animation = owner;
+    setHeight(`${target}px`);
+    options.onLayoutFrame?.();
+    void owner.finished.then(() => {
+      if (animation !== owner) return;
+      animation = undefined;
+      if (closing) finishClose(); else finishOpen();
+    }, () => undefined);
+  };
+  const scheduleOpeningMeasure = () => {
+    if (measureFrame !== undefined || state() !== 'opening') return;
     measureFrame = platform.requestAnimationFrame(() => {
       measureFrame = undefined;
-      if (!open() || !mounted() || !content) return;
-      const nextHeight = measuredContentHeight();
-      if (reducedMotion()) {
-        commitHeight(nextHeight);
-        finishOpen();
-        options.onMotionEnd?.();
-        return;
-      }
-      runAnimation('opening', nextHeight, openDurationMs, OPEN_EASING, finishOpen, start);
+      if (!open() || !content || state() !== 'opening') return;
+      const nextHeight = Math.max(0, content.getBoundingClientRect().height);
+      if (animation && Math.abs(nextHeight - Number.parseFloat(height())) <= 0.5) return;
+      const start = openingStart ?? presentation();
+      openingStart = undefined;
+      // Retargeting consumes the remaining time of this interaction. Streaming
+      // content cannot extend the deadline or animate a settled open panel.
+      animate(start, nextHeight, Math.max(0, openingDeadline - platform.now()), false);
     });
   };
-  const beginClose = () => {
-    options.onBeforeClose?.();
-    measureFrame = clearFrame(measureFrame);
-    if (!mounted()) {
-      finishClose();
-      options.onMotionEnd?.();
-      return;
-    }
-    if (reducedMotion()) {
-      cancelAnimation();
-      finishClose();
-      options.onLayoutFrame?.();
-      options.onMotionEnd?.();
-      return;
-    }
-    const start = currentPresentation();
-    setHeight(`${start.height}px`);
-    runAnimation('closing', 0, closeDurationMs, CLOSE_EASING, finishClose, start);
+  const observeOpening = () => {
+    disconnectResize?.();
+    disconnectResize = content && state() === 'opening'
+      ? platform.observeResize(content, scheduleOpeningMeasure) : undefined;
   };
-
-  createEffect(() => {
-    const shouldOpen = open();
-    const motionReduced = reducedMotion();
+  createEffect(on([open, reducedMotion], ([shouldOpen, reduced]) => {
     if (shouldOpen) {
-      if (!mounted() || state() === 'closing') {
-        beginOpen();
+      if (mounted() && state() === 'open') return;
+      if (reduced) {
+        cancelAnimation();
+        setMounted(true);
+        finishOpen();
         return;
       }
-      if (motionReduced) syncMeasuredHeight();
-      return;
+      openingStart = mounted() ? presentation() : { height: 0, opacity: 0, transform: CLOSED_TRANSFORM };
+      cancelAnimation();
+      stopMeasuring();
+      openingDeadline = platform.now() + openDurationMs;
+      setHeight(`${openingStart.height}px`);
+      setMounted(true);
+      setState('opening');
+      observeOpening();
+      scheduleOpeningMeasure();
+    } else if (mounted()) {
+      options.onBeforeClose?.();
+      stopMeasuring();
+      const start = presentation();
+      setState('closing');
+      animate(start, 0, reduced ? 0 : closeDurationMs, true);
     }
-    if (mounted() || state() !== 'closed') beginClose();
-  });
-
-  const bindContent = (node: HTMLDivElement) => {
-    disconnectResize?.();
-    content = node;
-    disconnectResize = platform.observeResize(node, () => {
-      if (!open() || !mounted() || state() === 'closing') return;
-      if (state() === 'opening') {
-        scheduleMeasuredHeight(openDurationMs);
-        return;
-      }
-      scheduleMeasuredHeight(resizeDurationMs);
-    });
-    if (open() && mounted()) {
-      if (reducedMotion()) syncMeasuredHeight();
-      else scheduleMeasuredHeight(state() === 'opening' ? openDurationMs : resizeDurationMs);
-    }
-  };
-
-  onCleanup(() => {
-    measureFrame = clearFrame(measureFrame);
-    cancelAnimation();
-    disconnectResize?.();
-  });
-
+  }));
+  onCleanup(() => { stopMeasuring(); cancelAnimation(); });
   return {
-    mounted,
-    state,
-    layoutMotion,
-    height,
-    bindViewport: (node) => {
-      viewport = node;
+    mounted, state, height,
+    bindViewport: (node) => { viewport = node; },
+    bindContent: (node) => {
+      content = node;
+      observeOpening();
+      scheduleOpeningMeasure();
     },
-    bindContent,
   };
 }

@@ -14,7 +14,7 @@ describe('FlowerMarkdownBlock component wiring', () => {
   it('uses explicit streaming snapshot tails and code-copy helpers', () => {
     const src = source();
 
-    expect(src).toContain('buildMarkdownRenderSnapshot');
+    expect(src).toContain('createMarkdownRenderModel');
     expect(src).toContain('StreamingMarkdownTail');
     expect(src).toContain('decorateFlowerMarkdownCodeBlocks');
     expect(src).toContain('flowerMarkdownCodeTextForCopyButton');

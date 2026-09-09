@@ -5384,8 +5384,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-details[data-state='opening'],
-.flower-activity-inline-details[data-state='closing'],
-.flower-activity-inline-details[data-layout-motion='resizing'] {
+.flower-activity-inline-details[data-state='closing'] {
   will-change: height, opacity, transform;
 }
 

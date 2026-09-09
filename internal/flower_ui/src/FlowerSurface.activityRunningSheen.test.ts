@@ -158,7 +158,7 @@ describe('Flower activity running sheen', () => {
     expect(disclosureRule).not.toContain('transition:');
     expect(disclosureRule).not.toContain('max-height:');
     expect(css).toContain(".flower-activity-inline-details[data-state='opening'],");
-    expect(css).toContain(".flower-activity-inline-details[data-layout-motion='resizing'] {");
+    expect(css).not.toContain("data-layout-motion");
     expect(css).toContain('will-change: height, opacity, transform');
     expect(clipRule).toContain('min-height: 0');
     expect(contentRule).toContain('box-sizing: border-box');

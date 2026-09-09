@@ -5,6 +5,7 @@ export type LiveTransport<T> = Readonly<{
   start(input: Readonly<{
     connect: LiveTransportConnect<T>;
     onCurrent: (value: T, connectionEpoch: number) => void;
+    onBoundary?: () => void;
     onTerminalError: (error: unknown) => void;
   }>): () => void;
 }>;
@@ -29,11 +30,13 @@ export function createLiveTransport<T>(): LiveTransport<T> {
       };
       stopCurrent = stop;
       const wait = (delayMs: number) => new Promise<void>((resolve) => {
-        const timer = window.setTimeout(resolve, delayMs);
-        controller.signal.addEventListener('abort', () => {
+        const finish = () => {
           window.clearTimeout(timer);
+          controller.signal.removeEventListener('abort', finish);
           resolve();
-        }, { once: true });
+        };
+        const timer = window.setTimeout(finish, delayMs);
+        controller.signal.addEventListener('abort', finish, { once: true });
       });
       void (async () => {
         while (!stopped && !controller.signal.aborted) {
@@ -44,9 +47,11 @@ export function createLiveTransport<T>(): LiveTransport<T> {
               if (stopped || controller.signal.aborted || connectionEpoch !== epoch) return;
               input.onCurrent(value, connectionEpoch);
             }
+            if (!stopped) input.onBoundary?.();
             if (Date.now() - connectedAt >= 30_000) reconnectAttempt = 0;
           } catch (error) {
             if (stopped || controller.signal.aborted || connectionEpoch !== epoch) return;
+            input.onBoundary?.();
             const status = Number((error as { status?: unknown })?.status ?? 0);
             const code = String((error as { code?: unknown })?.code ?? '').trim();
             if (status === 401 || status === 403) {

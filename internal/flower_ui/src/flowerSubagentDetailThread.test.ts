@@ -49,6 +49,19 @@ function detail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDe
 }
 
 describe('projectSubagentDetailThread', () => {
+  it('retains child history across 300 live tail snapshots and refreshes real facts', () => {
+    const source = detail();
+    let previous = projectSubagentDetailThread(source);
+    const history = previous!.messages[0];
+    for (let version = 8; version <= 307; version += 1) {
+      previous = projectSubagentDetailThread({ ...source, current: { ...source.current, view_version: version, items: [item(), item({ id: 'tail', text: `Tail ${version}` })] } }, previous);
+      expect(previous!.messages[0]).toBe(history);
+      expect(previous!.messages[1]!.content).toBe(`Tail ${version}`);
+    }
+    const replaced = projectSubagentDetailThread({ ...source, current: { ...source.current, items: [item({ run_id: 'replacement', text: 'Changed history' })] } }, previous);
+    expect(replaced!.messages[0]).not.toBe(history);
+    expect(replaced!.messages[0]!.content).toBe('Changed history');
+  });
   it('projects the complete typed Floret current without rebuilding or reordering it', () => {
     const projected = projectSubagentDetailThread(detail({
       current: {

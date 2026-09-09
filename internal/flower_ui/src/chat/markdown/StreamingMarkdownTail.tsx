@@ -1,4 +1,4 @@
-import type { Component } from 'solid-js';
+import { Match, Switch, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
 import type { MarkdownTail } from './streamingMarkdownModel';
@@ -9,15 +9,13 @@ export interface StreamingMarkdownTailProps {
   class?: string;
 }
 
-export const StreamingMarkdownTail: Component<StreamingMarkdownTailProps> = (props) => {
-  if (props.tail.kind === 'raw') {
-    return <AppendOnlyText text={props.tail.text} class={cn('flower-chat-md-tail', props.class)} />;
-  }
-  if (props.tail.kind !== 'html') return null;
-  return (
-    <div
-      class={cn('flower-chat-md-tail', props.class)}
-      innerHTML={props.tail.html}
-    />
-  );
-};
+export const StreamingMarkdownTail: Component<StreamingMarkdownTailProps> = (props) => (
+  <Switch>
+    <Match when={props.tail.kind === 'raw'}>
+      <AppendOnlyText text={props.tail.kind === 'raw' ? props.tail.text : ''} class={cn('flower-chat-md-tail', props.class)} />
+    </Match>
+    <Match when={props.tail.kind === 'html'}>
+      <div class={cn('flower-chat-md-tail', props.class)} innerHTML={props.tail.kind === 'html' ? props.tail.html : ''} />
+    </Match>
+  </Switch>
+);

@@ -2,6 +2,7 @@ import type { FlowerSubagentDetail, FlowerThreadReadStatus, FlowerThreadSnapshot
 import { threadTitleSnapshot } from './threadTitleSnapshot';
 import { trimString } from './flowerSurfaceModel';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { retainThreadPresentation } from './presentationIdentity';
 
 function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
   const revision = Math.max(1, thread.messages.length);
@@ -12,7 +13,7 @@ function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
   };
 }
 
-export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null): FlowerThreadSnapshot | null {
+export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null, previous?: FlowerThreadSnapshot | null): FlowerThreadSnapshot | null {
   if (!detail) return null;
   const summary = detail.summary;
   const threadID = trimString(summary.thread_id);
@@ -43,5 +44,5 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null)
     },
   };
   const thread = applyFlowerRuntimeCurrentView(base, detail.current);
-  return { ...thread, read_status: readStatus(thread) };
+  return retainThreadPresentation(previous ?? undefined, { ...thread, read_status: readStatus(thread) });
 }

@@ -109,6 +109,8 @@ main() {
       internal/flower_ui/src/flowerThreadTitle.test.ts \
       internal/flower_ui/src/transportOutbox.test.ts \
       internal/flower_ui/src/runtimeCurrentView.test.ts \
+      internal/flower_ui/src/runtimeCurrentView.stability.test.ts \
+      internal/flower_ui/src/flowerLiveFrameQueue.test.ts \
       internal/flower_ui/src/inputResponse.test.ts \
       internal/flower_ui/src/flowerApprovalPresentation.test.ts \
       internal/flower_ui/src/flowerSurfaceModel.test.ts \
@@ -165,6 +167,8 @@ main() {
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
+        src/ui/FlowerSurface.streamingStability.browser.test.tsx \
+        src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
         src/ui/FlowerDirectoryMenus.browser.test.tsx \
         src/ui/FlowerSurface.fork.browser.test.tsx \

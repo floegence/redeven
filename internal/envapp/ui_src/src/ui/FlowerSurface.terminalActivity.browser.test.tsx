@@ -137,7 +137,7 @@ describe('SSH terminal activity', () => {
       const row = rowFor(runtime, id);
       expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
     }
-    await waitFor(() => Array.from(runtime.querySelectorAll('.flower-activity-inline-details')).every((panel) => panel.getAttribute('data-state') === 'open' && panel.getAttribute('data-layout-motion') === 'idle'));
+    await waitFor(() => Array.from(runtime.querySelectorAll('.flower-activity-inline-details')).every((panel) => panel.getAttribute('data-state') === 'open'));
     await page.viewport(1280, 900);
   });
 

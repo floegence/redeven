@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
-import type { Component } from 'solid-js';
+import type { Accessor, Component } from 'solid-js';
 import { render } from 'solid-js/web';
 import { Marked } from 'marked';
 import { cn } from '@floegence/floe-webapp-core';
@@ -8,10 +8,9 @@ import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { writeTextToClipboard } from '../../clipboard';
 import { createFlowerMarkdownRenderer } from './markedConfig';
 import { normalizeMarkdownForDisplay } from './normalizeMarkdownForDisplay';
-import { buildMarkdownRenderSnapshot, type MarkdownRenderSnapshot } from './streamingMarkdownModel';
+import { createMarkdownRenderModel, type MarkdownRenderSnapshot } from './streamingMarkdownModel';
 import { StreamingMarkdownTail } from './StreamingMarkdownTail';
 import {
-  applyFlowerMarkdownCodeCopyLabel,
   decorateFlowerMarkdownCodeBlocks,
   flowerMarkdownCodeTextForCopyButton,
 } from './codeBlockCopy';
@@ -34,12 +33,13 @@ marked.use({ renderer: createFlowerMarkdownRenderer() });
 export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) => {
   const [copiedButton, setCopiedButton] = createSignal<HTMLButtonElement | null>(null);
   const displayContent = createMemo(() => normalizeMarkdownForDisplay(String(props.content ?? '')));
-  const snapshot = createMemo<MarkdownRenderSnapshot>(() => buildMarkdownRenderSnapshot(
-    marked,
+  const renderMarkdown = createMarkdownRenderModel(marked);
+  const snapshot = createMemo<MarkdownRenderSnapshot>(() => renderMarkdown(
     displayContent(),
     props.streaming === true,
   ));
-  const segmentKeys = createMemo(() => snapshot().committedSegments.map((segment) => segment.key));
+  const segments = createMemo(() => new Map(snapshot().committedSegments.map((segment) => [segment.key, segment])));
+  const segmentKeys = createMemo(() => [...segments().keys()]);
   let rootRef: HTMLDivElement | undefined;
   let copiedResetTimer: number | undefined;
   const iconCleanups = new WeakMap<HTMLButtonElement, () => void>();
@@ -76,15 +76,6 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     mountedButtons.add(button);
   };
 
-  const disposeDetachedCopyButtons = () => {
-    const root = rootRef;
-    for (const button of Array.from(mountedButtons)) {
-      if (root?.contains(button)) continue;
-      iconCleanups.get(button)?.();
-      mountedButtons.delete(button);
-    }
-  };
-
   const copyLabels = () => {
     return {
       copy: props.copyCodeLabel,
@@ -118,45 +109,48 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     });
   };
 
-  const decorateCodeBlocks = (root: HTMLDivElement, labels = copyLabels()) => {
-    disposeDetachedCopyButtons();
-    decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons);
+  const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>) => {
+    let buttons: readonly HTMLButtonElement[] = [];
+    const release = (button: HTMLButtonElement) => {
+      iconCleanups.get(button)?.();
+      iconCleanups.delete(button);
+      mountedButtons.delete(button);
+    };
+    createEffect(() => {
+      content();
+      const labels = copyLabels();
+      let cancelled = false;
+      onCleanup(() => { cancelled = true; });
+      queueMicrotask(() => {
+        if (cancelled) return;
+        const root = element();
+        for (const button of buttons) {
+          if (!root.contains(button)) release(button);
+        }
+        buttons = decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons);
+      });
+    });
+    onCleanup(() => { for (const button of buttons) release(button); });
   };
 
-  createEffect(() => {
-    snapshot();
-    const labels = copyLabels();
-    queueMicrotask(() => {
-      const root = rootRef;
-      if (!root) return;
-      decorateCodeBlocks(root, labels);
-      const buttons = root.querySelectorAll<HTMLButtonElement>('.flower-chat-md-code-copy');
-      for (const button of Array.from(buttons)) {
-        applyFlowerMarkdownCodeCopyLabel(button, labels);
-      }
-    });
-  });
+  const HtmlSegment: Component<{ segmentKey: string }> = (segmentProps) => {
+    let element!: HTMLDivElement;
+    const html = createMemo(() => segments().get(segmentProps.segmentKey)?.html ?? '');
+    decorateRegion(() => element, html);
+    return <div ref={element} class="flower-chat-md-committed-segment" data-segment-key={segmentProps.segmentKey} innerHTML={html()} />;
+  };
+
+  const TailFrame: Component = () => {
+    let element!: HTMLDivElement;
+    const tail = createMemo(() => snapshot().tail);
+    decorateRegion(() => element, () => tail().kind === 'html' ? tail() : null);
+    return <div ref={element} class="flower-chat-md-tail-frame"><StreamingMarkdownTail tail={tail()} /></div>;
+  };
 
   return (
     <div ref={(node) => { rootRef = node; }} class={cn('flower-chat-md-block', props.class)} onClick={handleClick}>
-      <For each={segmentKeys()}>
-        {(key) => {
-          const committedSegmentHtml = createMemo(() => snapshot().committedSegments.find((segment) => segment.key === key)?.html ?? '');
-
-          return (
-            <div
-              class="flower-chat-md-committed-segment"
-              data-segment-key={key}
-              innerHTML={committedSegmentHtml()}
-            />
-          );
-        }}
-      </For>
-      <Show when={snapshot().tail.kind !== 'empty'}>
-        <div class="flower-chat-md-tail-frame">
-          <StreamingMarkdownTail tail={snapshot().tail} />
-        </div>
-      </Show>
+      <For each={segmentKeys()}>{(key) => <HtmlSegment segmentKey={key} />}</For>
+      <Show when={snapshot().tail.kind !== 'empty'}><TailFrame /></Show>
     </div>
   );
 };

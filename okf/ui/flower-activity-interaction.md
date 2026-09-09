@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-09T00:00:00Z
 ---
 # Summary
 
@@ -69,14 +69,20 @@ or hit-test order.
 
 ## Visual motion
 
-The disclosure motion owner manages presence and measured height through
-ResizeObserver and one current Web Animation. Open, close, and resize retain
-360, 300, and 280 ms durations. Reversal and content retargeting cancel the prior
-animation; its obsolete completion cannot change presence. Motion reports layout
-and completion to the viewport controller but never creates an anchor or changes
-follow intent. Automatic attention expansion and content growth do not claim the
-viewport. Reduced motion commits measured height with the same completion and
-focus behavior.
+The disclosure motion owner uses one current Web Animation: opening takes
+180 ms and closing takes 140 ms. During opening, ResizeObserver coalesces content
+measurements into one frame and retargets the remaining duration without moving
+the original deadline. Once open, height becomes natural and the observer stops;
+streaming growth does not start a resize animation. Reversal cancels the prior
+animation, and its obsolete completion cannot change presence. Reduced motion
+commits presence immediately with the same completion and focus behavior.
+
+Each viewport combines resize, tail following, smooth scrolling, and disclosure
+anchoring into one scheduled geometry read/write pass per frame. Only active
+gestures, anchors, and smooth transitions schedule another frame. Idle or closed
+details have no layout loop. Motion reports completion to that controller without
+creating an anchor or changing follow intent. Automatic attention expansion and
+content growth do not claim the viewport.
 
 Details remain bounded by `min(42rem, 72vh)` with local overflow. The nearest
 disclosure owns dynamic resize; outer timeline motion does not duplicate it.
@@ -99,3 +105,4 @@ file, process, or approval actions. Live transport continues during interaction.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.disclosureInteraction.browser.test.tsx` - Native 60/100/160 ms presses, live updates, float competition, and early/file detail transitions.
 - `redeven:internal/envapp/ui_src/src/ui/flower/flowerScrollInteraction.test.ts` - Input attribution, cancellation, cleanup, keyboard holds, and nested viewport isolation.
 - `redeven:internal/flower_ui/src/flowerScrollTail.test.ts` - Layout events cannot revive paused following.
+- [Streaming stability](flower-streaming-stability.md) - Complete identity, side-effect, and performance acceptance inventory.

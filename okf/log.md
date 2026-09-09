@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-09-09: Flower streaming stability
+
+- Retain unchanged current-view and timeline branches while keeping canonical validation and real content changes observable.
+- Stabilize queue, approval, question, subagent, reference, and structured-detail controls; retain native press, focus, drag, and answer drafts.
+- Bound Markdown tail nodes and parsing work, isolate terminal reader lifetimes, and share viewport geometry scheduling with 180/140 ms disclosure motion.
+- Add 300-update interaction regressions, a 10,000-append code-tail regression, and reproducible production-renderer performance evidence for Chromium and official Electron.
+
 ## 2026-09-09: Model directory and selection
 
 - Generate one offline catalog for Runtime validation, model capabilities, and both Flower settings entrances.
