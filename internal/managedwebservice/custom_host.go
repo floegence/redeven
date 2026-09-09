@@ -287,7 +287,9 @@ func (d *hostScriptDriver) stop(ctx context.Context, service *pfregistry.Managed
 			}
 		}
 	}
-	if stopScriptErr != nil {return stopScriptErr}
+	if stopScriptErr != nil {
+		return stopScriptErr
+	}
 	if err := terminateHostProcess(current); err != nil {
 		return serviceError("STOP_FAILED", "The custom host service could not be stopped.", 502, true, err)
 	}

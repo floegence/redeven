@@ -512,7 +512,9 @@ func (m *Manager) refreshInstalledReleases(ctx context.Context) {
 		return
 	}
 	for index := range services {
- if !activeManagement(services[index]) {continue}
+		if !activeManagement(services[index]) {
+			continue
+		}
 		if ctx.Err() != nil {
 			return
 		}
