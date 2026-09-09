@@ -74,6 +74,15 @@ describe('Managed service recovery drawer', () => {
       managementProblemKey('CURRENT_TEMPLATE_PARAMETERS_INCOMPATIBLE'),
     ).toBe('webServices.management.problems.configurationRequired');
   });
+  it('shows one copyable workspace identity when the reviewed inventory contains it', async () => {
+    api.fetch.mockResolvedValue({ request: { action: 'uninstall' }, plan_digest: 'reviewed', path: 'uninstall', blockers: [], facts: { presence: 'present', runtime: 'stopped', ownership: 'verified', resources: [{ resource_id: 'workspace', kind: 'directory', identity: service.workspace_path, presence: 'present', ownership: 'verified' }] } });
+    mount(async () => undefined);
+    await settle();
+    const drawer = document.querySelector('[data-testid="service-management-drawer"]')!;
+    expect(drawer.textContent?.split(service.workspace_path)).toHaveLength(2);
+    expect(drawer.querySelectorAll('[aria-label="Copy workspace path"]')).toHaveLength(1);
+  });
+
   it('cleans a retained archive only after explicit resource selection', async () => {
     api.fetch.mockImplementation(async (_url: string, init: RequestInit) => ({
       request: JSON.parse(String(init.body)),

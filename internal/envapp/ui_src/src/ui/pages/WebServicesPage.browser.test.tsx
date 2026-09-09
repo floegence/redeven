@@ -207,6 +207,20 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => managed.disabled).toBe(false);
   });
 
+  it('keeps reviewed content intact during the sidebar exit', async () => {
+    await mount();
+    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Review and resolve', exact: true }));
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')?.textContent).toContain('example-volume');
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await userEvent.keyboard('{Escape}');
+    const exiting = document.querySelector('[data-testid="service-management-drawer"]');
+    if (exiting) {
+      expect(exiting.textContent).toContain('/Users/demo/Services/workspace');
+      expect(exiting.textContent).toContain('example-volume');
+    }
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+  });
+
   it('restores the selected trigger and removes motion when reduced motion is requested', async () => {
     await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
     await mount(480);

@@ -936,6 +936,10 @@ function managedOperationFailureMessage(operation: ManagedOperation, i18n: WebSe
 
 function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string {
   switch (errorCode) {
+    case 'STOP_SCRIPT_FAILED':
+    case 'STOP_SCRIPT_UNAVAILABLE':
+    case 'UNINSTALL_SCRIPT_FAILED':
+    case 'UNINSTALL_SCRIPT_UNAVAILABLE': return i18n.t('webServices.management.problems.hookFailed');
     case 'UI_REQUEST_FAILED': return i18n.t('webServices.collection.requestFailed');
     case 'IMAGE_PULL_TIMEOUT': return i18n.t('webServices.managed.imagePullTimeout');
     case 'IMAGE_REGISTRY_UNAVAILABLE': return i18n.t('webServices.managed.imageRegistryUnavailable');
