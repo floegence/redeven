@@ -4233,3 +4233,104 @@ pre,
     transition-duration: 1ms;
   }
 }
+
+/* SSH environment editing owns its compact geometry; other dialogs keep their layout. */
+[data-floe-dialog-panel].redeven-ssh-settings-dialog {
+  width: min(40rem, calc(100vw - 2rem));
+  max-width: 40rem;
+  max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--background);
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, var(--background));
+  box-shadow: 0 20px 64px -20px rgb(0 0 0 / 45%);
+  color: var(--foreground);
+  font-size: 14px;
+}
+.redeven-ssh-settings-dialog > div:first-child {
+  padding: 24px 28px 20px;
+  border-bottom: 0;
+  flex-shrink: 0;
+}
+.redeven-ssh-settings-dialog > div:first-child > div { min-width: 0; }
+.redeven-ssh-settings-dialog h2 { font-size: 20px; line-height: 1.3; font-weight: 600; }
+.redeven-ssh-settings-dialog > div:first-child p {
+  margin-top: 6px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere;
+}
+.redeven-ssh-settings-dialog > div:nth-child(2) {
+  padding: 0 28px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.redeven-ssh-settings-dialog > div:last-child {
+  flex-shrink: 0;
+  border-top: 0;
+  padding: 20px 28px 24px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.redeven-ssh-settings-dialog > div:last-child button {
+  min-height: 36px;
+  border-radius: 8px;
+  padding-inline: 16px;
+  font-size: 14px;
+}
+.redeven-ssh-settings-dialog button, .redeven-ssh-settings-dialog select { cursor: pointer; }
+.redeven-ssh-settings-dialog button:disabled { cursor: not-allowed; }
+.ssh-settings-form { display: flex; flex-direction: column; gap: 24px; padding-bottom: 4px; }
+.ssh-settings-form[hidden] { display: none; }
+.ssh-settings-field, .ssh-settings-section, .ssh-settings-advanced-fields { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ssh-settings-section, .ssh-settings-advanced-fields { gap: 16px; }
+.ssh-settings-section-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.ssh-settings-section h3, .ssh-settings-field > label, .ssh-settings-field > span, .ssh-settings-probe label { font-weight: 500; font-size: 14px; line-height: 1.5; }
+.ssh-settings-endpoint { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 12px; }
+.ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select {
+  min-width: 0;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 16%, var(--background));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--foreground) 4%, var(--background));
+  color: var(--foreground);
+  font-size: 14px;
+  box-shadow: none;
+}
+.ssh-settings-form select { padding-right: 28px; }
+.ssh-settings-form input::placeholder { color: var(--muted-foreground); opacity: 1; }
+.ssh-settings-form input:not([type='checkbox']):focus-visible, .ssh-settings-form select:focus-visible {
+  outline: 2px solid var(--ring); outline-offset: 2px;
+}
+.ssh-settings-form .ssh-settings-field--invalid input { border-color: var(--destructive); }
+.ssh-settings-help { font-size: 12px; line-height: 1.6; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.ssh-settings-help-link { color: var(--muted-foreground); font-size: 12px; text-align: left; width: fit-content; }
+.ssh-settings-help-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+.ssh-settings-help-link:focus-visible, .ssh-settings-disclosure:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 4px; }
+.ssh-settings-probe { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.ssh-settings-probe > div { min-width: 0; }
+.ssh-settings-probe > label { flex-shrink: 0; cursor: pointer; }
+.ssh-settings-probe .ssh-settings-help { margin-top: 4px; }
+.ssh-settings-disclosure { display: flex; align-items: flex-start; width: 100%; gap: 8px; text-align: left; }
+.ssh-settings-disclosure-title { display: block; font-weight: 500; line-height: 1.5; }
+.ssh-settings-summary { display: block; margin-top: 4px; }
+.ssh-settings-chevron { width: 16px; height: 16px; flex-shrink: 0; margin-top: 3px; color: var(--muted-foreground); transition: transform 160ms ease; }
+.ssh-settings-chevron--open { transform: rotate(90deg); }
+.ssh-settings-advanced-fields { margin-top: 20px; }
+.ssh-settings-timeout { display: flex; align-items: center; gap: 10px; }
+.ssh-settings-timeout input { width: 96px !important; }
+.ssh-settings-error { color: var(--destructive); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.ssh-settings-help-popover { max-width: min(340px, calc(100vw - 32px)); padding: 16px; font-size: 13px; line-height: 1.6; }
+.ssh-settings-discard-copy { font-size: 14px; line-height: 1.6; color: var(--muted-foreground); }
+.ssh-settings-form [role='radiogroup'] { width: fit-content; max-width: 100%; border: 0; background: color-mix(in srgb, var(--foreground) 5%, var(--background)); border-radius: 8px; padding: 3px; }
+.ssh-settings-form [role='radio'] { min-height: 32px; padding: 6px 12px; font-size: 13px; border: 0; box-shadow: none; }
+.ssh-settings-form [role='radio'][aria-checked='true'] { background: color-mix(in srgb, var(--foreground) 10%, var(--background)); box-shadow: none; border: 0; }
+@media (max-width: 480px) {
+  .redeven-ssh-settings-dialog > div:first-child { padding: 20px 20px 16px; }
+  .redeven-ssh-settings-dialog > div:nth-child(2) { padding-inline: 20px; }
+  .redeven-ssh-settings-dialog > div:last-child { padding: 16px 20px 20px; }
+  .ssh-settings-endpoint { grid-template-columns: minmax(0, 1fr) 80px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ssh-settings-chevron { transition: none; }
+}

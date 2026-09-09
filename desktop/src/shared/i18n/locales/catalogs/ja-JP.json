@@ -2308,5 +2308,31 @@
     "portInUse": "この CodeSpace に保存されたローカルポートは使用中です。そのポートを使用しているアプリを閉じてから、もう一度お試しください。",
     "unavailable": "CodeSpace に接続できません。環境への接続を確認し、もう一度開いてください。",
     "profileInvalid": "保存された CodeSpace のブラウザープロファイルを読み取れません。codespace-profiles.json を復元してから、この CodeSpace を開き直してください。"
+  },
+  "sshSettings": {
+    "title": "環境設定",
+    "connection": "接続",
+    "connectionHelp": "接続方式について",
+    "saveChanges": "変更を保存",
+    "discardTitle": "変更を破棄しますか？",
+    "discardDescription": "この環境への変更は保存されていません。",
+    "keepEditing": "編集を続ける",
+    "discardChanges": "変更を破棄",
+    "password": "パスワード",
+    "keyHelp": "既存の SSH 設定と鍵を使用します。",
+    "passwordSaved": "このデバイスにパスワードが保存されています。空欄のままにすると、現在のパスワードを保持します。",
+    "probeHelp": "ホーム画面を開いている間、この環境を自動的に確認します。",
+    "defaultDirectory": "既定のディレクトリ",
+    "customDirectory": "カスタムディレクトリ",
+    "secondsValue": "{seconds} 秒",
+    "secondsUnit": "秒",
+    "uploadHelp": "Desktop がランタイムパッケージを準備し、SSH ホストにアップロードします。",
+    "remoteHelp": "SSH ホストがランタイムパッケージを直接ダウンロードしてインストールします。",
+    "rootHelp": "空欄の場合、リモートホストの ~/.redeven を使用します。",
+    "releaseHelp": "空欄の場合、GitHub Releases を使用します。変更するにはリリースミラーの URL を入力してください。",
+    "invalidDestination": "user@host または SSH エイリアスを入力してください。空白、URL スキーム、先頭のハイフンは使用できません。",
+    "invalidRoot": "リモートの絶対パスを入力するか、空欄にして ~/.redeven を使用してください。",
+    "invalidReleaseUrl": "HTTP または HTTPS の完全なリリース URL を入力するか、空欄にして GitHub Releases を使用してください。",
+    "invalidTimeout": "1 秒以上の数値を入力するか、空欄にして 10 秒を使用してください。"
   }
 }

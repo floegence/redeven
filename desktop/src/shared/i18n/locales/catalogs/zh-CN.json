@@ -2308,5 +2308,31 @@
     "portInUse": "此 CodeSpace 保存的本机端口正被占用。请关闭占用该端口的应用，然后重试。",
     "unavailable": "CodeSpace 连接不可用。请检查环境连接，然后重新打开。",
     "profileInvalid": "无法读取保存的 CodeSpace 浏览器配置。请先恢复 codespace-profiles.json，再重新打开此 CodeSpace。"
+  },
+  "sshSettings": {
+    "title": "环境设置",
+    "connection": "连接",
+    "connectionHelp": "了解连接方式",
+    "saveChanges": "保存更改",
+    "discardTitle": "放弃更改？",
+    "discardDescription": "对此环境的更改尚未保存。",
+    "keepEditing": "继续编辑",
+    "discardChanges": "放弃更改",
+    "password": "密码",
+    "keyHelp": "使用本机已有的 SSH 配置与密钥。",
+    "passwordSaved": "此设备已保存密码。留空即可保留现有密码。",
+    "probeHelp": "首页打开期间自动检查此环境。",
+    "defaultDirectory": "默认目录",
+    "customDirectory": "自定义目录",
+    "secondsValue": "{seconds} 秒",
+    "secondsUnit": "秒",
+    "uploadHelp": "Desktop 准备运行时安装包并上传至 SSH 主机。",
+    "remoteHelp": "SSH 主机直接下载并安装运行时安装包。",
+    "rootHelp": "留空使用远端主机上的 ~/.redeven。",
+    "releaseHelp": "留空使用 GitHub Releases，也可填写自定义发布镜像 URL。",
+    "invalidDestination": "请输入 user@host 或 SSH 别名，不可包含空格、URL 协议前缀，也不可以连字符开头。",
+    "invalidRoot": "请输入远端绝对路径，或留空使用 ~/.redeven。",
+    "invalidReleaseUrl": "请输入完整的 HTTP 或 HTTPS 发布地址，或留空使用 GitHub Releases。",
+    "invalidTimeout": "请输入不小于 1 秒的数值，或留空使用 10 秒。"
   }
 }

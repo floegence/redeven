@@ -37,6 +37,8 @@ Each action popup has one vertical scroll owner. The outer frame clips its borde
 
 SSH Runtime package-delivery choices name the user-visible data path rather than an internal strategy relationship. `desktop_upload` is presented as Desktop upload, while `remote_install` is presented as remote download and install; neither an explicit selector nor an Environment fact calls the latter a fallback. Automatic describes its ordered choice in plain language without changing the persisted strategy contract.
 
+SSH host editing follows [Desktop SSH environment settings](desktop-ssh-environment-settings.md).
+
 # Evidence
 
 - `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Explicit registration reference and progress-surface contracts.

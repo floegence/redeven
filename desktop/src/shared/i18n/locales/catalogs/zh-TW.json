@@ -2308,5 +2308,31 @@
     "portInUse": "此 CodeSpace 儲存的本機連接埠正在使用中。請關閉使用該連接埠的應用程式，然後重試。",
     "unavailable": "CodeSpace 連線無法使用。請檢查環境連線，然後重新開啟。",
     "profileInvalid": "無法讀取儲存的 CodeSpace 瀏覽器設定。請先還原 codespace-profiles.json，再重新開啟此 CodeSpace。"
+  },
+  "sshSettings": {
+    "title": "環境設定",
+    "connection": "連線",
+    "connectionHelp": "瞭解連線方式",
+    "saveChanges": "儲存變更",
+    "discardTitle": "捨棄變更？",
+    "discardDescription": "對此環境的變更尚未儲存。",
+    "keepEditing": "繼續編輯",
+    "discardChanges": "捨棄變更",
+    "password": "密碼",
+    "keyHelp": "使用本機現有的 SSH 設定與金鑰。",
+    "passwordSaved": "此裝置已儲存密碼。留空即可保留現有密碼。",
+    "probeHelp": "首頁開啟期間自動檢查此環境。",
+    "defaultDirectory": "預設目錄",
+    "customDirectory": "自訂目錄",
+    "secondsValue": "{seconds} 秒",
+    "secondsUnit": "秒",
+    "uploadHelp": "Desktop 準備執行階段安裝套件並上傳至 SSH 主機。",
+    "remoteHelp": "SSH 主機直接下載並安裝執行階段套件。",
+    "rootHelp": "留空使用遠端主機上的 ~/.redeven。",
+    "releaseHelp": "留空使用 GitHub Releases，亦可填入自訂發佈鏡像 URL。",
+    "invalidDestination": "請輸入 user@host 或 SSH 別名，不可包含空格、URL 通訊協定前綴，也不可以連字號開頭。",
+    "invalidRoot": "請輸入遠端絕對路徑，或留空使用 ~/.redeven。",
+    "invalidReleaseUrl": "請輸入完整的 HTTP 或 HTTPS 發佈網址，或留空使用 GitHub Releases。",
+    "invalidTimeout": "請輸入不小於 1 秒的數值，或留空使用 10 秒。"
   }
 }
