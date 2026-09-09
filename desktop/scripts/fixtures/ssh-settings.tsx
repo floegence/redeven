@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { FloeProvider, useTheme, builtInShellThemePresets } from '@floegence/floe-webapp-core';
 import { createDesktopI18n, type RedevenLocale } from '../../src/shared/i18n';
@@ -49,6 +49,7 @@ function Fixture() {
             query.get('theme') === 'light' ? 'light' : 'dark',
             query.get('theme') === 'light' ? 'classic-light' : 'ocean',
           );
+          setState({ ...initial });
           setErrors({});
           setError('');
           setOpen(true);
@@ -57,57 +58,56 @@ function Fixture() {
         Edit environment
       </button>
       <output id="fixture-saved">{saved()}</output>
-      <Show when={open()}>
-        <SSHEnvironmentSettingsDialog
-          i18n={i18n}
-          state={state()}
-          fieldErrors={errors()}
-          error={error()}
-          saving={false}
-          sshConfigHosts={[
-            { alias: 'gzcom', host_name: 'gzcom.example.com', user: 'dev', port: 22, source_path: '~/.ssh/config' },
-            {
-              alias: 'production',
-              host_name: 'prod.example.com',
-              user: 'dev',
-              port: 2222,
-              source_path: '~/.ssh/config',
-            },
-          ]}
-          sshConfigHostsLoading={false}
-          sshConfigHostsLoadError={false}
-          refreshSSHConfigHosts={() => undefined}
-          updateField={(name, value) => {
-            setState((current) => ({
-              ...current,
-              [name]: value,
-              ...(name === 'ssh_password' ? ({ ssh_password_mode: value ? 'replace' : 'keep' } as const) : {}),
-            }));
-            setErrors((current) => {
-              const next = { ...current };
-              delete next[name];
-              return next;
-            });
-          }}
-          switchBootstrapStrategy={(value) => setState((current) => ({ ...current, bootstrap_strategy: value }))}
-          toggleAutoRuntimeProbe={(value) => setState((current) => ({ ...current, auto_runtime_probe_enabled: value }))}
-          removeSSHPassword={() =>
-            setState((current) => ({ ...current, ssh_password: '', ssh_password_mode: 'clear' }))
+      <SSHEnvironmentSettingsDialog
+        open={open()}
+        i18n={i18n}
+        state={state()}
+        fieldErrors={errors()}
+        error={error()}
+        saving={false}
+        sshConfigHosts={[
+          { alias: 'gzcom', host_name: 'gzcom.example.com', user: 'dev', port: 22, source_path: '~/.ssh/config' },
+          {
+            alias: 'production',
+            host_name: 'prod.example.com',
+            user: 'dev',
+            port: 2222,
+            source_path: '~/.ssh/config',
+          },
+        ]}
+        sshConfigHostsLoading={false}
+        sshConfigHostsLoadError={false}
+        refreshSSHConfigHosts={() => undefined}
+        updateField={(name, value) => {
+          setState((current) => ({
+            ...current,
+            [name]: value,
+            ...(name === 'ssh_password' ? ({ ssh_password_mode: value ? 'replace' : 'keep' } as const) : {}),
+          }));
+          setErrors((current) => {
+            const next = { ...current };
+            delete next[name];
+            return next;
+          });
+        }}
+        switchBootstrapStrategy={(value) => setState((current) => ({ ...current, bootstrap_strategy: value }))}
+        toggleAutoRuntimeProbe={(value) => setState((current) => ({ ...current, auto_runtime_probe_enabled: value }))}
+        removeSSHPassword={() =>
+          setState((current) => ({ ...current, ssh_password: '', ssh_password_mode: 'clear' }))
+        }
+        onClose={() => setOpen(false)}
+        onSave={async () => {
+          const validation = validateSSHEnvironmentSettings(state(), i18n);
+          setErrors(validation);
+          if (Object.keys(validation).length) return;
+          if (query.has('fail-save')) {
+            setError('The fixture could not save this environment.');
+            return;
           }
-          onClose={() => setOpen(false)}
-          onSave={async () => {
-            const validation = validateSSHEnvironmentSettings(state(), i18n);
-            setErrors(validation);
-            if (Object.keys(validation).length) return;
-            if (query.has('fail-save')) {
-              setError('The fixture could not save this environment.');
-              return;
-            }
-            setSaved(JSON.stringify(state()));
-            setOpen(false);
-          }}
-        />
-      </Show>
+          setSaved(JSON.stringify(state()));
+          setOpen(false);
+        }}
+      />
     </>
   );
 }

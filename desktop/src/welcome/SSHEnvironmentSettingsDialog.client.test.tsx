@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createSignal, Show } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { createDesktopI18n } from '../shared/i18n';
 import { SSHEnvironmentSettingsDialog } from './SSHEnvironmentSettingsDialog';
@@ -61,46 +61,45 @@ async function mount(overrides: Partial<SSHConnectionDialogState> = {}, saveActi
   disposers.push(
     render(
       () => (
-        <Show when={open()}>
-          <SSHEnvironmentSettingsDialog
-            i18n={i18n}
-            state={state()}
-            fieldErrors={errors()}
-            error={error()}
-            saving={false}
-            sshConfigHosts={[
-              { alias: 'production', host_name: 'example.com', user: 'dev', port: 2222, source_path: '~/.ssh/config' },
-            ]}
-            sshConfigHostsLoading={false}
-            sshConfigHostsLoadError={false}
-            refreshSSHConfigHosts={() => undefined}
-            updateField={(name, value) => {
-              setState((current) => ({ ...current, [name]: value }));
-              setErrors((current) => {
-                const next = { ...current };
-                delete next[name];
-                return next;
-              });
-            }}
-            toggleAutoRuntimeProbe={(enabled) =>
-              setState((current) => ({ ...current, auto_runtime_probe_enabled: enabled }))
-            }
-            switchBootstrapStrategy={(strategy) =>
-              setState((current) => ({ ...current, bootstrap_strategy: strategy }))
-            }
-            removeSSHPassword={() =>
-              setState((current) => ({ ...current, ssh_password: '', ssh_password_mode: 'clear' }))
-            }
-            onSave={save}
-            onClose={() => setOpen(false)}
-          />
-        </Show>
+        <SSHEnvironmentSettingsDialog
+          open={open()}
+          i18n={i18n}
+          state={state()}
+          fieldErrors={errors()}
+          error={error()}
+          saving={false}
+          sshConfigHosts={[
+            { alias: 'production', host_name: 'example.com', user: 'dev', port: 2222, source_path: '~/.ssh/config' },
+          ]}
+          sshConfigHostsLoading={false}
+          sshConfigHostsLoadError={false}
+          refreshSSHConfigHosts={() => undefined}
+          updateField={(name, value) => {
+            setState((current) => ({ ...current, [name]: value }));
+            setErrors((current) => {
+              const next = { ...current };
+              delete next[name];
+              return next;
+            });
+          }}
+          toggleAutoRuntimeProbe={(enabled) =>
+            setState((current) => ({ ...current, auto_runtime_probe_enabled: enabled }))
+          }
+          switchBootstrapStrategy={(strategy) =>
+            setState((current) => ({ ...current, bootstrap_strategy: strategy }))
+          }
+          removeSSHPassword={() =>
+            setState((current) => ({ ...current, ssh_password: '', ssh_password_mode: 'clear' }))
+          }
+          onSave={save}
+          onClose={() => setOpen(false)}
+        />
       ),
       host,
     ),
   );
   await settle();
-  return { state, setState, errors, save, open };
+  return { state, setState, errors, save, open, setOpen };
 }
 afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose();
@@ -132,19 +131,34 @@ describe('SSH environment settings interactions', () => {
     expect(document.getElementById('ssh-settings-runtime_root')).not.toBeNull();
   });
 
-  it('protects a dirty draft from closing and leaves backdrop clicks inert', async () => {
+  it.each(['backdrop', 'Cancel', 'Close', 'Escape'])('closes a dirty draft directly through %s and preserves the exit animation', async (action) => {
     const harness = await mount();
-    document.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!.click();
-    expect(harness.open()).toBe(true);
-    input('label', 'Production');
-    button('Cancel').click();
-    await settle();
-    expect(document.getElementById('ssh-settings-keep-editing')).toBe(document.activeElement);
-    button('Keep editing').click();
-    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Production');
-    button('Close').click();
-    button('Discard changes').click();
+    input('label', 'Unsaved production');
+    const panel = document.querySelector('[data-floe-dialog-panel]');
+    if (action === 'backdrop') document.querySelector<HTMLElement>('[data-floe-dialog-backdrop]')!.click();
+    else if (action === 'Escape') document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    else button(action).click();
     expect(harness.open()).toBe(false);
+    expect(harness.save).not.toHaveBeenCalled();
+    expect(panel?.isConnected).toBe(true);
+    expect(panel?.getAttribute('data-floating-presence')).toBe('exiting');
+    expect(document.body.textContent).not.toContain('Discard changes?');
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(panel?.isConnected).toBe(false);
+  });
+
+  it('starts a fresh editing session when the same environment is reopened', async () => {
+    const harness = await mount();
+    button('Advanced settingsAutomatic · Default directory · GitHub Releases · 10 s').click();
+    input('label', 'Discarded');
+    button('Close').click();
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    harness.setState({ ...initial, label: 'Latest saved name' });
+    harness.setOpen(true);
+    await settle();
+    expect(document.querySelector('[data-floe-dialog-panel]')?.textContent).toContain('Latest saved name · SSH Host');
+    expect(button('Save changes').disabled).toBe(true);
+    expect(document.getElementById('ssh-settings-runtime_root')).toBeNull();
   });
 
   it('lets the SSH picker own Escape and Enter before dialog dismissal or save', async () => {
@@ -155,7 +169,7 @@ describe('SSH environment settings interactions', () => {
     expect(destination.getAttribute('aria-expanded')).toBe('true');
     destination.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     expect(destination.getAttribute('aria-expanded')).toBe('false');
-    expect(document.getElementById('ssh-settings-keep-editing')).toBeNull();
+    expect(harness.open()).toBe(true);
     destination.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     destination.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }),
@@ -163,6 +177,19 @@ describe('SSH environment settings interactions', () => {
     expect(harness.state().ssh_destination).toBe('production');
     expect(harness.state().ssh_port).toBe('2222');
     expect(harness.save).not.toHaveBeenCalled();
+  });
+
+  it('dismisses connection help before the editor when Escape is pressed', async () => {
+    const harness = await mount();
+    input('label', 'Unsaved');
+    button('About this connection').click();
+    button('About this connection').focus();
+    await settle();
+    button('About this connection').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(harness.open()).toBe(true);
+    expect(button('About this connection').getAttribute('aria-expanded')).toBe('false');
+    button('About this connection').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(harness.open()).toBe(false);
   });
 
   it('expands invalid advanced fields on save and preserves other field errors and the failed draft', async () => {
@@ -212,9 +239,9 @@ describe('SSH environment settings interactions', () => {
     name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }));
     name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
     expect(harness.save).toHaveBeenCalledTimes(1);
-    expect(button('Cancel').disabled).toBe(true);
+    expect(button('Cancel').disabled).toBe(false);
     button('Close').click();
-    expect(harness.open()).toBe(true);
+    expect(harness.open()).toBe(false);
     finish();
     await settle();
     expect(button('Save changes').disabled).toBe(false);

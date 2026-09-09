@@ -1,7 +1,7 @@
 ---
 type: Desktop Contract
 title: Desktop SSH environment settings
-description: Edit SSH registrations in a compact modal with explicit saving, visible custom configuration, and protected drafts.
+description: Edit SSH registrations in a compact modal with explicit saving, visible custom configuration, and direct dismissal.
 tags: [desktop, environments, ssh, settings, interaction]
 timestamp: 2026-09-09T00:00:00Z
 ---
@@ -10,8 +10,8 @@ timestamp: 2026-09-09T00:00:00Z
 Desktop owns SSH registration editing through one local draft and the existing
 registration save API. Common fields remain visible ahead of advanced settings;
 custom configuration stays discoverable in a summary. Changes save explicitly,
-failed saves preserve input, and closing a modified draft requires an explicit
-discard choice. Connection and secret authority remain with the owners in
+failed saves preserve input, and dismissing the editor discards unsaved changes
+without confirmation. Connection and secret authority remain with the owners in
 [Environment registrations](desktop-environment-registrations.md).
 
 # Contract
@@ -24,6 +24,12 @@ status detection, and advanced configuration. Creation, containers, and Gateway
 settings retain their existing forms. Desktop uses the published Floe Dialog
 contract for backdrop dismissal policy, localized close labels, and input-owned
 Escape handling; it does not intercept global keyboard events to override it.
+The shell stays mounted when closed so the shared Dialog owns its full entrance
+and exit motion, including reduced-motion behavior. The form reuses the existing
+Welcome section entrance motion instead of adding a separate animation system. Its last presentation stays
+stable through exit; reopening resets the baseline and collapsed advanced state.
+Corner radius and shadow follow the shared Dialog; the title is 14px, fields and
+controls are 13px, and supporting text is 12px.
 
 Advanced settings start collapsed even for customized registrations. A wrapping
 summary names package delivery, default or custom directory, release source, and
@@ -36,11 +42,13 @@ the canonical SSH normalizers; editing one field clears only that field's error.
 The opening snapshot is the editor's baseline. Editable field and password-action
 changes enable Save; background metadata does not replace the baseline or draft.
 Saving is explicit, blocks duplicate submission, and preserves input on failure.
-Cancel, Close, and Escape ask whether to discard a changed draft. Backdrop clicks
-leave the editor open. Unchanged drafts close directly; focus returns to the
-original trigger. Cmd/Ctrl+Enter saves unless composition or a nested selector owns
-the key. Collapsed fields and the draft behind discard confirmation are outside
-the tab order. Only the content body scrolls; the title and actions stay visible.
+Cancel, Close, Escape, and backdrop clicks dismiss directly, including modified
+drafts, without a second question. Dismissing during a save does not cancel the
+submitted request; late completion cannot close a new editor and late failures
+are delivered to the launcher. Focus returns to the original trigger after exit.
+Cmd/Ctrl+Enter saves unless composition or a nested selector owns the key.
+Collapsed fields remain outside the tab order. Only the content body scrolls;
+the title and actions stay visible.
 
 # Boundaries
 
