@@ -99,7 +99,7 @@ describe('Web Services product interaction', () => {
   for (const preset of ['classic-light', 'classic-dark', 'solarized-light']) it(`renders the normal and exception hierarchy in ${preset}`, async () => {
     await mount(1120, preset);
     assertLayout();
-    await page.screenshot({ element: host, path: `__screenshots__/web-services-${preset}.png` });
+    expect((await page.screenshot({ element: host, save: false })).length).toBeGreaterThan(1_000);
   });
 
   for (const [status, problem] of [['inspection_unavailable', 'ENGINE_NOT_RUNNING'], ['confirmation_required', 'HOST_PROCESS_IDENTITY_MISMATCH'], ['recovery_required', 'INSTANCE_MISSING']]) it(`opens the reviewed next step for ${status}`, async () => {
@@ -148,7 +148,7 @@ describe('Web Services product interaction', () => {
     const footer = document.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!;
     expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(960);
     await new Promise((resolve) => setTimeout(resolve, 260));
-    await page.screenshot({ path: '__screenshots__/web-services-management.png' });
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
     await userEvent.click(page.getByRole('button', { name: 'Keep data and complete uninstall', exact: true }));
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     await expect.poll(() => host.querySelectorAll('[data-managed-service-id]').length).toBe(1);
@@ -230,6 +230,6 @@ describe('Web Services product interaction', () => {
     await userEvent.keyboard('{Escape}');
     await expect.poll(() => document.activeElement).toBe(trigger);
     expect(getComputedStyle(host.querySelector('.web-service-notice')!).animationName).toBe('none');
-    await page.screenshot({ element: host, path: '__screenshots__/web-services-narrow.png' });
+    expect((await page.screenshot({ element: host, save: false })).length).toBeGreaterThan(1_000);
   });
 });
