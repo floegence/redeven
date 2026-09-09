@@ -3671,10 +3671,14 @@ export function EnvPortForwardsPage() {
         onExecute={async (request: ManagementRequest & { plan_digest: string }) => {
           const target = managementTarget(); if (!target) return;
           const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(target.service.service_id)}/operations`, { method: 'POST', body: JSON.stringify({ ...request, request_id: managedRequestID() }) });
-          const completed = await managedOperations.track(result);
-          await loadManaged(false); bumpRefresh();
-          if (completed.state !== 'succeeded') throw new LocalApiError({ message: completed.error_message ?? '', code: completed.error_code ?? 'OPERATION_FAILED', status: 409 });
-          closeManagement();
+          try {
+            const completed = await managedOperations.track(result);
+            await loadManaged(false); bumpRefresh();
+            if (completed.state !== 'succeeded') throw new LocalApiError({ message: completed.error_message ?? '', code: completed.error_code ?? 'OPERATION_FAILED', status: 409 });
+            closeManagement();
+          } finally {
+            managedOperations.clear(result.operation_id);
+          }
         }}
       />
       <ManagedServiceSettingsDrawer
