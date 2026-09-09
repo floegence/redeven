@@ -31,6 +31,8 @@ The [terminal interaction contract](workbench-terminal-interaction.md) owns cont
 
 Font files and menu behavior are Runtime-served Env App assets. Updating Desktop alone cannot deploy them to an unchanged remote Runtime. Validate an isolated task Runtime first; installing the font feature does not authorize upgrading or restarting other running environments. Font license text is included in the generated root third-party notice.
 
+Quick CI and the final pre-push gate use the same Floeterm dependency consistency check, including the published npm integrity and Go checksums.
+
 # Reproduction
 
 Build the Env App, then run `node scripts/checkTerminalFontCarrier.mjs --serve --host <task-interface-address> --shared-font Monaco --output <private-output>` from the Env App UI directory. Use a font available on the coordinator; the default is JetBrains Mono. The server starts an isolated native Runtime with a random password and writes a private `client-config.json`. Transfer that file only to the task clients. Run the same script with `--config <private-config> --output <evidence-directory>` on each client, optionally selecting its native Chromium executable with `--executable`.
@@ -40,6 +42,8 @@ The client records four DPR values, real loaded faces and cell metrics, both dir
 The private configuration, test browser profiles, and temporary Runtime state are test credentials and state, not deliverables. Shut down the task server after validation and distribute only sanitized reports, screenshots, and matching build artifacts. Browser DPR emulation exercises the real renderer at those scales; it does not certify native display-driver behavior or physical x64 Windows hardware.
 
 # Evidence
+
+- `redeven:scripts/check_floeterm_dependency_consistency.mjs` - Published Go/npm release parity shared by Quick CI and final integration.
 
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.ts` - Client-local loading, stable candidate IDs, and side-effect-free resolution.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalFontAssets.ts` - Packaged WOFF2 faces and Unicode ranges.

@@ -141,6 +141,8 @@ run_step "testing README localization contract" node --test scripts/check_readme
 run_step "testing JavaScript lock inventory" node --test scripts/javascript_lock_inventory.test.mjs
 run_step "checking synchronized README localizations" node scripts/check_readme_localizations.mjs
 run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
+run_step "testing Floeterm dependency consistency" node --test scripts/check_floeterm_dependency_consistency.test.mjs
+run_step "checking Floeterm dependency consistency" node scripts/check_floeterm_dependency_consistency.mjs
 run_step "testing Floeterm native build contract" node --test scripts/floeterm_native_build_contract.test.mjs
 run_step "testing no-native terminal failure boundary" env GOWORK=off CGO_ENABLED=1 go test ./internal/agent -run '^TestTerminalLiveStreamFailsClosedWithoutNativeActor$' -count=1
 run_step "testing Go packages serially with the native terminal engine" env GOWORK=off CGO_ENABLED=1 go test -tags floeterm_native -p 1 -count=1 ./...
