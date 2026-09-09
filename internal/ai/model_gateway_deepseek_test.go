@@ -118,6 +118,61 @@ func TestDeepSeekShortRequestDoesNotEnableSearch(t *testing.T) {
 	}
 }
 
+func TestDeepSeekVisionReasoningSelectionWireContract(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		level config.AIReasoningLevel
+		want  string
+	}{
+		{name: "unspecified"},
+		{name: "default", level: config.AIReasoningLevelDefault},
+		{name: "off", level: config.AIReasoningLevelOff, want: `{"effort":"none"}`},
+		{name: "low", level: config.AIReasoningLevelLow, want: `{"effort":"low"}`},
+		{name: "high", level: config.AIReasoningLevelHigh, want: `{"effort":"high"}`},
+		{name: "max", level: config.AIReasoningLevelMax, want: `{"effort":"max"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body map[string]json.RawMessage
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp\",\"status\":\"completed\",\"output\":[]}}\n\n")
+			}))
+			defer server.Close()
+			base, err := newProviderAdapter("deepseek", server.URL, "test-key", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			selection := config.AIReasoningSelection{Level: tc.level}
+			capability := config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-flash-vision-exp")
+			if !capability.SupportsLevel(tc.level) {
+				t.Fatalf("catalog rejects %q", tc.level)
+			}
+			adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-flash-vision-exp", ProviderControls{ReasoningSelection: selection, ReasoningCapability: capability}, TurnBudgets{}, providerWebSearchModeDisabled)
+			stream, err := adapter.Stream(context.Background(), flprovider.Request{
+				RunID: "run", PromptScopeID: "scope", Reasoning: selection,
+				Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "hello"}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for event := range stream {
+				if event.Err != nil {
+					t.Fatal(event.Err)
+				}
+			}
+			if body == nil {
+				t.Fatal("provider request was not sent")
+			}
+			if got := string(body["reasoning"]); got != tc.want {
+				t.Fatalf("reasoning = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDeepSeekVisionUsesPreparedImageAndPreservesToolContinuation(t *testing.T) {
 	var bodies []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

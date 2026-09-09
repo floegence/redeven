@@ -10149,6 +10149,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </span>
           }>
             <FlowerReasoningControl
+              copy={copy().reasoningControl}
               compact
               variant="segment"
               capability={selectedReasoningCapability()}

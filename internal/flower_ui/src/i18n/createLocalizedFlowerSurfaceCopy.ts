@@ -1,3 +1,4 @@
+import { createLocalizedReasoningControlCopy } from './reasoningControlMessages';
 import { modelCatalogCopy } from '../settings/modelCatalogCopy';
 import { createLocalizedFilesystemPickerCopy } from './filesystemPickerMessages';
 import type { FlowerSurfaceCopy } from '../copy';
@@ -19,6 +20,7 @@ function t(i18n: FlowerSurfaceTranslator, key: string, params?: TranslationParam
 export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy {
   const k = (suffix: string) => `flowerSurface.${suffix}`;
   return {
+    reasoningControl: createLocalizedReasoningControlCopy(i18n),
     filesystemPicker: createLocalizedFilesystemPickerCopy(i18n),
     attachments: {
       listLabel: t(i18n, k('attachments.listLabel')),
@@ -541,6 +543,7 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
 function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy['settings'] {
   const k = (suffix: string) => `flowerSurface.settings.${suffix}`;
   return {
+    reasoningControl: createLocalizedReasoningControlCopy(i18n),
     title: t(i18n, k('title')),
     backToChat: t(i18n, k('backToChat')),
     description: t(i18n, k('description')),

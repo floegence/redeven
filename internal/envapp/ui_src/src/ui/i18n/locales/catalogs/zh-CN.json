@@ -4184,6 +4184,24 @@
     "textOnlyModality": "仅文本"
   },
   "flowerSurface": {
+    "reasoningControl": {
+      "default": "默认",
+      "off": "关闭",
+      "minimal": "最低",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "极高",
+      "max": "最高",
+      "label": "推理",
+      "defaultLabel": "默认推理配置",
+      "reset": "重置推理配置",
+      "defaultHint": "使用模型默认推理配置",
+      "alwaysOn": "始终开启",
+      "tokens": "{count} 个 token",
+      "tokenUnit": "token",
+      "budgetLabel": "{label} token 预算"
+    },
     "filesystemPicker": {
       "path": "目录路径",
       "go": "前往",

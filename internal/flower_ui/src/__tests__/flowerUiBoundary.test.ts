@@ -254,7 +254,6 @@ describe('shared Flower UI boundary', () => {
 		expect(surfaceSrc).not.toContain('persistThreadReasoningSelection');
 		expect(controlSrc).toContain("variant?: 'full' | 'badge' | 'segment'");
 		expect(controlSrc).toContain("segmentMode() ? 'flower-reasoning-segment-button' : 'flower-reasoning-badge-button'");
-		expect(controlSrc).toContain("normalizeFlowerReasoningLevel(level) === 'default' ? 'On'");
 		expect(controlSrc).toContain('class="flower-reasoning-reset"');
 		expect(controlSrc).toContain('onClick={() => props.onChange?.(undefined)}');
 		expect(readText(path.join(flowerRoot, 'runtimeFlowerSurfaceAdapter.ts'))).toContain('reasoning_selection: selection ?? null');

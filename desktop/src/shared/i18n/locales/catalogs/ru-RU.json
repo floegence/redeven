@@ -674,6 +674,24 @@
       "dialogDynamicModelMetadata": "Динамические метаданные модели",
       "dialogOpenAICompatibleNativeEndpoint": "Нативная конечная точка, совместимая с OpenAI",
       "dialogLocalOpenAICompatibleEndpoint": "Локальная конечная точка, совместимая с OpenAI"
+    },
+    "reasoningControl": {
+      "default": "По умолчанию",
+      "off": "Выключено",
+      "minimal": "Минимальный",
+      "low": "Низкий",
+      "medium": "Средний",
+      "high": "Высокий",
+      "xhigh": "Очень высокий",
+      "max": "Максимальный",
+      "label": "Рассуждение",
+      "defaultLabel": "Рассуждение по умолчанию",
+      "reset": "Сбросить настройки рассуждения",
+      "defaultHint": "Использовать настройки рассуждения модели по умолчанию",
+      "alwaysOn": "Всегда включено",
+      "tokens": "{count} токенов",
+      "tokenUnit": "токены",
+      "budgetLabel": "Бюджет токенов для {label}"
     }
   },
   "common": {

@@ -665,6 +665,24 @@
       "dialogDynamicModelMetadata": "동적 모델 메타데이터",
       "dialogOpenAICompatibleNativeEndpoint": "OpenAI 호환 네이티브 엔드포인트",
       "dialogLocalOpenAICompatibleEndpoint": "로컬 OpenAI 호환 엔드포인트"
+    },
+    "reasoningControl": {
+      "default": "기본값",
+      "off": "끄기",
+      "minimal": "최소",
+      "low": "낮음",
+      "medium": "중간",
+      "high": "높음",
+      "xhigh": "매우 높음",
+      "max": "최대",
+      "label": "추론",
+      "defaultLabel": "기본 추론 설정",
+      "reset": "추론 설정 초기화",
+      "defaultHint": "모델의 기본 추론 설정 사용",
+      "alwaysOn": "항상 켜짐",
+      "tokens": "토큰 {count}개",
+      "tokenUnit": "토큰",
+      "budgetLabel": "{label} 토큰 예산"
     }
   },
   "common": {

@@ -664,5 +664,23 @@
     "hostPermissionDenied": "The operating system denied access to this directory.",
     "notDirectory": "This path is not a directory.",
     "connectionFailed": "Could not reach the environment. Check the connection and retry."
+  },
+  "reasoningControl": {
+    "default": "Default",
+    "off": "Off",
+    "minimal": "Min",
+    "low": "Low",
+    "medium": "Med",
+    "high": "High",
+    "xhigh": "XHigh",
+    "max": "Max",
+    "label": "Reasoning",
+    "defaultLabel": "Default reasoning",
+    "reset": "Reset reasoning",
+    "defaultHint": "Use the model’s default reasoning configuration",
+    "alwaysOn": "Always on",
+    "tokens": "{count} tokens",
+    "tokenUnit": "tokens",
+    "budgetLabel": "{label} budget tokens"
   }
 }

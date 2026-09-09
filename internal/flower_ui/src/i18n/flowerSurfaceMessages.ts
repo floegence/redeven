@@ -1,6 +1,8 @@
+import { reasoningControlEnUS } from './reasoningControlMessages';
 import { filesystemPickerEnUS } from './filesystemPickerMessages';
 
 export const flowerSurfaceEnUS = {
+  reasoningControl: reasoningControlEnUS,
   filesystemPicker: filesystemPickerEnUS,
   runtime: {
     localEnvironment: 'Local Environment',

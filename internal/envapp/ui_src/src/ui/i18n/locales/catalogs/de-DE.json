@@ -4169,6 +4169,24 @@
     "textOnlyModality": "Nur Text"
   },
   "flowerSurface": {
+    "reasoningControl": {
+      "default": "Standard",
+      "off": "Aus",
+      "minimal": "Minimal",
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "xhigh": "Sehr hoch",
+      "max": "Maximal",
+      "label": "Denken",
+      "defaultLabel": "Standard-Denkeinstellung",
+      "reset": "Denkeinstellung zurücksetzen",
+      "defaultHint": "Standard-Denkkonfiguration des Modells verwenden",
+      "alwaysOn": "Immer aktiviert",
+      "tokens": "{count} Tokens",
+      "tokenUnit": "Tokens",
+      "budgetLabel": "Tokenbudget für {label}"
+    },
     "filesystemPicker": {
       "path": "Verzeichnispfad",
       "go": "Öffnen",

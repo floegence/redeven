@@ -1,3 +1,4 @@
+import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasoningControlMessages';
 import { modelCatalogCopy, type ModelCatalogCopy } from './settings/modelCatalogCopy';
 import type { FilesystemPickerCopy } from './filePicker/filesystemPicker';
 import { filesystemPickerEnUS } from './i18n/filesystemPickerMessages';
@@ -96,6 +97,7 @@ export type FlowerAutoSaveCopy = Readonly<{
 }>;
 
 export type FlowerSettingsCopy = Readonly<{
+  reasoningControl: ReasoningControlCopy;
   title: string;
   backToChat: string;
   description: string;
@@ -264,6 +266,7 @@ export type FlowerSubagentsCopy = Readonly<{
 }>;
 
 export type FlowerSurfaceCopy = Readonly<{
+  reasoningControl: ReasoningControlCopy;
   filesystemPicker: FilesystemPickerCopy;
   attachments: Readonly<{
     listLabel: string;
@@ -548,6 +551,7 @@ export type FlowerSurfaceCopy = Readonly<{
 }>;
 
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
+  reasoningControl: reasoningControlEnUS,
   filesystemPicker: { ...filesystemPickerEnUS, selectedCount: (count) => filesystemPickerEnUS.selectedCount.replace('{count}', String(count)) },
   attachments: {
     listLabel: 'Attachments',
@@ -1052,6 +1056,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
   },
   settings: {
+    reasoningControl: reasoningControlEnUS,
     title: 'Flower Settings',
     backToChat: 'Back to chat',
     description: 'Configure models and the default Flower permission for the Local AI Profile.',
