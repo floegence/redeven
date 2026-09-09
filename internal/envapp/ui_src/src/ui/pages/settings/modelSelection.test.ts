@@ -66,7 +66,7 @@ describe('model catalog preferences', () => {
 describe('model parameter preservation', () => {
   it('retains edited parameters when disabling, reopening, and selecting again', () => {
     const models = defaultFlowerProviderModels('deepseek');
-    const edited = { ...models[0], context_window: 81920, input_modalities: ['text', 'image'] };
+    const edited = { ...models[0], context_window: 81920, max_output_tokens: 4096, input_modalities: ['text', 'image'] };
     const draft: FlowerProviderDraft = { id: 'deepseek', type: 'deepseek', models: [edited, ...models.slice(1)] };
     const disabled = setFlowerModelsEnabled(draft, [edited], false);
     const saved = serializeFlowerProvider(disabled);
@@ -87,4 +87,15 @@ describe('model parameter preservation', () => {
     expect(saved.model_selection?.custom_models).toEqual([]);
     expect(saved.model_selection?.model_overrides).toEqual([{ model_name: custom.model_name, context_window: 87654 }]);
   });
+});
+
+
+it('bounds inherited output capacity by a smaller user context override', () => {
+  const provider: FlowerProviderDraft = { id: 'brand', type: 'openai', models: [], model_selection: { model_overrides: [{ model_name: 'gpt-5.5', context_window: 32000 }] } };
+  const models = resolveFlowerProviderModels(provider);
+  const model = models.find((entry) => entry.model_name === 'gpt-5.5')!;
+  expect(model.context_window).toBe(32000);
+  expect(model.max_output_tokens).toBe(32000);
+  const saved = serializeFlowerProvider({ ...provider, models });
+  expect(saved.model_selection?.model_overrides).toEqual([{ model_name: 'gpt-5.5', context_window: 32000 }]);
 });

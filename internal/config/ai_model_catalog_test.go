@@ -134,3 +134,20 @@ func TestCatalogAdditionPreservesMatchingCustomModel(t *testing.T) {
 		t.Fatalf("model duplicated: %d", found)
 	}
 }
+
+func TestModelMigrationPreservesSmallerContextWithInheritedOutputLimit(t *testing.T) {
+	cfg := &AIConfig{CurrentModelID: "brand/gpt-5.5", Providers: []AIProvider{{ID: "brand", Type: "openai", Models: []AIProviderModel{{ModelName: "gpt-5.5", ContextWindow: 32000}}}}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !migrateAIModelSelection(cfg) {
+		t.Fatal("not migrated")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	_, model, ok := cfg.ProviderModelByID(cfg.CurrentModelID)
+	if !ok || model.ContextWindow != 32000 || model.MaxOutputTokens > model.ContextWindow {
+		t.Fatalf("context override lost: %+v", model)
+	}
+}
