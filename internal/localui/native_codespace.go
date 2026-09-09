@@ -3,7 +3,6 @@ package localui
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/floegence/redeven/internal/accessgate"
@@ -55,8 +54,8 @@ func (s *Server) handleNativeCodeSpace(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "codespace instance closed", http.StatusGone)
 		return
 	}
-	presentation, err := url.Parse(r.Header.Get("X-Redeven-Code-Origin"))
-	if err != nil || presentation.Scheme != "http" || presentation.Hostname() != "127.0.0.1" || presentation.Port() == "" || presentation.String() != presentation.Scheme+"://"+presentation.Host {
+	presentation, valid := appserver.NativeCodeSpaceOrigin(r.Header.Get("X-Redeven-Code-Origin"))
+	if !valid {
 		http.Error(w, "invalid codespace origin", http.StatusBadRequest)
 		return
 	}

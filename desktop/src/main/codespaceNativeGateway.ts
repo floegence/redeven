@@ -1,3 +1,9 @@
+import {
+  CodeSpaceBrowserAuthorization,
+  CODESPACE_BROWSER_COOKIE,
+  CODESPACE_BROWSER_SESSION_MS,
+  stripCodeSpaceBrowserCookie,
+} from './codespaceBrowserAuthorization';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import http, {
   type IncomingHttpHeaders,
@@ -23,6 +29,7 @@ export type NativeCodeSpaceGateway = Readonly<{
   origin: string;
   port: number;
   token: string;
+  mintBrowserEntry: () => string;
   close: () => Promise<void>;
 }>;
 
@@ -54,12 +61,25 @@ function copyHeaders(
   ]);
   for (const value of String(source.connection ?? '').split(','))
     excluded.add(value.trim().toLowerCase());
-  return Object.fromEntries(
+  const headers = Object.fromEntries(
     Object.entries(source).filter(
       ([name, value]) =>
         value !== undefined && !excluded.has(name.toLowerCase()),
     ),
   ) as Record<string, string | string[]>;
+  if (typeof headers.cookie === 'string') {
+    headers.cookie = stripCodeSpaceBrowserCookie(headers.cookie);
+    if (!headers.cookie) delete headers.cookie;
+  }
+  if (headers['set-cookie']) {
+    const cookies = headers['set-cookie'];
+    headers['set-cookie'] = (
+      Array.isArray(cookies) ? cookies : [cookies]
+    ).filter(
+      (cookie) => cookie.split('=')[0]?.trim() !== CODESPACE_BROWSER_COOKIE,
+    );
+  }
+  return headers;
 }
 
 function exactHeader(
@@ -85,7 +105,16 @@ function equalToken(actual: string | undefined, expected: string): boolean {
 export async function createNativeCodeSpaceGateway(
   route: NativeCodeSpaceRoute,
   port = 0,
+  browserHost?: string,
 ): Promise<NativeCodeSpaceGateway> {
+  if (
+    browserHost !== undefined &&
+    !/^cs-[a-f0-9]{40}\.localhost$/u.test(browserHost)
+  ) {
+    await route.close();
+    throw new Error('invalid codespace browser host');
+  }
+  const browser = browserHost ? new CodeSpaceBrowserAuthorization() : undefined;
   const token = randomBytes(32).toString('base64url');
   const lifetime = new AbortController();
   const sockets = new Set<Duplex>();
@@ -104,15 +133,19 @@ export async function createNativeCodeSpaceGateway(
   });
   server.on('clientError', (_error, socket) => socket.destroy());
 
-  const admitted = (request: IncomingMessage): boolean =>
+  const validRequest = (request: IncomingMessage): boolean =>
     !lifetime.signal.aborted &&
     exactHeader(request, 'host') === new URL(origin).host &&
     Boolean(
       request.url?.startsWith('/') &&
-      !request.url.startsWith('//') &&
-      !request.url.includes('\\'),
-    ) &&
-    equalToken(exactHeader(request, CODESPACE_NATIVE_AUTH_HEADER), token);
+        !request.url.startsWith('//') &&
+        !request.url.includes('\\'),
+    );
+  const admitted = (request: IncomingMessage, upgrade = false): boolean =>
+    validRequest(request) &&
+    (browser
+      ? browser.authorize(request, origin, upgrade)
+      : equalToken(exactHeader(request, CODESPACE_NATIVE_AUTH_HEADER), token));
 
   const begin = async (
     incoming: IncomingMessage,
@@ -180,6 +213,7 @@ export async function createNativeCodeSpaceGateway(
   };
 
   server.on('request', (incoming, response) => {
+    if (validRequest(incoming) && browser?.redeem(incoming, response)) return;
     if (!admitted(incoming)) {
       response.writeHead(401, { Connection: 'close' });
       response.end();
@@ -228,7 +262,7 @@ export async function createNativeCodeSpaceGateway(
   });
 
   server.on('upgrade', (incoming, downstream, head) => {
-    if (!admitted(incoming)) {
+    if (!admitted(incoming, true)) {
       downstream.end(
         'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n',
       );
@@ -290,18 +324,30 @@ export async function createNativeCodeSpaceGateway(
     throw error;
   }
   const ownedPort = (server.address() as AddressInfo).port;
-  origin = `http://127.0.0.1:${ownedPort}`;
+  origin = `http://${browserHost ?? '127.0.0.1'}:${ownedPort}`;
+  let expiry: NodeJS.Timeout | undefined;
+  const close = (): Promise<void> =>
+    (closed ??= (async () => {
+      clearTimeout(expiry);
+      lifetime.abort();
+      for (const request of requests) request.destroy();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await route.close();
+    })());
+  if (browser)
+    expiry = setTimeout(() => {
+      void close();
+    }, CODESPACE_BROWSER_SESSION_MS).unref();
   return {
     origin,
     port: ownedPort,
     token,
-    close: () =>
-      (closed ??= (async () => {
-        lifetime.abort();
-        for (const request of requests) request.destroy();
-        for (const socket of sockets) socket.destroy();
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-        await route.close();
-      })()),
+    mintBrowserEntry: () => {
+      if (!browser || lifetime.signal.aborted)
+        throw new Error('codespace_closed');
+      return browser.mint(origin);
+    },
+    close,
   };
 }

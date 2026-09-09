@@ -4,8 +4,8 @@
     "release_version": "v0.12.0",
     "previous_release": "v0.11.0",
     "reviewed_at": "2026-09-09",
-    "review_id": "codespace-native-http-v1",
-    "summary": "Compatibility epoch 13 adds protected Desktop native CodeSpace HTTP and Code App streams while retaining the epoch 12 Flower storage-generation fence and every reviewed earlier upgrade. The v0.12.0 release pair remains the minimum supported Desktop and Runtime.",
+    "review_id": "codespace-browser-handoff-v1",
+    "summary": "Compatibility epoch 14 adds isolated CodeSpace system-browser presentation origins to the epoch 13 native HTTP/stream contract, retaining the epoch 12 storage-generation fence and reviewed upgrades. The v0.12.0 release pair remains the minimum supported Desktop and Runtime.",
     "checked_surfaces": [
       "Floret v7.6.1 public inspection, WAL snapshots, deferred Host activation, and restore preparation own canonical storage and execution. Product and read-state stores share the readiness generation; backing_up and restoring remain Flower-only maintenance states in Env App, Desktop, Runtime Service, and sys.ping. Administrator-confirmed restoration uses a durable complete-set replacement journal, preserves prior data and queued inputs, and invalidates old execution and approval. New user submissions fetch the storage generation; persisted outbox retries retain their original generation and remain copyable after rejection. The flower-title-generation-v1 title contract and all transport review surfaces remain required.",
       "Flower HTTP lists, details, and live summaries carry Floret title_generation. Desktop and Env App require the same canonical title contract; the existing compatibility handshake rejects older epoch combinations. Title text, status, and generation share one ThreadCache summary owner independently of runtime views.",
@@ -30,19 +30,20 @@
       "Each remote or local accepted session registers the final Flowersec SessionHandlers, RPC, ByteStream, and terminal/live_v1 boundaries directly; outbound terminal notification sinks attach to the established Flowersec RPC peer and detach idempotently when that session ends",
       "Desktop attach and start, CA-free private bridge health, optional public device CA trust, startup reports, sys.ping, Env App maintenance, SSH runtime bootstrap, independent public WSS, terminal history recovery, and consecutive Desktop bridge sessions remain covered by focused transport contracts",
       "Flowersec ConnectionController remains the only reconnect owner; secure-session retry uses Floe Webapp replaceConnection so an old asynchronous close cannot overwrite a new controller generation, while Redeven supplies artifact acquisition, authorization, permissions, product RPC handlers, and post-session business recovery without a second reconnect state machine or alternate carrier path",
-      "The desktop-placement-http2-v1 boundary remains unchanged. Runtime Service protocol_version is redeven-runtime-v2 at compatibility_epoch 13; Desktop verifies Runtime Service, the redeven-desktop-placement-h2/1 private bridge, Catalog, Local UI, package identity, and a unique managed process before a direct lifecycle operation succeeds",
+      "The desktop-placement-http2-v1 boundary remains unchanged. Runtime Service protocol_version is redeven-runtime-v2 at compatibility_epoch 14; Desktop verifies Runtime Service, the redeven-desktop-placement-h2/1 private bridge, Catalog, Local UI, package identity, and a unique managed process before a direct lifecycle operation succeeds",
       "Gateway is an optional access component and never prepares, starts, stops, updates, reinstalls, or supervises a managed Runtime",
       "Published ReDevPlugin 3.0.31 prepares validated installed Worker modules during process startup before an Env App session exists, while authenticated recovery remains the execution authority. The released bounded document cache retains only hash-matched bytes and revalidates trust. Workbench hidden and offscreen first commits, exact-slot retry cleanup, real Desktop runtime restart, and preparation latency are covered without changing Runtime Service protocol, Rust IPC, or plugin author API.",
-      "Desktop native CodeSpace windows use a persistent resource/account profile, a protected stable numeric-loopback origin, the selected EnvironmentSession transport, and released Flowersec HTTP/Node stream adapters. Runtime binds full permissions and AccessGate to one running editor generation; browser launchers remain unchanged and application traffic is never replayed."
+      "Desktop CodeSpace windows and system-browser openings share the selected EnvironmentSession route and generation-bound Runtime handler. ID-only browser intent mints a single-use entry on an isolated cs-<profile>.localhost origin; Host-only browser cookies never reach Runtime or the editor. Epoch 14 rejects older runtimes that only accept numeric-loopback presentation origins. Entry expiry, HTTP resources, WebSockets, AccessGate, environment disposal, file save and terminal execution are covered without replaying application traffic."
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 13,
+  "compatibility_epoch": 14,
   "upgrade_from_runtime_epochs": [
     9,
     10,
     11,
-    12
+    12,
+    13
   ],
   "minimum_desktop_version": "v0.12.0",
   "minimum_runtime_version": "v0.12.0"

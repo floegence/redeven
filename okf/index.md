@@ -62,6 +62,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Code
 
+- [CodeSpace system-browser access](desktop/codespace-system-browser.md) - Hand a resource-bound entry to an ordinary browser and preserve editor operations without private bridge credentials.
 - [Native Desktop CodeSpace access](desktop/codespace-native-access.md) - Open a bound editor through a persistent protected loopback origin over the selected environment transport.
 - [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.
 

@@ -1,17 +1,17 @@
 import { expect, it } from 'vitest';
 import { normalizeDesktopShellOpenCodespaceWindowRequest as normalize } from './desktopShellCodespaceWindowIPC';
-it('accepts only a bounded resource intent and keeps passwords ephemeral', () => {
-  expect(normalize({ mode: 'open', code_space_id: 'space-one' })).toEqual({
-    mode: 'open',
+it.each(['open', 'browser'])('accepts only a bounded %s resource intent and keeps passwords ephemeral', (mode) => {
+  expect(normalize({ mode, code_space_id: 'space-one' })).toEqual({
+    mode,
     code_space_id: 'space-one',
   });
   expect(
     normalize({
-      mode: 'open',
+      mode,
       code_space_id: 'space-one',
       password: ' secret ',
     }),
-  ).toEqual({ mode: 'open', code_space_id: 'space-one', password: ' secret ' });
+  ).toEqual({ mode, code_space_id: 'space-one', password: ' secret ' });
   for (const extra of [
     { url: 'https://example.com' },
     { host: 'localhost' },
@@ -19,7 +19,7 @@ it('accepts only a bounded resource intent and keeps passwords ephemeral', () =>
     { route: 'remote' },
   ])
     expect(
-      normalize({ mode: 'open', code_space_id: 'space-one', ...extra }),
+      normalize({ mode, code_space_id: 'space-one', ...extra }),
     ).toBeNull();
   for (const id of [
     '',
@@ -30,7 +30,7 @@ it('accepts only a bounded resource intent and keeps passwords ephemeral', () =>
     'UPPER',
     'x'.repeat(49),
   ])
-    expect(normalize({ mode: 'open', code_space_id: id })).toBeNull();
+    expect(normalize({ mode, code_space_id: id })).toBeNull();
   expect(
     normalize({ code_space_id: 'one', url: 'https://example.com' }),
   ).toBeNull();

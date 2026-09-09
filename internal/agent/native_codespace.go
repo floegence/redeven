@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 
@@ -48,8 +47,8 @@ func (a *Agent) registerNativeCodeSpaceStreams(ctx context.Context, handlers *fl
 	if err := handlers.HandleStream("code/http_v1", func(streamCtx context.Context, incoming flowersec.IncomingStream) error {
 		values := incoming.Metadata.Values()
 		origin, ok := values["presentation_origin"].(string)
-		parsed, err := url.Parse(origin)
-		if !ok || len(values) != 1 || len(origin) > 128 || err != nil || parsed.Scheme != "http" || parsed.Hostname() != "127.0.0.1" || parsed.Port() == "" || parsed.String() != parsed.Scheme+"://"+parsed.Host {
+		parsed, valid := appserver.NativeCodeSpaceOrigin(origin)
+		if !ok || len(values) != 1 || !valid {
 			return errors.New("invalid native presentation origin")
 		}
 		if lifetime.Err() != nil {

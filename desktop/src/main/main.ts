@@ -1,3 +1,4 @@
+import { CodeSpaceBrowserSessions } from './codespaceBrowserSessions';
 import { createNativeCodeSpaceGateway, type NativeCodeSpaceGateway } from './codespaceNativeGateway';
 import { createLocalNativeCodeSpaceRoute } from './codespaceNativeRoute';
 import { createRemoteNativeCodeSpaceRoute } from './codespaceNativeRemote';
@@ -768,6 +769,7 @@ type DesktopSessionRecord = {
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
   codespace_windows: Map<string, DesktopTrackedWindow>;
+  codespace_browser: CodeSpaceBrowserSessions;
   codespace_native: Map<string, { identity: string; partition: string; lifetime: AbortController; gateway?: NativeCodeSpaceGateway; dispose?: () => void; opening?: Promise<void> }>;
   web_service_windows: Map<string, DesktopTrackedWindow>;
   web_service_loopback_gateways: Map<string, WebServiceLoopbackGateway>;
@@ -8198,6 +8200,20 @@ function codeSpaceProfiles(): NativeCodeSpaceProfiles {
   return nativeCodeSpaceProfiles ??= new NativeCodeSpaceProfiles(path.join(app.getPath('userData'), 'codespace-profiles.json'));
 }
 
+async function sessionCodeSpaceIdentity(record: DesktopSessionRecord, codeSpaceID: string): Promise<string> {
+  const target = record.target;
+  const account = target.kind === 'local_environment' && target.provider_origin
+    ? savedControlPlaneByIdentity(await loadDesktopPreferencesCached(), target.provider_origin, target.provider_id ?? '')?.account.user_public_id ?? '' : '';
+  return nativeCodeSpaceIdentity(target, codeSpaceID, account);
+}
+
+async function createSessionCodeSpaceRoute(record: DesktopSessionRecord, codeSpaceID: string, signal: AbortSignal, password?: string) {
+  const webSession = session.fromPartition(record.session_partition);
+  return record.transport.kind === 'provider_remote'
+    ? createRemoteNativeCodeSpaceRoute({ webSession, environmentOrigin: record.transport.baseURL, envPublicID: record.target.kind === 'local_environment' ? record.target.env_public_id ?? '' : '', codeSpaceID, password, signal })
+    : createLocalNativeCodeSpaceRoute({ transport: record.transport, startup: record.startup, webSession, codeSpaceID, signal });
+}
+
 async function openSessionCodespaceLoadingWindow(
   sessionKey: DesktopSessionKey,
   codeSpaceID: string,
@@ -8216,13 +8232,10 @@ async function openSessionCodespaceLoadingWindow(
   }
   // A late setup failure must not resurrect a child that the user already closed.
   if (copy.state === 'error') return null;
-  const target = record.target;
-  const account = target.kind === 'local_environment' && target.provider_origin
-    ? savedControlPlaneByIdentity(await loadDesktopPreferencesCached(), target.provider_origin, target.provider_id ?? '')?.account.user_public_id ?? '' : '';
+  const identity = await sessionCodeSpaceIdentity(record, codeSpaceID);
   if (record.closing) return null;
   const concurrent = liveTrackedBrowserWindow(record.codespace_windows.get(codeSpaceID));
   if (concurrent) return concurrent;
-  const identity = nativeCodeSpaceIdentity(target, codeSpaceID, account);
   const state = { identity, partition: `persist:redeven-code:${identity}`, lifetime: new AbortController() } as NonNullable<ReturnType<typeof record.codespace_native.get>>;
   record.codespace_native.set(codeSpaceID, state);
   record.codespace_loading_documents.set(codeSpaceID, copy);
@@ -8259,10 +8272,7 @@ async function prepareSessionNativeCodeSpace(record: DesktopSessionRecord, codeS
     const signal = state.lifetime.signal;
     const profile = codeSpaceProfiles();
     const port = profile.port(state.identity);
-    const webSession = session.fromPartition(record.session_partition);
-    const route = record.transport.kind === 'provider_remote'
-      ? await createRemoteNativeCodeSpaceRoute({ webSession, environmentOrigin: record.transport.baseURL, envPublicID: record.target.kind === 'local_environment' ? record.target.env_public_id ?? '' : '', codeSpaceID, password, signal })
-      : await createLocalNativeCodeSpaceRoute({ transport: record.transport, startup: record.startup, webSession, codeSpaceID, signal });
+    const route = await createSessionCodeSpaceRoute(record, codeSpaceID, signal, password);
     if (signal.aborted) { await route.close(); throw new Error('codespace_closed'); }
     const gateway = await createNativeCodeSpaceGateway(route, port);
     try {
@@ -8303,6 +8313,16 @@ async function openCodespaceWindowFromShell(
     if (request.mode === 'loading') {
       const window = await openSessionCodespaceLoadingWindow(record.session_key, request.code_space_id, request);
       return { ok: window !== null };
+    }
+    if (request.mode === 'browser') {
+      const identity = await sessionCodeSpaceIdentity(record, request.code_space_id);
+      if (record.closing) throw new Error('codespace_closed');
+      await record.codespace_browser.open(request.code_space_id, {
+        identity, profiles: codeSpaceProfiles(),
+        createRoute: (signal) => createSessionCodeSpaceRoute(record, request.code_space_id, signal, request.password),
+        openExternal: openExternalURL,
+      });
+      return { ok: true };
     }
     await prepareSessionNativeCodeSpace(record, request.code_space_id, request.password);
     return { ok: true };
@@ -9289,6 +9309,7 @@ async function createSessionRecord(
     root_window: rootWindow,
     child_windows: new Map(),
     codespace_windows: new Map(),
+    codespace_browser: new CodeSpaceBrowserSessions(),
     codespace_native: new Map(),
     web_service_windows: new Map(),
     web_service_loopback_gateways: new Map(),
@@ -9410,6 +9431,7 @@ async function finalizeSessionClosure(
     }
     sessionRecord.child_windows.clear();
 
+    await sessionRecord.codespace_browser.close();
     const nativeCodeSpaces = Array.from(sessionRecord.codespace_native.values());
     for (const codespaceWindow of sessionRecord.codespace_windows.values()) {
       sessionKeyByWebContentsID.delete(codespaceWindow.webContentsID);

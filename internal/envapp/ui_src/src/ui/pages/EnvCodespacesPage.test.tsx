@@ -1140,12 +1140,12 @@ describe('EnvCodespacesPage', () => {
     windowOpenSpy.mockRestore();
   });
 
-  it('requests a Code App password in the trusted page and clears rejected input before retrying', async () => {
+  it.each(['open', 'browser'])('requests a Code App password for %s in the trusted page and clears rejected input before retrying', async (mode) => {
     const bridge = vi.fn().mockImplementation(async (request) => request.mode === 'loading' || request.password === 'correct-password' ? { ok: true } : { ok: false, message: 'codespace_password_required' });
     window.redevenDesktopShell = { openCodespaceWindow: bridge };
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Desktop')?.click();
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === (mode === 'browser' ? 'Open in Browser' : 'Open in Desktop'))?.click();
     await flushPage();
     const submit = async (password: string) => {
       const input = host.querySelector<HTMLInputElement>('input[type="password"]');
@@ -1161,7 +1161,7 @@ describe('EnvCodespacesPage', () => {
     expect(host.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe('');
     await submit('correct-password');
     expect(host.querySelector('input[type="password"]')).toBeNull();
-    expect(bridge).toHaveBeenLastCalledWith({ mode: 'open', code_space_id: 'space-1', password: 'correct-password' });
+    expect(bridge).toHaveBeenLastCalledWith({ mode, code_space_id: 'space-1', password: 'correct-password' });
     expect(controlplaneMocks.mintEnvEntryTicketForApp).not.toHaveBeenCalled();
   });
 
@@ -1190,9 +1190,8 @@ describe('EnvCodespacesPage', () => {
     await flushPage();
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
-    expect(openCodespaceWindowBridge).not.toHaveBeenCalled();
-    expect(openExternalURLBridge).toHaveBeenCalledTimes(1);
-    expect(openExternalURLBridge.mock.calls[0]?.[0]).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+    expect(openCodespaceWindowBridge).toHaveBeenCalledWith({ mode: 'browser', code_space_id: 'space-1' });
+    expect(openExternalURLBridge).not.toHaveBeenCalled();
 
     windowOpenSpy.mockRestore();
   });
@@ -1257,9 +1256,8 @@ describe('EnvCodespacesPage', () => {
     await flushPage();
 
     expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', { method: 'POST' });
-    expect(openCodespaceWindowBridge).not.toHaveBeenCalled();
-    expect(openExternalURLBridge).toHaveBeenCalledTimes(1);
-    expect(openExternalURLBridge.mock.calls[0]?.[0]).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+    expect(openCodespaceWindowBridge).toHaveBeenCalledWith({ mode: 'browser', code_space_id: 'space-1' });
+    expect(openExternalURLBridge).not.toHaveBeenCalled();
   });
 
   it('opens a loading desktop window before auto-starting a stopped codespace', async () => {
