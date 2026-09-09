@@ -6,6 +6,7 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { I18nProvider } from '../i18n';
 import { SUPPORTED_LOCALES } from '../i18n/localeMeta';
 import { EnvPortForwardsPage } from './EnvPortForwardsPage';
+import type { ManagedOperation } from './managedServiceOperationController';
 
 const api = vi.hoisted(() => ({ fetch: vi.fn(), stream: vi.fn(), open: vi.fn(), notify: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@floegence/floe-webapp-core', async (original) => ({ ...await original<typeof import('@floegence/floe-webapp-core')>(), useNotification: () => api.notify }));
@@ -179,6 +180,89 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => host.querySelectorAll('[data-managed-service-id]').length).toBe(1);
     expect(api.fetch.mock.calls.find(([url]) => String(url).endsWith('/operations'))?.[1].body).toContain('reviewed-plan');
     await expect.poll(() => host.contains(document.activeElement)).toBe(true);
+  });
+
+  async function executeRecovery(mode: 'immediate' | 'streamed' | 'stream-error', state = 'succeeded') {
+    records = [{ ...base, status: 'recovery_required', observed_state: 'missing', primary_action: 'inspect', actions: { ...base.actions, open: { available: false } } }];
+    const completed: ManagedOperation = {
+      operation_id: 'recovery-operation', service_id: base.service_id, action: 'recover',
+      state, stage: state === 'succeeded' ? 'completed' : 'failed', progress_current: 7, progress_total: 7,
+      ...(state === 'failed' ? { error_code: 'START_FAILED' } : {}),
+    };
+    const running = { ...completed, state: 'running', stage: 'starting', progress_current: 3 };
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    api.stream.mockImplementation(async () => {
+      if (mode === 'stream-error') throw new Error('Recovery event stream disconnected.');
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } }), { headers: { 'Content-Type': 'text/event-stream' } });
+    });
+    const original = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/operations')) {
+        if (mode !== 'immediate') return running;
+        if (state === 'succeeded') records = [base];
+        return completed;
+      }
+      return original(url, options);
+    });
+    await mount(680);
+    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Recover service', exact: true }));
+    if (mode === 'streamed') {
+      await expect.poll(() => api.stream.mock.calls.length).toBe(1);
+      if (state === 'succeeded') records = [base];
+      stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(completed)}\n\n`));
+      stream.close();
+    }
+    return host.querySelector<HTMLElement>('[data-managed-service-id="sample-running"]')!;
+  }
+
+  for (const mode of ['immediate', 'streamed'] as const) it(`dismisses ${mode} recovery success while keeping the service row`, async () => {
+    const row = await executeRecovery(mode);
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Completed');
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    expect(row.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
+    expect((page.getByRole('button', { name: 'Example dashboard: Stop', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-disclosure"]'), { timeout: 4_000 }).toBeNull();
+    expect(row.isConnected).toBe(true);
+    await userEvent.click(page.getByTestId('web-services-refresh'));
+    await expect.poll(() => (host.querySelector('[data-testid="web-services-refresh"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(row.querySelector('[data-testid="managed-operation-disclosure"]')).toBeNull();
+    expect(row.isConnected).toBe(true);
+  });
+
+  it('keeps expanded recovery success readable and dismisses it after collapse', async () => {
+    const row = await executeRecovery('immediate');
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    const trigger = page.getByTestId('managed-service-operation-trigger');
+    await userEvent.click(trigger);
+    await new Promise((resolve) => setTimeout(resolve, 2_200));
+    expect(trigger.element().getAttribute('aria-expanded')).toBe('true');
+    expect(row.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
+    await userEvent.click(trigger);
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-disclosure"]'), { timeout: 1_500 }).toBeNull();
+    expect(row.isConnected).toBe(true);
+  });
+
+  it('retains a failed recovery result after closing the review drawer', async () => {
+    const row = await executeRecovery('immediate', 'failed');
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Failed');
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 2_200));
+    expect(row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Failed');
+    expect((page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('releases a disconnected recovery stream so the service can be reviewed again', async () => {
+    const row = await executeRecovery('stream-error');
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"] [role="alert"]')).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    const review = page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true });
+    expect((review.element() as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(review);
+    await expect.poll(() => document.querySelector('[data-testid="service-management-footer"] button:not(:disabled)')).toBeTruthy();
+    expect(row.isConnected).toBe(true);
   });
 
   it('shows request acceptance and completion without blocking other services or repeating a start', async () => {

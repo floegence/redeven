@@ -111,15 +111,15 @@ describe('managed service operation presentation', () => {
     presentation.dispose();
   });
 
-  it('retains attention states and lets a new operation replace them immediately', async () => {
+  it.each(['failed', 'cancelled', 'interrupted'])('retains %s results and lets a new operation replace them immediately', async (state) => {
     const presentation = createManagedServiceOperationPresentation({ isExpanded: () => false });
     const running = runningOperation('mop-failed');
     presentation.update(running);
-    presentation.update({ ...running, state: 'failed', stage: 'failed', error_code: 'START_FAILED' });
+    presentation.update({ ...running, state, stage: state, ...(state === 'failed' ? { error_code: 'START_FAILED' } : {}) });
     presentation.release(running.operation_id);
 
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(presentation.operationForService(running.service_id)?.state).toBe('failed');
+    expect(presentation.operationForService(running.service_id)?.state).toBe(state);
     expect(presentation.phaseForService(running.service_id)).toBe('visible');
 
     const next = runningOperation('mop-next');
