@@ -35,7 +35,11 @@ describe('Web Services product interaction', () => {
   let records: (typeof base & { problem_code?: string })[];
   let failRefresh = false;
   let host: HTMLDivElement;
+  let rootAttributes: [string, string][];
+  let storedPreferences: [string, string][];
   beforeEach(() => {
+    rootAttributes = Array.from(document.documentElement.attributes, ({ name, value }) => [name, value]);
+    storedPreferences = Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)!]);
     localStorage.clear();
     localStorage.setItem('redeven_ui_language_preference', 'en-US');
     records = [base, retained, { ...base, service_id: 'sample-archive', name: 'Archived dashboard', management_state: 'detached', status: 'detached', primary_action: 'inspect' }];
@@ -60,7 +64,16 @@ describe('Web Services product interaction', () => {
       throw new Error(`Unexpected test API: ${url}`);
     });
   });
-  afterEach(async () => { dispose?.(); document.body.replaceChildren(); localStorage.clear(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); });
+  afterEach(async () => {
+    dispose?.();
+    document.body.replaceChildren();
+    localStorage.clear();
+    for (const [key, value] of storedPreferences) localStorage.setItem(key, value);
+    // ThemeProvider clears token overrides but intentionally leaves the selected mode on the root.
+    for (const attribute of Array.from(document.documentElement.attributes)) document.documentElement.removeAttribute(attribute.name);
+    for (const [name, value] of rootAttributes) document.documentElement.setAttribute(name, value);
+    await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  });
   async function mount(width = 1120, preset = 'classic-light') {
     await page.viewport(1440, 960);
     host = document.createElement('div');
