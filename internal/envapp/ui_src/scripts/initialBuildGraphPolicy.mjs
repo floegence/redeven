@@ -18,6 +18,7 @@ export function findForbiddenInitialAssetNames(assets, forbiddenNames) {
 }
 
 function isForbiddenInitialModule(moduleId) {
+  if (moduleId.endsWith('/internal/config/model_catalog.generated.json')) return true;
   if (moduleId === '@floegence/floe-webapp-boot'
       || moduleId.startsWith('@floegence/floe-webapp-boot/')) {
     return true;

@@ -19,6 +19,5 @@ export * from './flowerRequestIdentity';
 export * from './flowerTurnLauncherCopy';
 export * from './icons/FlowerIcon';
 export * from './icons/FlowerSoftAuraIcon';
-export * from './settings/FlowerSettingsSurface';
 export * from './threads/FlowerThreadList';
 export * from './threads/FlowerThreadSwitcher';

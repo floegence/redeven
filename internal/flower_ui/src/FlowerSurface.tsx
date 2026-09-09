@@ -1,7 +1,7 @@
 import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
-import { For, Match, Show, Switch, batch, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
+import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
@@ -148,7 +148,6 @@ import {
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from './gitPatch';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
-import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
 import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
@@ -170,7 +169,7 @@ import {
 } from './transportOutbox';
 import { createLiveTransport } from './liveTransport';
 import { flowerThreadActivityRevision } from './flowerThreadListRefresh';
-import { flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
+import { flowerModelSupportsImage, formatFlowerTokenCount } from './flowerModelLabel';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
   type FlowerComposerDraftCoordinator,
@@ -220,6 +219,8 @@ import {
   sameFlowerReasoningSelection,
   serializeFlowerReasoningSelection,
 } from './reasoning';
+
+const FlowerSettingsSurface = lazy(() => import('./settings/FlowerSettingsSurface').then((module) => ({ default: module.FlowerSettingsSurface })));
 
 type FlowerSurfacePanel = 'chat' | 'settings';
 type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
@@ -794,6 +795,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadsLoaded, setThreadsLoaded] = createSignal(false);
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
+  const [settingsOpened, setSettingsOpened] = createSignal(false);
   let consumedSettingsFocusRequest = 0;
   const [contextSnapshotPreview, setContextSnapshotPreview] = createSignal<FlowerChatContextSnapshotPreview | null>(null);
   const [attachmentPreview, setAttachmentPreview] = createSignal<FlowerAttachmentPreviewSource | null>(null);
@@ -4516,6 +4518,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const openSettings = () => {
     closeSubagentOverlays();
     setSidePanel('settings');
+    setSettingsOpened(true);
   };
 
   createEffect(() => {
@@ -11483,17 +11486,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <section class="flower-component-main">
         <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
         <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
-          <FlowerSettingsSurface
-            onDiscoverModels={props.adapter.discoverProviderModels}
-            snapshot={snapshot()}
-            copy={copy().settings}
-            onSaveDefaultPermission={saveDefaultPermission}
-            onSaveModelProfile={saveModelProfile}
-            saveError={saveError()}
-            savedAt={savedAt()}
-            saving={settingsSaving()}
-            onBackToChat={returnToChat}
-          />
+          <Show when={settingsOpened()}>
+            <Suspense fallback={<div class="p-4 text-sm text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
+              <FlowerSettingsSurface
+                onDiscoverModels={props.adapter.discoverProviderModels}
+                snapshot={snapshot()}
+                copy={copy().settings}
+                onSaveDefaultPermission={saveDefaultPermission}
+                onSaveModelProfile={saveModelProfile}
+                saveError={saveError()}
+                savedAt={savedAt()}
+                saving={settingsSaving()}
+                onBackToChat={returnToChat}
+              />
+            </Suspense>
+          </Show>
         </div>
       </section>
       <FlowerWorkingDirPickerDialog

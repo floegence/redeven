@@ -98,6 +98,19 @@ test('fails closed when a static manifest edge is missing', () => {
   }), /manifest import is missing/u);
 });
 
+test('loads generated model metadata through a dynamic settings boundary', () => {
+  const catalog = '/workspace/redeven/internal/config/model_catalog.generated.json';
+  const chunks = { chunks: { 'assets/index.js': chunk(['src/index.ts']), 'assets/models.js': chunk([catalog]) } };
+  const manifest = {
+    'index.html': entry('assets/index.js', { dynamicImports: ['models.ts'] }),
+    'models.ts': { file: 'assets/models.js' },
+  };
+  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules, []);
+  manifest['index.html'].imports = ['models.ts'];
+  const result = analyzeInitialBuildGraph(manifest, chunks);
+  assert.deepEqual(result.forbiddenModules.map((item) => item.moduleId), [catalog]);
+});
+
 test('ignores forbidden words that occur only inside Vite content hashes', () => {
   assert.deepEqual(findForbiddenInitialAssetNames(
     ['assets/index-Biuxjpdf.js', 'assets/index-DDO0JaUN.css'],

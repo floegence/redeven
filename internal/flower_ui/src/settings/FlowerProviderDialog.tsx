@@ -1,6 +1,7 @@
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { ModelCatalogControls } from './ModelCatalogControls';
 import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, flowerProviderModelChoices, setFlowerModelsEnabled } from './modelSelection';
+import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import { For, Show, createEffect, createSignal } from 'solid-js';
 import { createStore, produce, reconcile } from 'solid-js/store';
@@ -16,12 +17,10 @@ import {
   FLOWER_PROVIDER_TYPES,
   defaultBaseURLForFlowerProviderType,
   defaultFlowerContextWindowForProviderType,
-  flowerModelSupportsImage,
   flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
   flowerProviderUsesCustomName,
-  formatFlowerTokenCount,
 } from './providerCatalog';
 import {
   FlowerFieldLabel,

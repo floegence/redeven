@@ -1,4 +1,3 @@
-import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../flower_ui/src/settings/modelSelection';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import {
@@ -17,7 +16,6 @@ import type {
   FlowerAttachmentStagingScope,
   FlowerCanonicalReferenceOpenRequest,
   FlowerProvider,
-  FlowerProviderDraft,
   FlowerProviderModel,
   FlowerPermissionType,
   FlowerRouterDecision,
@@ -351,7 +349,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
     ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
     model_selection: provider.model_selection,
-    models: resolveFlowerProviderModels(provider as FlowerProvider).map((model) => mapProviderModel(model as NonNullable<AIConfig['providers']>[number]['models'][number])).filter((model) => model.model_name),
+    models: (provider.models ?? []).map(mapProviderModel).filter((model) => model.model_name),
   };
 }
 
@@ -492,14 +490,11 @@ function mapSettings(
   };
 }
 
-function draftProviderToAI(provider: FlowerProviderDraft): NonNullable<AIConfig['providers']>[number] {
-  return serializeFlowerProvider(provider) as NonNullable<AIConfig['providers']>[number];
-}
-
-function draftToModelProfile(draft: FlowerSettingsDraft): AIModelProfile {
+async function draftToModelProfile(draft: FlowerSettingsDraft): Promise<AIModelProfile> {
+  const { serializeFlowerProvider } = await import('../../../../../flower_ui/src/settings/modelSelection');
   return {
     current_model_id: trim(draft.model_profile.current_model_id),
-    providers: draft.model_profile.providers.map(draftProviderToAI),
+    providers: draft.model_profile.providers.map((provider) => serializeFlowerProvider(provider) as NonNullable<AIConfig['providers']>[number]),
   };
 }
 
@@ -589,8 +584,9 @@ async function loadSettingsSnapshot(
   }
   const snapshot = mapSettings(settings, catalog, exposeDesktopModelSource);
   if (!snapshot.model_profile) return snapshot;
-  const providers = await Promise.all(snapshot.model_profile.providers.map((provider) => provider.type === 'ollama'
-    ? hydrateFlowerProviderCatalog(provider, (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) })) : provider));
+  const { hydrateFlowerProviderCatalog } = await import('../../../../../flower_ui/src/settings/modelSelection');
+  const providers = await Promise.all(snapshot.model_profile.providers.map((provider) =>
+    hydrateFlowerProviderCatalog(provider, (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }))));
   return { ...snapshot, model_profile: { ...snapshot.model_profile, providers } };
 }
 
@@ -817,7 +813,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({
-          model_profile: draftToModelProfile(draft),
+          model_profile: await draftToModelProfile(draft),
           provider_api_key_patches: providerAPIKeyPatches,
           web_search_provider_key_patches: webSearchKeyPatches,
         }),

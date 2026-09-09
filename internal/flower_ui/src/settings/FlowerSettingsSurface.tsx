@@ -1,4 +1,5 @@
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
+import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
@@ -20,13 +21,11 @@ import {
   defaultBaseURLForFlowerProviderType,
   defaultFlowerContextWindowForProviderType,
   flowerModelID,
-  flowerModelSupportsImage,
   flowerProviderNeedsWebSearchConfig,
   flowerProviderPresetForType,
   flowerProviderTypeLabel,
   flowerProviderTypeRequiresBaseURL,
   flowerProviderUsesCustomName,
-  formatFlowerTokenCount,
   normalizeFlowerEffectiveContextPercent,
   normalizeFlowerInputModalities,
   normalizeFlowerPositiveInteger,
