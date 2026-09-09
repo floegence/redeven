@@ -7,7 +7,8 @@ import {
   onCleanup,
   type JSX,
 } from 'solid-js';
-import { Button, Checkbox } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Dropdown } from '@floegence/floe-webapp-core/ui';
+import { Check, ChevronDown, Copy } from '@floegence/floe-webapp-core/icons';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
@@ -162,6 +163,11 @@ export function ManagedServiceManagementDrawer(props: {
   const [executing, setExecuting] = createSignal(false);
   const [error, setError] = createSignal('');
   const [revision, setRevision] = createSignal(0);
+  const [pathCopy, setPathCopy] = createSignal<'idle' | 'copied' | 'failed'>('idle');
+  const copyPath = async () => {
+    try { await navigator.clipboard.writeText(props.service?.workspace_path ?? ''); setPathCopy('copied'); }
+    catch { setPathCopy('failed'); }
+  };
   let generation = 0;
   const text = (key: string) =>
     i18n.t(`webServices.management.${key}` as EnvAppTranslationKey);
@@ -172,6 +178,7 @@ export function ManagedServiceManagementDrawer(props: {
         setRequest({ action: props.initialAction });
         setPlan(null);
         setError('');
+        setPathCopy('idle');
         if (!props.service) generation++;
       },
     ),
@@ -185,7 +192,6 @@ export function ManagedServiceManagementDrawer(props: {
     const current = ++generation;
     setLoading(true);
     setError('');
-    setPlan(null);
     void fetchLocalApiJSON<ManagementPlan>(
       `/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/management-plans`,
       { method: 'POST', body: JSON.stringify(body), signal: controller.signal },
@@ -209,7 +215,7 @@ export function ManagedServiceManagementDrawer(props: {
   const choose = (action: ManagementAction) => setRequest({ action });
   const execute = async () => {
     const current = plan();
-    if (!current || current.blockers.length || executing() || loading()) return;
+    if (!current || current.blockers.length || executing() || loading() || error()) return;
     setExecuting(true);
     setError('');
     try {
@@ -259,12 +265,40 @@ export function ManagedServiceManagementDrawer(props: {
       }}
       title={props.service?.name ?? text('title')}
       description={text('title')}
+      class="service-management-panel"
       bodyClass="min-h-0"
+      footer={<div class="service-management-footer" data-testid="service-management-footer">
+          <Button
+            size="sm"
+            variant={
+              request().action === 'uninstall' || request().action === 'detach'
+                ? 'destructive'
+                : 'default'
+            }
+            class="service-management-execute"
+            onClick={() => void execute()}
+            disabled={
+              !plan() || Boolean(error()) ||
+              loading() ||
+              executing() ||
+              Boolean(plan()?.blockers.length) ||
+              (retainedArchive() &&
+                request().action === 'uninstall' &&
+                !hasCleanupSelection()) ||
+              (request().action === 'detach' && !props.administrator)
+            }
+          >
+            {executing() ? text('executing') : actionLabel()}
+          </Button>
+          <Show when={request().action === 'uninstall'}>
+            <p class="text-xs leading-5 text-muted-foreground">{text('cancelMeaning')}</p>
+          </Show>
+      </div>}
     >
-      <div class="space-y-6 p-1" data-testid="service-management-drawer">
-        <section class="space-y-2">
-          <h3 class="text-sm font-semibold">{text('currentSituation')}</h3>
-          <p class="text-sm">
+      <div class="service-management-body" data-testid="service-management-drawer">
+        <section class="service-management-situation space-y-2">
+          <div class="service-management-section-heading"><h3>{text('currentSituation')}</h3><Button size="sm" variant="ghost" onClick={() => setRevision((value) => value + 1)} disabled={loading() || executing()}>{text('recheck')}</Button></div>
+          <p class="service-management-conclusion">
             {i18n.t(
               managementStatusKey(
                 props.service?.status ?? 'inspection_unavailable',
@@ -313,12 +347,12 @@ export function ManagedServiceManagementDrawer(props: {
             )}
           </Show>
         </section>
-        <section class="space-y-3">
+        <section class="service-management-section">
           <h3 class="text-sm font-semibold">{text('resources')}</h3>
           {props.ownershipReview}
           <Show when={plan()}>
             {(current) => (
-              <div class="flex justify-between gap-3 rounded-lg border p-3 text-xs">
+              <div class="service-management-resource-summary">
                 <span>{text('runtimeInstance')}</span>
                 <span>
                   {text(
@@ -336,8 +370,8 @@ export function ManagedServiceManagementDrawer(props: {
           </Show>
           <For each={plan()?.facts.resources ?? []}>
             {(resource) => (
-              <div class="rounded-lg border p-3 text-xs space-y-2">
-                <div class="flex justify-between gap-3">
+              <div class="service-management-resource">
+                <div class="service-management-resource-summary">
                   <span class="font-medium">
                     {resource.resource_id === 'workspace'
                       ? text('workspace')
@@ -355,12 +389,14 @@ export function ManagedServiceManagementDrawer(props: {
                     )}
                   </span>
                 </div>
-                <p class="break-all font-mono text-muted-foreground">
+                <p class="service-management-resource-identity">
                   {resource.identity}
                 </p>
                 <Show when={resource.problem_code}>
                   <p class="text-warning">{problem(resource.problem_code!)}</p>
                 </Show>
+                <Show when={resource.references?.length}>
+                  <details class="service-management-references"><summary><span>{text('references')}</span><span class="inline-flex items-center gap-2 tabular-nums">{resource.references?.length}<ChevronDown class="service-management-reference-chevron h-3 w-3" aria-hidden="true" /></span></summary>
                 <For each={resource.references ?? []}>
                   {(reference) => (
                     <button
@@ -394,10 +430,18 @@ export function ManagedServiceManagementDrawer(props: {
                       </span>
                     </button>
                   )}
-                </For>
+                </For>                  </details>
+                </Show>
               </div>
             )}
           </For>
+          <div class="service-management-path">
+            <div class="service-management-section-heading"><span>{text('workspace')}</span><Button size="sm" variant="ghost" class="h-8 w-8 px-0" onClick={() => void copyPath()} aria-label={text('copyPath')}>
+              <Show when={pathCopy() === 'copied'} fallback={<Copy class="h-3.5 w-3.5" />}><Check class="h-3.5 w-3.5" /></Show>
+            </Button></div>
+            <p class="service-management-resource-identity">{props.service?.workspace_path}</p>
+            <Show when={pathCopy() !== 'idle'}><p role="status" class="text-xs">{pathCopy() === 'copied' ? i18n.t('common.actions.copied') : text('copyFailed')}</p></Show>
+          </div>
           <Show when={props.service?.last_failure}>
             <details class="rounded-lg border p-3 text-xs">
               <summary class="cursor-pointer font-medium">
@@ -415,52 +459,18 @@ export function ManagedServiceManagementDrawer(props: {
             </details>
           </Show>
         </section>
-        <section class="space-y-3">
+        <section class="service-management-section">
           <h3 class="text-sm font-semibold">{text('nextAction')}</h3>
-          <div class="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant={
-                request().action === 'uninstall' ? 'secondary' : 'outline'
-              }
-              onClick={() => choose('uninstall')}
-              disabled={executing()}
-            >
-              {text(
-                retainedArchive() ? 'cleanupRetained' : 'actions.uninstall',
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant={request().action === 'recover' ? 'secondary' : 'outline'}
-              onClick={() => choose('recover')}
-              disabled={executing()}
-            >
-              {text('actions.recover')}
-            </Button>
-            <Show
-              when={
-                props.service?.actions?.stop?.available &&
-                plan()?.facts.runtime === 'running'
-              }
-            >
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => choose('stop')}
-                disabled={executing()}
-              >
-                {text('actions.stop')}
-              </Button>
-            </Show>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setRevision((value) => value + 1)}
-              disabled={loading()}
-            >
-              {text('recheck')}
-            </Button>
+          <div class="service-management-section-heading">
+            <span class="text-sm font-medium">{text(`actions.${request().action}`)}</span>
+            <Dropdown align="end" triggerAriaLabel={text('otherActions')} disabled={executing()} triggerClass="web-services-menu-trigger"
+              items={[
+                { id: 'uninstall', label: text(retainedArchive() ? 'cleanupRetained' : 'actions.uninstall') },
+                { id: 'recover', label: text('actions.recover') },
+                ...(props.service?.actions?.stop?.available && plan()?.facts.runtime === 'running' ? [{ id: 'stop', label: text('actions.stop') }] : []),
+              ].filter((item) => item.id !== request().action).map((item) => ({ ...item, disabled: executing() }))}
+              onSelect={(id) => choose(id as ManagementAction)}
+              trigger={<span>{text('otherActions')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></span>} />
           </div>
           <Show when={request().action === 'uninstall'}>
             <p class="text-xs text-muted-foreground">
@@ -491,9 +501,7 @@ export function ManagedServiceManagementDrawer(props: {
                   }))
                 }
               />
-              <p class="break-all font-mono text-xs text-muted-foreground">
-                {props.service?.workspace_path}
-              </p>
+
             </div>
           </Show>
           <Show
@@ -599,30 +607,6 @@ export function ManagedServiceManagementDrawer(props: {
               {text('preserveInstead')}
             </Button>
           </Show>
-          <Button
-            size="sm"
-            variant={
-              request().action === 'uninstall' || request().action === 'detach'
-                ? 'destructive'
-                : 'default'
-            }
-            onClick={() => void execute()}
-            disabled={
-              !plan() ||
-              loading() ||
-              executing() ||
-              Boolean(plan()?.blockers.length) ||
-              (retainedArchive() &&
-                request().action === 'uninstall' &&
-                !hasCleanupSelection()) ||
-              (request().action === 'detach' && !props.administrator)
-            }
-          >
-            {executing() ? text('executing') : actionLabel()}
-          </Button>
-          <Show when={request().action === 'uninstall'}>
-            <p class="text-xs text-muted-foreground">{text('cancelMeaning')}</p>
-          </Show>
           <details class="border-t pt-3">
             <summary class="cursor-pointer text-xs font-medium">
               {text('advanced')}
@@ -643,6 +627,7 @@ export function ManagedServiceManagementDrawer(props: {
               <Show
                 when={
                   props.administrator &&
+                  request().action !== 'detach' &&
                   props.service?.management_state !== 'detached' &&
                   props.service?.management_state !== 'uninstalled'
                 }

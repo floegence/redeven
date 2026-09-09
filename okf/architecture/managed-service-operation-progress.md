@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Service operation progress
 description: Persist and stream bounded, redacted lifecycle command output while preserving stable, user-controlled progress presentation.
 tags: [architecture, managed-services, operations, observability, security, ui]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-09T00:00:00Z
 ---
 # Summary
 
@@ -26,7 +26,7 @@ Uninstall keeps operation metadata, command templates, state, timing, error code
 
 ## Service-row interaction
 
-The owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. The service list is keyed by stable `service_id`, so refreshed service snapshots update the existing row and disclosure DOM in place instead of replaying entry presentation. The submitting placeholder transfers its explicit state once to the accepted backend operation ID. SSE snapshots and service-list replacements update the existing disclosure in place. A later operation defaults collapsed, and an operation removed from both page state and service state releases its disclosure entry.
+The owning page stores explicit expanded or collapsed state by `operation_id`; row component identity and service-object identity are not state owners. The service list is keyed by stable `service_id`, so refreshed service snapshots update the existing row and disclosure DOM in place instead of replaying entry presentation. The submitting placeholder shows request-submission feedback and transfers its explicit state once to the accepted backend operation ID. A rejected submission retains its safe failure in the same renderer disclosure; it creates no durable backend operation and does not change the observed service state. Failure explanations remain readable below the operation heading. SSE snapshots and service-list replacements update the existing disclosure in place. A later operation defaults collapsed, and an operation removed from both page state and service state releases its disclosure entry.
 
 The details surface keeps the ordered stage list on the left and one stage-context panel on the right at wide widths, then stacks those regions on narrow screens. That right panel uses the facts available for the current operation step: image or package transfer progress during transfer work, command templates and their bounded live output during command work, and stage timing when neither richer context exists. Command output never becomes a separate full-width region below both columns. The output viewport is the only local scroll owner. It follows new output while the user remains at the bottom, stops following when the user scrolls upward, and resumes only after the user returns to the bottom. Output changes do not open the disclosure, move page focus, or create a dialog.
 

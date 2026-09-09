@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "Referenziert von",
+      "copyPath": "Arbeitsverzeichnispfad kopieren",
+      "copyFailed": "Der Pfad konnte nicht kopiert werden. Wählen Sie ihn aus und kopieren Sie ihn manuell.",
+      "otherActions": "Weitere Aktionen",
       "title": "Prüfen und beheben",
       "currentSituation": "Aktuelle Situation",
       "checkedAt": "Geprüft",
@@ -3016,7 +3020,7 @@
       "network": "Instanznetzwerk"
     },
     "title": "Webdienste",
-    "description": "Öffnen Sie HTTP-Dienste an der Loopback-Schnittstelle dieser Umgebung in einem isolierten Desktop-Fenster oder über die sicherste verfügbare Route.",
+    "description": "Lokale Dienste in dieser Umgebung öffnen und verwalten.",
     "loadingEyebrow": "Webdienste",
     "loadingMessage": "Webdienste werden geladen...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Webdienst-Adresse",
-      "placeholder": "Port oder Adresse eingeben, z. B. 3000 oder localhost:8080/docs",
+      "placeholder": "Port oder lokale Adresse, z. B. 3000 oder localhost:8080/docs",
       "scopeTitle": "Nur lokale Dienste.",
       "scopeDescription": "Geben Sie einen Port oder eine Loopback-Adresse aus dieser Umgebung ein.",
       "invalidTitle": "Nur innerhalb dieser Umgebung verfügbar",
@@ -3076,7 +3080,18 @@
       "temporary": "Temporär"
     },
     "collection": {
-      "title": "Dienste"
+      "title": "Hinzugefügte Dienste",
+      "review": "Prüfen",
+      "recover": "Wiederherstellen",
+      "restore": "Verwalten",
+      "viewData": "Daten ansehen",
+      "archives": "Archive",
+      "archiveCount": "{name} · {count}",
+      "back": "Zurück zu den Diensten",
+      "archiveEmpty": "Dieses Archiv enthält keine Einträge.",
+      "updateAvailable": "Eine neuere stabile Version ist verfügbar",
+      "requestFailed": "Die Anfrage wurde nicht abgeschlossen. Prüfen Sie den Dienst, bevor Sie es erneut versuchen.",
+      "refreshFailed": "Die letzte Prüfung wurde nicht abgeschlossen. Zuvor geladene Dienste werden angezeigt. Erneut prüfen, um ihren Status zu aktualisieren."
     },
     "card": {
       "fallbackName": "Dienst {id}"
@@ -3602,7 +3617,7 @@
       "updateCompleteMessage": "Der Dienst verwendet nun die geprüfte Vorlagenrevision.",
       "updateFailed": "Aktualisierung des verwalteten Dienstes fehlgeschlagen",
       "logs": "Protokolle anzeigen",
-      "operationStarting": "Vorgang wird gestartet",
+      "operationStarting": "Anfrage wird gesendet…",
       "operationDetailsTitle": "Fortschritt: {name}",
       "operationProgress": "Vorgangsfortschritt",
       "operationAction": "Aktion",

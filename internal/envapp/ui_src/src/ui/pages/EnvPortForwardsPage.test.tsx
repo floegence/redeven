@@ -773,7 +773,7 @@ describe('web service metadata and template validation', () => {
       expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
       expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
       expect(row.textContent).not.toContain('Error');
-      expect(row.querySelector<HTMLButtonElement>('[data-testid="managed-service-primary"]')?.disabled).toBe(true);
+      expect(row.querySelector<HTMLButtonElement>('[data-testid="managed-service-primary"]')?.disabled).toBe(false);
 
       progress.click();
       const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
@@ -1172,7 +1172,7 @@ describe('EnvPortForwardsPage', () => {
     const list = host.querySelector('[data-testid="unified-web-services-list"]') as HTMLDivElement | null;
     const row = host.querySelector('[data-testid="port-forward-row"]') as HTMLDivElement | null;
 
-    expect(header?.className).toContain('border-b');
+    expect(header?.className).toContain('web-services-header');
     expect(list?.className).toContain('redeven-surface-panel');
     expect(row?.className).not.toContain('redeven-surface-panel');
   });
@@ -1199,7 +1199,7 @@ describe('EnvPortForwardsPage', () => {
     expect(inputShell?.className).toContain('flex-1');
   });
 
-  it('keeps header actions beside a truncated description and places the address icon in the input', async () => {
+  it('keeps header actions beside a readable description and places the address icon in the input', async () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
@@ -1208,7 +1208,7 @@ describe('EnvPortForwardsPage', () => {
     const inputShell = host.querySelector<HTMLElement>('[data-testid="web-service-address-input-shell"]');
 
     expect(header?.className).not.toContain('flex-wrap');
-    expect(description?.className).toContain('truncate');
+    expect(description?.className).not.toContain('truncate');
     expect(host.querySelector('#web-service-address-label')).toBeNull();
     expect(inputShell?.className).toContain('relative');
     expect(host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]')?.className).toContain('pl-10');
@@ -1441,20 +1441,15 @@ describe('EnvPortForwardsPage', () => {
     const workspace = host.querySelector<HTMLElement>('[data-testid="managed-service-workspace"]');
     const actions = host.querySelector<HTMLElement>('[data-testid="managed-service-actions"]');
 
-    expect(collection?.parentElement?.className).toContain('max-w-5xl');
+    expect(collection?.parentElement?.className).toContain('web-services-content');
     expect(collection?.contains(search ?? null)).toBe(true);
     expect(collection?.contains(list ?? null)).toBe(true);
-    expect(search?.className).toContain('sm:w-64');
-    expect(toolbarActions?.className).toContain('sm:ml-auto');
     expect(toolbarActions?.contains(refresh ?? null)).toBe(true);
     expect(host.querySelector('[data-testid="web-services-panel"]')?.contains(refresh ?? null)).toBe(false);
-    expect(list?.className).toContain('divide-y');
-    expect(list?.className).not.toContain('grid');
     expect(row?.className).not.toContain('bg-[var(--redeven-status-success-soft)]');
-    expect(workspace?.className).toContain('truncate');
-    expect(actions?.className).toContain('grid-cols-[4.75rem_4.75rem_2rem]');
     expect(actions?.querySelector('[data-testid="managed-service-more"]')).toBeTruthy();
     expect(row?.querySelector('[data-template-kind="container"]')).toBeTruthy();
+    expect(workspace?.textContent).not.toContain('/');
   });
 
   it('shows managed service status and read actions without lifecycle permission', async () => {
@@ -2486,7 +2481,7 @@ describe('EnvPortForwardsPage', () => {
       await flushMicrotasks();
 
       const submitting = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
-      expect(submitting.textContent).toContain('Starting operation');
+      expect(submitting.textContent).toContain('Submitting request');
       expect(submitting.textContent).toContain('0/3');
       expect(host.querySelector('[data-managed-service-id="mws-retry"]')?.textContent).not.toContain('Error');
 
@@ -2590,9 +2585,8 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
-    const drawer = host.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
     await flushPage();
-    const confirm = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.textContent?.trim() === 'Keep data and complete uninstall').at(-1)!;
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => button.textContent?.trim() === 'Keep data and complete uninstall').at(-1)!;
     await waitForAssertion(() => expect(confirm.disabled).toBe(false));
     confirm.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
@@ -2628,7 +2622,7 @@ describe('EnvPortForwardsPage', () => {
     const label = Array.from(drawer.querySelectorAll('label')).find((item) => item.textContent?.includes('Delete service data'))!;
     label.querySelector<HTMLInputElement>('input')?.click();
     await flushPage();
-    const confirm = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
     await waitForAssertion(() => expect(confirm.disabled).toBe(false));
     confirm.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
@@ -2669,7 +2663,7 @@ describe('EnvPortForwardsPage', () => {
     const label = Array.from(drawer.querySelectorAll('label')).find((item) => item.textContent?.includes('Delete workspace'))!;
     label.querySelector<HTMLInputElement>('input')?.click();
     await flushPage();
-    const confirm = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="service-management-footer"] button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
     await waitForAssertion(() => expect(confirm.disabled).toBe(false));
     confirm.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
@@ -2897,7 +2891,7 @@ describe('EnvPortForwardsPage', () => {
 
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-testid="port-forward-row"]')).toBeTruthy());
-    host.querySelector<HTMLButtonElement>('button[aria-label="Edit service details"]')?.click();
+    host.querySelector<HTMLButtonElement>('button[aria-label$=": Edit service details"]')?.click();
     await flushPage();
     const target = host.querySelector<HTMLInputElement>('#web-service-metadata-target')!;
     expect(target.value).toBe('http://localhost:3000/967d185dad?view=details#section');

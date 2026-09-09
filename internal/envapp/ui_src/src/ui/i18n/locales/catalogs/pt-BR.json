@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "Referenciado por",
+      "copyPath": "Copiar caminho do diretório de trabalho",
+      "copyFailed": "Não foi possível copiar o caminho. Selecione-o para copiar manualmente.",
+      "otherActions": "Outras ações",
       "title": "Revisar e resolver",
       "currentSituation": "Situação atual",
       "checkedAt": "Verificado",
@@ -3016,7 +3020,7 @@
       "network": "Rede da instância"
     },
     "title": "Serviços web",
-    "description": "Abra serviços HTTP que escutam na interface de loopback deste ambiente em uma janela Desktop isolada ou pela rota disponível mais segura.",
+    "description": "Abra e gerencie os serviços locais deste ambiente.",
     "loadingEyebrow": "Serviços web",
     "loadingMessage": "Carregando serviços web...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Endereço do serviço web",
-      "placeholder": "Digite uma porta ou endereço, por exemplo 3000 ou localhost:8080/docs",
+      "placeholder": "Porta ou endereço local, como 3000 ou localhost:8080/docs",
       "scopeTitle": "Somente serviços locais.",
       "scopeDescription": "Informe uma porta ou um endereço de loopback deste ambiente.",
       "invalidTitle": "Disponível somente dentro deste ambiente",
@@ -3076,7 +3080,18 @@
       "temporary": "Temporário"
     },
     "collection": {
-      "title": "Serviços"
+      "title": "Serviços adicionados",
+      "review": "Analisar",
+      "recover": "Recuperar",
+      "restore": "Retomar",
+      "viewData": "Ver dados",
+      "archives": "Arquivos",
+      "archiveCount": "{name} · {count}",
+      "back": "Voltar aos serviços",
+      "archiveEmpty": "Não há registros neste arquivo.",
+      "updateAvailable": "Uma versão estável mais recente está disponível",
+      "requestFailed": "A solicitação não foi concluída. Verifique o estado do serviço antes de tentar novamente.",
+      "refreshFailed": "A última verificação não foi concluída. Os serviços carregados anteriormente são exibidos. Verifique novamente para atualizar o estado."
     },
     "card": {
       "fallbackName": "Serviço {id}"
@@ -3602,7 +3617,7 @@
       "updateCompleteMessage": "O serviço agora usa a revisão de modelo verificada.",
       "updateFailed": "Falha ao atualizar o serviço gerenciado",
       "logs": "Ver logs",
-      "operationStarting": "Iniciando operação",
+      "operationStarting": "Enviando solicitação…",
       "operationDetailsTitle": "Progresso de {name}",
       "operationProgress": "Progresso da operação",
       "operationAction": "Ação",

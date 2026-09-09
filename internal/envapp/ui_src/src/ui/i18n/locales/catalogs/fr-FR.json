@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "Référencé par",
+      "copyPath": "Copier le chemin du répertoire de travail",
+      "copyFailed": "Impossible de copier le chemin. Sélectionnez-le pour le copier manuellement.",
+      "otherActions": "Autres actions",
       "title": "Examiner et résoudre",
       "currentSituation": "Situation actuelle",
       "checkedAt": "Vérifié le",
@@ -3016,7 +3020,7 @@
       "network": "Réseau de l’instance"
     },
     "title": "Services web",
-    "description": "Ouvrez les services HTTP à l’écoute sur l’interface de bouclage de cet environnement dans une fenêtre Desktop isolée ou via la route disponible la plus sûre.",
+    "description": "Ouvrez et gérez les services locaux de cet environnement.",
     "loadingEyebrow": "Services web",
     "loadingMessage": "Chargement des services web...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Adresse du service web",
-      "placeholder": "Saisissez un port ou une adresse, par exemple 3000 ou localhost:8080/docs",
+      "placeholder": "Port ou adresse locale, par ex. 3000 ou localhost:8080/docs",
       "scopeTitle": "Services locaux uniquement.",
       "scopeDescription": "Saisissez un port ou une adresse de bouclage de cet environnement.",
       "invalidTitle": "Disponible uniquement dans cet environnement",
@@ -3076,7 +3080,18 @@
       "temporary": "Temporaire"
     },
     "collection": {
-      "title": "Services"
+      "title": "Services ajoutés",
+      "review": "Examiner",
+      "recover": "Récupérer",
+      "restore": "Reprendre",
+      "viewData": "Voir les données",
+      "archives": "Archives",
+      "archiveCount": "{name} · {count}",
+      "back": "Retour aux services",
+      "archiveEmpty": "Aucun enregistrement dans cette archive.",
+      "updateAvailable": "Une version stable plus récente est disponible",
+      "requestFailed": "La requête n’a pas abouti. Vérifiez l’état du service avant de réessayer.",
+      "refreshFailed": "La dernière vérification n’a pas abouti. Les services précédemment chargés sont affichés. Relancez la vérification pour actualiser leur état."
     },
     "card": {
       "fallbackName": "Service {id} Échec de"
@@ -3602,7 +3617,7 @@
       "updateCompleteMessage": "Le service utilise maintenant la révision de modèle vérifiée.",
       "updateFailed": "Échec de la mise à jour du service géré",
       "logs": "Afficher les journaux",
-      "operationStarting": "Démarrage de l’opération",
+      "operationStarting": "Envoi de la demande…",
       "operationDetailsTitle": "Progression de {name}",
       "operationProgress": "Progression de l’opération",
       "operationAction": "Action",
