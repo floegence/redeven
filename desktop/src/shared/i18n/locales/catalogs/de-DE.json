@@ -2337,6 +2337,12 @@
     "invalidDestination": "Geben Sie user@host oder einen SSH-Alias ein, ohne Leerzeichen, URL-Schema oder führenden Bindestrich.",
     "invalidRoot": "Geben Sie einen absoluten Remote-Pfad ein oder lassen Sie das Feld für ~/.redeven leer.",
     "invalidReleaseUrl": "Geben Sie eine vollständige HTTP- oder HTTPS-Release-URL ein oder lassen Sie das Feld für GitHub Releases leer.",
-    "invalidTimeout": "Geben Sie eine Zahl ab 1 Sekunde ein oder lassen Sie das Feld für 10 Sekunden leer."
+    "invalidTimeout": "Geben Sie eine Zahl ab 1 Sekunde ein oder lassen Sie das Feld für 10 Sekunden leer.",
+    "advanced": "Erweiterte Einstellungen",
+    "delivery": "Paketübertragung",
+    "directory": "Laufzeitverzeichnis",
+    "releaseSource": "Release-Quelle",
+    "keyAgent": "Schlüssel / SSH-Agent",
+    "passwordHelp": "Wird nur auf diesem Gerät für automatische Prüfungen gespeichert. Bei Verbindungsabfragen eingegebene Passwörter werden nicht gespeichert."
   }
 }

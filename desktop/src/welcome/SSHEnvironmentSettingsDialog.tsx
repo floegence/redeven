@@ -282,7 +282,7 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
               aria-label={t('connectionDialog.authentication')}
               role="radiogroup"
               options={[
-                { value: 'key_agent', label: t('connectionDialog.keyAgent') },
+                { value: 'key_agent', label: t('sshSettings.keyAgent') },
                 { value: 'password', label: t('sshSettings.password') },
               ]}
             />
@@ -294,7 +294,7 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
             <Field
               name="ssh_password"
               label={t('connectionDialog.localSshPassword')}
-              help={t('connectionDialog.localSshPasswordHelp')}
+              help={t('sshSettings.passwordHelp')}
             >
               <Input
                 id="ssh-settings-ssh_password"
@@ -352,7 +352,7 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
           >
             <ChevronRight class="ssh-settings-chevron" classList={{ 'ssh-settings-chevron--open': advanced() }} />
             <span>
-              <span class="ssh-settings-disclosure-title">{t('connectionDialog.advanced')}</span>
+              <span class="ssh-settings-disclosure-title">{t('sshSettings.advanced')}</span>
               <span class="ssh-settings-help ssh-settings-summary">{summary()}</span>
             </span>
           </button>
@@ -360,7 +360,7 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
             <div id="ssh-settings-advanced-fields" class="ssh-settings-advanced-fields">
               <Field
                 name="bootstrap_strategy"
-                label={t('connectionDialog.bootstrapDelivery')}
+                label={t('sshSettings.delivery')}
                 help={t(
                   props.state.bootstrap_strategy === 'desktop_upload'
                     ? 'sshSettings.uploadHelp'
@@ -391,7 +391,7 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
                   </For>
                 </select>
               </Field>
-              <Field name="runtime_root" label={t('connectionDialog.runtimeRoot')} help={t('sshSettings.rootHelp')}>
+              <Field name="runtime_root" label={t('sshSettings.directory')} help={t('sshSettings.rootHelp')}>
                 <Input
                   id="ssh-settings-runtime_root"
                   value={props.state.runtime_root}
@@ -403,7 +403,7 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
               </Field>
               <Field
                 name="release_base_url"
-                label={t('connectionDialog.releaseBaseUrl')}
+                label={t('sshSettings.releaseSource')}
                 help={t('sshSettings.releaseHelp')}
               >
                 <Input

@@ -2333,6 +2333,12 @@
     "invalidDestination": "user@host または SSH エイリアスを入力してください。空白、URL スキーム、先頭のハイフンは使用できません。",
     "invalidRoot": "リモートの絶対パスを入力するか、空欄にして ~/.redeven を使用してください。",
     "invalidReleaseUrl": "HTTP または HTTPS の完全なリリース URL を入力するか、空欄にして GitHub Releases を使用してください。",
-    "invalidTimeout": "1 秒以上の数値を入力するか、空欄にして 10 秒を使用してください。"
+    "invalidTimeout": "1 秒以上の数値を入力するか、空欄にして 10 秒を使用してください。",
+    "advanced": "詳細設定",
+    "delivery": "パッケージの転送方法",
+    "directory": "ランタイムディレクトリ",
+    "releaseSource": "リリースの取得元",
+    "keyAgent": "鍵 / SSH エージェント",
+    "passwordHelp": "自動確認用のパスワードは、このデバイスにのみ保存されます。接続時のプロンプトで入力したパスワードは保存されません。"
   }
 }

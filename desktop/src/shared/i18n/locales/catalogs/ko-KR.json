@@ -2333,6 +2333,12 @@
     "invalidDestination": "user@host 또는 SSH 별칭을 입력하세요. 공백, URL 스킴, 맨 앞의 하이픈은 사용할 수 없습니다.",
     "invalidRoot": "원격 절대 경로를 입력하거나 비워 두어 ~/.redeven을 사용하세요.",
     "invalidReleaseUrl": "전체 HTTP 또는 HTTPS 릴리스 URL을 입력하거나 비워 두어 GitHub Releases를 사용하세요.",
-    "invalidTimeout": "1초 이상의 숫자를 입력하거나 비워 두어 10초를 사용하세요."
+    "invalidTimeout": "1초 이상의 숫자를 입력하거나 비워 두어 10초를 사용하세요.",
+    "advanced": "고급 설정",
+    "delivery": "패키지 전송 방식",
+    "directory": "런타임 디렉터리",
+    "releaseSource": "릴리스 소스",
+    "keyAgent": "키 / SSH 에이전트",
+    "passwordHelp": "자동 확인을 위해 이 기기에만 저장됩니다. 연결할 때 입력 창에 입력한 비밀번호는 저장되지 않습니다."
   }
 }
