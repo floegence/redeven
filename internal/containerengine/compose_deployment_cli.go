@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func composeDeploymentArgs(req ComposeDeploymentRequest) []string {
@@ -42,7 +43,7 @@ func (c *CLIClient) CreateComposeDeployment(ctx context.Context, req ComposeDepl
 	if err := validateComposeDeploymentRequest(req); err != nil {
 		return err
 	}
-	_, err := c.run(ctx, EngineDocker, append(composeDeploymentArgs(req), "create", "--remove-orphans")...)
+	_, err := c.run(ctx, EngineDocker, append(composeDeploymentArgs(req), "create")...)
 	return err
 }
 
@@ -103,7 +104,11 @@ func (c *CLIClient) runComposeDeploymentAction(ctx context.Context, req ComposeD
 	}
 	args := append(composeDeploymentArgs(req), action)
 	args = append(args, extra...)
-	_, err := c.run(ctx, EngineDocker, args...)
+	timeout := c.Timeout
+	if (action == "stop" || action == "restart" || action == "down") && timeout < 30*time.Second {
+		timeout = 30 * time.Second
+	}
+	_, err := c.runWithTimeout(ctx, timeout, EngineDocker, args...)
 	return err
 }
 

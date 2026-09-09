@@ -185,12 +185,12 @@ func TestServiceActionCapabilitiesComeFromRuntimeState(t *testing.T) {
 	runtime := &resolvedRuntime{Template: Template{Deployment: DeploymentContainer}}
 	failure := &pfregistry.ManagedOperation{Action: string(ActionStart), State: "failed", ErrorCode: "START_FAILED"}
 	actions := serviceActionCapabilities(service, runtime, nil, failure)
-	if actions.Start.Available || actions.Stop.Available || !actions.Restart.Available || !actions.Retry.Available {
+	if actions.Start.Available || actions.Stop.Available || actions.Restart.Available || actions.Retry.Available || !actions.Inspect.Available || !actions.Detach.Available {
 		t.Fatalf("error-state actions = %+v", actions)
 	}
 	active := &pfregistry.ManagedOperation{Action: string(ActionRestart), State: "running"}
 	actions = serviceActionCapabilities(service, runtime, active, failure)
-	if actions.Start.Available || actions.Stop.Available || actions.Restart.Available || actions.Retry.Available || actions.Retry.ReasonCode != "OPERATION_ACTIVE" {
+	if actions.Start.Available || actions.Stop.Available || actions.Restart.Available || actions.Retry.Available || actions.Uninstall.ReasonCode != "OPERATION_ACTIVE" {
 		t.Fatalf("busy actions = %+v", actions)
 	}
 }
@@ -386,11 +386,16 @@ func TestRunUninstallDelegatesLifecycleOwnershipOnce(t *testing.T) {
 	t.Parallel()
 	wantErr := errors.New("stop after uninstall delegation")
 	driver := &uninstallOwnershipDriver{uninstallErr: wantErr}
-	manager := &Manager{listeners: map[string]map[uint64]chan pfregistry.ManagedOperation{}}
-	service := &pfregistry.ManagedService{ServiceID: "mws_uninstall_once"}
+	manager, registry, home := newWorkspaceTestManager(t)
+	service := persistWorkspaceTestService(t, registry, "mws-uninstall-once", filepath.Join(home, "workspace"), workspaceOwnershipUserSelected)
+	manager.host = driver
+	plan, err := manager.managementPlan(context.Background(), &service, ManagementPlanRequest{Action: ActionUninstall})
+	if err != nil {
+		t.Fatal(err)
+	}
 	op := &pfregistry.ManagedOperation{OperationID: "mop_uninstall_once", ServiceID: service.ServiceID, ProgressTotal: operationProgressTotal}
-	if err := manager.runUninstall(context.Background(), service, op, driver, false, false, false); !errors.Is(err, wantErr) {
-		t.Fatalf("runUninstall() error = %v", err)
+	if err := manager.runManagementUninstall(context.Background(), &service, op, driver, plan); !errors.Is(err, wantErr) {
+		t.Fatalf("uninstall delegation error = %v", err)
 	}
 	if driver.stopCalls != 0 || driver.uninstallCalls != 1 {
 		t.Fatalf("uninstall lifecycle calls: stop=%d uninstall=%d", driver.stopCalls, driver.uninstallCalls)
@@ -725,4 +730,8 @@ func (d *blockingStopDriver) Logs(context.Context, *pfregistry.ManagedService, i
 func managedErrorCode(err error) string {
 	code, _, _, _ := ErrorDetails(err)
 	return code
+}
+
+func (*uninstallOwnershipDriver) Observe(context.Context, *pfregistry.ManagedService) (bool, error) {
+	return false, nil
 }

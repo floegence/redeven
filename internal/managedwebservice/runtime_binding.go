@@ -47,7 +47,7 @@ func newRuntimeBinding(serviceID, familyID string, deployment Deployment) (strin
 		instanceRoot := path.Join("instances", serviceID)
 		binding.Host = &hostRuntimeBinding{
 			InstallRoot: path.Join(instanceRoot, "install"),
-			DataRoot:    path.Join("families", familyID, "data"),
+			DataRoot:    path.Join(instanceRoot, "data"),
 			LogPath:     path.Join(instanceRoot, "logs", "service.log"),
 		}
 	case DeploymentContainer:
@@ -89,7 +89,7 @@ func decodeRuntimeBinding(service *pfregistry.ManagedService) (*runtimeBinding, 
 		instanceRoot := path.Join("instances", service.ServiceID)
 		if binding.Host == nil || binding.Container != nil || binding.Compose != nil ||
 			binding.Host.InstallRoot != path.Join(instanceRoot, "install") ||
-			binding.Host.DataRoot != path.Join("families", binding.ServiceFamilyID, "data") ||
+			(binding.Host.DataRoot != path.Join("families", binding.ServiceFamilyID, "data") && binding.Host.DataRoot != path.Join(instanceRoot, "data")) ||
 			binding.Host.LogPath != path.Join(instanceRoot, "logs", "service.log") {
 			return nil, serviceError("RUNTIME_BINDING_INVALID", "The managed Host Runtime binding is invalid.", 409, false, nil)
 		}

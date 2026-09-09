@@ -32,6 +32,9 @@ const (
 	ActionUpdate       OperationAction = "update"
 	ActionReconfigure  OperationAction = "reconfigure"
 	ActionUninstall    OperationAction = "uninstall"
+	ActionDetach       OperationAction = "detach"
+	ActionRestore      OperationAction = "restore"
+	ActionRecover      OperationAction = "recover"
 )
 
 type TemplateNotice struct {
@@ -251,6 +254,7 @@ type TemplateSpec struct {
 }
 
 type CreateRequest struct {
+	PlanDigest              string            `json:"plan_digest,omitempty"`
 	RequestID               string            `json:"request_id"`
 	TemplateID              string            `json:"template_id"`
 	Deployment              Deployment        `json:"deployment"`
@@ -274,6 +278,9 @@ type TemplateDuplicateRequest struct {
 }
 
 type OperationRequest struct {
+	RetainResourceIDs       []string            `json:"retain_resource_ids,omitempty"`
+	PlanDigest              string              `json:"plan_digest,omitempty"`
+	SkipHooks               bool                `json:"skip_hooks,omitempty"`
 	RequestID               string              `json:"request_id"`
 	Action                  OperationAction     `json:"action"`
 	DeleteData              bool                `json:"delete_data,omitempty"`
@@ -441,21 +448,25 @@ type LockedSetting struct {
 }
 
 type ServiceSettingsView struct {
-	ServiceID             string                 `json:"service_id"`
-	Name                  string                 `json:"name"`
-	Description           string                 `json:"description,omitempty"`
-	AccessMode            string                 `json:"access_mode"`
-	Deployment            Deployment             `json:"deployment"`
-	TemplateSource        string                 `json:"template_source"`
-	ObservedState         string                 `json:"observed_state"`
-	ConfigurationRevision int64                  `json:"configuration_revision"`
-	ConfigurationSHA256   string                 `json:"configuration_sha256"`
-	Parameters            map[string]string      `json:"parameters,omitempty"`
-	Runtime               ServiceRuntimeSettings `json:"runtime"`
-	Locked                []LockedSetting        `json:"locked,omitempty"`
+	ManagementState            string                 `json:"management_state"`
+	ParameterDefinitions       []TemplateParameter    `json:"parameter_definitions,omitempty"`
+	ConfiguredSecretParameters []string               `json:"configured_secret_parameters,omitempty"`
+	ServiceID                  string                 `json:"service_id"`
+	Name                       string                 `json:"name"`
+	Description                string                 `json:"description,omitempty"`
+	AccessMode                 string                 `json:"access_mode"`
+	Deployment                 Deployment             `json:"deployment"`
+	TemplateSource             string                 `json:"template_source"`
+	ObservedState              string                 `json:"observed_state"`
+	ConfigurationRevision      int64                  `json:"configuration_revision"`
+	ConfigurationSHA256        string                 `json:"configuration_sha256"`
+	Parameters                 map[string]string      `json:"parameters,omitempty"`
+	Runtime                    ServiceRuntimeSettings `json:"runtime"`
+	Locked                     []LockedSetting        `json:"locked,omitempty"`
 }
 
 type ReconfigureDraft struct {
+	SecretParameters      map[string]string      `json:"secret_parameters,omitempty"`
 	ConfigurationRevision int64                  `json:"configuration_revision"`
 	Parameters            map[string]string      `json:"parameters,omitempty"`
 	Runtime               ServiceRuntimeSettings `json:"runtime"`
@@ -489,6 +500,10 @@ type CreateResult struct {
 }
 
 type ServiceView struct {
+	Facts         ServiceFacts `json:"facts"`
+	PrimaryAction string       `json:"primary_action"`
+	Status        string       `json:"status"`
+	ProblemCode   string       `json:"problem_code,omitempty"`
 	pfregistry.ManagedService
 	Name               string                          `json:"name"`
 	Description        string                          `json:"description,omitempty"`
@@ -517,6 +532,10 @@ type ServiceOpening struct {
 }
 
 type ServiceActions struct {
+	Inspect           ActionCapability `json:"inspect"`
+	Uninstall         ActionCapability `json:"uninstall"`
+	Recover           ActionCapability `json:"recover"`
+	Detach            ActionCapability `json:"detach"`
 	Open              ActionCapability `json:"open"`
 	RestoreManagement ActionCapability `json:"restore_management"`
 	Start             ActionCapability `json:"start"`

@@ -326,6 +326,7 @@ type ImageBuildHistoryEntry struct {
 }
 
 type VolumeRecord struct {
+	Labels                      map[string]string   `json:"-"`
 	Name                        string              `json:"name"`
 	Driver                      string              `json:"driver,omitempty"`
 	Scope                       string              `json:"scope,omitempty"`
@@ -336,9 +337,11 @@ type VolumeRecord struct {
 }
 
 type ResourceReference struct {
-	ContainerID string         `json:"container_id"`
-	Name        string         `json:"name,omitempty"`
-	State       ContainerState `json:"state"`
+	ManagedServiceID string         `json:"managed_service_id,omitempty"`
+	Ports            []PortSummary  `json:"ports,omitempty"`
+	ContainerID      string         `json:"container_id"`
+	Name             string         `json:"name,omitempty"`
+	State            ContainerState `json:"state"`
 }
 
 type ResourcePlan struct {

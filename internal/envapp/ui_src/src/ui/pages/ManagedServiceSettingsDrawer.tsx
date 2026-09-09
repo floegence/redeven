@@ -103,6 +103,10 @@ type RuntimeSettings = {
   host?: HostSettings;
 };
 type SettingsView = {
+  management_state?: string;
+  parameter_definitions?: Array<{name:string;label?:string;description?:string;type:string;required?:boolean;default?:string}>;
+  configured_secret_parameters?: string[];
+  secret_parameters?: Record<string,string>;
   service_id: string;
   name: string;
   description?: string;
@@ -118,6 +122,7 @@ type SettingsView = {
 };
 
 export type ManagedServiceReconfigureDraft = {
+  secret_parameters?: Record<string,string>;
   configuration_revision: number;
   parameters: Record<string, string>;
   runtime: RuntimeSettings;
@@ -235,6 +240,7 @@ export function ManagedServiceSettingsDrawer(props: {
   onChanged: () => void;
   onRequestStop: () => void;
   onDuplicateTemplate: () => void;
+  onEditTemplate?: () => void;
   onApply: (request: {
     draft: ManagedServiceReconfigureDraft;
     plan_digest: string;
@@ -306,6 +312,7 @@ export function ManagedServiceSettingsDrawer(props: {
     return {
       configuration_revision: value.configuration_revision,
       parameters: clone(value.parameters ?? {}),
+      secret_parameters: clone(value.secret_parameters ?? {}),
       runtime: clone(value.runtime),
     };
   });
@@ -323,15 +330,17 @@ export function ManagedServiceSettingsDrawer(props: {
         draft() &&
         stable({
           parameters: loaded()!.parameters ?? {},
+          secret_parameters: {},
           runtime: loaded()!.runtime,
         }) !==
           stable({
             parameters: draft()!.parameters ?? {},
+            secret_parameters: draft()!.secret_parameters ?? {},
             runtime: draft()!.runtime,
           }),
     );
   const dirtyCount = () => Number(metadataDirty()) + Number(runtimeDirty());
-  const stopped = () => draft()?.observed_state === "stopped";
+  const stopped = () => ["stopped", "missing"].includes(draft()?.observed_state ?? "") || ["detached","uninstalled"].includes(draft()?.management_state ?? "");
   const runtimeConfigurationEditable = () =>
     ["host", "container", "compose"].includes(draft()?.deployment ?? "");
   const currentContainer = (): ContainerSettings | null => {
@@ -545,7 +554,7 @@ export function ManagedServiceSettingsDrawer(props: {
           size="sm"
           variant="outline"
           onClick={() => void saveMetadata()}
-          disabled={!props.canManage || savingMetadata()}
+          disabled={!props.canManage || savingMetadata() || ["detached","uninstalled"].includes(draft()?.management_state ?? "")}
         >
           {settingText("saveDetails")}
         </Button>
@@ -677,6 +686,7 @@ export function ManagedServiceSettingsDrawer(props: {
                   >
                     {error()}
                   </div>
+                  <Show when={props.onEditTemplate && props.canManage}><Button size="sm" variant="outline" onClick={() => props.onEditTemplate?.()}>{i18n.t("webServices.managed.editTemplate")}</Button></Show>
                 </Show>
 
                 <Show when={section() === "general"}>
@@ -858,19 +868,21 @@ export function ManagedServiceSettingsDrawer(props: {
                         </h4>
                       </div>
                       <div class="divide-y overflow-hidden rounded-lg border">
-                        <For each={Object.entries(resolved().parameters ?? {})}>
-                          {([name, value]) => (
+                        <For each={resolved().parameter_definitions ?? Object.keys(resolved().parameters ?? {}).map(name => ({name,type:"string"}))}>
+                          {(parameter) => (
                             <div class="grid grid-cols-[minmax(10rem,0.7fr)_1fr] items-center gap-3 px-3 py-2">
-                              <code class="truncate text-xs">{name}</code>
+                              <label class="text-xs" for={`service-parameter-${parameter.name}`}>{parameter.name}</label>
                               <Input
+                                id={`service-parameter-${parameter.name}`}
+                                type={parameter.type === "secret" ? "password" : "text"}
+                                autocomplete="off"
                                 class="h-8"
-                                value={value}
+                                placeholder={parameter.type === "secret" && resolved().configured_secret_parameters?.includes(parameter.name) ? settingText("secretConfigured") : undefined}
+                                value={parameter.type === "secret" ? resolved().secret_parameters?.[parameter.name] ?? "" : resolved().parameters?.[parameter.name] ?? ""}
                                 onInput={(event) =>
                                   updateDraft((next) => {
-                                    next.parameters = {
-                                      ...(next.parameters ?? {}),
-                                      [name]: event.currentTarget.value,
-                                    };
+                                    if (parameter.type === "secret") next.secret_parameters = {...next.secret_parameters,[parameter.name]:event.currentTarget.value};
+                                    else next.parameters = {...next.parameters,[parameter.name]:event.currentTarget.value};
                                   })
                                 }
                               />
@@ -879,7 +891,7 @@ export function ManagedServiceSettingsDrawer(props: {
                         </For>
                         <Show
                           when={
-                            Object.keys(resolved().parameters ?? {}).length ===
+                            (resolved().parameter_definitions?.length ?? Object.keys(resolved().parameters ?? {}).length) ===
                             0
                           }
                         >

@@ -121,11 +121,12 @@ type VolumeInspectRequest struct {
 	Name       string     `json:"name"`
 }
 type VolumeCreateRequest struct {
-	Engine     Engine         `json:"engine"`
-	EndpointID EndpointID     `json:"endpoint_id,omitempty"`
-	Name       string         `json:"name"`
-	Driver     string         `json:"driver,omitempty"`
-	Options    []VolumeOption `json:"options,omitempty"`
+	Labels     map[string]string `json:"labels,omitempty"`
+	Engine     Engine            `json:"engine"`
+	EndpointID EndpointID        `json:"endpoint_id,omitempty"`
+	Name       string            `json:"name"`
+	Driver     string            `json:"driver,omitempty"`
+	Options    []VolumeOption    `json:"options,omitempty"`
 }
 
 type VolumeOption struct {

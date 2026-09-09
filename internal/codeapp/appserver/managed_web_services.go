@@ -54,6 +54,28 @@ func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Requ
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"services": services}})
 		return true
+	case r.Method == http.MethodPost && r.URL.Path == managedServicesAPIBase+"/install-plans":
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		backend, ok := g.managed.(managedwebservice.InstallPlanningBackend)
+		if !ok {
+			writeJSON(w, http.StatusNotImplemented, apiResp{OK: false, Error: "installation planning is unavailable", ErrorCode: "INSTALL_PLANNING_UNAVAILABLE"})
+			return true
+		}
+		var req managedwebservice.CreateRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		plan, err := backend.PreflightInstall(r.Context(), req)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: plan})
+		return true
 	case r.Method == http.MethodPost && r.URL.Path == managedServicesAPIBase:
 		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
 		if !ok {
@@ -62,6 +84,10 @@ func (g *Server) handleManagedWebServicesAPI(w http.ResponseWriter, r *http.Requ
 		var req managedwebservice.CreateRequest
 		if err := decodeManagedJSON(r, &req); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		if strings.TrimSpace(req.PlanDigest) == "" {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "Review the installation location before confirming.", ErrorCode: "INSTALL_PREFLIGHT_REQUIRED"})
 			return true
 		}
 		detail := map[string]any{"template_id": truncateString(req.TemplateID, 80), "deployment": truncateString(string(req.Deployment), 20), "workspace_path": truncateString(req.WorkspacePath, 160)}
@@ -281,6 +307,29 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	serviceID, action := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if r.Method == http.MethodPost && action == "management-plans" {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
+			return true
+		}
+		backend, ok := g.managed.(managedwebservice.ManagementBackend)
+		if !ok {
+			writeJSON(w, http.StatusNotImplemented, apiResp{OK: false, ErrorCode: "MANAGEMENT_UNAVAILABLE"})
+			return true
+		}
+		var req managedwebservice.ManagementPlanRequest
+		if err := decodeManagedJSON(r, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, ErrorCode: "REQUEST_INVALID"})
+			return true
+		}
+		plan, err := backend.PreflightManagement(r.Context(), serviceID, req)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: plan})
+		return true
+	}
 	if r.Method == http.MethodPost && (action == "management-review" || action == "restore-management") {
 		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull)
 		if !ok {

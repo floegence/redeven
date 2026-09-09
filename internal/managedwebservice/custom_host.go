@@ -272,10 +272,10 @@ func (d *hostScriptDriver) stop(ctx context.Context, service *pfregistry.Managed
 		return err
 	}
 	var stopScriptErr error
-	if runTemplateScript {
+	if runTemplateScript && !skipManagementHooks(ctx) {
 		resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 		if err != nil {
-			return err
+			return serviceError("STOP_SCRIPT_UNAVAILABLE", "The stop hook is unavailable. Review stopping the verified process without the hook.", 409, true, err)
 		}
 		resolved.applyTo(service)
 		if strings.TrimSpace(resolved.Spec.Host.StopScript) != "" {
@@ -287,6 +287,7 @@ func (d *hostScriptDriver) stop(ctx context.Context, service *pfregistry.Managed
 			}
 		}
 	}
+	if stopScriptErr != nil {return stopScriptErr}
 	if err := terminateHostProcess(current); err != nil {
 		return serviceError("STOP_FAILED", "The custom host service could not be stopped.", 502, true, err)
 	}
@@ -326,15 +327,19 @@ func (d *hostScriptDriver) Uninstall(ctx context.Context, service *pfregistry.Ma
 		return err
 	}
 	progress("uninstalling", 5)
-	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
-	if err != nil {
-		return err
-	}
-	resolved.applyTo(service)
-	spec := resolved.Spec
-	if strings.TrimSpace(spec.Host.UninstallScript) != "" {
-		if err := d.runOneShot(context.Background(), service, spec.Host.UninstallScript, service.ArtifactReference, "uninstall"); err != nil {
-			return serviceError("UNINSTALL_SCRIPT_FAILED", "The custom host uninstall script failed.", 502, true, err)
+	if !skipManagementHooks(ctx) {
+		resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
+		if err != nil {
+			return serviceError("UNINSTALL_SCRIPT_UNAVAILABLE", "The uninstall hook is unavailable. Review cleanup without the hook.", 409, true, err)
+		}
+		resolved.applyTo(service)
+		if script := strings.TrimSpace(resolved.Spec.Host.UninstallScript); script != "" {
+			hookCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			err := d.runOneShot(hookCtx, service, script, service.ArtifactReference, "uninstall")
+			cancel()
+			if err != nil {
+				return serviceError("UNINSTALL_SCRIPT_FAILED", "The uninstall hook failed. Review cleanup without the hook.", 502, true, err)
+			}
 		}
 	}
 	root := d.instanceRoot(service)

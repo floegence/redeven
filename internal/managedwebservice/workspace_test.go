@@ -18,6 +18,10 @@ type workspaceLifecycleDriver struct {
 	workspaceAtStop bool
 }
 
+func (*workspaceLifecycleDriver) Observe(context.Context, *pfregistry.ManagedService) (bool, error) {
+	return false, nil
+}
+
 func (*workspaceLifecycleDriver) Install(context.Context, *pfregistry.ManagedService, operationProgress) (string, string, error) {
 	return "", "", errors.New("unexpected install")
 }
@@ -453,7 +457,7 @@ func TestDeleteServiceWorkspaceTreatsMissingDirectoryAsSuccess(t *testing.T) {
 	}
 }
 
-func TestOperateDeleteDataAlsoDeletesUserSelectedWorkspace(t *testing.T) {
+func TestOperateDeleteDataPreservesUnselectedWorkspace(t *testing.T) {
 	manager, registry, home := newWorkspaceTestManager(t)
 	target := filepath.Join(home, "user-selected-delete-data-workspace")
 	if err := os.Mkdir(target, 0o700); err != nil {
@@ -462,18 +466,22 @@ func TestOperateDeleteDataAlsoDeletesUserSelectedWorkspace(t *testing.T) {
 	service := persistWorkspaceTestService(t, registry, "mws-user-selected-delete-data", target, workspaceOwnershipUserSelected)
 	manager.host = &uninstallOwnershipDriver{}
 
+	plan, err := manager.PreflightManagement(context.Background(), service.ServiceID, ManagementPlanRequest{Action: ActionUninstall, DeleteData: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 	op, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{
-		RequestID: "request-user-selected-delete-data", Action: ActionUninstall, DeleteData: true, Administrator: true,
+		RequestID: "request-user-selected-delete-data", Action: ActionUninstall, DeleteData: true, Administrator: true, PlanDigest: plan.PlanDigest,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !op.DeleteWorkspace {
-		t.Fatalf("delete-data operation did not include workspace deletion: %+v", op)
+	if op.DeleteWorkspace {
+		t.Fatalf("delete-data operation implicitly selected workspace deletion: %+v", op)
 	}
 	manager.workers.Wait()
-	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("delete-data operation did not delete workspace: %v", err)
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("delete-data operation did not preserve workspace: %v", err)
 	}
 }
 
@@ -508,24 +516,30 @@ func TestRunUninstallUsesPersistedWorkspaceDeletionIntent(t *testing.T) {
 				t.Fatal(err)
 			}
 			driver := &uninstallOwnershipDriver{}
-			if err := manager.runUninstall(context.Background(), &service, &op, driver, true, test.deleteWorkspace, false); err != nil {
+			manager.host = driver
+			plan, err := manager.managementPlan(context.Background(), &service, ManagementPlanRequest{Action: ActionUninstall, DeleteData: true, DeleteWorkspace: test.deleteWorkspace})
+			if err != nil {
 				t.Fatal(err)
 			}
-			_, err := os.Stat(target)
+			if err := manager.runManagementUninstall(context.Background(), &service, &op, driver, plan); err != nil {
+				t.Fatal(err)
+			}
+			_, err = os.Stat(target)
 			if test.wantDeleted && !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("workspace was not deleted: %v", err)
 			}
 			if !test.wantDeleted && err != nil {
 				t.Fatalf("workspace was not retained: %v", err)
 			}
-			if stored, err := registry.GetManagedService(context.Background(), service.ServiceID); err != nil || stored != nil {
-				t.Fatalf("uninstalled service = %#v, err=%v", stored, err)
+			stored, err := registry.GetManagedService(context.Background(), service.ServiceID)
+			if err != nil || (test.wantDeleted && stored != nil) || (!test.wantDeleted && (stored == nil || stored.ManagementState != "uninstalled")) {
+				t.Fatalf("uninstalled archive = %#v, err=%v", stored, err)
 			}
 		})
 	}
 }
 
-func TestRetryUninstallPreservesDeletionIntentAndAuthorization(t *testing.T) {
+func TestRetryUninstallRequiresNewReviewInsteadOfGuessingProgress(t *testing.T) {
 	manager, registry, home := newWorkspaceTestManager(t)
 	target := filepath.Join(home, "retry-workspace")
 	if err := os.Mkdir(target, 0o700); err != nil {
@@ -544,21 +558,14 @@ func TestRetryUninstallPreservesDeletionIntentAndAuthorization(t *testing.T) {
 	}
 	driver := &uninstallOwnershipDriver{uninstallErr: errors.New("runtime uninstall must not run twice")}
 	manager.host = driver
-	op, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{RequestID: "request-retry-with-admin", Action: ActionRetry, Administrator: true})
-	if err != nil {
-		t.Fatal(err)
+	_, err := manager.Operate(context.Background(), service.ServiceID, OperationRequest{RequestID: "request-retry-with-admin", Action: ActionRetry, Administrator: true})
+	if managedErrorCode(err) != "MANAGEMENT_PREFLIGHT_REQUIRED" {
+		t.Fatalf("unreviewed retry error=%v", err)
 	}
-	if !op.DeleteData || !op.DeleteWorkspace || op.RetryOfOperationID != failure.OperationID || op.Action != string(ActionUninstall) {
-		t.Fatalf("retry operation lost deletion intent: %+v", op)
-	}
-	manager.workers.Wait()
 	if driver.uninstallCalls != 0 {
-		t.Fatalf("workspace-only retry repeated runtime uninstall %d times", driver.uninstallCalls)
+		t.Fatal("unreviewed retry changed runtime")
 	}
-	if stored, err := registry.GetManagedService(context.Background(), service.ServiceID); err != nil || stored != nil {
-		t.Fatalf("workspace-only retry left service = %#v, err=%v", stored, err)
-	}
-	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("workspace-only retry did not delete workspace: %v", err)
+	if _, err := os.Stat(target); err != nil {
+		t.Fatal("unreviewed retry changed workspace")
 	}
 }

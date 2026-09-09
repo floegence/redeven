@@ -3,9 +3,10 @@ import { createSignal } from 'solid-js';
 import { fetchLocalApi, fetchLocalApiJSON } from '../services/localApi';
 
 export type ManagedOperation = Readonly<{
+	cancel_requested?: boolean;
   operation_id: string;
   service_id: string;
-  action: 'install' | 'start' | 'stop' | 'restart' | 'retry' | 'retry_install' | 'update' | 'reconfigure' | 'uninstall';
+  action: 'install' | 'start' | 'stop' | 'restart' | 'retry' | 'retry_install' | 'update' | 'reconfigure' | 'uninstall' | 'detach' | 'restore' | 'recover';
   state: string;
   stage: string;
   progress_current: number;

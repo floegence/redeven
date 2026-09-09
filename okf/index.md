@@ -18,6 +18,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.
 - [Independent Host service lifecycle](architecture/independent-host-services.md) - Preserve application processes across management restarts and safely recover native ownership and private opening sessions.
 - [Managed Web Services](architecture/managed-web-services.md) - Resolve current templates with fixed releases, exact bindings, applied Runtime digests, and explicit failure recovery.
+- [Web Service management recovery](architecture/service-management-recovery.md) - Review current facts, resume partial uninstall, and detach or restore management without losing resource control.
+- [Service resource ownership](architecture/service-resource-ownership.md) - Allocate isolated instance resources and preserve unverified legacy or externally referenced data.
 - [Managed Service operation progress](architecture/managed-service-operation-progress.md) - Persist and stream bounded, redacted command output without losing user-controlled disclosure state.
 - [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md) - Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
 - [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine current template definitions with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.

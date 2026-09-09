@@ -64,9 +64,6 @@ func TestContainerTemplateUninstallRejectsChangedOwnership(t *testing.T) {
 	}{
 		{name: "runtime id", wantCode: "CONTAINER_IDENTITY_MISMATCH", change: func(container *containerengine.EngineContainer) { container.ContainerID = "container_other" }},
 		{name: "managed name", wantCode: "CONTAINER_NAME_MISMATCH", change: func(container *containerengine.EngineContainer) { container.Name = "redeven-mws-other" }},
-		{name: "image", wantCode: "CONTAINER_IMAGE_MISMATCH", change: func(container *containerengine.EngineContainer) {
-			container.Image.Reference = "registry.example/redeven/other@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-		}},
 		{name: "service label", wantCode: "CONTAINER_LABEL_MISMATCH", change: func(container *containerengine.EngineContainer) {
 			container.Runtime.Labels[managedServiceLabel] = "mws_other"
 		}},
@@ -236,7 +233,7 @@ func TestHostUninstallRejectsMissingCurrentTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := driver.Uninstall(context.Background(), service, true, discardOperationProgress)
-	if managedErrorCode(err) != "TEMPLATE_NOT_FOUND" {
+	if managedErrorCode(err) != "UNINSTALL_SCRIPT_UNAVAILABLE" {
 		t.Fatalf("missing current template error = %v", err)
 	}
 	if _, err := os.Stat(sentinel); err != nil {

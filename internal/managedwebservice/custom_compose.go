@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/floegence/redeven/internal/containerengine"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -28,9 +29,6 @@ func (d *composeTemplateDriver) RebuildStoppedRuntime(ctx context.Context, servi
 		return "", "", err
 	}
 	service.RuntimeIdentity, service.ArtifactReference = runtimeID, artifact
-	if err := d.adapter.CreateComposeDeployment(ctx, d.request(service)); err != nil {
-		return "", "", serviceError("COMPOSE_CREATE_FAILED", "The stopped managed Compose runtime could not be created.", 502, true, err)
-	}
 	if _, err := d.verifyProject(ctx, service); err != nil {
 		_ = d.adapter.RemoveComposeDeployment(context.Background(), d.request(service), false)
 		return "", "", err
@@ -67,7 +65,10 @@ func (d *composeTemplateDriver) FindReconfiguredRuntime(ctx context.Context, ser
 		return "", err
 	}
 	details, err := d.adapter.InspectComposeDeployment(ctx, request)
-	if err != nil || len(details.Containers) == 0 {
+	if err != nil {
+		return "", err
+	}
+	if len(details.Containers) == 0 {
 		return "", nil
 	}
 	digest := sha256.Sum256(raw)
@@ -77,6 +78,12 @@ func (d *composeTemplateDriver) FindReconfiguredRuntime(ctx context.Context, ser
 func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry.ManagedService, progress operationProgress) (string, string, error) {
 	if d.adapter == nil {
 		return "", "", serviceError("DOCKER_UNAVAILABLE", "Docker Compose is not available in this Environment.", 409, true, nil)
+	}
+	if strings.TrimSpace(service.RuntimeIdentity) != "" {
+		if err := d.RemoveRuntime(ctx, service); err != nil {
+			return "", "", err
+		}
+		service.RuntimeIdentity = ""
 	}
 	resolved, err := d.manager.resolveCurrentRuntime(ctx, service)
 	if err != nil {
@@ -98,6 +105,26 @@ func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry
 	}
 	progress("verifying", 3)
 	request := d.request(service)
+	var planned struct {
+		Networks map[string]struct {
+			Name   string            `yaml:"name"`
+			Labels map[string]string `yaml:"labels"`
+		} `yaml:"networks"`
+	}
+	if err := yaml.Unmarshal(generated, &planned); err != nil {
+		return "", "", err
+	}
+	networks, err := d.adapter.ListNetworks(ctx, containerengine.EngineDocker)
+	if err != nil {
+		return "", "", err
+	}
+	for _, network := range networks {
+		for _, wanted := range planned.Networks {
+			if network.Name == wanted.Name {
+				return "", "", serviceError("DATA_NAME_CONFLICT", "An existing network occupies the planned instance name. Review it before installation.", 409, false, nil)
+			}
+		}
+	}
 	if err := writePrivateFile(request.ConfigPath, generated); err != nil {
 		return "", "", err
 	}
@@ -114,7 +141,32 @@ func (d *composeTemplateDriver) Install(ctx context.Context, service *pfregistry
 	progress("installing", 4)
 	digest := sha256.Sum256(generated)
 	artifact := "compose-sha256:" + hex.EncodeToString(digest[:]) + ":" + strings.Join(pinned, ",")
-	return d.identity(service, hex.EncodeToString(digest[:])), artifact, nil
+	runtimeID := d.identity(service, hex.EncodeToString(digest[:]))
+	details, err := d.adapter.InspectComposeDeployment(ctx, request)
+	if err != nil {
+		return "", "", err
+	}
+	if len(details.Containers) > 0 {
+		return "", "", serviceError("COMPOSE_IDENTITY_MISMATCH", "The Compose instance already has containers. Review them before recreating the instance.", 409, false, nil)
+	}
+	// The configuration digest includes this allocation's random ownership label.
+	// Persist it before creating containers so a lost engine response is recoverable.
+	service.RuntimeIdentity, service.ArtifactReference = runtimeID, artifact
+	if err := d.manager.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &runtimeID, ArtifactReference: &artifact}); err != nil {
+		return "", "", err
+	}
+	for _, network := range planned.Networks {
+		if err := d.manager.registry.PutManagedServiceResource(ctx, pfregistry.ManagedServiceResource{ServiceID: service.ServiceID, ResourceID: "@allocation/network/" + network.Name, Kind: "runtime", EngineIdentity: network.Name, StableIdentity: network.Labels[managedServiceLabel+".generation"], Ownership: "owned", CreatedAtUnixMs: time.Now().UnixMilli()}); err != nil {
+			return "", "", err
+		}
+	}
+	if err := d.adapter.CreateComposeDeployment(ctx, request); err != nil {
+		return "", "", serviceError("COMPOSE_CREATE_FAILED", "The Compose creation result needs to be inspected before continuing.", 502, true, err)
+	}
+	if _, err := d.verifyProject(ctx, service); err != nil {
+		return "", "", err
+	}
+	return runtimeID, artifact, nil
 }
 
 func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pfregistry.ManagedService, spec TemplateSpec, configuration serviceConfiguration, secrets serviceSecrets, progress operationProgress) ([]byte, []string, map[string]string, error) {
@@ -133,6 +185,10 @@ func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pf
 	sort.Strings(names)
 	pinned := make([]string, 0, len(names))
 	secretVariables := map[string]string{}
+	generation, err := randomID("mra")
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	for _, name := range names {
 		entry, ok := services[name].(map[string]any)
 		if !ok {
@@ -149,11 +205,43 @@ func (d *composeTemplateDriver) generateCompose(ctx context.Context, service *pf
 		}
 		entry["image"] = pinnedImage
 		pinned = append(pinned, pinnedImage)
-		entry["labels"] = mergeComposeLabels(entry["labels"], map[string]string{managedServiceLabel: service.ServiceID})
+		entry["labels"] = mergeComposeLabels(entry["labels"], map[string]string{managedServiceLabel: service.ServiceID, managedServiceLabel + ".generation": generation})
 		injectComposeSecrets(entry, name, configuration.SecretEnvironmentNames, secrets.Environment, secretVariables)
 		if name == spec.Compose.MainService {
 			ports, _ := entry["ports"].([]any)
 			entry["ports"] = append(ports, map[string]any{"target": spec.Endpoint.ContainerPort, "published": service.RuntimePort, "host_ip": "127.0.0.1", "protocol": "tcp"})
+		}
+	}
+	// Compose data volumes use the same persisted, instance-owned resources as
+	// single-container templates. Mark them external in generated YAML so Compose
+	// never deletes data as a side effect of removing runtime resources.
+	if volumes, ok := document["volumes"].(map[string]any); ok {
+		names := make([]string, 0, len(volumes))
+		for name := range volumes {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		containerDriver := &containerTemplateDriver{manager: d.manager, adapter: d.adapter}
+		for _, name := range names {
+			mounts, err := containerDriver.containerMounts(ctx, service, []ContainerMountSpec{{Type: "volume", ResourceID: name, Target: "/data"}}, true)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			volumes[name] = map[string]any{"external": true, "name": mounts[0].Source}
+		}
+	}
+	if _, ok := document["networks"]; !ok {
+		document["networks"] = map[string]any{"default": map[string]any{}}
+	}
+	if networks, ok := document["networks"].(map[string]any); ok {
+		for name, raw := range networks {
+			network, _ := raw.(map[string]any)
+			if network == nil {
+				network = map[string]any{}
+			}
+			network["labels"] = mergeComposeLabels(network["labels"], map[string]string{managedServiceLabel: service.ServiceID, managedServiceLabel + ".generation": generation})
+			network["name"] = d.projectName(service) + "_" + name
+			networks[name] = network
 		}
 	}
 	document["name"] = d.projectName(service)
@@ -305,6 +393,21 @@ func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfre
 	if err != nil {
 		return containerengine.ComposeProjectDetails{}, err
 	}
+	var applied struct {
+		Networks map[string]struct {
+			Name string `yaml:"name"`
+		} `yaml:"networks"`
+		Services map[string]struct {
+			Networks any `yaml:"networks"`
+		} `yaml:"services"`
+	}
+	config, err := os.ReadFile(d.request(service).ConfigPath)
+	if err != nil {
+		return containerengine.ComposeProjectDetails{}, err
+	}
+	if err := yaml.Unmarshal(config, &applied); err != nil {
+		return containerengine.ComposeProjectDetails{}, err
+	}
 	for _, child := range details.Containers {
 		expectedImage := expectedImages[child.Service]
 		inspected, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID})
@@ -317,10 +420,49 @@ func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfre
 		}
 		runtime := container.Runtime
 		expected, ok := expectedRuntime[child.Service]
+		resources, resourceErr := d.manager.registry.ListManagedServiceResources(ctx, service.ServiceID)
+		if resourceErr != nil {
+			return containerengine.ComposeProjectDetails{}, resourceErr
+		}
+		for index := range expected.Mounts {
+			if expected.Mounts[index].Type != "volume" {
+				continue
+			}
+			for _, resource := range resources {
+				if resource.Kind == "volume" && resource.ResourceID == expected.Mounts[index].Source {
+					expected.Mounts[index].Source = resource.EngineIdentity
+					break
+				}
+			}
+		}
+		shmSize := expected.ShmSizeBytes
+		if shmSize == 0 {
+			shmSize = 64 * 1024 * 1024
+		}
+		allocatedNetworks := []string{}
+		attach := applied.Services[child.Service].Networks
+		names := []string{}
+		switch value := attach.(type) {
+		case map[string]any:
+			for name := range value {
+				names = append(names, name)
+			}
+		case []any:
+			for _, name := range value {
+				names = append(names, fmt.Sprint(name))
+			}
+		default:
+			names = append(names, "default")
+		}
+		for _, name := range names {
+			if declaration, ok := applied.Networks[name]; ok {
+				allocatedNetworks = append(allocatedNetworks, declaration.Name)
+			}
+		}
 		if !ok || runtime.Privileged != expected.Privileged || runtime.ReadOnlyRoot != expected.ReadOnlyRoot || int64(runtime.PIDsLimit) != expected.PIDsLimit ||
-			!composeNetworkModeMatches(runtime.NetworkMode, expected.NetworkMode) || !namespaceModeMatches(runtime.PIDMode, expected.PIDMode) ||
+			!composeNetworkModeMatches(runtime.NetworkMode, expected.NetworkMode, allocatedNetworks...) || !namespaceModeMatches(runtime.PIDMode, expected.PIDMode) ||
 			!namespaceModeMatches(runtime.IPCMode, expected.IPCMode) || strings.TrimSpace(runtime.RestartPolicy) != normalizedRestartPolicy(expected.RestartPolicy) ||
-			runtime.ShmSizeBytes != expected.ShmSizeBytes || strings.TrimSpace(runtime.User) != strings.TrimSpace(expected.User) ||
+			runtime.ShmSizeBytes != shmSize || strings.TrimSpace(runtime.User) != strings.TrimSpace(expected.User) ||
 			!sameStrings(runtime.CapAdd, expected.CapAdd) || !sameStrings(runtime.CapDrop, expected.CapDrop) || !sameStrings(runtime.SecurityOpts, expected.SecurityOpts) {
 			return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_CONFIGURATION_MISMATCH", "A managed Compose container no longer matches its effective runtime configuration.", 409, false, nil)
 		}
@@ -410,8 +552,15 @@ func normalizedRestartPolicy(value string) string {
 	return value
 }
 
-func composeNetworkModeMatches(actual, expected string) bool {
+func composeNetworkModeMatches(actual, expected string, allocated ...string) bool {
 	actual, expected = strings.TrimSpace(actual), strings.TrimSpace(expected)
+	if expected == "" {
+		for _, name := range allocated {
+			if name != "" && actual == name {
+				return true
+			}
+		}
+	}
 	if expected == "" || expected == "bridge" {
 		return actual == "" || actual == "bridge" || actual == "default"
 	}
@@ -467,8 +616,20 @@ func (d *composeTemplateDriver) verifyOwnedProject(ctx context.Context, service 
 		return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The exact managed Compose project identity has changed.", 409, false, nil)
 	}
 	seen := make(map[string]struct{}, len(details.Containers))
+	raw, err := os.ReadFile(d.request(service).ConfigPath)
+	if err != nil {
+		return containerengine.ComposeProjectDetails{}, err
+	}
+	var document struct {
+		Services map[string]struct {
+			Labels map[string]string `yaml:"labels"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(raw, &document); err != nil {
+		return containerengine.ComposeProjectDetails{}, err
+	}
 	for _, child := range details.Containers {
-		expectedImage, known := expectedImages[child.Service]
+		_, known := expectedImages[child.Service]
 		if !known {
 			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "The managed Compose project contains an unexpected service.", 409, false, nil)
 		}
@@ -480,11 +641,17 @@ func (d *composeTemplateDriver) verifyOwnedProject(ctx context.Context, service 
 		if err != nil || !matches {
 			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container no longer has the exact service identity.", 409, false, err)
 		}
+		if generation := document.Services[child.Service].Labels[managedServiceLabel+".generation"]; generation != "" {
+			matches, err := d.adapter.ContainerMatchesLabel(ctx, containerengine.ContainerLabelMatchRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID, Key: managedServiceLabel + ".generation", Value: generation})
+			if err != nil || !matches {
+				return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A Compose container belongs to another allocation.", 409, false, err)
+			}
+		}
 		inspected, err := d.adapter.Inspect(ctx, containerengine.ContainerInspectRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID})
 		if err != nil {
 			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISSING", "A managed Compose container could not be inspected.", 409, false, err)
 		}
-		if inspected.Container.ContainerID != child.ContainerID || inspected.Container.Image.Reference != expectedImage || !inspected.Container.Image.DigestPinned {
+		if inspected.Container.ContainerID != child.ContainerID {
 			return containerengine.ComposeProjectDetails{}, serviceError("COMPOSE_IDENTITY_MISMATCH", "A managed Compose container image identity has changed.", 409, false, nil)
 		}
 	}
@@ -520,10 +687,10 @@ func (d *composeTemplateDriver) expectedImages(service *pfregistry.ManagedServic
 }
 
 func (d *composeTemplateDriver) Start(ctx context.Context, service *pfregistry.ManagedService) (string, error) {
-	if err := d.verifyIdentity(service); err != nil {
+	if _, err := d.verifyProject(ctx, service); err != nil {
 		return "", err
 	}
-	if err := d.adapter.ApplyComposeDeployment(ctx, d.request(service)); err != nil {
+	if err := d.adapter.StartComposeDeployment(ctx, d.request(service)); err != nil {
 		return "", serviceError("START_FAILED", "The managed Compose project could not be started.", 502, true, err)
 	}
 	if _, err := d.verifyProject(ctx, service); err != nil {
@@ -540,8 +707,12 @@ func (d *composeTemplateDriver) Stop(ctx context.Context, service *pfregistry.Ma
 	if err != nil {
 		return err
 	}
-	if _, err := d.verifyOwnedProject(ctx, service, expectedImages); err != nil {
+	details, err := d.verifyOwnedProject(ctx, service, expectedImages)
+	if err != nil {
 		return err
+	}
+	if len(details.Containers) == 0 {
+		return nil
 	}
 	if err := d.adapter.StopComposeDeployment(ctx, d.request(service)); err != nil {
 		return serviceError("STOP_FAILED", "The exact managed Compose project could not be stopped.", 502, true, err)
@@ -560,6 +731,24 @@ func (d *composeTemplateDriver) Uninstall(ctx context.Context, service *pfregist
 			return err
 		}
 		progress("stopping", 2)
+		if pendingUninstall(service) {
+			for _, child := range details.Containers {
+				if _, err := d.verifyOwnedProject(ctx, service, expectedImages); err != nil {
+					return err
+				}
+				if child.State == containerengine.ContainerStateRunning || child.State == containerengine.ContainerStateRestarting || child.State == containerengine.ContainerStatePaused {
+					result, err := d.adapter.Stop(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID, TimeoutSec: 10})
+					if err != nil || !result.Completed {
+						return serviceError("STOP_FAILED", "A verified Compose container could not be stopped.", 502, true, err)
+					}
+				}
+				result, err := d.adapter.Remove(ctx, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: child.ContainerID})
+				if !errors.Is(err, containerengine.ErrContainerNotFound) && (err != nil || !result.Completed) {
+					return serviceError("CONTAINER_REMOVE_FAILED", "A verified Compose container could not be removed.", 502, true, err)
+				}
+			}
+			return nil
+		}
 		if len(details.Containers) > 0 {
 			if err := d.adapter.StopComposeDeployment(ctx, d.request(service)); err != nil {
 				return serviceError("STOP_FAILED", "The exact managed Compose project could not be stopped.", 502, true, err)
@@ -568,7 +757,7 @@ func (d *composeTemplateDriver) Uninstall(ctx context.Context, service *pfregist
 				return err
 			}
 			progress("uninstalling", 5)
-			if err := d.adapter.RemoveComposeDeployment(context.Background(), d.request(service), deleteData); err != nil {
+			if err := d.adapter.RemoveComposeDeployment(ctx, d.request(service), deleteData); err != nil {
 				return serviceError("COMPOSE_REMOVE_FAILED", "The exact managed Compose project could not be removed.", 502, true, err)
 			}
 		} else {
@@ -576,6 +765,9 @@ func (d *composeTemplateDriver) Uninstall(ctx context.Context, service *pfregist
 		}
 	} else {
 		progress("uninstalling", 5)
+	}
+	if pendingUninstall(service) {
+		return nil
 	}
 	return os.RemoveAll(filepath.Dir(d.request(service).ConfigPath))
 }

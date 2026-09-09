@@ -498,14 +498,12 @@ func (c *CLIClient) ListVolumes(ctx context.Context, engine Engine) ([]VolumeRec
 	}
 	metadataFailures := 0
 	for index := range out {
-		if out[index].CreatedAtUnixMs != 0 {
-			continue
-		}
 		metadata, inspectErr := c.inspectVolumeMetadata(ctx, engine, out[index].Name)
 		if inspectErr != nil {
 			metadataFailures++
 			continue
 		}
+		out[index].Labels = metadata.Labels
 		out[index].CreatedAtUnixMs = metadata.CreatedAtUnixMs
 		if out[index].Driver == "" {
 			out[index].Driver = metadata.Driver
@@ -564,13 +562,14 @@ func (c *CLIClient) inspectVolumeMetadata(ctx context.Context, engine Engine, na
 		return VolumeRecord{}, err
 	}
 	var docs []struct {
-		Name      string `json:"Name"`
-		NameAlt   string `json:"name"`
-		Driver    string `json:"Driver"`
-		DriverAlt string `json:"driver"`
-		Scope     string `json:"Scope"`
-		ScopeAlt  string `json:"scope"`
-		CreatedAt string `json:"CreatedAt"`
+		Labels    map[string]string `json:"Labels"`
+		Name      string            `json:"Name"`
+		NameAlt   string            `json:"name"`
+		Driver    string            `json:"Driver"`
+		DriverAlt string            `json:"driver"`
+		Scope     string            `json:"Scope"`
+		ScopeAlt  string            `json:"scope"`
+		CreatedAt string            `json:"CreatedAt"`
 	}
 	if err := json.Unmarshal(raw, &docs); err != nil {
 		return VolumeRecord{}, fmt.Errorf("parse volume inspect: %w", err)
@@ -578,7 +577,7 @@ func (c *CLIClient) inspectVolumeMetadata(ctx context.Context, engine Engine, na
 	if len(docs) == 0 {
 		return VolumeRecord{}, errors.New("parse volume inspect: empty response")
 	}
-	item := VolumeRecord{Name: firstNonEmpty(docs[0].Name, docs[0].NameAlt), Driver: firstNonEmpty(docs[0].Driver, docs[0].DriverAlt), Scope: firstNonEmpty(docs[0].Scope, docs[0].ScopeAlt), CreatedAtUnixMs: parseTimeUnixMs(docs[0].CreatedAt)}
+	item := VolumeRecord{Labels: docs[0].Labels, Name: firstNonEmpty(docs[0].Name, docs[0].NameAlt), Driver: firstNonEmpty(docs[0].Driver, docs[0].DriverAlt), Scope: firstNonEmpty(docs[0].Scope, docs[0].ScopeAlt), CreatedAtUnixMs: parseTimeUnixMs(docs[0].CreatedAt)}
 	return item, nil
 }
 func (c *CLIClient) CreateVolume(ctx context.Context, req VolumeCreateRequest) (VolumeRecord, error) {
@@ -586,6 +585,14 @@ func (c *CLIClient) CreateVolume(ctx context.Context, req VolumeCreateRequest) (
 		return VolumeRecord{}, err
 	}
 	args := []string{"volume", "create"}
+	keys := make([]string, 0, len(req.Labels))
+	for key := range req.Labels {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		args = append(args, "--label", key+"="+req.Labels[key])
+	}
 	if req.Driver != "" {
 		args = append(args, "--driver", req.Driver)
 	}
@@ -728,7 +735,7 @@ func imageReferences(image ImageRecord, containers []EngineContainer) []Resource
 	out := make([]ResourceReference, 0)
 	for _, container := range containers {
 		if anyImageIdentityMatches(candidates, container.Image.Reference, container.Image.Digest, container.Image.RuntimeID) {
-			out = append(out, ResourceReference{ContainerID: container.ContainerID, Name: container.Name, State: container.State})
+			out = append(out, ResourceReference{ManagedServiceID: container.Runtime.Labels["com.floegence.redeven.managed-web-service"], Ports: container.Ports, ContainerID: container.ContainerID, Name: container.Name, State: container.State})
 		}
 	}
 	return out
@@ -756,7 +763,7 @@ func volumeReferences(name string, containers []EngineContainer) []ResourceRefer
 	for _, container := range containers {
 		for _, mount := range container.Runtime.Mounts {
 			if mount.Type == MountTypeVolume && strings.TrimSpace(mount.Source) == name {
-				out = append(out, ResourceReference{ContainerID: container.ContainerID, Name: container.Name, State: container.State})
+				out = append(out, ResourceReference{ManagedServiceID: container.Runtime.Labels["com.floegence.redeven.managed-web-service"], Ports: container.Ports, ContainerID: container.ContainerID, Name: container.Name, State: container.State})
 				break
 			}
 		}

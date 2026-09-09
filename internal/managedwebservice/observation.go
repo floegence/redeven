@@ -59,30 +59,34 @@ func (d *composeTemplateDriver) Observe(ctx context.Context, service *pfregistry
 }
 
 func (m *Manager) observe(ctx context.Context, service *pfregistry.ManagedService) (bool, error) {
+	facts, err := m.inspectService(ctx, service, false)
+	return m.applyObservation(ctx, service, facts, err)
+}
+
+func (m *Manager) applyObservation(ctx context.Context, service *pfregistry.ManagedService, facts ServiceFacts, observationErr error) (bool, error) {
 	binding, err := decodeRuntimeBinding(service)
 	if err != nil {
 		return false, err
 	}
-	observer, ok := m.driver(binding.Deployment).(runtimeObserver)
-	if !ok {
-		return false, serviceError("RUNTIME_INSPECTION_UNAVAILABLE", "The service runtime cannot be inspected.", 503, true, nil)
-	}
-	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	running, err := observer.Observe(checkCtx, service)
+	err = observationErr
+	running := facts.Runtime == "running" && err == nil
 	observed := "stopped"
 	if err != nil {
 		observed = "unknown"
+	} else if facts.Presence == "absent" {
+		observed = "missing"
 	} else if running {
 		observed = "running"
+	} else if facts.Runtime != "stopped" {
+		observed = "transition"
 	}
 	if service.ObservedState != observed {
-		if updateErr := m.registry.UpdateManagedServiceIfRuntimeMatches(ctx, service.ServiceID, service.RuntimeIdentity, service.RuntimeSpecSHA256, pfregistry.ManagedServicePatch{ObservedState: &observed}); updateErr != nil {
+		if updateErr := m.registry.UpdateManagedServiceObservation(ctx, *service, pfregistry.ManagedServicePatch{ObservedState: &observed}); updateErr != nil {
 			return false, updateErr
 		}
 		service.ObservedState = observed
 	}
-	if running && err == nil && binding.Deployment != DeploymentHost {
+	if running && err == nil && activeManagement(*service) && binding.Deployment != DeploymentHost {
 		// Opening preparation must never change the observed business state.
 		_, _ = m.resolveStaticOpening(ctx, service)
 	}
@@ -123,6 +127,9 @@ func (m *Manager) startOutputMaintenance(ctx context.Context) {
 					continue
 				}
 				for _, service := range services {
+					if !activeManagement(service) {
+						continue
+					}
 					if state, err := driver.readRunState(&service); err == nil && state.OutputMode == "private_file" {
 						_ = truncatePrivateOutput(filepath.Join(driver.runDirectory(&service), "output"), hostPrivateOutputLimit)
 					}
