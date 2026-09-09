@@ -20,6 +20,8 @@ OpenRouter queries its configured `/models` endpoint with tool filtering and sta
 
 The two settings entrances share catalog resolution, serialization, search, selection count, and bulk controls. Searching, collapsing, reopening, or refreshing never derives selection from visible rows. Disabling and re-enabling a model preserves parameter edits; clearing selection also retains custom definitions for later selection. Ollama API keys are optional. Offline Ollama discovery reports an error in its settings; other configured providers remain usable. Selecting all models changes the available range, not the new-chat default or a thread's persisted model.
 
+The generated directory stays outside the Env App initial bundle. The settings panel loads on first use and remains mounted after opening, preserving drafts and pending autosave when returning to chat. Lightweight model display helpers do not import catalog data; the build graph gate enforces that boundary.
+
 An unavailable current model remains its exact stored identity and is shown with a request to choose another model. It is never silently replaced. A model-specific image flag participates in the attachment capability revision, so text-only and vision models may coexist within any provider. Actual image admission also requires a supported adapter route and authorized staged bytes; a metadata reasoning flag never invents request parameters.
 
 Compatibility epoch 16 requires matching Desktop and Runtime support for compact model preferences and the shared catalog endpoint. Older clients cannot save an empty expanded list over a catalog-owned profile. Existing epoch 9 through 15 upgrade paths remain available.

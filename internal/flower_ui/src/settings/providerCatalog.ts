@@ -105,16 +105,6 @@ export function flowerModelID(providerID: string, modelName: string): string {
   return cleanProviderID && cleanModelName ? `${cleanProviderID}/${cleanModelName}` : '';
 }
 
-export function flowerModelSupportsImage(raw: readonly string[] | string | undefined): boolean {
-  const source = Array.isArray(raw) ? raw : String(raw ?? '').split(',');
-  return source.some((item) => String(item ?? '').trim().toLowerCase() === 'image');
-}
-
-export function formatFlowerTokenCount(value: number | undefined): string {
-  if (!Number.isFinite(Number(value)) || Number(value) <= 0) return 'N/A';
-  return new Intl.NumberFormat(undefined).format(Math.trunc(Number(value)));
-}
-
 export function normalizeFlowerPositiveInteger(raw: unknown): number | undefined {
   const value = Math.floor(Number(raw));
   return Number.isSafeInteger(value) && value > 0 ? value : undefined;
