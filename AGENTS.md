@@ -1035,6 +1035,26 @@ Flower uses one workspace live transport, a summary/detail-separated bounded thr
 
 Each new Turn resolves the current persisted model, reasoning, System Prompt, and tool definitions. Ask User continuation, tool loops, retries, and restart recovery reuse Floret's durable surface for that Turn. Settings changes are idle-only and affect only a later Turn. Historical tool Activity comes from the canonical persisted presentation; a tool removed from the current version uses the neutral unknown-tool presentation and is never restored to the current registry.
 
+Submitted references and ordinary runtime context belong to Floret's canonical
+model history. Admission maps references and `UserInput.Context` snapshots once;
+working directory, runtime facts, and selected-device hints must not depend on
+`SupplementalContext`. Only explicitly ephemeral material such as secret answers
+uses that separate contract. Context changes append new snapshots effective from
+the new user message. Hosts never rebuild provider history from display state.
+
+Environment cards identify the user-selected device, while runtime snapshots
+identify the actual tool host. Card admission includes the existing environment
+routing skill. Remote diagnostics use `redeven targets exec --target ... --json`;
+only its result establishes actual target execution. An unavailable target must
+not fall back to a local diagnostic. Tool Activity describes where its own process
+ran; a nested CLI target result describes where the diagnostic ran.
+
+Floret owns bounded correction of schema-invalid tool arguments and persists the
+complete call/result pairs. Flower keeps running during correction, shows only
+valid interactions, and filters technical feedback only in presentation. Failed
+question generation preserves generated content and the existing retry action;
+programmer, storage, and unknown-effect errors retain their terminal boundaries.
+
 Outside temporary Local Fast Debugging, Redeven must use the released v7 module with `GOWORK=off`; local sibling wiring is never a committed integration boundary.
 
 ## UI Interaction Affordance

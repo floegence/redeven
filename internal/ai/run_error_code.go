@@ -48,7 +48,7 @@ func userFacingRunError(code string, fallback string) string {
 	case runErrorCodeFloretEngineFailed:
 		return "Flower could not finish this turn because the orchestration engine failed."
 	case runErrorCodeFloretControlContract:
-		return "Flower could not finish this turn because the model returned an invalid interaction control signal."
+		return "Flower could not generate a valid question. The reply so far has been preserved. Retry to continue."
 	case runErrorCodeFloretAdmissionBlocked:
 		return "Flower could not start the next turn because the runtime still reports an active turn. Restart recovery did not complete, so the turn was not admitted."
 	case runErrorCodeFloretAuthorityConsistency:

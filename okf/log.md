@@ -1,5 +1,17 @@
 # Redeven OKF Update Log
 
+## 2026-09-09: Flower durable context and question recovery
+
+- Adopt published Floret v7.8.0 for canonical references, durable runtime
+  snapshots, strict bounded argument correction, and automatic domain migration.
+- Separate the selected device from the actual tool host and include existing
+  environment routing instructions at card admission. No local target substitute.
+- Preserve technical correction pairs in Floret while keeping the user interaction
+  focused on valid questions; exhausted corrections retain output and retry.
+- Verify the shared Desktop card fixture through Send and DeepSeek HTTP, plus
+  follow-up context, bounded question correction, actual execution facts, and
+  localized failure presentation.
+
 ## 2026-09-08: Preserve web facts through the public Activity boundary
 
 - Include web operation, target URL, find pattern, and explicit source-list

@@ -125,6 +125,8 @@ Ejecuta `redeven help run` para consultar otros modos de ejecución y la protecc
 | Flower | Superficies de IA opcionales que usan herramientas validadas por el entorno de ejecución y configuración local del modelo y del host. |
 | Desktop | Iniciador nativo para entornos locales, entornos alojados en Redeven Cloud, entornos inicializados mediante SSH y entornos de Local UI guardados. |
 
+Flower conserva en la conversación las referencias y la selección del dispositivo que envías, para que las preguntas posteriores mantengan su contexto. El dispositivo seleccionado y el equipo que ejecuta las herramientas se identifican por separado. Los datos secretos introducidos temporalmente no se guardan en el historial.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

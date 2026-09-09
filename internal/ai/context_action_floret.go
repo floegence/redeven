@@ -1,9 +1,7 @@
 package ai
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,15 +14,11 @@ import (
 
 const (
 	floretTerminalSelectionInlineChars = 10_000
-	floretTextSnapshotInlineChars      = 12_000
 )
 
 type floretContextProjection struct {
-	References    []flruntime.MessageReference
-	Items         []flruntime.TurnSupplementalContextItem
-	RenderedChars int
-	Truncated     bool
-	ContextHash   string
+	References []flruntime.MessageReference
+	Context    []flruntime.MessageContextItem
 }
 
 func cloneFlowerCanonicalReferenceTargetAuthority(in *flowerCanonicalReferenceTargetAuthority) *flowerCanonicalReferenceTargetAuthority {
@@ -40,86 +34,86 @@ func floretContextProjectionForInput(input RunInput) (floretContextProjection, e
 }
 
 func floretContextProjectionForInputWithAuthority(input RunInput, authority *flowerCanonicalReferenceTargetAuthority) (floretContextProjection, error) {
-	references, items, err := floretContextActionItemsWithAuthority(input.ContextAction, authority)
+	action, err := normalizeAskFlowerContextActionEnvelope(input.ContextAction)
 	if err != nil {
 		return floretContextProjection{}, err
 	}
-	projection := floretContextProjection{References: references, Items: items}
-	if len(items) == 0 {
-		return projection, nil
-	}
-	projection.RenderedChars = floretSupplementalRenderedChars(items)
-	projection.Truncated = floretSupplementalHasTruncation(items)
-	projection.ContextHash = floretSupplementalContextHash(items)
-	return projection, nil
-}
-
-func floretContextActionItemsWithAuthority(action *ContextActionEnvelope, authority *flowerCanonicalReferenceTargetAuthority) ([]flruntime.MessageReference, []flruntime.TurnSupplementalContextItem, error) {
-	action, err := normalizeAskFlowerContextActionEnvelope(action)
-	if err != nil {
-		return nil, nil, err
-	}
 	if action == nil {
-		return nil, nil, nil
+		return floretContextProjection{}, nil
 	}
 	if authority != nil {
 		if err := authorizeFlowerContextActionTarget(action, *authority); err != nil {
-			return nil, nil, err
+			return floretContextProjection{}, err
 		}
 		action = canonicalizeFlowerContextActionTarget(action, *authority)
 	}
-	references := make([]flruntime.MessageReference, 0, len(action.Context))
-	items := make([]flruntime.TurnSupplementalContextItem, 0, len(action.Context))
+	projection := floretContextProjection{}
 	for index, item := range action.Context {
 		var reference flruntime.MessageReference
 		hasReference := true
-		var supplemental flruntime.TurnSupplementalContextItem
+		metadata := contextActionBaseMetadata(action)
+		title := nonEmptyString(item.Title, "Submitted context")
+		instruction := "Facts supplied with this reference (routing hints do not establish execution location):"
 		switch strings.TrimSpace(item.Kind) {
 		case contextActionKindFilePath:
 			reference, err = floretFilePathReferenceWithAuthority(action, item, index, authority)
-			label := contextReferencePathLabel(item.Path)
-			if label == "" {
-				label = nonEmptyString(item.RootLabel, "selected file")
-			}
-			supplemental = flruntime.TurnSupplementalContextItem{
-				Kind:      contextActionKindFilePath,
-				Title:     "User-selected file",
-				Text:      fmt.Sprintf("The user explicitly selected %q for this turn. Treat it as the referenced file and do not ask which file was selected. Read it with the file tool if its contents are needed.", label),
-				Metadata:  contextActionFilePathMetadata(action, item),
-				Sensitive: true,
-			}
+			title = "User-selected file"
+			instruction = "The user explicitly selected the referenced file. Read it with the file tool if its contents are needed."
+			metadata = contextActionFilePathMetadata(action, item)
 		case contextActionKindTerminal:
 			reference, hasReference = floretTerminalSelectionReference(item, index)
-			supplemental = floretTerminalSelectionSupplementalItem(action, item)
+			if dir := strings.TrimSpace(item.WorkingDir); dir != "" {
+				metadata["working_dir"] = dir
+			}
+			if item.SelectionChars > 0 {
+				metadata["selection_chars"] = strconv.Itoa(item.SelectionChars)
+			}
+			if reference.Truncated {
+				metadata["selection_truncated"] = "true"
+			}
 		case contextActionKindProcess:
 			reference = floretProcessReference(item, index)
-			supplemental = flruntime.TurnSupplementalContextItem{
-				Kind:      contextActionKindProcess,
-				Title:     nonEmptyString(item.Title, item.Name, "Linked process snapshot"),
-				Metadata:  contextActionProcessMetadata(action, item),
-				Sensitive: true,
-			}
+			title = nonEmptyString(item.Title, item.Name, "Process snapshot")
+			metadata = contextActionProcessMetadata(action, item)
 		case contextActionKindText:
 			reference = floretTextSnapshotReference(item, index)
-			supplemental = floretTextSnapshotSupplementalItem(action, item)
+			if detail := strings.TrimSpace(item.Detail); detail != "" && detail != reference.Text {
+				metadata["detail"] = detail
+			}
 		default:
-			return nil, nil, ErrInvalidContextAction
+			return floretContextProjection{}, ErrInvalidContextAction
 		}
 		if err != nil {
-			return nil, nil, err
+			return floretContextProjection{}, err
 		}
 		if hasReference {
 			if err := reference.Validate(); err != nil {
-				return nil, nil, fmt.Errorf("context reference %d: %w", index, err)
+				return floretContextProjection{}, fmt.Errorf("context reference %d: %w", index, err)
 			}
-			references = append(references, reference)
+			projection.References = append(projection.References, reference)
 		}
-		items = append(items, supplemental)
+		if action.Source.Surface == contextActionSurfaceWelcomeEnv {
+			title = "User-selected device"
+			instruction = "This is the device selected by the user. It does not change the tool execution environment."
+		}
+		raw, err := json.Marshal(metadata)
+		if err != nil {
+			return floretContextProjection{}, err
+		}
+		snapshot := flruntime.MessageContextItem{Kind: strings.TrimSpace(item.Kind), Title: title, Text: instruction + "\n" + string(raw)}
+		if err := snapshot.Validate(); err != nil {
+			return floretContextProjection{}, err
+		}
+		projection.Context = append(projection.Context, snapshot)
 	}
-	if len(items) != len(action.Context) {
-		return nil, nil, ErrInvalidContextAction
+	if action.Source.Surface == contextActionSurfaceWelcomeEnv {
+		routing, err := systemSkillFS.ReadFile("system_skills/redeven-environment/SKILL.md")
+		if err != nil {
+			return floretContextProjection{}, fmt.Errorf("load environment routing skill: %w", err)
+		}
+		projection.Context = append(projection.Context, flruntime.MessageContextItem{Kind: "environment_routing", Title: "Environment inspection routing", Text: string(routing)})
 	}
-	return references, items, nil
+	return projection, nil
 }
 
 func floretFilePathReferenceWithAuthority(action *ContextActionEnvelope, item ContextActionContextItem, index int, authority *flowerCanonicalReferenceTargetAuthority) (flruntime.MessageReference, error) {
@@ -286,59 +280,6 @@ func formatContextActionNumber(value int) string {
 	return raw
 }
 
-func floretTerminalSelectionSupplementalItem(action *ContextActionEnvelope, item ContextActionContextItem) flruntime.TurnSupplementalContextItem {
-	selection := strings.TrimSpace(item.Selection)
-	selectionChars := item.SelectionChars
-	if selectionChars <= 0 {
-		selectionChars = len([]rune(selection))
-	}
-	metadata := contextActionBaseMetadata(action)
-	if workingDir := strings.TrimSpace(item.WorkingDir); workingDir != "" {
-		metadata["working_dir"] = workingDir
-	}
-	if selectionChars > 0 {
-		metadata["selection_chars"] = strconv.Itoa(selectionChars)
-	}
-	out := flruntime.TurnSupplementalContextItem{
-		Kind:      contextActionKindTerminal,
-		Title:     nonEmptyString(item.Title, "Linked terminal selection"),
-		Metadata:  metadata,
-		Sensitive: true,
-	}
-	if selection != "" && len([]rune(selection)) <= floretTerminalSelectionInlineChars {
-		out.Text = selection
-		return out
-	}
-	if selection != "" || selectionChars > floretTerminalSelectionInlineChars {
-		out.Truncated = true
-		metadata["selection_truncated"] = "true"
-	}
-	return out
-}
-
-func floretTextSnapshotSupplementalItem(action *ContextActionEnvelope, item ContextActionContextItem) flruntime.TurnSupplementalContextItem {
-	text := strings.TrimSpace(item.Content)
-	if text == "" {
-		text = strings.TrimSpace(item.Detail)
-	}
-	truncated := false
-	if len([]rune(text)) > floretTextSnapshotInlineChars {
-		text = string([]rune(text)[:floretTextSnapshotInlineChars])
-		truncated = true
-	}
-	metadata := contextActionBaseMetadata(action)
-	if detail := strings.TrimSpace(item.Detail); detail != "" && detail != text {
-		metadata["detail"] = detail
-	}
-	return flruntime.TurnSupplementalContextItem{
-		Kind:      contextActionKindText,
-		Title:     nonEmptyString(item.Title, "Linked text snapshot"),
-		Text:      text,
-		Metadata:  metadata,
-		Truncated: truncated,
-	}
-}
-
 func contextActionFilePathMetadata(action *ContextActionEnvelope, item ContextActionContextItem) map[string]string {
 	metadata := contextActionBaseMetadata(action)
 	delete(metadata, "suggested_working_dir_abs")
@@ -393,7 +334,7 @@ func contextActionBaseMetadata(action *ContextActionEnvelope) map[string]string 
 	metadata["target_locality"] = strings.TrimSpace(action.Target.Locality)
 	if action.ExecutionContext != nil {
 		if targetID := strings.TrimSpace(action.ExecutionContext.CurrentTargetID); targetID != "" {
-			metadata["current_target_id"] = targetID
+			metadata["selected_target_id"] = targetID
 		}
 		if envPublicID := strings.TrimSpace(action.ExecutionContext.SourceEnvPublicID); envPublicID != "" {
 			metadata["source_env_public_id"] = envPublicID
@@ -409,38 +350,6 @@ func contextActionBaseMetadata(action *ContextActionEnvelope) map[string]string 
 		metadata["suggested_working_dir_abs"] = dir
 	}
 	return metadata
-}
-
-func floretSupplementalRenderedChars(items []flruntime.TurnSupplementalContextItem) int {
-	total := 0
-	for _, item := range items {
-		total += len([]rune(item.Kind)) + len([]rune(item.Title)) + len([]rune(item.Text))
-		for key, value := range item.Metadata {
-			total += len([]rune(key)) + len([]rune(value))
-		}
-	}
-	return total
-}
-
-func floretSupplementalHasTruncation(items []flruntime.TurnSupplementalContextItem) bool {
-	for _, item := range items {
-		if item.Truncated {
-			return true
-		}
-	}
-	return false
-}
-
-func floretSupplementalContextHash(items []flruntime.TurnSupplementalContextItem) string {
-	if len(items) == 0 {
-		return ""
-	}
-	raw, err := json.Marshal(items)
-	if err != nil {
-		raw = []byte(fmt.Sprintf("%+v", items))
-	}
-	sum := sha256.Sum256(raw)
-	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func formatContextActionBytes(n int64) string {

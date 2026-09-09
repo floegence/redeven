@@ -4349,7 +4349,7 @@
       "runErrorProviderModelUnavailable": "O modelo selecionado não está disponível neste provedor de modelos. Escolha outro modelo no perfil de IA local.",
       "runErrorModelGatewayContractFailed": "A fonte do modelo retornou uma chamada de ferramenta incompleta. Nenhuma ferramenta foi executada. Tente novamente ou escolha outro modelo.",
       "runErrorFloretEngineFailed": "Flower não pôde terminar este turno porque o mecanismo de orquestração falhou.",
-      "runErrorFloretControlContractFailed": "Flower não pôde concluir este turno porque o modelo retornou um sinal de controle de interação inválido.",
+      "runErrorFloretControlContractFailed": "Flower não conseguiu gerar uma pergunta válida. A resposta gerada foi preservada. Tente novamente para continuar.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower não pôde concluir este turno porque o resultado confirmado da ferramenta não pôde ser verificado. A ferramenta não foi executada novamente; envie uma nova mensagem para continuar.",
       "runErrorFloretEffectOutcomeUnknown": "Não foi possível confirmar se algumas operações foram concluídas. A tarefa foi interrompida para evitar execução duplicada.",
       "runErrorRuntimeRestarted": "O ambiente de execução local reiniciou antes que esta resposta terminasse. Inicie uma nova resposta quando ele estiver pronto.",

@@ -74,6 +74,20 @@ function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): Flower
 }
 
 describe('presentFlowerActivityItem', () => {
+  it('shows actual terminal target and execution location without guessing from the command', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal',
+      chips: [{ kind: 'target', label: 'target', value: 'ssh:host:actual' }, { kind: 'execution_location', label: 'location', value: 'ssh_target' }],
+      payload: { command: 'uname -a', execution_location: 'ssh_target' },
+    }));
+    expect(presentation.meta).toBe('ssh:host:actual · ssh_target');
+    const launcher = presentFlowerActivityItem(item({
+      renderer: 'terminal',
+      payload: { command: 'redeven targets exec --target ssh:host:remote --json -- uname', execution_location: 'local_runtime' },
+    }));
+    expect(launcher.meta).toBe('local_runtime');
+  });
+
   it('joins a Subagent operation target to the exact thread summary', () => {
     const presentation = presentFlowerActivityItem(item({
       item_id: 'subagent:review-api',

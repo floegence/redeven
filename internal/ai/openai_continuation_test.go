@@ -231,7 +231,7 @@ func TestOpenAIProviderStreamTurnUsesPreviousResponseIDAndReturnsProviderState(t
 	}
 }
 
-func TestIntegrationServiceRuntimeContextDoesNotReuseOpaqueOpenAIContinuation(t *testing.T) {
+func TestIntegrationServiceDurableRuntimeContextReusesOpenAIContinuation(t *testing.T) {
 	t.Parallel()
 
 	mock := &openAIContinuationMock{}
@@ -260,9 +260,7 @@ func TestIntegrationServiceRuntimeContextDoesNotReuseOpaqueOpenAIContinuation(t 
 	if len(previousIDs) < 2 || len(issuedResponseIDs) < 2 {
 		t.Fatalf("provider calls=(previous=%v responses=%v), want both turns", previousIDs, issuedResponseIDs)
 	}
-	for _, previousID := range previousIDs {
-		if previousID != "" {
-			t.Fatalf("previous response ids=%v, runtime supplemental context must disable opaque continuation reuse", previousIDs)
-		}
+	if previousIDs[0] != "" || previousIDs[1] != issuedResponseIDs[0] {
+		t.Fatalf("previous response ids=%v, want the durable first turn continuation %q", previousIDs, issuedResponseIDs[0])
 	}
 }

@@ -4349,7 +4349,7 @@
       "runErrorProviderModelUnavailable": "Le modèle sélectionné n’est pas disponible auprès de ce fournisseur de modèles. Choisissez un autre modèle dans le profil d’IA local.",
       "runErrorModelGatewayContractFailed": "La source du modèle a renvoyé un appel d’outil incomplet. Aucun outil n’a été exécuté. Réessayez ou choisissez un autre modèle.",
       "runErrorFloretEngineFailed": "Flower n'a pas pu terminer ce tour en raison d'une panne du moteur d'orchestration.",
-      "runErrorFloretControlContractFailed": "Flower n'a pas pu terminer ce tour, car le modèle a renvoyé un signal de contrôle d'interaction non valide.",
+      "runErrorFloretControlContractFailed": "Flower n’a pas pu générer une question valide. La réponse déjà rédigée a été conservée. Réessayez pour continuer.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower n'a pas pu terminer ce tour, car le résultat d'outil validé n'a pas pu être vérifié. L'outil n'a pas été réexécuté ; envoyez un nouveau message pour continuer.",
       "runErrorFloretEffectOutcomeUnknown": "Impossible de confirmer si certaines opérations ont abouti. La tâche a été arrêtée pour éviter une double exécution.",
       "runErrorRuntimeRestarted": "L’environnement d’exécution local a redémarré avant la fin de cette réponse. Lancez une nouvelle réponse lorsqu’il est prêt.",

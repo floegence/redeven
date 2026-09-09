@@ -16,7 +16,7 @@ timestamp: 2026-09-08T00:00:00Z
 
 ## Storage owners
 
-Redeven consumes published Floret v7.6.1 with `GOWORK=off`. Floret owns journal,
+Redeven consumes published Floret v7.8.0 with `GOWORK=off`. Floret owns journal,
 queue, interactions, context lineage, execution identity and recovery. Redeven
 uses public `InspectSQLite`, `BackupSQLite`, deferred `runtime.Open`, typed
 queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor
@@ -105,3 +105,8 @@ Historical byte interpretation never grants current execution permission.
 - `redeven:internal/ai/execution_authority_maintenance_test.go` - Queue handoff and canonical authority protection.
 - `redeven:internal/ai/storage_compatibility_test.go` - Immutable writer upgrades, retained facts and real continuation.
 - `redeven:scripts/contracts/threadstore_boundary_manifest.json` - Reviewed SQL ownership inventory.
+
+The upstream v9 to v10 domain edge admits durable context and validation feedback
+without rewriting existing entries. Redeven neither opens those records nor
+reconstructs lost ephemeral history. References and runtime snapshots are submitted
+through public `UserInput`; Floret owns their fingerprints, replay, and compaction.
