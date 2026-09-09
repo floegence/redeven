@@ -1,6 +1,7 @@
 import '../index.css';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { expectSingleInputFocus } from './inputFocus.test-support';
 
 type BoundaryProbe = Readonly<{
   border: string;
@@ -42,7 +43,9 @@ function applyTheme(name: string, mode: 'light' | 'dark'): void {
 function mountBoundary(className: string, background: string): BoundaryProbe {
   const element = document.createElement('div');
   element.className = className;
-  element.style.border = '1px solid transparent';
+  // The role owns color; an inline color would override ordinary stylesheet rules.
+  element.style.borderWidth = '1px';
+  element.style.borderStyle = 'solid';
   element.style.background = background;
   document.body.appendChild(element);
   const style = getComputedStyle(element);
@@ -80,6 +83,21 @@ describe('Classic Dark rendered boundary contract', () => {
     expect(contrastRatio(control.border, control.background)).toBeGreaterThanOrEqual(3);
     expect(contrastRatio(overlay.border, overlay.background)).toBeGreaterThanOrEqual(3);
     expect(contrastRatio(chrome.border, chrome.background)).toBeGreaterThanOrEqual(2.2);
+  });
+
+  it('keeps a real input boundary visible while allowing the shared focus color', () => {
+    applyTheme('classic-dark', 'dark');
+    const input = document.createElement('input');
+    input.className = 'redeven-surface-control';
+    input.style.borderWidth = '1px';
+    input.style.borderStyle = 'solid';
+    input.style.background = 'var(--redeven-surface-panel)';
+    document.body.appendChild(input);
+
+    const style = getComputedStyle(input);
+    expect(contrastRatio(style.borderTopColor, style.backgroundColor)).toBeGreaterThanOrEqual(3);
+    expectSingleInputFocus(input);
+    expect(contrastRatio(style.borderTopColor, style.backgroundColor)).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps the stronger Classic Dark palette scoped away from other presets', () => {
