@@ -12,7 +12,9 @@ timestamp: 2026-09-09T00:00:00Z
 - Invariants: names alone never confer ownership; stopped containers count as references; external resources and unverified legacy assets cannot become implicitly deletable.
 - Failure boundary: inspection or identity uncertainty preserves resources and directs users to the management review. No running data is moved or copied during upgrade.
 
-# Instance allocation
+# Contract
+
+## Instance allocation
 
 New Host bindings use `instances/<service-id>/data`. New default workspaces include the randomly allocated service ID. Existing bindings remain unchanged, including former family directories. A user-selected directory keeps its external ownership semantics and receives no automatic deletion authority.
 
@@ -20,13 +22,15 @@ Container volume names include the instance and resource IDs. Before engine crea
 
 Compose generated configuration scopes projects, volumes, and networks to the instance. Declared data volumes use the same owned volume allocator as Container, and generated Compose YAML references them externally so removing runtime containers cannot implicitly delete data. Generated container and network labels include a random allocation generation. The private configuration digest and generation are persisted before Compose creates resources. Start only starts existing verified containers; it never implicitly recreates them with `up`. Template permissions remain unchanged: unsupported external Compose capabilities are still rejected by template policy.
 
-# Observation and deletion
+## Observation and deletion
 
 Container ownership uses exact native ID, standard managed name, and service label. Image or runtime-configuration drift is a separate configuration issue, not evidence that ownership changed. Compose checks the saved configuration identity, exact project membership, service labels, and the allocation generation when available.
 
 Volume proof combines stored name, creation identity, and allocation labels for new resources. Networks retain the exact network ID. Directory proof uses native device, inode, and birth identity where available. A changed identity, symlink, unsafe scope, overlapping managed path, or incomplete inspection prevents destructive cleanup.
 
 Resource checks inspect actual engine references, including stopped containers and bind mounts outside the current Runtime's Registry. Unknown ownership is shown honestly. Reference metadata exposes selected container identity, state, ports, and owning service identifiers; arbitrary engine labels and injected secrets never become public inventory fields.
+
+# Boundaries
 
 Existing volume names and directories are not renamed, moved, or recreated during schema upgrade. Legacy resources remain unverified until their evidence is sufficient. Uninstall defaults to retaining data and workspace, and cannot remove another container to satisfy a cleanup request. The [management recovery contract](service-management-recovery.md) owns confirmation, journal resumption, archive navigation, and explicit preservation.
 

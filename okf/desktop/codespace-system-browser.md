@@ -27,7 +27,7 @@ Browser admission requires exactly one matching cookie, the exact listener autho
 
 The session lasts at most 12 hours from gateway creation. Its timer closes the listener and all owned connections, not just future request admission. Entries and credentials remain process-local. A new explicit browser opening closes the previous route for that resource and acquires the current editor generation on the same saved origin, allowing recovery after a stopped/restarted CodeSpace. Concurrent openings for that resource share setup. Other CodeSpaces and built-in windows remain independent. Closing the environment aborts pending setup and closes every browser route; late route acquisition cannot open a browser. An OS-open failure closes the newly acquired gateway and route.
 
-## Failure and compatibility boundary
+# Boundaries
 
 The browser cookie grants only the bound native editor, never Local UI management, a sibling CodeSpace, an environment session, or a Web Service. Existing Runtime generation, permission, access expiry and revocation checks remain authoritative. Desktop is required while these browser tabs are in use. After environment closure or session expiry, the user reopens the CodeSpace from Desktop.
 
