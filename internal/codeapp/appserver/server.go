@@ -3975,6 +3975,32 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/model_catalog":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body ai.ModelCatalogRequest
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid model catalog request"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid model catalog request"})
+			return
+		}
+		out, err := aiSvc.DiscoverModelCatalog(r.Context(), body)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":
 		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
 			return

@@ -23,6 +23,32 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | --- | --- | --- | --- | --- |
 | Node.js | 24.19.0 | MIT | https://github.com/nodejs/node | Official platform runtime downloaded on demand by host deployment using the URL, byte size, and SHA-256 pinned in the Redeven release. The distribution retains its bundled license and dependency notices. |
 
+## Bundled Model Catalog
+
+Redeven derives its offline Agent model metadata from [models.dev](https://github.com/anomalyco/models.dev), under MIT. The compact source snapshot and reviewed provider corrections live in `scripts/model-catalog/`; the generated catalog is bundled in the Runtime and Flower UI. The snapshot records the SHA-256 of the upstream API response used for the update.
+
+MIT License
+
+Copyright (c) 2025 models.dev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ## Go Modules
 
 | Component | Version | License | Used by | Source | Notes |

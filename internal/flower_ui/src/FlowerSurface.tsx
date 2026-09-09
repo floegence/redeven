@@ -1,3 +1,4 @@
+import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Switch, batch, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
@@ -169,7 +170,7 @@ import {
 } from './transportOutbox';
 import { createLiveTransport } from './liveTransport';
 import { flowerThreadActivityRevision } from './flowerThreadListRefresh';
-import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
+import { flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
   type FlowerComposerDraftCoordinator,
@@ -11483,6 +11484,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
         <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
           <FlowerSettingsSurface
+            onDiscoverModels={props.adapter.discoverProviderModels}
             snapshot={snapshot()}
             copy={copy().settings}
             onSaveDefaultPermission={saveDefaultPermission}

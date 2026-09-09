@@ -1,3 +1,6 @@
+import { ModelCatalogControls } from '../../../../../../flower_ui/src/settings/ModelCatalogControls';
+import { filterFlowerModels } from '../../../../../../flower_ui/src/settings/modelSelection';
+import { modelCatalogCopy } from '../../../../../../flower_ui/src/settings/modelCatalogCopy';
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Bot, Key, Settings, Sparkles } from '@floegence/floe-webapp-core/icons';
@@ -29,6 +32,10 @@ import {
 import type { AIProviderModelPreset, AIProviderRow, AIProviderType, AIProviderWebSearchMode } from './types';
 
 export type AIProviderDialogProps = {
+  onDiscoverModels?: () => void;
+  onClearModels: () => void;
+  discoveringModels?: boolean;
+  discoveryError?: string;
   open: boolean;
   title: string;
   provider: AIProviderRow | null;
@@ -70,6 +77,8 @@ function normalizeModelName(value: unknown): string {
 export function AIProviderDialog(props: AIProviderDialogProps) {
   const i18n = useI18n();
   const [activeStep, setActiveStep] = createSignal<ProviderDialogStep>('type');
+  const [query, setQuery] = createSignal('');
+  const catalogCopy = () => modelCatalogCopy(i18n.locale());
   const [customModelName, setCustomModelName] = createSignal('');
   const saving = createMemo(() => props.aiSaving || props.keySaving || props.webSearchKeySaving);
   const providerHasModels = createMemo(() => Array.isArray(props.provider?.models) && (props.provider?.models.length ?? 0) > 0);
@@ -77,7 +86,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   createEffect(() => {
     if (!props.open) {
       setActiveStep('type');
-      setCustomModelName('');
+      setCustomModelName(''); setQuery('');
     }
   });
 
@@ -126,7 +135,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
             variant="default"
             onClick={props.onConfirm}
             loading={saving()}
-            disabled={!props.canInteract || saving() || !providerHasModels()}
+            disabled={!props.canInteract || saving() || !providerHasModels() && !props.provider?.model_selection}
           >
             {i18n.t('flowerProviderDialog.saveProvider')}
           </Button>
@@ -152,7 +161,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
             {
               id: 'connection',
               label: i18n.t('flowerProviderDialog.connectionTitle'),
-              description: props.keySet || String(props.keyDraft ?? '').trim()
+              description: provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim()
                 ? i18n.t('flowerProviderDialog.keyReady')
                 : i18n.t('flowerSettings.needsKey'),
               icon: Key,
@@ -188,7 +197,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                   </div>
                   <div class="mt-3 flex flex-wrap gap-1.5">
                     <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
-                      {props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
+                      {provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                     </SettingsPill>
                     <Show when={localizedProviderBuiltInWebSearchLabel(i18n, provider().type)}>
                       {(label) => <SettingsPill tone="success">{label()}</SettingsPill>}
@@ -292,7 +301,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         </div>
                       </Show>
                       <div>
-                        <FieldLabel hint={props.keySet ? i18n.t('flowerProviderDialog.savedKeyHint') : i18n.t('flowerProviderDialog.requiredBeforeUseHint')}>
+                        <FieldLabel hint={provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet ? i18n.t('flowerProviderDialog.savedKeyHint') : i18n.t('flowerProviderDialog.requiredBeforeUseHint')}>
                           {i18n.t('flowerProviderDialog.apiKey')}
                         </FieldLabel>
                         <Input
@@ -353,7 +362,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                     </div>
                     <div class="redeven-settings-inset flex flex-wrap gap-2 rounded-lg border p-3">
                       <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
-                        {props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
+                        {provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                       </SettingsPill>
                       <SettingsPill>{providerTypeDisplayLabel(provider().type)}</SettingsPill>
                       <Show when={localizedProviderBuiltInWebSearchLabel(i18n, provider().type)}>
@@ -369,27 +378,21 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       <SubSectionHeader
                         title={i18n.t('flowerProviderDialog.recommendedModelsTitle')}
                         description={i18n.t('flowerProviderDialog.recommendedModelsDescription')}
-                        actions={
-                          <Show when={props.recommendedModels.length > 0}>
-                            <Button size="sm" variant="outline" onClick={props.onApplyAllPresets} disabled={!props.canInteract}>
-                              {i18n.t('flowerProviderDialog.addAllPresets')}
-                            </Button>
-                          </Show>
-                        }
                       />
+                      <ModelCatalogControls copy={catalogCopy()} query={query()} count={props.provider?.models.length ?? 0} onQuery={setQuery} onSelectAll={props.onApplyAllPresets} onClear={props.onClearModels} onRefresh={props.onDiscoverModels} loading={props.discoveringModels} error={props.discoveryError} disabled={!props.canInteract} />
                       <Show
-                        when={props.recommendedModels.length > 0}
-                        fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{i18n.t('flowerProviderDialog.noMaintainedPresets')}</div>}
+                        when={filterFlowerModels(props.recommendedModels, query()).length > 0}
+                        fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{catalogCopy().empty}</div>}
                       >
                         <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                          <For each={props.recommendedModels}>
+                          <For each={filterFlowerModels(props.recommendedModels, query())}>
                             {(preset) => {
                               const selected = () => recommendedModelSelected(preset.model_name);
                               return (
                                 <div class={cn('redeven-settings-choice rounded-lg border p-3', selected() && 'redeven-settings-choice--selected')}>
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
-                                      <div class="break-all font-mono text-sm font-semibold text-foreground">{preset.model_name}</div>
+                                      <div class="break-all font-mono text-sm font-semibold text-foreground">{preset.display_name || preset.model_name} <Show when={preset.status}><SettingsPill>{preset.status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
                                       <div class="mt-1 text-xs text-muted-foreground">
                                         {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(preset.context_window) })}
                                         <Show when={preset.max_output_tokens}> · {i18n.t('flowerProviderDialog.outputTokens', { count: formatTokenCount(Number(preset.max_output_tokens ?? 0)) })}</Show>
@@ -447,8 +450,8 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{i18n.t('flowerProviderDialog.noSelectedModels')}</div>}
                       >
                         <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                          <For each={models()}>
-                            {(model, index) => (
+                          <For each={filterFlowerModels(models(), query())}>
+                            {(model) => (
                               <div class="redeven-settings-inset rounded-lg border p-3">
                                 <div class="flex items-start justify-between gap-3">
                                   <div class="min-w-0">
@@ -461,7 +464,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     size="sm"
                                     variant="ghost"
                                     class="text-muted-foreground hover:text-destructive"
-                                    onClick={() => props.onRemoveModel(index())}
+                                    onClick={() => props.onRemoveModel(models().findIndex((item) => item.model_name === model.model_name))}
                                     disabled={!props.canInteract || models().length <= 1}
                                   >
                                     {i18n.t('flowerProviderDialog.removeModel')}

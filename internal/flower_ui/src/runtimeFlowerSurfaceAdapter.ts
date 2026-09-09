@@ -1,3 +1,4 @@
+import type { FlowerModelCatalogDiscovery } from './contracts/flowerSurfaceContracts';
 import type {
   FlowerApprovalCommandResult,
   FlowerCanonicalReferenceOpenRequest,
@@ -108,6 +109,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   canMutate?: boolean;
   transport: FlowerRuntimeTransport;
   mapperOptions: FlowerLiveThreadMapperOptions;
+  discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
@@ -253,6 +255,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     canMutate: options.canMutate !== false,
     keepLiveWhenHidden: Boolean(options.transport.connectLiveStream),
     loadSettings: options.loadSettings,
+    discoverProviderModels: options.discoverProviderModels,
     saveDefaultPermission: options.saveDefaultPermission,
     saveModelProfile: options.saveModelProfile,
     listThreads: async () => {

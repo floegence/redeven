@@ -150,10 +150,17 @@ func (service *Service) AdoptOrphanCanonicalRoot(ctx context.Context, req AdoptO
 	if req.ThreadID == "" || req.EndpointID == "" || req.NamespacePublicID == "" || req.ModelID == "" || req.PermissionType == "" || req.WorkingDir == "" || req.OperatorPublicID == "" {
 		return 0, errors.New("orphan adoption requires complete explicit settings and operator identity")
 	}
-	if service.cfg == nil {
+	service.mu.Lock()
+	cfg := service.cfg
+	service.mu.Unlock()
+	if cfg == nil {
 		return 0, errors.New("orphan adoption requires an active model profile")
 	}
-	if _, _, ok := service.cfg.ProviderModelByID(req.ModelID); !ok {
+	resolvedConfig, catalogErr := resolveModelCatalogs(ctx, cfg, service.resolveProviderKey, req.ModelID)
+	if catalogErr != nil {
+		return 0, catalogErr
+	}
+	if _, _, ok := resolvedConfig.ProviderModelByID(req.ModelID); !ok {
 		return 0, errors.New("orphan adoption model is not configured")
 	}
 	switch req.PermissionType {

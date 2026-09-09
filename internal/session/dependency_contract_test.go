@@ -663,7 +663,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 15",
+			"\"compatibility_epoch\": 16",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",

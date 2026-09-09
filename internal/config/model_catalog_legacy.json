@@ -1,0 +1,856 @@
+{
+  "openai": [
+    {
+      "model_name": "gpt-5.5",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "default_level": "medium",
+        "disable_supported": true,
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/models/gpt-5.5",
+          "https://developers.openai.com/api/docs/guides/latest-model",
+          "https://developers.openai.com/api/docs/guides/reasoning"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_55_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "medium"
+      },
+      "note_key": "openai_gpt_55_frontier"
+    },
+    {
+      "model_name": "gpt-5.4",
+      "context_window": 1050000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "default_level": "off",
+        "disable_supported": true,
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/models/gpt-5.4"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_54_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "off"
+      },
+      "note_key": "openai_gpt_54_professional"
+    },
+    {
+      "model_name": "gpt-5.4-mini",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "default_level": "off",
+        "disable_supported": true,
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/models/gpt-5.4-mini"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_54_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "off"
+      },
+      "note_key": "openai_gpt_54_mini"
+    },
+    {
+      "model_name": "gpt-5.4-nano",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "default_level": "off",
+        "disable_supported": true,
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/models/gpt-5.4-nano"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_54_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "off"
+      },
+      "note_key": "openai_gpt_54_nano"
+    },
+    {
+      "model_name": "gpt-5.2",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "default_level": "off",
+        "disable_supported": true,
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/models/gpt-5.2"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_52_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "off"
+      },
+      "note_key": "openai_gpt_52_previous_flagship"
+    },
+    {
+      "model_name": "gpt-5.2-mini",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "default_level": "off",
+        "disable_supported": true,
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/models/gpt-5.2"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_52_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "off"
+      },
+      "note_key": "openai_gpt_52_mini"
+    },
+    {
+      "model_name": "gpt-5.2-pro",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "default_level": "medium",
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/models/gpt-5.2-pro",
+          "https://developers.openai.com/api/docs/guides/reasoning"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_52_pro_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "medium"
+      },
+      "note_key": "openai_gpt_52_previous_flagship"
+    },
+    {
+      "model_name": "gpt-5",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_level": "medium",
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/models/gpt-5",
+          "https://developers.openai.com/api/docs/models/gpt-5-mini"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_5_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "medium"
+      },
+      "note_key": "openai_gpt_5_stable"
+    },
+    {
+      "model_name": "gpt-5-mini",
+      "context_window": 400000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_level": "medium",
+        "wire_shape": "openai_responses_reasoning_effort",
+        "disable_shape": "openai_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "source_urls": [
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/models/gpt-5",
+          "https://developers.openai.com/api/docs/models/gpt-5-mini"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openai_gpt_5_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "medium"
+      },
+      "note_key": "openai_gpt_5_mini"
+    }
+  ],
+  "anthropic": [
+    {
+      "model_name": "claude-opus-4-7",
+      "context_window": 1000000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "default_level": "off",
+        "disable_supported": true,
+        "wire_shape": "anthropic_output_config_effort",
+        "disable_shape": "anthropic_thinking_disabled",
+        "source_urls": [
+          "https://platform.claude.com/docs/en/build-with-claude/effort",
+          "https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
+          "https://platform.claude.com/docs/en/api/messages/create"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "anthropic_opus_47_adaptive_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "off"
+      },
+      "note_key": "claude_opus_47_note"
+    },
+    {
+      "model_name": "claude-sonnet-4-6",
+      "context_window": 1000000,
+      "max_output_tokens": 64000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "reasoning_capability": {
+        "kind": "effort_budget",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ],
+        "default_level": "high",
+        "disable_supported": true,
+        "wire_shape": "anthropic_output_config_effort",
+        "disable_shape": "anthropic_thinking_disabled",
+        "budget_shape": "anthropic_thinking_budget",
+        "min_budget_tokens": 1024,
+        "source_urls": [
+          "https://platform.claude.com/docs/en/build-with-claude/effort",
+          "https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
+          "https://platform.claude.com/docs/en/api/messages/create",
+          "https://platform.claude.com/docs/en/about-claude/models/migration-guide"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "anthropic_sonnet_46_adaptive_effort_budget"
+      },
+      "default_reasoning_selection": {
+        "level": "high"
+      },
+      "note_key": "anthropic_sonnet_46"
+    },
+    {
+      "model_name": "claude-haiku-4-5-20251001",
+      "context_window": 200000,
+      "max_output_tokens": 64000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "note_key": "claude_haiku_45_note"
+    }
+  ],
+  "moonshot": [
+    {
+      "model_name": "kimi-k2.6",
+      "context_window": 256000,
+      "max_output_tokens": 96000,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "toggle",
+        "default_level": "default",
+        "disable_supported": true,
+        "default_enabled": true,
+        "wire_shape": "kimi_thinking_type",
+        "disable_shape": "kimi_thinking_disabled",
+        "response_reasoning_fields": [
+          "reasoning_content"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content"
+        ],
+        "source_urls": [
+          "https://platform.kimi.ai/docs/guide/kimi-k2-6-quickstart",
+          "https://platform.moonshot.cn/docs/guide/use-kimi-k2-thinking-model"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "kimi_thinking_type"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "moonshot_kimi_k26"
+    }
+  ],
+  "chatglm": [
+    {
+      "model_name": "glm-5.2",
+      "context_window": 200000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "default_level": "default",
+        "disable_supported": true,
+        "wire_shape": "glm_reasoning_effort",
+        "disable_shape": "glm_reasoning_effort_none",
+        "response_reasoning_fields": [
+          "reasoning_content",
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content"
+        ],
+        "source_urls": [
+          "https://docs.z.ai/guides/capabilities/thinking",
+          "https://docs.z.ai/api-reference/llm/chat-completion"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "glm_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "chatglm_glm_51"
+    },
+    {
+      "model_name": "glm-5.1",
+      "context_window": 200000,
+      "max_output_tokens": 128000,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "toggle",
+        "default_level": "default",
+        "disable_supported": true,
+        "default_enabled": true,
+        "wire_shape": "glm_thinking_type",
+        "disable_shape": "glm_thinking_disabled",
+        "source_urls": [
+          "https://docs.z.ai/guides/capabilities/thinking",
+          "https://docs.z.ai/api-reference/llm/chat-completion"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "glm_thinking_type"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "chatglm_glm_51"
+    }
+  ],
+  "deepseek": [
+    {
+      "model_name": "deepseek-v4-pro",
+      "context_window": 1000000,
+      "max_output_tokens": 384000,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "high",
+          "max"
+        ],
+        "default_level": "high",
+        "disable_supported": true,
+        "wire_shape": "deepseek_reasoning_effort",
+        "disable_shape": "deepseek_thinking_disabled",
+        "response_reasoning_fields": [
+          "reasoning_content",
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content"
+        ],
+        "source_urls": [
+          "https://api-docs.deepseek.com/api/create-chat-completion",
+          "https://api-docs.deepseek.com/guides/thinking_mode"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "deepseek_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "high"
+      },
+      "note_key": "deepseek_v4_pro"
+    },
+    {
+      "model_name": "deepseek-v4-flash",
+      "context_window": 1000000,
+      "max_output_tokens": 384000,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "high",
+          "max"
+        ],
+        "default_level": "high",
+        "disable_supported": true,
+        "wire_shape": "deepseek_reasoning_effort",
+        "disable_shape": "deepseek_thinking_disabled",
+        "response_reasoning_fields": [
+          "reasoning_content",
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content"
+        ],
+        "source_urls": [
+          "https://api-docs.deepseek.com/api/create-chat-completion",
+          "https://api-docs.deepseek.com/guides/thinking_mode"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "deepseek_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "high"
+      },
+      "note_key": "deepseek_v4_flash"
+    }
+  ],
+  "qwen": [
+    {
+      "model_name": "qwen3.6-plus",
+      "context_window": 1000000,
+      "max_output_tokens": 65536,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "toggle_budget",
+        "default_level": "default",
+        "disable_supported": true,
+        "default_enabled": true,
+        "wire_shape": "qwen_enable_thinking",
+        "disable_shape": "qwen_enable_thinking_false",
+        "budget_shape": "qwen_thinking_budget",
+        "response_reasoning_fields": [
+          "reasoning_content",
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content",
+          "preserve_thinking"
+        ],
+        "source_urls": [
+          "https://help.aliyun.com/zh/model-studio/deep-thinking",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "qwen_enable_thinking_budget"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "qwen36_plus"
+    },
+    {
+      "model_name": "qwen3.6-plus-2026-04-02",
+      "context_window": 1000000,
+      "max_output_tokens": 65536,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "toggle_budget",
+        "default_level": "default",
+        "disable_supported": true,
+        "default_enabled": true,
+        "wire_shape": "qwen_enable_thinking",
+        "disable_shape": "qwen_enable_thinking_false",
+        "budget_shape": "qwen_thinking_budget",
+        "response_reasoning_fields": [
+          "reasoning_content",
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content",
+          "preserve_thinking"
+        ],
+        "source_urls": [
+          "https://help.aliyun.com/zh/model-studio/deep-thinking",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "qwen_enable_thinking_budget"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "qwen36_plus_snapshot"
+    },
+    {
+      "model_name": "qwen3.6-flash",
+      "context_window": 1000000,
+      "max_output_tokens": 65536,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "toggle_budget",
+        "default_level": "default",
+        "disable_supported": true,
+        "default_enabled": true,
+        "wire_shape": "qwen_enable_thinking",
+        "disable_shape": "qwen_enable_thinking_false",
+        "budget_shape": "qwen_thinking_budget",
+        "response_reasoning_fields": [
+          "reasoning_content",
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content",
+          "preserve_thinking"
+        ],
+        "source_urls": [
+          "https://help.aliyun.com/zh/model-studio/deep-thinking",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "qwen_enable_thinking_budget"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "qwen36_flash"
+    },
+    {
+      "model_name": "qwen3.6-flash-2026-04-16",
+      "context_window": 1000000,
+      "max_output_tokens": 65536,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "toggle_budget",
+        "default_level": "default",
+        "disable_supported": true,
+        "default_enabled": true,
+        "wire_shape": "qwen_enable_thinking",
+        "disable_shape": "qwen_enable_thinking_false",
+        "budget_shape": "qwen_thinking_budget",
+        "response_reasoning_fields": [
+          "reasoning_content",
+          "completion_tokens_details.reasoning_tokens"
+        ],
+        "history_replay_requirements": [
+          "reasoning_content",
+          "preserve_thinking"
+        ],
+        "source_urls": [
+          "https://help.aliyun.com/zh/model-studio/deep-thinking",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope",
+          "https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "qwen_enable_thinking_budget"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "qwen36_flash_snapshot"
+    }
+  ],
+  "openrouter": [
+    {
+      "model_name": "gpt-oss-120b",
+      "context_window": 128000,
+      "max_output_tokens": 32768,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "dynamic",
+        "dynamic_provider_metadata": true,
+        "wire_shape": "openrouter_reasoning_metadata",
+        "source_urls": [
+          "https://openrouter.ai/docs/api-reference/parameters",
+          "https://openrouter.ai/docs/guides/best-practices/reasoning-tokens",
+          "https://openrouter.ai/api/v1/models"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "openrouter_model_reasoning_metadata"
+      },
+      "note_key": "openrouter_dynamic_metadata"
+    }
+  ],
+  "xai": [
+    {
+      "model_name": "grok-4.3",
+      "context_window": 256000,
+      "max_output_tokens": 65536,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_level": "low",
+        "disable_supported": true,
+        "wire_shape": "xai_reasoning_effort",
+        "disable_shape": "xai_reasoning_effort_none",
+        "source_urls": [
+          "https://docs.x.ai/developers/model-capabilities/text/reasoning"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "xai_grok_4_3_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "low"
+      },
+      "note_key": "xai_grok_43"
+    }
+  ],
+  "groq": [
+    {
+      "model_name": "qwen3-32b",
+      "wire_model_name": "qwen/qwen3-32b",
+      "context_window": 131072,
+      "max_output_tokens": 32768,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "default_level": "default",
+        "disable_supported": true,
+        "wire_shape": "groq_qwen_reasoning_effort",
+        "disable_shape": "groq_reasoning_none",
+        "source_urls": [
+          "https://console.groq.com/docs/reasoning",
+          "https://console.groq.com/docs/api-reference"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "groq_qwen_reasoning_default"
+      },
+      "default_reasoning_selection": {
+        "level": "default"
+      },
+      "note_key": "groq_qwen_reasoning"
+    },
+    {
+      "model_name": "gpt-oss-120b",
+      "wire_model_name": "openai/gpt-oss-120b",
+      "context_window": 131072,
+      "max_output_tokens": 32768,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "effort",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_level": "medium",
+        "wire_shape": "groq_gpt_oss_reasoning_effort",
+        "source_urls": [
+          "https://console.groq.com/docs/reasoning",
+          "https://console.groq.com/docs/api-reference"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "groq_gpt_oss_reasoning_effort"
+      },
+      "default_reasoning_selection": {
+        "level": "medium"
+      },
+      "note_key": "groq_gpt_oss"
+    }
+  ],
+  "ollama": [
+    {
+      "model_name": "gpt-oss",
+      "context_window": 128000,
+      "max_output_tokens": 32768,
+      "input_modalities": [
+        "text"
+      ],
+      "reasoning_capability": {
+        "kind": "dynamic",
+        "dynamic_provider_metadata": true,
+        "wire_shape": "ollama_model_family_think",
+        "source_urls": [
+          "https://docs.ollama.com/capabilities/thinking",
+          "https://docs.ollama.com/api/chat"
+        ],
+        "source_checked_at": "2026-06-23",
+        "fixture": "ollama_model_family_think"
+      },
+      "note_key": "ollama_local_reasoning_metadata"
+    }
+  ],
+  "openai_compatible": []
+}

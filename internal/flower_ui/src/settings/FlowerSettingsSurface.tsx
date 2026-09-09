@@ -1,3 +1,5 @@
+import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
+import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -15,7 +17,6 @@ import type {
   FlowerWebSearchMode,
 } from '../contracts/flowerSurfaceContracts';
 import {
-  FlowerProviderBrandIcon,
   defaultBaseURLForFlowerProviderType,
   defaultFlowerContextWindowForProviderType,
   flowerModelID,
@@ -29,8 +30,8 @@ import {
   normalizeFlowerEffectiveContextPercent,
   normalizeFlowerInputModalities,
   normalizeFlowerPositiveInteger,
-  recommendedModelsForFlowerProviderType,
 } from './providerCatalog';
+import { defaultFlowerProviderModels } from './modelSelection';
 import { FlowerProviderDialog, type FlowerProviderDialogMode } from './FlowerProviderDialog';
 import { FlowerAutoSaveIndicator, FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
 import type { FlowerProviderTypeLabels } from './providerTypeLabels';
@@ -79,13 +80,13 @@ function cloneProviderForForm(provider: NonNullable<FlowerSettingsSnapshot['mode
 function newProviderDraft(): FlowerProviderDraft {
   const type: FlowerProviderDraft['type'] = 'openai';
   const preset = flowerProviderPresetForType(type);
-  const firstModel = recommendedModelsForFlowerProviderType(type)[0];
+
   return {
     id: newProviderID(),
     name: flowerProviderUsesCustomName(type) ? preset.name : flowerProviderTypeLabel(type),
     type,
     base_url: defaultBaseURLForFlowerProviderType(type),
-    models: firstModel ? [{ ...firstModel }] : [],
+    models: defaultFlowerProviderModels(type),
   };
 }
 
@@ -106,7 +107,7 @@ function collectModelOptions(providers: readonly FlowerProviderDraft[], labels?:
       if (!providerID || !modelName) return null;
       return {
         id: flowerModelID(providerID, modelName),
-        label: `${providerDisplayName(provider, labels)} / ${modelName}`,
+        label: `${providerDisplayName(provider, labels)} / ${model.display_name || model.wire_model_name || modelName}`,
         supportsImageInput: flowerModelSupportsImage(model.input_modalities),
         ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
         ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
@@ -124,10 +125,6 @@ function providerWebSearchSecretConfigured(snapshot: FlowerSettingsSnapshot | nu
   return snapshot?.provider_secrets.some((secret) => secret.provider_id === providerID && secret.web_search_api_key_configured) ?? false;
 }
 
-function currentModelExists(currentModelID: string, providers: readonly FlowerProviderDraft[]): boolean {
-  const options = collectModelOptions(providers);
-  return options.some((option) => option.id === currentModelID);
-}
 
 function normalizeSecretPatch(value: string | null | undefined): string | null | undefined {
   if (value === null) return null;
@@ -163,6 +160,8 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     ? normalizeSecretPatch(provider.web_search_api_key)
     : null;
   return {
+    model_selection: provider.model_selection,
+    catalog_models: provider.catalog_models,
     id: trim(provider.id),
     name: flowerProviderUsesCustomName(provider.type) ? trim(provider.name) : flowerProviderTypeLabel(provider.type),
     type: provider.type,
@@ -172,6 +171,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     ...(webSearchKey !== undefined ? { web_search_api_key: webSearchKey } : {}),
     models: provider.models.map((model) => ({
       model_name: trim(model.model_name),
+      wire_model_name: model.wire_model_name, display_name: model.display_name, status: model.status,
       ...(normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) ? { context_window: normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) } : {}),
       ...(normalizeFlowerPositiveInteger(model.max_output_tokens) ? { max_output_tokens: normalizeFlowerPositiveInteger(model.max_output_tokens) } : {}),
       ...(normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) ? { effective_context_window_percent: normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) } : {}),
@@ -183,6 +183,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
 }
 
 export type FlowerSettingsSurfaceProps = Readonly<{
+  onDiscoverModels?: FlowerModelCatalogDiscovery;
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
@@ -345,7 +346,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
           return { ok: false, error: copy().validation.providerBaseURLProtocol(providerDisplayName(provider, copy().providerTypeLabels)) };
         }
       }
-      if (provider.models.length === 0) {
+      if (provider.models.length === 0 && !provider.model_selection) {
         return { ok: false, error: copy().validation.providerNeedsModel(providerDisplayName(provider, copy().providerTypeLabels)) };
       }
       const modelNames = new Set<string>();
@@ -371,7 +372,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     if (cleanProviders.length > 0 && !current) {
       return { ok: false, error: copy().validation.selectCurrentModel };
     }
-    if (current && !availableModelIDs.has(current)) {
+    if (current && !availableModelIDs.has(current) && !cleanProviders.some((provider) => provider.model_selection && current.startsWith(`${provider.id}/`))) {
       return { ok: false, error: copy().validation.currentModelUnavailable(current) };
     }
     return {
@@ -407,9 +408,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       ? [...providers(), normalized]
       : providers().map((provider, itemIndex) => (itemIndex === index ? normalized : provider));
     const current = trim(currentModelID());
-    const nextCurrent = currentModelExists(current, next)
-      ? current
-      : (!current && index == null ? flowerModelID(normalized.id, normalized.models[0]?.model_name ?? '') : current);
+    const nextCurrent = current || (index == null && normalized.models.length > 0 ? flowerModelID(normalized.id, normalized.models[0].model_name) : '');
     const result = buildSettingsDraft(next, nextCurrent);
     if (!result.ok) {
       setProviderDialogError(result.error);
@@ -555,6 +554,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </div>
           </header>
 
+          <Show when={currentModelID() && !activeModelOption()}><p role="alert" class="text-sm text-destructive">{copy().dialog.catalog.unavailable}</p></Show>
           <section class="flower-settings-current-model">
               <div class="flower-settings-current-model-icon">
                 <Show when={activeModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
@@ -693,7 +693,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                             <div class="flex items-center gap-2 text-xs">
                               <span class="w-16 flex-shrink-0 text-muted-foreground">{copy().apiKey}</span>
                               <span class={cn('flower-settings-dot-pill', (providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key)) && 'flower-settings-dot-pill-active')}>
-                                {providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key) ? copy().ready : copy().needsKey}
+                                {provider.type === 'ollama' ? copy().dialog.catalog.optionalKey : providerSecretConfigured(props.snapshot, provider.id) || trim(provider.provider_api_key) ? copy().ready : copy().needsKey}
                               </span>
                             </div>
                             <div class="flex items-start gap-2 text-xs">
@@ -729,6 +729,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       </div>
 
       <FlowerProviderDialog
+        onDiscoverModels={props.onDiscoverModels}
         open={providerDialogOpen()}
         mode={providerDialogMode()}
         provider={providerDialogProvider()}

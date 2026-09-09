@@ -52,6 +52,7 @@ function toAIProviderPreset(providerType: AIProviderType): AIProviderPreset {
     web_search: preset.web_search,
     models: preset.models.map((model) => ({
       model_name: model.model_name,
+      display_name: model.display_name, status: model.status,
       ...(model.wire_model_name ? { wire_model_name: model.wire_model_name } : {}),
       context_window: Number(model.context_window ?? 0),
       ...(model.max_output_tokens ? { max_output_tokens: model.max_output_tokens } : {}),
@@ -211,6 +212,9 @@ export function providerBuiltInWebSearchLabel(providerType: AIProviderType): str
 
 export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
   return {
+    model_selection: row.model_selection,
+    catalog_models: row.catalog_models,
+    catalog_error: row.catalog_error,
     id: String(row?.id ?? ''),
     name: String(row?.name ?? ''),
     type: (row?.type as AIProviderType) || 'openai',
@@ -219,6 +223,7 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
       ? { mode: row?.web_search?.mode === 'openai_builtin' || row?.web_search?.mode === 'brave' ? row.web_search.mode : 'disabled' }
       : undefined,
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
+      display_name: m.display_name, status: m.status,
       model_name: String(m?.model_name ?? ''),
       wire_model_name: String(m?.wire_model_name ?? ''),
       context_window: normalizePositiveInteger(m?.context_window),
@@ -235,7 +240,8 @@ export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
   out.models = models.map((m) => ({
-    model_name: String(m?.model_name ?? ''),
+    display_name: m.display_name, status: m.status,
+      model_name: String(m?.model_name ?? ''),
     wire_model_name: String(m?.wire_model_name ?? '').trim() || undefined,
     context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
     max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),

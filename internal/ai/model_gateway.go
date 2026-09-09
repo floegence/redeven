@@ -158,6 +158,7 @@ type openAIProvider struct {
 	client           openai.Client
 	strictToolSchema bool
 	forceChat        bool
+	gemini           bool
 	parallelTools    parallelToolCallsWireMode
 }
 
@@ -585,6 +586,13 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		messages = append(messages, openai.UserMessage("Continue."))
 	}
 
+	signatures := map[string]geminiToolSignature{}
+	if p.gemini {
+		messages, signatures, err = restoreGeminiSignatures(req, messages)
+		if err != nil {
+			return ModelGatewayResult{}, err
+		}
+	}
 	params := openai.ChatCompletionNewParams{
 		Model:         oshared.ChatModel(strings.TrimSpace(req.Model)),
 		Messages:      messages,
@@ -628,13 +636,14 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		RawProviderDiag: map[string]any{},
 	}
 	type partialCall struct {
-		Index   int64
-		CallID  string
-		Name    string
-		Started bool
-		Ended   bool
-		ArgsRaw strings.Builder
-		Args    map[string]any
+		Index     int64
+		CallID    string
+		Name      string
+		Started   bool
+		Ended     bool
+		Signature string
+		ArgsRaw   strings.Builder
+		Args      map[string]any
 	}
 	partials := map[int64]*partialCall{}
 	order := make([]int64, 0, 2)
@@ -732,6 +741,18 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			}
 			for _, tc := range delta.ToolCalls {
 				pc := getPartial(tc.Index)
+				if p.gemini {
+					sig, err := geminiSignatureFromDelta(tc.RawJSON())
+					if err != nil {
+						return ModelGatewayResult{}, err
+					}
+					if sig != "" {
+						if pc.Signature != "" && pc.Signature != sig {
+							return ModelGatewayResult{}, errors.New("Gemini changed a tool thought signature")
+						}
+						pc.Signature = sig
+					}
+				}
 				if id := strings.TrimSpace(tc.ID); id != "" {
 					pc.CallID = id
 				}
@@ -761,6 +782,9 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		if !pc.Ended {
 			continue
 		}
+		if p.gemini && pc.Signature != "" {
+			signatures[ensureCallID(pc)] = geminiToolSignature{Signature: pc.Signature, Name: providerHistoryToolWireName(pc.Name, aliases), Arguments: geminiArguments(pc.ArgsRaw.String())}
+		}
 		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: canonicalProviderToolName(pc.Name, aliases), Args: cloneAnyMap(pc.Args)})
 	}
 	result.Text = strings.TrimSpace(textBuf.String())
@@ -776,6 +800,13 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
+	if p.gemini && len(signatures) > 0 {
+		raw, err := json.Marshal(signatures)
+		if err != nil {
+			return ModelGatewayResult{}, err
+		}
+		result.ProviderState = &ModelGatewayState{Kind: geminiStateKind, ID: req.Model, Attributes: map[string]string{"tool_signatures": string(raw)}}
+	}
 	return result, nil
 }
 
@@ -810,7 +841,11 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		StreamOptions: openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
 	}
 	if req.Budgets.MaxOutputToken > 0 {
-		params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+		if strings.HasPrefix(req.Model, "kimi-k3") {
+			params.MaxCompletionTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+		} else {
+			params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+		}
 	}
 	if req.ProviderControls.Temperature != nil {
 		params.Temperature = openai.Float(*req.ProviderControls.Temperature)
@@ -1056,7 +1091,11 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		Messages: messages,
 	}
 	if req.Budgets.MaxOutputToken > 0 {
-		params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+		if strings.HasPrefix(req.Model, "kimi-k3") {
+			params.MaxCompletionTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+		} else {
+			params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+		}
 	}
 	if req.ProviderControls.Temperature != nil {
 		params.Temperature = openai.Float(*req.ProviderControls.Temperature)
@@ -1197,11 +1236,14 @@ func applyChatReasoning(params *openai.ChatCompletionNewParams, controls Provide
 	}
 	extraFields := params.ExtraFields()
 	switch capability.WireShape {
-	case "openai_chat_reasoning_effort", "openai_responses_reasoning_effort", "glm_reasoning_effort", "xai_reasoning_effort", "groq_qwen_reasoning_effort", "groq_gpt_oss_reasoning_effort", "ollama_model_family_think":
+	case "openai_chat_reasoning_effort", "openai_responses_reasoning_effort", "glm_reasoning_effort", "kimi_reasoning_effort", "xai_reasoning_effort", "groq_qwen_reasoning_effort", "groq_gpt_oss_reasoning_effort", "ollama_model_family_think":
 		params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
 	case "kimi_thinking_type", "glm_thinking_type":
 		extraFields = mergeAnyFields(extraFields, map[string]any{"thinking": map[string]any{"type": thinkingTypeForSelection(selection)}})
-	case "qwen_enable_thinking":
+	case "qwen_enable_thinking", "qwen_reasoning_effort":
+		if capability.WireShape == "qwen_reasoning_effort" && selection.Level != "" && selection.Level != config.AIReasoningLevelDefault {
+			params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
+		}
 		extra := map[string]any{"enable_thinking": selection.Level != config.AIReasoningLevelOff}
 		if selection.BudgetTokens > 0 {
 			extra["thinking_budget"] = selection.BudgetTokens
@@ -1247,7 +1289,7 @@ func applyAnthropicReasoning(params *anthropic.MessageNewParams, controls Provid
 	if selection.IsZero() {
 		return nil
 	}
-	if capability.WireShape != "anthropic_output_config_effort" {
+	if capability.WireShape != "anthropic_output_config_effort" && capability.WireShape != "anthropic_thinking_budget_tokens" {
 		return fmt.Errorf("unsupported anthropic reasoning wire shape %q", capability.WireShape)
 	}
 	if selection.Level == config.AIReasoningLevelOff {
@@ -2213,7 +2255,7 @@ func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider.Type)) {
-	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", DesktopModelSourceProviderType:
+	case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", DesktopModelSourceProviderType:
 		return true
 	default:
 		return false
@@ -2244,7 +2286,10 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			strictToolSchema: strictToolSchema,
 			parallelTools:    parallelTools,
 		}, nil
-	case "openai_compatible", "openrouter", "xai", "groq", "ollama":
+	case "openai_compatible", "openrouter", "xai", "groq", "ollama", "google":
+		if providerType == "google" && strings.TrimSpace(baseURL) == "" {
+			baseURL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+		}
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
@@ -2253,6 +2298,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			forceChat:        true,
+			gemini:           providerType == "google",
 			parallelTools:    parallelTools,
 		}, nil
 	case "deepseek":
@@ -2335,7 +2381,7 @@ func resolveStrictToolSchema(providerType string, baseURL string, override *bool
 
 func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	if providerType == "openai_compatible" || providerType == "chatglm" || providerType == "deepseek" || providerType == "qwen" || providerType == "openrouter" || providerType == "xai" || providerType == "groq" || providerType == "ollama" {
+	if providerType == "google" || providerType == "openai_compatible" || providerType == "chatglm" || providerType == "deepseek" || providerType == "qwen" || providerType == "openrouter" || providerType == "xai" || providerType == "groq" || providerType == "ollama" {
 		// Compatible endpoints vary widely in strict function schema support; disable strict mode by default.
 		return false
 	}

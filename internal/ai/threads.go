@@ -367,6 +367,11 @@ func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
+	var catalogErr error
+	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
+	if catalogErr != nil {
+		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false, catalogErr
+	}
 	if capability, selection, ok := modelReasoningDefaultsFromConfig(cfg, modelID); ok {
 		return capability, selection, true, nil
 	}
@@ -575,17 +580,6 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	if err != nil {
 		return threadstore.ThreadSettings{}, err
 	}
-	if modelID != "" {
-		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
-			return threadstore.ThreadSettings{}, errors.New("invalid model")
-		}
-		if cfg != nil && cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
-		} else if ok, allowErr := s.desktopModelSourceModelAllowed(ctx, modelID); allowErr != nil {
-			return threadstore.ThreadSettings{}, allowErr
-		} else if !ok {
-			return threadstore.ThreadSettings{}, fmt.Errorf("model not allowed: %s", modelID)
-		}
-	}
 	if modelID == "" {
 		if candidate, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
 			modelID = candidate
@@ -597,8 +591,24 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 		}
 	}
 	if modelID == "" && cfg != nil && cfg.HasModelProfile() {
-		if candidate := strings.TrimSpace(cfg.CurrentModelID); candidate != "" && cfg.IsAllowedModelID(candidate) {
+		if candidate := strings.TrimSpace(cfg.CurrentModelID); candidate != "" {
 			modelID = candidate
+		}
+	}
+	cfg, err = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
+	if err != nil {
+		return threadstore.ThreadSettings{}, err
+	}
+
+	if modelID != "" {
+		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
+			return threadstore.ThreadSettings{}, errors.New("invalid model")
+		}
+		if cfg != nil && cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
+		} else if ok, allowErr := s.desktopModelSourceModelAllowed(ctx, modelID); allowErr != nil {
+			return threadstore.ThreadSettings{}, allowErr
+		} else if !ok {
+			return threadstore.ThreadSettings{}, fmt.Errorf("model not allowed: %s", modelID)
 		}
 	}
 	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, modelID)
@@ -968,6 +978,11 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
+	var catalogErr error
+	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
+	if catalogErr != nil {
+		return catalogErr
+	}
 	if !cfg.HasModelProfile() && !isDesktopModelSourceModelID(modelID) {
 		return ErrNotConfigured
 	}

@@ -1512,6 +1512,7 @@ describe('main routing', () => {
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] }");
     expect(routeSrc).toContain("'/_redeven_proxy/api/ai/models'");
+    expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/model_catalog', methods: ['POST'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/turns', methods: ['POST'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/upload-staging-scopes', methods: ['POST'] }");
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/upload-staging-scopes\\/[^/]+$/u');

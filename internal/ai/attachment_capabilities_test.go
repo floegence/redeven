@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -92,5 +93,28 @@ func TestAttachmentCapabilitiesFailClosedForUnresolvedModel(t *testing.T) {
 		if route.Mode != "unsupported" {
 			t.Fatalf("unresolved route=%#v, want unsupported", route)
 		}
+	}
+}
+
+func TestImageInputIsAnIndependentModelCapability(t *testing.T) {
+	for _, providerType := range []string{"openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "xai", "groq", "openrouter", "ollama", "openai_compatible"} {
+		t.Run(providerType, func(t *testing.T) {
+			provider := config.AIProvider{ID: "mixed", Type: providerType, Models: []config.AIProviderModel{{ModelName: "vision", InputModalities: []string{"text", "image"}}, {ModelName: "text", InputModalities: []string{"text"}}}}
+			for _, name := range []string{"vision", "text"} {
+				capability, err := adapter.NewResolver().Resolve(context.Background(), provider, "mixed/"+name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if capability.SupportsImageInput != (name == "vision") {
+					t.Fatalf("model %s image capability=%v", name, capability.SupportsImageInput)
+				}
+				view := attachmentCapabilitiesForModel("mixed/"+name, provider, capability)
+				for _, media := range view.MediaTypes {
+					if media.MediaType == "image/png" && (media.Mode == "native_full_content") != (name == "vision") {
+						t.Fatalf("wrong upload route for %s: %+v", name, media)
+					}
+				}
+			}
+		})
 	}
 }

@@ -23,15 +23,15 @@ func TestResolver_Resolve_UsesCuratedNativeModelMetadata(t *testing.T) {
 			name:       "moonshot_kimi_k2_6",
 			provider:   config.AIProvider{ID: "moonshot", Type: "moonshot"},
 			modelID:    "moonshot/kimi-k2.6",
-			wantCtx:    256000,
-			wantOutput: 96000,
+			wantCtx:    262144,
+			wantOutput: 262144,
 		},
 		{
 			name:       "glm_5_1",
 			provider:   config.AIProvider{ID: "glm", Type: "chatglm"},
 			modelID:    "glm/glm-5.1",
 			wantCtx:    200000,
-			wantOutput: 128000,
+			wantOutput: 131072,
 		},
 		{
 			name:       "deepseek_v4_pro",
@@ -55,11 +55,11 @@ func TestResolver_Resolve_UsesCuratedNativeModelMetadata(t *testing.T) {
 			wantOutput: 65536,
 		},
 		{
-			name:       "qwen_3_6_flash_snapshot",
+			name:       "qwen_3_8_flash",
 			provider:   config.AIProvider{ID: "qwen", Type: "qwen"},
-			modelID:    "qwen/qwen3.6-flash-2026-04-16",
+			modelID:    "qwen/qwen3.8-flash",
 			wantCtx:    1000000,
-			wantOutput: 65536,
+			wantOutput: 131072,
 		},
 	}
 
@@ -140,7 +140,7 @@ func TestResolver_Resolve_UsesProviderModelWireNameForReasoningCatalog(t *testin
 	if cap.WireModelName != "openai/gpt-oss-120b" {
 		t.Fatalf("WireModelName=%q, want official provider model id", cap.WireModelName)
 	}
-	if cap.ReasoningCapability.WireShape != "groq_gpt_oss_reasoning_effort" {
+	if cap.ReasoningCapability.WireShape != "openai_chat_reasoning_effort" {
 		t.Fatalf("ReasoningCapability=%+v, want Groq GPT-OSS reasoning catalog row", cap.ReasoningCapability)
 	}
 }

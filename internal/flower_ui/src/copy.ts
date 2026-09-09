@@ -1,3 +1,4 @@
+import { modelCatalogCopy, type ModelCatalogCopy } from './settings/modelCatalogCopy';
 import type { FilesystemPickerCopy } from './filePicker/filesystemPicker';
 import { filesystemPickerEnUS } from './i18n/filesystemPickerMessages';
 import type { FlowerActivityApprovalState, FlowerPermissionType, FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
@@ -150,6 +151,7 @@ export type FlowerSettingsCopy = Readonly<{
 }>;
 
 export type FlowerProviderDialogCopy = Readonly<{
+  catalog: ModelCatalogCopy;
   addTitle: string;
   editTitle: string;
   discard: string;
@@ -1124,6 +1126,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       currentModelUnavailable: (modelID) => `Current model is not available: ${modelID}.`,
     },
     dialog: {
+      catalog: modelCatalogCopy('en-US'),
       addTitle: 'Add provider',
       editTitle: 'Edit provider',
       discard: 'Discard',
@@ -1137,6 +1140,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerTypeLabels: localizedFlowerProviderTypeLabels('en-US'),
       providerTypeHints: {
         openai: 'Native connection',
+        google: 'Gemini',
         anthropic: 'Native connection',
         moonshot: 'Native connection',
         chatglm: 'Native connection',
@@ -1176,8 +1180,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         deepseek: 'DeepSeek built-in web search',
         qwen: 'Qwen built-in web search',
       },
-      recommendedModelsTitle: 'Recommended models',
-      recommendedModelsDescription: 'Start from maintained presets, then fine tune limits in Advanced.',
+      recommendedModelsTitle: "Models",
+      recommendedModelsDescription: "Choose the models available in Flower. Search and collapse keep your selection.",
       modelNote: (noteKey) => localizedFlowerProviderModelNote('en-US', noteKey),
       addAllPresets: 'Add all',
       customModelProvider: 'This provider uses custom model names.',

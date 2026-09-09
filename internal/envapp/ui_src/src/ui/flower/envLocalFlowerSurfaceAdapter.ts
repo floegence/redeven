@@ -1,3 +1,4 @@
+import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../flower_ui/src/settings/modelSelection';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import {
@@ -331,6 +332,7 @@ function normalizePermissionType(raw: unknown): FlowerPermissionType {
 function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[number]['models']>[number]): FlowerProviderModel {
   return {
     model_name: trim(model.model_name),
+    display_name: model.display_name, status: model.status,
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
     ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
     ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
@@ -348,7 +350,8 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     type: provider.type,
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
     ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
-    models: (provider.models ?? []).map(mapProviderModel).filter((model) => model.model_name),
+    model_selection: provider.model_selection,
+    models: resolveFlowerProviderModels(provider as FlowerProvider).map((model) => mapProviderModel(model as NonNullable<AIConfig['providers']>[number]['models'][number])).filter((model) => model.model_name),
   };
 }
 
@@ -472,7 +475,7 @@ function mapSettings(
     ? {
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
-        providers: (ai.providers ?? []).map(mapProvider).filter((provider) => provider.id && provider.models.length > 0),
+        providers: (ai.providers ?? []).map(mapProvider).filter((provider) => provider.id),
       }
     : null;
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
@@ -490,23 +493,7 @@ function mapSettings(
 }
 
 function draftProviderToAI(provider: FlowerProviderDraft): NonNullable<AIConfig['providers']>[number] {
-  return {
-    id: trim(provider.id),
-    ...(trim(provider.name) ? { name: trim(provider.name) } : {}),
-    type: provider.type,
-    ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
-    ...(provider.web_search ? { web_search: provider.web_search } : {}),
-    models: provider.models.map((model) => ({
-      model_name: trim(model.model_name),
-      ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
-      ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
-      ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
-      ...(positiveInteger(model.effective_context_window_percent) ? { effective_context_window_percent: positiveInteger(model.effective_context_window_percent) } : {}),
-      ...(Array.isArray(model.input_modalities) ? { input_modalities: model.input_modalities.map(trim).filter(Boolean) as Array<'text' | 'image'> } : {}),
-      ...(normalizeFlowerReasoningCapability(model.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability) } : {}),
-      ...(serializeFlowerReasoningSelection(model.default_reasoning_selection) ? { default_reasoning_selection: serializeFlowerReasoningSelection(model.default_reasoning_selection) } : {}),
-    })),
-  };
+  return serializeFlowerProvider(provider) as NonNullable<AIConfig['providers']>[number];
 }
 
 function draftToModelProfile(draft: FlowerSettingsDraft): AIModelProfile {
@@ -600,7 +587,11 @@ async function loadSettingsSnapshot(
       catalog = { state: 'failed', message: error instanceof Error ? error.message : String(error) };
     }
   }
-  return mapSettings(settings, catalog, exposeDesktopModelSource);
+  const snapshot = mapSettings(settings, catalog, exposeDesktopModelSource);
+  if (!snapshot.model_profile) return snapshot;
+  const providers = await Promise.all(snapshot.model_profile.providers.map((provider) => provider.type === 'ollama'
+    ? hydrateFlowerProviderCatalog(provider, (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) })) : provider));
+  return { ...snapshot, model_profile: { ...snapshot.model_profile, providers } };
 }
 
 async function loadModels(): Promise<ModelsResponse> {
@@ -798,6 +789,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     },
     mapperOptions: envLiveMapperOptions(options),
     loadSettings: loadCachedSettings,
+    discoverProviderModels: (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }),
     saveDefaultPermission: async (permissionType) => {
       await updateDefaultAIPermission(normalizePermissionType(permissionType));
       invalidateSettingsCache();
