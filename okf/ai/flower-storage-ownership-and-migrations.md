@@ -16,7 +16,7 @@ timestamp: 2026-09-08T00:00:00Z
 
 ## Storage owners
 
-Redeven consumes published Floret v7.8.0 with `GOWORK=off`. Floret owns journal,
+Redeven consumes published Floret v7.9.1 with `GOWORK=off`. Floret owns journal,
 queue, interactions, context lineage, execution identity and recovery. Redeven
 uses public `InspectSQLite`, `BackupSQLite`, deferred `runtime.Open`, typed
 queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor
