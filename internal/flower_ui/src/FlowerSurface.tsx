@@ -10113,6 +10113,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )}
     >
       <div
+        data-floe-input-surface
         class={cn('flower-model-reasoning-control', `flower-composer-control-${location}`)}
         data-flower-composer-control="model_reasoning"
         data-has-reasoning={composerReasoningEnabled() || composerReasoningLoading() ? 'true' : 'false'}
@@ -10828,6 +10829,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 {queuedTurnsDock()}
               </Show>
               <div
+                data-floe-input-surface={companionCollapsed() ? undefined : ''}
                 class={cn(
                   'flower-composer p-3',
                   bottomActionMode() !== 'chat' && 'flower-decision-surface',

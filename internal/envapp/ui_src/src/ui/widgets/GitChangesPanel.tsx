@@ -1133,7 +1133,9 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                   class="h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0"
                 />
                 <label
-                  class={`git-changes-filter-slot flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] text-muted-foreground shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring ${redevenSurfaceRoleClass('control')} ${redevenSurfaceRoleClass('controlMuted')}`}
+                  data-floe-input-surface
+                  aria-disabled={filterDisabled() || undefined}
+                  class={`git-changes-filter-slot flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] text-muted-foreground shadow-sm ${redevenSurfaceRoleClass('control')} ${redevenSurfaceRoleClass('controlMuted')}`}
                   data-git-changes-filter-state={filterDisabled() ? 'pending' : 'ready'}
                 >
                   <Search class="size-3.5 shrink-0" />

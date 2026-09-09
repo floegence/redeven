@@ -317,6 +317,12 @@ describe('desktop preload runtime', () => {
   it('keeps Web Service chrome unified and preserves drafts across every published theme in Electron', async () => {
     const runtimeCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-web-service-chrome-'));
     tempDirs.push(runtimeCwd);
+    // Keep the isolated consumer's runtime CSS dependency identical to the published package.
+    await fs.cp(
+      path.join(process.cwd(), 'node_modules', '@floegence', 'floe-webapp-core'),
+      path.join(runtimeCwd, 'node_modules', '@floegence', 'floe-webapp-core'),
+      { recursive: true },
+    );
     const outDir = path.join(runtimeCwd, 'preload');
     await buildDesktopPreloads({ outDir });
     const runtimeScript = path.join(runtimeCwd, 'runtime.cjs');
@@ -334,7 +340,8 @@ describe('desktop preload runtime', () => {
         `,
         resolveDir: process.cwd(), loader: 'ts',
       },
-      outfile: runtimeScript, bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
+      outfile: runtimeScript, bundle: true, platform: 'node', format: 'cjs',
+      external: ['electron', '@floegence/floe-webapp-core/input-focus.css'],
     });
     const userDataDir = path.join(runtimeCwd, 'user-data');
     const launch = getElectronRuntimeLaunch(process.platform, String(electronPath), runtimeScript,

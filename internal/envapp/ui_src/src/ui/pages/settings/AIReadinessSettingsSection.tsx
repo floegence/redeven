@@ -265,7 +265,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
                 <div class="mt-3 divide-y divide-border border-y border-border">
                   <For each={loaded().items}>{(item) => {
                     const draft = () => drafts()[item.thread_id] ?? defaultDraft();
-                    const fieldClass = 'min-h-10 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+                    const fieldClass = 'min-h-10 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground';
                     return (
                       <section class="py-3" data-orphan-thread-id={item.thread_id}>
                         <div class="flex min-w-0 items-center justify-between gap-3">

@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
 import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
 import { desktopShellThemeCatalog, desktopShellThemeSemanticCatalog } from './desktopTheme';
 import { buildDesktopWindowChromeStyleText } from '../shared/windowChromeContract';
 import { resolveDesktopWindowChromeSnapshot } from '../shared/windowChromePlatform';
 import { WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT, WEB_SERVICE_BROWSER_CHROME_HEIGHT } from '../shared/webServiceBrowserLayout';
+
+const inputFocusStyleText = readFileSync(require.resolve('@floegence/floe-webapp-core/input-focus.css'), 'utf8');
 
 export type WebServiceBrowserCopy = Readonly<{
   locale: string;
@@ -58,6 +61,9 @@ export function buildWebServiceBrowserDocumentURL(
   <style>
     :root {
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ring: var(--primary);
+      --accent: var(--hover);
+      --accent-foreground: var(--foreground);
       --toolbar-height: ${WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT}px;
       --chrome-height: ${WEB_SERVICE_BROWSER_CHROME_HEIGHT}px;
       --control-border: color-mix(in srgb, var(--border) 70%, var(--chrome));
@@ -68,6 +74,7 @@ export function buildWebServiceBrowserDocumentURL(
       --error-soft: color-mix(in srgb, var(--error) 12%, var(--chrome));
       --error-border: color-mix(in srgb, var(--error) 38%, var(--chrome));
     }
+    ${inputFocusStyleText}
     ${browserThemeStyleText()}
     ${buildDesktopWindowChromeStyleText(resolveDesktopWindowChromeSnapshot(platform))}
     * { box-sizing: border-box; }
@@ -84,7 +91,6 @@ export function buildWebServiceBrowserDocumentURL(
     .nav-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .nav-button svg[hidden] { display: none; }
     .address-wrap { min-width: 0; height: 38px; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--address); }
-    .address-wrap:has(.address-input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 1px; }
     .address-input::placeholder { color: inherit; opacity: 1; }
     .route-mark { width: 16px; height: 16px; flex: 0 0 16px; color: var(--foreground); }
     .route-mark svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -126,7 +132,7 @@ export function buildWebServiceBrowserDocumentURL(
       <svg class="reload-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 5"/></svg>
       <svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
     </button>
-    <div class="address-wrap">
+    <div class="address-wrap" data-floe-input-surface>
       <span class="route-mark" title="${htmlEscape(copy.secureRouteLabel)}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/><path d="M12 3a15 15 0 0 0 0 18"/></svg>
       </span>

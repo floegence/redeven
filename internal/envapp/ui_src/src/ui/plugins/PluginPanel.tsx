@@ -320,7 +320,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
                     placeholder={i18n.t('uiCopy.plugin.launcherSearchPlaceholder')}
-                    class={cn('w-full rounded-md border bg-muted/40 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20 motion-reduce:transition-none', isWorkbenchPopup() ? 'h-8 pl-8 pr-2 text-xs' : 'h-10 pl-9 pr-3 text-sm')}
+                    class={cn('w-full rounded-md border bg-muted/40 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 motion-reduce:transition-none', isWorkbenchPopup() ? 'h-8 pl-8 pr-2 text-xs' : 'h-10 pl-9 pr-3 text-sm')}
                   />
                 </label>
               </div>

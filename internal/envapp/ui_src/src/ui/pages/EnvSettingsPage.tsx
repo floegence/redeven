@@ -156,7 +156,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                 value={ctx.searchQuery()}
                 onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
                 placeholder={i18n.t('settings.searchPlaceholder')}
-                class="redeven-settings-search w-full rounded-md border py-1.5 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--redeven-settings-selection-indicator)_24%,transparent)]"
+                class="redeven-settings-search w-full rounded-md border py-1.5 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60"
               />
               <Show when={ctx.searchQuery()}>
                 <button

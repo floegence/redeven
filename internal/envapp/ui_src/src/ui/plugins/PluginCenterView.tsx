@@ -1327,7 +1327,7 @@ export function PluginCenterShell(props: {
                 value={props.query}
                 onInput={(event) => props.onQueryInput(event.currentTarget.value)}
                 placeholder={i18n.t('uiCopy.plugin.searchPlaceholder')}
-                class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20 sm:h-9 motion-reduce:transition-none"
+                class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 sm:h-9 motion-reduce:transition-none"
               />
           </label>
           <div class="ml-auto flex shrink-0 items-center gap-1.5">

@@ -1880,7 +1880,7 @@ export function CreateForwardDialog(props: {
             size="sm"
             class={cn(
               'w-full font-mono',
-              showScopeRestriction() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
+              showScopeRestriction() && 'border-warning/45',
             )}
             data-testid="web-service-dialog-target"
           />
@@ -2015,7 +2015,7 @@ export function ForwardMetadataDialog(props: Readonly<{
             aria-describedby="web-service-metadata-target-guidance"
             class={cn(
               'w-full font-mono',
-              showScopeRestriction() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
+              showScopeRestriction() && 'border-warning/45',
             )}
           />
           <div
@@ -3431,7 +3431,7 @@ export function EnvPortForwardsPage() {
                     size="sm"
                     class={cn(
                       'h-10 w-full pl-10 font-mono text-sm',
-                      addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
+                      addressValidationVisible() && 'border-warning/45',
                     )}
                     disabled={!canExecute() || addressOpening()}
                     data-testid="web-service-address-input"

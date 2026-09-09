@@ -974,7 +974,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                           <label class="text-[11px] font-medium text-foreground">{i18n.t('uiCopy.git.stashMessage')}</label>
                           <input
                             type="text"
-                            class={cn('w-full rounded-lg border px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition-shadow focus:ring-2 focus:ring-ring/20', redevenSurfaceRoleClass('control'))}
+                            class={cn('w-full rounded-lg border px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition-shadow', redevenSurfaceRoleClass('control'))}
                             value={props.saveMessage ?? ''}
                             placeholder={i18n.t('uiCopy.git.stashMessagePlaceholder')}
                             onInput={(event) => props.onSaveMessageChange?.(event.currentTarget.value)}

@@ -1063,6 +1063,25 @@ Outside temporary Local Fast Debugging, Redeven must use the released v7 module 
 - Do not ship controls that look clickable while still using the default arrow cursor.
 - Disabled controls are the exception and must use a clearly non-interactive cursor treatment.
 
+## Input Focus Boundary
+
+- Published `floe-webapp` owns input focus styling. Focus changes only the
+  existing border color; do not add input outlines, rings, glow, focus shadows,
+  border-width changes, padding changes, or focus-only background changes.
+  Preserve non-focus decorative shadows and the control's existing shape.
+- Standard inputs, textareas, and native selects use the upstream default rule.
+  A custom composite input declares exactly one visible boundary with
+  `data-floe-input-surface`; its inner editable elements remain frameless.
+  Use `aria-invalid` and `disabled`/`aria-disabled` for error and disabled
+  semantics. Preserve upstream forced-colors behavior and keyboard focus
+  indicators on buttons, links, checkboxes, and switches.
+- Remove conflicting product overrides instead of copying the upstream focus
+  implementation. Trusted scriptless Desktop chrome consumes the published
+  `@floegence/floe-webapp-core/input-focus.css` asset. Do not inject focus CSS
+  into third-party frames, application views, or editor internals.
+- Keep `checkInputFocusSources.mjs` and representative browser focus checks
+  aligned with this boundary; source rules must distinguish inputs from buttons.
+
 ## Runtime Startup Presentation
 
 - `redeven run` startup output must be driven by structured runtime presentation events, not by ad hoc `fmt.Print*` banners inside startup logic.

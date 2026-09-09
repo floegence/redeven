@@ -181,7 +181,7 @@ export function JSONEditor(props: { value: string; onChange: (v: string) => void
   return (
     <textarea
       class={cn(
-        'redeven-settings-control w-full resize-y rounded-lg border px-3 py-2.5 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--redeven-settings-selection-indicator)_24%,transparent)] disabled:opacity-50',
+        'redeven-settings-control w-full resize-y rounded-lg border px-3 py-2.5 font-mono text-xs disabled:opacity-50',
       )}
       style={{ 'min-height': `${(props.rows ?? 6) * 1.5}rem` }}
       value={props.value}

@@ -69,6 +69,7 @@ main() {
     if [ "$mode" = "full" ]; then
       "$SCRIPT_DIR/check_desktop_electron_test_runtime.sh" "$dir"
       npm run test
+      node scripts/run-ssh-settings-check.mjs
     fi
     npm run build
   )

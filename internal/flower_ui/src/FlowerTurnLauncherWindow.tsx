@@ -507,11 +507,11 @@ export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
                           </span>
                         </div>
 
-                        <div data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
+                        <div data-floe-input-surface data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
                           <textarea
                             ref={setTextareaEl}
                             id={`flower-turn-launcher-prompt-${intent.id}`}
-                            class="chat-input-textarea flower-chat-input-textarea flower-turn-launcher-textarea focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none"
+                            class="chat-input-textarea flower-chat-input-textarea flower-turn-launcher-textarea"
                             value={visiblePrompt()}
                             placeholder={projected()?.placeholder}
                             disabled={sending() || admissionUnknown()}
