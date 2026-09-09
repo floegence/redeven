@@ -13,6 +13,7 @@ import {
 } from './sshEnvironmentSettingsState';
 
 export type SSHEnvironmentSettingsDialogProps = Readonly<{
+  open: boolean;
   i18n: DesktopI18n;
   state: SSHConnectionDialogState;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
@@ -45,10 +46,8 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
   const [baseline, setBaseline] = createSignal(props.state);
   const [advanced, setAdvanced] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
-  const [discardOpen, setDiscardOpen] = createSignal(false);
   const [submitting, setSubmitting] = createSignal(false);
   let form: HTMLDivElement | undefined;
-  let previousFocus: HTMLElement | null = null;
   let focusFrame = 0;
   const busy = () => submitting() || props.saving;
   const dirty = createMemo(() => sshEnvironmentSettingsDirty(baseline(), props.state));
@@ -78,13 +77,13 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
       }),
     ].join(' · ');
 
-  const identity = createMemo(() => props.state.environment_id);
+  const identity = createMemo(() => props.open ? props.state.environment_id : null);
   createEffect(
     on(identity, () => {
+      if (!props.open) return;
       setBaseline(props.state);
       setAdvanced(false);
       setHelpOpen(false);
-      setDiscardOpen(false);
     }),
   );
 
@@ -106,39 +105,27 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
     });
   }
 
-  function continueEditing() {
-    setDiscardOpen(false);
-    focusAfterLayout(() => {
-      if (previousFocus?.isConnected) previousFocus.focus();
-      else form?.querySelector<HTMLInputElement>('#ssh-settings-label')?.focus();
-    });
-  }
   function requestClose() {
-    if (busy()) return;
-    if (discardOpen()) {
-      continueEditing();
-      return;
-    }
-    if (!dirty()) {
-      props.onClose();
-      return;
-    }
-    previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setHelpOpen(false);
-    setDiscardOpen(true);
-    focusAfterLayout(() => document.getElementById('ssh-settings-keep-editing')?.focus());
+    if (props.open) props.onClose();
   }
   async function save() {
-    if (busy() || !dirty() || discardOpen()) return;
+    if (!props.open || busy() || !dirty()) return;
+    const openingBaseline = baseline();
     setSubmitting(true);
     try {
       await props.onSave();
-      revealErrors();
+      if (props.open && baseline() === openingBaseline) revealErrors();
     } finally {
       setSubmitting(false);
     }
   }
   function handleKeyDown(event: KeyboardEvent) {
+    if (!event.defaultPrevented && !event.isComposing && event.key === 'Escape' && helpOpen()) {
+      event.preventDefault();
+      event.stopPropagation();
+      setHelpOpen(false);
+      return;
+    }
     if (event.defaultPrevented || event.isComposing || event.key !== 'Enter' || !(event.metaKey || event.ctrlKey))
       return;
     if (
@@ -178,42 +165,28 @@ export function SSHEnvironmentSettingsDialog(props: SSHEnvironmentSettingsDialog
 
   return (
     <Dialog
-      open
+      open={props.open}
       onOpenChange={(open) => {
         if (!open) requestClose();
       }}
-      title={discardOpen() ? t('sshSettings.discardTitle') : t('sshSettings.title')}
-      description={discardOpen() ? undefined : `${baseline().label} · ${t('connectionDialog.sshHost')}`}
+      title={t('sshSettings.title')}
+      description={`${baseline().label} · ${t('connectionDialog.sshHost')}`}
       closeLabel={t('common.close')}
-      closeOnBackdropClick={false}
       escapeKeyPhase="bubble"
       onKeyDown={handleKeyDown}
       class="redeven-ssh-settings-dialog"
       footer={
-        <Show
-          when={!discardOpen()}
-          fallback={
-            <>
-              <Button id="ssh-settings-keep-editing" variant="ghost" onClick={continueEditing}>
-                {t('sshSettings.keepEditing')}
-              </Button>
-              <Button onClick={props.onClose}>{t('sshSettings.discardChanges')}</Button>
-            </>
-          }
-        >
-          <Button variant="ghost" disabled={busy()} onClick={requestClose}>
+        <>
+          <Button variant="ghost" onClick={requestClose}>
             {t('common.cancel')}
           </Button>
           <Button disabled={!dirty() || busy()} loading={busy()} onClick={() => void save()}>
             {t('sshSettings.saveChanges')}
           </Button>
-        </Show>
+        </>
       }
     >
-      <Show when={discardOpen()}>
-        <p class="ssh-settings-discard-copy">{t('sshSettings.discardDescription')}</p>
-      </Show>
-      <div ref={form} class="ssh-settings-form" hidden={discardOpen()} inert={discardOpen() || busy()}>
+      <div ref={form} class="ssh-settings-form redeven-dialog-section" inert={!props.open || busy()}>
         <Field name="label" label={t('connectionDialog.name')}>
           <Input
             id="ssh-settings-label"

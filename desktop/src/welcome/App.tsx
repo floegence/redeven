@@ -4267,22 +4267,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     request: DesktopLauncherActionRequest,
     errorTarget: LauncherActionErrorTarget = 'connect',
   ): Promise<Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | null> {
+    const openingDraft = connectionDialogState();
+    const resultErrorTarget = () => errorTarget === 'dialog' && connectionDialogState() !== openingDraft ? 'connect' : errorTarget;
     resetMessages();
     setBusyState(busyStateForLauncherRequest(request));
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
         const requestEnvID = (request as { environment_id?: string }).environment_id?.trim();
-        await handleLauncherActionFailure(result, errorTarget, requestEnvID || undefined, request);
+        await handleLauncherActionFailure(result, resultErrorTarget(), requestEnvID || undefined, request);
         return null;
       }
       if (isDesktopLauncherActionSuccess(result)) {
         return result;
       }
-      setErrorMessage(errorTarget, i18n().t('toast.unexpectedLauncherResult'));
+      setErrorMessage(resultErrorTarget(), i18n().t('toast.unexpectedLauncherResult'));
       return null;
     } catch (error) {
-      setErrorMessage(errorTarget, getErrorMessage(error));
+      setErrorMessage(resultErrorTarget(), getErrorMessage(error));
       return null;
     } finally {
       setBusyState(IDLE_LAUNCHER_BUSY_STATE);
@@ -5655,6 +5657,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       successMessage: string;
     }>,
   ): Promise<boolean> {
+    const openingDraft = connectionDialogState();
     setConnectionDialogError('');
     setBusyState({
       action: 'save_environment',
@@ -5696,7 +5699,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(request.successMessage);
       return true;
     } catch (error) {
-      setErrorMessage(request.errorTarget, getErrorMessage(error));
+      setErrorMessage(request.errorTarget === 'dialog' && connectionDialogState() !== openingDraft ? 'connect' : request.errorTarget, getErrorMessage(error));
       return false;
     } finally {
       setBusyState(IDLE_LAUNCHER_BUSY_STATE);
@@ -6048,7 +6051,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         successMessage: i18n().t('toast.gatewayEnvironmentSaved'),
       });
     }
-    if (saved) {
+    if (saved && connectionDialogState() === state) {
       closeConnectionDialog();
     }
   }
@@ -14637,19 +14640,25 @@ type ConnectionDialogProps = Readonly<{
 }>;
 
 function ConnectionDialog(props: ConnectionDialogProps) {
+  const sshEditorOpen = createMemo(() => props.state?.mode === 'edit' && props.state.connection_kind === 'ssh_environment');
+  // Retain the last presentation while the published Dialog completes its exit.
+  // The parent remains the only editable draft owner.
+  const sshPresentation = createMemo<SSHConnectionDialogState | null>((previous) => (
+    sshEditorOpen() ? props.state as SSHConnectionDialogState : previous
+  ), null);
   return (
-    <Show
-      when={props.state?.mode === 'edit' && props.state.connection_kind === 'ssh_environment'}
-      fallback={<ConnectionDialogForm {...props} />}
-    >
-      <SSHEnvironmentSettingsDialog i18n={props.i18n} state={props.state as SSHConnectionDialogState}
-        sshConfigHosts={props.sshConfigHosts} sshConfigHostsLoading={props.sshConfigHostsLoading}
-        sshConfigHostsLoadError={props.sshConfigHostsLoadError} fieldErrors={props.fieldErrors} error={props.error}
-        saving={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
-        updateField={props.updateField} toggleAutoRuntimeProbe={props.toggleAutoRuntimeProbe}
-        switchBootstrapStrategy={props.switchBootstrapStrategy} removeSSHPassword={props.removeSSHPassword}
-        refreshSSHConfigHosts={props.refreshSSHConfigHosts} onClose={() => props.onOpenChange(false)} onSave={props.onSave} />
-    </Show>
+    <>
+      <ConnectionDialogForm {...props} state={sshEditorOpen() ? null : props.state} />
+      <Show when={sshPresentation()}>
+        <SSHEnvironmentSettingsDialog open={sshEditorOpen()} i18n={props.i18n} state={sshPresentation()!}
+          sshConfigHosts={props.sshConfigHosts} sshConfigHostsLoading={props.sshConfigHostsLoading}
+          sshConfigHostsLoadError={props.sshConfigHostsLoadError} fieldErrors={props.fieldErrors} error={props.error}
+          saving={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
+          updateField={props.updateField} toggleAutoRuntimeProbe={props.toggleAutoRuntimeProbe}
+          switchBootstrapStrategy={props.switchBootstrapStrategy} removeSSHPassword={props.removeSSHPassword}
+          refreshSSHConfigHosts={props.refreshSSHConfigHosts} onClose={() => props.onOpenChange(false)} onSave={props.onSave} />
+      </Show>
+    </>
   );
 }
 
