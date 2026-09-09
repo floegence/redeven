@@ -428,9 +428,15 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         />
         <For each={['bundled', 'local'] as const}>
           {(kind) => (
-            <div class="space-y-2" data-terminal-font-group={kind}>
-              <div class="text-xs font-semibold text-muted-foreground">
-                {i18n.t(kind === 'bundled' ? 'terminal.settings.fontBundled' : 'terminal.settings.fontLocal')}
+            <div class="space-y-2" data-terminal-font-group={kind}
+              aria-busy={TERMINAL_FONT_OPTIONS.some((option) => option.kind === kind && ['idle', 'loading'].includes(terminalFontCatalog.state(option.id)))}>
+              <div class="flex items-center justify-between gap-2 text-xs font-semibold text-muted-foreground">
+                <span>{i18n.t(kind === 'bundled' ? 'terminal.settings.fontBundled' : 'terminal.settings.fontLocal')}</span>
+                <Show when={kind === 'bundled' && TERMINAL_FONT_OPTIONS.some((option) => option.kind === kind && terminalFontCatalog.state(option.id) === 'unavailable')}>
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    for (const option of TERMINAL_FONT_OPTIONS.filter((item) => item.kind === 'bundled')) void terminalFontCatalog.ensure(option.id, true);
+                  }}>{i18n.t('terminal.settings.fontRetry')}</Button>
+                </Show>
               </div>
               <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <For each={TERMINAL_FONT_OPTIONS.filter((option) => option.kind === kind && (
@@ -461,7 +467,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         <TerminalFontStatus font={resolvedFont()} showReady />
         <pre class="overflow-x-auto rounded-md border border-border/70 bg-muted/[0.14] p-3"
           aria-label={i18n.t('terminal.settings.fontPreview')}
-          style={{ 'font-family': resolvedFont().family, 'font-size': `${props.fontSize}px`, 'line-height': '1.5' }}>
+          style={{ 'font-family': resolvedFont().family, 'font-size': `${props.fontSize}px`, 'line-height': '1.5', 'font-feature-settings': '"liga" 0, "calt" 0' }}>
           {TERMINAL_FONT_PREVIEW_SAMPLE}
         </pre>
 

@@ -531,11 +531,17 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     return resizeWork;
   };
 
-  const requestResize = async (): Promise<void> => {
-    if (disposed) return;
+  const refreshLocalGeometry = () => {
     renderer?.resize();
     inputBridge?.syncGeometry();
     const next = measure();
+    if (latestEffectiveGeometry) publishGeometryPresentation(next, latestEffectiveGeometry);
+    return next;
+  };
+
+  const requestResize = async (): Promise<void> => {
+    if (disposed) return;
+    const next = refreshLocalGeometry();
     if (!attached) {
       desiredSize = next;
       if (props.connected()) await attach();
@@ -543,7 +549,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
     if (!isController) {
       desiredSize = null;
-      if (latestEffectiveGeometry) publishGeometryPresentation(next, latestEffectiveGeometry);
       return;
     }
     desiredSize = inFlightSize && sameGrid(inFlightSize, next)
@@ -982,7 +987,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     setAppearance: (appearance: SemanticTerminalAppearance) => {
       renderer?.setPalette(terminalPalette(appearance.theme));
       if (applyTypography(appearance.fontSize, appearance.fontFamily)) {
-        void requestResize();
+        refreshLocalGeometry();
       }
     },
     getDimensions: () => appliedSize ?? measure(),
@@ -1227,11 +1232,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       : new ResizeObserver(() => { void requestResize(); });
     resizeObserver?.observe(host);
     const handleWindowResize = () => { void requestResize(); };
+    const handleFontLoad = () => { if (!disposed) refreshLocalGeometry(); };
     const handleScroll = () => inputBridge?.syncGeometry();
     window.addEventListener('resize', handleWindowResize);
     window.addEventListener('scroll', handleScroll, true);
-    document.fonts?.addEventListener?.('loadingdone', handleWindowResize);
-    void document.fonts?.ready.then(handleWindowResize);
+    document.fonts?.addEventListener?.('loadingdone', handleFontLoad);
+    void document.fonts?.ready.then(handleFontLoad);
     syncInputGeometry();
     untrack(() => { void requestResize(); });
 
@@ -1246,7 +1252,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       resizeObserver = null;
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('scroll', handleScroll, true);
-      document.fonts?.removeEventListener?.('loadingdone', handleWindowResize);
+      document.fonts?.removeEventListener?.('loadingdone', handleFontLoad);
     });
   });
 
@@ -1273,7 +1279,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const fontSize = props.fontSize();
     const fontFamily = props.fontFamily();
     if (applyTypography(fontSize, fontFamily)) {
-      void requestResize();
+      refreshLocalGeometry();
     }
   });
 

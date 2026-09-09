@@ -469,6 +469,20 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       ?.getAttribute('data-terminal-is-controller')).toBe('true');
   });
 
+  it('does not resize a controller from passive shared typography updates', async () => {
+    const runtime = harness({ autoFocus: true });
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'shared preference'));
+    await waitForHistoryAttachment(runtime);
+    await waitForPaint();
+    runtime.resizeWithEffectiveGeometry.mockClear();
+    runtime.setFontSize(20);
+    await waitForPaint();
+    expect(runtime.resizeWithEffectiveGeometry).not.toHaveBeenCalled();
+    runtime.getViewport()?.forceResize();
+    await vi.waitFor(() => expect(runtime.resizeWithEffectiveGeometry).toHaveBeenCalledTimes(1));
+  });
+
   it('routes structured keys to the native intent channel while IME commits once as text', async () => {
     const runtime = harness();
     mounted.push(runtime);
@@ -2021,6 +2035,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       const before = runtime.resizeWithEffectiveGeometry.mock.calls.length;
       const started = performance.now();
       runtime.setFontSize(sample % 2 === 0 ? 15 : 14);
+      runtime.getViewport()?.forceResize();
       await vi.waitFor(() => expect(runtime.resizeWithEffectiveGeometry.mock.calls.length).toBeGreaterThan(before));
       resizeSamples.push(performance.now() - started);
     }

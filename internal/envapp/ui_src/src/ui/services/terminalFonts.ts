@@ -6,22 +6,23 @@ export type TerminalFontOption = Readonly<{
   label: string;
   kind: 'bundled' | 'local';
   family: string;
+  localNames?: readonly string[];
 }>;
 
-const font = (id: string, label: string, kind: TerminalFontOption['kind']): TerminalFontOption => ({
-  id, label, kind, family: `"Redeven Terminal ${id}", monospace`,
+const font = (id: string, label: string, kind: TerminalFontOption['kind'], localNames?: readonly string[]): TerminalFontOption => ({
+  id, label, kind, family: `"Redeven Terminal ${id}", monospace`, ...(localNames ? { localNames } : {}),
 });
 
 export const TERMINAL_FONT_OPTIONS: readonly TerminalFontOption[] = [
   font('jetbrains', 'JetBrains Mono', 'bundled'),
   font('iosevka', 'Iosevka', 'bundled'),
-  font('cascadia-mono', 'Cascadia Mono', 'local'),
+  font('cascadia-mono', 'Cascadia Mono', 'local', ['Cascadia Mono', 'Cascadia Mono Regular', 'CascadiaMono-Regular']),
   font('consolas', 'Consolas', 'local'),
-  font('dejavu-sans-mono', 'DejaVu Sans Mono', 'local'),
-  font('liberation-mono', 'Liberation Mono', 'local'),
-  font('ubuntu-mono', 'Ubuntu Mono', 'local'),
-  font('sfmono', 'SF Mono', 'local'),
-  font('menlo', 'Menlo', 'local'),
+  font('dejavu-sans-mono', 'DejaVu Sans Mono', 'local', ['DejaVu Sans Mono', 'DejaVuSansMono']),
+  font('liberation-mono', 'Liberation Mono', 'local', ['Liberation Mono', 'LiberationMono', 'LiberationMono-Regular']),
+  font('ubuntu-mono', 'Ubuntu Mono', 'local', ['Ubuntu Mono', 'Ubuntu Mono Regular', 'UbuntuMono-Regular']),
+  font('sfmono', 'SF Mono', 'local', ['SF Mono', 'SF Mono Regular', 'SFMono-Regular']),
+  font('menlo', 'Menlo', 'local', ['Menlo', 'Menlo Regular', 'Menlo-Regular']),
   font('monaco', 'Monaco', 'local'),
 ];
 
@@ -37,24 +38,33 @@ export type ResolvedTerminalFont = Readonly<{
   status: 'loading' | 'ready' | 'fallback' | 'failed';
 }>;
 
-async function loadTerminalFont(option: TerminalFontOption): Promise<void> {
+async function loadTerminalFont(option: TerminalFontOption, signal: AbortSignal): Promise<void> {
   if (typeof FontFace === 'undefined' || !globalThis.document?.fonts) {
     throw new Error('Font loading is unavailable');
   }
-  const sources = option.kind === 'bundled'
-    ? (await import('./terminalFontAssets')).terminalBundledFontSources[option.id]!
-    : [{ source: `local("${option.label}")`, unicodeRange: undefined }];
-  // A private family prevents same-named system fonts from replacing bundled files.
-  // Explicit local() loading detects availability without trusting fallback metrics
-  // or requesting permission to enumerate the user's entire font collection.
-  const faces = await Promise.all(sources.map(({ source, unicodeRange }) => new FontFace(
-    `Redeven Terminal ${option.id}`, source, { weight: '400', style: 'normal', ...(unicodeRange ? { unicodeRange } : {}) },
-  ).load()));
+  const family = `Redeven Terminal ${option.id}`;
+  // Reading bundled bytes explicitly makes requests abortable and avoids stalled
+  // URL-backed FontFace loads observed across Chromium client documents.
+  const faces = option.kind === 'bundled'
+    ? await Promise.all((await import('./terminalFontAssets')).terminalBundledFontSources[option.id]!.map(async ({ url, unicodeRange }) => {
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error(`Font resource returned ${response.status}`);
+      return new FontFace(family, await response.arrayBuffer(), {
+        weight: '400', style: 'normal', ...(unicodeRange ? { unicodeRange } : {}),
+      }).load();
+    }))
+    : [await new FontFace(family,
+      (option.localNames ?? [option.label]).map((name) => `local("${name}")`).join(', '),
+      { weight: '400', style: 'normal' },
+    ).load()];
+  // Private families keep bundled files authoritative. Explicit local() probes
+  // do not trust fallback metrics or request full font enumeration permission.
+  if (signal.aborted) throw new Error('Font loading timed out');
   for (const face of faces) document.fonts.add(face);
 }
 
 /** One document-local owner for font loading and resolution; never persists preferences. */
-export function createTerminalFontCatalog(load: (option: TerminalFontOption) => Promise<void> = loadTerminalFont) {
+export function createTerminalFontCatalog(load: (option: TerminalFontOption, signal: AbortSignal) => Promise<void> = loadTerminalFont) {
   const [states, setStates] = createSignal<Readonly<Record<string, LoadState>>>({});
   const pending = new Map<string, Promise<void>>();
   const state = (id: string): LoadState => states()[id] ?? 'idle';
@@ -65,10 +75,18 @@ export function createTerminalFontCatalog(load: (option: TerminalFontOption) => 
     if (existing) return existing;
     if (state(id) === 'ready' || (state(id) === 'unavailable' && !retry)) return Promise.resolve();
     setStates((current) => ({ ...current, [id]: 'loading' }));
-    const work = Promise.resolve().then(() => load(option)).then(
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Font loading timed out'));
+      }, 10_000);
+    });
+    const work = Promise.race([Promise.resolve().then(() => load(option, controller.signal)), deadline]).then(
       () => setStates((current) => ({ ...current, [id]: 'ready' })),
       () => setStates((current) => ({ ...current, [id]: 'unavailable' })),
-    ).then(() => { pending.delete(id); });
+    ).then(() => { clearTimeout(timer); pending.delete(id); });
     pending.set(id, work);
     return work;
   };

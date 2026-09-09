@@ -17,7 +17,7 @@ Activity, Workbench, container exec, and settings previews consume the same font
 
 The Env App packages `@fontsource/jetbrains-mono@5.3.0` and Iosevka WOFF2 resources. Private CSS families bind bundled options to these files rather than same-named installed fonts. Explicit `FontFace` local-source loads probe known system candidates without requesting full font enumeration or treating generic fallback metrics as proof of availability. The menu separates bundled fonts from available local fonts; an unavailable saved selection remains visible but cannot be newly selected.
 
-The resolver deduplicates document-local loads. Resolution always reads the current requested ID, so a previous asynchronous load cannot overwrite a newer choice. Preview, actual font status, and terminal rendering use the same resolved family. A missing selected font uses JetBrains Mono if that resource loads, otherwise system monospace. Fallback and loading failures have localized status and retry actions. No fallback changes a persisted preference.
+The resolver deduplicates document-local loads. Bundled resources are read as abortable byte requests before constructing FontFace objects; this avoids stalled URL-backed face loads observed across Chromium documents. Each attempt has a ten-second deadline and an explicit retry; a timed-out attempt cannot register late faces. Known full and PostScript names are probed alongside family names because local-source lookup differs between installed font formats. Resolution always reads the current requested ID, so a previous asynchronous load cannot overwrite a newer choice. Preview, actual font status, and terminal rendering use the same resolved family. A missing selected font uses JetBrains Mono if that resource loads, otherwise system monospace. Fallback and loading failures have localized status and retry actions. No fallback changes a persisted preference.
 
 ## Preferences and shared terminal geometry
 
@@ -25,11 +25,19 @@ Activity preferences stay on the client. Workbench retains the existing shared c
 
 Different sessions on the same Runtime retain independent grids. Multiple views of one session consume the same Floeterm Presentation and preserve its cell spans, text, cursor, and selection coordinates. A font changes only local drawing metrics; the client does not rewrap output, reinterpret Unicode width, stretch glyphs horizontally, or create another renderer. Font completion refreshes the existing renderer and input bridge geometry.
 
-The [terminal interaction contract](workbench-terminal-interaction.md) owns controller transfer and canonical geometry. Passive observer font, viewport, and DPR changes update only local presentation and cannot send resize or activation requests. Losing control drops queued local resize proposals. Explicit activation measures the current viewport and converges through the existing atomic controller and geometry protocol. Existing clipping and navigation apply when the canonical grid does not fit the local viewport.
+The [terminal interaction contract](workbench-terminal-interaction.md) owns controller transfer and canonical geometry. Passive observer font, viewport, and DPR changes update only local presentation and cannot send resize or activation requests. Activity and Workbench show font fallback in their existing fixed-height status bar, so a remote font update cannot resize the controller by adding or removing a message row. Closing the settings dialog restores local keyboard focus without activating an observer. Passive shared typography updates and font completion refresh local metrics even on the controller, without proposing new geometry. An explicit font or size choice on the controlling client may propose its newly measured grid; ordinary controller viewport changes retain the existing resize path. Losing control drops queued local resize proposals. Published Floeterm 0.19.1 preserves monotonically increasing controller epochs when a departed controller is replaced and notifies remaining observers, so an older open view can still explicitly take control. Explicit activation measures the current viewport and converges through the existing atomic controller and geometry protocol. Existing clipping and navigation apply when the canonical grid does not fit the local viewport.
 
-# Delivery boundary
+# Boundaries
 
 Font files and menu behavior are Runtime-served Env App assets. Updating Desktop alone cannot deploy them to an unchanged remote Runtime. Validate an isolated task Runtime first; installing the font feature does not authorize upgrading or restarting other running environments. Font license text is included in the generated root third-party notice.
+
+# Reproduction
+
+Build the Env App, then run `node scripts/checkTerminalFontCarrier.mjs --serve --host <task-interface-address> --shared-font Monaco --output <private-output>` from the Env App UI directory. Use a font available on the coordinator; the default is JetBrains Mono. The server starts an isolated native Runtime with a random password and writes a private `client-config.json`. Transfer that file only to the task clients. Run the same script with `--config <private-config> --output <evidence-directory>` on each client, optionally selecting its native Chromium executable with `--executable`.
+
+The client records four DPR values, real loaded faces and cell metrics, both directions of shared preference changes, missing-font fallback, explicit retry after a blocked resource, and controller replacement. `--observe --duration 120000` keeps a third native client observing during another client's run. `--interaction-only` exercises an independent session and twenty full-screen `top` resizes while checking that the existing shared session is unchanged. Use `checkTerminalFontElectron.mjs` with the same configuration and `--executable` to test the installed Electron engine with sandboxing and context isolation enabled. The Electron carrier is an engine test, not a packaged Desktop installation test.
+
+The private configuration, test browser profiles, and temporary Runtime state are test credentials and state, not deliverables. Shut down the task server after validation and distribute only sanitized reports, screenshots, and matching build artifacts. Browser DPR emulation exercises the real renderer at those scales; it does not certify native display-driver behavior or physical x64 Windows hardware.
 
 # Evidence
 
@@ -40,4 +48,6 @@ Font files and menu behavior are Runtime-served Env App assets. Updating Desktop
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.test.ts` - Missing fonts, late completions, explicit retries, and independent client resolution.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.browser.test.tsx` - Actual packaged face loading and glyph measurements.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx` - Observer typography and viewport changes followed by explicit activation.
+- `redeven:internal/envapp/ui_src/scripts/checkTerminalFontCarrier.mjs` - Isolated authenticated Runtime and native-browser clients checking font resources, metrics, shared fallback, DPR, and observer ownership.
+- `redeven:internal/envapp/ui_src/scripts/checkTerminalFontElectron.mjs` - Native Electron font metrics, explicit typography resize, and full-screen interaction.
 - `redeven:scripts/generate_third_party_notices.mjs` - Bundled font attribution and license distribution.

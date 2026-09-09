@@ -8,7 +8,7 @@ quality_exception: Cross-runtime terminal interaction contract spanning actor au
 ---
 # Summary
 
-Floeterm terminal-go v0.19.0 owns each PTY, native Ghostty VT, canonical geometry, controller epoch, semantic history, and atomic Presentation. Redeven Activity and Workbench use published terminal-web v0.19.0 to render that Presentation and complete atomic history viewports on one canvas per view and to collect view-local input. A browser view never parses PTY bytes, owns terminal history, or creates a second renderer. Authoritative live, input, resize, and renderer contract violations fail closed; auxiliary history and search failures remain local to that view and retry from a stable boundary without taking the live terminal offline.
+Floeterm terminal-go v0.19.1 owns each PTY, native Ghostty VT, canonical geometry, controller epoch, semantic history, and atomic Presentation. Redeven Activity and Workbench use published terminal-web v0.19.1 to render that Presentation and complete atomic history viewports on one canvas per view and to collect view-local input. A browser view never parses PTY bytes, owns terminal history, or creates a second renderer. Authoritative live, input, resize, and renderer contract violations fail closed; auxiliary history and search failures remain local to that view and retry from a stable boundary without taking the live terminal offline.
 
 # Contract
 
