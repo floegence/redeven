@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Managed Service Instance Configuration
 description: Resolve the current template and instance overrides into one validated Runtime specification with journaled stopped-state reconfiguration.
 tags: [architecture, web-services, containers, configuration, security]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-09T00:00:00Z
 ---
 # Summary
 
@@ -16,9 +16,11 @@ timestamp: 2026-09-04T00:00:00Z
 
 # Configuration model
 
-The current verified template definition is the only Runtime baseline. An installed instance stores its template ID but no template revision or snapshot. A canonical schema-versioned document stores only instance differences, accepted template notices, stable resource IDs, and the names of secret environment variables; its revision and SHA-256 are committed together. The resolver combines that document with current TemplateSpec, selected release identity, RuntimeBinding, secrets, and workspace parameters. Install, start, retry, update, reconfigure, recovery, verification, settings, and Open all use this same path; there is no snapshot execution path and no Renderer-owned preservation of hidden fields.
+The current verified template definition is the only Runtime baseline. An installed instance stores its template ID but no template revision or snapshot. A canonical schema-versioned document stores only instance differences, accepted template notices, stable resource IDs, and the names of secret environment variables; its revision and SHA-256 are committed together. The resolver combines that document with current TemplateSpec, selected release identity, RuntimeBinding, secrets, and workspace parameters. Executable lifecycle behavior uses this same path; there is no snapshot execution path and no Renderer-owned preservation of hidden fields.
 
 The selected application release remains fixed until the user explicitly chooses another verified release. Current template image or package recommendations may change the materialized Runtime contract but do not silently change that release. A canonical Runtime digest covers executable effective behavior and records what is applied to the managed resource. Template presentation or revision-only edits leave it unchanged; Runtime-relevant template, configuration, secret-presence, release, binding, or workspace changes make it stale and require the ordinary rebuild path.
+
+The read-only definition loader verifies the current template and saved configuration identity without requiring every execution parameter to be present. Settings expose current parameter definitions and secret-presence facts so missing inputs can be repaired. Saving a candidate validates all values and keeps private parameters out of configuration JSON and API responses.
 
 The settings controller owns metadata and Runtime drafts but commits them independently. Name, description, and access mode update the service-owned protected forward without stopping the service. Runtime fields are deployment-aware:
 
@@ -40,9 +42,9 @@ Preflight resolves the canonical candidate, asks `containerengine` for the norma
 
 Secret environment values live only in a service-private `0600` file. The Local API reports only whether a value exists and supports explicit replacement or clearing. Values never enter configuration JSON, Resource Plans, service views, audit details, operation events, logs, or persisted Renderer state. Reconfigure stages old and target secret files privately so recovery can restore either exact release.
 
-Runtime configuration applies only while desired and observed state are both stopped. One serialized `reconfigure` operation persists the old and target configuration, binding, resource identity, artifact, and Runtime digest in a journal; it verifies and removes the exact old Runtime, rebuilds the stopped target, verifies its complete image, resource, port, mount, device, security, and identity projection, then atomically commits the next revision and the digest of the Runtime actually built before clearing the journal. A custom host commits scripts without executing them; start, stop, and uninstall use them on their next action, while install runs only on an explicit reinstall path.
+Active Runtime configuration requires stopped intent and a stopped or confirmed absent instance. Detached and uninstalled records may repair configuration without reconnecting management or touching business processes. A configuration-only change uses the same reconfigure journal and private secret staging, returning `requires_rebuild: false`. One serialized `reconfigure` operation persists the old and target configuration, binding, resource identity, artifact, and Runtime digest in a journal; it verifies and removes the exact old Runtime, rebuilds the stopped target, verifies its complete image, resource, port, mount, device, security, and identity projection, then atomically commits the next revision and the digest of the Runtime actually built before clearing the journal. A custom host commits scripts without executing them; start, stop, and uninstall use them on their next action, while install runs only on an explicit reinstall path.
 
-Failure removes an incomplete target, restores the old secret file, recreates and verifies the old Runtime, and leaves the old configuration authoritative. A rollback failure is preserved as an explicit service error rather than a half-applied success. On startup, an already verified target may be finalized. If the template changed after target verification, recovery proves the same managed Runtime identity and commits the journal's built digest rather than claiming it matches the newer template; a later lifecycle or Open action then performs one normal rebuild. Every earlier journal phase rolls back through the same driver. Cancellation terminates the owned engine operation before rollback.
+Failure removes an incomplete target, restores the old secret file, recreates and verifies the old Runtime, and leaves the old configuration authoritative. A rollback failure is preserved as an explicit service error rather than a half-applied success. On startup, an already verified target may be finalized. If the template changed after target verification, recovery proves the same managed Runtime identity and commits the journal's built digest rather than claiming it matches the newer template; a later explicit application of changes performs the rebuild; Open preserves the existing verified entrance. Earlier rebuild journal phases roll back through the same driver. Configuration-only journal rollback restores staged secrets without calling an engine. Cancellation terminates the owned engine operation before rollback.
 
 # Boundaries
 
@@ -50,7 +52,7 @@ This contract does not change template images, Compose topology, the primary Web
 
 # Persistence and API
 
-`portforward_registry_v2` version 1 stores the template ID, configuration schema v2, revision and SHA-256, stable resource IDs, exact release identity, RuntimeBinding v2, applied Runtime digest, progress details, retry lineage, workspace ownership, deletion intent, and release-check schema v2 summaries. Runtime verifies each persisted document digest before typed policy validation, so serialization cannot become a second semantic identity. `managed_web_service_resources` is the only durable engine-resource source; no file marker or live-engine inference can create an alternate identity.
+`portforward_registry_v2` version 4 retains the template ID, configuration schema v2, revision and SHA-256, stable resource IDs, exact release identity, RuntimeBinding v2, applied Runtime digest, progress details, retry lineage, workspace ownership, deletion intent, and release-check schema v2 summaries. Runtime verifies each persisted document digest before typed policy validation, so serialization cannot become a second semantic identity. `managed_web_service_resources` is the only durable engine-resource source; no file marker or live-engine inference can create an alternate identity.
 
 Every `portforward_registry_v1` version and other discarded pre-baseline kind has no decoder and is rejected read-only. After the user-approved v2 version-1 baseline is merged and released or distributed, its kind is permanent; every later configuration or Registry change must append a contiguous transactional edge that preserves user-owned records and validates the exact source and target shape.
 

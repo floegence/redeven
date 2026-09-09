@@ -23,6 +23,8 @@ const managedServiceLabel = "com.floegence.redeven.managed-web-service"
 var dockerDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
 type customContainerVolume struct {
+	StableIdentity  string `json:"stable_identity,omitempty"`
+	Ownership       string `json:"ownership,omitempty"`
 	ResourceID      string `json:"resource_id,omitempty"`
 	Name            string `json:"name"`
 	CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
@@ -136,11 +138,19 @@ func (d *containerTemplateDriver) CreateRuntime(ctx context.Context, service *pf
 		return "", err
 	}
 	request := containerCreateRequest(service, spec, pinnedImage, mounts, environment)
+	allocation, err := d.prepareAllocation(ctx, service, &request)
+	if err != nil {
+		return "", err
+	}
 	created, err := d.adapter.Create(ctx, request)
 	if err != nil || !created.Completed || strings.TrimSpace(created.ContainerID) == "" {
 		return "", serviceError("CONTAINER_CREATE_FAILED", "The managed template container could not be created.", 502, true, err)
 	}
 	service.RuntimeIdentity, service.ArtifactReference = created.ContainerID, pinnedImage
+	allocation.EngineIdentity = created.ContainerID
+	if err := d.manager.registry.PutManagedServiceResource(context.WithoutCancel(ctx), allocation); err != nil {
+		return "", err
+	}
 	if err := d.verifyExactContainer(ctx, service, spec); err != nil {
 		_ = d.removeExactContainer(context.Background(), service)
 		return "", err
@@ -343,20 +353,35 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 			if resourceID == "" {
 				return nil, serviceError("TEMPLATE_RESOURCE_ID_INVALID", "A managed volume must declare a stable resource identity.", 400, false, nil)
 			}
-			binding, err := decodeRuntimeBinding(service)
-			if err != nil {
+			if _, err := decodeRuntimeBinding(service); err != nil {
 				return nil, err
 			}
-			name := fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(binding.ServiceFamilyID), resourceNameSuffix(resourceID))
+			name := fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(service.ServiceID), resourceNameSuffix(resourceID))
 			identity, ok := volumeByResourceID[resourceID]
 			if ok {
 				name = identity.Name
 				inspected, err := d.adapter.InspectVolume(ctx, containerengine.VolumeInspectRequest{Engine: containerengine.EngineDocker, Name: name})
-				if err != nil || inspected.CreatedAtUnixMs != identity.CreatedAtUnixMs {
+				if err != nil || inspected.CreatedAtUnixMs != identity.CreatedAtUnixMs || (identity.StableIdentity != "" && inspected.Labels[managedServiceLabel+".generation"] != identity.StableIdentity) {
 					return nil, serviceError("DATA_IDENTITY_MISMATCH", "A retained template data volume is missing or has changed identity.", 409, false, err)
 				}
 			} else if createVolumes {
-				created, err := d.adapter.CreateVolume(ctx, containerengine.VolumeCreateRequest{Engine: containerengine.EngineDocker, Name: name})
+				volumes, err := d.adapter.ListVolumes(ctx, containerengine.EngineDocker)
+				if err != nil {
+					return nil, err
+				}
+				for _, volume := range volumes {
+					if volume.Name == name {
+						return nil, serviceError("DATA_NAME_CONFLICT", "An existing volume already uses this instance resource name. Review it before installing.", 409, false, nil)
+					}
+				}
+				token, err := randomID("mvr")
+				if err != nil {
+					return nil, err
+				}
+				if err := d.persistVolumeAllocation(ctx, service, resourceID, name, token); err != nil {
+					return nil, err
+				}
+				created, err := d.adapter.CreateVolume(ctx, containerengine.VolumeCreateRequest{Engine: containerengine.EngineDocker, Name: name, Labels: map[string]string{managedServiceLabel: service.ServiceID, managedServiceLabel + ".resource": resourceID, managedServiceLabel + ".generation": token}})
 				if err != nil {
 					return nil, serviceError("DATA_VOLUME_CREATE_FAILED", "A template data volume could not be created.", 502, true, err)
 				}
@@ -366,13 +391,22 @@ func (d *containerTemplateDriver) containerMounts(ctx context.Context, service *
 						return nil, err
 					}
 				}
+				if created.Labels[managedServiceLabel] != service.ServiceID || created.Labels[managedServiceLabel+".resource"] != resourceID || created.Labels[managedServiceLabel+".generation"] != token {
+					return nil, serviceError("DATA_IDENTITY_MISMATCH", "The created volume ownership could not be verified.", 409, false, nil)
+				}
 				if created.CreatedAtUnixMs <= 0 {
 					return nil, serviceError("DATA_IDENTITY_UNAVAILABLE", "Docker did not return a stable identity for a template data volume.", 502, false, nil)
 				}
-				identity = customContainerVolume{ResourceID: resourceID, Name: name, CreatedAtUnixMs: created.CreatedAtUnixMs}
+				identity = customContainerVolume{StableIdentity: token, Ownership: "owned", ResourceID: resourceID, Name: name, CreatedAtUnixMs: created.CreatedAtUnixMs}
 				marker.Volumes = append(marker.Volumes, identity)
 				volumeByResourceID[resourceID] = identity
 				changed = true
+				if err := d.manager.registry.PutManagedServiceResource(ctx, pfregistry.ManagedServiceResource{StableIdentity: token, ServiceID: service.ServiceID, ResourceID: resourceID, Kind: "volume", EngineIdentity: name, CreatedAtUnixMs: created.CreatedAtUnixMs, Ownership: "owned"}); err != nil {
+					return nil, err
+				}
+				if err := d.manager.registry.DeleteManagedServiceResource(ctx, service.ServiceID, volumeAllocationPrefix+resourceID); err != nil {
+					return nil, err
+				}
 			} else {
 				return nil, serviceError("DATA_IDENTITY_MISSING", "A retained template data volume identity is missing.", 409, false, nil)
 			}
@@ -418,11 +452,10 @@ func (d *containerTemplateDriver) containerMountsForPreflight(ctx context.Contex
 		case "volume":
 			name := volumeNames[mount.ResourceID]
 			if name == "" {
-				binding, err := decodeRuntimeBinding(service)
-				if err != nil {
+				if _, err := decodeRuntimeBinding(service); err != nil {
 					return nil, err
 				}
-				name = fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(binding.ServiceFamilyID), resourceNameSuffix(mount.ResourceID))
+				name = fmt.Sprintf("redeven-mws-data-%s-%s", resourceNameSuffix(service.ServiceID), resourceNameSuffix(mount.ResourceID))
 			}
 			result = append(result, containerengine.ContainerMount{Type: containerengine.MountTypeVolume, Source: name, Target: mount.Target, ReadOnly: mount.ReadOnly})
 		default:
@@ -438,9 +471,22 @@ func (d *containerTemplateDriver) loadVolumeSet(ctx context.Context, service *pf
 	if err != nil {
 		return resources, err
 	}
+	for _, record := range records {
+		if strings.HasPrefix(record.ResourceID, volumeAllocationPrefix) {
+			volumes, listErr := d.adapter.ListVolumes(ctx, containerengine.EngineDocker)
+			if listErr != nil {
+				return resources, listErr
+			}
+			records, err = d.manager.recoverVolumeAllocations(ctx, service, records, volumes)
+			if err != nil {
+				return resources, err
+			}
+			break
+		}
+	}
 	for _, resource := range records {
 		if resource.Kind == "volume" {
-			resources.Volumes = append(resources.Volumes, customContainerVolume{ResourceID: resource.ResourceID, Name: resource.EngineIdentity, CreatedAtUnixMs: resource.CreatedAtUnixMs})
+			resources.Volumes = append(resources.Volumes, customContainerVolume{StableIdentity: resource.StableIdentity, Ownership: resource.Ownership, ResourceID: resource.ResourceID, Name: resource.EngineIdentity, CreatedAtUnixMs: resource.CreatedAtUnixMs})
 		}
 	}
 	return resources, nil
@@ -448,7 +494,7 @@ func (d *containerTemplateDriver) loadVolumeSet(ctx context.Context, service *pf
 
 func (d *containerTemplateDriver) saveVolumeSet(ctx context.Context, service *pfregistry.ManagedService, marker containerVolumeSet) error {
 	for _, volume := range marker.Volumes {
-		if err := d.manager.registry.PutManagedServiceResource(ctx, pfregistry.ManagedServiceResource{ServiceID: service.ServiceID, ResourceID: volume.ResourceID, Kind: "volume", EngineIdentity: volume.Name, CreatedAtUnixMs: volume.CreatedAtUnixMs}); err != nil {
+		if err := d.manager.registry.PutManagedServiceResource(ctx, pfregistry.ManagedServiceResource{StableIdentity: volume.StableIdentity, Ownership: volume.Ownership, ServiceID: service.ServiceID, ResourceID: volume.ResourceID, Kind: "volume", EngineIdentity: volume.Name, CreatedAtUnixMs: volume.CreatedAtUnixMs}); err != nil {
 			return err
 		}
 	}
@@ -517,6 +563,15 @@ func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, serv
 }
 
 func (d *containerTemplateDriver) ownedContainer(ctx context.Context, service *pfregistry.ManagedService) (containerengine.ContainerInspect, bool, error) {
+	if service != nil {
+		if err := d.recoverAllocation(ctx, service); err != nil {
+			return containerengine.ContainerInspect{}, false, err
+		}
+	}
+	return d.ownedContainerIdentity(ctx, service)
+}
+
+func (d *containerTemplateDriver) ownedContainerIdentity(ctx context.Context, service *pfregistry.ManagedService) (containerengine.ContainerInspect, bool, error) {
 	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
 		return containerengine.ContainerInspect{}, false, nil
 	}
@@ -541,9 +596,6 @@ func (d *containerTemplateDriver) ownedContainer(ctx context.Context, service *p
 	}
 	if container.Name != binding.Container.Name {
 		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_NAME_MISMATCH", "The managed template container name no longer matches the saved runtime.", 409, false, nil)
-	}
-	if container.Image.Reference != service.ArtifactReference || !container.Image.DigestPinned {
-		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_IMAGE_MISMATCH", "The managed template container image no longer matches the saved release.", 409, false, nil)
 	}
 	if !labelMatches {
 		return containerengine.ContainerInspect{}, false, serviceError("CONTAINER_LABEL_MISMATCH", "The managed template container ownership label no longer matches the service.", 409, false, nil)
@@ -655,7 +707,7 @@ func (d *containerTemplateDriver) Uninstall(ctx context.Context, service *pfregi
 		return err
 	}
 	progress("uninstalling", 5)
-	background := context.Background()
+	background := ctx
 	if exists {
 		removed, err := d.adapter.Remove(background, containerengine.ContainerActionRequest{Engine: containerengine.EngineDocker, ContainerID: service.RuntimeIdentity})
 		if !errors.Is(err, containerengine.ErrContainerNotFound) && (err != nil || !removed.Completed || removed.ContainerID != service.RuntimeIdentity) {

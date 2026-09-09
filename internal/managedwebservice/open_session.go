@@ -93,5 +93,12 @@ func (m *Manager) openExistingSession(ctx context.Context, serviceID string) (*O
 	if err := m.checkOpeningEndpoint(ctx, service); err != nil {
 		return nil, err
 	}
+	current, currentForward, err := m.serviceAndForward(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	if current.RuntimeIdentity != service.RuntimeIdentity || currentForward.ForwardID != forward.ForwardID {
+		return nil, serviceError("RESOURCE_PLAN_STALE", "The service instance changed while its opening information was prepared. Open the current instance again.", 409, true, nil)
+	}
 	return &OpenSession{State: "ready", Forward: forward, AppPath: appPath}, nil
 }

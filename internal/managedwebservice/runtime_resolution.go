@@ -33,9 +33,10 @@ func (r resolvedRuntime) applyTo(service *pfregistry.ManagedService) {
 	service.ConfigurationSHA256 = r.ConfigurationSHA256
 }
 
-// resolveCurrentRuntime is the only bridge from persisted instance state to
-// executable behavior. It always starts from the current template definition.
-func (m *Manager) resolveCurrentRuntime(ctx context.Context, service *pfregistry.ManagedService) (*resolvedRuntime, error) {
+// resolveRuntimeDefinition loads the current definition and verifies persisted
+// configuration identity without requiring that every execution input is present.
+// Settings use this read-only boundary to repair missing inputs.
+func (m *Manager) resolveRuntimeDefinition(ctx context.Context, service *pfregistry.ManagedService) (*resolvedRuntime, error) {
 	if service == nil {
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
@@ -74,6 +75,22 @@ func (m *Manager) resolveCurrentRuntime(ctx context.Context, service *pfregistry
 	if savedJSON != strings.TrimSpace(service.ConfigurationJSON) || savedDigest != strings.TrimSpace(service.ConfigurationSHA256) {
 		return nil, serviceError("SERVICE_CONFIGURATION_IDENTITY_MISMATCH", "The managed-service configuration identity has changed.", 409, false, nil)
 	}
+	effective, err := applyServiceConfiguration(materialized, savedConfiguration, template.Source)
+	if err != nil {
+		return nil, err
+	}
+	return &resolvedRuntime{Template: *template, BaseSpec: materialized, Spec: effective, Configuration: savedConfiguration, ConfigurationJSON: savedJSON, ConfigurationSHA256: savedDigest, Release: *release, Binding: *binding}, nil
+}
+
+// resolveCurrentRuntime is the sole execution resolver. Missing or invalid
+// inputs are rejected before any template script or resource creation runs.
+func (m *Manager) resolveCurrentRuntime(ctx context.Context, service *pfregistry.ManagedService) (*resolvedRuntime, error) {
+	resolved, err := m.resolveRuntimeDefinition(ctx, service)
+	if err != nil {
+		return nil, err
+	}
+	template, materialized, savedConfiguration := &resolved.Template, resolved.BaseSpec, resolved.Configuration
+	release, binding := &resolved.Release, &resolved.Binding
 	parameters, err := m.serviceParameters(service)
 	if err != nil {
 		return nil, err

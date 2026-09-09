@@ -47,6 +47,8 @@ type ManagedTemplateRequest struct {
 }
 
 type ManagedService struct {
+	ManagementState       string `json:"management_state"`
+	ArchivedForwardJSON   string `json:"-"`
 	ServiceID             string `json:"service_id"`
 	TemplateID            string `json:"template_id"`
 	WorkspacePath         string `json:"workspace_path"`
@@ -258,9 +260,11 @@ type ManagedServicePatch struct {
 	LastErrorMessage      *string
 }
 
-const managedServiceSelectColumns = "service_id,template_id,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,forward_id,runtime_identity,runtime_spec_sha256,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms"
+const managedServiceSelectColumns = "service_id,template_id,workspace_path,workspace_ownership,configuration_json,configuration_revision,configuration_sha256,release_identity_json,release_identity_sha256,runtime_binding_json,runtime_binding_sha256,desired_state,observed_state,COALESCE(forward_id,''),runtime_identity,runtime_spec_sha256,runtime_manifest_json,runtime_port,artifact_reference,last_error_code,last_error_message,created_at_unix_ms,updated_at_unix_ms,management_state,archived_forward_json"
 
 type ManagedServiceResource struct {
+	StableIdentity  string `json:"stable_identity,omitempty"`
+	Ownership       string `json:"ownership"`
 	ServiceID       string `json:"service_id"`
 	ResourceID      string `json:"resource_id"`
 	Kind            string `json:"kind"`
@@ -463,7 +467,7 @@ func (r *Registry) GetManagedService(ctx context.Context, serviceID string) (*Ma
 type rowScanner interface{ Scan(dest ...any) error }
 
 func scanManagedService(row rowScanner, value *ManagedService) error {
-	return row.Scan(&value.ServiceID, &value.TemplateID, &value.WorkspacePath, &value.WorkspaceOwnership, &value.ConfigurationJSON, &value.ConfigurationRevision, &value.ConfigurationSHA256, &value.ReleaseIdentityJSON, &value.ReleaseIdentitySHA256, &value.RuntimeBindingJSON, &value.RuntimeBindingSHA256, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeSpecSHA256, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs)
+	return row.Scan(&value.ServiceID, &value.TemplateID, &value.WorkspacePath, &value.WorkspaceOwnership, &value.ConfigurationJSON, &value.ConfigurationRevision, &value.ConfigurationSHA256, &value.ReleaseIdentityJSON, &value.ReleaseIdentitySHA256, &value.RuntimeBindingJSON, &value.RuntimeBindingSHA256, &value.DesiredState, &value.ObservedState, &value.ForwardID, &value.RuntimeIdentity, &value.RuntimeSpecSHA256, &value.RuntimeManifestJSON, &value.RuntimePort, &value.ArtifactReference, &value.LastErrorCode, &value.LastErrorMessage, &value.CreatedAtUnixMs, &value.UpdatedAtUnixMs, &value.ManagementState, &value.ArchivedForwardJSON)
 }
 
 func (r *Registry) CreateManagedService(ctx context.Context, service ManagedService, forward Forward) error {
@@ -567,7 +571,14 @@ func (r *Registry) UpdateManagedServiceIfRuntimeMatches(ctx context.Context, ser
 	return r.updateManagedService(ctx, serviceID, patch, &[2]string{identity, digest})
 }
 
-func (r *Registry) updateManagedService(ctx context.Context, serviceID string, patch ManagedServicePatch, expected *[2]string) error {
+func (r *Registry) UpdateManagedServiceObservation(ctx context.Context, service ManagedService, patch ManagedServicePatch) error {
+	if service.ManagementState == "" {
+		service.ManagementState = "active"
+	}
+	return r.updateManagedService(ctx, service.ServiceID, patch, &[2]string{service.RuntimeIdentity, service.RuntimeSpecSHA256}, service)
+}
+
+func (r *Registry) updateManagedService(ctx context.Context, serviceID string, patch ManagedServicePatch, expected *[2]string, observations ...ManagedService) error {
 	if r == nil || r.db == nil {
 		return errors.New("registry not initialized")
 	}
@@ -633,6 +644,11 @@ func (r *Registry) updateManagedService(ctx context.Context, serviceID string, p
 	if expected != nil {
 		where += " AND runtime_identity = ? AND runtime_spec_sha256 = ?"
 		args = append(args, expected[0], expected[1])
+	}
+	if len(observations) > 0 {
+		old := observations[0]
+		where += " AND configuration_revision=? AND management_state=? AND runtime_manifest_json=? AND desired_state=? AND observed_state=?"
+		args = append(args, old.ConfigurationRevision, old.ManagementState, old.RuntimeManifestJSON, old.DesiredState, old.ObservedState)
 	}
 	result, err := r.db.ExecContext(nonNilContext(ctx), `UPDATE managed_web_services SET `+strings.Join(sets, ", ")+where, args...)
 	if err != nil {
@@ -710,7 +726,7 @@ func (r *Registry) ListManagedServiceResources(ctx context.Context, serviceID st
 	if r == nil || r.db == nil {
 		return nil, errors.New("registry not initialized")
 	}
-	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,resource_id,kind,engine_identity,created_at_unix_ms FROM managed_web_service_resources WHERE service_id=? ORDER BY resource_id`, strings.TrimSpace(serviceID))
+	rows, err := r.db.QueryContext(nonNilContext(ctx), `SELECT service_id,resource_id,kind,engine_identity,created_at_unix_ms,ownership,stable_identity FROM managed_web_service_resources WHERE service_id=? ORDER BY resource_id`, strings.TrimSpace(serviceID))
 	if err != nil {
 		return nil, err
 	}
@@ -718,7 +734,7 @@ func (r *Registry) ListManagedServiceResources(ctx context.Context, serviceID st
 	var result []ManagedServiceResource
 	for rows.Next() {
 		var value ManagedServiceResource
-		if err := rows.Scan(&value.ServiceID, &value.ResourceID, &value.Kind, &value.EngineIdentity, &value.CreatedAtUnixMs); err != nil {
+		if err := rows.Scan(&value.ServiceID, &value.ResourceID, &value.Kind, &value.EngineIdentity, &value.CreatedAtUnixMs, &value.Ownership, &value.StableIdentity); err != nil {
 			return nil, err
 		}
 		result = append(result, value)
@@ -733,7 +749,10 @@ func (r *Registry) PutManagedServiceResource(ctx context.Context, value ManagedS
 	if strings.TrimSpace(value.ServiceID) == "" || strings.TrimSpace(value.ResourceID) == "" || strings.TrimSpace(value.Kind) == "" || strings.TrimSpace(value.EngineIdentity) == "" || value.CreatedAtUnixMs <= 0 {
 		return errors.New("invalid managed service resource identity")
 	}
-	_, err := r.db.ExecContext(nonNilContext(ctx), `INSERT INTO managed_web_service_resources(service_id,resource_id,kind,engine_identity,created_at_unix_ms) VALUES(?,?,?,?,?) ON CONFLICT(service_id,resource_id) DO UPDATE SET kind=excluded.kind,engine_identity=excluded.engine_identity,created_at_unix_ms=excluded.created_at_unix_ms`, value.ServiceID, value.ResourceID, value.Kind, value.EngineIdentity, value.CreatedAtUnixMs)
+	if value.Ownership == "" {
+		value.Ownership = "unverified"
+	}
+	_, err := r.db.ExecContext(nonNilContext(ctx), `INSERT INTO managed_web_service_resources(service_id,resource_id,kind,engine_identity,created_at_unix_ms,ownership,stable_identity) VALUES(?,?,?,?,?,?,?) ON CONFLICT(service_id,resource_id) DO UPDATE SET kind=excluded.kind,engine_identity=excluded.engine_identity,created_at_unix_ms=excluded.created_at_unix_ms,ownership=excluded.ownership,stable_identity=excluded.stable_identity`, value.ServiceID, value.ResourceID, value.Kind, value.EngineIdentity, value.CreatedAtUnixMs, value.Ownership, value.StableIdentity)
 	return err
 }
 
@@ -755,7 +774,7 @@ func (r *Registry) DeleteManagedService(ctx context.Context, serviceID string) e
 	}
 	defer func() { _ = tx.Rollback() }()
 	var forwardID string
-	if err := tx.QueryRow(`SELECT forward_id FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)).Scan(&forwardID); err != nil {
+	if err := tx.QueryRow(`SELECT COALESCE(forward_id,'') FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)).Scan(&forwardID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrManagedServiceNotFound
 		}
@@ -767,10 +786,14 @@ func (r *Registry) DeleteManagedService(ctx context.Context, serviceID string) e
 	if _, err := tx.Exec(`DELETE FROM port_forwards WHERE forward_id = ?`, forwardID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.revokeForwardAccess(forwardID)
+	return nil
 }
 
-func (r *Registry) CompleteManagedServiceUninstall(ctx context.Context, serviceID string, operation ManagedOperation) error {
+func (r *Registry) CompleteManagedServiceUninstall(ctx context.Context, serviceID string, operation ManagedOperation, retainResources ...bool) error {
 	if r == nil || r.db == nil {
 		return errors.New("registry not initialized")
 	}
@@ -780,7 +803,7 @@ func (r *Registry) CompleteManagedServiceUninstall(ctx context.Context, serviceI
 	}
 	defer func() { _ = tx.Rollback() }()
 	var forwardID string
-	if err := tx.QueryRow(`SELECT forward_id FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)).Scan(&forwardID); err != nil {
+	if err := tx.QueryRow(`SELECT COALESCE(forward_id,'') FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)).Scan(&forwardID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrManagedServiceNotFound
 		}
@@ -809,13 +832,29 @@ func (r *Registry) CompleteManagedServiceUninstall(ctx context.Context, serviceI
 	if err := clearManagedOperationOutputBodiesTx(tx, strings.TrimSpace(serviceID)); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM managed_web_services WHERE service_id = ?`, strings.TrimSpace(serviceID)); err != nil {
+	if len(retainResources) > 0 && retainResources[0] {
+		var raw string
+		err := tx.QueryRow(`SELECT json_object('target_url',target_url,'name',name,'description',description,'health_path',health_path,'access_mode',access_mode,'default_app_path',default_app_path) FROM port_forwards WHERE forward_id=?`, forwardID).Scan(&raw)
+		if errors.Is(err, sql.ErrNoRows) {
+			err = tx.QueryRow(`SELECT archived_forward_json FROM managed_web_services WHERE service_id=?`, serviceID).Scan(&raw)
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE managed_web_services SET management_state='uninstalled',forward_id=NULL,archived_forward_json=?,desired_state='stopped',observed_state='missing',runtime_manifest_json='{}',updated_at_unix_ms=? WHERE service_id=?`, raw, time.Now().UnixMilli(), serviceID); err != nil {
+			return err
+		}
+	} else if _, err := tx.Exec(`DELETE FROM managed_web_services WHERE service_id=?`, serviceID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM port_forwards WHERE forward_id = ?`, forwardID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.revokeForwardAccess(forwardID)
+	return nil
 }
 
 func clearManagedOperationOutputBodiesTx(tx *sql.Tx, serviceID string) error {
@@ -898,6 +937,12 @@ func (r *Registry) GetActiveManagedOperation(ctx context.Context, serviceID stri
 
 func (r *Registry) GetLatestManagedOperationFailure(ctx context.Context, serviceID string) (*ManagedOperation, error) {
 	return r.queryManagedOperation(ctx, `SELECT `+managedOperationSelectColumns+` FROM managed_web_service_operations WHERE service_id = ? AND error_code <> '' AND state IN ('failed','cancelled','interrupted') ORDER BY finished_at_unix_ms DESC, updated_at_unix_ms DESC, operation_id DESC LIMIT 1`, serviceID)
+}
+
+// A historical uninstall is a request to inspect, never evidence that a resource
+// was removed. A later successful recreation or start supersedes that request.
+func (r *Registry) GetUnresolvedManagedUninstall(ctx context.Context, serviceID string) (*ManagedOperation, error) {
+	return r.queryManagedOperation(ctx, `SELECT `+managedOperationSelectColumns+` FROM managed_web_service_operations WHERE service_id=? AND action='uninstall' AND state IN ('failed','cancelled','interrupted') AND created_at_unix_ms >= COALESCE((SELECT MAX(done.created_at_unix_ms) FROM managed_web_service_operations AS done WHERE done.service_id=managed_web_service_operations.service_id AND done.state='succeeded' AND done.action IN ('install','retry_install','start','restart','recover','restore','uninstall')),0) ORDER BY created_at_unix_ms DESC,operation_id DESC LIMIT 1`, serviceID)
 }
 
 func (r *Registry) getManagedOperation(ctx context.Context, column, value string) (*ManagedOperation, error) {

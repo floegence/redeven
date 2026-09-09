@@ -551,7 +551,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-one', template_id: 'example-desktop-a',
           name: 'Example Desktop A', template_source: 'builtin', deployment: 'container',
-          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'running', forward_id: 'pf-one', runtime_port: 3000,
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'pf-one', runtime_port: 3000,
           container_resources: [
             { kind: 'container', engine: 'docker', view: 'containers', identity: 'container-id' },
             { kind: 'image', engine: 'docker', view: 'images', identity: 'lscr.io/example/desktop@sha256:abc' },
@@ -583,7 +583,7 @@ describe('web service metadata and template validation', () => {
     document.body.appendChild(host);
     const open = vi.fn();
     const dispose = render(() => <ManagedServiceRow
-      service={{ service_id: 'mws-independent', template_id: 'generic-host', template_source: 'custom', workspace_ownership: 'user_selected', name: 'Independent service', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'pf-independent', runtime_port: 3000,
+      service={{ service_id: 'mws-independent', template_id: 'generic-host', template_source: 'custom', workspace_ownership: 'user_selected', name: 'Independent service', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'pf-independent', runtime_port: 3000,
         actions: { open: { available: true }, start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: true } },
         opening: { state: 'error', error_code: 'HOST_OPEN_HOOK_FAILED' }, pending_changes: true,
         last_failure: { error_code: 'OPERATION_INTERRUPTED', message: 'Previous operation interrupted' },
@@ -609,7 +609,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-opening', template_id: 'example-host',
           name: 'Example Service', template_source: 'builtin', deployment: 'host',
-          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop',
           forward_id: 'pf-opening', runtime_port: 3000,
         }}
         busy
@@ -644,7 +644,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-failed', template_id: 'example-container',
           name: 'Example Service', template_source: 'builtin', deployment: 'container',
-          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error', primary_action: 'inspect',
           forward_id: 'pf-failed', runtime_port: 3000,
           actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } },
           last_failure: { action: 'start', stage: 'starting', error_code: 'DATA_IDENTITY_MISSING', message: 'Raw backend message must not be shown.', operation_id: 'mop-failed', occurred_at_unix_ms: 1_777_777_777_000 },
@@ -655,6 +655,7 @@ describe('web service metadata and template validation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={retry}
+        onInspect={retry}
         onDiagnosticCopyFailure={copyFailure}
         onLogs={() => undefined}
         onUninstall={() => undefined}
@@ -662,45 +663,18 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
-      const retryButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
-        .find((button) => button.textContent?.trim() === 'Retry');
-      const restartButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
-        .find((button) => button.textContent?.trim() === 'Restart');
-
-      expect(retryButton).toBeTruthy();
-      expect(restartButton).toBeTruthy();
-      expect(retryButton?.disabled).toBe(false);
-      expect(restartButton?.disabled).toBe(false);
-      expect(retryButton?.className).toContain('whitespace-nowrap');
-      expect(retryButton?.querySelector('[data-testid="restart-icon"]')).toBeNull();
-      expect(row.textContent).not.toContain('Failed');
-
-      row.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
-      await Promise.resolve();
-      expect(clipboardMocks.writeText).toHaveBeenCalledOnce();
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('DATA_IDENTITY_MISSING');
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).toContain('Redeven could not find the saved identity for this service data volume.');
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).not.toContain('Raw backend message');
-      expect(clipboardMocks.writeText.mock.calls[0]?.[0]).not.toContain('Secret');
-      expect(notificationMocks.success).not.toHaveBeenCalled();
-      expect(row.querySelector('[data-testid="check-icon"]')).toBeTruthy();
-
-      clipboardMocks.writeText.mockRejectedValueOnce(new Error('Clipboard denied'));
-      row.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
-      await Promise.resolve();
-      expect(copyFailure).toHaveBeenCalledWith('Clipboard denied');
-
-      retryButton?.click();
-      restartButton?.click();
-      expect(retry).toHaveBeenNthCalledWith(1, 'retry');
-      expect(retry).toHaveBeenNthCalledWith(2, 'restart');
+      expect(row.textContent).not.toContain('Raw backend message');
+      expect(row.querySelector('[data-testid="managed-service-copy-failure"]')).toBeNull();
+      expect(Array.from(row.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Retry')).toBeUndefined();
+      const review = Array.from(row.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => button.textContent?.trim() === 'Review and resolve');
+      review?.click(); expect(retry).toHaveBeenCalledOnce();
     } finally {
       dispose();
       host.remove();
     }
   });
 
-  it('explains that retry recreates a missing workspace without exposing backend details', async () => {
+  it('requires review for a missing workspace without exposing backend details', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const retry = vi.fn();
@@ -709,7 +683,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-missing-workspace', template_id: 'example-host',
           name: 'Example Host', template_source: 'builtin', deployment: 'host',
-          workspace_path: '/private/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.2.3'), desired_state: 'stopped', observed_state: 'error',
+          workspace_path: '/private/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.2.3'), desired_state: 'stopped', observed_state: 'error', primary_action: 'inspect',
           forward_id: 'pf-missing-workspace', runtime_port: 3000,
           actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } },
           last_failure: { action: 'start', stage: 'failed', error_code: 'WORKSPACE_MISSING', message: 'stat /private/workspace: no such file or directory', operation_id: 'mop-missing-workspace' },
@@ -720,22 +694,15 @@ describe('web service metadata and template validation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={retry}
+        onInspect={retry}
         onLogs={() => undefined}
         onUninstall={() => undefined}
       />
     ), host);
     try {
-      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
-      await Promise.resolve();
-      const diagnostic = clipboardMocks.writeText.mock.calls.at(-1)?.[0] ?? '';
-      expect(diagnostic).toContain('WORKSPACE_MISSING');
-      expect(diagnostic).toContain('Retry will create a new empty directory and start the service.');
-      expect(diagnostic).not.toContain('/private/workspace: no such file or directory');
-
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
-        .find((button) => button.textContent?.trim() === 'Retry')
-        ?.click();
-      expect(retry).toHaveBeenCalledWith('retry');
+      expect(host.textContent).not.toContain('/private/workspace: no such file or directory');
+      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => button.textContent?.trim() === 'Review and resolve');
+      button?.click(); expect(retry).toHaveBeenCalledOnce();
     } finally {
       dispose();
       host.remove();
@@ -750,7 +717,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-host-failed', template_id: 'example-host',
           name: 'Example Host', template_source: 'builtin', deployment: 'host',
-          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.2.3'), desired_state: 'stopped', observed_state: 'error',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.2.3'), desired_state: 'stopped', observed_state: 'error', primary_action: 'inspect',
           forward_id: 'pf-host-failed', runtime_port: 3000,
           actions: { start: { available: false }, stop: { available: false }, restart: { available: false }, retry: { available: true } },
           last_failure: { action: 'retry_install', stage: 'failed', error_code: 'DEPENDENCY_LAYOUT_INVALID', message: 'private runtime path detail' },
@@ -766,11 +733,8 @@ describe('web service metadata and template validation', () => {
       />
     ), host);
     try {
-      host.querySelector<HTMLButtonElement>('[data-testid="managed-service-copy-failure"]')?.click();
-      await Promise.resolve();
-      const diagnostic = clipboardMocks.writeText.mock.calls.at(-1)?.[0] ?? '';
-      expect(diagnostic).toContain('Redeven could not verify the installed npm package layout.');
-      expect(diagnostic).not.toContain('private runtime path detail');
+      expect(host.textContent).not.toContain('private runtime path detail');
+      expect(Array.from(host.querySelectorAll<HTMLButtonElement>('button')).some((button) => button.textContent?.trim() === 'Review and resolve')).toBe(true);
     } finally {
       dispose();
       host.remove();
@@ -786,7 +750,7 @@ describe('web service metadata and template validation', () => {
         service={{
           service_id: 'mws-retry', template_id: 'example-container',
           name: 'Example Service', template_source: 'builtin', deployment: 'container',
-          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error',
+          workspace_path: '/workspace', workspace_ownership: 'user_selected', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'error', primary_action: 'inspect',
           forward_id: 'pf-retry', runtime_port: 3000,
           actions: { start: { available: false, reason_code: 'OPERATION_ACTIVE' }, stop: { available: false, reason_code: 'OPERATION_ACTIVE' }, restart: { available: false, reason_code: 'OPERATION_ACTIVE' }, retry: { available: false, reason_code: 'OPERATION_ACTIVE' } },
         }}
@@ -809,7 +773,7 @@ describe('web service metadata and template validation', () => {
       expect(progress.textContent).toContain('2.00 KB / 5.00 KB');
       expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
       expect(row.textContent).not.toContain('Error');
-      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Restart')?.disabled).toBe(true);
+      expect(row.querySelector<HTMLButtonElement>('[data-testid="managed-service-primary"]')?.disabled).toBe(true);
 
       progress.click();
       const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
@@ -1257,7 +1221,7 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'example-host', name: 'Example Service · Host', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'example-host', name: 'Example Service · Host', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-forward', runtime_port: 3080 }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'managed-forward', target_url: 'http://127.0.0.1:3080', name: 'Example Service', description: 'Managed by Redeven', health: { status: 'healthy', last_checked_at_unix_ms: 1, latency_ms: 2, last_error: '' }, created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: 0 }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -1278,7 +1242,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{
         service_id: 'mws-desktop', template_id: 'example-desktop-a',
         name: 'Example Desktop A', deployment: 'container', workspace_path: '/workspace', release_status: releaseStatus('oci', '654ea8e3-ls177'),
-        desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3000,
+        desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-forward', runtime_port: 3000,
         container_resources: [{ kind: 'image', engine: 'docker', view: 'images', identity: imageIdentity }],
       }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'managed-forward', target_url: 'http://127.0.0.1:3000' }] };
@@ -1308,7 +1272,7 @@ describe('EnvPortForwardsPage', () => {
       workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a',
       release_status: releaseStatus('oci', '654ea8e3-ls177'),
       desired_state: 'running',
-      observed_state: 'running',
+      observed_state: 'running', primary_action: 'stop',
       actions: { open: { available: true } },
       forward_id: 'pf_legacy_managed_service',
       runtime_port: 54945,
@@ -1349,7 +1313,7 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-stale-runtime', template_id: 'example-host',
       name: 'Example Host', template_source: 'builtin', deployment: 'host', workspace_path: '/workspace',
-      release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', actions: { open: { available: true } },
+      release_status: releaseStatus('npm', '1.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', actions: { open: { available: true } },
       forward_id: 'pf-stale-runtime', runtime_port: 3080,
     };
     const assign = vi.fn();
@@ -1415,7 +1379,7 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-container', template_id: 'example-container',
       name: 'Example Service · Container', template_source: 'builtin', deployment: 'container', workspace_path: templates[1].default_workspace_path,
-      release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'pf-container', runtime_port: 3080,
+      release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'pf-container', runtime_port: 3080,
       access_mode: 'unified_proxy',
     };
     const assign = vi.fn();
@@ -1460,7 +1424,7 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'example-desktop-a', name: 'Example Desktop A', description: 'Managed desktop', template_source: 'builtin', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a', release_status: releaseStatus('oci', '654ea8e3-ls177'), desired_state: 'running', observed_state: 'running', forward_id: 'pf-managed', runtime_port: 54945 }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-1', template_id: 'example-desktop-a', name: 'Example Desktop A', description: 'Managed desktop', template_source: 'builtin', deployment: 'container', workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a', release_status: releaseStatus('oci', '654ea8e3-ls177'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'pf-managed', runtime_port: 54945 }] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [{ forward_id: 'pf-managed', target_url: 'http://127.0.0.1:54945', name: 'Desktop Service', description: 'Managed by Redeven' }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -1500,7 +1464,7 @@ describe('EnvPortForwardsPage', () => {
     );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
-      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-readonly', template_id: 'example-host', name: 'Example Service · Host', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080, actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } } }] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [{ service_id: 'mws-readonly', template_id: 'example-host', name: 'Example Service · Host', deployment: 'host', workspace_path: '/workspace', release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-forward', runtime_port: 3080, actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } } }] };
       throw new Error(`Unexpected local API call: ${url}`);
     });
 
@@ -1654,6 +1618,7 @@ describe('EnvPortForwardsPage', () => {
     let createBody: Record<string, any> | null = null;
     let installed = false;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/install-plans') return { plan_digest: 'installation-plan', workspace_path: JSON.parse(String(init?.body)).workspace_path + '/instance' };
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') return { services: installed ? [{ service_id: 'mws-desktop', template_id: templates[0].template_id, forward_id: 'managed-desktop' }] : [] };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'POST') {
@@ -1689,7 +1654,7 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
 
     expect(host.textContent).toContain('Container root access and outbound network');
-    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Install and start');
+    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review installation');
     expect(install?.disabled).toBe(true);
     host.querySelector<HTMLInputElement>('[data-testid="managed-template-notices"] input[type="checkbox"]')?.click();
     await flushPage();
@@ -1697,10 +1662,13 @@ describe('EnvPortForwardsPage', () => {
     expect(host.querySelector('[data-testid="managed-release-risk-hints"]')?.textContent).toContain('cannot be ordered safely');
     expect(host.querySelector('[data-testid="managed-release-risk-hints"] input[type="checkbox"]')).toBeNull();
     install?.click();
+    await waitForAssertion(() => expect(install?.textContent).toContain('Install and start'));
+    install?.click();
 
     await waitForAssertion(() => expect(createBody).toMatchObject({
       template_id: 'example-desktop-a',
-      workspace_path: templates[0].default_workspace_path,
+      workspace_path: templates[0].default_workspace_path + '/instance',
+      plan_digest: 'installation-plan',
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 1 },
     }));
   });
@@ -1726,6 +1694,7 @@ describe('EnvPortForwardsPage', () => {
     let createBody: Record<string, any> | null = null;
     let rejectInstall = true;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/install-plans') return { plan_digest: 'installation-plan', workspace_path: JSON.parse(String(init?.body)).workspace_path + '/instance' };
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') return { services: [] };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'POST') {
@@ -1770,7 +1739,7 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Cancel')?.click();
     await flushPage();
 
-    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Install and start');
+    const install = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review installation');
     expect(install?.disabled).toBe(true);
     expect(host.textContent).toContain('The recommended release is unavailable. Refresh and choose an available release.');
 
@@ -1781,6 +1750,8 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Deploy selected version')?.click();
     await flushPage();
     expect(install?.disabled).toBe(false);
+    install?.click();
+    await waitForAssertion(() => expect(install?.textContent).toContain('Install and start'));
     install?.click();
     await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith(
       'Failed to add service',
@@ -1820,6 +1791,7 @@ describe('EnvPortForwardsPage', () => {
     let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
     const createRequest = deferred<{ service: typeof service; operation: typeof operation }>();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/install-plans') return { plan_digest: 'installation-plan', workspace_path: JSON.parse(String(init?.body)).workspace_path + '/instance' };
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
       if (url === '/_redeven_proxy/api/managed-web-services' && init?.method === 'GET') {
         return { services: installed ? [{ ...service, observed_state: finished ? 'running' : service.observed_state, active_operation: finished ? undefined : operation }] : [] };
@@ -1849,6 +1821,9 @@ describe('EnvPortForwardsPage', () => {
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
       await flushPage();
 
+      const review = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review installation');
+      review?.click();
+      await waitForAssertion(() => expect(review?.textContent).toContain('Install and start'));
       Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim().startsWith('Install'))?.click();
 
       await waitForAssertion(() => expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/managed-web-services', expect.objectContaining({ method: 'POST' })));
@@ -1897,7 +1872,7 @@ describe('EnvPortForwardsPage', () => {
       localizations: { 'en-US': { name: 'Example Desktop', description: 'Managed desktop', notices: { 'interactive-desktop-root-and-network': { title: 'Container root access and outbound network', description: 'Only share this service with trusted users.' } } } },
       workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a',
       release_status: { schema_version: 2 as const, current_release: currentRelease, recommended_release: currentRelease, latest_stable_release: targetRelease, latest_stable_relation: 'newer' as const, check_status: 'fresh' as const, checked_at_unix_ms: Date.now() },
-      desired_state: 'running', observed_state: 'running', forward_id: 'managed-desktop', runtime_port: 32100,
+      desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-desktop', runtime_port: 32100,
     };
     let operationBody: Record<string, any> | null = null;
     let updatePlanBody: Record<string, any> | null = null;
@@ -1975,7 +1950,7 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-release-error', template_id: 'example-container',
       name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace',
-      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-release-error', runtime_port: 32102,
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-release-error', runtime_port: 32102,
     };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -2002,7 +1977,7 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-stale-feedback', template_id: 'example-container',
       name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace',
-      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-stale-feedback', runtime_port: 32102,
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-stale-feedback', runtime_port: 32102,
     };
     const candidate = { schema_version: 2, candidate_id: 'cached-release', source_kind: 'oci', source: 'registry.example/app', tag: '1.0.0', channel: 'stable', trust: 'registry_verified', selectable: true, relation: 'same', is_current: true, verification_status: 'verified' };
     const result = { schema_version: 2, candidates: [candidate], catalog_status: 'complete', has_more: false, loaded_count: 1, check_status: 'stale', checked_at_unix_ms: Date.now() };
@@ -2041,7 +2016,7 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-release-loading', template_id: 'example-container',
       name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace',
-      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-release-loading', runtime_port: 32102,
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-release-loading', runtime_port: 32102,
     };
     const signals: AbortSignal[] = [];
     localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
@@ -2081,12 +2056,12 @@ describe('EnvPortForwardsPage', () => {
     const first = {
       service_id: 'mws-release-first', template_id: 'example-first',
       name: 'First Service', template_source: 'builtin', deployment: 'container', workspace_path: '/first',
-      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-first', runtime_port: 32103,
+      release_status: releaseStatus('oci', '1.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-first', runtime_port: 32103,
     };
     const second = {
       service_id: 'mws-release-second', template_id: 'example-second',
       name: 'Second Service', template_source: 'builtin', deployment: 'container', workspace_path: '/second',
-      release_status: releaseStatus('oci', '2.0.0'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-second', runtime_port: 32104,
+      release_status: releaseStatus('oci', '2.0.0'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-second', runtime_port: 32104,
     };
     const late = deferred<any>();
     const releaseResult = (version: string, candidateID: string) => {
@@ -2125,7 +2100,7 @@ describe('EnvPortForwardsPage', () => {
       service_id: 'mws-host', template_id: 'example-host',
       name: 'Example Service', description: 'Native host service', template_source: 'custom', deployment: 'host',
       workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-host', release_status: { schema_version: 2 as const, current_release: currentRelease, recommended_release: currentRelease, check_status: 'fresh' as const },
-      desired_state: 'running', observed_state: 'running', forward_id: 'managed-host', runtime_port: 32101,
+      desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-host', runtime_port: 32101,
     };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, _init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -2304,7 +2279,7 @@ describe('EnvPortForwardsPage', () => {
       service_id: 'mws-stable-details', template_id: 'example-host',
       name: 'Example Service', template_source: 'custom', deployment: 'host', workspace_path: '/workspace',
       workspace_ownership: 'user_selected', release_status: releaseStatus('npm', '1.0.0'), desired_state: 'stopped',
-      observed_state: listedOperation ? 'starting' : 'stopped', forward_id: 'pf-stable-details', runtime_port: 3000,
+      observed_state: listedOperation ? 'starting' : 'stopped', primary_action: 'start', forward_id: 'pf-stable-details', runtime_port: 3000,
       actions: { start: { available: !listedOperation }, stop: { available: false }, restart: { available: false }, retry: { available: false } },
       ...(listedOperation ? { active_operation: { ...listedOperation } } : {}),
     });
@@ -2379,9 +2354,9 @@ describe('EnvPortForwardsPage', () => {
     const operationOne = { operation_id: 'mop-one', service_id: 'mws-one', action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7, progress_detail: { schema_version: 2 as const, transfer: { artifact_reference: 'ghcr.io/runzhliu/example-service:0.1.1-rc.2@sha256:one', artifact_index: 1, artifact_total: 1, completed_layers: 2, total_layers: 5 } } };
     const operationTwo = { operation_id: 'mop-two', service_id: 'mws-two', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
     const services = [
-      { service_id: 'mws-one', template_id: 'example-container', name: 'Example Service', deployment: 'container', workspace_path: '/one', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'error', forward_id: 'pf-one', runtime_port: 3001, active_operation: operationOne },
-      { service_id: 'mws-two', template_id: 'example-desktop-b', name: 'Debian desktop', deployment: 'container', workspace_path: '/two', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'stopped', forward_id: 'pf-two', runtime_port: 3002, active_operation: operationTwo },
-      { service_id: 'mws-idle', template_id: 'custom-idle', name: 'Idle service', deployment: 'container', workspace_path: '/idle', release_status: releaseStatus('oci', '1'), desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-idle', runtime_port: 3003 },
+      { service_id: 'mws-one', template_id: 'example-container', name: 'Example Service', deployment: 'container', workspace_path: '/one', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'error', primary_action: 'inspect', forward_id: 'pf-one', runtime_port: 3001, active_operation: operationOne },
+      { service_id: 'mws-two', template_id: 'example-desktop-b', name: 'Debian desktop', deployment: 'container', workspace_path: '/two', release_status: releaseStatus('oci', '1'), desired_state: 'running', observed_state: 'stopped', primary_action: 'start', forward_id: 'pf-two', runtime_port: 3002, active_operation: operationTwo },
+      { service_id: 'mws-idle', template_id: 'custom-idle', name: 'Idle service', deployment: 'container', workspace_path: '/idle', release_status: releaseStatus('oci', '1'), desired_state: 'stopped', observed_state: 'stopped', primary_action: 'start', forward_id: 'pf-idle', runtime_port: 3003 },
     ];
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -2419,8 +2394,8 @@ describe('EnvPortForwardsPage', () => {
 
   it('keeps simultaneous service actions on independent event streams', async () => {
     const baseServices = [
-      { service_id: 'mws-first', template_id: 'custom-first', name: 'First service', deployment: 'container', workspace_path: '/first', release_status: releaseStatus('oci', '1'), desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-first', runtime_port: 3001, actions: { start: { available: true }, stop: { available: false }, restart: { available: false }, retry: { available: false } } },
-      { service_id: 'mws-second', template_id: 'custom-second', name: 'Second service', deployment: 'container', workspace_path: '/second', release_status: releaseStatus('oci', '1'), desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-second', runtime_port: 3002, actions: { start: { available: true }, stop: { available: false }, restart: { available: false }, retry: { available: false } } },
+      { service_id: 'mws-first', template_id: 'custom-first', name: 'First service', deployment: 'container', workspace_path: '/first', release_status: releaseStatus('oci', '1'), desired_state: 'stopped', observed_state: 'stopped', primary_action: 'start', forward_id: 'pf-first', runtime_port: 3001, actions: { start: { available: true }, stop: { available: false }, restart: { available: false }, retry: { available: false } } },
+      { service_id: 'mws-second', template_id: 'custom-second', name: 'Second service', deployment: 'container', workspace_path: '/second', release_status: releaseStatus('oci', '1'), desired_state: 'stopped', observed_state: 'stopped', primary_action: 'start', forward_id: 'pf-second', runtime_port: 3002, actions: { start: { available: true }, stop: { available: false }, restart: { available: false }, retry: { available: false } } },
     ];
     const runningFirst = { operation_id: 'mop-first', service_id: 'mws-first', action: 'start' as const, state: 'running', stage: 'starting', progress_current: 4, progress_total: 7 };
     const runningSecond = { ...runningFirst, operation_id: 'mop-second', service_id: 'mws-second' };
@@ -2487,10 +2462,10 @@ describe('EnvPortForwardsPage', () => {
     }
   });
 
-  it('shows retry submission in the owning row before the operation request returns', async () => {
-    const service = { service_id: 'mws-retry', template_id: 'example-container', name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } } };
+  it('shows start submission in the owning row before the operation request returns', async () => {
+    const service = { service_id: 'mws-retry', template_id: 'example-container', name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'stopped', observed_state: 'stopped', primary_action: 'start', forward_id: 'pf-retry', runtime_port: 3080, actions: { start: { available: true }, stop: { available: false }, restart: { available: true }, retry: { available: true } } };
     const operationRequest = deferred<any>();
-    const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+    const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'start' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [service] };
@@ -2507,12 +2482,12 @@ describe('EnvPortForwardsPage', () => {
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-retry"]')).toBeTruthy());
-      Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Retry')?.click();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Start')?.click();
       await flushMicrotasks();
 
       const submitting = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
       expect(submitting.textContent).toContain('Starting operation');
-      expect(submitting.textContent).toContain('0/7');
+      expect(submitting.textContent).toContain('0/3');
       expect(host.querySelector('[data-managed-service-id="mws-retry"]')?.textContent).not.toContain('Error');
 
       operationRequest.resolve(running);
@@ -2526,11 +2501,11 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-settings', template_id: 'custom-container', template_source: 'custom',
       name: 'Team dashboard', description: 'Managed dashboard', deployment: 'container', workspace_path: '/workspace', release_status: releaseStatus('oci', '1'),
-      desired_state: 'stopped', observed_state: 'stopped', forward_id: 'pf-settings', runtime_port: 3000,
+      desired_state: 'stopped', observed_state: 'stopped', primary_action: 'start', forward_id: 'pf-settings', runtime_port: 3000,
     };
     const settings = {
       service_id: service.service_id, name: service.name, description: service.description, access_mode: 'unified_proxy',
-      deployment: 'container', template_source: 'custom', observed_state: 'stopped', configuration_revision: 3,
+      deployment: 'container', template_source: 'custom', observed_state: 'stopped', primary_action: 'start', configuration_revision: 3,
       configuration_sha256: 'configuration-sha', parameters: {},
       runtime: { container: { entrypoint: '', command: [], environment: [], labels: {}, restart_policy: 'no', network_mode: 'bridge', ports: [], mounts: [], cpus: 0, memory_bytes: 0, pids_limit: 512, shm_size_bytes: 0, cap_add: [], cap_drop: ['ALL'], devices: [], privileged: false, read_only_root: true, security_opts: ['no-new-privileges:true'], user: '' } },
     };
@@ -2570,9 +2545,9 @@ describe('EnvPortForwardsPage', () => {
     expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-reconfigure/events'), expect.objectContaining({ method: 'GET' }));
   });
 
-  it('reports retry failures with the retry action title', async () => {
-    const service = { service_id: 'mws-retry', template_id: 'example-container', name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'stopped', observed_state: 'error', forward_id: 'pf-retry', runtime_port: 3080, actions: { start: { available: false }, stop: { available: false }, restart: { available: true }, retry: { available: true } } };
-    const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'retry_install' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
+  it('reports start failures with the start action title', async () => {
+    const service = { service_id: 'mws-retry', template_id: 'example-container', name: 'Example Service', template_source: 'builtin', deployment: 'container', workspace_path: '/workspace', release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'stopped', observed_state: 'stopped', primary_action: 'start', forward_id: 'pf-retry', runtime_port: 3080, actions: { start: { available: true }, stop: { available: false }, restart: { available: true }, retry: { available: true } } };
+    const running = { operation_id: 'mop-retry', service_id: service.service_id, action: 'start' as const, state: 'running', stage: 'pulling', progress_current: 2, progress_total: 7 };
     const failed = { ...running, state: 'failed', stage: 'failed', error_code: 'IMAGE_REGISTRY_UNAVAILABLE', error_message: 'The container image registry is unavailable.' };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -2585,16 +2560,16 @@ describe('EnvPortForwardsPage', () => {
 
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-retry"]')).toBeTruthy());
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Retry')?.click();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-retry"] button')).find((button) => button.textContent?.trim() === 'Start')?.click();
 
-    await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith('Service retry failed', 'The image registry is unavailable. Check the network connection, then retry.'));
+    await waitForAssertion(() => expect(notificationMocks.error).toHaveBeenCalledWith('Failed to start service', 'The image registry is unavailable. Check the network connection, then retry.'));
     expect(host.querySelector('[data-testid="managed-service-operation-trigger"]')?.textContent).toContain('Failed');
     expect(host.querySelector('[data-testid="managed-operation-disclosure"]')?.getAttribute('data-presentation-state')).toBe('visible');
     expect(notificationMocks.error).not.toHaveBeenCalledWith('Failed to open service', expect.anything());
   });
 
   it('uninstalls a managed service while retaining its data by default', async () => {
-    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected' as const, release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected' as const, release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-forward', runtime_port: 3080 };
     let removed = false;
     let operationBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -2606,6 +2581,7 @@ describe('EnvPortForwardsPage', () => {
         removed = true;
         return { operation_id: 'mop-uninstall', service_id: 'mws-1', state: 'pending', stage: 'stopping', progress_current: 0, progress_total: 7 };
       }
+      if (url.endsWith('/management-plans')) return { plan_digest: 'reviewed-plan', request: JSON.parse(String(init?.body)), path: 'uninstall', blockers: [], facts: { presence: 'present', runtime: 'running', checked_at_unix_ms: 1, resources: [] } };
       throw new Error(`Unexpected local API call: ${url}`);
     });
     localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-uninstall', service_id: 'mws-1', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
@@ -2613,24 +2589,23 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
+    const drawer = host.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
     await flushPage();
-    const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
-      .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
-    const uninstall = Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
-      .find((button) => button.textContent?.trim() === 'Uninstall');
-    uninstall?.click();
-
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: false }));
-    expect(operationBody).not.toHaveProperty('delete_workspace');
-    await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalledWith('Managed service uninstalled', expect.any(String)));
+    const confirm = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.textContent?.trim() === 'Keep data and complete uninstall').at(-1)!;
+    await waitForAssertion(() => expect(confirm.disabled).toBe(false));
+    confirm.click();
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
+    expect(operationBody).not.toMatchObject({ delete_data: true });
+    expect(operationBody).not.toMatchObject({ delete_workspace: true });
   });
 
-  it('uses one destructive choice to delete managed data and the workspace', async () => {
+  it('deletes service data without implicitly deleting the workspace', async () => {
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
       { state: 'ready', loading: false, error: null },
     );
-    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected' as const, release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', forward_id: 'managed-forward', runtime_port: 3080 };
+    const service = { service_id: 'mws-1', template_id: 'example-service', deployment: 'host', workspace_path: '/workspace', workspace_ownership: 'user_selected' as const, release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'managed-forward', runtime_port: 3080 };
     let operationBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [] };
@@ -2640,6 +2615,7 @@ describe('EnvPortForwardsPage', () => {
         operationBody = JSON.parse(String(init.body));
         return { operation_id: 'mop-delete', service_id: 'mws-1', state: 'pending', stage: 'stopping', progress_current: 0, progress_total: 7 };
       }
+      if (url.endsWith('/management-plans')) return { plan_digest: 'reviewed-plan', request: JSON.parse(String(init?.body)), path: 'uninstall', blockers: [], facts: { presence: 'present', runtime: 'running', checked_at_unix_ms: 1, resources: [] } };
       throw new Error(`Unexpected local API call: ${url}`);
     });
     localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-delete', service_id: 'mws-1', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
@@ -2647,27 +2623,20 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
+    const drawer = host.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
+    const label = Array.from(drawer.querySelectorAll('label')).find((item) => item.textContent?.includes('Delete service data'))!;
+    label.querySelector<HTMLInputElement>('input')?.click();
     await flushPage();
-    const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    expect(checkbox?.disabled).toBe(false);
-    checkbox?.click();
-    await flushPage();
-    expect(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(1);
-    expect(host.textContent).toContain('The workspace directory and everything in it will also be deleted: /workspace');
-    const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
-      .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
-    Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
-      .find((button) => button.textContent?.trim() === 'Uninstall')?.click();
-    await flushPage();
-    expect(operationBody).toBeNull();
-    expect(host.textContent).toContain('This permanently deletes');
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data and workspace')?.click();
-
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true }));
-    expect(operationBody).not.toHaveProperty('delete_workspace');
+    const confirm = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
+    await waitForAssertion(() => expect(confirm.disabled).toBe(false));
+    confirm.click();
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
+    expect(operationBody).toMatchObject({ delete_data: true });
+    expect(operationBody).not.toMatchObject({ delete_workspace: true });
   });
 
-  it('uses the same single deletion choice for a Redeven-created workspace', async () => {
+  it('deletes the workspace independently from service data', async () => {
     envContextMocks.env = Object.assign(
       () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }),
       { state: 'ready', loading: false, error: null },
@@ -2675,7 +2644,7 @@ describe('EnvPortForwardsPage', () => {
     const service = {
       service_id: 'mws-dedicated', template_id: 'example-service', deployment: 'host',
       workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service', workspace_ownership: 'redeven_created' as const,
-      release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running',
+      release_status: releaseStatus('npm', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', primary_action: 'stop',
       forward_id: 'managed-forward', runtime_port: 3080,
     };
     let operationBody: Record<string, unknown> | null = null;
@@ -2687,6 +2656,7 @@ describe('EnvPortForwardsPage', () => {
         operationBody = JSON.parse(String(init.body));
         return { operation_id: 'mop-delete-dedicated', service_id: service.service_id, state: 'pending', stage: 'stopping', progress_current: 0, progress_total: 7 };
       }
+      if (url.endsWith('/management-plans')) return { plan_digest: 'reviewed-plan', request: JSON.parse(String(init?.body)), path: 'uninstall', blockers: [], facts: { presence: 'present', runtime: 'running', checked_at_unix_ms: 1, resources: [] } };
       throw new Error(`Unexpected local API call: ${url}`);
     });
     localApiMocks.fetchLocalApi.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-delete-dedicated', service_id: service.service_id, state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
@@ -2694,20 +2664,17 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')).toBeTruthy());
     host.querySelector<HTMLButtonElement>('button[title="Uninstall"]')?.click();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
+    const drawer = host.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
+    const label = Array.from(drawer.querySelectorAll('label')).find((item) => item.textContent?.includes('Delete workspace'))!;
+    label.querySelector<HTMLInputElement>('input')?.click();
     await flushPage();
-    host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-    await flushPage();
-    expect(host.textContent).toContain('The workspace directory and everything in it will also be deleted');
-    expect(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(1);
-    const uninstallDialog = Array.from(host.querySelectorAll<HTMLHeadingElement>('h2'))
-      .find((heading) => heading.textContent?.trim() === 'Uninstall managed service')?.parentElement;
-    Array.from(uninstallDialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
-      .find((button) => button.textContent?.trim() === 'Uninstall')?.click();
-    await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Delete data and workspace')?.click();
-
-    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', delete_data: true }));
-    expect(operationBody).not.toHaveProperty('delete_workspace');
+    const confirm = Array.from(drawer.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.textContent?.trim() === 'Uninstall').at(-1)!;
+    await waitForAssertion(() => expect(confirm.disabled).toBe(false));
+    confirm.click();
+    await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'uninstall', plan_digest: 'reviewed-plan' }));
+    expect(operationBody).not.toMatchObject({ delete_data: true });
+    expect(operationBody).toMatchObject({ delete_workspace: true });
   });
 
   it('uses Web Services copy for the product surface', async () => {

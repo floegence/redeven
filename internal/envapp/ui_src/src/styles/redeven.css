@@ -113,6 +113,15 @@
   width: min(62rem, calc(100vw - 4rem));
 }
 
+[data-floe-dialog-overlay-root][data-floe-dialog-mode="surface"] [data-floe-dialog-panel].env-app-drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(58rem, 100%);
+  max-width: 100%;
+}
+
 [data-floe-dialog-overlay-root]:has(.env-app-drawer-panel) > :not([data-floe-dialog-backdrop]) {
   pointer-events: none;
 }

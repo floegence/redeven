@@ -164,7 +164,10 @@ func TestRegistryHookUpgradePreservesInstancesRoutesAndHistory(t *testing.T) {
 	if err := old.CreateManagedServiceWithOperation(context.Background(), service, Forward{ForwardID: service.ForwardID, TargetURL: "http://127.0.0.1:3080/retained", AccessMode: AccessModeUnifiedProxy}, operation); err != nil {
 		t.Fatal(err)
 	}
-	beforeService, _ := old.GetManagedService(context.Background(), service.ServiceID)
+	beforeService := &ManagedService{}
+	if err := scanManagedService(old.db.QueryRow(`SELECT `+strings.TrimSuffix(managedServiceSelectColumns, ",management_state,archived_forward_json")+`,'active','{}' FROM managed_web_services WHERE service_id=?`, service.ServiceID), beforeService); err != nil {
+		t.Fatal(err)
+	}
 	beforeForward, _ := old.GetForward(context.Background(), service.ForwardID)
 	beforeOperation, _ := old.GetManagedOperation(context.Background(), operation.OperationID)
 	if err := old.Close(); err != nil {
@@ -178,6 +181,7 @@ func TestRegistryHookUpgradePreservesInstancesRoutesAndHistory(t *testing.T) {
 	afterService, _ := current.GetManagedService(context.Background(), service.ServiceID)
 	afterForward, _ := current.GetForward(context.Background(), service.ForwardID)
 	afterOperation, _ := current.GetManagedOperation(context.Background(), operation.OperationID)
+	beforeService.ManagementState, beforeService.ArchivedForwardJSON = "active", "{}"
 	before, _ := json.Marshal([]any{beforeService, beforeForward, beforeOperation})
 	after, _ := json.Marshal([]any{afterService, afterForward, afterOperation})
 	if string(before) != string(after) || afterService.ConfigurationJSON != beforeService.ConfigurationJSON || afterService.RuntimeBindingJSON != beforeService.RuntimeBindingJSON {

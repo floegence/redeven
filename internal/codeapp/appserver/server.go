@@ -6108,6 +6108,17 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if access, ok := g.pf.(interface {
+		ForwardAccessContext(context.Context, string) (context.Context, func(), error)
+	}); ok {
+		requestCtx, release, err := access.ForwardAccessContext(r.Context(), forwardID)
+		if err != nil {
+			http.Error(w, "port forward no longer exists", http.StatusNotFound)
+			return
+		}
+		defer release()
+		r = r.WithContext(requestCtx)
+	}
 	targetURL, err := portforward.ParseTargetURL(strings.TrimSpace(fw.TargetURL))
 	if err != nil {
 		http.Error(w, "invalid port forward target", http.StatusInternalServerError)

@@ -34,11 +34,12 @@ type reconfigureRelease struct {
 }
 
 type reconfigureJournal struct {
-	Kind        string             `json:"kind"`
-	OperationID string             `json:"operation_id"`
-	Phase       string             `json:"phase"`
-	Old         reconfigureRelease `json:"old"`
-	Target      reconfigureRelease `json:"target"`
+	ConfigurationOnly bool               `json:"configuration_only,omitempty"`
+	Kind              string             `json:"kind"`
+	OperationID       string             `json:"operation_id"`
+	Phase             string             `json:"phase"`
+	Old               reconfigureRelease `json:"old"`
+	Target            reconfigureRelease `json:"target"`
 }
 
 type reconfigureRuntimeDriver interface {
@@ -69,7 +70,7 @@ func (e *reconfigureExecutionError) Unwrap() error {
 }
 
 func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, candidate reconfigureCandidate) (runErr error) {
-	if service.DesiredState != "stopped" || service.ObservedState != "stopped" {
+	if activeManagement(*service) && (service.DesiredState != "stopped" || (service.ObservedState != "stopped" && service.ObservedState != "missing")) {
 		return serviceError("RECONFIGURE_REQUIRES_STOPPED", "Stop the service before applying runtime settings.", 409, false, nil)
 	}
 	if candidate.Plan.ConfigurationRevision != service.ConfigurationRevision {
@@ -84,13 +85,13 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 		return bindingErr
 	}
 	journal := reconfigureJournal{
-		Kind: reconfigureJournalKind, OperationID: op.OperationID, Phase: reconfigurePhasePrepared,
+		Kind: reconfigureJournalKind, OperationID: op.OperationID, Phase: reconfigurePhasePrepared, ConfigurationOnly: !candidate.Plan.RequiresRebuild,
 		Old:    reconfigureRelease{ConfigurationJSON: service.ConfigurationJSON, ConfigurationSHA256: service.ConfigurationSHA256, Revision: service.ConfigurationRevision, RuntimeIdentity: service.RuntimeIdentity, RuntimeSpecSHA256: service.RuntimeSpecSHA256, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
 		Target: reconfigureRelease{ConfigurationJSON: candidate.JSON, ConfigurationSHA256: candidate.SHA256, Revision: service.ConfigurationRevision + 1, ArtifactReference: service.ArtifactReference, RuntimeBindingJSON: service.RuntimeBindingJSON, RuntimeBindingSHA256: service.RuntimeBindingSHA256},
 	}
 	var oldResolved *resolvedRuntime
-	if binding.Deployment != DeploymentHost {
-		oldResolved, err = m.resolveCurrentRuntime(ctx, service)
+	if !journal.ConfigurationOnly && binding.Deployment != DeploymentHost {
+		oldResolved, err = m.resolveRuntimeDefinition(ctx, service)
 		if err != nil {
 			return err
 		}
@@ -129,7 +130,7 @@ func (m *Manager) runReconfigure(ctx context.Context, service *pfregistry.Manage
 
 	// Host services have no persistent Runtime resource to rebuild. Their
 	// scripts become authoritative only for the next matching lifecycle action.
-	if binding.Deployment == DeploymentHost {
+	if journal.ConfigurationOnly || binding.Deployment == DeploymentHost {
 		m.progress(op, "applying_configuration", 5)
 		if err := m.writeServiceSecretDocument(service.ServiceID, candidate.Secrets); err != nil {
 			return err
@@ -271,7 +272,7 @@ func (m *Manager) rollbackReconfigure(ctx context.Context, service *pfregistry.M
 	if bindingErr != nil {
 		return bindingErr
 	}
-	if binding.Deployment == DeploymentHost {
+	if journal.ConfigurationOnly || binding.Deployment == DeploymentHost {
 		empty := "{}"
 		if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeManifestJSON: &empty}); err != nil {
 			return err
@@ -395,4 +396,18 @@ func (m *Manager) recoverInterruptedReconfigure(service *pfregistry.ManagedServi
 		return m.registry.FinalizeManagedOperation(context.Background(), *operation, pfregistry.ManagedServicePatch{LastErrorCode: &blank, LastErrorMessage: &blank})
 	}
 	return m.rollbackReconfigure(context.Background(), service, journal, driver)
+}
+
+// Archived records may finish local configuration bookkeeping, never business
+// lifecycle recovery. Empty manifests cover an already committed configuration.
+func configurationOnlyRecovery(service *pfregistry.ManagedService, operation *pfregistry.ManagedOperation) bool {
+	if operation == nil || operation.Action != string(ActionReconfigure) {
+		return false
+	}
+	raw := strings.TrimSpace(service.RuntimeManifestJSON)
+	if raw == "" || raw == "{}" {
+		return true
+	}
+	journal, err := decodeReconfigureJournal(raw)
+	return err == nil && journal.ConfigurationOnly
 }

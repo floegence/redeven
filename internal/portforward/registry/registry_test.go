@@ -47,7 +47,7 @@ func TestOpenCreatesFreshRegistryV2Baseline(t *testing.T) {
 		"configuration_revision", "configuration_sha256", "release_identity_json", "release_identity_sha256",
 		"runtime_binding_json", "runtime_binding_sha256", "desired_state", "observed_state", "forward_id",
 		"runtime_identity", "runtime_spec_sha256", "runtime_manifest_json", "runtime_port", "artifact_reference",
-		"last_error_code", "last_error_message", "created_at_unix_ms", "updated_at_unix_ms",
+		"last_error_code", "last_error_message", "created_at_unix_ms", "updated_at_unix_ms", "management_state", "archived_forward_json",
 	}
 	if !slices.Equal(columns, want) {
 		t.Fatalf("managed_web_services columns = %v, want %v", columns, want)

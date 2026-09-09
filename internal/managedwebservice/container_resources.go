@@ -75,6 +75,7 @@ func (m *Manager) ContainerResourceOwner(ctx context.Context, engine containeren
 	}
 	for index := range services {
 		service := &services[index]
+ if !activeManagement(*service) {continue}
 		owned, err := m.serviceOwnsContainerResource(ctx, service, kind, identity)
 		if err != nil {
 			return nil, err
@@ -92,12 +93,7 @@ func (m *Manager) serviceOwnsContainerResource(ctx context.Context, service *pfr
 	if service == nil {
 		return false, nil
 	}
-	resolved, err := m.resolveCurrentRuntime(ctx, service)
-	if err != nil {
-		return false, err
-	}
-	resolved.applyTo(service)
-	deployment := resolved.Template.Deployment
+ binding,err:=decodeRuntimeBinding(service);if err!=nil{return false,err};deployment:=binding.Deployment
 	switch kind {
 	case ContainerResourceContainer:
 		if deployment == DeploymentContainer && strings.TrimSpace(service.RuntimeIdentity) == identity {

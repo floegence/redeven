@@ -16,11 +16,11 @@ import (
 )
 
 func (m *Manager) Settings(ctx context.Context, serviceID string) (*ServiceSettingsView, error) {
-	service, forward, err := m.serviceAndForward(ctx, serviceID)
+	service, forward, err := m.serviceSettingsRecord(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := m.resolveCurrentRuntime(ctx, service)
+	resolved, err := m.resolveRuntimeDefinition(ctx, service)
 	if err != nil {
 		return nil, err
 	}
@@ -38,8 +38,12 @@ func (m *Manager) Settings(ctx context.Context, serviceID string) (*ServiceSetti
 		ServiceID: service.ServiceID, Name: forward.Name, Description: forward.Description, AccessMode: forward.AccessMode,
 		Deployment: resolved.Template.Deployment, TemplateSource: resolved.Template.Source, ObservedState: service.ObservedState,
 		ConfigurationRevision: service.ConfigurationRevision, ConfigurationSHA256: service.ConfigurationSHA256,
-		Parameters: cloneStringMap(configuration.Parameters),
+		Parameters: cloneStringMap(configuration.Parameters), ManagementState: service.ManagementState, ParameterDefinitions: spec.Parameters,
 	}
+	for name := range secrets.Parameters {
+		view.ConfiguredSecretParameters = append(view.ConfiguredSecretParameters, name)
+	}
+	sort.Strings(view.ConfiguredSecretParameters)
 	if spec.Container != nil {
 		runtime := containerRuntimeSettingsFromSpec(*spec.Container, secretNames)
 		markConfiguredSecrets(runtime.Environment, secrets.Environment)
@@ -69,9 +73,12 @@ func markConfiguredSecrets(settings []EnvironmentSetting, values map[string]stri
 }
 
 func (m *Manager) UpdateSettings(ctx context.Context, serviceID string, patch ServiceMetadataPatch) (*ServiceSettingsView, error) {
-	service, forward, err := m.serviceAndForward(ctx, serviceID)
+	service, forward, err := m.serviceSettingsRecord(ctx, serviceID)
 	if err != nil {
 		return nil, err
+	}
+	if !activeManagement(*service) {
+		return nil, serviceError("SERVICE_NOT_ACTIVE", "Restore management before changing the service entry.", 409, true, nil)
 	}
 	name := strings.TrimSpace(patch.Name)
 	if !templateNamePattern.MatchString(name) {
@@ -84,7 +91,7 @@ func (m *Manager) UpdateSettings(ctx context.Context, serviceID string, patch Se
 	if mode != pfregistry.AccessModeUnifiedProxy && mode != pfregistry.AccessModeDesktopLoopback {
 		return nil, serviceError("ACCESS_MODE_INVALID", "The Web Service access mode is invalid.", 400, false, nil)
 	}
-	resolved, err := m.resolveCurrentRuntime(ctx, service)
+	resolved, err := m.resolveRuntimeDefinition(ctx, service)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +106,24 @@ func (m *Manager) UpdateSettings(ctx context.Context, serviceID string, patch Se
 	return m.Settings(ctx, service.ServiceID)
 }
 
+func (m *Manager) serviceSettingsRecord(ctx context.Context, id string) (*pfregistry.ManagedService, *pfregistry.Forward, error) {
+	service, err := m.registry.GetManagedService(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if service == nil {
+		return nil, nil, serviceError("SERVICE_NOT_FOUND", "The service record was not found.", 404, false, nil)
+	}
+	if activeManagement(*service) {
+		return m.serviceAndForward(ctx, id)
+	}
+	var forward pfregistry.Forward
+	if err := json.Unmarshal([]byte(service.ArchivedForwardJSON), &forward); err != nil {
+		return nil, nil, err
+	}
+	return service, &forward, nil
+}
+
 func (m *Manager) serviceAndForward(ctx context.Context, serviceID string) (*pfregistry.ManagedService, *pfregistry.Forward, error) {
 	service, err := m.registry.GetManagedService(ctx, strings.TrimSpace(serviceID))
 	if err != nil {
@@ -106,6 +131,9 @@ func (m *Manager) serviceAndForward(ctx context.Context, serviceID string) (*pfr
 	}
 	if service == nil {
 		return nil, nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
+	}
+	if !activeManagement(*service) {
+		return nil, nil, serviceError("SERVICE_NOT_ACTIVE", "Restore management before opening this service.", 409, false, nil)
 	}
 	forward, err := m.registry.GetForward(ctx, service.ForwardID)
 	if err != nil {
@@ -127,7 +155,7 @@ type reconfigureCandidate struct {
 }
 
 func (m *Manager) PreflightReconfigure(ctx context.Context, serviceID string, draft ReconfigureDraft) (*ReconfigurePlan, error) {
-	service, _, err := m.serviceAndForward(ctx, serviceID)
+	service, _, err := m.serviceSettingsRecord(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +170,7 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 	if draft.ConfigurationRevision != service.ConfigurationRevision {
 		return reconfigureCandidate{}, serviceError("CONFIGURATION_REVISION_CONFLICT", "Service settings changed after this drawer was opened. Reload the latest settings.", 409, true, nil)
 	}
-	resolved, err := m.resolveCurrentRuntime(ctx, service)
+	resolved, err := m.resolveRuntimeDefinition(ctx, service)
 	if err != nil {
 		return reconfigureCandidate{}, err
 	}
@@ -155,11 +183,26 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		return reconfigureCandidate{}, err
 	}
 	configuration := current
-	configuration.Parameters = cloneStringMap(draft.Parameters)
+
 	secretDocument, err := m.serviceSecretDocument(service.ServiceID)
 	if err != nil {
 		return reconfigureCandidate{}, err
 	}
+	parameters := cloneStringMap(draft.Parameters)
+	if parameters == nil {
+		parameters = map[string]string{}
+	}
+	for name, value := range secretDocument.Parameters {
+		parameters[name] = value
+	}
+	for name, value := range draft.SecretParameters {
+		parameters[name] = value
+	}
+	validated, private, err := resolveTemplateInputs(baseline, parameters, current.AcceptedNoticeRevisions)
+	if err != nil {
+		return reconfigureCandidate{}, err
+	}
+	configuration.Parameters, secretDocument.Parameters = validated.Parameters, private
 	if secretDocument.Environment == nil {
 		secretDocument.Environment = map[string]string{}
 	}
@@ -184,7 +227,7 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		if baseline.Host == nil || draft.Runtime.Host == nil {
 			return reconfigureCandidate{}, serviceError("HOST_CONFIGURATION_REQUIRED", "Host lifecycle settings are required for this service.", 400, false, nil)
 		}
-		if resolved.Template.Source == "builtin" {
+		if resolved.Template.Source == "builtin" && (draft.Runtime.Host.InstallScript != baseline.Host.InstallScript || draft.Runtime.Host.StartScript != baseline.Host.StartScript || draft.Runtime.Host.StopScript != baseline.Host.StopScript || draft.Runtime.Host.UninstallScript != baseline.Host.UninstallScript) {
 			return reconfigureCandidate{}, serviceError("BUILTIN_LIFECYCLE_LOCKED", "Duplicate this built-in template before editing lifecycle scripts.", 409, false, nil)
 		}
 		override := diffHostSettings(*baseline.Host, *draft.Runtime.Host)
@@ -227,8 +270,16 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		changed = append(changed, "parameters")
 	}
 	sort.Strings(changed)
+	rebuild := activeManagement(*service) && resolved.Template.Deployment != DeploymentHost
+	if rebuild {
+		facts, err := m.inspectService(ctx, service, false)
+		if err != nil {
+			return reconfigureCandidate{}, err
+		}
+		rebuild = facts.Presence != "absent"
+	}
 	runtimePlanDigest := ""
-	if spec.Container != nil && m.containers != nil {
+	if rebuild && spec.Container != nil && m.containers != nil {
 		driver := &containerTemplateDriver{manager: m, adapter: m.containers}
 		mounts, err := driver.containerMountsForPreflight(ctx, service, spec.Container.Mounts)
 		if err != nil {
@@ -245,7 +296,7 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		}
 		runtimePlanDigest = resourcePlan.PlanDigest
 	}
-	plan := ReconfigurePlan{ConfigurationRevision: service.ConfigurationRevision, PlanDigest: configurationPlanDigest(service.ServiceID, service.ConfigurationRevision, encoded, hex.EncodeToString(secretHash[:])+"\n"+runtimePlanDigest), ChangedSections: changed, Risks: risks, RequiresRebuild: true}
+	plan := ReconfigurePlan{ConfigurationRevision: service.ConfigurationRevision, PlanDigest: configurationPlanDigest(service.ServiceID, service.ConfigurationRevision, encoded, hex.EncodeToString(secretHash[:])+"\n"+runtimePlanDigest+fmt.Sprint(rebuild)+service.ManagementState+service.RuntimeIdentity), ChangedSections: changed, Risks: risks, RequiresRebuild: rebuild}
 	return reconfigureCandidate{Configuration: configuration, JSON: encoded, SHA256: digest, Secrets: secretDocument, Spec: spec, Plan: plan}, nil
 }
 

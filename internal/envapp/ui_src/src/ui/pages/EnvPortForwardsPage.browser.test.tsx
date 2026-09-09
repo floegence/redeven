@@ -773,7 +773,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(new Set(narrowHeights).size).toBe(1);
   });
 
-  it('keeps a failed managed service dense and its retry action on one line', async () => {
+  it('keeps an ownership conflict dense with a direct review action', async () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');
     host.style.width = '1024px';
@@ -792,6 +792,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
           release_status: releaseStatus('oci', '0.1.1-rc.2'),
           desired_state: 'running',
           observed_state: 'error',
+		  status: 'confirmation_required', primary_action: 'inspect',
           forward_id: 'pf-failed',
           runtime_port: 3000,
           last_failure: { action: 'start', stage: 'failed', error_code: 'CONTAINER_NAME_MISMATCH', message: 'raw backend identity detail' },
@@ -812,19 +813,16 @@ describe('EnvPortForwardsPage browser presentation', () => {
 
     const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
     const retryButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Retry')!;
+      .find((button) => button.textContent?.trim() === 'Review and resolve')!;
 
     expect(retryButton).toBeTruthy();
-    expect(retryButton.querySelector('svg')).toBeNull();
+    expect(retryButton.disabled).toBe(false);
     expect(row.textContent).not.toContain('Failed');
     expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(72);
     expect(getComputedStyle(retryButton).whiteSpace).toBe('nowrap');
     expect(retryButton.scrollHeight).toBeLessThanOrEqual(retryButton.clientHeight);
-    const failureButton = row.querySelector<HTMLButtonElement>('button[aria-label="Show failure details"]')!;
-    failureButton.focus();
-    await new Promise((resolve) => window.setTimeout(resolve, 350));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('The container name no longer matches this managed service.');
-    expect(document.querySelector('[role="tooltip"]')?.textContent).not.toContain('raw backend identity detail');
+	 expect(row.textContent).toContain('Confirmation needed');
+	 expect(row.textContent).not.toContain('raw backend identity detail');
   });
 
   it('replaces a stale service error with contextual operation progress and details', async () => {

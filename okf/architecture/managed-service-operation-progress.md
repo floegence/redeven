@@ -22,7 +22,7 @@ The concurrent Reporter owns every mutation to an in-flight progress document. H
 
 The retained tail is at most 400 lines and 128 KiB, with at most 4 KiB per line and at most 64 commands. ANSI sequences and unsafe control characters are removed. Known Secret values, authorization fields, credential-shaped values, sensitive URL query values, the Manager state root, and the service workspace are replaced before any persistence, event publication, or service-log write. A truncation fact tells the UI that older content was removed; it does not reconstruct discarded output.
 
-Uninstall keeps operation metadata, command templates, state, timing, error code, and retry lineage for audit, but clears output text for every operation owned by that service in the same transaction that finalizes uninstall. Failed uninstall retains the current records and output so explicit retry has the same observable context.
+Uninstall keeps operation metadata, command templates, state, timing, error code, and retry lineage for audit, but clears output text for every operation owned by that service in the same transaction that finalizes uninstall. Failed uninstall retains current records and output; the [management review](service-management-recovery.md) presents completed and pending resources before a new confirmed continuation.
 
 ## Service-row interaction
 
@@ -42,7 +42,7 @@ Operation output is observability data, not a terminal, shell, downloadable tran
 - `redeven:internal/managedwebservice/npm_host.go` - Streams real npm install and rebuild output through the Reporter.
 - `redeven:internal/managedwebservice/custom_host.go` - Streams Host lifecycle output through one collector and closes commands with their actual result.
 - `redeven:internal/portforward/registry/managed.go` - Canonicalizes progress v2 and clears service output bodies during uninstall finalization.
-- `redeven:internal/portforward/registry/schema.go` - Migrates progress v1 to v2 atomically in Registry v5.
+- `redeven:internal/portforward/registry/schema.go` - Verifies the canonical progress document inside the permanent Registry lineage.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Owns operation-ID disclosure state and the bounded bottom-follow output viewport.
 - `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.ts` - Owns minimum visibility, terminal retention, expansion-aware exit, and presentation replacement.
 - `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceOperationPresentation.test.ts` - Verifies brief success timing, expanded-detail retention, attention states, and replacement.

@@ -17,7 +17,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v2"
-	registryCurrentSchemaVersion = 3
+	registryCurrentSchemaVersion = 4
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -31,8 +31,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryV3ToV4},
 		},
-		Verify: verifyRegistryV3,
+		Verify: func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 4) },
 	}
 }
 
@@ -66,8 +67,10 @@ func initializeCurrentRegistry(tx *sql.Tx) error {
 	if err := initializeRegistryV1(tx); err != nil {
 		return err
 	}
-	_, err := tx.Exec(addDefaultAppPath)
-	return err
+	if _, err := tx.Exec(addDefaultAppPath); err != nil {
+		return err
+	}
+	return applyManagementSchema(tx)
 }
 
 func initializeRegistryV1(tx *sql.Tx) error {
@@ -229,6 +232,11 @@ func verifyRegistryShape(tx *sql.Tx, version int) error {
 			return err
 		}
 	}
+	if version >= 4 {
+		if err := applyManagementSchema(expected); err != nil {
+			return err
+		}
+	}
 	read := func(source *sql.Tx) ([]string, error) {
 		rows, err := source.Query(`SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__redeven_db_meta' ORDER BY type, name`)
 		if err != nil {
@@ -290,6 +298,10 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	if version >= 2 {
 		wantColumns["port_forwards"] = append(wantColumns["port_forwards"], "default_app_path")
 	}
+	if version >= 4 {
+		wantColumns["managed_web_services"] = append(wantColumns["managed_web_services"], "management_state", "archived_forward_json")
+		wantColumns["managed_web_service_resources"] = append(wantColumns["managed_web_service_resources"], "stable_identity", "ownership")
+	}
 	for table, want := range wantColumns {
 		got, err := sqliteutil.TableColumnNamesTx(tx, table)
 		if err != nil {
@@ -303,8 +315,13 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	if err != nil {
 		return err
 	}
-	if len(indexes) != 0 {
+	if (version < 4 && len(indexes) != 0) || (version >= 4 && !slices.Equal(indexes, []string{"managed_web_services_active_template"})) {
 		return fmt.Errorf("port forward registry v2 has unexpected indexes %v", indexes)
+	}
+	if version >= 4 {
+		if err := verifyManagementDocuments(tx); err != nil {
+			return err
+		}
 	}
 	if err := verifyRegistryDocuments(tx); err != nil {
 		return err
@@ -571,7 +588,7 @@ func verifyRuntimeBindingV2(serviceID, raw string) error {
 		instanceRoot := path.Join("instances", serviceID)
 		if binding.Host == nil || binding.Container != nil || binding.Compose != nil ||
 			binding.Host.InstallRoot != path.Join(instanceRoot, "install") ||
-			binding.Host.DataRoot != path.Join("families", binding.ServiceFamilyID, "data") ||
+			(binding.Host.DataRoot != path.Join("families", binding.ServiceFamilyID, "data") && binding.Host.DataRoot != path.Join(instanceRoot, "data")) ||
 			binding.Host.LogPath != path.Join(instanceRoot, "logs", "service.log") {
 			return fmt.Errorf("runtime binding %s host identity is invalid", serviceID)
 		}

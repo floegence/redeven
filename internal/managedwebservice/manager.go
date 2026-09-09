@@ -68,6 +68,7 @@ type Manager struct {
 	managementCancel  context.CancelFunc
 	maintenanceCancel context.CancelFunc
 	openFlights       singleflight.Group
+	installPlans      map[string]cachedInstallPlan
 	closed            bool
 }
 
@@ -135,6 +136,9 @@ func (m *Manager) Start(ctx context.Context) {
 		latest, latestErr := m.registry.GetLatestManagedOperation(ctx, service.ServiceID)
 		if latestErr != nil {
 			m.log.Error("read managed Web Service recovery operation", "service_id", service.ServiceID, "cause", safeManagedFailureCause(latestErr))
+			continue
+		}
+		if pendingUninstall(&service) || (!activeManagement(service) && !configurationOnlyRecovery(&service, latest)) {
 			continue
 		}
 		if latest != nil && latest.State == "interrupted" {
@@ -289,16 +293,16 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 	out := make([]ServiceView, 0, len(services))
 	for _, service := range services {
 		forward, ok := forwardByID[service.ForwardID]
-		if !ok {
+		if !ok && activeManagement(service) {
 			return nil, serviceError("FORWARD_NOT_FOUND", "The managed Web Service route is unavailable.", 409, false, nil)
 		}
 		active, err := m.registry.GetActiveManagedOperation(ctx, service.ServiceID)
 		if err != nil {
 			return nil, err
 		}
-		var observationErr error
+		facts, observationErr := m.inspectService(ctx, &service, false)
 		if active == nil {
-			_, observationErr = m.observe(ctx, &service)
+			_, observationErr = m.applyObservation(ctx, &service, facts, observationErr)
 		}
 		var lastFailure *ServiceFailure
 		var latestFailure *pfregistry.ManagedOperation
@@ -336,6 +340,21 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			AccessMode:         forward.AccessMode,
 			ContainerResources: containerResourceLinks(service, deployment),
 			Actions:            serviceActionCapabilities(service, resolved, active, latestFailure),
+		}
+		view.Facts = facts
+		view.Status, view.PrimaryAction, view.ProblemCode = servicePresentation(service, view.Facts, active, latestFailure)
+		if active == nil && activeManagement(service) && facts.Presence == "absent" && !pendingUninstall(&service) {
+			unfinished, err := m.registry.GetUnresolvedManagedUninstall(ctx, service.ServiceID)
+			if err != nil {
+				return nil, err
+			}
+			if unfinished != nil {
+				view.Status, view.PrimaryAction = "uninstall_pending", "inspect"
+			}
+		}
+		if view.PrimaryAction == "start" && !view.Actions.Start.Available {
+			view.PrimaryAction = "inspect"
+			view.ProblemCode = "CURRENT_TEMPLATE_INVALID"
 		}
 		view.PendingChanges = resolved != nil && service.RuntimeSpecSHA256 != "" && service.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256
 		view.Opening.State = "unavailable"
@@ -439,48 +458,68 @@ func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry
 	return service.TemplateID, ""
 }
 
-func serviceActionCapabilities(service pfregistry.ManagedService, runtime *resolvedRuntime, active, failure *pfregistry.ManagedOperation) ServiceActions {
-	unavailable := func(code string) ActionCapability { return ActionCapability{ReasonCode: code} }
-	actions := ServiceActions{
-		Open: unavailable("SERVICE_NOT_RUNNING"), RestoreManagement: unavailable("HOST_RECOVERY_NOT_REQUIRED"),
-		Start: unavailable("SERVICE_STATE_UNAVAILABLE"), Stop: unavailable("SERVICE_STATE_UNAVAILABLE"),
-		Restart: unavailable("SERVICE_STATE_UNAVAILABLE"), Retry: unavailable("NO_RETRYABLE_FAILURE"),
-	}
+func serviceActionCapabilities(service pfregistry.ManagedService, runtime *resolvedRuntime, active, _ *pfregistry.ManagedOperation) ServiceActions {
+	no := func(code string) ActionCapability { return ActionCapability{ReasonCode: code} }
+	yes := ActionCapability{Available: true}
+	actions := ServiceActions{Inspect: yes, Uninstall: yes, Detach: yes, Open: no("SERVICE_NOT_RUNNING"), Start: no("SERVICE_STATE_UNAVAILABLE"), Stop: no("SERVICE_STATE_UNAVAILABLE"), Restart: no("SERVICE_STATE_UNAVAILABLE"), Retry: no("REVIEW_REQUIRED"), RestoreManagement: no("RECOVERY_NOT_REQUIRED"), Recover: yes}
 	if active != nil {
-		busy := unavailable("OPERATION_ACTIVE")
-		return ServiceActions{Start: busy, Stop: busy, Restart: busy, Retry: busy, Open: busy, RestoreManagement: busy}
+		busy := no("OPERATION_ACTIVE")
+		actions.Uninstall, actions.Detach, actions.Recover, actions.Start, actions.Stop, actions.Restart, actions.Open, actions.RestoreManagement = busy, busy, busy, busy, busy, busy, busy, busy
+		return actions
+	}
+	if !activeManagement(service) {
+		actions.Detach = no("SERVICE_NOT_ACTIVE")
+		actions.Open = no("SERVICE_NOT_ACTIVE")
+		actions.RestoreManagement = yes
+		return actions
 	}
 	if service.ObservedState == "running" {
-		actions.Open = ActionCapability{Available: true}
+		actions.Open = yes
+	}
+	if service.ObservedState == "running" || service.ObservedState == "stopped" || service.ObservedState == "missing" {
+		actions.Stop = yes
+	}
+	if pendingUninstall(&service) {
+		return actions
+	}
+	if runtime != nil && service.ObservedState == "stopped" {
+		actions.Start = yes
+	}
+	if runtime != nil && (service.ObservedState == "running" || service.ObservedState == "stopped") {
+		actions.Restart = yes
 	}
 	if service.ObservedState == "unknown" && parseHostIdentity(service.RuntimeIdentity).version == "v2" {
-		actions.RestoreManagement = ActionCapability{Available: true}
-	}
-	bindingReady := runtime != nil
-	runtimeReady := strings.TrimSpace(service.RuntimeIdentity) != ""
-	if runtime != nil && runtime.Template.Deployment == DeploymentHost {
-		runtimeReady = runtime.Spec.Host != nil && ((runtime.Spec.Host.NPM == nil && runtime.Spec.Host.Artifact == nil) || strings.TrimSpace(service.ArtifactReference) != "")
-	}
-	if bindingReady && runtimeReady && service.ObservedState == "stopped" && service.LastErrorCode == "" {
-		actions.Start = ActionCapability{Available: true}
-	}
-	if bindingReady && runtimeReady && service.ObservedState == "running" {
-		actions.Stop = ActionCapability{Available: true}
-	}
-	if bindingReady && runtimeReady && (service.ObservedState == "running" || service.ObservedState == "error" || service.ObservedState == "stopped") {
-		actions.Restart = ActionCapability{Available: true}
-	}
-	if failure != nil {
-		switch OperationAction(failure.Action) {
-		case ActionInstall, ActionRetryInstall, ActionStart, ActionStop, ActionRestart, ActionUninstall:
-			actions.Retry = ActionCapability{Available: true}
-		case ActionUpdate:
-			actions.Retry = unavailable("RESELECT_RELEASE_REQUIRED")
-		case ActionReconfigure:
-			actions.Retry = unavailable("REFLIGHT_REQUIRED")
-		}
+		actions.RestoreManagement = yes
 	}
 	return actions
+}
+
+func servicePresentation(service pfregistry.ManagedService, facts ServiceFacts, active, _ *pfregistry.ManagedOperation) (string, string, string) {
+	if !activeManagement(service) {
+		return service.ManagementState, "inspect", ""
+	}
+	if active != nil {
+		return active.Stage, "inspect", ""
+	}
+	if pendingUninstall(&service) {
+		return "uninstall_pending", "inspect", facts.ProblemCode
+	}
+	if facts.Ownership == "conflict" {
+		return "confirmation_required", "inspect", facts.ProblemCode
+	}
+	if facts.Presence == "unknown" {
+		return "inspection_unavailable", "inspect", facts.ProblemCode
+	}
+	if facts.Presence == "absent" {
+		return "recovery_required", "recover", "INSTANCE_MISSING"
+	}
+	if facts.Runtime == "running" {
+		return "running", "stop", ""
+	}
+	if facts.Runtime == "stopped" {
+		return "stopped", "start", ""
+	}
+	return "transition", "inspect", facts.ProblemCode
 }
 
 func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult, error) {
@@ -540,6 +579,24 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	if req.Deployment != "" && req.Deployment != template.Deployment {
 		return nil, serviceError("DEPLOYMENT_INVALID", "The requested deployment type does not match the selected template.", 400, false, nil)
 	}
+	serviceID, err := randomID("mws")
+	if err != nil {
+		return nil, err
+	}
+	if req.PlanDigest != "" {
+		plan, err := m.reviewedInstall(req, *template)
+		if err != nil {
+			return nil, err
+		}
+		serviceID = plan.ServiceID
+	}
+	defaultWorkspace, err := m.defaultWorkspacePath(template.TemplateID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.WorkspacePath) == "" || filepath.Clean(req.WorkspacePath) == filepath.Clean(defaultWorkspace) {
+		req.WorkspacePath = filepath.Join(defaultWorkspace, strings.TrimPrefix(serviceID, "mws_"))
+	}
 	resolved, workspaceOwnership, err := m.resolveInstallWorkspace(strings.TrimSpace(req.WorkspacePath))
 	if err != nil {
 		return nil, err
@@ -577,10 +634,6 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 	}
 	if err != nil {
 		return nil, serviceError("PORT_UNAVAILABLE", "No loopback port is available for this managed Web Service.", 503, true, err)
-	}
-	serviceID, err := randomID("mws")
-	if err != nil {
-		return nil, err
 	}
 	forwardID, err := randomManagedForwardID()
 	if err != nil {
@@ -713,6 +766,9 @@ func releaseImageTag(reference string) string {
 
 func validateServiceFamilyAvailability(existingServices []pfregistry.ManagedService, template Template) error {
 	for _, existing := range existingServices {
+		if !activeManagement(existing) {
+			continue
+		}
 		binding, err := decodeRuntimeBinding(&existing)
 		if err != nil {
 			return err
@@ -746,14 +802,12 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	if err := validateRequestID(req.RequestID); err != nil {
 		return nil, err
 	}
-	if req.Action == ActionUninstall && req.DeleteData {
-		req.DeleteWorkspace = true
-	}
+
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
 	noticeJSON, _ := json.Marshal(req.AcceptedNoticeRevisions)
 	reconfigureJSON, _ := json.Marshal(req.Reconfigure)
-	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), fmt.Sprint(req.DeleteWorkspace), strings.TrimSpace(req.UpdatePlanID), string(noticeJSON), string(reconfigureJSON))
+	fingerprint := requestFingerprint("operate", strings.TrimSpace(serviceID), string(req.Action), fmt.Sprint(req.DeleteData), fmt.Sprint(req.DeleteWorkspace), strings.TrimSpace(req.UpdatePlanID), string(noticeJSON), string(reconfigureJSON), req.PlanDigest, fmt.Sprint(req.SkipHooks))
 	if existing, err := m.registry.GetManagedOperationByRequestID(ctx, req.RequestID); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -769,8 +823,12 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	if service == nil {
 		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
+	if active, err := m.registry.HasActiveManagedOperation(ctx, service.ServiceID); err != nil {
+		return nil, err
+	} else if active {
+		return nil, serviceError("OPERATION_CONFLICT", "Another operation is already running for this service.", 409, true, nil)
+	}
 	retryOfOperationID := ""
-	retryWorkspaceCleanupOnly := false
 	if req.Action == ActionRetry {
 		failure, failureErr := m.registry.GetLatestManagedOperationFailure(ctx, service.ServiceID)
 		if failureErr != nil {
@@ -784,28 +842,55 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 		retryOfOperationID = failure.OperationID
 		req.DeleteData = failure.DeleteData
 		req.DeleteWorkspace = failure.DeleteWorkspace
-		retryWorkspaceCleanupOnly = failure.Action == string(ActionUninstall) && isUninstallPostRuntimeFailure(failure.ErrorCode)
 	}
 	switch req.Action {
-	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUpdate, ActionReconfigure, ActionUninstall:
+	case ActionStart, ActionStop, ActionRestart, ActionRetryInstall, ActionUpdate, ActionReconfigure, ActionUninstall, ActionDetach, ActionRestore, ActionRecover:
 	default:
 		return nil, serviceError("ACTION_INVALID", "The managed Web Service action is invalid.", 400, false, nil)
 	}
 	if req.DeleteData && req.Action != ActionUninstall {
 		return nil, serviceError("REQUEST_INVALID", "delete_data is valid only for uninstall.", 400, false, nil)
 	}
-	if req.DeleteWorkspace && (req.Action != ActionUninstall || !req.DeleteData) {
-		return nil, serviceError("REQUEST_INVALID", "delete_workspace requires uninstall with delete_data.", 400, false, nil)
+	if req.DeleteWorkspace && req.Action != ActionUninstall {
+		return nil, serviceError("REQUEST_INVALID", "delete_workspace is valid only for uninstall.", 400, false, nil)
 	}
 	if (req.DeleteData || req.DeleteWorkspace) && !req.Administrator {
 		return nil, serviceError("ADMIN_REQUIRED", "Administrator permission is required to delete managed service data.", 403, false, nil)
+	}
+	if (req.Action == ActionDetach || req.SkipHooks) && !req.Administrator {
+		return nil, serviceError("ADMIN_REQUIRED", "Administrator permission is required for this recovery action.", 403, false, nil)
+	}
+	if !activeManagement(*service) && req.Action != ActionRestore && req.Action != ActionRecover && req.Action != ActionUninstall && req.Action != ActionReconfigure {
+		return nil, serviceError("SERVICE_NOT_ACTIVE", "Restore management before changing the service lifecycle.", 409, false, nil)
+	}
+	if pendingUninstall(service) && req.Action != ActionUninstall && req.Action != ActionDetach && req.Action != ActionRecover && req.Action != ActionStop {
+		return nil, serviceError("UNINSTALL_PENDING", "Review the unfinished uninstall before changing the service.", 409, true, nil)
+	}
+	var managementPlan *ManagementPlan
+	if requiresManagementPlan(req) {
+		managementPlan, err = m.managementPlan(ctx, service, ManagementPlanRequest{RetainResourceIDs: req.RetainResourceIDs, Action: req.Action, DeleteData: req.DeleteData, DeleteWorkspace: req.DeleteWorkspace, SkipHooks: req.SkipHooks})
+		if err != nil {
+			return nil, err
+		}
+		if err := validateManagementPlan(managementPlan, req); err != nil {
+			return nil, err
+		}
+	}
+	if req.Action == ActionStart || req.Action == ActionRestart {
+		facts, inspectErr := m.inspectService(ctx, service, false)
+		if inspectErr != nil {
+			return nil, inspectErr
+		}
+		if facts.Presence == "absent" {
+			return nil, serviceError("RECOVERY_REQUIRED", "The runtime instance no longer exists. Review recovery before recreating it.", 409, true, nil)
+		}
 	}
 	var reconfigure *reconfigureCandidate
 	if req.Action == ActionReconfigure {
 		if req.Reconfigure == nil {
 			return nil, serviceError("RECONFIGURE_REQUEST_REQUIRED", "Reconfigure settings are required.", 400, false, nil)
 		}
-		if service.DesiredState != "stopped" || service.ObservedState != "stopped" {
+		if activeManagement(*service) && (service.DesiredState != "stopped" || (service.ObservedState != "stopped" && service.ObservedState != "missing")) {
 			return nil, serviceError("RECONFIGURE_REQUIRES_STOPPED", "Stop the service before applying runtime settings.", 409, true, nil)
 		}
 		candidate, candidateErr := m.buildReconfigureCandidate(ctx, service, req.Reconfigure.Draft)
@@ -843,7 +928,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 					m.consumeUpdatePlan(req.UpdatePlanID)
 				}
 				m.mu.Unlock()
-				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, DeleteWorkspace: req.DeleteWorkspace, WorkspaceCleanupOnly: retryWorkspaceCleanupOnly, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
+				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, DeleteWorkspace: req.DeleteWorkspace, ManagementPlan: managementPlan, SkipHooks: req.SkipHooks, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
 				return &op, nil
 			}
 		}
@@ -891,9 +976,10 @@ func initialStage(action OperationAction) string {
 }
 
 type operationInputs struct {
+	ManagementPlan          *ManagementPlan
+	SkipHooks               bool
 	DeleteData              bool
 	DeleteWorkspace         bool
-	WorkspaceCleanupOnly    bool
 	AcceptedNoticeRevisions map[string]int64
 	Reconfigure             *reconfigureCandidate
 	Release                 *cachedReleaseCandidate
@@ -932,19 +1018,59 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 	}()
 	op.State = "running"
 	m.saveAndPublish(&op)
-	resolved, err := m.resolveCurrentRuntime(ctx, &service)
+	var resolved *resolvedRuntime
+	var err error
+	var driver deploymentDriver
+	if inputs.ManagementPlan != nil {
+		current, readErr := m.registry.GetManagedService(ctx, service.ServiceID)
+		if readErr != nil {
+			err = readErr
+		} else if current == nil {
+			err = serviceError("SERVICE_NOT_FOUND", "The service record was removed before execution.", 404, false, nil)
+		} else {
+			var fresh *ManagementPlan
+			fresh, err = m.managementPlan(ctx, current, inputs.ManagementPlan.Request)
+			if err == nil {
+				err = validateManagementPlan(fresh, OperationRequest{PlanDigest: inputs.ManagementPlan.PlanDigest})
+			}
+			if err == nil {
+				service = *current
+			}
+		}
+	}
 	if err != nil {
 		code, message, _, _ := ErrorDetails(err)
 		m.fail(&service, &op, code, message, err)
 		return
 	}
-	resolved.applyTo(&service)
-	driver := m.driver(resolved.Template.Deployment)
-	if err := m.prepareOperationWorkspace(&service, &op); err != nil {
+	if OperationAction(op.Action) == ActionDetach {
+		err = m.registry.ArchiveManagedService(ctx, service, "detached")
+		if err == nil {
+			service.ManagementState = "detached"
+			service.ForwardID = ""
+		}
+	} else {
+		binding, bindingErr := decodeRuntimeBinding(&service)
+		err = bindingErr
+		if err == nil {
+			driver = m.driver(binding.Deployment)
+		}
+		restoresExisting := op.Action == "recover" && inputs.ManagementPlan != nil && inputs.ManagementPlan.Path == "restore_management"
+		needsTemplate := op.Action != "stop" && op.Action != "uninstall" && op.Action != "restore" && op.Action != "reconfigure" && !restoresExisting
+		if err == nil && needsTemplate {
+			resolved, err = m.resolveCurrentRuntime(ctx, &service)
+			if err == nil {
+				resolved.applyTo(&service)
+				err = m.prepareOperationWorkspace(&service, &op)
+			}
+		}
+	}
+	if err != nil {
 		code, message, _, _ := ErrorDetails(err)
 		m.fail(&service, &op, code, message, err)
 		return
 	}
+	ctx = context.WithValue(ctx, skipManagementHooksKey{}, inputs.SkipHooks)
 	err = nil
 	switch OperationAction(op.Action) {
 	case ActionInstall, ActionRetryInstall:
@@ -982,8 +1108,26 @@ func (m *Manager) run(ctx context.Context, service pfregistry.ManagedService, op
 		} else {
 			err = m.runReconfigure(ctx, &service, &op, driver, *inputs.Reconfigure)
 		}
+	case ActionDetach:
+	case ActionRestore:
+		err = m.restoreArchivedManagement(ctx, &service)
+	case ActionRecover:
+		if inputs.ManagementPlan != nil && inputs.ManagementPlan.Path == "restore_management" {
+			err = m.restoreArchivedManagement(ctx, &service)
+		} else {
+			err = m.restoreArchivedManagement(ctx, &service)
+			if err == nil {
+				blank := ""
+				service.RuntimeIdentity = ""
+				service.RuntimeManifestJSON = "{}"
+				err = m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &blank, RuntimeManifestJSON: &service.RuntimeManifestJSON})
+			}
+			if err == nil {
+				err = m.runInstall(ctx, &service, &op, driver, resolved)
+			}
+		}
 	case ActionUninstall:
-		err = m.runUninstall(ctx, &service, &op, driver, inputs.DeleteData, inputs.DeleteWorkspace, inputs.WorkspaceCleanupOnly)
+		err = m.runManagementUninstall(ctx, &service, &op, driver, inputs.ManagementPlan)
 	}
 	reporter.Close()
 	if err != nil && m.isClosing() {
@@ -1189,49 +1333,6 @@ func (m *Manager) runStop(ctx context.Context, service *pfregistry.ManagedServic
 	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &stopped, LastErrorCode: &blank, LastErrorMessage: &blank})
 }
 
-func (m *Manager) runUninstall(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, deleteData, deleteWorkspace, workspaceCleanupOnly bool) error {
-	if !workspaceCleanupOnly {
-		if err := driver.Uninstall(ctx, service, deleteData, m.operationProgress(op)); err != nil {
-			return err
-		}
-	}
-	if deleteWorkspace {
-		m.progress(op, "workspace_cleanup", 6)
-		if err := m.deleteServiceWorkspace(ctx, *service); err != nil {
-			return err
-		}
-	}
-	if err := os.Remove(m.serviceSecretPath(service.ServiceID)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return serviceError("SERVICE_SECRETS_DELETE_FAILED", "The managed Web Service secret data could not be removed.", 500, true, err)
-	}
-	op.State = "succeeded"
-	op.Stage = "completed"
-	op.ProgressCurrent = operationProgressTotal
-	op.FinishedAtUnixMs = time.Now().UnixMilli()
-	// The external resources are already gone, so persist their removal even if
-	// the request was cancelled immediately after the driver returned.
-	if err := os.RemoveAll(m.staticOpeningDirectory(service)); err != nil {
-		return err
-	}
-	if err := m.registry.CompleteManagedServiceUninstall(context.Background(), service.ServiceID, *op); err != nil {
-		return serviceError("UNINSTALL_RECORD_FINALIZE_FAILED", "The managed Web Service removal could not be finalized.", 500, true, err)
-	}
-	return nil
-}
-
-func isWorkspaceCleanupFailure(code string) bool {
-	switch strings.TrimSpace(code) {
-	case "WORKSPACE_DELETE_FAILED", "WORKSPACE_DELETE_UNSAFE", "WORKSPACE_IN_USE":
-		return true
-	default:
-		return false
-	}
-}
-
-func isUninstallPostRuntimeFailure(code string) bool {
-	return isWorkspaceCleanupFailure(code) || strings.TrimSpace(code) == "SERVICE_SECRETS_DELETE_FAILED" || strings.TrimSpace(code) == "UNINSTALL_RECORD_FINALIZE_FAILED"
-}
-
 func (m *Manager) cleanupCancelledOperation(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver) error {
 	switch OperationAction(op.Action) {
 	case ActionInstall, ActionRetryInstall:
@@ -1303,6 +1404,10 @@ func (m *Manager) finishReconfigureFailure(service *pfregistry.ManagedService, o
 }
 
 func (m *Manager) reconcileInterruptedService(service *pfregistry.ManagedService, operation pfregistry.ManagedOperation) {
+	if operation.Action == "uninstall" || pendingUninstall(service) || (!activeManagement(*service) && !configurationOnlyRecovery(service, &operation)) {
+		_, _ = m.observe(context.Background(), service)
+		return
+	}
 	binding, bindingErr := decodeRuntimeBinding(service)
 	if bindingErr != nil {
 		code, message, _, _ := ErrorDetails(bindingErr)

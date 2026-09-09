@@ -156,7 +156,17 @@ func (c *CLIClient) Action(ctx context.Context, req EngineActionRequest) (Engine
 	}
 	containerID := strings.TrimSpace(req.ContainerID)
 	args := actionArgs(req.Method, containerID, req.Force, req.TimeoutSec)
-	if _, err := c.run(ctx, req.Engine, args...); err != nil {
+	timeout := c.Timeout
+	if req.Method == MethodStop || req.Method == MethodRestart {
+		grace := req.TimeoutSec
+		if grace <= 0 {
+			grace = 10
+		}
+		if budget := time.Duration(grace)*time.Second + 5*time.Second; timeout < budget {
+			timeout = budget
+		}
+	}
+	if _, err := c.runWithTimeout(ctx, timeout, req.Engine, args...); err != nil {
 		return EngineActionResult{}, err
 	}
 	return EngineActionResult{

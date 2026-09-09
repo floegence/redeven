@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
@@ -34,7 +35,10 @@ type Forward struct {
 }
 
 type Registry struct {
-	db *sql.DB
+	accessMu   sync.Mutex
+	access     map[string]map[uint64]context.CancelFunc
+	nextAccess uint64
+	db         *sql.DB
 }
 
 func Open(path string) (*Registry, error) {
@@ -49,6 +53,14 @@ func (r *Registry) Close() error {
 	if r == nil || r.db == nil {
 		return nil
 	}
+	r.accessMu.Lock()
+	for _, callbacks := range r.access {
+		for _, cancel := range callbacks {
+			cancel()
+		}
+	}
+	r.access = nil
+	r.accessMu.Unlock()
 	return r.db.Close()
 }
 
@@ -308,6 +320,7 @@ func (r *Registry) DeleteForward(ctx context.Context, forwardID string) error {
 	if affected == 0 {
 		return ErrForwardNotFound
 	}
+	r.revokeForwardAccess(id)
 	return nil
 }
 

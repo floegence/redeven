@@ -27,7 +27,7 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 		t.Fatalf("catalog response status = %d body=%s", response.Code, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace"}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","plan_digest":"reviewed-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	readServer.handleManagedWebServicesAPI(response, request)
@@ -36,7 +36,7 @@ func TestManagedWebServiceRoutesEnforceReadAndLifecyclePermissions(t *testing.T)
 	}
 
 	fullServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace"}`))
+	request = httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","plan_digest":"reviewed-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	fullServer.handleManagedWebServicesAPI(response, request)
@@ -76,7 +76,7 @@ func TestManagedWebServiceRoutesCarryNoticeRevisionsForInstallAndUpdate(t *testi
 	channelID := "ch_managed_notices"
 	server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
 
-	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-container","deployment":"container","workspace_path":"/workspace","accepted_notice_revisions":{"runtime-risk":1}}`))
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","plan_digest":"reviewed-install","template_id":"example-container","deployment":"container","workspace_path":"/workspace","accepted_notice_revisions":{"runtime-risk":1}}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response := httptest.NewRecorder()
 	server.handleManagedWebServicesAPI(response, request)
@@ -156,7 +156,7 @@ func TestManagedWebServiceJSONRejectsUnknownFields(t *testing.T) {
 	backend := &managedBackendStub{}
 	channelID := "ch_managed_json"
 	server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
-	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace","api_key":"must-not-be-accepted"}`))
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"request-install","plan_digest":"reviewed-install","template_id":"example-host","deployment":"host","workspace_path":"/workspace","api_key":"must-not-be-accepted"}`))
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response := httptest.NewRecorder()
 	server.handleManagedWebServicesAPI(response, request)
@@ -449,5 +449,18 @@ func TestManagedManagementRecoveryRequiresFullPermissionAndPrivateResponse(t *te
 				}
 			}
 		})
+	}
+}
+
+func TestManagedWebServiceInstallRequiresReviewedLocation(t *testing.T) {
+	backend := &managedBackendStub{}
+	channelID := "ch_install_review"
+	server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true})}
+	request := httptest.NewRequest(http.MethodPost, managedServicesAPIBase, strings.NewReader(`{"request_id":"unreviewed-install","template_id":"example-host","deployment":"host"}`))
+	request.Header.Set("Origin", envOriginWithChannel(channelID))
+	response := httptest.NewRecorder()
+	server.handleManagedWebServicesAPI(response, request)
+	if response.Code != http.StatusConflict || backend.createCalls != 0 || !strings.Contains(response.Body.String(), "INSTALL_PREFLIGHT_REQUIRED") {
+		t.Fatalf("unreviewed installation reached the driver: status=%d calls=%d body=%s", response.Code, backend.createCalls, response.Body.String())
 	}
 }

@@ -76,7 +76,7 @@ func hostTestService(t *testing.T, root string, spec TemplateSpec) (*Manager, *p
 	return &Manager{stateDir: root, registry: registry, catalog: catalog, scope: scope}, service
 }
 
-func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
+func TestHostStopScriptFailureRequiresReviewedBypass(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("custom host lifecycle is Unix-only")
@@ -109,9 +109,10 @@ func TestHostStopScriptFailureStillCleansManagedProcess(t *testing.T) {
 	if managedErrorCode(err) != "STOP_SCRIPT_FAILED" {
 		t.Fatalf("Stop() error = %v", err)
 	}
-	if managedProcessAlive(pid) {
-		t.Fatalf("managed process %d remained alive after stop script failure", pid)
-	}
+ if !managedProcessAlive(pid){t.Fatal("failed stop hook changed the business process before reviewed bypass")}
+ ctx:=context.WithValue(context.Background(),skipManagementHooksKey{},true)
+ if err:=driver.Stop(ctx,service);err!=nil{t.Fatal(err)}
+ if managedProcessAlive(pid){t.Fatal("reviewed bypass did not stop the owned process")}
 	driver.processMu.Lock()
 	_, retained := driver.processes[service.ServiceID]
 	driver.processMu.Unlock()

@@ -707,3 +707,16 @@ func normalizeMeta(name string, description string) (string, string, error) {
 	}
 	return name, description, nil
 }
+
+// ForwardAccessContext cancels open proxy streams when management revokes a
+// persisted service route. Ephemeral address openings keep their existing owner.
+func (s *Service) ForwardAccessContext(ctx context.Context, id string) (context.Context, func(), error) {
+	s.ephemeralMu.Lock()
+	ephemeral := s.getEphemeralForwardLocked(id)
+	s.ephemeralMu.Unlock()
+	if ephemeral != nil {
+		child, cancel := context.WithCancel(ctx)
+		return child, cancel, nil
+	}
+	return s.reg.ForwardAccessContext(ctx, id)
+}
