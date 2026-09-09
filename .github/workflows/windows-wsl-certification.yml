@@ -54,24 +54,13 @@ jobs:
           RUNTIME_RELEASE_TAG: ${{ steps.version.outputs.runtime_release_tag }}
         run: |
           set -euo pipefail
-          ./scripts/build_assets.sh
+          REDEVEN_DESKTOP_BUNDLE_GOOS=linux REDEVEN_DESKTOP_BUNDLE_GOARCH=amd64 \
+            REDEVEN_DESKTOP_VERSION="$RUNTIME_RELEASE_TAG" \
+            ./scripts/build_desktop_bundled_runtime.sh
           mkdir -p dist
-          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          commit="${GITHUB_SHA::12}"
-          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
-            -tags floeterm_native \
-            -trimpath \
-            -ldflags "-s -w -X main.Version=${RUNTIME_RELEASE_TAG} -X main.Commit=${commit} -X main.BuildTime=${build_time}" \
-            -o dist/redeven \
-            ./cmd/redeven
-          ./scripts/stage_redevplugin_release_artifacts.sh \
-            --dest-dir dist/redevplugin-release \
-            --redeven-goos linux \
-            --redeven-goarch amd64 \
-            --runtime-out dist/redevplugin-runtime \
-            --profile release
-          cp LICENSE THIRD_PARTY_NOTICES.md dist/
-          tar -C dist -czf dist/redeven_linux_amd64.tar.gz \
+          bundle=desktop/.bundle/linux-amd64
+          cp LICENSE THIRD_PARTY_NOTICES.md "$bundle/"
+          tar -C "$bundle" -czf dist/redeven_linux_amd64.tar.gz \
             redeven \
             redevplugin-runtime \
             REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
@@ -82,12 +71,15 @@ jobs:
             .redevplugin-release-artifacts-verified.json \
             LICENSE \
             THIRD_PARTY_NOTICES.md
+          cp "$bundle/desktop-bundle-manifest.json" dist/redeven_linux_amd64.manifest.json
 
       - name: Upload Linux Runtime archive
         uses: actions/upload-artifact@v6
         with:
           name: windows-wsl-linux-runtime
-          path: dist/redeven_linux_amd64.tar.gz
+          path: |
+            dist/redeven_linux_amd64.tar.gz
+            dist/redeven_linux_amd64.manifest.json
           if-no-files-found: error
 
   certify:
@@ -134,7 +126,10 @@ jobs:
 
       - name: Install Desktop dependencies
         working-directory: desktop
-        run: npm ci --no-audit --no-fund
+        run: |
+          $packageManager = node -p "require('./package.json').packageManager"
+          npm install --global $packageManager --no-audit --no-fund
+          pnpm install --frozen-lockfile
 
       - name: Run Desktop source tests
         working-directory: desktop

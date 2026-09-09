@@ -11,6 +11,7 @@ import {
   type DesktopSSHHostAccessDetails,
 } from '../shared/desktopSSH';
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
+import { resolveDesktopHostCommand } from './desktopHostCommand';
 
 const DEFAULT_IDLE_CLOSE_MS = 90_000;
 const DEFAULT_READY_POLL_MS = 100;
@@ -130,6 +131,9 @@ type DesktopSSHTransportManagerDependencies = Readonly<{
 }>;
 
 type TransportEntry = {
+  direct: boolean;
+  ready: boolean;
+  children: Set<SpawnedSSHProcess>;
   key: string;
   target: DesktopSSHHostAccessDetails;
   credentialScope: string;
@@ -150,6 +154,8 @@ type TransportEntry = {
 };
 
 type ManagerOptions = Readonly<{
+  platform?: NodeJS.Platform;
+  windowsAskPassExecutable?: string;
   idleCloseMs?: number;
   readyPollMs?: number;
   dependencies?: Partial<DesktopSSHTransportManagerDependencies>;
@@ -249,7 +255,7 @@ function sharedArgs(entry: TransportEntry): string[] {
     '-o', 'ServerAliveInterval=15',
     '-o', 'ServerAliveCountMax=3',
     ...authArgs(entry.target),
-    '-S', entry.controlSocketPath,
+    ...(entry.direct ? [] : ['-S', entry.controlSocketPath]),
   ];
 }
 
@@ -271,11 +277,16 @@ function spawnOptions(entry: TransportEntry, signal?: AbortSignal): SpawnOptions
   return {
     env: spawnEnvironment(entry),
     signal,
+    windowsHide: entry.direct,
   };
 }
 
 function processAlive(process: SpawnedSSHProcess | null): process is SpawnedSSHProcess {
   return Boolean(process && process.exitCode === null && !process.signalCode);
+}
+
+function transportAlive(entry: TransportEntry): boolean {
+  return !entry.closing && (entry.direct ? entry.ready : processAlive(entry.master));
 }
 
 function appendRecent(existing: string, chunk: string): string {
@@ -317,12 +328,16 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
   private readonly deps: DesktopSSHTransportManagerDependencies;
   private readonly idleCloseMs: number;
   private readonly readyPollMs: number;
+  private readonly platform: NodeJS.Platform;
+  private readonly windowsAskPassExecutable: string;
   private disposed = false;
 
   constructor(options: ManagerOptions = {}) {
     this.deps = createDependencies(options);
     this.idleCloseMs = options.idleCloseMs ?? DEFAULT_IDLE_CLOSE_MS;
     this.readyPollMs = options.readyPollMs ?? DEFAULT_READY_POLL_MS;
+    this.platform = options.platform ?? process.platform;
+    this.windowsAskPassExecutable = options.windowsAskPassExecutable ?? '';
   }
 
   async acquire(input: SSHTransportAcquireInput): Promise<DesktopSSHTransportLease> {
@@ -333,12 +348,13 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       throw input.signal.reason ?? new DOMException('Canceled.', 'AbortError');
     }
     const target = normalizeDesktopSSHHostAccessDetails(input.target);
-    const sshBinary = compact(input.sshBinary) || 'ssh';
+    const sshBinary = compact(input.sshBinary)
+      || (this.platform === 'win32' ? resolveDesktopHostCommand('ssh').command : 'ssh');
     const credentialScope = compact(input.credentialScope);
     if (target.auth_mode === 'password' && credentialScope === '') {
       throw new Error('Password SSH transport requires an explicit credential scope.');
     }
-    const password = compact(input.sshPassword);
+    const password = String(input.sshPassword ?? '');
     const key = transportKey(target, sshBinary, credentialScope);
     let entry = await this.getOrCreateEntry({ key, target, credentialScope, password, sshBinary });
     if (entry && entry.password !== password) {
@@ -418,14 +434,22 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     sshBinary: string;
   }>): Promise<TransportEntry> {
     const tempDir = await this.deps.mkdtemp(path.join(this.deps.tempRoot, 'rdv-ssh-transport-'));
+    const direct = this.platform === 'win32';
     const askPassScriptPath = input.target.auth_mode === 'password'
-      ? path.join(tempDir, 'askpass.sh')
+      ? direct ? this.windowsAskPassExecutable : path.join(tempDir, 'askpass.sh')
       : undefined;
-    if (askPassScriptPath) {
+    if (direct && input.target.auth_mode === 'password' && !askPassScriptPath) {
+      await this.deps.rm(tempDir, { recursive: true, force: true });
+      throw new DesktopSSHTransportUnavailableError('The Windows SSH password helper is missing. Repair or reinstall Redeven Desktop.');
+    }
+    if (askPassScriptPath && !direct) {
       await this.deps.writeFile(askPassScriptPath, buildAskPassScript(), { mode: 0o700 });
     }
     return {
       ...input,
+      direct,
+      ready: false,
+      children: new Set(),
       tempDir,
       controlSocketPath: path.join(tempDir, 'm.sock'),
       askPassScriptPath,
@@ -448,7 +472,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       (entry.target.connect_timeout_seconds ?? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000 + 1_000,
     ),
   ): Promise<void> {
-    if (processAlive(entry.master)) {
+    if (transportAlive(entry)) {
       return;
     }
     if (entry.connectTask) {
@@ -463,6 +487,20 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
   private async connect(entry: TransportEntry, readyTimeoutMs: number): Promise<void> {
     if (entry.closing || this.disposed) {
       throw new DesktopSSHTransportUnavailableError('Desktop SSH transport is closing.');
+    }
+    if (entry.direct) {
+      entry.generation += 1;
+      const result = await this.runProcess(entry, [
+        ...sharedArgs(entry), ...targetArgs(entry.target), 'true',
+      ], undefined, undefined, undefined, readyTimeoutMs);
+      if (entry.closing || this.disposed) {
+        throw new DesktopSSHTransportInterruptedError(desktopSSHAuthority(entry.target), entry.generation, result);
+      }
+      if (result.exit_code !== 0 || result.signal) {
+        throw transportUnavailableError(`SSH connection to "${desktopSSHAuthority(entry.target)}" failed.`, result.stderr);
+      }
+      entry.ready = true;
+      return;
     }
     await this.deps.rm(entry.controlSocketPath, { force: true }).catch(() => undefined);
     entry.generation += 1;
@@ -534,7 +572,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
         released
         || entry.closing
         || entry.generation !== generation
-        || !processAlive(entry.master)
+        || !transportAlive(entry)
       ) {
         throw new DesktopSSHTransportInterruptedError(desktopSSHAuthority(entry.target), generation);
       }
@@ -549,6 +587,15 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           ...targetArgs(entry.target),
           command,
         ], options.stdinData, options.signal, options.onStderr, options.timeout_ms);
+        if (entry.direct) {
+          if (!transportAlive(entry) || entry.generation !== generation) {
+            throw new DesktopSSHTransportInterruptedError(desktopSSHAuthority(entry.target), generation, result);
+          }
+          if (result.exit_code === 255) {
+            throw transportUnavailableError(`SSH connection to "${desktopSSHAuthority(entry.target)}" failed.`, result.stderr);
+          }
+          return result;
+        }
         if (result.exit_code !== 0) {
           const check = await this.runProcess(entry, [
             ...sharedArgs(entry),
@@ -582,6 +629,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           ...spawnOptions(entry, options.signal),
           stdio: ['pipe', 'pipe', 'pipe'],
         }) as ChildProcessByStdio<Writable, Readable, Readable>;
+        this.trackChild(entry, child);
         const timeoutMs = Number(options.timeout_ms);
         const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
           ? this.deps.setTimer(() => {
@@ -590,7 +638,11 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
             }, timeoutMs)
           : null;
         child.stderr.setEncoding('utf8');
-        child.stderr.on('data', (chunk: string) => options.onStderr?.(chunk));
+        let stderr = '';
+        child.stderr.on('data', (chunk: string) => {
+          stderr = appendRecent(stderr, chunk);
+          options.onStderr?.(chunk);
+        });
         const result = new Promise<DesktopSSHCommandResult>((resolve, reject) => {
           child.once('error', reject);
           child.once('close', (exitCode, closeSignal) => {
@@ -599,7 +651,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
               exit_code: exitCode,
               signal: closeSignal,
               stdout: '',
-              stderr: '',
+              stderr,
             });
           });
         });
@@ -616,12 +668,18 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           if (commandResult.exit_code === 0 && !commandResult.signal) {
             return;
           }
-          if (entry.generation !== generation || !processAlive(entry.master)) {
+          if (entry.generation !== generation || !transportAlive(entry)) {
             throw new DesktopSSHTransportInterruptedError(
               desktopSSHAuthority(entry.target),
               generation,
               commandResult,
             );
+          }
+          if (entry.direct) {
+            if (commandResult.exit_code === 255) {
+              throw transportUnavailableError(`SSH connection to "${desktopSSHAuthority(entry.target)}" failed.`, commandResult.stderr);
+            }
+            throw new DesktopSSHRemoteCommandError(desktopSSHAuthority(entry.target), generation, commandResult);
           }
           const check = await this.runProcess(entry, [
             ...sharedArgs(entry),
@@ -688,6 +746,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           ...spawnOptions(entry, signal),
           stdio: [stdinData ? 'pipe' : 'ignore', 'pipe', 'pipe'],
         }) as SpawnedSSHProcess;
+        this.trackChild(entry, child);
       } catch (error) {
         reject(error);
         return;
@@ -747,11 +806,18 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     });
   }
 
+  private trackChild(entry: TransportEntry, child: SpawnedSSHProcess): void {
+    entry.children.add(child);
+    child.once('close', () => entry.children.delete(child));
+  }
+
   private async closeEntry(entry: TransportEntry, force = false): Promise<void> {
     if (entry.closing || (!force && entry.leases > 0)) {
       return;
     }
     entry.closing = true;
+    entry.ready = false;
+    entry.password = '';
     if (entry.idleTimer) {
       this.deps.clearTimer(entry.idleTimer);
       entry.idleTimer = null;
@@ -763,6 +829,12 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       master.kill('SIGTERM');
       await closed;
     }
+    await Promise.all([...entry.children].map(async (child) => {
+      if (!processAlive(child)) return;
+      const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+      child.kill('SIGTERM');
+      await closed;
+    }));
     await this.deps.rm(entry.tempDir, { recursive: true, force: true }).catch(() => undefined);
     if (this.entries.get(entry.key) === entry) {
       this.entries.delete(entry.key);

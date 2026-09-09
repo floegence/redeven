@@ -20,11 +20,11 @@ async function writeExecutable(dir: string, name: string): Promise<string> {
 describe('desktopHostCommand', () => {
   it('resolves host commands from the process PATH first', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-command-path-'));
-    const dockerPath = await writeExecutable(tempDir, 'docker');
+    const dockerPath = await writeExecutable(tempDir, process.platform === 'win32' ? 'docker.exe' : 'docker');
 
     expect(resolveDesktopHostCommand('docker', {
       env: { PATH: tempDir },
-      platform: 'darwin',
+      platform: process.platform,
       defaultSearchPaths: [],
     })).toEqual({
       command: dockerPath,
@@ -34,8 +34,8 @@ describe('desktopHostCommand', () => {
   });
 
   it('uses Desktop macOS default command paths when LaunchServices provides a short PATH', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-command-default-'));
-    const dockerPath = await writeExecutable(tempDir, 'docker');
+    const tempDir = (await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-command-default-'))).replaceAll('\\', '/');
+    const dockerPath = (await writeExecutable(tempDir, 'docker')).replaceAll('\\', '/');
 
     expect(resolveDesktopHostCommand('docker', {
       env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
@@ -81,6 +81,13 @@ describe('desktopHostCommand', () => {
       '/bin',
       '/opt/homebrew/bin',
       '/usr/local/bin',
+    ]);
+  });
+
+  it('finds the Windows OpenSSH installation even with a restricted application PATH', () => {
+    expect(desktopHostCommandSearchPaths({ PATH: 'C:\\Tools', SystemRoot: 'C:\\Windows' }, 'win32')).toEqual([
+      'C:\\Tools', 'C:\\Windows\\System32', 'C:\\Windows\\Sysnative',
+      'C:\\Windows\\System32\\OpenSSH', 'C:\\Windows\\Sysnative\\OpenSSH',
     ]);
   });
 });

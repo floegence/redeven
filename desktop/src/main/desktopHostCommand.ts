@@ -95,6 +95,8 @@ export function desktopDefaultCommandSearchPaths(
     return windowsRoot === '' ? [] : unique([
       path.win32.join(windowsRoot, 'System32'),
       path.win32.join(windowsRoot, 'Sysnative'),
+      path.win32.join(windowsRoot, 'System32', 'OpenSSH'),
+      path.win32.join(windowsRoot, 'Sysnative', 'OpenSSH'),
     ], true);
   }
   if (platform !== 'darwin') {

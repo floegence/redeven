@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
+import { buildDesktopWelcomeSnapshot as buildSnapshot } from '../main/desktopWelcomeState';
+import { resolveDesktopPlatformCapabilities } from '../shared/desktopPlatformCapabilities';
 import {
   DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS,
   desktopProviderEnvironmentOpenRoute,
@@ -15,6 +16,7 @@ import {
   type DesktopControlPlaneSummary,
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
+import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import type {
   RuntimeServiceOpenReadiness,
@@ -62,6 +64,14 @@ import {
 } from './viewModel';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopSavedRuntimeTarget } from '../main/desktopPreferences';
+
+// These card fixtures include a native local environment on every test host.
+function buildDesktopWelcomeSnapshot(args: Parameters<typeof buildSnapshot>[0]) {
+  return buildSnapshot({
+    platformCapabilities: resolveDesktopPlatformCapabilities('darwin'),
+    ...args,
+  });
+}
 
 function sshRuntimeTarget(input: Readonly<{
   id: string;
@@ -1390,8 +1400,39 @@ describe('buildEnvironmentCardModel', () => {
     const offlineEntry = offlineSnapshot.environments.find((environment) => environment.kind === 'local_environment');
 
     expect(buildEnvironmentCardModel(onlineEntry!).runtime_started_label).toBe('Start time unavailable');
-    expect(buildEnvironmentCardModel(offlineEntry!).runtime_started_label).toBe('Not running');
+    expect(buildEnvironmentCardModel(offlineEntry!).runtime_started_label).toBe('Unknown');
+    expect(buildEnvironmentCardModel({
+      ...offlineEntry!,
+      runtime_health: {
+        ...offlineEntry!.runtime_health,
+        freshness: 'fresh',
+        offline_reason_code: 'not_started',
+      },
+    }).runtime_started_label).toBe('Not running');
   });
+
+  it.each(['unknown', 'checking', 'failed', 'fresh'] as const)(
+    'does not claim an unverified SSH runtime is stopped when health freshness is %s',
+    (freshness) => {
+      const snapshot = buildDesktopWelcomeSnapshot({
+        preferences: testDesktopPreferences({ local_environment: testLocalEnvironment() }),
+      });
+      const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment')!;
+      const sshEntry: DesktopEnvironmentEntry = {
+        ...entry,
+        kind: 'ssh_environment',
+        runtime_started_at_unix_ms: undefined,
+        runtime_health: {
+          status: 'offline',
+          checked_at_unix_ms: 0,
+          source: 'ssh_runtime_probe',
+          freshness,
+          offline_reason_code: freshness === 'failed' ? 'probe_failed' : 'unverified',
+        },
+      };
+      expect(buildEnvironmentCardModel(sshEntry).runtime_started_label).toBe('Unknown');
+    },
+  );
 
   it('keeps version visible when runtime metadata is unavailable', () => {
     const snapshot = buildDesktopWelcomeSnapshot({

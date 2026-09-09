@@ -1061,7 +1061,11 @@ const MANAGED_ENVIRONMENT_OPEN_BRIDGE_START_RETRY_DELAYS_MS = [250, 500] as cons
 const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
 const runtimeLifecycleCoordinator = new RuntimeLifecycleCoordinator();
-const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager();
+const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager({
+  windowsAskPassExecutable: app.isPackaged
+    ? path.join(process.resourcesPath, 'native', 'redeven-ssh-askpass.exe')
+    : path.join(app.getAppPath(), '.bundle', 'windows-ssh', 'redeven-ssh-askpass.exe'),
+});
 const desktopWelcomeSnapshotOrder = new DesktopWelcomeSnapshotOrder();
 const welcomeRuntimeHealthStore = new DesktopWelcomeRuntimeHealthStore(
   () => broadcastDesktopWelcomeSnapshots(),

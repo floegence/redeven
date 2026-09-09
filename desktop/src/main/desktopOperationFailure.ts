@@ -6,6 +6,7 @@ import type {
 } from '../shared/desktopOperationFailure';
 import type { DesktopTranslationKey } from '../shared/i18n';
 import type { DesktopRuntimeLifecycleStepID } from '../shared/desktopRuntimeLifecycleProgress';
+import { DesktopSSHTransportAuthenticationError } from './sshTransportManager';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -104,6 +105,16 @@ export function operationFailureFromUnknown(
 ): DesktopOperationFailurePresentation {
   if (isDesktopOperationFailureError(error)) {
     return error.presentation;
+  }
+  if (error instanceof DesktopSSHTransportAuthenticationError) {
+    return desktopOperationFailurePresentation({
+      code: 'ssh_authentication_failed',
+      title: 'SSH Authentication Failed',
+      summary: `SSH login credentials were rejected by "${fallback.target_label ?? 'Runtime'}".`,
+      recoveryHint: 'Edit this environment to check the SSH username and password or key, then retry.',
+      targetLabel: fallback.target_label,
+      diagnostics: fallback.diagnostics ?? [{ channel: 'ssh_stderr', label: 'SSH stderr', text: error.stderr }],
+    });
   }
   const message = error instanceof Error ? compact(error.message) : compact(error);
   if (message === '') {

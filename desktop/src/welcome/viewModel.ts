@@ -319,7 +319,14 @@ function environmentRuntimeStartedLabel(environment: DesktopEnvironmentEntry): s
   }
   const startedAtUnixMS = Number(environment.runtime_started_at_unix_ms);
   if (!Number.isInteger(startedAtUnixMS) || startedAtUnixMS <= 0) {
-    return environment.runtime_health.status === 'online' ? 'Start time unavailable' : 'Not running';
+    const health = environment.runtime_health;
+    if (health.status === 'online') return 'Start time unavailable';
+    const stopped = health.offline_reason_code === 'not_started'
+      || health.offline_reason_code === 'container_not_running';
+    const unverified = health.freshness === 'unknown'
+      || health.freshness === 'checking'
+      || health.freshness === 'failed';
+    return stopped && !unverified ? 'Not running' : 'Unknown';
   }
   return `Started ${formatRuntimeStartedRelativeTimestamp(startedAtUnixMS)}`;
 }

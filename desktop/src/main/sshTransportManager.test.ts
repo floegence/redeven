@@ -73,6 +73,7 @@ function managerFixture() {
   });
   const rm = vi.fn(async () => undefined);
   const manager = new DefaultDesktopSSHTransportManager({
+    platform: 'darwin',
     idleCloseMs: 90_000,
     readyPollMs: 1,
     dependencies: {
@@ -84,6 +85,106 @@ function managerFixture() {
   });
   return { manager, masters, calls, spawnProcess, rm };
 }
+
+function windowsManagerFixture() {
+  const calls: Array<{ args: readonly string[]; options: import('node:child_process').SpawnOptions }> = [];
+  const spawnProcess = vi.fn((_command: string, args: readonly string[], options: import('node:child_process').SpawnOptions) => {
+    calls.push({ args, options });
+    return fakeProcess({ stdout: 'ok\n' });
+  });
+  const manager = new DefaultDesktopSSHTransportManager({
+    platform: 'win32',
+    windowsAskPassExecutable: 'C:\\Redeven\\native\\redeven-ssh-askpass.exe',
+    dependencies: {
+      spawnProcess: spawnProcess as never,
+      mkdtemp: vi.fn(async () => 'C:\\Temp\\transport') as never,
+      writeFile: vi.fn(async () => undefined) as never,
+      rm: vi.fn(async () => undefined) as never,
+    },
+  });
+  return { manager, calls, spawnProcess };
+}
+
+describe('Windows native SSH transport', () => {
+  it('authenticates and runs commands without a ControlMaster or shell password script', async () => {
+    const fixture = windowsManagerFixture();
+    try {
+      const lease = await fixture.manager.acquire({
+        target: target('password'), credentialScope: 'windows', sshPassword: ' secret $value ', readyTimeoutMs: 20,
+      });
+      await expect(lease.run('uname -m')).resolves.toMatchObject({ exit_code: 0, stdout: 'ok\n' });
+      expect(fixture.calls).toHaveLength(2);
+      for (const call of fixture.calls) {
+        expect(call.args).not.toEqual(expect.arrayContaining(['-M']));
+        expect(call.args).not.toEqual(expect.arrayContaining(['-S']));
+        expect(call.args).not.toEqual(expect.arrayContaining(['-O']));
+        expect(call.args.join(' ')).not.toContain('secret');
+        expect(call.options.windowsHide).toBe(true);
+        expect(call.options.env?.SSH_ASKPASS).toBe('C:\\Redeven\\native\\redeven-ssh-askpass.exe');
+        expect(call.options.env?.REDEVEN_DESKTOP_SSH_PASSWORD).toBe(' secret $value ');
+      }
+      await lease.release();
+    } finally { await fixture.manager.dispose(); }
+  });
+
+  it('returns remote command failures once and classifies authentication failures', async () => {
+    const fixture = windowsManagerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'windows', readyTimeoutMs: 20 });
+      fixture.spawnProcess.mockImplementationOnce(() => fakeProcess({ exitCode: 7, stderr: 'remote command failed' }));
+      await expect(lease.run('false')).resolves.toMatchObject({ exit_code: 7 });
+      fixture.spawnProcess.mockImplementationOnce(() => fakeProcess({ exitCode: 255, stderr: 'Permission denied (password).' }));
+      await expect(lease.run('true')).rejects.toBeInstanceOf(DesktopSSHTransportAuthenticationError);
+      expect(fixture.spawnProcess).toHaveBeenCalledTimes(3);
+    } finally { await fixture.manager.dispose(); }
+  });
+
+  it('closes only its streaming processes and invalidates leases on disposal', async () => {
+    const fixture = windowsManagerFixture();
+    const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'windows', readyTimeoutMs: 20 });
+    const child = fakeProcess({ longLived: true });
+    fixture.spawnProcess.mockImplementationOnce(() => child);
+    const stream = lease.stream('desktop-bridge');
+    const closed = expect(stream.closed).rejects.toBeInstanceOf(DesktopSSHTransportInterruptedError);
+    await fixture.manager.dispose();
+    await closed;
+    expect(child.kill).toHaveBeenCalledOnce();
+    await expect(lease.run('true')).rejects.toBeInstanceOf(DesktopSSHTransportInterruptedError);
+  });
+
+  it('cancels pending Windows authentication and allows a fresh credential retry', async () => {
+    const fixture = windowsManagerFixture();
+    const pending = fakeProcess({ longLived: true });
+    fixture.spawnProcess.mockImplementationOnce(() => pending);
+    const controller = new AbortController();
+    const acquisition = fixture.manager.acquire({
+      target: target('password'), credentialScope: 'windows', sshPassword: 'old', signal: controller.signal,
+    });
+    const rejection = expect(acquisition).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(fixture.spawnProcess).toHaveBeenCalledOnce());
+    controller.abort();
+    await rejection;
+    expect(pending.kill).toHaveBeenCalledOnce();
+    const lease = await fixture.manager.acquire({ target: target('password'), credentialScope: 'windows', sshPassword: 'new' });
+    await lease.run('true');
+    expect(fixture.calls.at(-1)?.options.env?.REDEVEN_DESKTOP_SSH_PASSWORD).toBe('new');
+    await lease.release();
+    await fixture.manager.dispose();
+  });
+
+  it('keeps simultaneous Windows password environments in separate credential scopes', async () => {
+    const fixture = windowsManagerFixture();
+    const first = await fixture.manager.acquire({ target: target('password'), credentialScope: 'first', sshPassword: 'first-only' });
+    const second = await fixture.manager.acquire({ target: target('password'), credentialScope: 'second', sshPassword: 'second-only' });
+    await first.run('true');
+    await second.run('true');
+    expect(fixture.calls.slice(-2).map((call) => call.options.env?.REDEVEN_DESKTOP_SSH_PASSWORD))
+      .toEqual(['first-only', 'second-only']);
+    await first.release();
+    await second.release();
+    await fixture.manager.dispose();
+  });
+});
 
 describe('DefaultDesktopSSHTransportManager', () => {
   it('coalesces concurrent acquisitions and reuses one ControlMaster', async () => {
@@ -289,6 +390,7 @@ describe('DefaultDesktopSSHTransportManager', () => {
       return fakeProcess({ stderr: 'Control socket unavailable.\n', exitCode: 255 });
     });
     const manager = new DefaultDesktopSSHTransportManager({
+      platform: 'darwin',
       readyPollMs: 1,
       dependencies: {
         spawnProcess: spawnProcess as never,

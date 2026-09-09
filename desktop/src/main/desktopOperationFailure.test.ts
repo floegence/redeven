@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DesktopSSHTransportAuthenticationError } from './sshTransportManager';
 
 import {
   DesktopOperationFailureError,
@@ -9,6 +10,14 @@ import {
 } from './desktopOperationFailure';
 
 describe('desktopOperationFailure main helpers', () => {
+  it('distinguishes SSH authentication rejection from network and Runtime failures', () => {
+    const fallback = desktopOperationFailurePresentation({
+      code: 'ssh_connection_failed', title: 'Connection failed', summary: 'Connection failed.', targetLabel: 'orange',
+    });
+    expect(operationFailureFromUnknown(new DesktopSSHTransportAuthenticationError('Denied', 'Permission denied (password).'), fallback))
+      .toMatchObject({ code: 'ssh_authentication_failed', target_label: 'orange' });
+    expect(operationFailureFromUnknown(new Error('Network unreachable'), fallback).code).toBe('ssh_connection_failed');
+  });
   it('preserves typed failure presentation across main-process boundaries', () => {
     const failure = desktopOperationFailurePresentation({
       code: 'ssh_connection_failed',

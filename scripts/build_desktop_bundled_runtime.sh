@@ -130,20 +130,13 @@ assert_go_binary_build_identity() {
   local expected_version="$2"
   local expected_commit="$3"
   local label="$4"
-  local metadata normalized_version
-
-  metadata=$(go version -m "$binary_path") || ui_pkg_die "$label is not a verifiable Go binary: $binary_path"
-  normalized_version="$expected_version"
-  case "$normalized_version" in
-    v*) ;;
-    *) normalized_version="v$normalized_version" ;;
-  esac
-  if [[ "$metadata" != *"-X main.Version=$normalized_version"* ]]; then
-    ui_pkg_die "$label build metadata does not match version $normalized_version"
-  fi
-  if [[ "$metadata" != *"-X main.Commit=$expected_commit"* ]]; then
-    ui_pkg_die "$label build metadata does not match commit $expected_commit"
-  fi
+  local tarball_path="$5"
+  # Go omits linker flags from trimpath build metadata. The Linux builder's
+  # existing bundle manifest binds the version and commit to every archive byte.
+  local source_manifest="${tarball_path%.tar.gz}.manifest.json"
+  [[ -f "$source_manifest" && ! -L "$source_manifest" ]] || ui_pkg_die "$label requires its Linux source bundle manifest: $source_manifest"
+  node "$SCRIPT_DIR/verify_desktop_runtime_source.mjs" \
+    "$source_manifest" "$(dirname -- "$binary_path")" "$expected_version" "$expected_commit"
 }
 
 bundle_from_tarball() {
@@ -437,9 +430,10 @@ main() {
     inspection_bundle="$staging_parent/managed-wsl-inspection"
     bundle_from_tarball "$tarball_path" "$inspection_bundle" linux
     assert_go_binary_target "$inspection_bundle/redeven" linux amd64 "Redeven managed WSL runtime"
-    assert_go_binary_build_identity "$inspection_bundle/redeven" "$bundle_version" "$bundle_commit" "Redeven managed WSL runtime"
+    assert_go_binary_build_identity "$inspection_bundle/redeven" "$bundle_version" "$bundle_commit" "Redeven managed WSL runtime" "$tarball_path"
     mkdir -p "$working_bundle"
     cp "$tarball_path" "$working_bundle_path"
+    cp "$inspection_bundle/LICENSE" "$inspection_bundle/THIRD_PARTY_NOTICES.md" "$working_bundle/"
   elif [ -n "$tarball_path" ]; then
     from_archive=1
     assert_tarball_target "$tarball_path" "$goos" "$goarch" "Redeven runtime archive"

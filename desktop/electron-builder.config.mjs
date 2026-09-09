@@ -188,6 +188,10 @@ export default {
       to: 'bin/desktop-bundle-manifest.json',
     },
     ...bundledReDevPluginResources,
+    ...(resolveTargetGoos() === 'windows' ? [{
+      from: path.join(desktopDir, '.bundle', 'windows-ssh', 'redeven-ssh-askpass.exe'),
+      to: 'native/redeven-ssh-askpass.exe',
+    }] : []),
     {
       from: path.join(repoRoot, 'LICENSE'),
       to: 'licenses/LICENSE',

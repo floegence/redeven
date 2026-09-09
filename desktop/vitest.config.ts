@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import solid from 'vite-plugin-solid';
+import { fileURLToPath } from 'node:url';
 
-const coreDist = new URL('./node_modules/@floegence/floe-webapp-core/dist/', import.meta.url).pathname;
-const markedDist = new URL('./node_modules/marked/lib/marked.esm.js', import.meta.url).pathname;
-const thinkingOrbsEngine = new URL('./node_modules/thinking-orbs/dist/engine.es.js', import.meta.url).pathname;
+const coreDist = fileURLToPath(new URL('./node_modules/@floegence/floe-webapp-core/dist/', import.meta.url));
+const markedDist = fileURLToPath(new URL('./node_modules/marked/lib/marked.esm.js', import.meta.url));
+const thinkingOrbsEngine = fileURLToPath(new URL('./node_modules/thinking-orbs/dist/engine.es.js', import.meta.url));
 export default defineConfig({
   server: {
     fs: {
