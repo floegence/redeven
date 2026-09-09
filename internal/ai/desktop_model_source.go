@@ -170,10 +170,10 @@ type desktopModelSourceStreamRequest struct {
 }
 
 type desktopModelSourceRegistryEntry struct {
-	Model       DesktopModelSourceModel
-	ProviderID  string
-	ModelName   string
-	ProviderCfg config.AIProvider
+	Model         DesktopModelSourceModel
+	ProviderID    string
+	WireModelName string
+	ProviderCfg   config.AIProvider
 }
 
 type desktopModelSourceClient struct {
@@ -1141,7 +1141,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 		return ModelGatewayResult{}, err
 	}
 	req := body.Request
-	req.Model = strings.TrimSpace(entry.ModelName)
+	req.Model = strings.TrimSpace(entry.WireModelName)
 	result, err := adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
 		_ = write(DesktopModelSourceRPCFrame{
 			Type:  "event",
@@ -1298,10 +1298,10 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 			}
 			out.Models = append(out.Models, model)
 			registry[publicID] = desktopModelSourceRegistryEntry{
-				Model:       model,
-				ProviderID:  providerID,
-				ModelName:   modelName,
-				ProviderCfg: p,
+				Model:         model,
+				ProviderID:    providerID,
+				WireModelName: m.EffectiveWireModelName(),
+				ProviderCfg:   p,
 			}
 			if currentLocal != "" && currentLocal == localID {
 				out.CurrentModel = publicID

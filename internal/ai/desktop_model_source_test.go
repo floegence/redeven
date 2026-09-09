@@ -178,7 +178,7 @@ func TestDesktopModelSourceModelSnapshotFiltersMissingKeysAndUsesOpaqueIDs(t *te
 	if !ok {
 		t.Fatalf("registry missing model %q", modelID)
 	}
-	if entry.ProviderID != "openai" || entry.ModelName != "gpt-5-mini" {
+	if entry.ProviderID != "openai" || entry.WireModelName != "gpt-5-mini" {
 		t.Fatalf("registry entry=%#v", entry)
 	}
 	capability := snapshot.Models[0].Capability
@@ -719,5 +719,69 @@ func testDesktopModelSourceError(id string, code string, message string) Desktop
 		Type:  "error",
 		ID:    id,
 		Error: &DesktopModelSourceRPCError{Code: code, Message: message},
+	}
+}
+
+func TestDesktopModelSourceExecutesCatalogWireNameWithOptionalOllamaKey(t *testing.T) {
+	for _, kind := range []string{"openrouter", "ollama"} {
+		t.Run(kind, func(t *testing.T) {
+			const wireModel = "vendor/agent:latest"
+			var sent bool
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/api/tags":
+					_, _ = w.Write([]byte(`{"models":[{"name":"vendor/agent:latest"}]}`))
+				case "/api/ps":
+					_, _ = w.Write([]byte(`{"models":[]}`))
+				case "/api/show":
+					_, _ = w.Write([]byte(`{"capabilities":["tools"],"parameters":"num_ctx 32768"}`))
+				case "/v1/chat/completions":
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Error(err)
+						return
+					}
+					if body["model"] != wireModel {
+						t.Errorf("wire model: %v", body["model"])
+					}
+					if kind == "openrouter" && r.Header.Get("Authorization") != "Bearer test-key" {
+						t.Error("missing key")
+					}
+					sent = true
+					w.Header().Set("Content-Type", "text/event-stream")
+					writeOpenAISSEJSON(w, w.(http.Flusher), map[string]any{"id": "result", "object": "chat.completion.chunk", "model": wireModel, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": "ok"}, "finish_reason": "stop"}}})
+				default:
+					t.Errorf("unexpected path: %s", r.URL)
+				}
+			}))
+			defer server.Close()
+			localModel := config.AIModelLocalName(wireModel)
+			p := config.AIProvider{ID: "provider", Type: kind, BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: localModel, WireModelName: wireModel, ContextWindow: 32768}}}
+			if kind == "ollama" {
+				p.Models = nil
+				p.ModelSelection = &config.AIModelSelection{}
+			}
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := config.Save(path, &config.Config{AI: &config.AIConfig{CurrentModelID: "provider/" + localModel, Providers: []config.AIProvider{p}}}); err != nil {
+				t.Fatal(err)
+			}
+			secretPath := filepath.Join(t.TempDir(), "secrets.json")
+			if kind != "ollama" {
+				if err := settings.NewSecretsStore(secretPath).SetAIProviderAPIKey("provider", "test-key"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			executor := &desktopModelSourceExecutor{configPath: path, secretsPath: secretPath}
+			snapshot, _, _, _, err := executor.snapshot()
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, _ := json.Marshal(desktopModelSourceStreamRequest{Request: ModelGatewayRequest{Model: snapshot.CurrentModel, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}}}}})
+			result, err := executor.streamTurn(context.Background(), DesktopModelSourceRPCFrame{ID: "request", Params: raw}, func(DesktopModelSourceRPCFrame) error { return nil })
+			if err != nil || !sent || result.Text != "ok" {
+				t.Fatalf("Desktop route: %+v, %v", result, err)
+			}
+		})
 	}
 }
