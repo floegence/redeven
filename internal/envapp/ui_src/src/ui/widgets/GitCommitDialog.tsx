@@ -133,7 +133,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
           <label class="mb-1 block text-xs font-medium text-foreground">{i18n.t('git.commitDialog.messageLabel')}</label>
           <textarea
             rows={4}
-            class={`w-full resize-y rounded-md border bg-background px-3 py-2 text-xs leading-5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring/70 ${outlineControlClass}`}
+            class={`w-full resize-y rounded-md border bg-background px-3 py-2 text-xs leading-5 text-foreground ${outlineControlClass}`}
             value={props.message}
             placeholder={i18n.t('git.commitDialog.messagePlaceholder')}
             onInput={(event) => props.onMessageChange?.(event.currentTarget.value)}

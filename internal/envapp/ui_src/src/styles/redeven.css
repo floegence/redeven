@@ -1894,11 +1894,11 @@ html.dark .git-changes-table-pending {
 }
 
 .redeven-surface-control {
-  border-color: var(--redeven-stroke-control) !important;
+  border-color: var(--redeven-stroke-control);
 }
 
 .redeven-surface-control:hover:not(:disabled):not([aria-disabled='true']) {
-  border-color: var(--redeven-stroke-control-strong) !important;
+  border-color: var(--redeven-stroke-control-strong);
 }
 
 .redeven-surface-control--muted {
@@ -1984,11 +1984,6 @@ html.dark .git-changes-table-pending {
   border-color: var(--redeven-settings-sidebar-control-border);
   background: var(--redeven-settings-sidebar-inset-bg);
   color: var(--foreground);
-}
-
-.redeven-settings-search:focus {
-  background: var(--redeven-settings-panel-bg);
-  border-color: var(--redeven-settings-selection-indicator);
 }
 
 .redeven-settings-nav-item:hover {
@@ -2125,14 +2120,9 @@ html.dark .git-changes-table-pending {
 }
 
 .redeven-settings-control {
-  border-color: var(--redeven-settings-control-border) !important;
+  border-color: var(--redeven-settings-control-border);
   background: var(--redeven-settings-inset-bg) !important;
   color: var(--foreground);
-}
-
-.redeven-settings-control:focus,
-.redeven-settings-control:focus-visible {
-  border-color: var(--redeven-settings-selection-indicator) !important;
 }
 
 .redeven-settings-choice {
@@ -2414,10 +2404,6 @@ html.dark .git-changes-table-pending {
   background: color-mix(in srgb, var(--muted) 58%, var(--background)) !important;
 }
 
-.flower-chat-model-select:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent) !important;
-}
-
 .flower-chat-model-select > span:first-child {
   min-width: 0;
   overflow: hidden;
@@ -2563,13 +2549,6 @@ html.dark .git-changes-table-pending {
   box-shadow: 0 10px 28px -26px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
-.flower-chat-input.chat-input-container-focused {
-  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent),
-    0 12px 32px -26px color-mix(in srgb, var(--primary) 24%, transparent);
-}
-
 .flower-chat-input.chat-input-container-dragging {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent);
 }
@@ -2603,13 +2582,6 @@ html.dark .git-changes-table-pending {
   appearance: none;
   font-size: 0.875rem;
   line-height: 1.55;
-}
-
-.flower-chat-input-textarea:focus,
-.flower-chat-input-textarea:focus-visible {
-  outline: none;
-  border: none !important;
-  box-shadow: none !important;
 }
 
 .flower-chat-input-send-slot {

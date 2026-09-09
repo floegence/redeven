@@ -228,7 +228,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
                         <input
                           id={confirmBranchInputId}
                           type="text"
-                          class={cn('w-full rounded-md border bg-background px-3 py-2 text-xs text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', outlineControlClass)}
+                          class={cn('w-full rounded-md border bg-background px-3 py-2 text-xs text-foreground shadow-sm', outlineControlClass)}
                           value={confirmBranchName()}
                           placeholder={requiredBranchName()}
                           aria-labelledby={confirmBranchLabelId}

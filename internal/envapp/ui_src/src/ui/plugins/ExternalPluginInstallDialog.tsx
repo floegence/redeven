@@ -644,8 +644,8 @@ function SourceForm(props: {
             aria-invalid={validationVisible() && !validation().valid ? 'true' : undefined}
             aria-describedby={validationVisible() && !validation().valid ? 'external-plugin-source-error' : undefined}
             class={cn(
-              'h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10 motion-reduce:transition-none',
-              validationVisible() && !validation().valid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+              'h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none',
+              validationVisible() && !validation().valid && 'border-destructive',
             )}
             onInput={(event) => props.onURL(event.currentTarget.value)}
             onBlur={() => setValidationVisible(props.url.trim().length > 0)}
@@ -665,7 +665,7 @@ function SourceForm(props: {
             value={props.tag}
             disabled={props.pending}
             placeholder={i18n.t('uiCopy.plugin.external.latestRelease')}
-            class="h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10 motion-reduce:transition-none"
+            class="h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 sm:h-10 motion-reduce:transition-none"
             onInput={(event) => props.onTag(event.currentTarget.value)}
           />
         </label>

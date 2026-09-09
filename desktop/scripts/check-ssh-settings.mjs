@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { chromium } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 const require = createRequire(new URL('../../internal/envapp/ui_src/package.json', import.meta.url));
 const axePath = require.resolve('axe-core/axe.min.js');
@@ -9,13 +12,71 @@ const base = process.env.REDEVEN_SSH_PREVIEW_URL || 'http://127.0.0.1:43817';
 const output =
   process.env.REDEVEN_SSH_PREVIEW_OUTPUT || fileURLToPath(new URL('../dist/ssh-settings-acceptance/', import.meta.url));
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const launchDirectory = await mkdtemp(join(tmpdir(), 'redeven-ssh-scrollbars-'));
 const errors = [];
-page.on('pageerror', (error) => errors.push(error.message));
+async function launchBrowser(scrollbars) {
+  let executablePath;
+  if (process.platform === 'darwin') {
+    // Argument-domain preferences affect only this test process, never system defaults.
+    executablePath = join(launchDirectory, scrollbars);
+    const binary = chromium.executablePath().replaceAll("'", "'\\''");
+    await writeFile(executablePath, `#!/bin/sh\nexec '${binary}' -AppleShowScrollBars ${scrollbars} "$@"\n`, { mode: 0o755 });
+  }
+  return chromium.launch({ headless: true, executablePath, ignoreDefaultArgs: ['--hide-scrollbars'] });
+}
+async function createPage(browser) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  page.on('pageerror', (error) => errors.push(error.message));
+  return page;
+}
+let browser = await launchBrowser('Always');
+let page = await createPage(browser);
+async function motion(action = 'open') {
+  const frames = await page.evaluate(async (action) => {
+    const frames = [], started = performance.now();
+    const sample = () => {
+      const panel = document.querySelector('.redeven-ssh-settings-dialog');
+      if (panel) {
+        const body = panel.children[1];
+        frames.push({ elapsed: performance.now() - started, width: body.clientWidth, overflow: body.scrollHeight - body.clientHeight, focus: document.activeElement?.id });
+      }
+    };
+    if (action === 'open') { const trigger = document.querySelector('#fixture-open'); trigger.focus(); trigger.click(); }
+    else document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    sample();
+    await new Promise(resolve => {
+      const next = () => { sample(); if (performance.now() - started >= 420) resolve(); else requestAnimationFrame(next); };
+      requestAnimationFrame(next);
+    });
+    return frames;
+  }, action);
+  assert.ok(frames.length > 1, `${action}: animation frames captured`);
+  for (const frame of frames) {
+    assert.equal(frame.overflow, 0, `${action}: transient overflow at ${frame.elapsed.toFixed(1)}ms`);
+    assert.equal(frame.width, frames[0].width, `${action}: body width changed`);
+  }
+  if (action === 'open') {
+    assert.ok(frames.at(-1).elapsed >= 400);
+    assert.equal(frames.at(-1).focus, 'ssh-settings-label');
+  }
+}
+async function assertFieldFocus() {
+  const values = await page.evaluate(() => {
+    const snapshot = (el) => { const s = getComputedStyle(el); return { width: el.offsetWidth, height: el.offsetHeight, border: s.borderWidth, padding: s.padding, shadow: s.boxShadow, outline: s.outlineStyle, color: s.borderColor }; };
+    return [...document.querySelectorAll('.ssh-settings-form input:not([type="checkbox"]),.ssh-settings-form select')].map(el => {
+      el.style.transition = 'none'; el.blur(); const before = snapshot(el); el.focus(); return { id: el.id, before, after: snapshot(el) };
+    });
+  });
+  for (const field of values) {
+    for (const key of ['width','height','border','padding','shadow']) assert.equal(field.after[key], field.before[key], `${field.id}: focus changes ${key}`);
+    assert.equal(field.after.outline, 'none', `${field.id}: focus outline`);
+    assert.notEqual(field.after.color, field.before.color, `${field.id}: invisible focus border`);
+  }
+}
 async function open(locale = 'en-US', theme = 'dark', suffix = '') {
   await page.goto(`${base}/ssh-settings.html?locale=${locale}&theme=${theme}${suffix}`);
-  await page.locator('#fixture-open').click();
+  await page.evaluate(() => document.fonts.ready);
+  await motion();
   await page.locator('.redeven-ssh-settings-dialog').waitFor();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(
@@ -38,19 +99,24 @@ async function geometry() {
   });
 }
 try {
-  for (const theme of ['dark', 'light']) {
+  for (const preset of (process.argv.includes('--interactions-only') ? [] : builtInShellThemePresets)) {
+    const theme = preset.mode;
     for (const locale of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU']) {
-      await open(locale, theme);
+      await open(locale, theme, `&preset=${preset.name}`);
       const bounds = await geometry();
       assert.equal(bounds.width, 640);
       assert.equal(bounds.horizontalOverflow, false, `${theme}/${locale}: horizontal overflow`);
       assert.ok(bounds.footerBottom < 800, `${theme}/${locale}: actions clipped`);
       assert.equal(bounds.scroll, 0, `${theme}/${locale}: default view scrolls`);
-      if (locale === 'zh-CN' || locale === 'en-US')
+      await assertFieldFocus();
+      if (['classic-light','ocean'].includes(preset.name) && (locale === 'zh-CN' || locale === 'en-US'))
         await page.screenshot({ path: `${output}/${theme}-${locale}.png`, animations: 'disabled' });
     }
   }
+  console.log(process.argv.includes('--interactions-only') ? 'Running focused SSH interactions.' : 'SSH theme/locale and frame checks passed.');
   await open();
+  await motion('close');
+  await motion('open');
   const typography = await page.locator('.redeven-ssh-settings-dialog').evaluate((el) => ({
     title: getComputedStyle(el.querySelector('h2')).fontSize,
     field: getComputedStyle(el.querySelector('input')).fontSize,
@@ -147,12 +213,53 @@ try {
   await page.keyboard.press('Escape');
   await page.locator('.ssh-settings-help-popover').waitFor({ state: 'detached' });
   assert.equal(await page.locator('.redeven-ssh-settings-dialog').count(), 1);
+  const scrollbarModes = process.platform === 'darwin' ? ['Always', 'WhenScrolling'] : ['native'];
+  for (const mode of scrollbarModes) {
+    if (mode === 'WhenScrolling') {
+      await browser.close();
+      browser = await launchBrowser(mode);
+      page = await createPage(browser);
+    }
+    await open();
+    await motion('close');
+    await motion('open');
+    await page.locator('.ssh-settings-disclosure').click();
+    await page.getByRole('radio', { name: 'Password', exact: true }).click();
+    await page.locator('#ssh-settings-release_base_url').fill(`https://mirror.example.com/${'release/'.repeat(18)}`);
+    await page.setViewportSize({ width: 480, height: 640 });
+    const scrolling = await page.locator('.redeven-ssh-settings-dialog').evaluate(panel => {
+      const body = panel.children[1];
+      const header = panel.firstElementChild.getBoundingClientRect();
+      const footer = panel.lastElementChild.getBoundingClientRect();
+      body.scrollTop = 0;
+      body.scrollTop = body.scrollHeight;
+      return {
+        overflow: body.scrollHeight - body.clientHeight,
+        scrollTop: body.scrollTop,
+        gutter: body.offsetWidth - body.clientWidth,
+        panelScroll: panel.scrollTop,
+        headerStable: header.top === panel.firstElementChild.getBoundingClientRect().top,
+        footerStable: footer.bottom === panel.lastElementChild.getBoundingClientRect().bottom,
+        actionsVisible: footer.bottom <= innerHeight,
+      };
+    });
+    assert.ok(scrolling.overflow > 0 && scrolling.scrollTop > 0, `${mode}: real body scrolling`);
+    assert.equal(scrolling.panelScroll, 0, `${mode}: only the body scrolls`);
+    assert.ok(scrolling.headerStable && scrolling.footerStable && scrolling.actionsVisible);
+    if (mode === 'Always') assert.ok(scrolling.gutter > 0, 'native persistent scrollbar reserves space');
+    if (mode === 'WhenScrolling') assert.equal(scrolling.gutter, 0, 'native overlay scrollbar reserves no space');
+    console.log(`SSH scrollbar mode ${mode} passed (gutter ${scrolling.gutter}px).`);
+  }
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
-      themes: 2,
-      locales: 10,
+      themes: process.argv.includes('--interactions-only') ? 0 : builtInShellThemePresets.length,
+      locales: process.argv.includes('--interactions-only') ? 0 : 10,
       scenarios: [
+        'first 420ms geometry and autofocus',
+        'reopen and closing frames',
+        'single input focus border',
+        'native persistent and overlay scrollbar geometry',
         'default geometry',
         'accessibility',
         'focus restoration',
@@ -172,4 +279,5 @@ try {
   );
 } finally {
   await browser.close();
+  await rm(launchDirectory, { recursive: true, force: true });
 }

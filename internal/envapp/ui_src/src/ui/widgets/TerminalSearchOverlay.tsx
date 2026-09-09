@@ -30,9 +30,10 @@ export function TerminalSearchOverlay(props: TerminalSearchOverlayProps) {
       <Input
         ref={props.inputRef}
         size="sm"
+        style={{ '--ring': 'var(--redeven-terminal-search-accent)' }}
         value={props.query}
         placeholder={i18n.t('terminal.searchPlaceholder')}
-        class={`${props.mobile ? 'min-w-0 flex-1' : 'w-[220px]'} bg-[var(--redeven-terminal-search-input)] border-[var(--redeven-terminal-search-border)] text-[var(--redeven-terminal-search-foreground)] placeholder:text-[var(--redeven-terminal-search-muted)] focus:ring-[var(--redeven-terminal-search-accent)] focus:border-[var(--redeven-terminal-search-accent)] shadow-none`}
+        class={`${props.mobile ? 'min-w-0 flex-1' : 'w-[220px]'} bg-[var(--redeven-terminal-search-input)] border-[var(--redeven-terminal-search-border)] text-[var(--redeven-terminal-search-foreground)] placeholder:text-[var(--redeven-terminal-search-muted)] shadow-none`}
         onInput={(event) => props.onQueryChange(event.currentTarget.value)}
       />
       <div

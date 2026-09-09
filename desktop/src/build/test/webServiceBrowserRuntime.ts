@@ -76,7 +76,9 @@ export async function verifyWebServiceBrowserRuntime(preload: string, screenshot
       await win.webContents.debugger.sendCommand('CSS.enable');
       const { root } = await win.webContents.debugger.sendCommand('DOM.getDocument');
       const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: '#browser-address' });
-      await win.webContents.debugger.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: ['focus-visible'] });
+      await win.webContents.debugger.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: ['focus', 'focus-visible'] });
+      const { nodeId: surfaceNodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: '.address-wrap' });
+      await win.webContents.debugger.sendCommand('CSS.forcePseudoState', { nodeId: surfaceNodeId, forcedPseudoClasses: ['focus-within'] });
     }
     const results = [];
     for (const [name, preset] of Object.entries(desktopShellThemeCatalog)) {
@@ -90,7 +92,7 @@ export async function verifyWebServiceBrowserRuntime(preload: string, screenshot
           resolve({ theme: root.dataset.floeShellTheme, titleBackground: getComputedStyle(title).backgroundColor,
             barBackground: getComputedStyle(bar).backgroundColor, chrome: rgb(getComputedStyle(bar).backgroundColor),
             address: rgb(getComputedStyle(wrap).backgroundColor), foreground: rgb(getComputedStyle(input).color),
-            focus: rgb(getComputedStyle(wrap).outlineColor), outlineWidth: getComputedStyle(wrap).outlineWidth,
+            focus: rgb(getComputedStyle(wrap).borderColor), outlineWidth: getComputedStyle(wrap).outlineWidth, borderWidth: getComputedStyle(wrap).borderWidth,
             activeIcon: rgb(getComputedStyle(document.getElementById('browser-devtools')).color), activeBackground: rgb(getComputedStyle(document.getElementById('browser-devtools')).backgroundColor),
             barBottom: bar.getBoundingClientRect().bottom, titleHeight: title.getBoundingClientRect().height,
             value: input.value, start: input.selectionStart, end: input.selectionEnd, focused: document.activeElement === input,
@@ -106,7 +108,8 @@ export async function verifyWebServiceBrowserRuntime(preload: string, screenshot
         assert.ok(contrast(result.foreground, result.chrome) >= 4.5, `${name}: title contrast`);
         assert.ok(contrast(result.activeIcon, result.activeBackground) >= 3, `${name}: active icon contrast ${contrast(result.activeIcon, result.activeBackground)}`);
         if (i === 0) {
-          assert.equal(result.outlineWidth, '2px', `${name}: active address focus`);
+          assert.equal(result.outlineWidth, '0px', `${name}: no extra address outline`);
+          assert.equal(result.borderWidth, '1px', `${name}: stable address border`);
           assert.ok(contrast(result.focus, result.chrome) >= 3, `${name}: focus contrast ${contrast(result.focus, result.chrome)}`);
         }
         if (i === 0) results.push({ name, ...result });

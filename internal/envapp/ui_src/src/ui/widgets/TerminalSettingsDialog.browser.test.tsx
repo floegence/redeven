@@ -1,4 +1,5 @@
 import '../../index.css';
+import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -122,6 +123,14 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
       expect((await document.fonts.load(`14px "Redeven Terminal ${id}"`, 'M')).length).toBeGreaterThan(0);
       expect(button.element().scrollWidth).toBeLessThanOrEqual(button.element().clientWidth + 1);
     }
+  });
+
+  it('uses one focus border for terminal settings inputs', async () => {
+    const mounted = mountDialog(); cleanup = mounted.dispose;
+    await settle();
+    const inputs = document.querySelectorAll<HTMLInputElement>('input:not([type="radio"]):not([type="checkbox"])');
+    expect(inputs.length).toBeGreaterThan(0);
+    inputs.forEach(expectSingleInputFocus);
   });
 
   it('renders a keyboard-operable 21-theme desktop gallery with one scroll region', async () => {

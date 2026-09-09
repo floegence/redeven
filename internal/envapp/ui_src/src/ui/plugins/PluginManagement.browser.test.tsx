@@ -1,4 +1,5 @@
 import '../../index.css';
+import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -1379,6 +1380,13 @@ describe('plugin management browser geometry and interaction', () => {
     const heading = navigation.host.querySelector<HTMLHeadingElement>('[data-plugin-center-detail-heading]')!;
     expect(heading.textContent).toBe('Metrics');
     expect(document.activeElement).toBe(heading);
+  });
+
+  it('uses one focus border in the external package source form', async () => {
+    mountExternalDialog();
+    await settle();
+    document.querySelectorAll<HTMLInputElement>('input[type="url"]').forEach(expectSingleInputFocus);
+    expect(document.querySelector('input[type="url"]')).toBeTruthy();
   });
 
   it.each(viewportCases)('keeps the external install source step contained at $width px', async (viewport) => {

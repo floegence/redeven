@@ -4563,7 +4563,7 @@ export function EnvAppShell() {
                     disabled={accessPending() || accessUnlocking()}
                     aria-describedby={accessGatePasswordDescribedBy()}
                     aria-invalid={!!accessError()}
-                    class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <p id={ACCESS_GATE_IDS.passwordHelp} class="text-xs leading-5 text-muted-foreground">
                     {accessGatePasswordHelp()}

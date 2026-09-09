@@ -45,9 +45,10 @@ function Fixture() {
       <button
         id="fixture-open"
         onClick={() => {
+          const preset = builtInShellThemePresets.find((preset) => preset.name === query.get('preset'));
           theme.selectShellTheme(
-            query.get('theme') === 'light' ? 'light' : 'dark',
-            query.get('theme') === 'light' ? 'classic-light' : 'ocean',
+            preset?.mode ?? (query.get('theme') === 'light' ? 'light' : 'dark'),
+            preset?.name ?? (query.get('theme') === 'light' ? 'classic-light' : 'ocean'),
           );
           setState({ ...initial });
           setErrors({});

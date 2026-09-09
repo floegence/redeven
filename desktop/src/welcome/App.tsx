@@ -13865,7 +13865,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                           size="sm"
                           class={cn(
                             'w-full',
-                            accessValidation().address_error_key && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+                            accessValidation().address_error_key && 'border-destructive',
                           )}
                           aria-invalid={accessValidation().address_error_key ? 'true' : undefined}
                           aria-describedby={accessValidation().address_error_key ? 'local-ui-port-error' : undefined}
@@ -14112,11 +14112,13 @@ function ContainerPicker(props: Readonly<{
         <button
           ref={buttonRef}
           id="environment-container-picker"
+          data-floe-input-surface
+          aria-invalid={Boolean(props.fieldError) || undefined}
           type="button"
           class={cn(
             'flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left text-sm transition-colors',
             props.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-ring',
-            props.fieldError && 'border-destructive ring-1 ring-destructive/20',
+            props.fieldError && 'border-destructive',
           )}
           disabled={props.disabled}
           onClick={openMenu}
@@ -14409,10 +14411,12 @@ function GatewayProfileSourcePicker(props: Readonly<{
       <button
         ref={buttonRef}
         id="gateway-environment-gateway"
+        data-floe-input-surface
+        aria-invalid={Boolean(props.fieldError) || undefined}
         type="button"
         class={cn(
-          'group flex min-h-[4.25rem] w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2.5 text-left outline-none transition-[border-color,background-color,box-shadow] hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20',
-          props.fieldError && 'border-destructive ring-1 ring-destructive/20',
+          'group flex min-h-[4.25rem] w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2.5 text-left outline-none transition-[border-color,background-color,box-shadow] hover:border-primary/40',
+          props.fieldError && 'border-destructive',
         )}
         aria-labelledby={labelID}
         aria-haspopup="listbox"
@@ -14856,7 +14860,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
                       }}
                       placeholder="https://env.internal.example"
                       size="sm"
-                      class={cn('w-full', props.fieldErrors.target_url && 'border-destructive ring-1 ring-destructive/20')}
+                      aria-invalid={Boolean(props.fieldErrors.target_url) || undefined}
+                      class={cn('w-full', props.fieldErrors.target_url && 'border-destructive')}
                       spellcheck={false}
                       autofocus={props.state?.mode === 'create'}
                     />
@@ -14906,7 +14911,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
                   }}
                   placeholder="http://192.168.1.11:24000/"
                   size="sm"
-                  class={cn('w-full', props.fieldErrors.external_local_ui_url && 'border-destructive ring-1 ring-destructive/20')}
+                  aria-invalid={Boolean(props.fieldErrors.external_local_ui_url) || undefined}
+                  class={cn('w-full', props.fieldErrors.external_local_ui_url && 'border-destructive')}
                   spellcheck={false}
                   autofocus={props.state?.mode === 'create'}
                 />
@@ -14971,7 +14977,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
                     placeholder="22"
                     inputMode="numeric"
                     size="sm"
-                    class={cn('w-full', props.fieldErrors.ssh_port && 'border-destructive ring-1 ring-destructive/20')}
+                    aria-invalid={Boolean(props.fieldErrors.ssh_port) || undefined}
+                    class={cn('w-full', props.fieldErrors.ssh_port && 'border-destructive')}
                   />
                   <Show when={props.fieldErrors.ssh_port}>
                     <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_port}</div>
@@ -15195,7 +15202,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
                   }}
                   placeholder={connectionKind() === 'ssh_container_runtime' || connectionKind() === 'gateway_url_profile' ? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL : '/root/.redeven'}
                   size="sm"
-                  class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
+                  aria-invalid={Boolean(props.fieldErrors.runtime_root) || undefined}
+                  class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive')}
                   spellcheck={false}
                 />
                 <div class="text-[11px] text-muted-foreground">
@@ -15249,7 +15257,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps) {
             }}
             placeholder={props.i18n.t('connectionDialog.namePlaceholder')}
             size="sm"
-            class={cn('w-full', props.fieldErrors.label && 'border-destructive ring-1 ring-destructive/20')}
+            aria-invalid={Boolean(props.fieldErrors.label) || undefined}
+            class={cn('w-full', props.fieldErrors.label && 'border-destructive')}
           />
           <Show when={props.fieldErrors.label}>
             <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
@@ -15388,7 +15397,8 @@ function GatewaySetupDialog(props: Readonly<{
                   }}
                   placeholder={props.i18n.t('connectionDialog.gatewayUrlPlaceholder')}
                   size="sm"
-                  class={cn('w-full', props.fieldErrors.gateway_url && 'border-destructive ring-1 ring-destructive/20')}
+                  aria-invalid={Boolean(props.fieldErrors.gateway_url) || undefined}
+                  class={cn('w-full', props.fieldErrors.gateway_url && 'border-destructive')}
                   spellcheck={false}
                   autofocus
                 />
@@ -15466,7 +15476,8 @@ function GatewaySetupDialog(props: Readonly<{
                     placeholder="22"
                     inputMode="numeric"
                     size="sm"
-                    class={cn('w-full', props.fieldErrors.ssh_port && 'border-destructive ring-1 ring-destructive/20')}
+                    aria-invalid={Boolean(props.fieldErrors.ssh_port) || undefined}
+                    class={cn('w-full', props.fieldErrors.ssh_port && 'border-destructive')}
                   />
                 </div>
               </div>
@@ -15582,7 +15593,8 @@ function GatewaySetupDialog(props: Readonly<{
                             }}
                             placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}
                             size="sm"
-                            class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
+                            aria-invalid={Boolean(props.fieldErrors.runtime_root) || undefined}
+                            class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive')}
                             spellcheck={false}
                           />
                           <div class="text-[11px] text-muted-foreground">
@@ -15696,7 +15708,8 @@ function GatewaySetupDialog(props: Readonly<{
             }}
             placeholder={props.i18n.t('connectionDialog.gatewayNamePlaceholder')}
             size="sm"
-            class={cn('w-full', props.fieldErrors.display_name && 'border-destructive ring-1 ring-destructive/20')}
+            aria-invalid={Boolean(props.fieldErrors.display_name) || undefined}
+            class={cn('w-full', props.fieldErrors.display_name && 'border-destructive')}
           />
           <Show when={props.fieldErrors.display_name}>
             <div class="text-[11px] text-destructive">{props.fieldErrors.display_name}</div>
@@ -15840,8 +15853,9 @@ function OfficialProviderPicker(props: Readonly<{
         <button
           ref={buttonRef}
           id="control-plane-provider-picker"
+          data-floe-input-surface
           type="button"
-          class="group flex min-h-16 w-full cursor-pointer items-center justify-between gap-3 rounded-lg bg-muted/40 px-3.5 py-2.5 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          class="group flex min-h-16 w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-transparent bg-muted/40 px-3.5 py-2.5 text-left transition-colors hover:bg-accent/70"
           aria-haspopup="listbox"
           aria-expanded={open() ? 'true' : 'false'}
           aria-controls="control-plane-provider-options"
@@ -16144,7 +16158,7 @@ function SettingsFieldInput(props: Readonly<{
             size="sm"
             class={cn(
               'w-full',
-              props.invalid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+              props.invalid && 'border-destructive',
             )}
             onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
           />

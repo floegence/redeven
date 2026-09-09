@@ -48,7 +48,7 @@ export function InputDialog(props: InputDialogProps) {
         <label class="block text-xs text-muted-foreground mb-1">{props.label}</label>
         <input
           type="text"
-          class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground"
           value={inputValue()}
           placeholder={props.placeholder}
           onInput={(e) => setInputValue(e.currentTarget.value)}

@@ -755,7 +755,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                     <input
                       value={query()}
                       onInput={(event) => setQuery(event.currentTarget.value)}
-                      class="w-full rounded-md border border-border/70 bg-background px-3 py-2 text-[10px] text-foreground outline-none transition-colors focus:border-primary/35 focus:ring-2 focus:ring-primary/10"
+                      class="w-full rounded-md border border-border/70 bg-background px-3 py-2 text-[10px] text-foreground outline-none transition-colors"
                       placeholder={i18n.t('debugConsole.search.placeholder')}
                       aria-label={i18n.t('debugConsole.search.ariaLabel')}
                     />

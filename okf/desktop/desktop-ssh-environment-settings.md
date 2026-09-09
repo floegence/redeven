@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop SSH environment settings
 description: Edit SSH registrations in a compact modal with explicit saving, visible custom configuration, and direct dismissal.
 tags: [desktop, environments, ssh, settings, interaction]
-timestamp: 2026-09-09T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 ---
 # Summary
 
@@ -26,8 +26,10 @@ contract for backdrop dismissal policy, localized close labels, and input-owned
 Escape handling; it does not intercept global keyboard events to override it.
 The shell stays mounted when closed so the shared Dialog owns its full entrance
 and exit motion, including reduced-motion behavior. The form reuses the existing
-Welcome section entrance motion instead of adding a separate animation system. Its last presentation stays
-stable through exit; reopening resets the baseline and collapsed advanced state.
+Welcome section entrance motion: a 250 ms opacity-only fade. Sections must not
+translate inside the scroll viewport, create transient overflow, or change body
+width during entry. The shared panel retains its scale, translation, and fade.
+Its last presentation stays stable through exit; reopening resets the baseline and collapsed advanced state.
 Corner radius and shadow follow the shared Dialog; the title is 14px, fields and
 controls are 13px, and supporting text is 12px.
 
@@ -48,7 +50,9 @@ submitted request; late completion cannot close a new editor and late failures
 are delivered to the launcher. Focus returns to the original trigger after exit.
 Cmd/Ctrl+Enter saves unless composition or a nested selector owns the key.
 Collapsed fields remain outside the tab order. Only the content body scrolls;
-the title and actions stay visible.
+the title and actions stay visible. Real overflow remains scrollable without
+changing overflow policy during animations or delaying focus. Inputs follow the
+shared [input focus boundary](../ui/input-focus-boundaries.md).
 
 # Boundaries
 
@@ -62,3 +66,4 @@ Runtime deployment, status probing, or persistence ownership.
 - `redeven:desktop/src/welcome/SSHEnvironmentSettingsDialog.tsx:1` - SSH editing layout, draft closure, and validation presentation.
 - `redeven:desktop/src/welcome/SSHEnvironmentSettingsDialog.client.test.tsx:1` - Editing, nested keyboard input, validation, and save behavior.
 - `redeven:desktop/src/welcome/sshEnvironmentSettingsState.ts:1` - Editable fields and canonical SSH validation.
+- `redeven:desktop/scripts/check-ssh-settings.mjs` - Theme/locale geometry, animation frames, real scrolling, and editing recovery in Chromium.

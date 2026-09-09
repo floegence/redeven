@@ -268,7 +268,7 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
           <label class="block text-xs font-medium text-foreground">
             {i18n.t('files.archiveExtraction.outputName')}
             <input
-              class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
+              class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none disabled:opacity-60"
               value={outputName()}
               disabled={busy() || multipart()}
               aria-invalid={Boolean(errorMessage() && validationError())}
@@ -285,7 +285,7 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
             {i18n.t('files.archiveExtraction.destinationFolder')}
             <span class="mt-1 flex items-stretch gap-1.5">
               <input
-                class="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 font-mono text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
+                class="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 font-mono text-sm outline-none disabled:opacity-60"
                 value={destinationParent()}
                 disabled={busy() || multipart()}
                 onInput={(event) => {
@@ -314,7 +314,7 @@ export function ArchiveExtractionDialog(props: ArchiveExtractionDialogProps) {
               <input
                 type="password"
                 autocomplete="off"
-                class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
+                class="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none disabled:opacity-60"
                 value={password()}
                 disabled={busy()}
                 onInput={(event) => {

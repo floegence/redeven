@@ -1,4 +1,5 @@
 import '../../index.css';
+import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 import '../flower-feature.css';
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
@@ -234,4 +235,11 @@ describe('Flower turn launcher send feedback', () => {
       await nextFrame();
     }
   });
+});
+
+it('uses one focus border around the real Flower launch editor', async () => {
+  await mountLauncher('dark', { width: 1280, height: 800 });
+  const input = document.querySelector<HTMLTextAreaElement>('.flower-turn-launcher-textarea')!;
+  expect(input.closest('[data-floe-input-surface]')).toBeTruthy();
+  expectSingleInputFocus(input);
 });
