@@ -8225,7 +8225,7 @@
         "title": "Web Services interface",
         "type": "UI Contract"
       },
-      "body_length": 5374,
+      "body_length": 5472,
       "summary": "The shared Web Services interface presents the service identity, current backend status, available action, and supporting facts in that order. Activity and Workbench use the same collection and management drawer. Content must remain readable and actionable at narrow surface widths, with long translations and enlarged text. Historical failures cannot replace observed state. Failed checks preserve previously loaded facts with a visible explanation; unavailable actions retain an actionable inspection path within existing permissions.",
       "sections": [
         {
@@ -8239,8 +8239,8 @@
           "id": "review-and-focus",
           "title": "Review and focus",
           "level": 1,
-          "body": "One drawer contains a current conclusion, compact resource facts, and recommended actions. Its shared Dialog footer keeps the confirmed execution and its impact visible while the body scrolls. Alternative goals change the reviewed plan inside the same drawer. Reference relations and technical identities expand in place; the workspace path remains visible and copyable. The selected service is highlighted while the drawer is open. Closing restores its surviving trigger; removing the record falls back to a neighboring service or the collection heading. Errors are readable without hover. Rechecking retains previously checked facts and their timestamp, but the previous digest cannot execute during loading or after a failed check.\nThe existing Floe Dialog owns the surface boundary, keyboard trap, 240ms entry and 180ms exit. Its footer remains visible while resource facts scroll. References disclose their related instances only when expanded. Advanced actions and recent operation diagnostics remain progressive disclosure rather than permanent collection warnings.",
-          "char_count": 1072
+          "body": "One drawer contains a current conclusion, compact resource facts, and recommended actions. Its shared Dialog footer keeps the confirmed execution and its impact visible while the body scrolls. Alternative goals change the reviewed plan inside the same drawer. Reference relations and technical identities expand in place; the workspace path remains visible and copyable. The selected service is highlighted while the drawer is open. Closing restores its surviving trigger; removing the record falls back to a neighboring service or the collection heading. Errors are readable without hover. Rechecking retains previously checked facts and their timestamp, but the previous digest cannot execute during loading or after a failed check.\nThe last reviewed identity and facts remain visible during exit, avoiding an empty-content flash. The existing Floe Dialog owns the surface boundary, keyboard trap, 240ms entry and 180ms exit. Its footer remains visible while resource facts scroll. References disclose their related instances only when expanded. Advanced actions and recent operation diagnostics remain progressive disclosure rather than permanent collection warnings.",
+          "char_count": 1170
         },
         {
           "id": "ownership-and-limits",
@@ -14832,5 +14832,5 @@
       ]
     }
   ],
-  "source_sha256": "8edcd74dc46e8f979f6d3e58a1028880356f0951f1bfaa37af2ac92a7eb940a7"
+  "source_sha256": "32e5726f80349104254113eabba645506df813f8b5cda6372d4ba81c02a7e8e1"
 }

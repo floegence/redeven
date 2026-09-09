@@ -20,7 +20,7 @@ Previously loaded collection facts survive an unsuccessful refresh with an expli
 # Review and focus
 
 One drawer contains a current conclusion, compact resource facts, and recommended actions. Its shared Dialog footer keeps the confirmed execution and its impact visible while the body scrolls. Alternative goals change the reviewed plan inside the same drawer. Reference relations and technical identities expand in place; the workspace path remains visible and copyable. The selected service is highlighted while the drawer is open. Closing restores its surviving trigger; removing the record falls back to a neighboring service or the collection heading. Errors are readable without hover. Rechecking retains previously checked facts and their timestamp, but the previous digest cannot execute during loading or after a failed check.
-The existing Floe Dialog owns the surface boundary, keyboard trap, 240ms entry and 180ms exit. Its footer remains visible while resource facts scroll. References disclose their related instances only when expanded. Advanced actions and recent operation diagnostics remain progressive disclosure rather than permanent collection warnings.
+The last reviewed identity and facts remain visible during exit, avoiding an empty-content flash. The existing Floe Dialog owns the surface boundary, keyboard trap, 240ms entry and 180ms exit. Its footer remains visible while resource facts scroll. References disclose their related instances only when expanded. Advanced actions and recent operation diagnostics remain progressive disclosure rather than permanent collection warnings.
 
 # Ownership and limits
 
