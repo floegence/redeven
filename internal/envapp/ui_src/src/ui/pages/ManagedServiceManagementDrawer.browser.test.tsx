@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import {
   ManagedServiceManagementDrawer,
+  managementProblemKey,
   type ManagementRequest,
 } from './ManagedServiceManagementDrawer';
 
@@ -65,6 +66,14 @@ describe('Managed service recovery drawer', () => {
       host,
     );
   }
+  it('maps observed absence and missing configuration to actionable explanations', () => {
+    expect(managementProblemKey('INSTANCE_MISSING')).toBe(
+      'webServices.management.problems.missingInstance',
+    );
+    expect(
+      managementProblemKey('CURRENT_TEMPLATE_PARAMETERS_INCOMPATIBLE'),
+    ).toBe('webServices.management.problems.configurationRequired');
+  });
   it('cleans a retained archive only after explicit resource selection', async () => {
     api.fetch.mockImplementation(async (_url: string, init: RequestInit) => ({
       request: JSON.parse(String(init.body)),
