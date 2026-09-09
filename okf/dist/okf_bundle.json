@@ -3803,7 +3803,7 @@
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 6830,
+      "body_length": 6848,
       "summary": "Redeven owns the model directory, user selection preferences, credentials, and the one-time configuration conversion. A checked-in models.dev snapshot generates the exact catalog consumed by Go and both Flower settings surfaces. Brand catalogs default to all Agent models; users persist exclusions and parameter overrides. Image input is a variable model capability for every provider, including DeepSeek Vision. Current and default conversation models never change merely because the selectable catalog changes. Floret remains the published engine dependency and owns its own provider transport and opaque state.",
       "sections": [
         {
@@ -3817,8 +3817,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.9.0 prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.",
-          "char_count": 475
+          "body": "Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.9.1, including v7.9.0 prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.",
+          "char_count": 493
         }
       ],
       "evidence": [
@@ -14973,5 +14973,5 @@
       ]
     }
   ],
-  "source_sha256": "7bc6bec684709bb191210a5a172a02409d28c1b8c71fbaa1edc50efcd24b0506"
+  "source_sha256": "51777c335cbe953eb12c58038a9d196dd8e913c8074ab3df7794c0dbed1e117c"
 }

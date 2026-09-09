@@ -4,7 +4,7 @@
 
 - Generate one offline catalog for Runtime validation, model capabilities, and both Flower settings entrances.
 - Default brand catalogs to all Agent models; preserve exclusions, custom entries, overrides, and current model identities through atomic configuration conversion.
-- Add Gemini, explicit OpenRouter discovery, installed Ollama discovery, and per-model Vision capabilities including DeepSeek Vision through published Floret v7.9.0.
+- Add Gemini, explicit OpenRouter discovery, installed Ollama discovery, and per-model Vision capabilities including DeepSeek Vision through published Floret v7.9.1, retaining the upstream asynchronous input ownership fix.
 - Preserve parameter edits through search, collapse, and reopen; localize new model controls in all ten interface languages.
 
 ## 2026-09-09: Flower durable context and question recovery
