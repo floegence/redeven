@@ -35,7 +35,7 @@ try {
   const panel = await selectSurface(page, 'panel');
   const terminal = await activateSession(panel, config.sessionID);
   const dialog = await settings(page, panel);
-  const labels = ['JetBrains Mono', 'Iosevka', 'Cascadia Mono', 'Consolas'];
+  const labels = ['JetBrains Mono', 'Iosevka', 'Source Code Pro', 'IBM Plex Mono', 'Cascadia Mono', 'Consolas'];
   const available = [];
   for (const label of labels) {
     const button = dialog.getByRole('button', { name: new RegExp(`^${label}`) });
@@ -48,7 +48,7 @@ try {
     report.fonts.push({ label, trace });
     await page.screenshot({ path: path.join(output, `electron-${label.replaceAll(' ', '-')}.png`) });
   }
-  if (!available.includes('JetBrains Mono') || !available.includes('Iosevka')) throw new Error('Bundled Electron font is unavailable');
+  if (!['JetBrains Mono', 'Iosevka', 'Source Code Pro', 'IBM Plex Mono'].every((label) => available.includes(label))) throw new Error('Bundled Electron font is unavailable');
   const trace = await runtimeTrace(terminal);
   const restore = await fetch(`${config.coordinator}/activate?epoch=${trace.controller_epoch}`, { headers: { Authorization: `Bearer ${config.password}` } });
   if (!restore.ok) throw new Error('Could not return control to the test coordinator');

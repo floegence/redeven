@@ -53,10 +53,16 @@ importers:
       '@floegence/redevplugin-ui':
         specifier: 3.0.31
         version: 3.0.31
+      '@fontsource/ibm-plex-mono':
+        specifier: 5.3.0
+        version: 5.3.0
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
       '@fontsource/jetbrains-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/source-code-pro':
         specifier: 5.3.0
         version: 5.3.0
       '@solidjs/router':
@@ -423,11 +429,17 @@ packages:
   '@floegence/redevplugin-ui@3.0.31':
     resolution: {integrity: sha512-bqJSxSEXYoYC5zQ+O6zzF1uh2Bh27l4Bc2tKc8PbgtI2ytw1TWAqxOVNRrV0LCr+sqZu92Iadn1GU33nvesR7g==}
 
+  '@fontsource/ibm-plex-mono@5.3.0':
+    resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
   '@fontsource/iosevka@5.2.5':
     resolution: {integrity: sha512-Zv/UHJodDug1LcnWv2u2+GPp3oWP3U6Xp16cJOsqqZQNsCu8sA/ttT331N0NypxBZ+7c8szlSRlYDcy9liZ8pw==}
 
   '@fontsource/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
+
+  '@fontsource/source-code-pro@5.3.0':
+    resolution: {integrity: sha512-JxaCODU69HDS3mVra9u96nyBF911La6IvtGLgpQD+PZLxJ1i9IxooNfLR6Y37kx06IFjVGkvoUmg3WPwh/8gBg==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2937,9 +2949,13 @@ snapshots:
     dependencies:
       '@floegence/redevplugin-contracts': 3.0.31
 
+  '@fontsource/ibm-plex-mono@5.3.0': {}
+
   '@fontsource/iosevka@5.2.5': {}
 
   '@fontsource/jetbrains-mono@5.3.0': {}
+
+  '@fontsource/source-code-pro@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

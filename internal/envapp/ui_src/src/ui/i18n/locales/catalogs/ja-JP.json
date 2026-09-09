@@ -2274,6 +2274,8 @@
       "fontRecommended": "推奨",
       "fontCompact": "コンパクト",
       "fontUnavailable": "このデバイスでは使用不可",
+      "fontSearch": "利用可能なフォントを検索...",
+      "fontNoMatches": "検索に一致する利用可能なフォントはありません。",
       "fontNoLocal": "使用可能な候補のローカルフォントがありません。内蔵フォントはすべてのプラットフォームで使用できます。",
       "fontLoading": "ターミナルフォントを読み込み中…",
       "fontFallback": "このデバイスでは {requested} を使用できないため、{actual} を使用しています。保存済みの選択は変更されません。",

@@ -30,6 +30,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
 type MountedDialog = Readonly<{
   dispose: () => void;
   selectedTheme: () => string;
+  selectedFont: () => string;
   changes: string[];
 }>;
 
@@ -37,13 +38,14 @@ function mountDialog(initialTheme = 'system'): MountedDialog {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const [selectedTheme, setSelectedTheme] = createSignal(initialTheme);
+  const [selectedFont, setSelectedFont] = createSignal('iosevka');
   const changes: string[] = [];
   const dispose = render(() => (
     <TerminalSettingsDialog
       open
       userTheme={selectedTheme()}
       fontSize={12}
-      fontFamilyId="iosevka"
+      fontFamilyId={selectedFont()}
       mobileInputMode="floe"
       systemAppearance="dark"
       workIndicatorEnabled
@@ -56,12 +58,12 @@ function mountDialog(initialTheme = 'system'): MountedDialog {
         return true;
       }}
       onFontSizeChange={() => undefined}
-      onFontFamilyChange={() => undefined}
+      onFontFamilyChange={setSelectedFont}
       onMobileInputModeChange={() => undefined}
       onWorkIndicatorEnabledChange={() => undefined}
     />
   ), host);
-  return { dispose, selectedTheme, changes };
+  return { dispose, selectedTheme, selectedFont, changes };
 }
 
 async function settle(): Promise<void> {
@@ -99,6 +101,29 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     await page.viewport(1280, 720);
   });
 
+  it('previews and selects all four packaged fonts with the actual loaded family on mobile', async () => {
+    layoutState.mobile = true;
+    await page.viewport(360, 780);
+    const mounted = mountDialog();
+    cleanup = mounted.dispose;
+    await expect.poll(() => document.querySelector('[data-terminal-font-group="bundled"]')?.getAttribute('aria-busy')).toBe('false');
+    const choices = [
+      ['JetBrains Mono', 'jetbrains'], ['Iosevka', 'iosevka'],
+      ['Source Code Pro', 'source-code-pro'], ['IBM Plex Mono', 'ibm-plex-mono'],
+    ];
+    for (const [label, id] of choices) {
+      const button = page.getByRole('button', { name: new RegExp(`^${label}`) });
+      await button.click();
+      expect(mounted.selectedFont()).toBe(id);
+      const sample = button.element().querySelector<HTMLElement>('[aria-hidden="true"]')!;
+      const preview = document.querySelector<HTMLElement>('pre[aria-label]')!;
+      expect(getComputedStyle(sample).fontFamily).toBe(getComputedStyle(preview).fontFamily);
+      expect(getComputedStyle(preview).fontFamily).toContain(`Redeven Terminal ${id}`);
+      expect((await document.fonts.load(`14px "Redeven Terminal ${id}"`, 'M')).length).toBeGreaterThan(0);
+      expect(button.element().scrollWidth).toBeLessThanOrEqual(button.element().clientWidth + 1);
+    }
+  });
+
   it('renders a keyboard-operable 21-theme desktop gallery with one scroll region', async () => {
     await page.viewport(1280, 900);
     const mounted = mountDialog();
@@ -111,7 +136,7 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     expect(radios).toHaveLength(TERMINAL_THEME_DEFINITIONS.length + 1);
     expect(new Set(radios.map((radio) => radio.value)).size).toBe(21);
     expect(radios[0]?.value).toBe('system');
-    expect(document.activeElement).toBe(radios[0]);
+    await expect.poll(() => document.activeElement).toBe(radios[0]);
 
     const firstDark = radios.find((radio) => radio.value === 'dark')!;
     const secondDark = radios.find((radio) => radio.value === 'solarizedDark')!;

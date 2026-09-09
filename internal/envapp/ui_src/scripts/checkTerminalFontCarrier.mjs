@@ -17,7 +17,7 @@ const option = (name, fallback = '') => args.includes(name) ? args[args.indexOf(
 const output = path.resolve(option('--output', '/tmp/redeven-terminal-font-carrier'));
 await mkdir(output, { recursive: true });
 const canvasSelector = '[data-terminal-semantic-canvas="true"]';
-const candidates = ['JetBrains Mono', 'Iosevka', 'Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Ubuntu Mono', 'SF Mono', 'Menlo', 'Monaco'];
+const candidates = ['JetBrains Mono', 'Iosevka', 'Source Code Pro', 'IBM Plex Mono', 'Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Ubuntu Mono', 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', 'Fira Code', 'Fira Mono', 'Hack', 'Inconsolata', 'Roboto Mono', 'Noto Sans Mono', 'Ubuntu Sans Mono'];
 const sharedFont = async (page) => page.locator('[data-terminal-panel-variant="workbench"]').last().evaluate((element) => ({
   requested: element.dataset.terminalFontRequested,
   effective: element.dataset.terminalFontEffective,
@@ -215,7 +215,20 @@ if (directEntry && args.includes('--serve')) {
           if (await button.count() && await button.isEnabled()) available.push(label);
         }
         report.fontLoads.push({ dpr, available, problems: client.problems, faces: await client.page.evaluate(() => globalThis.__terminalFontLoads), resources: await client.page.evaluate(() => globalThis.performance.getEntriesByType('resource').filter((entry) => entry.name.includes('.woff2')).map((entry) => ({ path: new URL(entry.name).pathname, duration: entry.duration, bytes: entry.decodedBodySize }))) });
-        if (!available.includes('JetBrains Mono') || !available.includes('Iosevka')) throw new Error(`Bundled font load failed at DPR ${dpr}`);
+        if (!['JetBrains Mono', 'Iosevka', 'Source Code Pro', 'IBM Plex Mono'].every((label) => available.includes(label))) throw new Error(`Bundled font load failed at DPR ${dpr}`);
+        const search = dialog.getByRole('searchbox', { name: 'Search available fonts...' });
+        if (available.length > 8) {
+          await search.fill('  pLeX  ');
+          const matches = dialog.locator('[data-terminal-font-group] button[aria-pressed]');
+          if (await matches.count() !== 1 || !(await matches.innerText()).includes('IBM Plex Mono')) throw new Error('Font search did not filter available families');
+          await search.fill('no-such-font');
+          await dialog.getByText('No available fonts match your search.', { exact: true }).waitFor();
+          await search.fill('');
+        } else if (await search.count()) throw new Error('Small font catalog unexpectedly requires search');
+        if (dpr === 1) {
+          await dialog.locator('[data-terminal-font-group="bundled"]').scrollIntoViewIfNeeded();
+          await client.page.screenshot({ path: path.join(output, `${process.platform}-font-menu.png`) });
+        }
         await client.page.keyboard.press('Escape');
         for (const label of available) {
           const epoch = (await runtimeTrace(terminal)).controller_epoch;
@@ -248,7 +261,7 @@ if (directEntry && args.includes('--serve')) {
         await coordinator(`activate-shared?epoch=${sharedEpoch}`);
         await activateSession(workbench, config.sessionID);
         const activeFontChanges = [];
-        for (const label of ['Iosevka', 'JetBrains Mono']) {
+        for (const label of ['Iosevka', 'Source Code Pro', 'IBM Plex Mono', 'JetBrains Mono']) {
           await chooseFont(client.page, workbench, label);
           const trace = await waitForTrace(sharedTerminal, (value) => value.is_controller && value.geometry_cols === value.measured_cols && value.geometry_rows === value.measured_rows);
           activeFontChanges.push({ label, trace });

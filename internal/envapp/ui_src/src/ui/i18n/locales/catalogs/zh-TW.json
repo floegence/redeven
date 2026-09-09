@@ -2274,6 +2274,8 @@
       "fontRecommended": "推薦",
       "fontCompact": "緊湊",
       "fontUnavailable": "目前裝置無法使用",
+      "fontSearch": "搜尋可用字型...",
+      "fontNoMatches": "沒有符合搜尋內容的可用字型。",
       "fontNoLocal": "找不到可用的候選本機字型。內建字型可在各平台使用。",
       "fontLoading": "正在載入終端字型…",
       "fontFallback": "{requested} 在目前裝置無法使用，實際使用 {actual}；已儲存的選擇維持不變。",
