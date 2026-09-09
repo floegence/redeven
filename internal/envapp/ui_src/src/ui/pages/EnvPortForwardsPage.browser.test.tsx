@@ -591,9 +591,10 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');
     host.style.width = '1024px';
+    host.className = 'web-services';
     document.body.appendChild(host);
     dispose = render(() => (
-      <div>
+      <div class="web-service-list">
         <ManagedServiceRow
           service={{
             service_id: 'mws-desktop',
@@ -659,9 +660,9 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const forwardSecondary = forwardRow.querySelector<HTMLElement>('[data-testid="port-forward-secondary"]')!;
     const forwardStatus = forwardRow.querySelector<HTMLElement>('[data-testid="port-forward-status"]')!;
     const forwardActions = forwardRow.querySelector<HTMLElement>('[data-testid="port-forward-actions"]')!;
-    const managedOpen = Array.from(actions.querySelectorAll<HTMLElement>('button')).find((button) => button.textContent?.trim() === 'Open')!;
+    const managedOpen = Array.from(actions.querySelectorAll<HTMLElement>('button, [data-floe-dropdown-trigger]')).find((button) => button.textContent?.trim() === 'Open')!;
     const forwardOpen = Array.from(forwardActions.querySelectorAll<HTMLElement>('button')).find((button) => button.textContent?.trim() === 'Open')!;
-    const actionButtons = Array.from(actions.querySelectorAll<HTMLElement>('button'));
+    const actionButtons = Array.from(actions.querySelectorAll<HTMLElement>('button, [data-floe-dropdown-trigger]'));
     const rowRect = row.getBoundingClientRect();
     const forwardRowRect = forwardRow.getBoundingClientRect();
     const identityRect = identity.getBoundingClientRect();
@@ -669,21 +670,23 @@ describe('EnvPortForwardsPage browser presentation', () => {
     const statusRect = status.getBoundingClientRect();
     const actionsRect = actions.getBoundingClientRect();
 
-    expect(rowRect.width).toBe(1024);
+    expect(rowRect.width).toBe(1022);
     expect(forwardRowRect.width).toBe(rowRect.width);
     expect(rowRect.height).toBe(forwardRowRect.height);
     expect(rowRect.height).toBeLessThanOrEqual(72);
-    expect(identityRect.right).toBeLessThanOrEqual(workspaceRect.left);
+    expect(workspaceRect.left).toBeGreaterThanOrEqual(identityRect.left);
+    expect(workspaceRect.right).toBeLessThanOrEqual(identityRect.right);
     expect(workspaceRect.right).toBeLessThanOrEqual(statusRect.left);
     expect(statusRect.right).toBeLessThanOrEqual(actionsRect.left);
-    expect(forwardSecondary.getBoundingClientRect().x).toBe(workspaceRect.x);
-    expect(forwardStatus.getBoundingClientRect().x).toBe(statusRect.x);
+    expect(forwardSecondary.getBoundingClientRect().bottom).toBeLessThanOrEqual(forwardRowRect.bottom);
+    expect(forwardStatus.getBoundingClientRect().right).toBe(statusRect.right);
     expect(forwardActions.getBoundingClientRect().x).toBe(actionsRect.x);
     expect(forwardOpen.getBoundingClientRect().x).toBe(managedOpen.getBoundingClientRect().x);
     expect(forwardOpen.getBoundingClientRect().width).toBe(managedOpen.getBoundingClientRect().width);
     expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
-    expect(workspace.scrollWidth).toBeGreaterThan(workspace.clientWidth);
-    expect(workspace.getBoundingClientRect().height).toBeLessThanOrEqual(20);
+    expect(workspace.textContent).toBe('very-long-project-directory');
+    expect(workspace.title).toContain('/Users/demo/Redeven/workspaces/managed-services/');
+    expect(workspace.getBoundingClientRect().bottom).toBeLessThanOrEqual(rowRect.bottom);
     expect(identity.textContent).not.toContain('Run an Ubuntu-based KDE Plasma desktop');
     expect(status.textContent).toContain('Running');
     expect(row.className).not.toContain('bg-[var(--redeven-status-success-soft)]');
@@ -696,6 +699,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');
     host.style.width = '1024px';
+    host.className = 'web-services';
     document.body.appendChild(host);
     type ManagedServiceRowService = Parameters<typeof ManagedServiceRowComponent>[0]['service'];
     const initialService: ManagedServiceRowService = {
@@ -762,6 +766,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
 
     await page.viewport(720, 800);
     host.style.width = '680px';
+    host.className = 'web-services';
     setService((current) => ({ ...current, observed_state: 'running', actions: { start: { available: false }, stop: { available: true }, restart: { available: true }, retry: { available: false } } }));
     setOperation(null);
     await settle();
@@ -777,6 +782,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');
     host.style.width = '1024px';
+    host.className = 'web-services';
     document.body.appendChild(host);
     dispose = render(() => (
       <ManagedServiceRow
@@ -813,13 +819,13 @@ describe('EnvPortForwardsPage browser presentation', () => {
 
     const row = document.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
     const retryButton = Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Review and resolve')!;
+      .find((button) => button.textContent?.trim() === 'Review')!;
 
     expect(retryButton).toBeTruthy();
     expect(retryButton.disabled).toBe(false);
     expect(row.textContent).not.toContain('Failed');
     expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(72);
-    expect(getComputedStyle(retryButton).whiteSpace).toBe('nowrap');
+    expect(retryButton.scrollWidth).toBeLessThanOrEqual(retryButton.clientWidth);
     expect(retryButton.scrollHeight).toBeLessThanOrEqual(retryButton.clientHeight);
 	 expect(row.textContent).toContain('Confirmation needed');
 	 expect(row.textContent).not.toContain('raw backend identity detail');
@@ -829,6 +835,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');
     host.style.width = '1024px';
+    host.className = 'web-services';
     document.body.appendChild(host);
     const [operation, setOperation] = createSignal<ManagedOperation>({
       operation_id: 'mop-retry',
@@ -948,6 +955,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await page.viewport(1200, 900);
     const host = document.createElement('div');
     host.style.width = '1024px';
+    host.className = 'web-services';
     document.body.appendChild(host);
     const initialOutput = Array.from({ length: 36 }, (_, index) => ({
       sequence: index + 1,
@@ -1029,6 +1037,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await page.viewport(720, 800);
     const host = document.createElement('div');
     host.style.width = '680px';
+    host.className = 'web-services';
     document.body.appendChild(host);
     dispose = render(() => (
       <ManagedServiceRow
@@ -1099,6 +1108,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     await page.viewport(1200, 800);
     const host = document.createElement('div');
     host.style.width = '1024px';
+    host.className = 'web-services';
     document.body.appendChild(host);
     dispose = render(() => (
       <ManagedServiceRow

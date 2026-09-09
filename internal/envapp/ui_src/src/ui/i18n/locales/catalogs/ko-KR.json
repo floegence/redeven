@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "참조하는 인스턴스",
+      "copyPath": "작업 디렉터리 경로 복사",
+      "copyFailed": "경로를 복사하지 못했습니다. 경로를 선택하여 직접 복사하세요.",
+      "otherActions": "다른 작업",
       "title": "확인 및 처리",
       "currentSituation": "현재 상황",
       "checkedAt": "확인 시간",
@@ -3016,7 +3020,7 @@
       "network": "인스턴스 네트워크"
     },
     "title": "Web 서비스",
-    "description": "이 환경의 루프백 인터페이스에서 수신 대기하는 HTTP 서비스를 격리된 Desktop 창이나 사용 가능한 가장 안전한 경로로 엽니다.",
+    "description": "현재 환경의 로컬 서비스를 열고 관리합니다.",
     "loadingEyebrow": "Web 서비스",
     "loadingMessage": "Web 서비스 불러오는 중...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Web 서비스 주소",
-      "placeholder": "포트 또는 주소 입력(예: 3000 또는 localhost:8080/docs)",
+      "placeholder": "포트 또는 로컬 주소(예: 3000 또는 localhost:8080/docs)",
       "scopeTitle": "로컬 서비스만 가능.",
       "scopeDescription": "이 환경의 포트 또는 루프백 주소를 입력하세요.",
       "invalidTitle": "이 환경 내부에서만 사용할 수 있습니다",
@@ -3076,7 +3080,18 @@
       "temporary": "임시"
     },
     "collection": {
-      "title": "서비스"
+      "title": "추가된 서비스",
+      "review": "검토",
+      "recover": "복구",
+      "restore": "관리 복원",
+      "viewData": "데이터 보기",
+      "archives": "보관함",
+      "archiveCount": "{name} · {count}",
+      "back": "서비스 목록으로 돌아가기",
+      "archiveEmpty": "이 보관함에는 기록이 없습니다.",
+      "updateAvailable": "새 안정 버전을 사용할 수 있습니다",
+      "requestFailed": "요청이 완료되지 않았습니다. 서비스 상태를 확인한 후 다시 시도하세요.",
+      "refreshFailed": "최근 확인이 완료되지 않았습니다. 이전에 불러온 서비스가 표시됩니다. 다시 확인하여 상태를 업데이트하세요."
     },
     "card": {
       "fallbackName": "서비스 {id}"
@@ -3602,7 +3617,7 @@
       "updateCompleteMessage": "서비스에서 검토된 템플릿 리비전을 사용합니다.",
       "updateFailed": "관리형 서비스 업데이트 실패",
       "logs": "로그 보기",
-      "operationStarting": "작업 시작 중",
+      "operationStarting": "요청 제출 중…",
       "operationDetailsTitle": "{name} 진행률",
       "operationProgress": "작업 진행률",
       "operationAction": "작업",

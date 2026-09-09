@@ -12,6 +12,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.
 - [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.
 - [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.
+- [Web Services interface](architecture/web-services-interface.md) - Read service status, open archives, and resolve exceptions in compact, accessible Activity and Workbench panels.
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
 - [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.

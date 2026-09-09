@@ -681,28 +681,23 @@ function InlineButtonSnakeLoading(props: { class?: string }) {
   );
 }
 
-type ServiceStatusTone = 'success' | 'error' | 'neutral';
+type ServiceStatusTone = 'success' | 'error' | 'warning' | 'neutral';
 
 function ServiceStatusIndicator(props: { label: string; tone: ServiceStatusTone; class?: string }) {
   return (
     <span
       class={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium',
+        'web-service-state inline-flex items-center gap-1.5 text-xs font-medium',
         props.tone === 'success' && 'text-[var(--redeven-status-success-foreground)]',
         props.tone === 'error' && 'text-destructive',
+        props.tone === 'warning' && 'text-[var(--redeven-status-warning-foreground)]',
         props.tone === 'neutral' && 'text-muted-foreground',
         props.class,
       )}
     >
-      <span
-        class={cn(
-          'h-1.5 w-1.5 shrink-0 rounded-full',
-          props.tone === 'success' && 'bg-[var(--redeven-status-success)]',
-          props.tone === 'error' && 'bg-destructive',
-          props.tone === 'neutral' && 'bg-muted-foreground/55',
-        )}
-        aria-hidden="true"
-      />
+      <Show when={props.tone === 'warning' || props.tone === 'error'} fallback={
+        <span class={cn('h-1.5 w-1.5 shrink-0 rounded-full', props.tone === 'success' ? 'bg-[var(--redeven-status-success)]' : 'bg-muted-foreground/55')} aria-hidden="true" />
+      }><AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /></Show>
       {props.label}
     </span>
   );
@@ -776,9 +771,18 @@ function EmptyState(props: { onCreateClick: () => void; disabled?: boolean }) {
   );
 }
 
-const serviceRowGridClass = 'group grid min-h-16 min-w-0 grid-cols-[minmax(0,1fr)_13.5rem] items-center gap-x-4 gap-y-1.5 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/25 lg:h-[4.5rem] lg:min-h-[4.5rem] lg:grid-cols-[minmax(0,1.15fr)_minmax(10rem,0.72fr)_6rem_13.5rem]';
-const managedServiceRowGridClass = `${serviceRowGridClass} grid-rows-[2.5rem_3.125rem] lg:grid-rows-[4.5rem]`;
-const serviceRowActionsClass = 'col-start-2 row-start-1 grid w-[13.5rem] shrink-0 grid-cols-[4.75rem_4.75rem_2rem] items-center justify-end gap-2 lg:col-start-4';
+const serviceRowGridClass = 'web-service-row';
+const serviceRowActionsClass = 'web-service-actions';
+
+function workspaceBasename(path: string): string {
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
+}
+
+function managedStatusTone(status: string): ServiceStatusTone {
+  if (status === 'running') return 'success';
+  if (['uninstall_pending', 'recovery_required', 'confirmation_required', 'inspection_unavailable'].includes(status)) return 'warning';
+  return 'neutral';
+}
 
 export function PortForwardRow(props: {
   forward: PortForward;
@@ -798,17 +802,14 @@ export function PortForwardRow(props: {
       data-testid="port-forward-row"
       data-forward-id={props.forward.forward_id}
     >
-      <div class="flex min-w-0 items-center gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/20 text-muted-foreground">
+      <div class="web-service-identity">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-muted/20 text-muted-foreground">
           <Globe class="h-4 w-4" aria-hidden="true" />
         </div>
-        <div class="min-w-0">
+        <div class="web-service-identity-content min-w-0">
           <div class="truncate text-sm font-semibold leading-5">{props.forward.name || i18n.t('webServices.card.fallbackName', { id: props.forward.forward_id })}</div>
-          <div class="mt-0.5 truncate font-mono text-[11px] leading-4 text-muted-foreground" title={forwardDefaultURL(props.forward)}>{forwardDefaultURL(props.forward)}</div>
-        </div>
-      </div>
-
-      <div class="col-start-1 row-start-2 flex min-w-0 items-center gap-2 truncate text-[11px] leading-5 text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="port-forward-secondary">
+          <div class="mt-0.5 truncate font-mono text-xs leading-4 text-muted-foreground" title={forwardDefaultURL(props.forward)}>{forwardDefaultURL(props.forward)}</div>
+      <div class="web-service-metadata web-service-forward-meta" data-testid="port-forward-secondary">
         <Tooltip content={fmtTime(props.forward.last_opened_at_unix_ms, i18n)} placement="top">
           <span class="cursor-default whitespace-nowrap">{i18n.t('webServices.fields.lastOpened')} · {fmtRelativeTime(props.forward.last_opened_at_unix_ms, i18n)}</span>
         </Tooltip>
@@ -818,19 +819,23 @@ export function PortForwardRow(props: {
         </span>
       </div>
 
-      <div class="col-start-2 row-start-2 flex min-w-0 justify-end lg:col-start-3 lg:row-start-1" data-testid="port-forward-status">
+        </div>
+      </div>
+
+
+      <div class="web-service-status" data-testid="port-forward-status">
         <HealthStatus health={props.forward.health} />
       </div>
 
       <div class={serviceRowActionsClass} data-testid="port-forward-actions">
-        <Tooltip content={props.openUnavailableReason || props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="col-start-1 w-full">
+        <Tooltip content={props.openUnavailableReason || props.busyText || i18n.t('webServices.actions.openServiceTooltip')} placement="top" anchorClass="web-service-open">
           <Button
             size="sm"
             variant="default"
             onClick={props.onOpen}
             disabled={props.busy || props.canOpen === false}
             aria-busy={props.busy || undefined}
-            class="h-8 w-full px-3"
+            class="web-service-button"
           >
             <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
               <InlineButtonSnakeLoading class="mr-1.5" />
@@ -838,31 +843,32 @@ export function PortForwardRow(props: {
             {i18n.t('webServices.actions.open')}
           </Button>
         </Tooltip>
-        <Tooltip content={i18n.t('webServices.actions.editServiceTooltip')} placement="top" anchorClass="col-start-2">
+        <Tooltip content={i18n.t('webServices.actions.editServiceTooltip')} placement="top" anchorClass="web-service-manage">
           <Button
             size="sm"
             variant="ghost"
             onClick={props.onEdit}
             disabled={props.busy}
             class="h-8 w-8 px-0 text-muted-foreground hover:text-foreground"
-            aria-label={i18n.t('webServices.actions.editServiceTooltip')}
+            aria-label={`${props.forward.name}: ${i18n.t('webServices.actions.editServiceTooltip')}`}
           >
             <Pencil class="h-3.5 w-3.5" />
           </Button>
         </Tooltip>
-        <Tooltip content={i18n.t('webServices.actions.deleteServiceTooltip')} placement="top" anchorClass="col-start-3">
+        <Tooltip content={i18n.t('webServices.actions.deleteServiceTooltip')} placement="top" anchorClass="web-service-more">
           <Button
             size="sm"
             variant="ghost"
             onClick={props.onDelete}
             disabled={props.busy}
             class="h-8 w-8 px-0 text-muted-foreground hover:text-destructive"
-            aria-label={i18n.t('webServices.actions.deleteServiceTooltip')}
+            aria-label={`${props.forward.name}: ${i18n.t('webServices.actions.deleteServiceTooltip')}`}
           >
             <Trash class="h-3.5 w-3.5" />
           </Button>
         </Tooltip>
       </div>
+      <Show when={props.openUnavailableReason}><div class="web-service-notice web-service-forward-notice" role="status"><AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><p>{props.openUnavailableReason}</p></div></Show>
     </div>
   );
 }
@@ -930,6 +936,7 @@ function managedOperationFailureMessage(operation: ManagedOperation, i18n: WebSe
 
 function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string {
   switch (errorCode) {
+    case 'UI_REQUEST_FAILED': return i18n.t('webServices.collection.requestFailed');
     case 'IMAGE_PULL_TIMEOUT': return i18n.t('webServices.managed.imagePullTimeout');
     case 'IMAGE_REGISTRY_UNAVAILABLE': return i18n.t('webServices.managed.imageRegistryUnavailable');
     case 'IMAGE_UNAVAILABLE': return i18n.t('webServices.managed.imageUnavailable');
@@ -1133,6 +1140,9 @@ function ManagedOperationDisclosure(props: Readonly<{
           <Button size="sm" variant="ghost" class="my-auto h-7 shrink-0 whitespace-nowrap px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
         </Show>
         </div>
+        <Show when={props.operation.state === 'failed' || props.operation.state === 'interrupted'}>
+          <p class="web-service-operation-error" role="alert">{managedOperationFailureMessage(props.operation, i18n)}</p>
+        </Show>
         <Show when={props.expanded}>
         <div id={detailsID()} class="grid gap-4 border-t border-border/60 px-5 py-4 sm:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)]" data-testid="managed-service-operation-details">
           <ol class="space-y-2">
@@ -1184,7 +1194,7 @@ function ManagedOperationDisclosure(props: Readonly<{
                 </div>
               </div>
             </Show>
-            <Show when={!transfer() && commands().length === 0 && output().length === 0}>
+            <Show when={!transfer() && commands().length === 0 && output().length === 0 && (!terminal() || succeeded())}>
               <div class="space-y-3">
                 <p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.operationPreparingDetails')}</p>
                 <dl class="text-xs"><div><dt class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}</dt><dd class="mt-0.5 font-medium text-foreground" data-testid="managed-operation-elapsed">{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, terminal() ? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs())}</dd></div></dl>
@@ -1544,16 +1554,36 @@ function managedActionUnavailableReason(capability: ManagedActionCapability, i18
   return i18n.t(`webServices.managed.actionUnavailable.${code}` as EnvAppTranslationKey);
 }
 
-export function ManagedServiceRow(props: { service: ManagedService; operation?: ManagedOperation | null; operationPhase?: ManagedOperationPresentationPhase; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onRestoreManagement?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void; onInspect?: () => void }) {
+export function ManagedServiceRow(props: { service: ManagedService; selected?: boolean; operation?: ManagedOperation | null; operationPhase?: ManagedOperationPresentationPhase; operationExpanded: boolean; busy: boolean; busyText?: string; canOpen: boolean; openUnavailableReason?: string; canManage: boolean; onOpen: () => void; onOpenResource: (resource: ManagedContainerResource) => void; onAction: (action: ManagedAction) => void; onOperationExpandedChange: (operationID: string, expanded: boolean) => void; onCancelOperation?: () => void; onDiagnosticCopyFailure?: (message: string) => void; onSettings?: () => void; onRestoreManagement?: () => void; onVersions?: () => void; onLogs: () => void; onUninstall: () => void; onInspect?: () => void }) {
   const i18n = useI18n();
   const presentation = () => managedServicePresentation(props.service, i18n);
   const running = () => props.service.observed_state === 'running';
   const operation = () => props.operation ?? null;
   const activeOperation = () => managedOperationActive(props.operation) ? props.operation ?? null : null;
+  const statusLabel = createMemo(() => {
+    const current = activeOperation();
+    if (!current) return i18n.t(managementStatusKey(props.service.status ?? props.service.observed_state));
+    return current.state === 'submitting' ? i18n.t('webServices.managed.operationStarting') : managedStageLabel(current.stage, i18n);
+  });
   const busy = () => props.busy || managedOperationActive(props.operation);
   const actionCapability = (action: ManagedAction): ManagedActionCapability => props.service.actions?.[action] ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' };
   const primaryAction = (): string => props.service.primary_action ?? 'inspect';
-  const primaryLabel = () => primaryAction() === 'start' ? i18n.t('webServices.managed.start') : primaryAction() === 'stop' ? i18n.t('webServices.managed.stop') : primaryAction() === 'recover' ? i18n.t('webServices.management.actions.recover') : i18n.t('webServices.management.title');
+  const primaryFullLabel = () => primaryAction() === 'start' ? i18n.t('webServices.managed.start') : primaryAction() === 'stop' ? i18n.t('webServices.managed.stop') : primaryAction() === 'recover' ? i18n.t('webServices.management.actions.recover') : i18n.t('webServices.management.title');
+  const archived = () => Boolean(props.service.management_state && props.service.management_state !== 'active');
+  const primaryLabel = () => archived()
+    ? i18n.t(props.service.management_state === 'detached' ? 'webServices.collection.restore' : 'webServices.collection.viewData')
+    : primaryAction() === 'start' || primaryAction() === 'stop' ? primaryFullLabel()
+    : i18n.t(primaryAction() === 'recover' ? 'webServices.collection.recover' : 'webServices.collection.review');
+  const notices = createMemo(() => {
+    if (activeOperation()) return [];
+    const messages: string[] = [];
+    if (props.service.status === 'uninstall_pending') messages.push(i18n.t('webServices.management.problems.cleanupBlocked'));
+    else if (props.service.problem_code) messages.push(i18n.t(managementProblemKey(props.service.problem_code)));
+    if (running() && props.service.opening?.error_code) messages.push(`${i18n.t('webServices.managed.openingUnavailable')}: ${managedFailureMessage(props.service.opening.error_code, i18n)}`);
+    if (props.service.pending_changes) messages.push(i18n.t('webServices.managed.pendingChanges'));
+    if (props.openUnavailableReason) messages.push(props.openUnavailableReason);
+    return [...new Set(messages)];
+  });
   const primaryCapability = (): ManagedActionCapability => primaryAction() === 'inspect' || primaryAction() === 'recover' ? props.service.actions?.inspect ?? { available: true } : actionCapability(primaryAction() as ManagedAction);
   const executePrimary = () => { const action = primaryAction(); if (action === 'start' || action === 'stop') props.onAction(action); else props.onInspect?.(); };
   const actionLabel = (action: ManagedAction): string => {
@@ -1582,11 +1612,11 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
       label: i18n.t('common.actions.settings'),
       disabled: busy() || !props.canManage,
     }] : []),
-    {
+    ...(!archived() ? [{
       id: 'restart',
       label: actionLabel('restart'),
       disabled: busy() || !props.canManage || !actionCapability('restart').available,
-    },
+    }] : []),
     {
       id: 'logs',
       label: i18n.t('webServices.managed.logs'),
@@ -1594,7 +1624,7 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     },
     {
       id: 'uninstall',
-      label: i18n.t('webServices.managed.uninstall'),
+      label: i18n.t(props.service.management_state === 'uninstalled' ? 'webServices.management.cleanupRetained' : 'webServices.managed.uninstall'),
       disabled: busy() || !props.canManage || props.service.actions?.uninstall?.available === false,
     },
   ];
@@ -1612,53 +1642,43 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
     else if (id === 'uninstall') props.onUninstall();
   };
   return (
-    <div
+    <div class="web-service-managed" data-selected={props.selected || undefined}
       data-testid="managed-service-row"
       data-managed-service-id={props.service.service_id}
     >
-      <div class={managedServiceRowGridClass}>
-        <div class="min-w-0"><ServiceTemplateIdentity template={presentation()} compact /></div>
-
-        <div class="col-start-1 row-start-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground lg:col-start-2 lg:row-start-1" data-testid="managed-service-secondary">
-		  <Tooltip
-			placement="top"
-			content={(<div class="max-w-72 space-y-1 text-left text-xs">
-			  <div>{i18n.t('webServices.managed.currentRelease')}: <span class="font-mono">{props.service.release_status.current_release ? releaseIdentityLabel(props.service.release_status.current_release) : '—'}</span></div>
-			  <Show when={props.service.release_status.recommended_release}>{(release) => <div>{i18n.t(props.service.template_source === 'builtin' ? 'webServices.managed.recommendedVersion' : 'webServices.managed.defaultVersion')}: <span class="font-mono">{releaseIdentityLabel(release())}</span></div>}</Show>
-			  <Show when={props.service.release_status.checked_at_unix_ms}><div class="text-muted-foreground">{i18n.t('webServices.managed.releaseCheckedAt')}: {i18n.formatDateTime(props.service.release_status.checked_at_unix_ms!, { dateStyle: 'medium', timeStyle: 'short' })}<Show when={props.service.release_status.check_status === 'stale' || props.service.release_status.check_status === 'error'}> · {i18n.t('webServices.managed.releaseCheckStale')}</Show></div></Show>
-			</div>)}
-		  >
-			<button type="button" class="shrink-0 rounded px-1.5 py-0.5 font-mono text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={props.onVersions} disabled={busy() || !props.canManage} data-testid="managed-service-version">
-			  {props.service.release_status.current_release ? releaseIdentityLabel(props.service.release_status.current_release) : '—'}
-			</button>
-		  </Tooltip>
-		  <span aria-hidden="true">·</span>
-          <span class="truncate font-mono leading-5 text-foreground/70" title={props.service.workspace_path} data-testid="managed-service-workspace">{props.service.workspace_path}</span>
-          <span aria-hidden="true">·</span>
-          <span class="shrink-0" title={props.service.access_mode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackDescription') : i18n.t('webServices.accessMode.unifiedProxyDescription')}>
-            {props.service.access_mode === 'desktop_loopback' ? i18n.t('webServices.accessMode.desktopLoopbackShort') : i18n.t('webServices.accessMode.unifiedProxyShort')}
-          </span>
+      <div class={serviceRowGridClass}>
+        <div class="web-service-identity"><ServiceTemplateIdentity template={presentation()} compact metadata={
+          <div class="web-service-metadata" data-testid="managed-service-secondary">
+            <span>{presentation().deploymentLabel}</span>
+            <Tooltip placement="top" content={<div class="max-w-72 space-y-1 text-left text-xs">
+              <div>{i18n.t('webServices.managed.currentRelease')}: {props.service.release_status.current_release ? releaseIdentityLabel(props.service.release_status.current_release) : '—'}</div>
+              <Show when={props.service.release_status.recommended_release}>{(release) => <div>{i18n.t(props.service.template_source === 'builtin' ? 'webServices.managed.recommendedVersion' : 'webServices.managed.defaultVersion')}: {releaseIdentityLabel(release())}</div>}</Show>
+              <Show when={props.service.release_status.checked_at_unix_ms}><div>{i18n.t('webServices.managed.releaseCheckedAt')}: {i18n.formatDateTime(props.service.release_status.checked_at_unix_ms!, { dateStyle: 'medium', timeStyle: 'short' })}<Show when={props.service.release_status.check_status === 'stale' || props.service.release_status.check_status === 'error'}> · {i18n.t('webServices.managed.releaseCheckStale')}</Show></div></Show>
+            </div>}>
+              <button type="button" class="web-service-version" onClick={props.onVersions} disabled={busy() || !props.canManage || !props.onVersions}
+                aria-label={`${props.service.name}: ${i18n.t('webServices.managed.versions')}`} data-testid="managed-service-version">
+                {props.service.release_status.current_release ? releaseIdentityLabel(props.service.release_status.current_release) : '—'}
+                <Show when={props.service.release_status.latest_stable_relation === 'newer'}><span class="web-service-update-dot" aria-label={i18n.t('webServices.collection.updateAvailable')} /></Show>
+                <Show when={props.service.release_status.latest_stable_relation !== 'newer' && props.service.release_status.latest_preview_relation === 'newer'}><span class="web-service-preview">{i18n.t('webServices.managed.releaseChannel.preview')}</span></Show>
+              </button>
+            </Tooltip>
+            <span class="web-service-workspace" title={props.service.workspace_path} data-testid="managed-service-workspace"><FolderOpen class="h-3 w-3 shrink-0" aria-hidden="true" /><span>{workspaceBasename(props.service.workspace_path)}</span></span>
+            <span class="web-service-access">{i18n.t(props.service.access_mode === 'desktop_loopback' ? 'webServices.accessMode.desktopLoopbackShort' : 'webServices.accessMode.unifiedProxyShort')}</span>
+          </div>
+        } /></div>
+        <div class="web-service-status" data-testid="managed-service-status" role="status" aria-live="polite">
+          <ServiceStatusIndicator label={statusLabel()}
+            tone={activeOperation() ? 'neutral' : managedStatusTone(props.service.status ?? props.service.observed_state)} />
         </div>
 
-        <div class="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-0.5 lg:col-start-3 lg:row-start-1" data-testid="managed-service-status">
-          <ServiceStatusIndicator label={activeOperation() ? managedStageLabel(activeOperation()!.stage, i18n) : i18n.t(managementStatusKey(props.service.status ?? props.service.observed_state))} tone={running() ? 'success' : 'neutral'} />
-          <Show when={!activeOperation() && props.service.status === 'uninstall_pending'}><button type="button" class="cursor-pointer text-left text-[11px] text-warning hover:underline" onClick={props.onInspect}>{i18n.t('webServices.management.problems.cleanupBlocked')}</button></Show>
-		  <Show when={!activeOperation() && props.service.status !== 'uninstall_pending' && props.service.problem_code}>{(code) => <button type="button" class="max-w-64 cursor-pointer text-left text-[11px] text-warning hover:underline" onClick={props.onInspect}>{i18n.t(managementProblemKey(code()))}</button>}</Show>
-          <Show when={props.service.pending_changes}><span class="text-[10px] text-warning">{i18n.t('webServices.managed.pendingChanges')}</span></Show>
-          <Show when={running() && props.service.opening?.error_code}><Tooltip content={managedFailureMessage(props.service.opening?.error_code ?? '', i18n)}><span class="text-[10px] text-warning">{i18n.t('webServices.managed.openingUnavailable')}</span></Tooltip></Show>
-
-		  <Show when={props.service.release_status.latest_stable_relation === 'newer' && props.service.release_status.latest_stable_release}>{(latest) => <span class="max-w-full truncate text-[10px] font-medium text-warning">{releaseIdentityLabel(props.service.release_status.current_release!)} → {releaseIdentityLabel(latest())}</span>}</Show>
-		  <Show when={props.service.release_status.latest_stable_relation !== 'newer' && props.service.release_status.latest_preview_relation === 'newer' && props.service.release_status.latest_preview_release}>{(latest) => <span class="max-w-full truncate text-[10px] font-medium text-warning">{i18n.t('webServices.managed.releaseChannel.preview')}: {releaseIdentityLabel(latest())}</span>}</Show>
-        </div>
-
-        <div class={serviceRowActionsClass} data-testid="managed-service-actions">
-          <Tooltip content={props.openUnavailableReason || (props.busy ? props.busyText || i18n.t('webServices.status.opening') : i18n.t('webServices.actions.openServiceTooltip'))} placement="top" anchorClass="w-full">
+        <div class={serviceRowActionsClass} data-archived={archived() || undefined} data-testid="managed-service-actions">
+          <Show when={!archived()}><Tooltip content={props.openUnavailableReason || (props.busy ? props.busyText || i18n.t('webServices.status.opening') : i18n.t('webServices.actions.openServiceTooltip'))} placement="top" anchorClass="web-service-open">
             <Button
               size="sm"
               variant="default"
-              class="h-8 w-full px-3"
+              class="web-service-button"
               onClick={props.onOpen}
-              disabled={!props.service.actions?.open?.available || busy() || !props.canOpen}
+              disabled={!props.service.actions?.open?.available || props.busy || !props.canOpen}
               aria-busy={props.busy || undefined}
             >
               <Show when={props.busy} fallback={<ExternalLink class="mr-1.5 h-3.5 w-3.5" />}>
@@ -1666,9 +1686,9 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
               </Show>
               {i18n.t('webServices.actions.open')}
             </Button>
-          </Tooltip>
-          <Tooltip content={managedActionUnavailableReason(primaryCapability(), i18n)} placement="top" anchorClass="w-full" disabled={primaryCapability().available}>
-            <Button data-testid="managed-service-primary" size="sm" variant="outline" class="h-8 w-full whitespace-nowrap px-3" onClick={executePrimary} disabled={busy() || !props.canManage || !primaryCapability().available}>
+          </Tooltip></Show>
+          <Tooltip content={managedActionUnavailableReason(primaryCapability(), i18n)} placement="top" anchorClass="web-service-manage" disabled={primaryCapability().available}>
+            <Button data-testid="managed-service-primary" size="sm" variant="outline" class="web-service-button" aria-label={`${props.service.name}: ${primaryFullLabel()}`} onClick={executePrimary} disabled={!primaryCapability().available || ((primaryAction() === 'start' || primaryAction() === 'stop') && (busy() || !props.canManage))}>
               <Show when={primaryAction() === 'stop'}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>
               <Show when={primaryAction() === 'start'}><Play class="mr-1.5 h-3.5 w-3.5" /></Show>
               <Show when={primaryAction() !== 'start' && primaryAction() !== 'stop'}><Search class="mr-1.5 h-3.5 w-3.5" /></Show>
@@ -1680,19 +1700,24 @@ export function ManagedServiceRow(props: { service: ManagedService; operation?: 
             items={moreItems()}
             onSelect={selectMoreItem}
             triggerAriaLabel={`${props.service.name}: ${i18n.t('webServices.managed.moreActions')}`}
-            triggerClass="shrink-0 rounded-md"
+            triggerClass="web-service-more shrink-0 rounded-md"
             trigger={(
-              <button
-                type="button"
+              <span
                 class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="managed-service-more"
                 title={i18n.t('webServices.managed.moreActions')}
               >
                 <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
-              </button>
+              </span>
             )}
           />
         </div>
+      </div>
+      <div class="web-service-notice-region" data-expanded={notices().length > 0 || undefined} aria-hidden={notices().length === 0 || undefined} data-testid="managed-service-notice">
+        <div class="web-service-notice-clip"><div class="web-service-notice">
+          <AlertTriangle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <div><For each={notices()}>{(message) => <p>{message}</p>}</For></div>
+        </div></div>
       </div>
       <Show when={operation()}>{(activeOperation) => (
         <ManagedOperationDisclosure
@@ -2139,6 +2164,7 @@ async function openWebServiceRoute(
 // ============================================================================
 
 export function EnvPortForwardsPage() {
+  let pageRoot: HTMLDivElement | undefined;
   const ctx = useEnvContext();
   const notify = useNotification();
   const outlineControlClass = redevenSurfaceRoleClass('control');
@@ -2164,20 +2190,21 @@ export function EnvPortForwardsPage() {
   const [refreshSeq, setRefreshSeq] = createSignal(0);
   const bumpRefresh = () => setRefreshSeq((n) => n + 1);
 
-  const [forwards] = createResource<PortForward[], number | null>(
-    () => {
-      if (!permissionReady()) return null;
-      if (!canExecute()) return null;
-      return refreshSeq();
+  const [forwards] = createResource<{ items: PortForward[]; loaded: boolean; checkFailed: boolean }, number | null>(
+    () => permissionReady() && canExecute() ? refreshSeq() : null,
+    async (_key, previous) => {
+      try {
+        const out = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
+        return { items: Array.isArray(out?.forwards) ? out.forwards : [], loaded: true, checkFailed: false };
+      } catch {
+        return { items: previous.value?.items ?? [], loaded: previous.value?.loaded ?? false, checkFailed: true };
+      }
     },
-    async () => {
-      const out = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
-      return Array.isArray(out?.forwards) ? out.forwards : [];
-    }
   );
   const initialForwardsLoading = () => forwards.state === 'pending';
   const forwardsRefreshing = () => forwards.state === 'refreshing';
-  const forwardsRenderable = () => forwards.state === 'ready' || forwards.state === 'refreshing';
+  const forwardsRenderable = () => forwards()?.loaded ?? false;
+  const forwardsCheckFailed = () => forwards()?.checkFailed ?? false;
 
   const [managedState, setManagedState] = createSignal<ManagedService[]>([]);
   const [managedTemplates, setManagedTemplates] = createSignal<ManagedCatalogTemplate[]>([]);
@@ -2225,6 +2252,20 @@ export function EnvPortForwardsPage() {
   const [managedLogs, setManagedLogs] = createSignal<string[] | null>(null);
   const [updateNoticeAcceptances, setUpdateNoticeAcceptances] = createSignal<Record<string, boolean>>({});
   const [managementTarget, setManagementTarget] = createSignal<{ service: ManagedService; action: ManagementAction } | null>(null);
+  const closeManagement = () => {
+    const id = managementTarget()?.service.service_id;
+    const rows = Array.from(pageRoot?.querySelectorAll<HTMLElement>('[data-managed-service-id]') ?? []);
+    const index = rows.findIndex((row) => row.dataset.managedServiceId === id);
+    const original = rows[index];
+    const neighbors = [rows[index + 1], rows[index - 1]];
+    setManagementTarget(null);
+    setManagementReview(null);
+    window.requestAnimationFrame(() => {
+      if (original?.isConnected) return; // The shared Dialog restores a surviving trigger.
+      const next = neighbors.find((row) => row?.isConnected)?.querySelector<HTMLElement>('[data-testid="managed-service-primary"]');
+      (next ?? pageRoot?.querySelector<HTMLElement>('#web-services-collection-title'))?.focus({ preventScroll: true });
+    });
+  };
   const [archiveView, setArchiveView] = createSignal('active');
   const [managedSettingsService, setManagedSettingsService] = createSignal<ManagedService | null>(null);
 	const [releasePickerTarget, setReleasePickerTarget] = createSignal<ManagedReleasePickerTarget | null>(null);
@@ -2306,8 +2347,10 @@ export function EnvPortForwardsPage() {
   };
 
 
+  let managedLoadGeneration = 0;
   const loadManaged = async (refreshCatalog = true) => {
     if (!permissionReady() || !canRead()) return;
+    const generation = ++managedLoadGeneration;
     setManagedLoading(true);
     try {
       const [catalog, services] = await Promise.all([
@@ -2316,6 +2359,7 @@ export function EnvPortForwardsPage() {
           : Promise.resolve({ templates: managedTemplates() }),
         fetchLocalApiJSON<{ services: ManagedService[] }>('/_redeven_proxy/api/managed-web-services', { method: 'GET' }),
       ]);
+      if (generation !== managedLoadGeneration) return;
       const templates = Array.isArray(catalog.templates) ? catalog.templates : [];
       setManagedTemplates(templates);
       const nextServices = Array.isArray(services.services) ? services.services : [];
@@ -2340,8 +2384,8 @@ export function EnvPortForwardsPage() {
           });
       }
     } catch {
-      setManagedLoadError(true);
-    } finally { setManagedLoading(false); }
+      if (generation === managedLoadGeneration) setManagedLoadError(true);
+    } finally { if (generation === managedLoadGeneration) setManagedLoading(false); }
   };
 
   const openManagedContainerResource = (link: ManagedContainerResource) => {
@@ -2370,7 +2414,7 @@ export function EnvPortForwardsPage() {
 		if (result.state === 'preparing') {
 			if (!result.operation) throw new Error(i18n.t('webServices.managed.openPreparationFailed'));
 			const preparingOperation = result.operation;
-			setBusyText(i18n.t('webServices.managed.preparingService'));
+			setOpenRequests((current) => ({ ...current, [`managed:${service.service_id}`]: i18n.t('webServices.managed.preparingService') }));
 			let operation: ManagedOperation;
 			try {
 				operation = await managedOperations.track(preparingOperation);
@@ -2460,8 +2504,9 @@ export function EnvPortForwardsPage() {
   };
 
 	const managedAction = async (serviceID: string, action: ManagedAction | 'update', noticeRevisions: Readonly<Record<string, number>> = {}, updatePlanID = '') => {
-    if (!canManageManagedService()) return;
-    let operationID = managedOperations.begin(serviceID, action).operation_id;
+    if (!canManageManagedService() || managedOperationActive(managedRowOperation(serviceID))) return;
+    const submission = managedOperations.begin(serviceID, action);
+    let operationID = submission.operation_id;
     try {
 		const result = await fetchLocalApiJSON<ManagedOperation>(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(serviceID)}/operations`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), action, accepted_notice_revisions: noticeRevisions, ...(updatePlanID ? { update_plan_id: updatePlanID } : {}) }) });
       operationID = result.operation_id;
@@ -2473,7 +2518,15 @@ export function EnvPortForwardsPage() {
       if (action === 'update') {
         notify.success(i18n.t('webServices.managed.updateComplete'), i18n.t('webServices.managed.updateCompleteMessage'));
       }
-    } catch (error) { notify.error(managedActionFailureTitle(action, i18n), error instanceof Error ? error.message : String(error)); }
+    } catch (error) {
+      const requestFailed = operationID === submission.operation_id;
+      const errorCode = error instanceof LocalApiError ? error.code : 'UI_REQUEST_FAILED';
+      const message = requestFailed ? managedFailureMessage(errorCode, i18n) : error instanceof Error ? error.message : String(error);
+      if (requestFailed) {
+        managedOperationPresentation.update({ ...submission, state: 'failed', stage: 'failed', error_code: errorCode });
+      }
+      notify.error(managedActionFailureTitle(action, i18n), message);
+    }
     finally { if (operationID) managedOperations.clear(operationID); }
   };
 
@@ -2557,7 +2610,7 @@ export function EnvPortForwardsPage() {
     if (managedOperationActive(managedRowOperation(service.service_id))) return i18n.t('webServices.managed.openUnavailableOperation');
     if (service.observed_state !== 'running') return i18n.t('webServices.managed.openUnavailableNotRunning');
     if (!canExecute()) return i18n.t('webServices.permission.executeRequired');
-    if (busyID() === `managed:${service.service_id}`) return i18n.t('webServices.status.opening');
+    if (openBusy(`managed:${service.service_id}`)) return i18n.t('webServices.status.opening');
     if (service.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()) return i18n.t('webServices.errors.desktopLoopbackRequiresDesktop');
     return '';
   };
@@ -3016,7 +3069,7 @@ export function EnvPortForwardsPage() {
   // Filtered and sorted services
   const unmanagedForwards = createMemo(() => {
     const managedForwardIDs = new Set(managedState().map((service) => service.forward_id));
-    return (forwards() ?? []).filter((forward) => !managedForwardIDs.has(forward.forward_id));
+    return (forwards()?.items ?? []).filter((forward) => !managedForwardIDs.has(forward.forward_id));
   });
 
   const filteredForwards = createMemo(() => {
@@ -3031,13 +3084,7 @@ export function EnvPortForwardsPage() {
         })
       : list;
 
-    // Sort: healthy first, then by last opened
-    return [...filtered].sort((a, b) => {
-      const aHealthy = a.health?.status === 'healthy' ? 1 : 0;
-      const bHealthy = b.health?.status === 'healthy' ? 1 : 0;
-      if (aHealthy !== bHealthy) return bHealthy - aHealthy;
-      return (b.last_opened_at_unix_ms || 0) - (a.last_opened_at_unix_ms || 0);
-    });
+    return [...filtered].sort((a, b) => a.created_at_unix_ms - b.created_at_unix_ms || a.forward_id.localeCompare(b.forward_id));
   });
 
   const filteredManagedServices = createMemo(() => {
@@ -3066,10 +3113,11 @@ export function EnvPortForwardsPage() {
     });
   });
 
-  // Busy state for individual operations
-  const [busyID, setBusyID] = createSignal<string | null>(null);
-  const [busyText, setBusyText] = createSignal<string>('');
-  const addressOpening = () => busyID() === 'new-session';
+  const [openRequests, setOpenRequests] = createSignal<Record<string, string>>({});
+  const [openErrors, setOpenErrors] = createSignal<Record<string, string>>({});
+  const openBusy = (id: string) => Object.prototype.hasOwnProperty.call(openRequests(), id);
+  const openStatus = (id: string) => openRequests()[id] ?? '';
+  const addressOpening = () => openBusy('new-session');
 
   // Create dialog state
   const [createOpen, setCreateOpen] = createSignal(false);
@@ -3134,13 +3182,14 @@ export function EnvPortForwardsPage() {
     appPath: string,
     useDesktopWindow: boolean,
     win: Window | null,
+    setStatus: (status: string) => void,
   ) => {
     const accessMode = f.access_mode || 'unified_proxy';
     if (accessMode === 'desktop_loopback' && !useDesktopWindow) {
       throw new Error(i18n.t('webServices.errors.desktopLoopbackRequiresDesktop'));
     }
     const fid = String(f.forward_id).trim();
-    setBusyText(i18n.t('webServices.status.resolvingRoute'));
+    setStatus(i18n.t('webServices.status.resolvingRoute'));
     const localRuntime = await getLocalRuntime().catch(() => null);
     const desktopContext = readDesktopSessionContextSnapshot();
     const route = resolveWebServiceOpenRoute({
@@ -3150,7 +3199,7 @@ export function EnvPortForwardsPage() {
       appPath,
       desktopWindowAvailable: useDesktopWindow,
     });
-    await openWebServiceRoute(route, fid, f.target_url, accessMode, appPath, useDesktopWindow, (s) => setBusyText(s), {
+    await openWebServiceRoute(route, fid, f.target_url, accessMode, appPath, useDesktopWindow, setStatus, {
       missingEnvContext: i18n.t('webServices.errors.missingEnvContext'),
       opening: i18n.t('webServices.status.opening'),
       openingLocalProxy: i18n.t('webServices.status.openingLocalProxy'),
@@ -3168,21 +3217,23 @@ export function EnvPortForwardsPage() {
     initialStatus: string,
     resolveTarget: () => Promise<Readonly<{ forward: PortForward; appPath: string }>>,
   ) => {
-    if (busyID()) return;
-    setBusyID(transactionID);
-    setBusyText(initialStatus);
+    if (openBusy(transactionID)) return;
+    const setStatus = (status: string) => setOpenRequests((current) => ({ ...current, [transactionID]: status }));
+    const finish = () => setOpenRequests((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== transactionID)));
+    setStatus(initialStatus);
+    setOpenErrors((current) => ({ ...current, [transactionID]: '' }));
     const useDesktopWindow = desktopShellWebServiceWindowOpenAvailable();
     const win = useDesktopWindow ? null : window.open('about:blank', popupName);
     if (!useDesktopWindow && !win) {
-      setBusyID(null);
-      setBusyText('');
+      finish();
+      setOpenErrors((current) => ({ ...current, [transactionID]: i18n.t('webServices.errors.popupBlocked') }));
       notify.error(i18n.t('webServices.notifications.failedToOpenTitle'), i18n.t('webServices.errors.popupBlocked'));
       return;
     }
 
     try {
       const target = await resolveTarget();
-      await performOpen(target.forward, target.appPath, useDesktopWindow, win);
+      await performOpen(target.forward, target.appPath, useDesktopWindow, win, setStatus);
     } catch (e) {
       try {
         win?.close();
@@ -3190,10 +3241,10 @@ export function EnvPortForwardsPage() {
         // ignore
       }
       const msg = e instanceof Error ? e.message : String(e);
+      setOpenErrors((current) => ({ ...current, [transactionID]: msg }));
       notify.error(i18n.t('webServices.notifications.failedToOpenTitle'), msg);
     } finally {
-      setBusyID(null);
-      setBusyText('');
+      finish();
     }
   };
 
@@ -3211,7 +3262,7 @@ export function EnvPortForwardsPage() {
 
   const doOpenAddress = async () => {
     const target = address().trim();
-    if (busyID()) return;
+    if (addressOpening()) return;
     if (!isSupportedWebServiceTarget(target)) {
       setAddressValidationVisible(true);
       return;
@@ -3281,7 +3332,7 @@ export function EnvPortForwardsPage() {
   const deleteTarget = createMemo(() => {
     const id = deleteID();
     if (!id) return null;
-    return forwards()?.find((f) => f.forward_id === id) ?? null;
+    return forwards()?.items.find((f) => f.forward_id === id) ?? null;
   });
 
   const forwardMetadataDialog = createMemo(() => {
@@ -3309,14 +3360,14 @@ export function EnvPortForwardsPage() {
   });
 
   return (
-    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
-      <header class="shrink-0 border-b bg-background/95 px-4 py-3 backdrop-blur md:px-5" data-testid="web-services-panel">
-        <div class="mx-auto flex w-full max-w-5xl items-start gap-4">
-          <div class="min-w-0 flex-1">
+    <div ref={pageRoot} {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('web-services flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+      <header class="web-services-header shrink-0" data-testid="web-services-panel">
+        <div class="web-services-header-inner">
+          <div class="web-services-heading">
             <h1 class="text-base font-semibold tracking-tight">{i18n.t('webServices.title')}</h1>
-            <p class="hidden truncate text-xs leading-5 text-muted-foreground sm:block" title={i18n.t('webServices.description')}>{i18n.t('webServices.description')}</p>
+            <p class="web-services-description">{i18n.t('webServices.description')}</p>
           </div>
-          <div class="ml-auto flex shrink-0 items-center gap-2 pt-0.5">
+          <div class="web-services-header-actions">
             <Button
               size="sm"
               variant="outline"
@@ -3333,7 +3384,7 @@ export function EnvPortForwardsPage() {
               variant="default"
               class="h-8"
               onClick={() => setCreateOpen(true)}
-              disabled={!!busyID() || (permissionReady() && !canExecute())}
+              disabled={permissionReady() && !canExecute()}
               aria-label={i18n.t('webServices.actions.addService')}
               title={i18n.t('webServices.actions.addService')}
             >
@@ -3344,8 +3395,8 @@ export function EnvPortForwardsPage() {
         </div>
       </header>
 
-      <main {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto px-4 py-5 md:px-5">
-        <div class="mx-auto w-full max-w-5xl space-y-6">
+      <main {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="web-services-main min-h-0 flex-1 overflow-auto">
+        <div class="web-services-content">
           <section aria-label={i18n.t('webServices.address.label')}>
             <form
               class="w-full"
@@ -3355,7 +3406,7 @@ export function EnvPortForwardsPage() {
               }}
               data-testid="web-service-address-form"
             >
-              <div class="flex w-full flex-col gap-2 sm:flex-row">
+              <div class="web-services-address">
                 <div class="relative min-w-0 flex-1" data-testid="web-service-address-input-shell">
                   <Globe class="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <Input
@@ -3378,7 +3429,7 @@ export function EnvPortForwardsPage() {
                       'h-10 w-full pl-10 font-mono text-sm',
                       addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
                     )}
-                    disabled={!canExecute() || !!busyID()}
+                    disabled={!canExecute() || addressOpening()}
                     data-testid="web-service-address-input"
                   />
                 </div>
@@ -3386,9 +3437,9 @@ export function EnvPortForwardsPage() {
                   type="submit"
                   size="sm"
                   class="h-10 shrink-0 px-4"
-                  disabled={!canExecute() || !!busyID() || !address().trim()}
+                  disabled={!canExecute() || addressOpening() || !address().trim()}
                   aria-busy={addressOpening() || undefined}
-                  aria-label={addressOpening() ? busyText() : i18n.t('webServices.actions.openAddress')}
+                  aria-label={addressOpening() ? openStatus('new-session') : i18n.t('webServices.actions.openAddress')}
                   data-testid="web-service-address-open"
                 >
                   <Show when={addressOpening()} fallback={<ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />}>
@@ -3426,6 +3477,7 @@ export function EnvPortForwardsPage() {
                 </Show>
               </div>
 
+              <Show when={openErrors()['new-session']}><p class="mt-2 text-xs text-warning" role="alert">{openErrors()['new-session']}</p></Show>
               <Show when={recentSession()?.ephemeral && recentSession()} keyed>
                 {(session) => (
                   <div class="mt-3 flex flex-col gap-2 rounded-lg bg-muted/30 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -3457,15 +3509,15 @@ export function EnvPortForwardsPage() {
           </Show>
 
           <section class="space-y-3" data-testid="web-services-collection" aria-labelledby="web-services-collection-title">
-            <Show when={unmanagedForwards().length > 0 || managedState().length > 0}>
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="flex items-baseline gap-2">
-                  <h2 id="web-services-collection-title" class="text-sm font-semibold tracking-tight">{i18n.t('webServices.collection.title')}</h2>
+            <Show when={!initialForwardsLoading() || managedState().length > 0}>
+              <div class="web-services-toolbar">
+                <div class="web-services-toolbar-heading">
+                  <Show when={archiveView() !== 'active'}><Button variant="ghost" size="sm" class="h-8 w-8 px-0" onClick={() => setArchiveView('active')} aria-label={i18n.t('webServices.collection.back')}><ArrowLeft class="h-4 w-4" /></Button></Show>
+                  <h2 id="web-services-collection-title" tabindex="-1">{archiveView() === 'active' ? i18n.t('webServices.collection.title') : i18n.t(`webServices.management.archive.${archiveView()}` as EnvAppTranslationKey)}</h2>
                   <span class="text-xs tabular-nums text-muted-foreground">{filteredForwards().length + filteredManagedServices().length}</span>
                 </div>
-                <div class="flex min-w-0 items-center gap-2 sm:ml-auto" data-testid="web-services-toolbar-actions">
-                  <For each={['active', 'detached', 'uninstalled']}>{(state) => <Button size="sm" variant={archiveView() === state ? 'default' : 'ghost'} onClick={() => setArchiveView(state)}>{i18n.t(`webServices.management.archive.${state}` as EnvAppTranslationKey)}</Button>}</For>
-                  <div class="relative min-w-0 sm:w-64" data-testid="web-services-search">
+                <div class="web-services-toolbar-actions" data-testid="web-services-toolbar-actions">
+                  <div class="web-services-search" data-testid="web-services-search">
                     <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                     <Input
                       value={searchQuery()}
@@ -3482,18 +3534,22 @@ export function EnvPortForwardsPage() {
                       </Button>
                     </Show>
                   </div>
+                  <Dropdown align="end" triggerAriaLabel={i18n.t('webServices.collection.archives')}
+                    items={(['detached', 'uninstalled'] as const).map((state) => ({ id: state, label: i18n.t('webServices.collection.archiveCount', { name: i18n.t(`webServices.management.archive.${state}`), count: managedState().filter((service) => service.management_state === state).length }) }))}
+                    onSelect={(id) => setArchiveView(id)}
+                    triggerClass="web-services-menu-trigger" trigger={<span>{i18n.t('webServices.collection.archives')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></span>} />
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => { bumpRefresh(); void loadManaged(true); }}
-                    disabled={!!busyID() || forwards.loading || managedLoading()}
+                    disabled={forwards.loading || managedLoading()}
                     aria-label={i18n.t('webServices.actions.refresh')}
-                    aria-busy={forwardsRefreshing() ? 'true' : undefined}
+                    aria-busy={forwardsRefreshing() || managedLoading() ? 'true' : undefined}
                     title={i18n.t('webServices.actions.refresh')}
                     class="h-9 w-9 shrink-0 px-0"
                     data-testid="web-services-refresh"
                   >
-                    <RefreshIcon class={cn('h-4 w-4', forwardsRefreshing() && 'animate-spin motion-reduce:animate-none')} />
+                    <RefreshIcon class={cn('h-4 w-4', (forwardsRefreshing() || managedLoading()) && 'animate-spin motion-reduce:animate-none')} />
                   </Button>
                 </div>
               </div>
@@ -3502,7 +3558,7 @@ export function EnvPortForwardsPage() {
             <div
               class="relative"
               style={{ 'min-height': '200px' }}
-              aria-busy={forwardsRefreshing() ? 'true' : undefined}
+              aria-busy={forwardsRefreshing() || managedLoading() ? 'true' : undefined}
               data-testid="web-services-list-region"
             >
               <EnvCollectionLoadingSkeleton
@@ -3514,41 +3570,31 @@ export function EnvPortForwardsPage() {
                 <span class="sr-only" role="status" aria-live="polite">{i18n.t('webServices.loadingMessage')}</span>
               </Show>
 
-              <Show when={forwards.error}>
-                <div class="flex items-center gap-2 text-sm text-destructive p-4">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
-                  />
-                </svg>
-                {i18n.t('webServices.errors.loadFailedPrefix')}: {String(forwards.error)}
-                </div>
-              </Show>
+              <Show when={forwardsCheckFailed() || managedLoadError()}><div class="web-services-refresh-error" role="status"><AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" /><p>{i18n.t(forwardsRenderable() || managedState().length ? 'webServices.collection.refreshFailed' : 'webServices.errors.loadFailedPrefix')}</p></div></Show>
 
-              <Show when={(forwardsRenderable() || managedState().length > 0) && !forwards.error}>
+              <Show when={forwardsRenderable() || managedState().length > 0}>
                 <Show when={unmanagedForwards().length > 0 || managedState().length > 0} fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}>
                   <Show when={filteredForwards().length > 0 || filteredManagedServices().length > 0} fallback={
                     <div class="flex flex-col items-center justify-center px-4 py-12">
-                      <p class="text-sm text-muted-foreground">{i18n.t('webServices.search.noMatches', { query: searchQuery() })}</p>
-                      <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button>
+                      <p class="text-sm text-muted-foreground">{searchQuery() ? i18n.t('webServices.search.noMatches', { query: searchQuery() }) : i18n.t('webServices.collection.archiveEmpty')}</p>
+                      <Show when={searchQuery()}><Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="mt-2">{i18n.t('webServices.search.clear')}</Button></Show>
                     </div>
                   }>
-                    <div class={cn('overflow-hidden rounded-xl border divide-y', redevenSurfaceRoleClass('panel'))} data-testid="unified-web-services-list">
+                    <div class={cn('web-service-list', redevenSurfaceRoleClass('panel'))} data-testid="unified-web-services-list">
                       <For each={filteredManagedServiceIDs()}>{(serviceID) => (
                         <Show when={managedServiceForID(serviceID)}>{(service) => (
                           <ManagedServiceRow
                             service={service()}
+                            selected={managementTarget()?.service.service_id === serviceID}
                             operation={managedPresentedOperation(serviceID)}
                             operationPhase={managedOperationPresentation.phaseForService(serviceID)}
                             operationExpanded={Boolean(expandedManagedOperations()[managedPresentedOperation(serviceID)?.operation_id ?? ''])}
-                            busy={busyID() === `managed:${serviceID}`}
-                            busyText={busyID() === `managed:${serviceID}` ? busyText() : undefined}
+                            busy={openBusy(`managed:${serviceID}`)}
+                            busyText={openStatus(`managed:${serviceID}`)}
                             canOpen={canExecute() && (service().access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
-                            openUnavailableReason={service().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                            openUnavailableReason={openErrors()[`managed:${serviceID}`] || (service().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
                               ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
-                              : undefined}
+                              : undefined)}
                             canManage={canManageManagedService()}
                             onOpen={() => void openManaged(service())}
                             onRestoreManagement={() => void reviewManagement(service())}
@@ -3568,12 +3614,12 @@ export function EnvPortForwardsPage() {
                       <For each={filteredForwards()}>{(forward) => (
                         <PortForwardRow
                           forward={forward}
-                          busy={busyID() === forward.forward_id}
-                          busyText={busyID() === forward.forward_id ? busyText() : undefined}
+                          busy={openBusy(forward.forward_id)}
+                          busyText={openStatus(forward.forward_id)}
                           canOpen={forward.access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable()}
-                          openUnavailableReason={forward.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
+                          openUnavailableReason={openErrors()[forward.forward_id] || (forward.access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
                             ? i18n.t('webServices.errors.desktopLoopbackRequiresDesktop')
-                            : undefined}
+                            : undefined)}
                           onOpen={() => void doOpen(forward)}
                           onEdit={() => setForwardMetadataTarget({ mode: 'edit', forward })}
                           onDelete={() => setDeleteID(forward.forward_id)}
@@ -3583,7 +3629,6 @@ export function EnvPortForwardsPage() {
                   </Show>
                 </Show>
               </Show>
-              <Show when={managedLoadError()}><p class="mt-3 text-xs text-warning">{i18n.t('webServices.errors.loadFailedPrefix')}</p></Show>
             </div>
           </section>
         </div>
@@ -3610,7 +3655,7 @@ export function EnvPortForwardsPage() {
 		operation={(() => {const operation=managementTarget() ? managedRowOperation(managementTarget()!.service.service_id) : null;return operation && managedOperationActive(operation) ? {label:managedStageLabel(operation.stage,i18n),current:operation.progress_current ?? 0,total:operation.progress_total ?? 7,cancellable:!operation.cancel_requested}:null;})()}
 		onCancelOperation={() => void cancelManagedOperation(managementTarget() ? managedRowOperation(managementTarget()!.service.service_id) : null)}
         administrator={Boolean(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)}
-        onClose={() => { setManagementTarget(null); setManagementReview(null); }}
+        onClose={closeManagement}
 		onService={(id) => {setManagementTarget(null);setArchiveView('active');const service=managedServiceForID(id);if(service)setSearchQuery(service.name);}}
         onResource={(identity) => openManagedContainerResource({ kind: 'container', engine: 'docker', view: 'containers', identity })}
         onSettings={() => { const target = managementTarget(); if (target) { setManagementTarget(null); setManagedSettingsService(target.service); } }}
@@ -3625,7 +3670,7 @@ export function EnvPortForwardsPage() {
           const completed = await managedOperations.track(result);
           await loadManaged(false); bumpRefresh();
           if (completed.state !== 'succeeded') throw new LocalApiError({ message: completed.error_message ?? '', code: completed.error_code ?? 'OPERATION_FAILED', status: 409 });
-          setManagementTarget(null);
+          closeManagement();
         }}
       />
       <ManagedServiceSettingsDrawer

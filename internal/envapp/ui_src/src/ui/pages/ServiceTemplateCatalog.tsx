@@ -428,6 +428,7 @@ function templateIconClass(icon: ServiceTemplatePresentation['icon'], compact = 
 export function ServiceTemplateIdentity(props: {
   template: ServiceTemplatePresentation;
   compact?: boolean;
+  metadata?: JSX.Element;
 }): JSX.Element {
   const i18n = useI18n();
 
@@ -451,6 +452,7 @@ export function ServiceTemplateIdentity(props: {
         <Show when={!props.compact}>
           <p class="mt-1 text-xs leading-5 text-muted-foreground" dir="auto">{props.template.description}</p>
         </Show>
+        <Show when={props.metadata !== undefined} fallback={
         <div class={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground', props.compact ? 'mt-0.5 leading-4' : 'mt-2')} data-template-metadata>
           <Show when={props.compact}>
             <span>{props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</span>
@@ -466,6 +468,7 @@ export function ServiceTemplateIdentity(props: {
             <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>
           </Show>
         </div>
+        }>{props.metadata}</Show>
       </div>
     </div>
   );

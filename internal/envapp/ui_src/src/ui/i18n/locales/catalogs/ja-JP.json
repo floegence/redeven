@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "参照しているインスタンス",
+      "copyPath": "作業ディレクトリのパスをコピー",
+      "copyFailed": "パスをコピーできませんでした。パスを選択して手動でコピーしてください。",
+      "otherActions": "その他の操作",
       "title": "確認して対処",
       "currentSituation": "現在の状況",
       "checkedAt": "確認日時",
@@ -3016,7 +3020,7 @@
       "network": "インスタンスのネットワーク"
     },
     "title": "Webサービス",
-    "description": "この環境のループバックインターフェースで待ち受ける HTTP サービスを、隔離された Desktop ウィンドウまたは利用可能な最も安全なルートで開きます。",
+    "description": "この環境のローカルサービスを開いて管理します。",
     "loadingEyebrow": "Webサービス",
     "loadingMessage": "Web サービスを読み込み中...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Web サービスのアドレス",
-      "placeholder": "ポートまたはアドレスを入力（例: 3000、localhost:8080/docs）",
+      "placeholder": "ポートまたはローカルアドレス（例：3000、localhost:8080/docs）",
       "scopeTitle": "ローカルサービスのみ。",
       "scopeDescription": "この環境のポートまたはループバックアドレスを入力してください。",
       "invalidTitle": "この環境内でのみ利用できます",
@@ -3076,7 +3080,18 @@
       "temporary": "一時"
     },
     "collection": {
-      "title": "サービス"
+      "title": "追加済みサービス",
+      "review": "確認",
+      "recover": "復旧",
+      "restore": "管理を復元",
+      "viewData": "データを見る",
+      "archives": "アーカイブ",
+      "archiveCount": "{name} · {count}",
+      "back": "サービス一覧に戻る",
+      "archiveEmpty": "このアーカイブに記録はありません。",
+      "updateAvailable": "新しい安定版が利用可能です",
+      "requestFailed": "リクエストが完了しませんでした。サービスの状態を確認してから、もう一度お試しください。",
+      "refreshFailed": "今回の確認は完了しませんでした。以前読み込んだサービスを表示しています。再確認して状態を更新してください。"
     },
     "card": {
       "fallbackName": "サービス {id}"
@@ -3602,7 +3617,7 @@
       "updateCompleteMessage": "サービスはレビュー済みのテンプレートリビジョンを使用しています。",
       "updateFailed": "マネージドサービスの更新に失敗しました",
       "logs": "ログを表示",
-      "operationStarting": "操作を開始しています",
+      "operationStarting": "リクエストを送信中…",
       "operationDetailsTitle": "{name} の進行状況",
       "operationProgress": "操作の進行状況",
       "operationAction": "操作",

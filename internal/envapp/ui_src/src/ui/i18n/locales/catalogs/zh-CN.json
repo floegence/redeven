@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "引用此资源的实例",
+      "copyPath": "复制工作目录路径",
+      "copyFailed": "无法复制路径，请选中路径后手动复制。",
+      "otherActions": "其他操作",
       "title": "查看并处理",
       "currentSituation": "当前情况",
       "checkedAt": "检查时间",
@@ -3016,7 +3020,7 @@
       "network": "实例网络"
     },
     "title": "Web服务",
-    "description": "在隔离的 Desktop 窗口或当前最安全的可用路由中，打开监听于当前环境回环接口的 HTTP 服务。",
+    "description": "打开和管理当前环境中的本地服务。",
     "loadingEyebrow": "Web服务",
     "loadingMessage": "正在加载 Web服务...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Web 服务地址",
-      "placeholder": "输入端口或地址，例如 3000 或 localhost:8080/docs",
+      "placeholder": "端口或本地地址，如 3000 或 localhost:8080/docs",
       "scopeTitle": "仅限本机服务。",
       "scopeDescription": "请输入当前环境中的端口或回环地址。",
       "invalidTitle": "仅可访问当前环境内的服务",
@@ -3076,7 +3080,18 @@
       "temporary": "临时"
     },
     "collection": {
-      "title": "服务"
+      "title": "已添加服务",
+      "review": "处理",
+      "recover": "恢复",
+      "restore": "恢复管理",
+      "viewData": "查看数据",
+      "archives": "归档",
+      "archiveCount": "{name} · {count}",
+      "back": "返回服务列表",
+      "archiveEmpty": "此归档中暂无记录。",
+      "updateAvailable": "有新的稳定版本可用",
+      "requestFailed": "请求未完成。请先检查服务状态，再重新尝试。",
+      "refreshFailed": "本次检查未完成。当前显示的是之前加载的服务，请重新检查以更新状态。"
     },
     "card": {
       "fallbackName": "服务 {id}"
@@ -3617,7 +3632,7 @@
       "updateCompleteMessage": "服务现已使用经过审核的模板修订版本。",
       "updateFailed": "托管服务更新失败",
       "logs": "查看日志",
-      "operationStarting": "正在启动操作",
+      "operationStarting": "正在提交请求…",
       "operationDetailsTitle": "{name} 进度",
       "operationProgress": "操作进度",
       "operationAction": "操作",

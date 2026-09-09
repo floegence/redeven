@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "Referenciado por",
+      "copyPath": "Copiar la ruta del directorio de trabajo",
+      "copyFailed": "No se pudo copiar la ruta. Selecciónala para copiarla manualmente.",
+      "otherActions": "Otras acciones",
       "title": "Revisar y resolver",
       "currentSituation": "Situación actual",
       "checkedAt": "Comprobado",
@@ -3016,7 +3020,7 @@
       "network": "Red de la instancia"
     },
     "title": "Servicios web",
-    "description": "Abre servicios HTTP que escuchan en la interfaz de bucle invertido de este entorno, en una ventana aislada de Desktop o mediante la ruta disponible más segura.",
+    "description": "Abre y administra los servicios locales de este entorno.",
     "loadingEyebrow": "Servicios web",
     "loadingMessage": "Cargando servicios web...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Dirección del servicio web",
-      "placeholder": "Introduce un puerto o dirección, por ejemplo 3000 o localhost:8080/docs",
+      "placeholder": "Puerto o dirección local, p. ej. 3000 o localhost:8080/docs",
       "scopeTitle": "Solo servicios locales.",
       "scopeDescription": "Introduce un puerto o una dirección de bucle invertido de este entorno.",
       "invalidTitle": "Disponible solo dentro de este entorno",
@@ -3076,7 +3080,18 @@
       "temporary": "Temporal"
     },
     "collection": {
-      "title": "Servicios"
+      "title": "Servicios añadidos",
+      "review": "Revisar",
+      "recover": "Recuperar",
+      "restore": "Retomar",
+      "viewData": "Ver datos",
+      "archives": "Archivos",
+      "archiveCount": "{name} · {count}",
+      "back": "Volver a los servicios",
+      "archiveEmpty": "No hay registros en este archivo.",
+      "updateAvailable": "Hay una versión estable más reciente disponible",
+      "requestFailed": "La solicitud no se completó. Comprueba el estado del servicio antes de volver a intentarlo.",
+      "refreshFailed": "La última comprobación no se completó. Se muestran los servicios cargados anteriormente. Vuelve a comprobarlos para actualizar su estado."
     },
     "card": {
       "fallbackName": "Servicio {id}"
@@ -3602,7 +3617,7 @@
       "updateCompleteMessage": "El servicio ya utiliza la revisión de plantilla verificada.",
       "updateFailed": "Error al actualizar el servicio administrado",
       "logs": "Ver registros",
-      "operationStarting": "Iniciando operación",
+      "operationStarting": "Enviando solicitud…",
       "operationDetailsTitle": "Progreso de {name}",
       "operationProgress": "Progreso de la operación",
       "operationAction": "Acción",

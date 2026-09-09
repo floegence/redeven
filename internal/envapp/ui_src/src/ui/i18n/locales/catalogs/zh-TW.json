@@ -2931,6 +2931,10 @@
   },
   "webServices": {
     "management": {
+      "references": "參照此資源的執行個體",
+      "copyPath": "複製工作目錄路徑",
+      "copyFailed": "無法複製路徑，請選取路徑後手動複製。",
+      "otherActions": "其他操作",
       "title": "檢視並處理",
       "currentSituation": "目前情況",
       "checkedAt": "檢查時間",
@@ -3016,7 +3020,7 @@
       "network": "執行個體網路"
     },
     "title": "Web服務",
-    "description": "在隔離的 Desktop 視窗或目前最安全的可用路由中，開啟監聽於目前環境回送介面的 HTTP 服務。",
+    "description": "開啟和管理目前環境中的本機服務。",
     "loadingEyebrow": "Web服務",
     "loadingMessage": "正在載入 Web 服務...",
     "time": {
@@ -3055,7 +3059,7 @@
     },
     "address": {
       "label": "Web 服務位址",
-      "placeholder": "輸入連接埠或位址，例如 3000 或 localhost:8080/docs",
+      "placeholder": "連接埠或本機位址，例如 3000 或 localhost:8080/docs",
       "scopeTitle": "僅限本機服務。",
       "scopeDescription": "請輸入目前環境中的連接埠或回送位址。",
       "invalidTitle": "僅可存取目前環境內的服務",
@@ -3076,7 +3080,18 @@
       "temporary": "暫時"
     },
     "collection": {
-      "title": "服務"
+      "title": "已新增的服務",
+      "review": "處理",
+      "recover": "復原",
+      "restore": "恢復管理",
+      "viewData": "檢視資料",
+      "archives": "封存",
+      "archiveCount": "{name} · {count}",
+      "back": "返回服務清單",
+      "archiveEmpty": "此封存中尚無記錄。",
+      "updateAvailable": "有新的穩定版本可用",
+      "requestFailed": "請求未完成。請先檢查服務狀態，再重新嘗試。",
+      "refreshFailed": "這次檢查未完成。目前顯示先前載入的服務，請重新檢查以更新狀態。"
     },
     "card": {
       "fallbackName": "服務 {id}"
@@ -3617,7 +3632,7 @@
       "updateCompleteMessage": "服務現在使用經過審核的範本修訂版本。",
       "updateFailed": "受管理服務更新失敗",
       "logs": "檢視記錄",
-      "operationStarting": "正在啟動操作",
+      "operationStarting": "正在送出請求…",
       "operationDetailsTitle": "{name} 進度",
       "operationProgress": "操作進度",
       "operationAction": "操作",
