@@ -2333,6 +2333,12 @@
     "invalidDestination": "請輸入 user@host 或 SSH 別名，不可包含空格、URL 通訊協定前綴，也不可以連字號開頭。",
     "invalidRoot": "請輸入遠端絕對路徑，或留空使用 ~/.redeven。",
     "invalidReleaseUrl": "請輸入完整的 HTTP 或 HTTPS 發佈網址，或留空使用 GitHub Releases。",
-    "invalidTimeout": "請輸入不小於 1 秒的數值，或留空使用 10 秒。"
+    "invalidTimeout": "請輸入不小於 1 秒的數值，或留空使用 10 秒。",
+    "advanced": "進階設定",
+    "delivery": "安裝套件傳送方式",
+    "directory": "執行階段目錄",
+    "releaseSource": "發佈來源",
+    "keyAgent": "金鑰 / SSH agent",
+    "passwordHelp": "密碼僅儲存在此裝置，供自動偵測使用。連線時臨時輸入的密碼不會儲存。"
   }
 }

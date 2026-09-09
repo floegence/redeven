@@ -1372,6 +1372,13 @@ export const enUS = {
     providerAuthorizedDetail: 'Desktop has active Redeven Cloud authorization and a fresh Environment catalog.',
   },
   sshSettings: {
+    advanced: "Advanced settings",
+    delivery: "Package delivery",
+    directory: "Runtime directory",
+    releaseSource: "Release source",
+    keyAgent: "Key / SSH agent",
+    passwordHelp: "Saved only on this device for automatic checks. Passwords entered in connection prompts are not saved.",
+
     title: "Environment settings",
     connection: "Connection",
     connectionHelp: "About this connection",

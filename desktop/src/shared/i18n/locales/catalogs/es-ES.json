@@ -2337,6 +2337,12 @@
     "invalidDestination": "Introduce user@host o un alias SSH, sin espacios, esquema de URL ni guion inicial.",
     "invalidRoot": "Introduce una ruta remota absoluta o deja el campo vacío para usar ~/.redeven.",
     "invalidReleaseUrl": "Introduce una URL de versiones HTTP o HTTPS completa, o deja el campo vacío para GitHub Releases.",
-    "invalidTimeout": "Introduce un número de al menos 1 segundo o deja el campo vacío para usar 10 segundos."
+    "invalidTimeout": "Introduce un número de al menos 1 segundo o deja el campo vacío para usar 10 segundos.",
+    "advanced": "Ajustes avanzados",
+    "delivery": "Transferencia del paquete",
+    "directory": "Directorio de ejecución",
+    "releaseSource": "Origen de las versiones",
+    "keyAgent": "Clave / agente SSH",
+    "passwordHelp": "Se guarda solo en este dispositivo para las comprobaciones automáticas. Las contraseñas introducidas cuando se solicitan al conectar no se guardan."
   }
 }

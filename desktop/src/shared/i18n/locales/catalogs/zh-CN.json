@@ -2333,6 +2333,12 @@
     "invalidDestination": "请输入 user@host 或 SSH 别名，不可包含空格、URL 协议前缀，也不可以连字符开头。",
     "invalidRoot": "请输入远端绝对路径，或留空使用 ~/.redeven。",
     "invalidReleaseUrl": "请输入完整的 HTTP 或 HTTPS 发布地址，或留空使用 GitHub Releases。",
-    "invalidTimeout": "请输入不小于 1 秒的数值，或留空使用 10 秒。"
+    "invalidTimeout": "请输入不小于 1 秒的数值，或留空使用 10 秒。",
+    "advanced": "高级设置",
+    "delivery": "安装包交付方式",
+    "directory": "运行时目录",
+    "releaseSource": "发布源",
+    "keyAgent": "密钥 / SSH agent",
+    "passwordHelp": "密码仅保存在此设备，供自动检测使用。连接时临时输入的密码不会保存。"
   }
 }

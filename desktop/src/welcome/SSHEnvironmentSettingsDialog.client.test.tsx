@@ -125,7 +125,7 @@ describe('SSH environment settings interactions', () => {
     input('label', 'Renamed');
     expect(document.querySelector('[aria-describedby]')?.textContent).toContain('gzcom');
     expect(button('Save changes').disabled).toBe(false);
-    button('AdvancedRemote Download & Install · Custom directory · Custom mirror · 30 s').click();
+    button('Advanced settingsRemote Download & Install · Custom directory · Custom mirror · 30 s').click();
     await settle();
     expect((document.getElementById('ssh-settings-runtime_root') as HTMLInputElement).value).toBe('/srv/redeven');
     harness.setState((state) => ({ ...state, ssh_password_configured: false }));
