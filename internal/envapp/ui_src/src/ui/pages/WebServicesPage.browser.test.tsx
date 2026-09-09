@@ -28,7 +28,10 @@ const base = {
 const retained = { ...base, name: 'Example workspace', deployment: 'container', service_id: 'sample-cleanup', status: 'uninstall_pending', primary_action: 'inspect', observed_state: 'missing', problem_code: 'RESOURCE_IN_USE', workspace_path: '/Users/demo/Services/workspace', forward_id: 'pf-cleanup', actions: { ...base.actions, open: { available: false } } };
 const saved = { forward_id: 'saved', name: 'Local dashboard', description: '', target_url: 'http://localhost:3002', access_mode: 'desktop_loopback', created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: Date.now(), health: { status: 'healthy', last_checked_at_unix_ms: Date.now(), latency_ms: 8, last_error: '' } };
 const settle = async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); };
-const media = commands as unknown as { emulateMediaPreferences: (value: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+const media = commands as unknown as {
+  emulateMediaPreferences: (value: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
+  inspectWebServicesZoom: () => Promise<{ devicePixelRatio: number; viewportWidth: number; cssWidth: number; pixelWidth: number; surfaceOverflow: number; mainOverflow: number; overflow: string[] }>;
+};
 
 describe('Web Services product interaction', () => {
   let dispose: (() => void) | undefined;
@@ -106,7 +109,16 @@ describe('Web Services product interaction', () => {
     await mount();
     await expect.poll(() => document.documentElement.lang).toBe(locale);
     for (const width of [360, 480, 680, 1024]) { host.style.width = `${width}px`; await settle(); assertLayout(); }
-    host.style.width = '480px'; host.style.zoom = '2'; await settle(); assertLayout();
+    host.style.width = '480px';
+    await settle();
+    const zoom = await media.inspectWebServicesZoom();
+    expect(zoom.devicePixelRatio).toBe(2);
+    expect(zoom.viewportWidth).toBe(720);
+    expect(zoom.cssWidth).toBe(480);
+    expect(zoom.pixelWidth).toBe(1440);
+    expect(zoom.surfaceOverflow).toBeLessThanOrEqual(1);
+    expect(zoom.mainOverflow).toBeLessThanOrEqual(1);
+    expect(zoom.overflow).toEqual([]);
   });
 
   for (const preset of ['classic-light', 'classic-dark', 'solarized-light']) it(`renders the normal and exception hierarchy in ${preset}`, async () => {
