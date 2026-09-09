@@ -109,10 +109,16 @@ func TestHostStopScriptFailureRequiresReviewedBypass(t *testing.T) {
 	if managedErrorCode(err) != "STOP_SCRIPT_FAILED" {
 		t.Fatalf("Stop() error = %v", err)
 	}
- if !managedProcessAlive(pid){t.Fatal("failed stop hook changed the business process before reviewed bypass")}
- ctx:=context.WithValue(context.Background(),skipManagementHooksKey{},true)
- if err:=driver.Stop(ctx,service);err!=nil{t.Fatal(err)}
- if managedProcessAlive(pid){t.Fatal("reviewed bypass did not stop the owned process")}
+	if !managedProcessAlive(pid) {
+		t.Fatal("failed stop hook changed the business process before reviewed bypass")
+	}
+	ctx := context.WithValue(context.Background(), skipManagementHooksKey{}, true)
+	if err := driver.Stop(ctx, service); err != nil {
+		t.Fatal(err)
+	}
+	if managedProcessAlive(pid) {
+		t.Fatal("reviewed bypass did not stop the owned process")
+	}
 	driver.processMu.Lock()
 	_, retained := driver.processes[service.ServiceID]
 	driver.processMu.Unlock()
