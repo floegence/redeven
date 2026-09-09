@@ -2,8 +2,9 @@
 
 ## 2026-09-09: Flower durable context and question recovery
 
-- Adopt published Floret v7.8.0 for canonical references, durable runtime
+- Adopt published Floret v7.9.1 for canonical references, durable runtime
   snapshots, strict bounded argument correction, and automatic domain migration.
+  The patch also copies submitted input before asynchronous execution.
 - Separate the selected device from the actual tool host and include existing
   environment routing instructions at card admission. No local target substitute.
 - Preserve technical correction pairs in Floret while keeping the user interaction
