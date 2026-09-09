@@ -19,7 +19,7 @@ Each profile hashes the stable environment/resource identity, including control-
 
 The first native opening creates a separate browser origin. Existing browser profile data is retained, but cookies, browser-only preferences, and extension sign-ins from the previous origin are not automatically copied. Runtime workspace files, code-server user data, and extension directories remain under their existing owners.
 
-The listener accepts only exact Host and a random main-process session header. One partition hook removes any renderer-supplied copy and attaches the current capability only to requests whose Chromium frame ancestry or Worker provenance belongs to the editor. Foreign frames cannot inherit authority merely because they request its port. The capability is removed before upstream forwarding. Workers and Service Workers use native browser networking. Navigation leaves the editor origin only through the system browser.
+The built-in window listener accepts only exact Host and a random main-process session header. One partition hook removes any renderer-supplied copy and attaches the current capability only to requests whose Chromium frame ancestry or Worker provenance belongs to the editor. Foreign frames cannot inherit authority merely because they request its port. The capability is removed before upstream forwarding. Workers and Service Workers use native browser networking. Navigation leaves the editor origin only through the system browser.
 
 ## Selected environment route
 
@@ -31,13 +31,13 @@ Remote environments acquire a fresh Code App entry ticket using the trusted envi
 
 The Local UI descriptor resolves only an already-running CodeSpace, returns its generation, and requires full effective read/write/execute permissions plus the current AccessGate. Its native route includes that generation. Remote `code/http_v1` runs in the same typed session dispatcher and checks the same full grant and channel gate for every request. Instance and access-session cancellation close in-flight HTTP and upgraded connections.
 
-Both paths use one bound native handler. Its dial target comes only from Runtime's running instance. The handler removes its own `/cs/<id>` prefix at most once, rejects another resource and product management paths, preserves raw query/encoded paths, and retains the managed workspace redirect and VSDA shim. The native Local UI route leaves response policy with the bound editor instead of adding the Local UI shell CSP or frame headers. It neither rewrites editor HTML/CSP nor changes the code-server launch configuration. Existing browser access to the same instance remains available.
+Both paths use one bound native handler. Its dial target comes only from Runtime's running instance. The handler removes its own `/cs/<id>` prefix at most once, rejects another resource and product management paths, preserves raw query/encoded paths, and retains the managed workspace redirect and VSDA shim. The native Local UI route leaves response policy with the bound editor instead of adding the Local UI shell CSP or frame headers. It neither rewrites editor HTML/CSP nor changes the code-server launch configuration. Desktop system-browser admission and its independent lifetime are defined by [CodeSpace system-browser access](codespace-system-browser.md); both Desktop targets share this bound Runtime handler.
 
 The native gateway streams request/response bodies with backpressure, preserves response cookies, and relays WebSocket upgrades and both buffered heads as opaque bytes. It never retries a submitted request or terminal input. Per-window and per-instance connection admission is bounded at 64; header and dial deadlines are bounded without imposing a short duration on active responses. Flowersec 5.1.0 owns ByteStream-to-Node-Duplex and Go HTTP stream adaptation; Redeven contains only its resource routing and authorization adapters.
 
 ## Compatibility and validation
 
-Compatibility epoch 13 adds this product HTTP/stream contract while preserving the epoch 12 storage-generation fence. The current v0.12.0 Desktop/Runtime pair and upgradeable earlier epochs are declared only in the Runtime Service compatibility manifest. Flowersec wire version is unchanged. Redeven consumes released Flowersec 5.1.0 and Floe Webapp 0.50.2 packages, without sibling source wiring.
+Compatibility epoch 14 extends the epoch 13 HTTP/stream contract with isolated system-browser presentation origins while preserving the epoch 12 storage-generation fence. The current v0.12.0 Desktop/Runtime pair and upgradeable earlier epochs are declared only in the Runtime Service compatibility manifest. Flowersec wire version is unchanged. Redeven consumes released Flowersec 5.1.0 and Floe Webapp 0.50.2 packages, without sibling source wiring.
 
 # Boundaries
 

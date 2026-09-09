@@ -46,9 +46,7 @@ import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOri
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 import {
   desktopShellCodespaceWindowOpenAvailable,
-  desktopShellExternalURLOpenAvailable,
   openCodespaceWindowInDesktopShell,
-  openExternalURLInDesktopShell,
 } from "../services/desktopShellBridge";
 import { desktopCodeWorkspacePrepareAvailable } from "../services/desktopCodeWorkspaceBridge";
 import {
@@ -173,7 +171,7 @@ function resolveCodespaceOpenStrategy(target: CodespaceOpenTarget, codeSpaceID: 
     return { kind: "desktop_codespace_window" };
   }
 
-  if (desktopShellExternalURLOpenAvailable()) {
+  if (desktopShellCodespaceWindowOpenAvailable()) {
     return { kind: "desktop_external_browser" };
   }
 
@@ -239,24 +237,11 @@ async function showDesktopCodespaceOpenFailure(
   }
 }
 
-async function commitCodespaceOpenStrategy(args: Readonly<{
-  strategy: CodespaceOpenStrategy;
+function navigateCodespaceBrowserPopup(args: Readonly<{
+  strategy: Extract<CodespaceOpenStrategy, { kind: "browser_popup" }>;
   url: string;
-  codeSpaceID: string;
   sandbox?: CodespaceTrustedLauncherTarget["sandbox"];
-  desktopOpenFailedMessage: string;
-  desktopWindowOpenFailedMessage: string;
-}>): Promise<void> {
-  if (args.strategy.kind === "desktop_codespace_window") throw new Error(args.desktopWindowOpenFailedMessage);
-
-  if (args.strategy.kind === "desktop_external_browser") {
-    const out = await openExternalURLInDesktopShell(args.url);
-    if (!out?.ok) {
-      throw new Error(out?.message || args.desktopOpenFailedMessage);
-    }
-    return;
-  }
-
+}>): void {
   if (args.sandbox) {
     registerSandboxWindow(args.strategy.win, args.sandbox);
   }
@@ -337,29 +322,27 @@ async function openCodespace(
     const sp = await fetchLocalApiJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(codeSpaceID)}/start`, { method: "POST" });
     const folder = String(sp?.workspace_path ?? "").trim();
 
-    if (strategy.kind === "desktop_codespace_window") {
+    if (strategy.kind === "desktop_codespace_window" || strategy.kind === "desktop_external_browser") {
       setStatus(copy.opening);
+      const failedMessage = strategy.kind === "desktop_external_browser" ? copy.desktopOpenFailed : copy.desktopWindowOpenFailed;
       let password: string | undefined;
       for (;;) {
         const retry = password !== undefined;
-        const result = await openCodespaceWindowInDesktopShell({ mode: "open", code_space_id: codeSpaceID, ...(password ? { password } : {}) });
+        const result = await openCodespaceWindowInDesktopShell({ mode: strategy.kind === "desktop_external_browser" ? "browser" : "open", code_space_id: codeSpaceID, ...(password ? { password } : {}) });
         password = undefined;
         if (result?.ok) return;
-        if (result?.message !== "codespace_password_required" || !options.requestPassword) throw new Error(result?.message || copy.desktopWindowOpenFailed);
+        if (result?.message !== "codespace_password_required" || !options.requestPassword) throw new Error(result?.message || failedMessage);
         password = await options.requestPassword(retry);
-        if (!password) throw new Error(copy.desktopWindowOpenFailed);
+        if (!password) throw new Error(failedMessage);
       }
     }
 
     if (local) {
       const url = buildLocalCodespaceURL(codeSpaceID, folder, copy.invalidUrl);
       setStatus(copy.opening);
-      await commitCodespaceOpenStrategy({
+      navigateCodespaceBrowserPopup({
         strategy,
         url,
-        codeSpaceID,
-        desktopOpenFailedMessage: copy.desktopOpenFailed,
-        desktopWindowOpenFailedMessage: copy.desktopWindowOpenFailed,
       });
       return;
     }
@@ -374,13 +357,10 @@ async function openCodespace(
     });
 
     setStatus(copy.opening);
-    await commitCodespaceOpenStrategy({
+    navigateCodespaceBrowserPopup({
       strategy,
       url: launcherTarget.url,
-      codeSpaceID,
       sandbox: launcherTarget.sandbox,
-      desktopOpenFailedMessage: copy.desktopOpenFailed,
-      desktopWindowOpenFailedMessage: copy.desktopWindowOpenFailed,
     });
   } catch (e) {
     closeCodespaceOpenStrategyOnError(strategy);

@@ -365,9 +365,11 @@ describe('main routing', () => {
     expect(helper).not.toContain('sessionKeyByWebContentsID.set(');
     expect(helper).toContain('state.lifetime.abort()');
     expect(helper).toContain('await gateway.close()');
-    expect(helper).toContain("record.transport.kind === 'provider_remote'");
-    expect(helper).toContain('createRemoteNativeCodeSpaceRoute(');
-    expect(helper).toContain('createLocalNativeCodeSpaceRoute(');
+    expect(helper).toContain('createSessionCodeSpaceRoute(record, codeSpaceID, signal, password)');
+    const route = mainSrc.slice(mainSrc.indexOf('async function createSessionCodeSpaceRoute('), start);
+    expect(route).toContain("record.transport.kind === 'provider_remote'");
+    expect(route).toContain('createRemoteNativeCodeSpaceRoute(');
+    expect(route).toContain('createLocalNativeCodeSpaceRoute(');
     expect(helper.indexOf('const profile = codeSpaceProfiles();')).toBeLessThan(helper.indexOf('const route ='));
     const closing = mainSrc.slice(mainSrc.indexOf('async function finalizeSessionClosure('));
     expect(closing.indexOf('const nativeCodeSpaces = Array.from')).toBeLessThan(closing.indexOf('for (const codespaceWindow'));

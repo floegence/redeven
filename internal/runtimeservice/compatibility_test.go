@@ -16,11 +16,11 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 13 {
-		t.Fatalf("CompatibilityEpoch = %d, want native CodeSpace transport contract epoch 13", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 14 {
+		t.Fatalf("CompatibilityEpoch = %d, want native CodeSpace browser contract epoch 14", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 4 || contract.UpgradeFromRuntimeEpochs[0] != 9 || contract.UpgradeFromRuntimeEpochs[1] != 10 || contract.UpgradeFromRuntimeEpochs[2] != 11 || contract.UpgradeFromRuntimeEpochs[3] != 12 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epoch 9, 10, 11 and 12 upgrades", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 5 || contract.UpgradeFromRuntimeEpochs[0] != 9 || contract.UpgradeFromRuntimeEpochs[1] != 10 || contract.UpgradeFromRuntimeEpochs[2] != 11 || contract.UpgradeFromRuntimeEpochs[3] != 12 || contract.UpgradeFromRuntimeEpochs[4] != 13 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epoch 9, 10, 11, 12 and 13 upgrades", contract.UpgradeFromRuntimeEpochs)
 	}
 	if contract.MinimumDesktopVersion != "v0.12.0" || contract.MinimumRuntimeVersion != "v0.12.0" {
 		t.Fatalf(

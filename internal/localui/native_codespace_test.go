@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/accessgate"
@@ -26,9 +27,15 @@ func (b nativeTestBackend) BindRunningCodeSpace(_ context.Context, id string) (a
 }
 
 func TestNativeCodeSpaceLocalAccessAndGeneration(t *testing.T) {
+	for _, origin := range []string{"http://127.0.0.1:43210", "http://cs-0123456789012345678901234567890123456789.localhost:43210"} {
+		t.Run(origin, func(t *testing.T) { testNativeCodeSpaceLocalAccessAndGeneration(t, origin) })
+	}
+}
+
+func testNativeCodeSpaceLocalAccessAndGeneration(t *testing.T, origin string) {
 	calls := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "127.0.0.1:43210" || r.URL.RequestURI() != "/echo?x=%2F&x=2" || r.Header.Get("X-Redeven-Code-Access") != "" || r.Header.Get("X-Redeven-Code-Origin") != "" {
+		if r.Host != strings.TrimPrefix(origin, "http://") || r.URL.RequestURI() != "/echo?x=%2F&x=2" || r.Header.Get("X-Redeven-Code-Access") != "" || r.Header.Get("X-Redeven-Code-Origin") != "" {
 			t.Errorf("native request boundary: %s %s %v", r.Host, r.URL.RequestURI(), r.Header)
 		}
 		for _, c := range r.Cookies() {
@@ -53,7 +60,7 @@ func TestNativeCodeSpaceLocalAccessAndGeneration(t *testing.T) {
 		req := httptest.NewRequest("POST", "http://localhost:23998/api/local/codespaces/demo/"+instance+"/echo?x=%2F&x=2", bytes.NewBufferString("native\x00body"))
 		req.Header.Set(localDesktopBridgeTokenHeader, s.localUIBridgeToken)
 		req.Header.Set("Origin", "null")
-		req.Header.Set("X-Redeven-Code-Origin", "http://127.0.0.1:43210")
+		req.Header.Set("X-Redeven-Code-Origin", origin)
 		req.Header.Set("X-Redeven-Code-Access", credential)
 		req.AddCookie(&http.Cookie{Name: "editor", Value: "preserved"})
 		req.AddCookie(&http.Cookie{Name: accessgate.LocalSessionCookieName, Value: "editor-controlled"})
