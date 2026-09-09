@@ -4169,6 +4169,24 @@
     "textOnlyModality": "テキストのみ"
   },
   "flowerSurface": {
+    "reasoningControl": {
+      "default": "デフォルト",
+      "off": "オフ",
+      "minimal": "最小",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "非常に高い",
+      "max": "最大",
+      "label": "推論",
+      "defaultLabel": "デフォルトの推論設定",
+      "reset": "推論設定をリセット",
+      "defaultHint": "モデルのデフォルトの推論設定を使用",
+      "alwaysOn": "常にオン",
+      "tokens": "{count} トークン",
+      "tokenUnit": "トークン",
+      "budgetLabel": "{label}のトークン予算"
+    },
     "filesystemPicker": {
       "path": "ディレクトリのパス",
       "go": "移動",

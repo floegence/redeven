@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-09-09 — Reasoning default presentation
+
+Clarified that Default is a configuration choice rather than an enabled state.
+Shared Flower controls offer Default without requiring a catalog default level,
+preserve explicit Off and budgets, and use localized labels. Verified the
+DeepSeek reasoning wire contract through the published Floret dependency.
+See [reasoning selection ownership](ui/flower-reasoning-selection.md).
+
 ## 2026-09-09: Flower streaming stability
 
 - Retain unchanged current-view and timeline branches while keeping canonical validation and real content changes observable.

@@ -4169,6 +4169,24 @@
     "textOnlyModality": "Somente texto"
   },
   "flowerSurface": {
+    "reasoningControl": {
+      "default": "Padrão",
+      "off": "Desativado",
+      "minimal": "Mínimo",
+      "low": "Baixo",
+      "medium": "Médio",
+      "high": "Alto",
+      "xhigh": "Muito alto",
+      "max": "Máximo",
+      "label": "Raciocínio",
+      "defaultLabel": "Raciocínio padrão",
+      "reset": "Redefinir raciocínio",
+      "defaultHint": "Usar a configuração de raciocínio padrão do modelo",
+      "alwaysOn": "Sempre ativado",
+      "tokens": "{count} tokens",
+      "tokenUnit": "tokens",
+      "budgetLabel": "Orçamento de tokens de {label}"
+    },
     "filesystemPicker": {
       "path": "Caminho do diretório",
       "go": "Ir",

@@ -48,6 +48,39 @@ async function select(surface: HTMLElement, id = 'thread-1') {
 beforeEach(async () => { await page.viewport(1280, 900); });
 
 describe('Flower reasoning settings authority', () => {
+  it('shows an unspecified effort model as Default and submits an explicit return to Default', async () => {
+    const { drafts, base } = fixture();
+    const cap: FlowerReasoningCapability = { kind: 'effort', supported_levels: ['low', 'high', 'max'], disable_supported: true };
+    const modelSettings = settings();
+    for (const provider of modelSettings.model_profile!.providers) {
+      for (const model of provider.models) {
+        model.reasoning_capability = cap;
+        delete model.default_reasoning_selection;
+      }
+    }
+    base.loadSettings = vi.fn(async () => modelSettings);
+    const surface = renderSurfaceWithDraftCoordinator(base, drafts);
+    await waitFor(() => control(surface)?.textContent?.includes('Default') === true);
+    expect(base.setThreadReasoningSelection).not.toHaveBeenCalled();
+    const choose = (text: string) => {
+      control(surface)!.querySelector('button')!.click();
+      Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'))
+        .find((item) => item.textContent === text)!.click();
+    };
+    choose('High');
+    expect(control(surface)?.textContent).toContain('High');
+    choose('Default');
+    expect(control(surface)?.textContent).toContain('Default');
+    const textarea = surface.querySelector<HTMLTextAreaElement>('textarea')!;
+    textarea.value = 'Use the model default';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const submit = surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!;
+    await waitFor(() => !submit.disabled);
+    submit.click();
+    await waitFor(() => base.launchTurn.mock.calls.length === 1);
+    expect(base.launchTurn.mock.calls[0]![0].reasoning_selection).toEqual({ level: 'default' });
+  });
+
   it('keeps saved Off after a cold detail load without promoting High into the draft', async () => {
     const { drafts, base } = fixture();
     const detail = deferred<FlowerThreadView>();

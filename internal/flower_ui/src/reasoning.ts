@@ -1,3 +1,4 @@
+import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasoningControlMessages';
 import type {
   FlowerReasoningCapability,
   FlowerReasoningLevel,
@@ -127,25 +128,18 @@ export function sameFlowerReasoningCapability(
   return JSON.stringify(normalizeFlowerReasoningCapability(left) ?? null) === JSON.stringify(normalizeFlowerReasoningCapability(right) ?? null);
 }
 
-export function flowerReasoningLevelLabel(level: FlowerReasoningLevel | string | null | undefined): string {
-  switch (normalizeFlowerReasoningLevel(level)) {
-    case 'off':
-      return 'Off';
-    case 'minimal':
-      return 'Min';
-    case 'low':
-      return 'Low';
-    case 'medium':
-      return 'Med';
-    case 'high':
-      return 'High';
-    case 'xhigh':
-      return 'XHigh';
-    case 'max':
-      return 'Max';
-    default:
-      return 'Default';
-  }
+export function flowerReasoningLevelLabel(
+  level: FlowerReasoningLevel | string | null | undefined,
+  copy: ReasoningControlCopy = reasoningControlEnUS,
+): string {
+  return copy[normalizeFlowerReasoningLevel(level) ?? 'default'];
+}
+
+export function flowerReasoningCapabilityLevels(capability: FlowerReasoningCapability): readonly FlowerReasoningLevel[] {
+  const levels = new Set(capability.supported_levels ?? []);
+  levels.add('default');
+  if (capability.disable_supported) levels.add('off');
+  return [...REASONING_LEVELS].filter((level) => levels.has(level));
 }
 
 export function effectiveFlowerReasoningSelection(

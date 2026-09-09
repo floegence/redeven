@@ -665,6 +665,24 @@
       "dialogDynamicModelMetadata": "Métadonnées dynamiques du modèle",
       "dialogOpenAICompatibleNativeEndpoint": "Point de terminaison natif compatible avec OpenAI",
       "dialogLocalOpenAICompatibleEndpoint": "Point de terminaison local compatible avec OpenAI"
+    },
+    "reasoningControl": {
+      "default": "Par défaut",
+      "off": "Désactivé",
+      "minimal": "Minimal",
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé",
+      "xhigh": "Très élevé",
+      "max": "Maximal",
+      "label": "Raisonnement",
+      "defaultLabel": "Raisonnement par défaut",
+      "reset": "Réinitialiser le raisonnement",
+      "defaultHint": "Utiliser la configuration de raisonnement par défaut du modèle",
+      "alwaysOn": "Toujours activé",
+      "tokens": "{count} jetons",
+      "tokenUnit": "jetons",
+      "budgetLabel": "Budget de jetons pour {label}"
     }
   },
   "common": {

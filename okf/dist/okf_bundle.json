@@ -1151,8 +1151,8 @@
               "flower",
               "reasoning"
             ],
-            "summary": "Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Cold loading and restart preserve Off. Failed saves retain the confirmed setting, and active Turns retain their immutable runtime configuration.",
-            "section_count": 2
+            "summary": "Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Default reasoning is a configuration choice, not an enabled state or an effort level. Cold loading and restart preserve Off. Failed saves retain the confirmed setting, and active Turns retain their immutable runtime configuration.",
+            "section_count": 3
           },
           {
             "concept_id": "ui.flower-model-navigation",
@@ -13080,8 +13080,8 @@
         "title": "Flower reasoning selection ownership",
         "type": "UI Contract"
       },
-      "body_length": 2872,
-      "summary": "Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Cold loading and restart preserve Off. Failed saves retain the confirmed setting, and active Turns retain their immutable runtime configuration.",
+      "body_length": 4320,
+      "summary": "Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Default reasoning is a configuration choice, not an enabled state or an effort level. Cold loading and restart preserve Off. Failed saves retain the confirmed setting, and active Turns retain their immutable runtime configuration.",
       "sections": [
         {
           "id": "contract",
@@ -13089,6 +13089,13 @@
           "level": 1,
           "body": "Existing Threads display the newest confirmed settings snapshot in `ThreadCache`, comparing settings revisions independently of runtime view versions. A saved `off` remains explicit even when the model defaults to `high`. Cold detail loads may use confirmed summary settings; if neither snapshot is available, the segment shows a fixed-width, non-interactive loading placeholder. Loading, reconnecting, and rendering must never write a reasoning preference.\n\nThe connection-local composer draft stores only an explicit new-thread reasoning choice. Effective model defaults and existing-thread settings are read-only projections, never draft input. Launch freezes effective reasoning in the request/outbox snapshot without promoting it to a draft override; existing-thread sends omit reasoning overrides. Admission transfers ownership to confirmed thread settings. An old existing-thread draft cannot mask those settings. A pending preference save disables conflicting model/reasoning edits, leaves the last confirmed value visible, and reports failures through the host notification channel. Its response updates only the owning Thread and cannot change navigation.\n\nRunning and waiting Threads expose no editable reasoning control. Input answers continue the immutable Turn surface through the existing runtime contract; they do not submit a reasoning override. New-thread Off survives shared-surface remounts and attachment preparation, while changing to a confirmed model without reasoning clears the unsupported draft choice.",
           "char_count": 1529
+        },
+        {
+          "id": "default-and-effort-presentation",
+          "title": "Default and effort presentation",
+          "level": 1,
+          "body": "All shared control variants use one ordered option list and localized labels.\nAn effort control includes Default, Off when supported, and only the catalog's\nsupported levels. Default remains selectable even when the catalog has no\n`default_level`. An explicit `default` is never labeled On or replaced with a\nspecific effort. Existing model/profile default resolution still applies when\nno explicit selection exists; rendering never writes that resolved choice.\n\nReturning to Default submits the existing `level: default` selection. Toggle\nand budget defaults also remain labeled Default rather than claiming enabled\nreasoning. An explicit budget displays its token count, and Off takes precedence\nover budget presentation. Turning Off clears the budget as before. Running and\nwaiting Turns retain their frozen settings.\n\nDeepSeek's published Floret transport omits explicit reasoning effort for absent\nor Default selections, sends `none` for Off, and preserves supported Low, High,\nand Max selections. The UI does not infer an effective provider default.",
+          "char_count": 1055
         },
         {
           "id": "boundaries",
@@ -13118,9 +13125,19 @@
           "id": "redeven:internal/ai/thread_reasoning_restart_test.go:0:persisted off survives service reopening and waiting continuation with deepseek wire requests.",
           "source": "redeven:internal/ai/thread_reasoning_restart_test.go",
           "description": "Persisted Off survives service reopening and waiting continuation with DeepSeek wire requests."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/ReasoningControl.browser.test.tsx:0:default/effort labels, budgets, localization, and keyboard interaction.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/ReasoningControl.browser.test.tsx",
+          "description": "Default/effort labels, budgets, localization, and keyboard interaction."
+        },
+        {
+          "id": "redeven:internal/ai/model_gateway_deepseek_test.go:0:published floret transport reasoning selection wire contract.",
+          "source": "redeven:internal/ai/model_gateway_deepseek_test.go",
+          "description": "Published Floret transport reasoning selection wire contract."
         }
       ],
-      "snippet": "Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Cold loading and restart preserve Off. Failed saves r",
+      "snippet": "Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Default reasoning is a configuration choice, not an e",
       "links": [
         {
           "label": "immutable Turn surface",
@@ -15404,5 +15421,5 @@
       ]
     }
   ],
-  "source_sha256": "dea3225c33b4744fff123ca6cb3f05344475cb4478ef8aa46cc3fc79fc4428a0"
+  "source_sha256": "732430a3965c8f25b56702260f4f0c8759a9e692253ad8fd90aa17da1d8cee0f"
 }

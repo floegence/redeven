@@ -587,9 +587,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                       <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
                         <div class="mt-3">
                           <FlowerReasoningControl
+                            copy={copy().reasoningControl}
                             capability={activeProviderModel()?.reasoning_capability}
                             selection={activeProviderModel()?.default_reasoning_selection}
-                            label="Default reasoning"
+                            label={copy().reasoningControl.defaultLabel}
                             onChange={updateCurrentModelReasoning}
                           />
                         </div>
