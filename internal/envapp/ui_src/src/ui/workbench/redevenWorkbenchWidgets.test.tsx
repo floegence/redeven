@@ -233,6 +233,27 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     });
   });
 
+  it('preserves shared typography save completion for the terminal resize owner', async () => {
+    renderTerminalBody();
+    await flushWorkbenchInteraction();
+    let finishSave!: () => void;
+    const saved = new Promise<void>((resolve) => { finishSave = resolve; });
+    workbenchMocks.updateTerminalGeometryPreferences.mockReturnValueOnce(saved);
+    const preferences = terminalPanelMocks.render.mock.calls[0]?.[0].terminalGeometryPreferences;
+    const completion = preferences.onFontFamilyChange('monaco');
+    expect(completion).toBe(saved);
+    let completed = false;
+    void completion.then(() => { completed = true; });
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    finishSave();
+    await completion;
+    expect(completed).toBe(true);
+
+    workbenchMocks.updateTerminalGeometryPreferences.mockReturnValueOnce(saved);
+    expect(preferences.onFontSizeChange(16)).toBe(saved);
+  });
+
   it('forwards the current workbench selection state into the live terminal panel', async () => {
     renderTerminalBody({
       selected: false,

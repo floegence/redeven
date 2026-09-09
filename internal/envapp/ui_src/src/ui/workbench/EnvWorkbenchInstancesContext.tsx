@@ -23,7 +23,7 @@ export type EnvWorkbenchInstancesContextValue = Readonly<{
     updater: (
       previous: RedevenWorkbenchTerminalGeometryPreferences,
     ) => RedevenWorkbenchTerminalGeometryPreferences,
-  ) => void;
+  ) => Promise<void>;
   updateTerminalPanelState: (
     widgetId: string,
     updater: (

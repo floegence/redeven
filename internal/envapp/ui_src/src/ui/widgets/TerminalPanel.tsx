@@ -161,8 +161,8 @@ export type TerminalPanelSessionOperations = Readonly<{
 }>;
 
 export type TerminalPanelGeometryPreferences = TerminalGeometryPreferences & Readonly<{
-  onFontSizeChange: (value: number) => void;
-  onFontFamilyChange: (id: string) => void;
+  onFontSizeChange: (value: number) => void | Promise<void>;
+  onFontFamilyChange: (id: string) => void | Promise<void>;
 }>;
 
 type ShellTerminalTokenName =
@@ -1205,25 +1205,34 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const isMobileLayout = () => layout.isMobile();
 
-  const resizeAfterFontSelection = () => queueMicrotask(() => {
+  let fontSelectionGeneration = 0;
+  const resizeAfterFontSelection = async (persist: () => void | Promise<void>) => {
+    const generation = ++fontSelectionGeneration;
     const sid = activeSessionId();
-    if (sid) viewportRegistry.get(sid)?.forceResize();
-  });
+    try {
+      await persist();
+    } catch {
+      // The shared preference owner reports persistence failures.
+      return;
+    }
+    queueMicrotask(() => {
+      if (generation !== fontSelectionGeneration || sid !== activeSessionId()) return;
+      if (sid) viewportRegistry.get(sid)?.forceResize();
+    });
+  };
 
   const persistFontSize = (value: number) => {
     const shared = sharedGeometryPreferences();
-    if (shared) {
-      shared.onFontSizeChange(normalizeTerminalFontSize(value));
-    } else terminalPrefs.setFontSize(value);
-    resizeAfterFontSelection();
+    void resizeAfterFontSelection(() => shared
+      ? shared.onFontSizeChange(normalizeTerminalFontSize(value))
+      : terminalPrefs.setFontSize(value));
   };
 
   const persistFontFamily = (id: string) => {
     const shared = sharedGeometryPreferences();
-    if (shared) {
-      shared.onFontFamilyChange(normalizeTerminalFontFamilyId(id));
-    } else terminalPrefs.setFontFamily(id);
-    resizeAfterFontSelection();
+    void resizeAfterFontSelection(() => shared
+      ? shared.onFontFamilyChange(normalizeTerminalFontFamilyId(id))
+      : terminalPrefs.setFontFamily(id));
   };
 
   const persistMobileInputMode = (value: TerminalMobileInputMode) => {

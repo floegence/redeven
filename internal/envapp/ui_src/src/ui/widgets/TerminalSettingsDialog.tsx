@@ -444,6 +444,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
                 ))}>
                   {(option) => (
                     <Button size="sm" variant={props.fontFamilyId === option.id ? 'primary' : 'outline'}
+                      aria-pressed={props.fontFamilyId === option.id}
                       class="h-auto w-full flex-col items-start gap-1 py-2 text-left"
                       disabled={terminalFontCatalog.state(option.id) !== 'ready'}
                       onClick={() => props.onFontFamilyChange(option.id)}>
