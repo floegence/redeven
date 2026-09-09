@@ -4,6 +4,7 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
+import { resolveDesktopPlatformCapabilities } from '../shared/desktopPlatformCapabilities';
 import {
   testDesktopPreferences,
   testLocalEnvironment,
@@ -21,6 +22,7 @@ import {
 
 function environment(overrides: Partial<DesktopEnvironmentEntry> = {}): DesktopEnvironmentEntry {
   const base = buildDesktopWelcomeSnapshot({
+    platformCapabilities: resolveDesktopPlatformCapabilities('darwin'),
     preferences: testDesktopPreferences({
       local_environment: testLocalEnvironment(),
     }),
@@ -146,6 +148,7 @@ function stoppedRuntimeEnvironment(testCase: DirectRuntimeSmokeCase): DesktopEnv
     offline_reason: 'Runtime is not running.',
   };
   const snapshot = buildDesktopWelcomeSnapshot({
+    platformCapabilities: resolveDesktopPlatformCapabilities(testCase.platform),
     preferences,
     localRuntimeHealth: testCase.kind === 'local_environment'
       ? { [directEnvironmentID]: runtimeHealth }

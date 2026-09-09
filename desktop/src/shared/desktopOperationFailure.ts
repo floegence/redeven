@@ -3,6 +3,7 @@ import type { DesktopTranslationKey } from './i18n/desktopI18n';
 export type DesktopFailureSeverity = 'info' | 'warning' | 'error';
 
 export type DesktopFailureCode =
+  | 'ssh_authentication_failed'
   | 'ssh_connection_failed'
   | 'ssh_connection_interrupted'
   | 'ssh_runtime_status_unavailable'
@@ -70,6 +71,7 @@ function compact(value: unknown): string {
 function normalizeFailureCode(value: unknown): DesktopFailureCode {
   const code = compact(value) as DesktopFailureCode;
   switch (code) {
+    case 'ssh_authentication_failed':
     case 'ssh_connection_failed':
     case 'ssh_connection_interrupted':
     case 'ssh_runtime_status_unavailable':

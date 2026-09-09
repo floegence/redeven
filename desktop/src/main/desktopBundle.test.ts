@@ -136,7 +136,9 @@ afterEach(() => {
 });
 
 describe('Desktop precompiled bundle', () => {
-  it('validates the exact packaged Runtime identity before startup', async () => {
+  // Native identity fixtures execute POSIX scripts and require Unix executable bits.
+  // Windows validates its managed Linux archive without executing a host Runtime.
+  it.skipIf(process.platform === 'win32')('validates the exact packaged Runtime identity before startup', async () => {
     const root = bundleFixture();
 
     const bundle = await loadDesktopBundle({
@@ -156,7 +158,7 @@ describe('Desktop precompiled bundle', () => {
     ]));
   });
 
-  it('accepts the complete Darwin Runtime suite and rejects a missing ReDevPlugin companion', async () => {
+  it.skipIf(process.platform === 'win32')('accepts the complete Darwin Runtime suite and rejects a missing ReDevPlugin companion', async () => {
     const root = bundleFixture({ platform: 'darwin', architecture: 'arm64' });
     await expect(loadDesktopBundle({
       root,
@@ -194,7 +196,7 @@ describe('Desktop precompiled bundle', () => {
     })).rejects.toThrow(message);
   });
 
-  it('rejects a Runtime digest mismatch', async () => {
+  it.skipIf(process.platform === 'win32')('rejects a Runtime digest mismatch', async () => {
     const root = bundleFixture();
     const filePath = path.join(root, 'redeven');
     const tampered = fs.readFileSync(filePath);
@@ -223,7 +225,7 @@ describe('Desktop precompiled bundle', () => {
     })).rejects.toThrow('regular non-symlink file');
   });
 
-  it('rejects a digest-valid Runtime with a mismatched embedded identity', async () => {
+  it.skipIf(process.platform === 'win32')('rejects a digest-valid Runtime with a mismatched embedded identity', async () => {
     const root = bundleFixture();
     replaceBundleRuntime(root, Buffer.from("#!/bin/sh\nprintf 'redeven v9.9.9 (abc123) now\\n'\n"));
 
@@ -241,6 +243,16 @@ describe('Desktop precompiled bundle', () => {
       expectedPlatform: 'linux',
       expectedArchitecture: 'amd64',
     })).rejects.toThrow('unsupported shape');
+  });
+
+  it('rejects a Windows archive digest mismatch before startup', async () => {
+    const root = windowsBundleFixture();
+    const archivePath = path.join(root, 'redeven_linux_amd64.tar.gz');
+    const bytes = fs.readFileSync(archivePath);
+    bytes[0] ^= 1;
+    fs.writeFileSync(archivePath, bytes);
+    await expect(loadDesktopBundle({ root, expectedPlatform: 'windows', expectedArchitecture: 'amd64' }))
+      .rejects.toThrow('digest');
   });
 
   it('validates a Windows bundle containing only the managed Linux x64 archive', async () => {

@@ -22,7 +22,7 @@ function readSharedGatewaySource(): string {
 describe('main routing', () => {
   it('owns and injects one Desktop SSH transport manager without direct consumer SSH spawns', () => {
     const mainSrc = readMainSource();
-    expect(mainSrc).toContain('const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager();');
+    expect(mainSrc).toContain('const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager({');
     expect(mainSrc).toContain('sshTransportManager: desktopSSHTransportManager');
     expect(mainSrc).toContain('ssh_transport_manager: desktopSSHTransportManager');
     expect(mainSrc.indexOf('await runtimePlacementBridgeRegistry.retireAll().catch(() => undefined);')).toBeLessThan(

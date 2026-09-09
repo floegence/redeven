@@ -11,6 +11,14 @@ import {
 } from './operationFailureI18n';
 
 describe('operationFailureI18n', () => {
+  it('explains SSH authentication rejection and password retry in Chinese', () => {
+    const failure = { code: 'ssh_authentication_failed', severity: 'error', title: 'SSH Authentication Failed',
+      summary: 'SSH authentication failed.', target_label: 'orange' } as DesktopOperationFailurePresentation;
+    const i18n = createDesktopI18n('zh-CN');
+    expect(localizedOperationFailureTitle(i18n, failure)).toBe('SSH 身份验证失败');
+    expect(localizedOperationFailureSummary(i18n, failure)).toBe('“orange”拒绝了 SSH 登录凭据。');
+    expect(localizedOperationFailureRecoveryHint(i18n, failure)).toContain('密码');
+  });
   it('provides a canonical compact summary while retaining raw text for technical disclosure', () => {
     const failure: DesktopOperationFailurePresentation = {
       code: 'operation_failed',

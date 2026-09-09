@@ -17,6 +17,8 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
     return failure.title_key;
   }
   switch (failure.code) {
+    case 'ssh_authentication_failed':
+      return 'progress.sshAuthenticationFailedTitle';
     case 'ssh_connection_failed':
       return 'progress.sshConnectionFailedTitle';
     case 'ssh_connection_interrupted':
@@ -87,6 +89,8 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
     return failure.summary_key;
   }
   switch (failure.code) {
+    case 'ssh_authentication_failed':
+      return 'progress.sshAuthenticationFailedSummary';
     case 'ssh_connection_failed':
       return 'progress.sshConnectionFailedSummary';
     case 'ssh_connection_interrupted':
@@ -211,6 +215,9 @@ export function localizedOperationFailureRecoveryHint(
 ): string {
   if (failure.recovery_hint_key) {
     return i18n.t(failure.recovery_hint_key, failureParams(failure));
+  }
+  if (failure.code === 'ssh_authentication_failed') {
+    return i18n.t('progress.sshAuthenticationFailedRecoveryHint');
   }
   if (failure.code === 'ssh_connection_interrupted') {
     return i18n.t('progress.sshConnectionInterruptedRecoveryHint');

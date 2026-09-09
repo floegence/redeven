@@ -33,6 +33,7 @@ import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
   diagnosticsFromRecentLogs,
+  operationFailureFromUnknown,
 } from './desktopOperationFailure';
 import { desktopOperationFailureFromBlockedLaunchReport } from './runtimeBlockedLaunchFailure';
 import {
@@ -60,6 +61,7 @@ import type {
 import type { DesktopTranslationKey } from '../shared/i18n';
 import {
   DesktopSSHTransportInterruptedError,
+  DesktopSSHTransportAuthenticationError,
   DesktopSSHTransportUnavailableError,
   DesktopSSHCommandTimeoutError,
   type DesktopSSHStreamingCommand,
@@ -1020,6 +1022,12 @@ export async function probeManagedSSHRuntimeStatus(
       startup: report.startup,
     };
   } catch (error) {
+    if (error instanceof DesktopSSHTransportAuthenticationError) {
+      const failure = operationFailureFromUnknown(error, desktopOperationFailurePresentation({
+        title: 'SSH Connection Failed', summary: 'SSH connection failed.', targetLabel: desktopSSHAuthority(target),
+      }));
+      return { status: 'failed', message: failure.summary, failure };
+    }
     if (error instanceof DesktopSSHTransportUnavailableError) {
       appendSSHRuntimeLog(logs, 'master_stderr', error.stderr, undefined);
       const targetLabel = desktopSSHAuthority(target);
@@ -2126,6 +2134,11 @@ async function startManagedSSHRuntimeInternal(
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code === 'ENOENT') {
       throw missingSSHBinaryError(logs);
+    }
+    if (error instanceof DesktopSSHTransportAuthenticationError) {
+      throw new DesktopOperationFailureError(operationFailureFromUnknown(error, desktopOperationFailurePresentation({
+        title: 'SSH Connection Failed', summary: 'SSH connection failed.', targetLabel: desktopSSHAuthority(target),
+      })));
     }
     throw readinessFailure('Desktop could not establish the SSH control connection.', logs, {
       code: 'ssh_connection_failed',

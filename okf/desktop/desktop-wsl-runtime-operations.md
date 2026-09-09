@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop WSL runtime operations
 description: Windows-only WSL 2 discovery, registration, Linux Runtime lifecycle, private Bridge, and packaging boundaries.
 tags: [desktop, windows, wsl, runtime, bridge, packaging]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-09T00:00:00Z
 ---
 # Summary
 
@@ -14,6 +14,8 @@ Redeven Desktop for Windows 11 x64 runs only the Electron Desktop process. It pr
 ## Discovery and registration
 
 The main process publishes one immutable platform-capability snapshot. Renderer surfaces consume it and never infer the host operating system. Windows disables native Local Environment, native host Runtime, and local-container creation while enabling WSL discovery. Discovery invokes `wsl.exe` with argument arrays, decodes UTF-8 or UTF-16 output, preserves exact distribution names, distinguishes running and stopped distributions, and records the WSL version when Windows reports it.
+
+Missing or unavailable WSL does not prevent Welcome or SSH Environment registration and Open.
 
 Discovery does not start a stopped distribution. Registration is user-confirmed and may start only that chosen distribution to verify WSL 2, Linux x64, its effective Linux user and home, and required commands. The registered `wsl_host` stores the exact distribution name and confirmed Linux user. Its target identity also binds the Runtime root. The first registered WSL Environment becomes the default Flower target; users may select another, and deleting the selected registration atomically clears the default. Removing a registration deletes only Desktop metadata and never stops the Runtime or removes WSL data.
 
@@ -37,6 +39,8 @@ External WSL shutdown ends the current Bridge and presents the Environment offli
 
 The Windows Desktop bundle uses `managed_wsl_archive` and contains one verified `redeven_linux_amd64.tar.gz`; it must not contain or execute `redeven.exe`. Startup verifies the archive target, Runtime version, source commit, size, and SHA-256 against the bundle manifest. Start, Update, and Reinstall transfer this embedded archive into WSL and do not require network access inside the distribution.
 
+Windows staging requires the Linux builder's schema-4 source bundle manifest beside the archive, named `redeven_linux_amd64.manifest.json`. It verifies the expected version and source commit, exact Runtime suite inventory, file sizes and hashes, and canonical suite digest before emitting the Windows bundle manifest. Go target metadata still verifies Linux/amd64; linker flags are not an identity source because `-trimpath` builds omit them. The archive retains licenses and the complete published ReDevPlugin suite.
+
 The internal package is an unsigned, per-user NSIS installer with Desktop auto-update marked unsupported. Desktop installation or replacement never mutates WSL Runtime installations. After restart, each Environment is checked independently and an incompatible Runtime exposes Update Runtime. Public Windows assets remain forbidden until Authenticode signing, signed NSIS update metadata, signing receipts, and a real signed n-1 to n update are enabled together.
 
 # Boundaries
@@ -51,5 +55,6 @@ Windows and WSL 2 remain separate authorities. Desktop owns registration metadat
 - `redeven:desktop/src/main/managedLinuxRuntime.ts:1` - Shared managed-Linux install, lifecycle, inventory, and stop path.
 - `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:1` - Private WSL stdio Bridge and loopback proxy.
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Windows managed archive manifest validation.
+- `redeven:scripts/verify_desktop_runtime_source.mjs:1` - Source identity bound to the extracted Linux Runtime suite.
 - `redeven:desktop/electron-builder.config.mjs:1` - Internal per-user NSIS package and unsupported update policy.
 - `redeven:.github/workflows/windows-wsl-certification.yml:1` - Exact-main Windows 2025 and two-distribution certification.

@@ -36,6 +36,8 @@ A healthy Runtime opens directly. A stopped Runtime offers Start and Open. An in
 
 Open may reuse a Welcome health observation for the separate status preflight only while it remains inside the 30-second freshness window and matches the exact target's ready record by Runtime PID, process start identity, and Runtime Service build identity. Missing identity, stale or failed health, non-openable service state, or any mismatch forces the normal direct probe. A reused observation never supplies a bridge URL or credential: Open still creates the live placement bridge, verifies its current private token, and probes Runtime health and Env App readiness through that bridge. The first recoverable bridge-start failure after reuse forces one status refresh before the existing bounded bridge retry and lifecycle recovery flow continues.
 
+A missing startup timestamp does not establish that a Runtime is stopped. Welcome shows an unknown time/state for unverified, checking, or failed observations; the stopped label requires an explicit stopped Runtime or container reason without a pending or failed health check. A verified online Runtime without a timestamp shows that its start time is unavailable.
+
 Runtime process health, Runtime Service compatibility, Local UI availability, Workspace readiness, AI readiness, Provider link, and Gateway access are separate facts. AI or Provider failure does not make a healthy Runtime installation unavailable. Gateway failure affects only sessions routed through that Gateway.
 
 ## Capability and progress
@@ -67,4 +69,5 @@ Read-only health probes do not start, stop, repair, or reconnect Runtime. Access
 - `redeven:desktop/src/main/runtimeOpenPreflight.ts:1` - Fresh status reuse requires exact process and Runtime Service identity.
 - `redeven:desktop/src/main/launcherOperations.ts:1` - Authoritative progress surface and terminal state.
 - `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Direct managed versus access-only capability boundary.
+- `redeven:desktop/src/welcome/viewModel.test.ts:1` - Unknown versus explicitly stopped Runtime card evidence.
 - `redeven:desktop/src/welcome/App.tsx:1` - Localized action menu, progress, and recovery presentation.

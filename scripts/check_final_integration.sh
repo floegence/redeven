@@ -153,6 +153,7 @@ run_step "checking Runtime compatibility source" ./scripts/check_runtime_compati
 run_step "checking ReDevPlugin dependency boundary" ./scripts/check_redevplugin_dependency_boundary.sh --ci
 run_step "testing controlled release archive extraction" ./scripts/safe_extract_tar.py --self-test
 run_step "testing controlled Desktop runtime extraction" ./scripts/extract_desktop_runtime.py --self-test
+run_step "testing Desktop bundle source identity" node --test scripts/desktop_bundle_build_contract.test.mjs scripts/verify_desktop_runtime_source.test.mjs
 run_step "checking release artifact collector syntax" node --check scripts/collect_release_artifacts.mjs
 run_step "testing release artifact collector" node --test scripts/collect_release_artifacts.test.mjs
 run_step "testing public installer runtime contract" node --test scripts/install_redevplugin_contract.test.mjs
