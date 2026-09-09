@@ -78,7 +78,7 @@ func restoreGeminiSignatures(req ModelGatewayRequest, messages []openai.ChatComp
 			name, _ := fn["name"].(string)
 			arguments, _ := fn["arguments"].(string)
 			if signature.Signature == "" || signature.Name != name || signature.Arguments != geminiArguments(arguments) {
-				return nil, nil, errors.New("Gemini tool signature does not match conversation")
+				return nil, nil, errors.New("gemini tool signature does not match conversation")
 			}
 			call["extra_content"] = map[string]any{"google": map[string]string{"thought_signature": signature.Signature}}
 			retained[id] = signature

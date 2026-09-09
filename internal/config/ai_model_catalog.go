@@ -159,7 +159,7 @@ func (p AIProvider) validateModelSelection() error {
 		}
 	}
 	if p.Type == "ollama" && len(p.ModelSelection.CustomModels) > 0 {
-		return errors.New("Ollama models must come from the installed inventory")
+		return errors.New("ollama models must come from the installed inventory")
 	}
 	for _, m := range p.ModelSelection.CustomModels {
 		if m.ContextWindow <= 0 {

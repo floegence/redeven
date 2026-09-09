@@ -748,7 +748,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 					}
 					if sig != "" {
 						if pc.Signature != "" && pc.Signature != sig {
-							return ModelGatewayResult{}, errors.New("Gemini changed a tool thought signature")
+							return ModelGatewayResult{}, errors.New("gemini changed a tool thought signature")
 						}
 						pc.Signature = sig
 					}
