@@ -4243,7 +4243,7 @@ pre,
   border-radius: 16px;
   background: var(--background);
   border: 1px solid color-mix(in srgb, var(--foreground) 12%, var(--background));
-  box-shadow: 0 20px 64px -20px rgb(0 0 0 / 45%);
+  box-shadow: var(--redeven-welcome-overlay-shadow);
   color: var(--foreground);
   font-size: 14px;
 }
