@@ -2308,5 +2308,31 @@
     "portInUse": "이 CodeSpace에 저장된 로컬 포트가 사용 중입니다. 해당 포트를 사용하는 앱을 닫은 후 다시 시도하세요.",
     "unavailable": "CodeSpace에 연결할 수 없습니다. 환경 연결을 확인한 후 다시 여세요.",
     "profileInvalid": "저장된 CodeSpace 브라우저 프로필을 읽을 수 없습니다. codespace-profiles.json을 복원한 후 이 CodeSpace를 다시 여세요."
+  },
+  "sshSettings": {
+    "title": "환경 설정",
+    "connection": "연결",
+    "connectionHelp": "연결 방식 안내",
+    "saveChanges": "변경 사항 저장",
+    "discardTitle": "변경 사항을 버릴까요?",
+    "discardDescription": "이 환경의 변경 사항이 저장되지 않았습니다.",
+    "keepEditing": "계속 편집",
+    "discardChanges": "변경 사항 버리기",
+    "password": "비밀번호",
+    "keyHelp": "기존 SSH 설정과 키를 사용합니다.",
+    "passwordSaved": "이 기기에 비밀번호가 저장되어 있습니다. 비워 두면 기존 비밀번호가 유지됩니다.",
+    "probeHelp": "홈 화면이 열려 있는 동안 이 환경을 자동으로 확인합니다.",
+    "defaultDirectory": "기본 디렉터리",
+    "customDirectory": "사용자 지정 디렉터리",
+    "secondsValue": "{seconds}초",
+    "secondsUnit": "초",
+    "uploadHelp": "Desktop이 런타임 패키지를 준비하여 SSH 호스트에 업로드합니다.",
+    "remoteHelp": "SSH 호스트가 런타임 패키지를 직접 다운로드하고 설치합니다.",
+    "rootHelp": "비워 두면 원격 호스트의 ~/.redeven을 사용합니다.",
+    "releaseHelp": "비워 두면 GitHub Releases를 사용합니다. 변경하려면 릴리스 미러 URL을 입력하세요.",
+    "invalidDestination": "user@host 또는 SSH 별칭을 입력하세요. 공백, URL 스킴, 맨 앞의 하이픈은 사용할 수 없습니다.",
+    "invalidRoot": "원격 절대 경로를 입력하거나 비워 두어 ~/.redeven을 사용하세요.",
+    "invalidReleaseUrl": "전체 HTTP 또는 HTTPS 릴리스 URL을 입력하거나 비워 두어 GitHub Releases를 사용하세요.",
+    "invalidTimeout": "1초 이상의 숫자를 입력하거나 비워 두어 10초를 사용하세요."
   }
 }

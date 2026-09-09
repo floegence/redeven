@@ -2312,5 +2312,31 @@
     "portInUse": "El puerto local guardado para este CodeSpace está en uso. Cierre la aplicación que utiliza ese puerto y vuelva a intentarlo.",
     "unavailable": "La conexión al CodeSpace no está disponible. Compruebe la conexión al entorno y vuelva a abrirlo.",
     "profileInvalid": "No se pudo leer el perfil de navegador guardado del CodeSpace. Restaure codespace-profiles.json antes de volver a abrir este CodeSpace."
+  },
+  "sshSettings": {
+    "title": "Ajustes del entorno",
+    "connection": "Conexión",
+    "connectionHelp": "Acerca de esta conexión",
+    "saveChanges": "Guardar cambios",
+    "discardTitle": "¿Descartar los cambios?",
+    "discardDescription": "Los cambios de este entorno no se han guardado.",
+    "keepEditing": "Seguir editando",
+    "discardChanges": "Descartar cambios",
+    "password": "Contraseña",
+    "keyHelp": "Utiliza la configuración y las claves SSH existentes.",
+    "passwordSaved": "Hay una contraseña guardada en este dispositivo. Deja el campo vacío para conservarla.",
+    "probeHelp": "Comprobar este entorno automáticamente mientras la pantalla de inicio esté abierta.",
+    "defaultDirectory": "Directorio predeterminado",
+    "customDirectory": "Directorio personalizado",
+    "secondsValue": "{seconds} s",
+    "secondsUnit": "segundos",
+    "uploadHelp": "Desktop prepara el paquete del entorno de ejecución y lo sube al host SSH.",
+    "remoteHelp": "El host SSH descarga e instala directamente el paquete del entorno de ejecución.",
+    "rootHelp": "Deja el campo vacío para usar ~/.redeven en el host remoto.",
+    "releaseHelp": "Deja el campo vacío para usar GitHub Releases. Introduce una URL de un espejo de versiones para personalizarlo.",
+    "invalidDestination": "Introduce user@host o un alias SSH, sin espacios, esquema de URL ni guion inicial.",
+    "invalidRoot": "Introduce una ruta remota absoluta o deja el campo vacío para usar ~/.redeven.",
+    "invalidReleaseUrl": "Introduce una URL de versiones HTTP o HTTPS completa, o deja el campo vacío para GitHub Releases.",
+    "invalidTimeout": "Introduce un número de al menos 1 segundo o deja el campo vacío para usar 10 segundos."
   }
 }

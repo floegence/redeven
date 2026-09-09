@@ -2312,5 +2312,31 @@
     "portInUse": "Le port local enregistré pour ce CodeSpace est utilisé. Fermez l’application qui utilise ce port, puis réessayez.",
     "unavailable": "La connexion au CodeSpace est indisponible. Vérifiez la connexion à l’environnement, puis rouvrez-le.",
     "profileInvalid": "Le profil de navigateur du CodeSpace est illisible. Restaurez codespace-profiles.json avant de rouvrir ce CodeSpace."
+  },
+  "sshSettings": {
+    "title": "Paramètres de l’environnement",
+    "connection": "Connexion",
+    "connectionHelp": "À propos de cette connexion",
+    "saveChanges": "Enregistrer les modifications",
+    "discardTitle": "Abandonner les modifications ?",
+    "discardDescription": "Vos modifications de cet environnement n’ont pas été enregistrées.",
+    "keepEditing": "Continuer la modification",
+    "discardChanges": "Abandonner les modifications",
+    "password": "Mot de passe",
+    "keyHelp": "Utilise votre configuration SSH et vos clés existantes.",
+    "passwordSaved": "Un mot de passe est enregistré sur cet appareil. Laissez ce champ vide pour le conserver.",
+    "probeHelp": "Vérifier automatiquement cet environnement tant que l’accueil est ouvert.",
+    "defaultDirectory": "Répertoire par défaut",
+    "customDirectory": "Répertoire personnalisé",
+    "secondsValue": "{seconds} s",
+    "secondsUnit": "secondes",
+    "uploadHelp": "Desktop prépare le paquet de l’environnement d’exécution et le téléverse vers l’hôte SSH.",
+    "remoteHelp": "L’hôte SSH télécharge et installe directement le paquet de l’environnement d’exécution.",
+    "rootHelp": "Laissez vide pour utiliser ~/.redeven sur l’hôte distant.",
+    "releaseHelp": "Laissez vide pour utiliser GitHub Releases. Saisissez l’URL d’un miroir de versions pour le personnaliser.",
+    "invalidDestination": "Saisissez user@host ou un alias SSH, sans espace, schéma d’URL ni trait d’union initial.",
+    "invalidRoot": "Saisissez un chemin distant absolu ou laissez vide pour utiliser ~/.redeven.",
+    "invalidReleaseUrl": "Saisissez une URL de versions HTTP ou HTTPS complète, ou laissez vide pour GitHub Releases.",
+    "invalidTimeout": "Saisissez un nombre d’au moins 1 seconde ou laissez vide pour utiliser 10 secondes."
   }
 }

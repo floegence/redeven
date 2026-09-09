@@ -2312,5 +2312,31 @@
     "portInUse": "A porta local salva para este CodeSpace está em uso. Feche o aplicativo que usa essa porta e tente novamente.",
     "unavailable": "A conexão com o CodeSpace não está disponível. Verifique a conexão com o ambiente e abra-o novamente.",
     "profileInvalid": "Não foi possível ler o perfil de navegador salvo do CodeSpace. Restaure codespace-profiles.json antes de reabrir este CodeSpace."
+  },
+  "sshSettings": {
+    "title": "Configurações do ambiente",
+    "connection": "Conexão",
+    "connectionHelp": "Sobre esta conexão",
+    "saveChanges": "Salvar alterações",
+    "discardTitle": "Descartar alterações?",
+    "discardDescription": "As alterações deste ambiente não foram salvas.",
+    "keepEditing": "Continuar editando",
+    "discardChanges": "Descartar alterações",
+    "password": "Senha",
+    "keyHelp": "Usa as configurações e chaves SSH existentes.",
+    "passwordSaved": "Há uma senha salva neste dispositivo. Deixe o campo vazio para mantê-la.",
+    "probeHelp": "Verificar este ambiente automaticamente enquanto a tela inicial estiver aberta.",
+    "defaultDirectory": "Diretório padrão",
+    "customDirectory": "Diretório personalizado",
+    "secondsValue": "{seconds} s",
+    "secondsUnit": "segundos",
+    "uploadHelp": "O Desktop prepara o pacote do ambiente de execução e o envia ao host SSH.",
+    "remoteHelp": "O host SSH baixa e instala diretamente o pacote do ambiente de execução.",
+    "rootHelp": "Deixe vazio para usar ~/.redeven no host remoto.",
+    "releaseHelp": "Deixe vazio para usar GitHub Releases. Insira a URL de um espelho de versões para personalizar.",
+    "invalidDestination": "Insira user@host ou um alias SSH, sem espaços, esquema de URL ou hífen inicial.",
+    "invalidRoot": "Insira um caminho remoto absoluto ou deixe vazio para usar ~/.redeven.",
+    "invalidReleaseUrl": "Insira uma URL de versões HTTP ou HTTPS completa, ou deixe vazio para GitHub Releases.",
+    "invalidTimeout": "Insira um número de pelo menos 1 segundo ou deixe vazio para usar 10 segundos."
   }
 }

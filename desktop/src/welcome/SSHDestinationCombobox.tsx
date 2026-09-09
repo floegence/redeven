@@ -24,6 +24,8 @@ export type SSHDestinationComboboxProps = Readonly<{
   loadError: boolean;
   autofocus: boolean;
   class?: string;
+  'aria-invalid'?: true;
+  'aria-describedby'?: string;
   onInput: (value: string) => void;
   onSelectHost: (host: DesktopSSHConfigHost) => void;
   onRetry: () => void;
@@ -160,6 +162,8 @@ export function SSHDestinationCombobox(props: SSHDestinationComboboxProps) {
         aria-controls={optionsID()}
         aria-activedescendant={open() && filteredHosts().length > 0 ? optionID(highlightedIndex()) : undefined}
         aria-autocomplete="list"
+        aria-invalid={props['aria-invalid']}
+        aria-describedby={props['aria-describedby']}
         aria-busy={props.loading ? 'true' : 'false'}
       />
       <Show when={open()}>

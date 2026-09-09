@@ -2312,5 +2312,31 @@
     "portInUse": "Der für diesen CodeSpace gespeicherte lokale Port ist belegt. Schließen Sie die Anwendung, die diesen Port verwendet, und versuchen Sie es erneut.",
     "unavailable": "Die CodeSpace-Verbindung ist nicht verfügbar. Prüfen Sie die Verbindung zur Umgebung und öffnen Sie den CodeSpace erneut.",
     "profileInvalid": "Das gespeicherte Browserprofil des CodeSpace konnte nicht gelesen werden. Stellen Sie codespace-profiles.json wieder her, bevor Sie diesen CodeSpace erneut öffnen."
+  },
+  "sshSettings": {
+    "title": "Umgebungseinstellungen",
+    "connection": "Verbindung",
+    "connectionHelp": "Über diese Verbindung",
+    "saveChanges": "Änderungen speichern",
+    "discardTitle": "Änderungen verwerfen?",
+    "discardDescription": "Ihre Änderungen an dieser Umgebung wurden nicht gespeichert.",
+    "keepEditing": "Weiter bearbeiten",
+    "discardChanges": "Änderungen verwerfen",
+    "password": "Passwort",
+    "keyHelp": "Verwendet Ihre vorhandene SSH-Konfiguration und Schlüssel.",
+    "passwordSaved": "Auf diesem Gerät ist ein Passwort gespeichert. Lassen Sie das Feld leer, um es beizubehalten.",
+    "probeHelp": "Diese Umgebung automatisch prüfen, während die Startseite geöffnet ist.",
+    "defaultDirectory": "Standardverzeichnis",
+    "customDirectory": "Eigenes Verzeichnis",
+    "secondsValue": "{seconds} s",
+    "secondsUnit": "Sekunden",
+    "uploadHelp": "Desktop bereitet das Laufzeitpaket vor und lädt es auf den SSH-Host hoch.",
+    "remoteHelp": "Der SSH-Host lädt das Laufzeitpaket direkt herunter und installiert es.",
+    "rootHelp": "Leer lassen, um ~/.redeven auf dem Remote-Host zu verwenden.",
+    "releaseHelp": "Leer lassen, um GitHub Releases zu verwenden. Für einen eigenen Release-Spiegel dessen URL eingeben.",
+    "invalidDestination": "Geben Sie user@host oder einen SSH-Alias ein, ohne Leerzeichen, URL-Schema oder führenden Bindestrich.",
+    "invalidRoot": "Geben Sie einen absoluten Remote-Pfad ein oder lassen Sie das Feld für ~/.redeven leer.",
+    "invalidReleaseUrl": "Geben Sie eine vollständige HTTP- oder HTTPS-Release-URL ein oder lassen Sie das Feld für GitHub Releases leer.",
+    "invalidTimeout": "Geben Sie eine Zahl ab 1 Sekunde ein oder lassen Sie das Feld für 10 Sekunden leer."
   }
 }

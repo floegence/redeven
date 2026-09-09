@@ -53,6 +53,9 @@ import {
   Tag,
 } from '@floegence/floe-webapp-core/ui';
 
+import { SSHEnvironmentSettingsDialog } from './SSHEnvironmentSettingsDialog';
+import { validateSSHEnvironmentSettings, type SSHConnectionDialogState } from './sshEnvironmentSettingsState';
+
 import {
   REDEVEN_LOCALE_META,
   REDEVEN_LOCALE_PREFERENCES,
@@ -424,27 +427,6 @@ type ExternalURLConnectionDialogState = Readonly<{
   environment_id: string;
   label: string;
   external_local_ui_url: string;
-  auto_runtime_probe_enabled: boolean;
-}>;
-
-type SSHConnectionDialogState = Readonly<{
-  mode: 'create' | 'edit';
-  connection_kind: 'ssh_environment';
-  environment_id: string;
-  label: string;
-  ssh_destination: string;
-  ssh_port: string;
-  auth_mode: DesktopSSHAuthMode;
-  ssh_password: string;
-  ssh_password_mode: 'keep' | 'replace' | 'clear';
-  ssh_password_configured: boolean;
-  baseline_ssh_destination: string;
-  baseline_ssh_port: string;
-  baseline_auth_mode: DesktopSSHAuthMode;
-  runtime_root: string;
-  bootstrap_strategy: DesktopSSHBootstrapStrategy;
-  release_base_url: string;
-  connect_timeout_seconds: string;
   auto_runtime_probe_enabled: boolean;
 }>;
 
@@ -4145,6 +4127,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind',
     value: string,
   ): void {
+    if (connectionDialogState()?.mode === 'edit' && connectionDialogState()?.connection_kind === 'ssh_environment') {
+      setConnectionDialogFieldErrors((current) => {
+        const next = { ...current };
+        delete next[name];
+        return next;
+      });
+    }
     setConnectionDialogState((current) => {
       if (!current) {
         return current;
@@ -4162,7 +4151,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (isSSHPasswordDraftState(base)) {
         base = reconcileSSHPasswordDraft(base, name) as ConnectionDialogState;
       }
-      if (name === 'ssh_destination' || name === 'container_label' || name === 'container_id' || name === 'target_url') {
+      if (!(current.mode === 'edit' && current.connection_kind === 'ssh_environment')
+        && (name === 'ssh_destination' || name === 'container_label' || name === 'container_id' || name === 'target_url')) {
         const oldSuggested = suggestConnectionLabel(current);
         const newSuggested = suggestConnectionLabel(base as ConnectionDialogState);
         const wasAutoFilled = oldSuggested !== null && trimString(current.label) === oldSuggested;
@@ -5997,7 +5987,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!state) {
       return;
     }
-    const errors = validateConnectionDialogFields(state);
+    const errors = state.mode === 'edit' && state.connection_kind === 'ssh_environment'
+      ? validateSSHEnvironmentSettings(state, i18n())
+      : validateConnectionDialogFields(state);
     setConnectionDialogFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       return;
@@ -14615,7 +14607,7 @@ function GatewayProfileSourcePicker(props: Readonly<{
     </div>
   );
 }
-function ConnectionDialog(props: Readonly<{
+type ConnectionDialogProps = Readonly<{
   i18n: DesktopI18n;
   nativeContainerRuntime: boolean;
   state: ConnectionDialogState;
@@ -14642,7 +14634,26 @@ function ConnectionDialog(props: Readonly<{
   removeSSHPassword: () => void;
   clearFieldErrors: () => void;
   onSave: () => Promise<void>;
-}>) {
+}>;
+
+function ConnectionDialog(props: ConnectionDialogProps) {
+  return (
+    <Show
+      when={props.state?.mode === 'edit' && props.state.connection_kind === 'ssh_environment'}
+      fallback={<ConnectionDialogForm {...props} />}
+    >
+      <SSHEnvironmentSettingsDialog i18n={props.i18n} state={props.state as SSHConnectionDialogState}
+        sshConfigHosts={props.sshConfigHosts} sshConfigHostsLoading={props.sshConfigHostsLoading}
+        sshConfigHostsLoadError={props.sshConfigHostsLoadError} fieldErrors={props.fieldErrors} error={props.error}
+        saving={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
+        updateField={props.updateField} toggleAutoRuntimeProbe={props.toggleAutoRuntimeProbe}
+        switchBootstrapStrategy={props.switchBootstrapStrategy} removeSSHPassword={props.removeSSHPassword}
+        refreshSSHConfigHosts={props.refreshSSHConfigHosts} onClose={() => props.onOpenChange(false)} onSave={props.onSave} />
+    </Show>
+  );
+}
+
+function ConnectionDialogForm(props: ConnectionDialogProps) {
   const isOpen = createMemo(() => props.state !== null);
   const isCreate = createMemo(() => props.state?.mode === 'create');
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
