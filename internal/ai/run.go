@@ -879,21 +879,13 @@ func (r *run) resolveModelGatewayForModel(modelID string, providerID string, pro
 		providerDisplay = n + " (" + providerID + ")"
 	}
 
-	apiKey := ""
-	if strings.ToLower(strings.TrimSpace(providerCfg.Type)) != "ollama" {
-		if r.resolveProviderKey == nil {
-			return resolvedRunModelGateway{}, fmt.Errorf("%w: missing provider key resolver", errModelGatewayMissingKey)
-		}
-		var ok bool
-		var err error
-		apiKey, ok, err = r.resolveProviderKey(providerID)
-		if err != nil {
-			return resolvedRunModelGateway{}, fmt.Errorf("%w: %v", errModelGatewayMissingKey, err)
-		}
-		if !ok || strings.TrimSpace(apiKey) == "" {
-			err := fmt.Errorf("missing api key for provider %q", providerID)
-			return resolvedRunModelGateway{userMessage: fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay), err: err}, nil
-		}
+	apiKey, available, err := resolveModelProviderKey(providerCfg.Type, providerID, r.resolveProviderKey)
+	if err != nil {
+		return resolvedRunModelGateway{}, fmt.Errorf("%w: %v", errModelGatewayMissingKey, err)
+	}
+	if !available {
+		err := fmt.Errorf("missing api key for provider %q", providerID)
+		return resolvedRunModelGateway{userMessage: fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay), err: err}, nil
 	}
 
 	if !r.supportsModelGatewayProvider(providerCfg) {

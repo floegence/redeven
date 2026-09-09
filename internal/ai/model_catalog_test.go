@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -185,5 +186,24 @@ func TestAllDisabledModelsKeepCurrentSelectionVisible(t *testing.T) {
 	out, err := (&Service{cfg: cfg}).ListModels()
 	if err != nil || len(out.Models) != 0 || out.CurrentModel != cfg.CurrentModelID {
 		t.Fatalf("disabled range changed current selection: %+v, %v", out, err)
+	}
+}
+
+func TestModelProviderKeysSupportOptionalOllamaAuthentication(t *testing.T) {
+	for _, kind := range []string{"ollama", "google", "deepseek", "openai"} {
+		t.Run(kind, func(t *testing.T) {
+			empty := func(string) (string, bool, error) { return "", false, nil }
+			if _, available, err := resolveModelProviderKey(kind, "provider", empty); err != nil || available != (kind == "ollama") {
+				t.Fatalf("empty key: %v, %v", available, err)
+			}
+			configured := func(string) (string, bool, error) { return " optional-key ", true, nil }
+			if key, available, err := resolveModelProviderKey(kind, "provider", configured); err != nil || !available || key != "optional-key" {
+				t.Fatalf("configured key ignored: %q, %v, %v", key, available, err)
+			}
+			denied := errors.New("secret read denied")
+			if _, _, err := resolveModelProviderKey(kind, "provider", func(string) (string, bool, error) { return "", false, denied }); !errors.Is(err, denied) {
+				t.Fatal("secret failure was ignored")
+			}
+		})
 	}
 }
