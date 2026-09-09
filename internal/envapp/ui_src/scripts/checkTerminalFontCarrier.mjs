@@ -74,6 +74,7 @@ async function chooseFont(page, panel, label) {
   const dialog = await settings(page, panel);
   const button = dialog.getByRole('button', { name: new RegExp(`^${label}`) });
   await button.click();
+  await dialog.getByRole('button', { name: new RegExp(`^${label}`), pressed: true }).waitFor();
   const family = await dialog.locator('pre[aria-label]').evaluate((element) => globalThis.getComputedStyle(element).fontFamily);
   await page.keyboard.press('Escape');
   return family;
@@ -144,6 +145,7 @@ if (directEntry && args.includes('--serve')) {
           controllerTerminal = await activateSession(panel, sessionID);
           if (request.pathname === '/activate-shared' && request.searchParams.has('restore')) {
             await chooseFont(host.page, panel, config.sharedFontLabel);
+            await waitForTrace(controllerTerminal, (trace) => trace.is_controller && trace.geometry_cols === trace.measured_cols && trace.geometry_rows === trace.measured_rows);
           }
         } else if (request.pathname === '/change-shared-font') {
           const label = request.searchParams.get('label');
@@ -245,6 +247,12 @@ if (directEntry && args.includes('--serve')) {
         const sharedEpoch = (await runtimeTrace(sharedTerminal)).controller_epoch;
         await coordinator(`activate-shared?epoch=${sharedEpoch}`);
         await activateSession(workbench, config.sessionID);
+        const activeFontChanges = [];
+        for (const label of ['Iosevka', 'JetBrains Mono']) {
+          await chooseFont(client.page, workbench, label);
+          const trace = await waitForTrace(sharedTerminal, (value) => value.is_controller && value.geometry_cols === value.measured_cols && value.geometry_rows === value.measured_rows);
+          activeFontChanges.push({ label, trace });
+        }
         const beforeRemoteChoice = await runtimeTrace(sharedTerminal);
         await coordinator('change-shared-font?label=Iosevka');
         await client.page.waitForFunction(() => globalThis.document.querySelector('[data-terminal-panel-variant="workbench"]')?.getAttribute('data-terminal-font-requested') === 'iosevka');
@@ -260,7 +268,7 @@ if (directEntry && args.includes('--serve')) {
         if (afterShared.controller_epoch !== beforeShared.controller_epoch || afterShared.geometry_cols !== beforeShared.geometry_cols || afterShared.geometry_rows !== beforeShared.geometry_rows) {
           throw new Error(`Shared observer font changed controller geometry: ${JSON.stringify({ beforeShared, afterShared })}`);
         }
-        report.shared.push({ dpr, initialShared, beforeRemoteChoice, afterRemoteChoice, before: beforeShared, after: afterShared });
+        report.shared.push({ dpr, initialShared, activeFontChanges, beforeRemoteChoice, afterRemoteChoice, before: beforeShared, after: afterShared });
         await client.page.screenshot({ path: path.join(output, `${process.platform}-${dpr}-shared-font.png`) });
         // Restore through the controller because the requested system font may be unavailable on this client.
         await coordinator(`activate-shared?epoch=${afterShared.controller_epoch}&restore=1`);

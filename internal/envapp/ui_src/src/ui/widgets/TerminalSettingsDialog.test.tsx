@@ -28,6 +28,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       type="button"
       class={props.class}
       disabled={props.disabled}
+      aria-pressed={props['aria-pressed']}
       onClick={props.onClick}
     >
       {props.children}
@@ -143,6 +144,8 @@ describe('TerminalSettingsDialog', () => {
 
     themeRadios.find((input) => input.value === 'dark')?.click();
     const jetbrains = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('JetBrains Mono'))!;
+    expect(jetbrains.getAttribute('aria-pressed')).toBe('false');
+    expect(Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Iosevka'))?.getAttribute('aria-pressed')).toBe('true');
     await vi.waitFor(() => expect(jetbrains.disabled).toBe(false));
     jetbrains.click();
     const activityBorderInput = host.querySelector('input[aria-label="Shown"]') as HTMLInputElement | null;

@@ -2575,7 +2575,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       };
     },
     terminalGeometryPreferences: (widgetId) => runtimeTerminalGeometryPreferences(compact(widgetId)),
-    updateTerminalGeometryPreferences: (widgetId, updater) => {
+    updateTerminalGeometryPreferences: async (widgetId, updater) => {
       const normalizedWidgetId = compact(widgetId);
       if (!normalizedWidgetId) {
         return;
@@ -2585,13 +2585,14 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       if (sameTerminalGeometryPreferences(currentPreferences, nextPreferences)) {
         return;
       }
-      void putSharedTerminalState(normalizedWidgetId, (latest) => ({
+      await putSharedTerminalState(normalizedWidgetId, (latest) => ({
         kind: 'terminal',
         session_ids: latest.session_ids,
         font_size: nextPreferences.fontSize,
         font_family_id: nextPreferences.fontFamilyId,
       })).catch((error) => {
         console.warn('Failed to update workbench terminal geometry preferences:', error);
+        throw error;
       });
     },
     updateTerminalPanelState: (widgetId, updater) => {

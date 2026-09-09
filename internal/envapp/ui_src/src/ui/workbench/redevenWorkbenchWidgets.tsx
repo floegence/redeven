@@ -90,13 +90,13 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
         fontSize: geometryPreferences().fontSize,
         fontFamilyId: geometryPreferences().fontFamilyId,
         onFontSizeChange: (fontSize) => {
-          workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
+          return workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
             ...previous,
             fontSize,
           }));
         },
         onFontFamilyChange: (fontFamilyId) => {
-          workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
+          return workbench.updateTerminalGeometryPreferences(props.widgetId, (previous) => ({
             ...previous,
             fontFamilyId,
           }));
