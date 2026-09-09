@@ -1,7 +1,7 @@
 export const TERMINAL_MIN_FONT_SIZE = 10;
 export const TERMINAL_MAX_FONT_SIZE = 20;
 export const DEFAULT_TERMINAL_FONT_SIZE = 12;
-export const DEFAULT_TERMINAL_FONT_FAMILY_ID = 'monaco';
+export const DEFAULT_TERMINAL_FONT_FAMILY_ID = 'jetbrains';
 
 export type TerminalGeometryPreferences = Readonly<{
   fontSize: number;

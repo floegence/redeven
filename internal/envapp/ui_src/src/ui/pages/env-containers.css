@@ -986,8 +986,9 @@
 .container-exec-empty { display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 11px; }
 .container-exec-empty { min-height: 280px; flex-direction: column; justify-content: center; }
 .container-exec-empty strong { color: var(--foreground); font-size: 13px; }
-.container-exec-terminal-surface { min-height: 340px; flex: 1; overflow: hidden; border-radius: 9px; background: var(--redeven-terminal-background, var(--redeven-code-surface)); }
-.container-exec-terminal-surface > * { height: 100%; min-height: 340px; }
+.container-exec-terminal-surface { display: flex; flex-direction: column; min-height: 340px; flex: 1; overflow: hidden; border-radius: 9px; background: var(--redeven-terminal-background, var(--redeven-code-surface)); }
+.container-exec-terminal-surface > * { flex: 1; min-height: 340px; }
+.container-exec-terminal-surface > [data-terminal-font-status] { flex: none; min-height: 0; }
 
 .container-operations-workspace {
   display: grid;

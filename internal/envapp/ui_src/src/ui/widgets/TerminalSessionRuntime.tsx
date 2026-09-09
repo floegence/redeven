@@ -425,6 +425,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
     controllerEpoch = controller.epoch;
     isController = controller.isController;
+    if (!isController) desiredSize = null;
     setControllerRevision((value) => value + 1);
   };
 
@@ -489,7 +490,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   };
 
   const runResizeWork = async () => {
-    while (!disposed && attached && desiredSize) {
+    while (!disposed && attached && isController && desiredSize) {
       const requested = desiredSize;
       desiredSize = null;
       if (sameGrid(appliedSize, requested)) continue;
@@ -524,7 +525,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!resizeWork) {
       resizeWork = runResizeWork().finally(() => {
         resizeWork = null;
-        if (!disposed && attached && desiredSize) void startResizeWork();
+        if (!disposed && attached && isController && desiredSize) void startResizeWork();
       });
     }
     return resizeWork;
@@ -538,6 +539,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!attached) {
       desiredSize = next;
       if (props.connected()) await attach();
+      return;
+    }
+    if (!isController) {
+      desiredSize = null;
+      if (latestEffectiveGeometry) publishGeometryPresentation(next, latestEffectiveGeometry);
       return;
     }
     desiredSize = inFlightSize && sameGrid(inFlightSize, next)

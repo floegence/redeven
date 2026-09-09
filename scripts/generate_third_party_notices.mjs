@@ -767,6 +767,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`;
 }
 
+function renderTerminalFontLicenses() {
+  return ['iosevka', 'jetbrains-mono'].map((name) => {
+    const root = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@fontsource', name);
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    const license = fs.readFileSync(path.join(root, 'LICENSE'), 'utf8').replace(/[ \t]+$/gm, '').trim();
+    if (manifest.license !== 'OFL-1.1' || !/SIL OPEN FONT LICENSE/i.test(license)) {
+      throw new Error(`Unexpected bundled terminal font license: ${name}`);
+    }
+    return `### @fontsource/${name}@${manifest.version}\n\n\`\`\`text\n${license}\n\`\`\``;
+  }).join('\n\n');
+}
+
 function renderNotices(goEntries, npmEntries, terminalAgentIcons, containerServiceIcons, floetermThemeNotices) {
   return `# Third-Party Notices
 
@@ -833,6 +845,12 @@ ${floetermThemeNotices.solarizedLicenseText}
 \`\`\`text
 ${floetermThemeNotices.tokyoNightLicenseText}
 \`\`\`
+
+## Bundled Terminal Font Licenses
+
+The Env App bundles JetBrains Mono and Iosevka font files. System font candidates are loaded from the client device and are not redistributed by Redeven.
+
+${renderTerminalFontLicenses()}
 
 ## Desktop Runtime Notices
 
