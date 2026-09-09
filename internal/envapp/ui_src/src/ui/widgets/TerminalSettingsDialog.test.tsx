@@ -6,6 +6,7 @@ import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from 'vitest
 import { TERMINAL_THEME_DEFINITIONS } from '@floegence/floeterm-terminal-web';
 
 import { TerminalSettingsDialog } from './TerminalSettingsDialog';
+import { terminalFontCatalog } from '../services/terminalFonts';
 
 const layoutState = vi.hoisted(() => ({
   mobile: false,
@@ -83,6 +84,34 @@ afterEach(() => {
 });
 
 describe('TerminalSettingsDialog', () => {
+  it('keeps active search reachable when replacing an unavailable saved font shortens the list', async () => {
+    const available = new Set(['jetbrains', 'iosevka', 'source-code-pro', 'ibm-plex-mono', 'consolas', 'cascadia-mono', 'menlo', 'dejavu-sans-mono']);
+    const state = vi.spyOn(terminalFontCatalog, 'state').mockImplementation((id) => available.has(id) ? 'ready' : 'unavailable');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [selected, setSelected] = createSignal('monaco');
+    const dispose = render(() => <TerminalSettingsDialog open userTheme="system" fontSize={12}
+      fontFamilyId={selected()} mobileInputMode="floe" workIndicatorEnabled minFontSize={10} maxFontSize={20}
+      onOpenChange={() => undefined} onThemeChange={() => true} onFontSizeChange={() => undefined}
+      onFontFamilyChange={setSelected} onMobileInputModeChange={() => undefined}
+      onWorkIndicatorEnabledChange={() => undefined} />, host);
+    try {
+      const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+      search.value = 'JetBrains';
+      search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      host.querySelector<HTMLButtonElement>('[data-terminal-font-group] button[aria-pressed]')!.click();
+      expect(selected()).toBe('jetbrains');
+      expect(host.querySelector('input[type="search"]')).toBe(search);
+      search.value = '';
+      search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      expect(host.querySelectorAll('[data-terminal-font-group] button[aria-pressed]')).toHaveLength(8);
+      expect(host.querySelector('input[type="search"]')).toBe(search);
+    } finally {
+      dispose();
+      state.mockRestore();
+    }
+  });
+
   it('searches the available catalog without changing the saved font and resets search on close', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
