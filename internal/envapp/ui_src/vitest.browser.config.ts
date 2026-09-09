@@ -173,6 +173,60 @@ export default mergeConfig(viteConfig, defineConfig({
               }));
           });
         },
+        inspectWebServicesZoom: async ({ page }) => {
+          const frame = await frameForSelector(page, '.web-services');
+          const session = await page.context().newCDPSession(page);
+          const viewport = page.viewportSize();
+          const frameElement = await frame.frameElement();
+          const frameStyle = await frameElement.getAttribute('style');
+          const frameHostStyle = await frameElement.evaluate((element) => element.parentElement!.getAttribute('style'));
+          try {
+            // Model browser zoom with half the CSS viewport and twice the pixel density.
+            // Keep zoom at the browser boundary instead of changing fixture typography.
+            await session.send('Emulation.setDeviceMetricsOverride', {
+              width: 720, height: 480, deviceScaleFactor: 2, mobile: false,
+            });
+            await frameElement.evaluate((element) => {
+              element.parentElement!.style.setProperty('transform', 'none', 'important');
+              Object.assign((element as HTMLElement).style, { position: 'fixed', inset: '0', width: '720px', height: '480px', transform: 'none', zIndex: '2147483647' });
+            });
+            await frame.waitForFunction(() => window.devicePixelRatio === 2 && window.innerWidth === 720);
+            const geometry = await frame.evaluate(() => {
+              const surface = document.querySelector<HTMLElement>('.web-services')!;
+              const rows = Array.from(surface.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"], [data-testid="port-forward-row"]'));
+              const overflow = rows.flatMap((row) => {
+                const bounds = row.getBoundingClientRect();
+                return Array.from(row.querySelectorAll<HTMLElement>('button, [data-testid="managed-service-status"], [data-testid="managed-service-notice"]'))
+                  .filter((child) => {
+                    const rect = child.getBoundingClientRect();
+                    return rect.left < bounds.left - 1 || rect.right > bounds.right + 1
+                      || rect.bottom > bounds.bottom + 1 || child.scrollWidth > child.clientWidth + 1;
+                  }).map((child) => child.textContent);
+              });
+              return {
+                devicePixelRatio: window.devicePixelRatio,
+                viewportWidth: window.innerWidth,
+                cssWidth: surface.getBoundingClientRect().width,
+                surfaceOverflow: surface.scrollWidth - surface.clientWidth,
+                mainOverflow: surface.querySelector('main')!.scrollWidth - surface.querySelector('main')!.clientWidth,
+                overflow,
+              };
+            });
+            const capture = await session.send('Page.captureScreenshot', { format: 'png' });
+            const screenshot = PNG.sync.read(Buffer.from(capture.data, 'base64'));
+            return { ...geometry, pixelWidth: screenshot.width };
+          } finally {
+            await frameElement.evaluate((element, styles) => {
+              for (const [target, style] of [[element, styles.frame], [element.parentElement!, styles.host]] as const) {
+                if (style === null) target.removeAttribute('style');
+                else target.setAttribute('style', style);
+              }
+            }, { frame: frameStyle, host: frameHostStyle });
+            await session.send('Emulation.clearDeviceMetricsOverride');
+            await session.detach();
+            if (viewport) await page.setViewportSize(viewport);
+          }
+        },
         inspectReadinessScreenshot: async ({ page }) => {
           const frame = await readinessFrame(page);
           const metrics = await frame.evaluate(() => ({
