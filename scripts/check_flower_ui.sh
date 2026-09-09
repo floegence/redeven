@@ -81,6 +81,10 @@ main() {
       src/ui/flower/flowerScrollInteraction.test.ts \
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
+      src/ui/pages/settings/modelSelection.test.ts \
+      src/ui/pages/settings/FlowerProviderDialog.test.tsx \
+      src/ui/pages/settings/AIProviderDialog.test.tsx \
+      src/ui/pages/settings/aiCatalog.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
       src/ui/flower/workingDirectoryNavigation.test.ts \
       src/ui/plugins/ActivityPluginSurfaceWindow.test.tsx \

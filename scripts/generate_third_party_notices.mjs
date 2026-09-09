@@ -790,6 +790,12 @@ Redeven downloads the following generic Host runtime only after an authorized us
 | --- | --- | --- | --- | --- |
 | Node.js | 24.19.0 | MIT | https://github.com/nodejs/node | Official platform runtime downloaded on demand by host deployment using the URL, byte size, and SHA-256 pinned in the Redeven release. The distribution retains its bundled license and dependency notices. |
 
+## Bundled Model Catalog
+
+Redeven derives its offline Agent model metadata from [models.dev](https://github.com/anomalyco/models.dev), under MIT. The compact source snapshot and reviewed provider corrections live in \`scripts/model-catalog/\`; the generated catalog is bundled in the Runtime and Flower UI. The snapshot records the SHA-256 of the upstream API response used for the update.
+
+${fs.readFileSync(path.join(repoRoot, 'scripts/model-catalog/models-dev.LICENSE'), 'utf8').trim()}
+
 ## Go Modules
 
 ${renderTable(goEntries)}

@@ -62,7 +62,7 @@ func newFloretProviderAdapter(base ModelGateway, providerType string, modelName 
 			option(adapter)
 		}
 	}
-	adapter.continuationSupported = adapter.stateCompatibilityRoute() == "openai-responses" || adapter.providerType == "deepseek"
+	adapter.continuationSupported = adapter.stateCompatibilityRoute() == "openai-responses" || adapter.providerType == "deepseek" || adapter.providerType == "google"
 	return adapter
 }
 
@@ -364,7 +364,7 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
 	previousResponseID := ""
-	if p.providerType != "deepseek" {
+	if p.providerType != "deepseek" && p.providerType != "google" {
 		var err error
 		previousResponseID, err = p.previousResponseID(previous)
 		if err != nil {
@@ -406,7 +406,7 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		}
 	}
 	var previousState *ModelGatewayState
-	if p.providerType == "deepseek" && previous != nil {
+	if (p.providerType == "deepseek" || p.providerType == "google") && previous != nil {
 		previousState = &ModelGatewayState{Kind: previous.Kind, ID: previous.ID, Attributes: cloneStringMap(previous.Attributes)}
 	}
 	return ModelGatewayRequest{
@@ -447,7 +447,7 @@ func (p *floretProviderAdapter) stateCompatibilityRoute() string {
 		return "anthropic-messages"
 	case DesktopModelSourceProviderType:
 		return "desktop-model-source"
-	case "openai_compatible", "openrouter", "xai", "groq", "ollama", "chatglm", "qwen":
+	case "google", "openai_compatible", "openrouter", "xai", "groq", "ollama", "chatglm", "qwen":
 		if p.webSearch == providerWebSearchModeOpenAIResponsesBuiltin ||
 			p.webSearch == providerWebSearchModeQwenResponsesWebSearch ||
 			(p.providerType == "openai_compatible" && p.webSearch == providerWebSearchModeExternalBrave) {

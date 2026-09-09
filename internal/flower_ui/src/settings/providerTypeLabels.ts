@@ -5,6 +5,7 @@ export type FlowerProviderTypeLabels = Readonly<Record<FlowerProviderType, strin
 const EN_US_PROVIDER_TYPE_LABELS: FlowerProviderTypeLabels = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
+  google: 'Gemini',
   moonshot: 'Moonshot',
   chatglm: 'ChatGLM',
   deepseek: 'DeepSeek',

@@ -3,6 +3,8 @@ package ai
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,7 +35,18 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	if err != nil {
 		return result, err
 	}
-	gateway, err := flprovider.NewDeepSeek(flprovider.DeepSeekOptions{Model: req.Model, BaseURL: p.baseURL, APIKey: p.apiKey, StateCompatibilityKey: "deepseek-responses-v1:" + p.baseURL + ":" + req.Model, HTTPClient: p.client, Temperature: req.ProviderControls.Temperature, TopP: req.ProviderControls.TopP, ResponseFormat: req.ProviderControls.ResponseFormat})
+	images := map[string][]byte{}
+	resolveImage := func(ctx context.Context, attachment flprovider.Attachment) ([]byte, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		data, ok := images[attachment.ResourceRef]
+		if !ok {
+			return nil, errors.New("DeepSeek image has no authorized prepared content")
+		}
+		return data, nil
+	}
+	gateway, err := flprovider.NewDeepSeek(flprovider.DeepSeekOptions{Model: req.Model, BaseURL: p.baseURL, APIKey: p.apiKey, StateCompatibilityKey: "deepseek-responses-v1:" + p.baseURL + ":" + req.Model, HTTPClient: p.client, ResolveAttachment: resolveImage, Temperature: req.ProviderControls.Temperature, TopP: req.ProviderControls.TopP, ResponseFormat: req.ProviderControls.ResponseFormat})
 	if err != nil {
 		return result, err
 	}
@@ -56,6 +69,18 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			switch part.Type {
 			case "text", "attachment_manifest":
 				mapped.Text += part.Text
+			case "image":
+				prefix := "data:" + part.MimeType + ";base64,"
+				if !strings.HasPrefix(part.FileURI, prefix) {
+					return result, errors.New("DeepSeek image requires prepared inline bytes matching its MIME type")
+				}
+				data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(part.FileURI, prefix))
+				if err != nil || len(data) == 0 {
+					return result, errors.New("DeepSeek image has invalid inline content")
+				}
+				ref := fmt.Sprintf("prepared-image:%x", sha256.Sum256(data))
+				images[ref] = data
+				mapped.Attachments = append(mapped.Attachments, flprovider.Attachment{ResourceRef: ref, Name: "image", MIMEType: part.MimeType, SizeBytes: int64(len(data))})
 			case "reasoning":
 				mapped.Reasoning += part.Text
 			case "tool_call":

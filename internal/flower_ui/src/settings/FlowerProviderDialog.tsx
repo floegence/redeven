@@ -1,15 +1,19 @@
+import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
+import { ModelCatalogControls } from './ModelCatalogControls';
+import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, setFlowerModelsEnabled } from './modelSelection';
+import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import { For, Show, createEffect, createSignal } from 'solid-js';
 import { createStore, produce, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
 import { ChevronDown, Pencil } from '@floegence/floe-webapp-core/icons';
 import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 
+import { defaultFlowerProviderModels } from './modelSelection';
 import type { FlowerProviderDialogCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type { FlowerProviderDraft, FlowerProviderModel, FlowerProviderType, FlowerWebSearchMode } from '../contracts/flowerSurfaceContracts';
 import {
   FLOWER_PROVIDER_TYPES,
-  FlowerProviderBrandIcon,
   defaultBaseURLForFlowerProviderType,
   defaultFlowerContextWindowForProviderType,
   flowerModelSupportsImage,
@@ -29,6 +33,7 @@ import {
 export type FlowerProviderDialogMode = 'create' | 'edit';
 
 export type FlowerProviderDialogProps = Readonly<{
+  onDiscoverModels?: FlowerModelCatalogDiscovery;
   open: boolean;
   mode: FlowerProviderDialogMode;
   provider: FlowerProviderDraft | null;
@@ -45,18 +50,7 @@ function cleanModelName(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function cloneModel(model: FlowerProviderModel): FlowerProviderModel {
-  return {
-    model_name: model.model_name,
-    ...(model.wire_model_name ? { wire_model_name: model.wire_model_name } : {}),
-    ...(model.context_window ? { context_window: model.context_window } : {}),
-    ...(model.max_output_tokens ? { max_output_tokens: model.max_output_tokens } : {}),
-    ...(model.effective_context_window_percent ? { effective_context_window_percent: model.effective_context_window_percent } : {}),
-    ...(model.input_modalities ? { input_modalities: [...model.input_modalities] } : {}),
-    ...(model.reasoning_capability ? { reasoning_capability: model.reasoning_capability } : {}),
-    ...(model.default_reasoning_selection ? { default_reasoning_selection: model.default_reasoning_selection } : {}),
-  };
-}
+const cloneModel = cloneFlowerModel;
 
 function modelSelected(provider: FlowerProviderDraft, modelName: string): boolean {
   return provider.models.some((model) => cleanModelName(model.model_name) === cleanModelName(modelName));
@@ -64,6 +58,26 @@ function modelSelected(provider: FlowerProviderDraft, modelName: string): boolea
 
 export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
+  const [query, setQuery] = createSignal('');
+  const [loading, setLoading] = createSignal(false);
+  const [discoveryError, setDiscoveryError] = createSignal('');
+  const catalog = () => store.draft?.catalog_models ?? recommendedModelsForFlowerProviderType(store.draft?.type ?? 'openai');
+  const visibleModels = () => {
+    const known = new Set(catalog().map((model) => model.model_name));
+    return filterFlowerModels([...catalog(), ...(store.draft?.models ?? []).filter((model) => !known.has(model.model_name))], query());
+  };
+  const discover = async () => {
+    const draft = store.draft;
+    if (!draft || !props.onDiscoverModels || loading()) return;
+    const identity = [draft.id, draft.type, draft.base_url, draft.provider_api_key].join('|');
+    setLoading(true); setDiscoveryError('');
+    try {
+      const result = await props.onDiscoverModels({ provider_id: draft.id, type: draft.type, base_url: draft.base_url, api_key: draft.provider_api_key ?? undefined });
+      const current = store.draft;
+      if (props.open && current && identity === [current.id, current.type, current.base_url, current.provider_api_key].join('|')) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models)));
+    } catch (error) { setDiscoveryError(error instanceof Error ? error.message : String(error)); }
+    finally { setLoading(false); }
+  };
   const [customModelName, setCustomModelName] = createSignal('');
   const [editingModelName, setEditingModelName] = createSignal('');
   const [expandedProviderType, setExpandedProviderType] = createSignal<FlowerProviderType | null>(null);
@@ -74,7 +88,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   createEffect(() => {
     if (props.open) {
       setStore('draft', reconcile(props.provider));
-      setCustomModelName('');
+      setCustomModelName(''); setQuery(''); setDiscoveryError(props.provider?.catalog_error ?? '');
       setEditingModelName('');
       setExpandedProviderType(props.mode === 'edit' && props.provider ? props.provider.type : null);
     }
@@ -86,8 +100,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
 
   const changeProviderType = (type: FlowerProviderType) => {
     if (!store.draft) return;
-    const preset = recommendedModelsForFlowerProviderType(type);
-    const nextModels = preset.length > 0 ? [cloneModel(preset[0])] : [];
+    const nextModels = defaultFlowerProviderModels(type);
     updateProvider({
       type,
       name: providerTypeLabel(type),
@@ -95,6 +108,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       web_search: flowerProviderNeedsWebSearchConfig(type) ? { mode: 'disabled' } : undefined,
       web_search_api_key: null,
       models: nextModels,
+      model_selection: undefined,
+      catalog_models: undefined,
     });
   };
 
@@ -108,25 +123,12 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     setStore('draft', (draft) => (draft ? { ...draft, models: models.map(cloneModel) } : draft));
   };
 
-  const addPreset = (model: FlowerProviderModel) => {
-    if (!store.draft || modelSelected(store.draft, model.model_name)) return;
-    setModels([...store.draft.models, cloneModel(model)]);
+  const setEnabled = (models: readonly FlowerProviderModel[], enabled: boolean) => {
+    if (store.draft) setStore('draft', reconcile(setFlowerModelsEnabled(store.draft, models, enabled)));
   };
-
-  const removePreset = (modelName: string) => {
-    if (!store.draft) return;
-    const next = store.draft.models.filter((model) => cleanModelName(model.model_name) !== cleanModelName(modelName));
-    setModels(next.length > 0 ? next : store.draft.models);
-  };
-
-  const addAllPresets = () => {
-    if (!store.draft) return;
-    const existing = new Set(store.draft.models.map((model) => cleanModelName(model.model_name)));
-    const additions = recommendedModelsForFlowerProviderType(store.draft.type)
-      .filter((model) => !existing.has(cleanModelName(model.model_name)))
-      .map(cloneModel);
-    setModels([...store.draft.models, ...additions]);
-  };
+  const addPreset = (model: FlowerProviderModel) => setEnabled([model], true);
+  const removePreset = (modelName: string) => setEnabled((store.draft?.models ?? []).filter((model) => model.model_name === modelName), false);
+  const addAllPresets = () => setEnabled(catalog(), true);
 
   const addCustomModel = () => {
     const name = cleanModelName(customModelName());
@@ -135,7 +137,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       ...store.draft.models,
       {
         model_name: name,
-        context_window: defaultFlowerContextWindowForProviderType(store.draft.type),
+        context_window: defaultFlowerContextWindowForProviderType(store.draft.type) ?? 128000,
         input_modalities: ['text'],
       },
     ]);
@@ -166,7 +168,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             size="sm"
             variant="default"
             loading={props.saving}
-            disabled={props.saving || !providerHasModels()}
+            disabled={props.saving || !providerHasModels() && !store.draft?.model_selection}
             onClick={() => { if (store.draft) void props.onConfirm(store.draft); }}
           >
             {copy().saveProvider}
@@ -237,7 +239,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                   </div>
                                 </Show>
                                 <div>
-                                  <FlowerFieldLabel hint={props.keyConfigured ? copy().storedKeyKept : copy().requiredBeforeUse}>
+                                  <FlowerFieldLabel hint={store.draft!.type === 'ollama' ? copy().catalog.optionalKey : props.keyConfigured ? copy().storedKeyKept : copy().requiredBeforeUse}>
                                     {copy().apiKey}
                                   </FlowerFieldLabel>
                                   <Input
@@ -303,7 +305,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               </div>
                               <div class="flex flex-wrap gap-2">
                                 <FlowerSettingsPill tone={props.keyConfigured || String(store.draft!.provider_api_key ?? '').trim() ? 'success' : 'default'}>
-                                  {props.keyConfigured || String(store.draft!.provider_api_key ?? '').trim() ? copy().keyReady : copy().needsKey}
+                                  {store.draft!.type === 'ollama' ? copy().catalog.optionalKey : props.keyConfigured || String(store.draft!.provider_api_key ?? '').trim() ? copy().keyReady : copy().needsKey}
                                 </FlowerSettingsPill>
                                 <FlowerSettingsPill>{providerTypeLabel(store.draft!.type)}</FlowerSettingsPill>
                                 <Show when={(store.draft!.web_search?.mode ?? 'disabled') === 'brave'}>
@@ -321,16 +323,14 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               <FlowerSubSectionHeader
                                 title={copy().recommendedModelsTitle}
                                 description={copy().recommendedModelsDescription}
-                                actions={(
-                                  <Button size="sm" variant="outline" onClick={addAllPresets}>{copy().addAllPresets}</Button>
-                                )}
                               />
+                              <ModelCatalogControls copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={(store.draft!.type === 'openrouter' || store.draft!.type === 'ollama') && props.onDiscoverModels ? discover : undefined} />
                               <Show
-                                when={recommendedModelsForFlowerProviderType(store.draft!.type).length > 0}
-                                fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().customModelProvider}</div>}
+                                when={visibleModels().length > 0}
+                                fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().catalog.empty}</div>}
                               >
                                 <div class="rounded-lg border border-border">
-                                  <For each={recommendedModelsForFlowerProviderType(store.draft!.type)}>
+                                  <For each={visibleModels()}>
                                     {(preset) => {
                                       const modelName = () => cleanModelName(preset.model_name);
                                       const enabled = () => modelSelected(store.draft!, modelName());
@@ -343,12 +343,14 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                           <div class="flex items-center gap-3 px-3 py-2.5">
                                             <Checkbox
                                               checked={enabled()}
+                                              aria-label={preset.display_name || modelName()}
                                               onChange={(on) => { if (on) addPreset(preset); else removePreset(modelName()); }}
                                               size="sm"
                                             />
                                             <div class="min-w-0 flex-1">
                                               <div class="flex items-center gap-2">
-                                                <span class={cn('font-mono text-sm font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{modelName()}</span>
+                                                <span class={cn('font-mono text-sm font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset.display_name || modelName()}</span>
+                                                <Show when={preset.status}><FlowerSettingsPill>{preset.status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
                                                 <Show when={preset.wire_model_name}>
                                                   <span class="font-mono text-[11px] text-muted-foreground">{preset.wire_model_name!}</span>
                                                 </Show>
@@ -367,20 +369,20 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                                   <span class="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">{copy().text}</span>
                                                 </Show>
                                               </div>
-                                              <Show when={copy().modelNote(preset.note_key)}>
+                                              <Show when={copy().modelNote('note_key' in preset ? preset.note_key as Parameters<FlowerProviderDialogCopy['modelNote']>[0] : undefined)}>
                                                 {(note) => <div class="mt-0.5 text-[11px] text-muted-foreground">{note()}</div>}
                                               </Show>
                                             </div>
                                             <Show when={enabled()}>
-                                              <Button size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setEditingModelName(editOpen() ? '' : modelName())} aria-label="Edit">
+                                              <Button size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setEditingModelName(editOpen() ? '' : modelName())} aria-label={copy().catalog.edit}>
                                                 <Pencil class="h-3 w-3" />
                                               </Button>
-                                              <Button size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => {
+                                              <Button size="sm" variant="ghost" class="h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => {
                                                 if (modelIndex() >= 0) {
                                                   resetModelToPreset(modelIndex(), preset);
                                                 }
-                                              }} aria-label="Reset to defaults">
-                                                <span class="text-[10px]">Reset</span>
+                                              }} aria-label={copy().catalog.reset}>
+                                                <span class="text-[10px]">{copy().catalog.reset}</span>
                                               </Button>
                                             </Show>
                                           </div>

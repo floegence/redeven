@@ -783,6 +783,18 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 
 	s.mu.Lock()
 	cfg := s.cfg
+	s.mu.Unlock()
+	resolved, err := resolveModelCatalogs(context.Background(), cfg, s.resolveProviderKey, modelID)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if s.cfg != cfg {
+		s.mu.Unlock()
+		return errors.New("model configuration changed; select the model again")
+	}
+	cfg = resolved
+
 	modelSource := s.desktopModelSource
 	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		s.mu.Unlock()
@@ -841,6 +853,9 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		modelSourceCurrent = modelSource.CurrentModelID()
 	}
 	s.mu.Unlock()
+	var catalogErr error
+	cfg, catalogErr = resolveModelCatalogs(context.Background(), cfg, s.resolveProviderKey, "")
+
 	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		return nil, ErrNotConfigured
 	}
@@ -848,7 +863,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 	out := NewModelsResponse(s.RuntimeStatus(context.Background()))
 	configModels, currentModelID, err := configModelViews(cfg)
 	if err != nil && cfg.HasModelProfile() {
-		return nil, err
+		return nil, errors.Join(err, catalogErr)
 	}
 	seen := make(map[string]struct{}, len(configModels))
 	if currentModelID != "" {
@@ -929,8 +944,8 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		}
 	}
 
-	if len(out.Models) == 0 && cfg.HasModelProfile() {
-		return nil, errors.New("invalid ai config: missing models")
+	if len(out.Models) == 0 && catalogErr != nil {
+		return nil, catalogErr
 	}
 
 	return out, nil
@@ -967,7 +982,7 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 		if pn == "" {
 			pn = providerID
 		}
-		for _, m := range p.Models {
+		for _, m := range p.EffectiveModels() {
 			modelName := strings.TrimSpace(m.ModelName)
 			if modelName == "" {
 				continue
@@ -977,19 +992,27 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 				continue
 			}
 			seenModel[id] = struct{}{}
-			models = append(models, configModelView(id, pn+" / "+modelName, p.Type, m))
+			models = append(models, configModelView(id, pn+" / "+firstNonEmpty(m.DisplayName, m.WireModelName, modelName), p.Type, m))
 		}
-	}
-	if len(models) == 0 {
-		return models, "", errors.New("invalid ai config: missing models")
 	}
 	currentModelID := strings.TrimSpace(cfg.CurrentModelID)
 	if currentModelID == "" {
 		return models, "", errors.New("invalid ai config: missing current model")
 	}
+
 	if !cfg.IsAllowedModelID(currentModelID) {
-		return models, "", fmt.Errorf("invalid ai config: current_model_id is not in providers[].models[]: %s", currentModelID)
+		catalogOwned := false
+		for _, p := range cfg.Providers {
+			if strings.HasPrefix(currentModelID, p.ID+"/") && p.ModelSelection != nil {
+				catalogOwned = true
+				break
+			}
+		}
+		if !catalogOwned {
+			return models, "", fmt.Errorf("invalid ai config: current_model_id is not in providers[].models[]: %s", currentModelID)
+		}
 	}
+
 	return models, currentModelID, nil
 }
 
@@ -1403,13 +1426,22 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		}
 	}
 	if model == "" && cfg.HasModelProfile() {
-		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
+		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" {
 			model = id
 		}
 	}
 	if model == "" {
 		return resolvedRunModel{}, errors.New("missing model")
 	}
+	var catalogErr error
+	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, model)
+	if catalogErr != nil {
+		return resolvedRunModel{}, catalogErr
+	}
+	if r != nil {
+		r.cfg = cfg
+	}
+
 	providerID, modelName := "", ""
 	desktopModelSourceModelID := ""
 	var desktopModelSourceModel *DesktopModelSourceModel

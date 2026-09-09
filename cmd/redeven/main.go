@@ -560,7 +560,7 @@ func (c *cli) runCmd(args []string) int {
 		Phase: runtimepresentation.PhaseLoadConfig,
 		Title: "Loading runtime config",
 	})
-	cfg, err := config.Load(stateLayout.ConfigPath)
+	cfg, err := config.LoadForStartup(stateLayout.ConfigPath)
 	if err != nil {
 		// Local mode must be able to start from a clean Local Environment (no bootstrap yet).
 		if (mode == runModeLocal || mode == runModeDesktop) && os.IsNotExist(err) {

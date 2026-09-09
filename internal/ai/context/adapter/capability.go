@@ -8,7 +8,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-const capabilityResolverVersion = 4
+const capabilityResolverVersion = 5
 
 type explicitCapabilityMetadata struct {
 	MaxContextTokens     int
@@ -16,40 +16,6 @@ type explicitCapabilityMetadata struct {
 	InputModalities      []string
 	SupportsStrictSchema *bool
 	ToolSchemaMode       string
-}
-
-var explicitModelCapabilityMetadata = map[string]map[string]explicitCapabilityMetadata{
-	"openai": {
-		"gpt-5.5":      {MaxContextTokens: 1050000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-		"gpt-5.4":      {MaxContextTokens: 1050000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-		"gpt-5.4-mini": {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-		"gpt-5.4-nano": {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-		"gpt-5.2":      {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-		"gpt-5.2-mini": {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-		"gpt-5":        {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-		"gpt-5-mini":   {MaxContextTokens: 400000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}},
-	},
-	"anthropic": {
-		"claude-opus-4-7":           {MaxContextTokens: 1000000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-		"claude-sonnet-4-6":         {MaxContextTokens: 1000000, MaxOutputTokens: 64000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-		"claude-haiku-4-5-20251001": {MaxContextTokens: 200000, MaxOutputTokens: 64000, InputModalities: []string{config.AIInputModalityText, config.AIInputModalityImage}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-	},
-	"moonshot": {
-		"kimi-k2.6": {MaxContextTokens: 256000, MaxOutputTokens: 96000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-	},
-	"chatglm": {
-		"glm-5.1": {MaxContextTokens: 200000, MaxOutputTokens: 128000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-	},
-	"deepseek": {
-		"deepseek-v4-pro":   {MaxContextTokens: 1000000, MaxOutputTokens: 384000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-		"deepseek-v4-flash": {MaxContextTokens: 1000000, MaxOutputTokens: 384000, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-	},
-	"qwen": {
-		"qwen3.6-plus":             {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-		"qwen3.6-plus-2026-04-02":  {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-		"qwen3.6-flash":            {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-		"qwen3.6-flash-2026-04-16": {MaxContextTokens: 1000000, MaxOutputTokens: 65536, InputModalities: []string{config.AIInputModalityText}, SupportsStrictSchema: boolPtr(false), ToolSchemaMode: "relaxed_json"},
-	},
 }
 
 // Resolver computes provider/model capability descriptors from current config.
@@ -147,7 +113,7 @@ func defaultCapability(provider config.AIProvider, modelName string, wireModelNa
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 262144
 		cap.MaxOutputTokens = 65536
-	case "openai_compatible":
+	case "google", "openai_compatible":
 		cap.SupportsStrictJSONSchema = false
 		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
@@ -190,12 +156,11 @@ func defaultCapability(provider config.AIProvider, modelName string, wireModelNa
 }
 
 func explicitCapabilityFor(providerType string, modelName string) (explicitCapabilityMetadata, bool) {
-	models, ok := explicitModelCapabilityMetadata[strings.ToLower(strings.TrimSpace(providerType))]
+	entry, ok := config.AIModelCatalogEntry(providerType, modelName)
 	if !ok {
 		return explicitCapabilityMetadata{}, false
 	}
-	metadata, ok := models[strings.ToLower(strings.TrimSpace(modelName))]
-	return metadata, ok
+	return explicitCapabilityMetadata{MaxContextTokens: entry.ContextWindow, MaxOutputTokens: entry.MaxOutputTokens, InputModalities: entry.InputModalities}, true
 }
 
 func modalitiesSupportImage(modalities []string) bool {
@@ -216,7 +181,7 @@ func providerModelByName(provider config.AIProvider, modelName string) (config.A
 	if target == "" {
 		return config.AIProviderModel{}, false
 	}
-	for _, item := range provider.Models {
+	for _, item := range provider.EffectiveModels() {
 		if strings.TrimSpace(item.ModelName) != target {
 			continue
 		}

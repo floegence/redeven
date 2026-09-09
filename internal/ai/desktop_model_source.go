@@ -1220,6 +1220,17 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 	if !cfg.HasModelProfile() {
 		return out, registry, nil
 	}
+	var resolveKey func(string) (string, bool, error)
+	if secretStore != nil {
+		resolveKey = secretStore.GetAIProviderAPIKey
+	}
+	resolved, err := resolveModelCatalogs(context.Background(), cfg, resolveKey, "")
+	models, _, _ := configModelViews(resolved)
+	if err != nil && len(models) == 0 {
+		return nil, nil, err
+	}
+	cfg = resolved
+
 	providerNameByID := map[string]string{}
 	for _, p := range cfg.Providers {
 		id := strings.TrimSpace(p.ID)
@@ -1244,8 +1255,8 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 		if providerID == "" {
 			continue
 		}
-		keySet := false
-		if secretStore != nil {
+		keySet := p.Type == "ollama"
+		if secretStore != nil && p.Type != "ollama" {
 			var err error
 			keySet, err = secretStore.HasAIProviderAPIKey(providerID)
 			if err != nil {
@@ -1257,7 +1268,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 			continue
 		}
 		providerName := firstNonEmpty(providerNameByID[providerID], providerID)
-		for _, m := range p.Models {
+		for _, m := range p.EffectiveModels() {
 			modelName := strings.TrimSpace(m.ModelName)
 			if modelName == "" {
 				continue
@@ -1275,7 +1286,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 			capability = sanitizeDesktopModelSourceCapability(publicID, capability)
 			model := DesktopModelSourceModel{
 				ID:                            publicID,
-				Label:                         providerName + " / " + modelName,
+				Label:                         providerName + " / " + firstNonEmpty(m.DisplayName, modelName),
 				Provider:                      providerName,
 				ContextWindow:                 m.ContextWindow,
 				MaxOutputTokens:               m.MaxOutputTokens,

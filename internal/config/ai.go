@@ -67,6 +67,7 @@ type AIProvider struct {
 	// Type is one of:
 	// - "openai"
 	// - "anthropic"
+	// - "google"
 	// - "moonshot"
 	// - "chatglm"
 	// - "deepseek"
@@ -108,8 +109,10 @@ type AIProvider struct {
 	// behavior from the provider type and explicit model allow-list, so this field is ignored for them.
 	WebSearch *AIProviderWebSearch `json:"web_search,omitempty"`
 
-	// Models is the allowed model list for this provider (shown in the Chat UI).
-	Models []AIProviderModel `json:"models,omitempty"`
+	// Models is the explicit selection for OpenRouter/custom endpoints, or a legacy brand list.
+	Models           []AIProviderModel `json:"models,omitempty"`
+	ModelSelection   *AIModelSelection `json:"model_selection,omitempty"`
+	discoveredModels []AIProviderModel
 }
 
 type AIProviderWebSearch struct {
@@ -123,6 +126,8 @@ type AIProviderWebSearch struct {
 }
 
 type AIProviderModel struct {
+	DisplayName                   string                `json:"display_name,omitempty"`
+	Status                        string                `json:"status,omitempty"`
 	ModelName                     string                `json:"model_name"`
 	WireModelName                 string                `json:"wire_model_name,omitempty"`
 	ContextWindow                 int                   `json:"context_window,omitempty"`
@@ -158,26 +163,6 @@ const (
 	AIInputModalityText  = "text"
 	AIInputModalityImage = "image"
 )
-
-var curatedNativeAIProviderModels = map[string]map[string]struct{}{
-	"moonshot": {
-		"kimi-k2.6": {},
-	},
-	"chatglm": {
-		"glm-5.1": {},
-		"glm-5.2": {},
-	},
-	"deepseek": {
-		"deepseek-v4-pro":   {},
-		"deepseek-v4-flash": {},
-	},
-	"qwen": {
-		"qwen3.6-plus":             {},
-		"qwen3.6-plus-2026-04-02":  {},
-		"qwen3.6-flash":            {},
-		"qwen3.6-flash-2026-04-16": {},
-	},
-}
 
 func (m AIProviderModel) EffectiveContextWindowPercentValue() int {
 	if m.EffectiveContextWindowPercent <= 0 {
@@ -280,11 +265,7 @@ func requiresExplicitAIProviderBaseURL(providerType string) bool {
 }
 
 func IsCuratedNativeAIProviderModel(providerType string, modelName string) bool {
-	models, ok := curatedNativeAIProviderModels[strings.ToLower(strings.TrimSpace(providerType))]
-	if !ok {
-		return false
-	}
-	_, ok = models[strings.TrimSpace(modelName)]
+	_, ok := AIModelCatalogEntry(providerType, strings.TrimSpace(modelName))
 	return ok
 }
 
@@ -370,7 +351,7 @@ func (p *AIModelProfile) Validate() error {
 
 		t := strings.ToLower(strings.TrimSpace(provider.Type))
 		switch t {
-		case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
+		case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
 		default:
 			return fmt.Errorf("providers[%d]: invalid type %q", i, t)
 		}
@@ -408,8 +389,13 @@ func (p *AIModelProfile) Validate() error {
 			}
 		}
 
+		if err := provider.validateModelSelection(); err != nil {
+			return fmt.Errorf("providers[%d]: %w", i, err)
+		}
+		// Validate both active models and retained overrides/custom entries.
+		provider.Models = provider.modelsForValidation()
 		// Validate models (provider-owned list).
-		if len(provider.Models) == 0 {
+		if len(provider.Models) == 0 && provider.ModelSelection == nil {
 			return fmt.Errorf("providers[%d]: missing models", i)
 		}
 		modelNames := make(map[string]struct{}, len(provider.Models))
@@ -429,13 +415,22 @@ func (p *AIModelProfile) Validate() error {
 				return fmt.Errorf("providers[%d].models[%d]: duplicate model_name %q", i, j, name)
 			}
 			modelNames[name] = struct{}{}
-			if _, curatedProvider := curatedNativeAIProviderModels[t]; curatedProvider && !IsCuratedNativeAIProviderModel(t, name) {
-				return fmt.Errorf("providers[%d].models[%d]: unsupported %s model %q", i, j, t, name)
+			if provider.ModelSelection == nil && (t == "moonshot" || t == "chatglm" || t == "deepseek" || t == "qwen") {
+				known := IsCuratedNativeAIProviderModel(t, name)
+				for _, old := range legacyModelCatalog[t] {
+					if old.ModelName == name {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return fmt.Errorf("providers[%d].models[%d]: unsupported %s model %q", i, j, t, name)
+				}
 			}
 
 			contextWindow := m.ContextWindow
 			if t == "openai_compatible" || t == "openrouter" || t == "xai" || t == "groq" || t == "ollama" {
-				if contextWindow <= 0 {
+				if contextWindow <= 0 && provider.ModelSelection == nil {
 					return fmt.Errorf("providers[%d].models[%d]: context_window is required for %s", i, j, t)
 				}
 			}
@@ -475,17 +470,25 @@ func (p *AIModelProfile) Validate() error {
 	if currentModelID == "" {
 		return errors.New("missing current model (current_model_id)")
 	}
+	pid, name, ok := strings.Cut(currentModelID, "/")
+	if !ok || pid == "" || name == "" || strings.Contains(name, "/") {
+		return errors.New("invalid current_model_id")
+	}
+
 	allowed := false
 	for _, provider := range p.Providers {
-		providerID := strings.TrimSpace(provider.ID)
+		if strings.TrimSpace(provider.ID) != pid {
+			continue
+		}
+		if provider.ModelSelection != nil {
+			allowed = true
+			break
+		}
 		for _, model := range provider.Models {
-			if providerID+"/"+strings.TrimSpace(model.ModelName) == currentModelID {
+			if strings.TrimSpace(model.ModelName) == name {
 				allowed = true
 				break
 			}
-		}
-		if allowed {
-			break
 		}
 	}
 	if !allowed {
@@ -510,7 +513,7 @@ func (c *AIConfig) ProviderModelByID(modelID string) (AIProvider, AIProviderMode
 		if strings.TrimSpace(p.ID) != pid {
 			continue
 		}
-		for _, m := range p.Models {
+		for _, m := range p.EffectiveModels() {
 			if strings.TrimSpace(m.ModelName) == mn {
 				return p, m, true
 			}
@@ -536,7 +539,7 @@ func (c *AIConfig) IsAllowedModelID(modelID string) bool {
 		if strings.TrimSpace(p.ID) != pid {
 			continue
 		}
-		for _, m := range p.Models {
+		for _, m := range p.EffectiveModels() {
 			if strings.TrimSpace(m.ModelName) == mn {
 				return true
 			}

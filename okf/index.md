@@ -102,6 +102,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## AI
 
+- [Model directory and selection](ai/model-directory-and-selection.md) - Update the offline catalog, preserve model preferences, and discover installed Agent models.
+
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
 - [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Preserve owner lineages and deterministic canonical imports without mutable request decoders.
 - [Flower backup and recovery](ai/flower-backup-and-recovery.md) - Review protected complete-set snapshots and restore data without replaying old work.

@@ -1,3 +1,4 @@
+import { modelCatalogCopy } from '../settings/modelCatalogCopy';
 import { createLocalizedFilesystemPickerCopy } from './filesystemPickerMessages';
 import type { FlowerSurfaceCopy } from '../copy';
 import { localizedFlowerProviderModelNote } from '../settings/providerModelNotes';
@@ -620,6 +621,7 @@ function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): Flowe
 function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy['settings']['dialog'] {
   const k = (suffix: string) => `flowerSurface.settings.${suffix}`;
   return {
+    catalog: modelCatalogCopy(i18n.locale),
     addTitle: t(i18n, k('dialogAddTitle')),
     editTitle: t(i18n, k('dialogEditTitle')),
     discard: t(i18n, k('dialogDiscard')),
@@ -633,6 +635,7 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
     providerTypeLabels: localizedFlowerProviderTypeLabels(i18n.locale),
     providerTypeHints: {
       openai: t(i18n, k('dialogNativeConnection')),
+      google: t(i18n, k('dialogNativeConnection')),
       anthropic: t(i18n, k('dialogNativeConnection')),
       moonshot: t(i18n, k('dialogNativeConnection')),
       chatglm: t(i18n, k('dialogNativeConnection')),

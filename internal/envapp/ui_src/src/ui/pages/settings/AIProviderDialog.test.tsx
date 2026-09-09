@@ -105,6 +105,7 @@ function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDi
     ],
     onOpenChange: vi.fn(),
     onConfirm: vi.fn(),
+    onClearModels: vi.fn(),
     onChangeName: vi.fn(),
     onChangeType: vi.fn(),
     onChangeBaseURL: vi.fn(),

@@ -139,29 +139,29 @@ func TestApplyChatReasoningRejectsQwenOffWithBudget(t *testing.T) {
 	}
 }
 
-func TestApplyChatReasoningRejectsUnsupportedGroqQwenLow(t *testing.T) {
+func TestApplyChatReasoningRejectsUnsupportedGroqQwenMax(t *testing.T) {
 	t.Parallel()
 
-	capability := config.AIReasoningCapabilityForModel("groq", "qwen/qwen3-32b")
+	capability := config.AIReasoningCapabilityForModel("groq", "qwen/qwen3.8-27b")
 	params := openai.ChatCompletionNewParams{
-		Model:    oshared.ChatModel("qwen/qwen3-32b"),
+		Model:    oshared.ChatModel("qwen/qwen3.8-27b"),
 		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
 	}
 	err := applyChatReasoning(&params, ProviderControls{
-		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelLow},
+		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelMax},
 		ReasoningCapability: capability,
 	})
 	if err == nil {
-		t.Fatalf("applyChatReasoning accepted low for Groq Qwen")
+		t.Fatalf("applyChatReasoning accepted max for Groq Qwen")
 	}
 }
 
 func TestApplyChatReasoningGroqQwenDefaultAndOff(t *testing.T) {
 	t.Parallel()
 
-	capability := config.AIReasoningCapabilityForModel("groq", "qwen/qwen3-32b")
+	capability := config.AIReasoningCapabilityForModel("groq", "qwen/qwen3.8-27b")
 	params := openai.ChatCompletionNewParams{
-		Model:    oshared.ChatModel("qwen/qwen3-32b"),
+		Model:    oshared.ChatModel("qwen/qwen3.8-27b"),
 		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
 	}
 	if err := applyChatReasoning(&params, ProviderControls{
@@ -176,7 +176,7 @@ func TestApplyChatReasoningGroqQwenDefaultAndOff(t *testing.T) {
 	}
 
 	params = openai.ChatCompletionNewParams{
-		Model:    oshared.ChatModel("qwen/qwen3-32b"),
+		Model:    oshared.ChatModel("qwen/qwen3.8-27b"),
 		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
 	}
 	if err := applyChatReasoning(&params, ProviderControls{
@@ -235,7 +235,7 @@ func TestApplyChatReasoningGeminiBudget(t *testing.T) {
 	}
 	if err := applyChatReasoning(&params, ProviderControls{
 		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelDefault, BudgetTokens: 1024},
-		ReasoningCapability: config.AIReasoningCapabilityForModel("openai_compatible", "gemini-2.5-pro"),
+		ReasoningCapability: config.AIReasoningCapabilityForModel("google", "gemini-2.5-pro"),
 	}); err != nil {
 		t.Fatalf("applyChatReasoning: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestApplyChatReasoningGeminiOffUsesBudgetZero(t *testing.T) {
 	}
 	if err := applyChatReasoning(&params, ProviderControls{
 		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelOff},
-		ReasoningCapability: config.AIReasoningCapabilityForModel("openai_compatible", "gemini-2.5-flash"),
+		ReasoningCapability: config.AIReasoningCapabilityForModel("google", "gemini-2.5-flash"),
 	}); err != nil {
 		t.Fatalf("applyChatReasoning: %v", err)
 	}
@@ -275,14 +275,14 @@ func TestApplyChatReasoningGLM52Effort(t *testing.T) {
 		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
 	}
 	if err := applyChatReasoning(&params, ProviderControls{
-		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelXHigh},
+		ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelMax},
 		ReasoningCapability: config.AIReasoningCapabilityForModel("chatglm", "glm-5.2"),
 	}); err != nil {
 		t.Fatalf("applyChatReasoning: %v", err)
 	}
 	payload := mustMarshalPayload(t, params)
-	if !strings.Contains(payload, `"reasoning_effort":"xhigh"`) {
-		t.Fatalf("payload=%s, want GLM 5.2 xhigh effort", payload)
+	if !strings.Contains(payload, `"reasoning_effort":"max"`) {
+		t.Fatalf("payload=%s, want GLM 5.2 max effort", payload)
 	}
 }
 
@@ -332,4 +332,20 @@ func mustMarshalPayload(t *testing.T, value any) string {
 		t.Fatalf("Marshal: %v", err)
 	}
 	return string(raw)
+}
+
+func TestQwenNewEffortUsesOneReasoningControl(t *testing.T) {
+	params := openai.ChatCompletionNewParams{Model: "qwen3.8-flash", Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")}}
+	controls := ProviderControls{ReasoningCapability: config.AIReasoningCapabilityForModel("qwen", "qwen3.8-flash"), ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelXHigh}}
+	if err := applyChatReasoning(&params, controls); err != nil {
+		t.Fatal(err)
+	}
+	payload := mustMarshalPayload(t, params)
+	if !strings.Contains(payload, `"reasoning_effort":"xhigh"`) || strings.Contains(payload, `"thinking_budget"`) {
+		t.Fatalf("wrong Qwen effort: %s", payload)
+	}
+	controls.ReasoningSelection.BudgetTokens = 8192
+	if err := applyChatReasoning(&params, controls); err == nil {
+		t.Fatal("accepted mutually exclusive effort and budget")
+	}
 }

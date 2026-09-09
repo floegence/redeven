@@ -8,7 +8,7 @@ timestamp: 2026-09-08T00:00:00Z
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.4.0 Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.9.0 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.
@@ -27,6 +27,21 @@ history retain a typed hosted search item, including queries, safe sources, and
 failed outcomes. Refresh and Runtime restart preserve this canonical activity;
 Redeven does not rebuild it from transport diagnostics. Short requests such as automatic
 titles have no hosted search surface and cannot initiate a search.
+
+## Model-specific image input
+
+DeepSeek Vision is enabled by the selected model's `input_modalities`, just like
+vision models on other providers. Redeven authorizes and prepares staged image
+bytes, then supplies them to Floret through `DeepSeekOptions.ResolveAttachment`.
+Floret freezes native `input_image` data for estimation and dispatch. Text-only
+models reject images. PNG, JPEG, GIF, and WebP use the same host attachment
+limits and authorization checks as other native image routes.
+
+Provider continuation state contains attachment descriptors and content hashes,
+never image data URLs. A later preparation reauthorizes the current bytes and
+rejects changed content. Prepared dispatch does not resolve the image again.
+Redeven passes opaque state through without interpreting it or maintaining an
+image/history mirror.
 
 # Boundaries
 

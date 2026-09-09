@@ -1,6 +1,7 @@
 export type FlowerProviderType =
   | 'openai'
   | 'anthropic'
+  | 'google'
   | 'moonshot'
   | 'chatglm'
   | 'deepseek'
@@ -40,6 +41,8 @@ export type FlowerReasoningCapability = Readonly<{
 }>;
 
 export type FlowerProviderModel = Readonly<{
+  display_name?: string;
+  status?: string;
   model_name: string;
   wire_model_name?: string;
   context_window?: number;
@@ -50,6 +53,12 @@ export type FlowerProviderModel = Readonly<{
   default_reasoning_selection?: FlowerReasoningSelection;
 }>;
 
+export type FlowerModelSelection = Readonly<{
+  disabled_models?: readonly string[];
+  custom_models?: readonly FlowerProviderModel[];
+  model_overrides?: readonly FlowerProviderModel[];
+}>;
+
 export type FlowerProvider = Readonly<{
   id: string;
   name?: string;
@@ -57,6 +66,9 @@ export type FlowerProvider = Readonly<{
   base_url?: string;
   web_search?: Readonly<{ mode: FlowerWebSearchMode }>;
   models: readonly FlowerProviderModel[];
+  model_selection?: FlowerModelSelection;
+  catalog_models?: readonly FlowerProviderModel[];
+  catalog_error?: string;
 }>;
 
 export type FlowerProviderDraft = FlowerProvider & Readonly<{
@@ -1095,11 +1107,15 @@ export type FlowerSurfaceRuntimeDescriptor = Readonly<{
   subtitle: string;
 }>;
 
+export type FlowerModelCatalogQuery = Readonly<{ provider_id?: string; type: FlowerProviderType; base_url?: string; api_key?: string }>;
+export type FlowerModelCatalogDiscovery = (input: FlowerModelCatalogQuery) => Promise<Readonly<{ models: readonly FlowerProviderModel[] }>>;
+
 export type FlowerSurfaceAdapter = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
   canMutate?: boolean;
   /** Keep the canonical summary stream connected while the document is hidden. */
   keepLiveWhenHidden?: boolean;
+  discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;

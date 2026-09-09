@@ -982,3 +982,35 @@ func anyBool(v any) bool {
 		return false
 	}
 }
+
+func TestKimiK3UsesCompletionTokenLimitAndEffort(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			return
+		}
+		if body["max_completion_tokens"] != float64(8192) || body["max_tokens"] != nil || body["reasoning_effort"] != "high" {
+			t.Errorf("incorrect Kimi K3 controls: %+v", body)
+		}
+		if body["stream"] == true {
+			w.Header().Set("Content-Type", "text/event-stream")
+			writeOpenAISSEJSON(w, w.(http.Flusher), map[string]any{"id": "kimi-result", "object": "chat.completion.chunk", "model": "kimi-k3", "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": "ok"}, "finish_reason": "stop"}}})
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"kimi-result","object":"chat.completion","model":"kimi-k3","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+		}
+	}))
+	defer server.Close()
+	gateway, err := newProviderAdapter("moonshot", server.URL, "test-key", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := ModelGatewayRequest{Model: "kimi-k3", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}}}, Budgets: TurnBudgets{MaxOutputToken: 8192}, ProviderControls: ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh}, ReasoningCapability: config.AIReasoningCapabilityForModel("moonshot", "kimi-k3")}}
+	if result, err := gateway.StreamTurn(context.Background(), req, nil); err != nil || result.Text != "ok" {
+		t.Fatalf("stream: %+v, %v", result, err)
+	}
+	if result, err := gateway.(*moonshotProvider).Turn(context.Background(), req); err != nil || result.Text != "ok" {
+		t.Fatalf("turn: %+v, %v", result, err)
+	}
+}

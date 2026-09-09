@@ -1,6 +1,7 @@
 import type { FlowerProviderModelNoteKey } from '../../../../../../flower_ui/src/settings/providerModelNotes';
 import type {
   FlowerReasoningCapability,
+  FlowerModelSelection,
   FlowerReasoningSelection,
 } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -13,9 +14,11 @@ export type PermissionPolicy = Readonly<{
   by_app?: Record<string, PermissionSet>;
 }>;
 
-export type AIProviderType = 'openai' | 'anthropic' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openrouter' | 'xai' | 'groq' | 'ollama' | 'openai_compatible';
+export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openrouter' | 'xai' | 'groq' | 'ollama' | 'openai_compatible';
 
 export type AIProviderModel = Readonly<{
+  display_name?: string;
+  status?: string;
   model_name: string;
   wire_model_name?: string;
   context_window?: number;
@@ -41,6 +44,7 @@ export type AIProvider = Readonly<{
   base_url?: string;
   web_search?: AIProviderWebSearch;
   models: AIProviderModel[];
+  model_selection?: FlowerModelSelection;
 }>;
 
 export type AIPermissionType = 'readonly' | 'approval_required' | 'full_access';
@@ -250,6 +254,8 @@ export type SkillBrowseFileResponse = Readonly<{
 export type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
 
 export type AIProviderModelRow = {
+  display_name?: string;
+  status?: string;
   model_name: string;
   wire_model_name?: string;
   context_window?: number;
@@ -267,9 +273,14 @@ export type AIProviderRow = {
   base_url: string;
   web_search?: AIProviderWebSearch;
   models: AIProviderModelRow[];
+  model_selection?: FlowerModelSelection;
+  catalog_error?: string;
+  catalog_models?: readonly import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerProviderModel[];
 };
 
 export type AIProviderModelPreset = Readonly<{
+  display_name?: string;
+  status?: string;
   model_name: string;
   wire_model_name?: string;
   context_window: number;

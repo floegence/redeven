@@ -265,11 +265,11 @@ func TestAIConfigValidate_CuratedNativeProviderModels(t *testing.T) {
 		{name: "moonshot_current", typ: "moonshot", models: []string{"kimi-k2.6"}, baseURL: "https://api.moonshot.cn/v1"},
 		{name: "moonshot_legacy_removed", typ: "moonshot", models: []string{"kimi-k2.5"}, baseURL: "https://api.moonshot.cn/v1", wantError: true},
 		{name: "glm_current", typ: "chatglm", models: []string{"glm-5.2", "glm-5.1"}, baseURL: "https://api.z.ai/api/paas/v4/"},
-		{name: "glm_legacy_removed", typ: "chatglm", models: []string{"glm-4.5"}, baseURL: "https://api.z.ai/api/paas/v4/", wantError: true},
+		{name: "glm_tool_capable", typ: "chatglm", models: []string{"glm-4.5"}, baseURL: "https://api.z.ai/api/paas/v4/"},
 		{name: "deepseek_current", typ: "deepseek", models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}, baseURL: "https://api.deepseek.com"},
 		{name: "deepseek_legacy_removed", typ: "deepseek", models: []string{"deepseek-chat"}, baseURL: "https://api.deepseek.com", wantError: true},
 		{name: "qwen_current", typ: "qwen", models: []string{"qwen3.6-plus", "qwen3.6-plus-2026-04-02", "qwen3.6-flash", "qwen3.6-flash-2026-04-16"}, baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"},
-		{name: "qwen_preview_without_builtin_tools_removed", typ: "qwen", models: []string{"qwen3.6-max-preview"}, baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wantError: true},
+		{name: "qwen_tool_capable_preview", typ: "qwen", models: []string{"qwen3.6-max-preview"}, baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"},
 	}
 
 	for _, tc := range tests {

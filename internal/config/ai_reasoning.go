@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	flconfig "github.com/floegence/floret/v7/config"
 )
@@ -136,8 +137,8 @@ func (c AIReasoningCapability) Validate() error {
 	if c.MinBudgetTokens > 0 && c.MaxBudgetTokens > 0 && c.MinBudgetTokens > c.MaxBudgetTokens {
 		return fmt.Errorf("min_budget_tokens %d exceeds max_budget_tokens %d", c.MinBudgetTokens, c.MaxBudgetTokens)
 	}
-	if c.SourceCheckedAt != aiReasoningSourceCheckedAt {
-		return fmt.Errorf("source_checked_at must be %s", aiReasoningSourceCheckedAt)
+	if _, err := time.Parse("2006-01-02", c.SourceCheckedAt); err != nil {
+		return errors.New("invalid source_checked_at date")
 	}
 	if len(c.SourceURLs) == 0 {
 		return errors.New("missing source_urls")
@@ -164,6 +165,9 @@ func ValidateAIReasoningSelection(capability AIReasoningCapability, selection AI
 		return fmt.Errorf("reasoning level %q is not supported by this model", selection.Level)
 	}
 	if selection.BudgetTokens > 0 {
+		if capability.WireShape == "qwen_reasoning_effort" && selection.Level != "" && selection.Level != AIReasoningLevelDefault {
+			return fmt.Errorf("Qwen reasoning effort and thinking budget cannot be combined")
+		}
 		if selection.Level == AIReasoningLevelOff {
 			return errors.New("reasoning budget cannot be set when reasoning is off")
 		}

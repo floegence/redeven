@@ -16,11 +16,11 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 15 {
-		t.Fatalf("CompatibilityEpoch = %d, want Web Service management contract epoch 15", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 16 {
+		t.Fatalf("CompatibilityEpoch = %d, want model catalog selection contract epoch 16", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 6 || contract.UpgradeFromRuntimeEpochs[0] != 9 || contract.UpgradeFromRuntimeEpochs[1] != 10 || contract.UpgradeFromRuntimeEpochs[2] != 11 || contract.UpgradeFromRuntimeEpochs[3] != 12 || contract.UpgradeFromRuntimeEpochs[4] != 13 || contract.UpgradeFromRuntimeEpochs[5] != 14 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epoch 9, 10, 11, 12, 13 and 14 upgrades", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 7 || contract.UpgradeFromRuntimeEpochs[0] != 9 || contract.UpgradeFromRuntimeEpochs[1] != 10 || contract.UpgradeFromRuntimeEpochs[2] != 11 || contract.UpgradeFromRuntimeEpochs[3] != 12 || contract.UpgradeFromRuntimeEpochs[4] != 13 || contract.UpgradeFromRuntimeEpochs[5] != 14 || contract.UpgradeFromRuntimeEpochs[6] != 15 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epoch 9, 10, 11, 12, 13, 14 and 15 upgrades", contract.UpgradeFromRuntimeEpochs)
 	}
 	if contract.MinimumDesktopVersion != "v0.12.0" || contract.MinimumRuntimeVersion != "v0.12.0" {
 		t.Fatalf(
