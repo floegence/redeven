@@ -14382,7 +14382,7 @@
         "title": "Terminal fonts across client devices",
         "type": "UI Contract"
       },
-      "body_length": 8083,
+      "body_length": 8368,
       "summary": "The Env App owns terminal font selection and document-local loading. New preferences use bundled JetBrains Mono at the existing default size of 12; existing font IDs and sizes remain intact. Each client resolves its own available font, while Floeterm owns character cells, cursor positions, and the authoritative session grid. A missing saved font falls back visibly without rewriting that preference. Font loading failure keeps the terminal usable in system monospace and offers an explicit retry.",
       "sections": [
         {
@@ -14396,8 +14396,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Font files and menu behavior are Runtime-served Env App assets. Updating Desktop alone cannot deploy them to an unchanged remote Runtime. Validate an isolated task Runtime first; installing the font feature does not authorize upgrading or restarting other running environments. Font license text is included in the generated root third-party notice.",
-          "char_count": 349
+          "body": "Font files and menu behavior are Runtime-served Env App assets. Updating Desktop alone cannot deploy them to an unchanged remote Runtime. Validate an isolated task Runtime first; installing the font feature does not authorize upgrading or restarting other running environments. Font license text is included in the generated root third-party notice.\n\nQuick CI and the final pre-push gate use the same Floeterm dependency consistency check, including the published npm integrity and Go checksums.",
+          "char_count": 495
         },
         {
           "id": "reproduction",
@@ -14408,6 +14408,11 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:scripts/check_floeterm_dependency_consistency.mjs:0:published go/npm release parity shared by quick ci and final integration.",
+          "source": "redeven:scripts/check_floeterm_dependency_consistency.mjs",
+          "description": "Published Go/npm release parity shared by Quick CI and final integration."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.ts:0:client-local loading, stable candidate ids, and side-effect-free resolution.",
           "source": "redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.ts",
@@ -15277,5 +15282,5 @@
       ]
     }
   ],
-  "source_sha256": "ab1bb106cf4fb585d84ea0dfab09796045bcf1eb9ac2806472718c1ba7692ba9"
+  "source_sha256": "c5b7566142f44cc51c73d09b0c255cd85a0036d9692ff35a9ba1990ab3bf7779"
 }
