@@ -147,6 +147,10 @@ describe('Tooltip', () => {
 
       vi.advanceTimersByTime(1);
       await Promise.resolve();
+      expect(document.body.querySelector('[role="tooltip"]')).toBe(tooltip);
+
+      vi.advanceTimersByTime(16);
+      await Promise.resolve();
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
     } finally {
       dispose();
