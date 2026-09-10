@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { commands, page } from 'vitest/browser';
 
 const mediaCommands = commands as unknown as {
@@ -29,7 +29,7 @@ function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collap
           </div>
         </main>
         <footer class="flower-chat-bottom-dock">
-          <div class="flower-composer p-3"><textarea aria-label="Ask Flower"></textarea></div>
+          <div class="flower-composer p-3" data-floe-surface="${phase === 'collapsed' || phase === 'collapsing' ? 'flat' : 'inset'}"><textarea aria-label="Ask Flower"></textarea></div>
         </footer>
       </section>
     </div>
@@ -81,10 +81,15 @@ function relativeLuminance(value: string): number {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
+beforeEach(() => {
+  document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
+});
+
 afterEach(async () => {
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.removeAttribute('data-floe-shell-theme');
+  document.documentElement.removeAttribute('data-floe-surface-style');
   document.documentElement.removeAttribute('style');
   await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
 });
@@ -164,7 +169,9 @@ describe('Flower bottom companion computed visual contract', () => {
     expect(style.borderTopWidth).toBe('1px');
     expect(style.borderRadius).toBe('14px');
     expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-    expect(style.boxShadow).not.toBe('none');
+    expect(composer.dataset.floeSurface).toBe('inset');
+    expect(style.boxShadow).toContain('inset');
+    expect(style.backdropFilter).toBe('none');
     for (const mode of ['approval', 'input_request']) {
       composer.classList.add('flower-decision-surface');
       composer.dataset.flowerBottomMode = mode;
