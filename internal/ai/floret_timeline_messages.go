@@ -328,6 +328,7 @@ func publicFloretMessageReferences(references []flruntime.MessageReference) ([]p
 
 func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
 	out := current
+	out.Cancellation = cloneFlowerCancellation(current.Cancellation)
 	out.Items = append([]flruntime.ThreadItem(nil), current.Items...)
 	for index := range out.Items {
 		out.Items[index].Attachments = publicFloretAttachments(out.Items[index].Attachments)
@@ -392,4 +393,12 @@ func publicFloretInteraction(interaction flruntime.ThreadInteraction) flruntime.
 	}
 	interaction.Resolution = &resolution
 	return interaction
+}
+
+func cloneFlowerCancellation(value *flruntime.ThreadCancellation) *flruntime.ThreadCancellation {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }

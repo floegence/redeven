@@ -77,6 +77,7 @@ const threadListCopy: FlowerThreadListCopy = {
   empty: 'No conversations',
   untitled: 'Untitled',
   working: 'Working',
+  stopping: 'Stopping...',
   unread: 'Unread',
   stop: 'Stop conversation',
   deleteMenuAction: 'Delete conversation',

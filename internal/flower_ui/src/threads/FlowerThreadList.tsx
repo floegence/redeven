@@ -1,3 +1,4 @@
+import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -121,8 +122,8 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           <div class="flex min-w-0 items-center gap-1">
             <span class="flower-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
-          <Show when={props.busyLabel}>
-            <span class="text-[10px] text-muted-foreground" role="status">{props.busyLabel}</span>
+          <Show when={props.busyLabel || flowerThreadIsStopping(props.item)}>
+            <span class="text-[10px] text-muted-foreground" role="status">{flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel}</span>
           </Show>
         </div>
       </button>

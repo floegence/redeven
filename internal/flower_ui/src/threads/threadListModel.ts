@@ -1,3 +1,4 @@
+import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerThreadListCopy, type FlowerThreadTimeGroup } from '../copy';
 import type { FlowerThreadListItem, FlowerThreadStatus } from '../contracts/flowerSurfaceContracts';
 
@@ -104,6 +105,7 @@ export function flowerThreadIndicator(
     ariaStatus,
     title: showUnreadDot ? `${ariaStatus}, ${copy.unread}` : ariaStatus,
   });
+  if (flowerThreadIsStopping(item)) return statusIndicator(copy.stopping, 'wave');
   switch (item.status) {
     case 'running':
       return {

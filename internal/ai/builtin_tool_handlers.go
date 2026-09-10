@@ -133,14 +133,16 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 	}
 	data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
 	return ToolResult{
-		ToolID:    strings.TrimSpace(call.ID),
-		ToolName:  toolName,
-		Status:    status,
-		Summary:   summary,
-		Details:   details,
-		Data:      data,
-		Truncated: truncated,
-		Error:     outcome.ToolError,
+		ToolID:                strings.TrimSpace(call.ID),
+		ToolName:              toolName,
+		Status:                status,
+		Summary:               summary,
+		Details:               details,
+		Data:                  data,
+		Truncated:             truncated,
+		Error:                 outcome.ToolError,
+		cancellationConfirmed: outcome.cancellationConfirmed,
+		dispatchErr:           outcome.dispatchErr,
 	}, nil
 }
 

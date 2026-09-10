@@ -499,6 +499,7 @@ export type FlowerQueuedTurnAttachment = Readonly<{
 }>;
 
 export type FlowerThreadSnapshot = Readonly<{
+  cancellation?: FlowerThreadCancellation;
   thread_id: string;
   title: string;
   title_status: FlowerTitleStatus;
@@ -694,7 +695,17 @@ export type FlowerRestoredInput = Readonly<{
  input: Readonly<{ text?: string; attachments?: FlowerRuntimeCurrentItem['attachments']; references?: FlowerRuntimeCurrentItem['references'] }>;
 }>;
 
+export type FlowerThreadCancellation = Readonly<{
+  thread_id: string;
+  turn_id: string;
+  run_id: string;
+  source: string;
+  mode: 'immediate' | 'graceful';
+  requested_at: string;
+}>;
+
 export type FlowerRuntimeCurrentView = Readonly<{
+  cancellation?: FlowerThreadCancellation;
   restored_inputs?: readonly FlowerRestoredInput[];
   thread_id: string;
   view_version: number;
@@ -762,6 +773,7 @@ export type FlowerApprovalCommandResult = Readonly<{
 }>;
 
 export type FlowerThreadListItem = Readonly<{
+  cancellation?: FlowerThreadCancellation;
   thread_id: string;
   title: string;
   title_status: FlowerTitleStatus;

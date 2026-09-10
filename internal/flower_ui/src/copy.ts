@@ -41,6 +41,7 @@ export type FlowerThreadListCopy = Readonly<{
   empty: string;
   untitled: string;
   working: string;
+  stopping: string;
   unread: string;
   stop: string;
   deleteMenuAction: string;
@@ -368,6 +369,11 @@ export type FlowerSurfaceCopy = Readonly<{
     send: string;
     stop: string;
     stopping: string;
+    stopped: string;
+    stoppedDescription: string;
+    stopOutcomeUnknownTitle: string;
+    stopOutcomeUnknownDescription: string;
+    stopRequestFailed: string;
     commandMenuLabel: string;
     commandCompactContext: string;
     compactContext: string;
@@ -660,6 +666,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     send: 'Send',
     stop: 'Stop',
     stopping: 'Stopping...',
+    stopped: "Stopped",
+    stoppedDescription: "This turn has ended. Send a new message to continue. Changes already made are kept.",
+    stopOutcomeUnknownTitle: "Stopped with unconfirmed results",
+    stopOutcomeUnknownDescription: "Some operations may have completed. Check their results before continuing. This turn will not be replayed automatically.",
+    stopRequestFailed: "Could not stop this turn. Try Stop again.",
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact this conversation context',
     compactContext: 'Compact context',
@@ -859,6 +870,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     empty: 'No conversations yet.',
     untitled: 'Untitled chat',
     working: 'Working',
+    stopping: 'Stopping...',
     unread: 'Unread',
     stop: 'Stop conversation',
     deleteMenuAction: 'Delete conversation',

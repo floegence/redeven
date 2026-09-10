@@ -3,7 +3,7 @@
 package ai
 
 import (
-	"os"
+	"errors"
 	"os/exec"
 )
 
@@ -13,12 +13,13 @@ func configureTerminalExecProcessGroup(cmd *exec.Cmd) {
 
 func terminateTerminalExecProcessTree(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
-		return nil
+		return errors.New("terminal process handle is unavailable")
 	}
-	p, err := os.FindProcess(cmd.Process.Pid)
-	if err != nil {
-		return nil
-	}
-	_ = p.Kill()
-	return nil
+	return cmd.Process.Kill()
+}
+
+func terminalExecWasTerminated(err error) bool {
+	// Process.Kill uses the same exit code as ordinary command failures.
+	// Preserve the observed exit result instead of inventing signal evidence.
+	return false
 }

@@ -1,3 +1,4 @@
+import { mapFlowerCancellation } from './flowerLiveMapper';
 import type {
   FlowerActivityApprovalState,
   FlowerActivityItem,
@@ -435,6 +436,7 @@ export function applyFlowerRuntimeCurrentView(
     status,
     active_run_id: activeRunID || undefined,
     run_progress: runtimeRunProgress(current),
+    cancellation: mapFlowerCancellation(current.cancellation, threadID, trim(current.run_id), trim(current.turn_id)),
     approval_pending: approvalCount > 0,
     approval_pending_count: approvalCount,
     approval_actions: approvalActions,

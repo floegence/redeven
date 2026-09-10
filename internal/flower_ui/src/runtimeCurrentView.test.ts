@@ -12,6 +12,21 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('owns exact Stop provenance and clears it only for the next canonical turn', () => {
+    const cancellation = { thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', source: 'user_stop', mode: 'graceful' as const, requested_at: '2026-09-10T03:00:00Z' };
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 2, activity: 'active', turn_id: 'turn-a', run_id: 'run-a', run_progress: { phase: 'tool_execution' }, cancellation, items: [] };
+    const stopping = applyFlowerRuntimeCurrentView(summary(), current);
+    expect(stopping.cancellation).toEqual(cancellation);
+    expect(stopping.status).toBe('running');
+    const stopped = applyFlowerRuntimeCurrentView(stopping, { ...current, view_version: 3, activity: 'idle', last_outcome: 'cancelled' });
+    expect(stopped.status).toBe('canceled');
+    expect(stopped.error).toBeUndefined();
+    expect(stopped.cancellation).toEqual(cancellation);
+    const next = applyFlowerRuntimeCurrentView(stopped, { ...current, view_version: 4, cancellation: undefined, run_id: 'run-next', turn_id: 'turn-next' });
+    expect(next.cancellation).toBeUndefined();
+    expect(() => applyFlowerRuntimeCurrentView(summary(), { ...current, cancellation: { ...cancellation, run_id: 'wrong-run' } })).toThrow('exact execution identity');
+  });
+
   it('keeps restored input separate from executable queues and canonical messages', () => {
     const restored = [{ id: 'restored-input', input: { text: 'Keep this old queue input', attachments: [{ name: 'notes.txt' }] } }];
     const result = applyFlowerRuntimeCurrentView(summary(), { thread_id: 'thread-a', view_version: 3, activity: 'idle', restored_inputs: restored, items: [] });

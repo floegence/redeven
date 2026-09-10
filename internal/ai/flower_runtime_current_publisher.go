@@ -301,6 +301,16 @@ func (builder *flowerRuntimeBoundaryBuilder) addInt(value int64) {
 func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 	var builder flowerRuntimeBoundaryBuilder
 	builder.add(string(current.Activity))
+	if current.Cancellation != nil {
+		builder.add(current.Cancellation.ThreadID.String())
+		builder.add(current.Cancellation.TurnID.String())
+		builder.add(current.Cancellation.RunID.String())
+		builder.add(current.Cancellation.Source)
+		builder.add(string(current.Cancellation.Mode))
+		builder.addInt(current.Cancellation.RequestedAt.UnixNano())
+	} else {
+		builder.add("")
+	}
 	builder.add(current.TurnID.String())
 	builder.add(current.RunID.String())
 	if current.RunProgress != nil {

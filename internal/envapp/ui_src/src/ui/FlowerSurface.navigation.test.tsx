@@ -252,7 +252,7 @@ describe('FlowerSurface navigation', () => {
     expect(markThreadRead.mock.calls.map((call) => call[1].activity_revision)).toEqual([7, 7]);
   });
 
-  it('keeps thread-menu stop failures silent and immediately retryable', async () => {
+  it('shows actionable thread-menu stop failures and keeps Stop retryable', async () => {
     clearFlowerSurfaceNotifications();
     const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
@@ -286,11 +286,11 @@ describe('FlowerSurface navigation', () => {
 
       await openStopMenu();
       await waitFor(() => stopThread.mock.calls.length === 1);
-      expect(flowerSurfaceNotifications()).toHaveLength(0);
+      expect(flowerSurfaceNotifications().at(-1)?.message).toBe('Could not stop this turn. Try Stop again.');
 
       await openStopMenu();
       await waitFor(() => stopThread.mock.calls.length === 2);
-      expect(flowerSurfaceNotifications()).toHaveLength(0);
+      expect(flowerSurfaceNotifications().at(-1)?.message).toBe('Could not stop this turn. Try Stop again.');
       expect(diagnostic).toHaveBeenCalledTimes(2);
     } finally {
       diagnostic.mockRestore();
@@ -1440,7 +1440,7 @@ describe('FlowerSurface navigation', () => {
 
     (runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).click();
     await waitFor(() => stopThread.mock.calls.length === 1);
-    await waitFor(() => !(runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).disabled);
+    await waitFor(() => (runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).disabled);
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while the previous reply stops');
   });
 

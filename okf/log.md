@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-09-10: Consistent Flower Stop
+
+- Consume released Floret v7.10.1 graceful Stop and canonical cancellation facts.
+  Preserve terminal output, exact process identity, real errors, and unknown-effect
+  protection; keep navigation and editing available. See
+  [runtime ownership](ai/floret-thread-runtime.md), [terminal completion](ai/terminal-tool-runtime.md),
+  and [live presentation](ui/flower-live-timeline.md).
+
+
 ## 2026-09-10 — Manual-only tool disclosure
 
 - Remove status- and attention-driven automatic expansion from the shared Flower activity controller. Pending, waiting, and running tools remain collapsed while running titles retain their sweep.

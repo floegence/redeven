@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/floegence/floret/v7/identity"
-	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -729,9 +728,14 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	text, _ := json.Marshal(structured)
 	status := strings.TrimSpace(anyToString(structured["status"]))
 	metadata := map[string]any(nil)
+	dispatchErr := result.dispatchErr
 	isError := status != toolResultStatusSuccess
 	if status == toolResultStatusAborted {
-		metadata = map[string]any{"tool_result_status": string(observation.ActivityStatusCanceled)}
+		if result.cancellationConfirmed {
+			structured["outcome"] = fltools.ResultOutcomeCanceled
+		} else if dispatchErr == nil {
+			dispatchErr = context.Canceled
+		}
 		isError = false
 	}
 	if token := floretToolResultProgressToken(result, structured); token != "" {
@@ -745,13 +749,14 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		return fltools.Result{}, err
 	}
 	return fltools.Result{
-		CallID:     strings.TrimSpace(result.ToolID),
-		Name:       strings.TrimSpace(result.ToolName),
-		Text:       string(text),
-		Structured: structured,
-		Metadata:   metadata,
-		Activity:   activity,
-		IsError:    isError,
+		CallID:      strings.TrimSpace(result.ToolID),
+		Name:        strings.TrimSpace(result.ToolName),
+		Text:        string(text),
+		Structured:  structured,
+		Metadata:    metadata,
+		Activity:    activity,
+		IsError:     isError,
+		DispatchErr: dispatchErr,
 	}, nil
 }
 
