@@ -3,6 +3,8 @@
 package ai
 
 import (
+	"errors"
+	"os"
 	"os/exec"
 	"syscall"
 )
@@ -13,15 +15,22 @@ func configureTerminalExecProcessGroup(cmd *exec.Cmd) {
 }
 
 func terminateTerminalExecProcessTree(cmd *exec.Cmd) error {
-	if cmd == nil || cmd.Process == nil {
-		return nil
+	if cmd == nil || cmd.Process == nil || cmd.Process.Pid <= 0 {
+		return errors.New("terminal process handle is unavailable")
 	}
-	pid := cmd.Process.Pid
-	if pid <= 0 {
-		return nil
+	// Every PTY command owns this process group, including its descendants.
+	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	if errors.Is(err, syscall.ESRCH) {
+		return os.ErrProcessDone
 	}
-	// Best effort: kill the full process group first, then the direct process.
-	_ = syscall.Kill(-pid, syscall.SIGKILL)
-	_ = syscall.Kill(pid, syscall.SIGKILL)
-	return nil
+	return err
+}
+
+func terminalExecWasTerminated(err error) bool {
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		return false
+	}
+	status, ok := exit.Sys().(syscall.WaitStatus)
+	return ok && status.Signaled() && status.Signal() == syscall.SIGKILL
 }

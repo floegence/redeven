@@ -1,3 +1,4 @@
+import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
 
 export function canForkThreadItem(item: FlowerThreadListItem): boolean {
@@ -18,7 +19,7 @@ export function canRenameThreadItem(item: FlowerThreadListItem): boolean {
 }
 
 export function canStopThreadItem(item: FlowerThreadListItem): boolean {
-  return item.status === 'running' || item.status === 'waiting_approval' || item.status === 'waiting_user';
+  return !flowerThreadIsStopping(item) && (item.status === 'running' || item.status === 'waiting_approval' || item.status === 'waiting_user');
 }
 
 export function canPinThreadItem(item: FlowerThreadListItem): boolean {

@@ -129,6 +129,7 @@ type terminalProcess struct {
 	lastSeq              int64
 	total                int64
 	truncated            bool
+	settlementErr        error
 	reaped               bool
 	terminationRequested bool
 	initialInputFailed   bool
@@ -276,9 +277,7 @@ func (p *terminalProcess) recordInitialInputFailure(cause error) {
 	p.err = toolErr
 	cmd := p.cmd
 	running := p.status == terminalProcessStatusRunning && cmd != nil
-	if running {
-		p.terminationRequested = true
-	} else {
+	if !running {
 		p.status = terminalProcessStatusError
 		if p.endedAt.IsZero() {
 			p.endedAt = time.Now()
@@ -288,8 +287,12 @@ func (p *terminalProcess) recordInitialInputFailure(cause error) {
 		p.cond.Broadcast()
 	}
 	p.mu.Unlock()
-	if running && cmd != nil {
-		_ = terminateTerminalExecProcessTree(cmd)
+	if running {
+		if err := p.requestTermination(); err != nil {
+			p.mu.Lock()
+			p.err.Message += "; process termination failed: " + err.Error()
+			p.mu.Unlock()
+		}
 	}
 }
 
@@ -447,13 +450,9 @@ func (p *terminalProcess) ReadAfter(req terminalProcessReadRequest) (terminalPro
 	return snapshot, nil
 }
 
-func (p *terminalProcess) WaitForYield(yieldMS int64) terminalProcessSnapshot {
-	return p.WaitForYieldContext(context.Background(), yieldMS)
-}
-
-func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64) terminalProcessSnapshot {
+func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64) (terminalProcessSnapshot, error) {
 	if p == nil {
-		return terminalProcessSnapshot{}
+		return terminalProcessSnapshot{}, errors.New("terminal process not found")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -475,8 +474,7 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 	for p.status == terminalProcessStatusRunning {
 		if ctx.Err() != nil {
 			p.mu.Unlock()
-			snapshot, _ := p.Terminate(context.Background())
-			return snapshot
+			return p.Terminate(context.Background())
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
@@ -492,12 +490,12 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 	}
 	if ctx.Err() != nil && p.status == terminalProcessStatusRunning {
 		p.mu.Unlock()
-		snapshot, _ := p.Terminate(context.Background())
-		return snapshot
+		return p.Terminate(context.Background())
 	}
 	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
+	err := p.settlementErr
 	p.mu.Unlock()
-	return snapshot
+	return snapshot, err
 }
 
 func (p *terminalProcess) Write(input string) (terminalProcessSnapshot, error) {
@@ -528,27 +526,15 @@ func (p *terminalProcess) Terminate(ctx context.Context) (terminalProcessSnapsho
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	terminateErr := p.requestTermination()
-	return p.waitForTermination(ctx, terminateErr)
-}
-
-// TerminateForActiveTurn is used by terminal.terminate while the owning
-// Floret turn is still executing.
-func (p *terminalProcess) TerminateForActiveTurn(ctx context.Context) (terminalProcessSnapshot, error) {
-	if p == nil {
-		return terminalProcessSnapshot{}, errors.New("terminal process not found")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	terminateErr := p.requestTermination()
-	if err := p.waitForReap(ctx, terminateErr); err != nil {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := p.requestTermination(); err != nil {
 		return p.Snapshot(), err
 	}
-	p.mu.Lock()
-	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
-	p.mu.Unlock()
-	return snapshot, terminateErr
+	if err := p.waitForReap(ctx); err != nil {
+		return p.Snapshot(), err
+	}
+	return p.Snapshot(), nil
 }
 
 func (p *terminalProcess) requestTermination() error {
@@ -556,36 +542,24 @@ func (p *terminalProcess) requestTermination() error {
 		return errors.New("terminal process not found")
 	}
 	p.mu.Lock()
-	requestTermination := p.status == terminalProcessStatusRunning && !p.terminationRequested
-	if requestTermination {
-		p.terminationRequested = true
+	defer p.mu.Unlock()
+	if p.status != terminalProcessStatusRunning || p.terminationRequested {
+		return nil
 	}
-	cmd := p.cmd
-	p.mu.Unlock()
-
-	if requestTermination && cmd != nil {
-		return terminateTerminalExecProcessTree(cmd)
+	// Serialize the signal outcome with process exit classification. A stop
+	// request cannot turn a concurrent normal exit or command failure into cancel.
+	err := terminateTerminalExecProcessTree(p.cmd)
+	if errors.Is(err, os.ErrProcessDone) {
+		return nil
 	}
+	if err != nil {
+		return err
+	}
+	p.terminationRequested = true
 	return nil
 }
 
-func (p *terminalProcess) waitForTermination(ctx context.Context, terminateErr error) (terminalProcessSnapshot, error) {
-	if p == nil {
-		return terminalProcessSnapshot{}, errors.New("terminal process not found")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := p.waitForReap(ctx, terminateErr); err != nil {
-		return p.Snapshot(), err
-	}
-	p.mu.Lock()
-	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
-	p.mu.Unlock()
-	return snapshot, terminateErr
-}
-
-func (p *terminalProcess) waitForReap(ctx context.Context, terminateErr error) error {
+func (p *terminalProcess) waitForReap(ctx context.Context) error {
 	if p == nil {
 		return errors.New("terminal process not found")
 	}
@@ -593,16 +567,19 @@ func (p *terminalProcess) waitForReap(ctx context.Context, terminateErr error) e
 		ctx = context.Background()
 	}
 	p.mu.Lock()
-	reaped := p.reaped
+	reaped, settlementErr := p.reaped, p.settlementErr
 	p.mu.Unlock()
 	if reaped {
-		return terminateErr
+		return settlementErr
 	}
 	select {
 	case <-p.reapedDone:
-		return terminateErr
+		p.mu.Lock()
+		settlementErr := p.settlementErr
+		p.mu.Unlock()
+		return settlementErr
 	case <-ctx.Done():
-		return errors.Join(terminateErr, ctx.Err())
+		return ctx.Err()
 	}
 }
 
@@ -636,7 +613,7 @@ func (p *terminalProcess) waitLoop() {
 	}
 	err := p.cmd.Wait()
 	_ = p.tty.Close()
-	p.waitForOutputDrain()
+	drainErr := p.waitForOutputDrain()
 	status := terminalProcessStatusSuccess
 	exitCode := 0
 	var toolErr *aitools.ToolError
@@ -659,7 +636,7 @@ func (p *terminalProcess) waitLoop() {
 		p.status = terminalProcessStatusError
 		p.exitCode = exitCode
 		p.endedAt = time.Now()
-	} else if p.terminationRequested {
+	} else if p.terminationRequested && terminalExecWasTerminated(err) {
 		p.status = terminalProcessStatusCanceled
 		p.err = &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled", Retryable: false}
 		p.exitCode = exitCode
@@ -673,6 +650,7 @@ func (p *terminalProcess) waitLoop() {
 			p.err = toolErr
 		}
 	}
+	p.settlementErr = drainErr
 	p.reaped = true
 	p.cond.Broadcast()
 	p.mu.Unlock()
@@ -692,15 +670,17 @@ func (p *terminalProcess) releaseWorkload() {
 	})
 }
 
-func (p *terminalProcess) waitForOutputDrain() {
+func (p *terminalProcess) waitForOutputDrain() error {
 	if p == nil || p.readDone == nil {
-		return
+		return nil
 	}
 	timer := time.NewTimer(terminalProcessOutputDrainWait)
 	defer timer.Stop()
 	select {
 	case <-p.readDone:
+		return nil
 	case <-timer.C:
+		return errors.New("terminal output did not finish draining")
 	}
 }
 
@@ -715,7 +695,11 @@ func (p *terminalProcess) maxRuntimeLoop() {
 	running := p.status == terminalProcessStatusRunning
 	p.mu.Unlock()
 	if running {
-		_, _ = p.Terminate(context.Background())
+		if _, err := p.Terminate(context.Background()); err != nil {
+			p.mu.Lock()
+			p.err = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal runtime limit could not terminate the process: " + err.Error(), Retryable: false}
+			p.mu.Unlock()
+		}
 	}
 }
 

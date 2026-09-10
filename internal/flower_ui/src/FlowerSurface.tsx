@@ -98,7 +98,7 @@ import type {
   FlowerSubagentDetail,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
-import { flowerThreadHasActiveTurnEvidence, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
+import { flowerThreadIsStopping, flowerThreadHasActiveTurnEvidence, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import { presentFlowerApproval } from './flowerApprovalPresentation';
 import { canonicalFlowerThreadSnapshotTitle, flowerForkTitle, flowerThreadDisplayTitle } from './flowerThreadTitle';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
@@ -1403,7 +1403,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const thread = selectedThread();
     return visibleInputRequest(thread);
   });
-  const selectedThreadStopPending = createMemo(() => stoppingThreadIDs().has(trimString(selectedThreadID())));
+  const selectedThreadStopPending = createMemo(() => (
+    stoppingThreadIDs().has(trimString(selectedThreadID())) || flowerThreadIsStopping(selectedThread())
+  ));
+  const selectedThreadStopped = createMemo(() => selectedThread()?.status === 'canceled' && selectedThread()?.cancellation?.source === 'user_stop');
+  createEffect(() => {
+    const cache = threadCache();
+    for (const threadID of stoppingThreadIDs()) {
+      const thread = cache.views.get(threadID)?.thread ?? cache.summaries.get(threadID);
+      // Acceptance can arrive before its live observation. Keep request
+      // feedback until the canonical view confirms Stop or a terminal race.
+      if (thread && (thread.cancellation || !flowerThreadHasActiveTurnEvidence(thread))) {
+        updateThreadIDMembership(setStoppingThreadIDs, threadID, false);
+      }
+    }
+  });
   const selectedThreadStopLabel = createMemo(() => (
     selectedThreadStopPending() ? copy().chat.stopping : copy().chat.stop
   ));
@@ -2301,6 +2315,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return [
       t.thread_id,
       t.status,
+      JSON.stringify(t.cancellation ?? null),
 		flowerThreadDisplayTitle(t, copy().threadList.untitled),
       String(Number(t.pinned_at_ms ?? 0) > 0),
       String(Number(t.pinned_at_ms ?? 0)),
@@ -2317,6 +2332,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const sidebarItemSignature = (t: FlowerThreadListItem): string => [
     t.thread_id,
     t.status,
+    JSON.stringify(t.cancellation ?? null),
     t.title,
     String(t.pinned),
     String(t.pinned_at_ms ?? 0),
@@ -5205,6 +5221,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!stoppingThreadID) return Promise.resolve();
     const existing = stopThreadRequests.get(stoppingThreadID);
     if (existing) return existing;
+    if (stoppingThreadIDs().has(stoppingThreadID)) return Promise.resolve();
+    if (flowerThreadIsStopping(threadCache().views.get(stoppingThreadID)?.thread ?? threadCache().summaries.get(stoppingThreadID))) return Promise.resolve();
     updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, true);
     const request = (async () => {
       try {
@@ -5220,9 +5238,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           setPendingStopFocusHandoff(null);
         }
         console.error('Flower stop request failed.', { threadID: stoppingThreadID, error });
+        updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, false);
+        const current = threadCache().views.get(stoppingThreadID)?.thread;
+        if (!current?.cancellation) notifyThreadActionError(copy().chat.stopRequestFailed);
       } finally {
         stopThreadRequests.delete(stoppingThreadID);
-        updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, false);
       }
     })();
     stopThreadRequests.set(stoppingThreadID, request);
@@ -5834,6 +5854,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
     const code = trimString(error?.code);
+    const stoppedUnknown = () => code === 'floret_effect_outcome_unknown' && selectedThread()?.cancellation?.source === 'user_stop';
     const continuationFailure = createMemo(() => (
       code === 'floret_control_contract_failed'
       || (
@@ -5877,7 +5898,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (
       <Show
         when={continuationFailure()}
-        fallback={errorNotice(copy().chat.runErrorTitle, presentRunError(error), action())}
+        fallback={errorNotice(stoppedUnknown() ? copy().chat.stopOutcomeUnknownTitle : copy().chat.runErrorTitle, stoppedUnknown() ? copy().chat.stopOutcomeUnknownDescription : presentRunError(error), action())}
       >
         {errorNotice(
           copy().chat.runContinuationErrorTitle,
@@ -10735,6 +10756,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </For>
               <For each={visibleTransportOutbox()}>{(submission) => transportOutboxEntry(() => submission)}</For>
               {threadLevelApprovalPanel()}
+              <Show when={selectedThreadStopped()}>
+                <div class="flower-turn-stop-notice text-sm text-muted-foreground" role="status">
+                  <div class="font-medium">{copy().chat.stopped}</div>
+                  <div>{copy().chat.stoppedDescription}</div>
+                </div>
+              </Show>
             </Show>
           </div>
         </div>
@@ -10761,12 +10788,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
           <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
-              <FlowerProgressIndicator
+              <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
                 progress={selectedRunProgress()
                   ? { kind: selectedRunProgress()!.kind, runID: selectedRunProgress()!.runID }
                   : null}
                 label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind) : ''}
-              />
+              />}><span class="flower-turn-stopping text-xs text-muted-foreground">{copy().chat.stopping}</span></Show>
             </div>
             <Show when={selectedThread() ? threadLoadError() : ''}>
               {(message) => (

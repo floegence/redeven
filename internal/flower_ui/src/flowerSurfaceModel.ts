@@ -19,6 +19,10 @@ export function flowerThreadHasActiveTurnEvidence(
     || thread.status === 'waiting_user';
 }
 
+export function flowerThreadIsStopping(thread: Pick<FlowerThreadSnapshot, 'status' | 'cancellation'> | null | undefined): boolean {
+  return Boolean(thread?.cancellation) && (thread?.status === 'running' || thread?.status === 'waiting_approval' || thread?.status === 'waiting_user');
+}
+
 function messagePreviewText(message: FlowerThreadSnapshot['messages'][number]): string {
   const fromBlocks = message.blocks
     ?.map((block) => (block.type === 'markdown' || block.type === 'text' ? trimString(block.content) : ''))
@@ -41,6 +45,7 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot, untitl
     updated_at_ms: thread.updated_at_ms,
     preview: lastMessage ?? '',
     status: thread.status,
+    cancellation: thread.cancellation,
     ...(thread.approval_pending !== undefined ? { approval_pending: thread.approval_pending } : {}),
     ...(thread.approval_pending_count !== undefined ? { approval_pending_count: thread.approval_pending_count } : {}),
     source_label: thread.source_label,

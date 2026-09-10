@@ -105,17 +105,19 @@ type ToolCall struct {
 }
 
 type ToolResult struct {
-	ToolID        string             `json:"tool_id,omitempty"`
-	ToolName      string             `json:"tool_name,omitempty"`
-	Status        string             `json:"status"`
-	Summary       string             `json:"summary,omitempty"`
-	Details       string             `json:"details,omitempty"`
-	Data          any                `json:"data,omitempty"`
-	Pending       *PendingToolResult `json:"pending,omitempty"`
-	Error         *aitools.ToolError `json:"error,omitempty"`
-	Truncated     bool               `json:"truncated,omitempty"`
-	ContentRef    string             `json:"content_ref,omitempty"`
-	activityInput map[string]any
+	ToolID                string             `json:"tool_id,omitempty"`
+	ToolName              string             `json:"tool_name,omitempty"`
+	Status                string             `json:"status"`
+	Summary               string             `json:"summary,omitempty"`
+	Details               string             `json:"details,omitempty"`
+	Data                  any                `json:"data,omitempty"`
+	Pending               *PendingToolResult `json:"pending,omitempty"`
+	Error                 *aitools.ToolError `json:"error,omitempty"`
+	Truncated             bool               `json:"truncated,omitempty"`
+	ContentRef            string             `json:"content_ref,omitempty"`
+	cancellationConfirmed bool
+	dispatchErr           error
+	activityInput         map[string]any
 }
 
 type PendingToolResult struct {

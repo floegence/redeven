@@ -112,6 +112,56 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('keeps authoritative Stop visible after acknowledgement, navigation, and detail reload', async () => {
+    const running = thread({ thread_id: 'thread-graceful-stop', status: 'running', active_run_id: 'run-stop', run_progress: { phase: 'tool_execution', run_id: 'run-stop', turn_id: 'turn-stop' }, messages: [{ id: 'user-stop', turn_id: 'turn-stop', role: 'user', content: 'Inspect device', status: 'complete', created_at_ms: 1 }] });
+    const other = thread({ thread_id: 'thread-other-stop', title: 'Other conversation' });
+    const cancellation = { thread_id: running.thread_id, turn_id: 'turn-stop', run_id: 'run-stop', source: 'user_stop', mode: 'graceful' as const, requested_at: '2026-09-10T03:00:00Z' };
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running, other] }]);
+    const stopping = { ...runtimeCurrentView(running, 2), cancellation, turn_id: 'turn-stop', run_id: 'run-stop' };
+    const stopThread = vi.fn(async () => undefined);
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [running, other]), loadThread: vi.fn(async (id) => liveBootstrap(id === running.thread_id ? running : other)), stopThread, connectLiveStream: vi.fn(stream.connect) });
+    const select = async (id: string) => {
+      await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${id}"] button`)));
+      (runtime.querySelector(`[data-thread-id="${id}"] button`) as HTMLButtonElement).click();
+      await waitFor(() => runtime.querySelector(`[data-thread-id="${id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    };
+    await select(running.thread_id);
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-primary-action="stop"]')));
+    (runtime.querySelector('[data-flower-primary-action="stop"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-turn-stopping')?.textContent === 'Stopping...');
+    await wait(50);
+    stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: running.thread_id, current: stopping });
+    expect((runtime.querySelector('[data-flower-primary-action="stop"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+    const draft = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
+    expect(draft.disabled).toBe(false);
+    draft.value = 'Keep this draft'; draft.dispatchEvent(new Event('input', { bubbles: true }));
+    expect((runtime.querySelector('.flower-composer input[type="file"]') as HTMLInputElement | null)?.disabled).not.toBe(true);
+    await select(other.thread_id);
+    await select(running.thread_id);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-turn-stopping')));
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft');
+    stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: running.thread_id, current: { ...stopping, view_version: 3, activity: 'idle', run_progress: undefined, last_outcome: 'cancelled' } });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-turn-stop-notice')));
+    expect(runtime.querySelector('.flower-turn-stop-notice')?.textContent).toContain('Changes already made are kept.');
+    expect(runtime.querySelector('.flower-turn-stopping')).toBeNull();
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+    expect(stopThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains a user Stop with unconfirmed effects without offering replay', async () => {
+    const failed = thread({ thread_id: 'thread-stop-unknown', status: 'failed', cancellation: { thread_id: 'thread-stop-unknown', turn_id: 'turn-stop', run_id: 'run-stop', source: 'user_stop', mode: 'graceful', requested_at: '2026-09-10T03:00:00Z' }, error: { code: 'floret_effect_outcome_unknown', message: 'private effect details' } });
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${failed.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${failed.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Stopped with unconfirmed results');
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('This turn will not be replayed automatically.');
+    expect(runtime.querySelector('.flower-error-actions button')).toBeNull();
+    expect(runtime.querySelector('.flower-error-card')?.textContent).not.toContain('private effect details');
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
   it('presents an unknown effect as terminal failure without replay controls', async () => {
     const failed = thread({
       thread_id: 'thread-unknown-effect-browser',

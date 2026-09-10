@@ -19,6 +19,7 @@ import type {
   FlowerTimelineDecoration,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
+  FlowerThreadCancellation,
   FlowerThreadStatus,
   FlowerTitleStatus,
   FlowerPermissionType,
@@ -1168,6 +1169,18 @@ function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'
   return turns;
 }
 
+export function mapFlowerCancellation(raw: unknown, threadID: string, runID = '', turnID = ''): FlowerThreadCancellation | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const value = recordValue(raw);
+  if (!value || value.thread_id !== threadID || !trim(value.turn_id) || !trim(value.run_id)
+    || (runID && value.run_id !== runID) || (turnID && value.turn_id !== turnID)
+    || !trim(value.source) || !['immediate', 'graceful'].includes(trim(value.mode))
+    || !trim(value.requested_at) || !Number.isFinite(Date.parse(trim(value.requested_at)))) {
+    throw new Error('Flower contract error: cancellation requires an exact execution identity and request time.');
+  }
+  return { thread_id: threadID, turn_id: trim(value.turn_id), run_id: trim(value.run_id), source: trim(value.source), mode: value.mode as FlowerThreadCancellation['mode'], requested_at: trim(value.requested_at) };
+}
+
 export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessage[], options: FlowerLiveThreadMapperOptions, readStatusRaw?: unknown): FlowerThreadSnapshot {
   const record = recordValue(raw) ?? {};
   const threadID = trim(record.thread_id);
@@ -1216,6 +1229,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     status,
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
     ...(progress ? { run_progress: progress } : {}),
+    cancellation: mapFlowerCancellation(record.cancellation, threadID, activeRunID),
     ...(record.approval_pending !== undefined ? { approval_pending: record.approval_pending } : {}),
     ...(approvalPendingCount !== undefined ? { approval_pending_count: approvalPendingCount } : {}),
     queued_turn_count: nonNegativeInteger(record.queued_turn_count ?? 0, 'thread.queued_turn_count'),

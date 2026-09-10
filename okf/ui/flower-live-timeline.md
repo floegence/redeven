@@ -22,14 +22,16 @@ stream.
 
 Flower read state is a Redeven-owned per-user activity revision watermark. Requests contain only the displayed `activity_revision`; equal or older acknowledgements are valid and cannot advance beyond current activity, while a future revision is rejected. The browser keeps one per-thread, per-selection-cycle coordinator: one request may be in flight, only the greatest newer revision remains pending, and a failed revision is not retried until a newer revision or a new genuine presentation cycle. Signature, prompt, message-time, polling, timer, and error-class retry paths do not exist.
 
-Stop is the deliberate command-only exception. Composer and thread-menu entry
-points share one per-thread request owner, show pending only while that request
-is in flight, and consume only an acknowledgement. A successful request never
-writes `ThreadCache`; the existing workspace stream supplies the canceled or
-next-active current view. Transport failure clears pending, leaves Stop
-retryable, and records diagnostics without showing a Stop error notification.
-The client does not synthesize `read_status`, load detail, poll, or open another
-connection to confirm cancellation.
+Stop is a command acknowledgement. Request feedback bridges acknowledgement to
+its live observation; the current view's canonical `Cancellation` plus active state
+keeps “Stopping...” visible after acknowledgement, navigation, and reload.
+Confirmed cancellation shows a neutral “Stopped” notice, retains output and
+changes, and permits continuation through a new message. An unconfirmed effect
+with explicit user Stop provenance shows a specific result warning without
+replay controls; older failures retain their recorded classification. Stop
+failure produces an actionable localized notification and leaves Stop retryable.
+Thread navigation, draft editing, and attachments remain available throughout.
+Queued input follows Floret admission and never starts automatically after Stop.
 
 An accepted send receipt proves admission through the exact request and Thread identities; it does not order runtime content. The receipt binds the outbox entry to the canonical ThreadID, settles the submitted draft, and transfers the still-current New Chat selection. A valid current view independently confirms and removes that entry when it contains the same canonical request key, even when its runtime detail is unchanged or older than the cached view. A missing receipt identity, conflicting identity, malformed success body, timeout, or disconnect is an unknown admission result: Flower preserves the original outbox request and never reports a definitive send failure. A valid receipt without a usable current view triggers canonical detail loading. A later navigation invalidates only the selection transfer, not admission or cache convergence. Only accepted runtime content may move the transcript, clear runtime errors, or update status presentation.
 

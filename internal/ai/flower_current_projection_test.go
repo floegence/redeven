@@ -391,3 +391,29 @@ func TestThreadListSummaryConsumesUnknownEffectFailureCode(t *testing.T) {
 		t.Fatalf("summary error=%q exposed internal projection failure", view.RunError)
 	}
 }
+
+func TestFlowerCancellationFactIsSharedBySummaryCurrentAndPublication(t *testing.T) {
+	fact := &flruntime.ThreadCancellation{ThreadID: "thread-stop", TurnID: "turn-stop", RunID: "run-stop", Source: "user_stop", Mode: flruntime.CancelModeGraceful, RequestedAt: time.Now().UTC()}
+	current := flruntime.ThreadView{ThreadID: fact.ThreadID, TurnID: fact.TurnID, RunID: fact.RunID, Activity: flruntime.ThreadActivityActive}
+	before := flowerRuntimeCurrentBoundaryKey(current)
+	current.Cancellation = fact
+	if before == flowerRuntimeCurrentBoundaryKey(current) {
+		t.Fatal("stop admission was treated as coalescible output")
+	}
+	var summaryView, currentView ThreadView
+	applyFlowerThreadRuntimeProjection(&summaryView, flowerThreadRuntimeProjectionFromSummary(flruntime.ThreadSummary{ID: fact.ThreadID, TurnID: fact.TurnID, RunID: fact.RunID, Activity: flruntime.ThreadActivityActive, Cancellation: fact}))
+	applyFlowerThreadRuntimeProjection(&currentView, flowerThreadRuntimeProjectionFromCurrent(current))
+	if !reflect.DeepEqual(summaryView, currentView) || summaryView.Cancellation == fact {
+		t.Fatal("summary and current lost or aliased cancellation")
+	}
+	encoded, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var projected struct {
+		Cancellation *flruntime.ThreadCancellation `json:"cancellation"`
+	}
+	if err := json.Unmarshal(encoded, &projected); err != nil || !reflect.DeepEqual(projected.Cancellation, fact) {
+		t.Fatalf("current JSON lost provenance: %s, %v", encoded, err)
+	}
+}

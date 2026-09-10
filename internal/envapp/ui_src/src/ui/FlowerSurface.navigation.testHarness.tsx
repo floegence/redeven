@@ -445,9 +445,11 @@ export function runtimeCurrentView(
   version = 1,
 ): FlowerRuntimeCurrentView {
   const activeTurnID = threadValue.run_progress?.turn_id
+    ?? threadValue.cancellation?.turn_id
     ?? [...threadValue.messages].reverse().find((message) => Boolean(message.turn_id))?.turn_id
     ?? 'turn-fixture';
   const activeRunID = threadValue.active_run_id
+    ?? threadValue.cancellation?.run_id
     ?? [...threadValue.messages].reverse().find((message) => Boolean(message.run_id))?.run_id
     ?? 'run-fixture';
   const interactions = [
@@ -531,6 +533,7 @@ export function runtimeCurrentView(
   return {
     thread_id: threadValue.thread_id,
     view_version: version,
+    cancellation: threadValue.cancellation,
     activity: threadValue.status === 'idle' || threadValue.status === 'success' || threadValue.status === 'failed' || threadValue.status === 'canceled'
       ? 'idle'
       : 'active',

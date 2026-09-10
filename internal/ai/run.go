@@ -1324,13 +1324,15 @@ func isMutatingInvocation(toolName string, args map[string]any) bool {
 }
 
 type toolCallOutcome struct {
-	Success        bool
-	ToolName       string
-	Args           map[string]any
-	Result         any
-	Pending        *PendingToolResult
-	ToolError      *aitools.ToolError
-	RecoveryAction string
+	cancellationConfirmed bool
+	dispatchErr           error
+	Success               bool
+	ToolName              string
+	Args                  map[string]any
+	Result                any
+	Pending               *PendingToolResult
+	ToolError             *aitools.ToolError
+	RecoveryAction        string
 }
 
 type toolActivityUpdater func(activity *fltools.ActivityPresentation, metadata map[string]any)
@@ -1572,6 +1574,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 
 	if toolName == "terminal.exec" {
 		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, activityUpdater)
+		outcome = terminalOutcome
 		if terminalErr != nil {
 			setToolError(terminalErr, "", terminalOutcome.Result)
 			return outcome, nil
@@ -3441,12 +3444,16 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	endBusy := r.beginBusy()
 	defer endBusy()
 
+	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
+	if canonicalRunID == "" || canonicalThreadID == "" || canonicalTurnID == "" {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal execution identity is unavailable", Retryable: false}
+	}
 	startRequest := terminalProcessStartRequest{
 		ProcessID:  processID,
 		EndpointID: strings.TrimSpace(r.endpointID),
-		ThreadID:   strings.TrimSpace(r.threadID),
-		RunID:      strings.TrimSpace(r.id),
-		TurnID:     strings.TrimSpace(r.turnID),
+		ThreadID:   canonicalThreadID,
+		RunID:      canonicalRunID,
+		TurnID:     canonicalTurnID,
 		ToolID:     strings.TrimSpace(toolID),
 		ToolName:   "terminal.exec",
 		Command:    parsed.Command,
@@ -3469,15 +3476,20 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		snapshot := proc.Snapshot()
 		activityUpdater(terminalProcessActivity(snapshot, terminalProcessResultPayload(snapshot)), nil)
 	}
-	snapshot := proc.WaitForYieldContext(ctx, parsed.YieldMS)
+	snapshot, waitErr := proc.WaitForYieldContext(ctx, parsed.YieldMS)
 	r.observeTerminalOutputEncodingRepair(snapshot, "exec")
 	result := terminalProcessResultPayload(snapshot)
 	outcome.Result = result
+	if waitErr != nil {
+		outcome.dispatchErr = waitErr
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal exit or output could not be confirmed: " + waitErr.Error(), Retryable: false}
+	}
 	if snapshot.Status == terminalProcessStatusRunning {
 		outcome.Success = true
 		return outcome, nil
 	}
 	if snapshot.Status == terminalProcessStatusCanceled {
+		outcome.cancellationConfirmed = true
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled", Retryable: false, Meta: map[string]any{"process_id": snapshot.ProcessID}}
 	}
 	if snapshot.Status == terminalProcessStatusError {
@@ -3559,7 +3571,7 @@ func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any,
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := proc.TerminateForActiveTurn(ctx)
+	snapshot, err := proc.Terminate(ctx)
 	r.observeTerminalOutputEncodingRepair(snapshot, "terminate")
 	if err != nil {
 		payload := terminalProcessResultPayload(snapshot)

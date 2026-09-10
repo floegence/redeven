@@ -129,39 +129,42 @@ func applyThreadSummaryPresentation(view *ThreadView, summary *flruntime.ThreadS
 // both Floret summaries and complete current views. Keeping this shape small
 // prevents either source from growing a second Flower-specific state machine.
 type flowerThreadRuntimeProjection struct {
-	QueueCount  int
-	Activity    flruntime.ThreadActivity
-	Attention   flruntime.AttentionSummary
-	LastOutcome *flruntime.TurnOutcome
-	Failure     *flruntime.ThreadTurnFailure
-	RunID       identity.RunID
-	TurnID      identity.TurnID
-	RunProgress *flruntime.ThreadRunProgress
+	Cancellation *flruntime.ThreadCancellation
+	QueueCount   int
+	Activity     flruntime.ThreadActivity
+	Attention    flruntime.AttentionSummary
+	LastOutcome  *flruntime.TurnOutcome
+	Failure      *flruntime.ThreadTurnFailure
+	RunID        identity.RunID
+	TurnID       identity.TurnID
+	RunProgress  *flruntime.ThreadRunProgress
 }
 
 func flowerThreadRuntimeProjectionFromSummary(summary flruntime.ThreadSummary) flowerThreadRuntimeProjection {
 	return flowerThreadRuntimeProjection{
-		QueueCount:  summary.QueueCount,
-		Activity:    summary.Activity,
-		Attention:   summary.Attention,
-		LastOutcome: summary.LastOutcome,
-		Failure:     summary.Failure,
-		RunID:       summary.RunID,
-		TurnID:      summary.TurnID,
-		RunProgress: summary.RunProgress,
+		QueueCount:   summary.QueueCount,
+		Cancellation: summary.Cancellation,
+		Activity:     summary.Activity,
+		Attention:    summary.Attention,
+		LastOutcome:  summary.LastOutcome,
+		Failure:      summary.Failure,
+		RunID:        summary.RunID,
+		TurnID:       summary.TurnID,
+		RunProgress:  summary.RunProgress,
 	}
 }
 
 func flowerThreadRuntimeProjectionFromCurrent(current flruntime.ThreadView) flowerThreadRuntimeProjection {
 	return flowerThreadRuntimeProjection{
-		QueueCount:  len(current.Queue),
-		Activity:    current.Activity,
-		Attention:   current.Attention,
-		LastOutcome: current.LastOutcome,
-		Failure:     current.Failure,
-		RunID:       current.RunID,
-		TurnID:      current.TurnID,
-		RunProgress: current.RunProgress,
+		QueueCount:   len(current.Queue),
+		Cancellation: current.Cancellation,
+		Activity:     current.Activity,
+		Attention:    current.Attention,
+		LastOutcome:  current.LastOutcome,
+		Failure:      current.Failure,
+		RunID:        current.RunID,
+		TurnID:       current.TurnID,
+		RunProgress:  current.RunProgress,
 	}
 }
 
@@ -169,6 +172,7 @@ func applyFlowerThreadRuntimeProjection(view *ThreadView, projection flowerThrea
 	if view == nil {
 		return
 	}
+	view.Cancellation = cloneFlowerCancellation(projection.Cancellation)
 	view.QueuedTurnCount = projection.QueueCount
 	view.RunErrorCode = ""
 	view.RunError = ""

@@ -14,7 +14,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Published Floret v7.9.2 applies sanitized tool Activity inside the existing
+Published Floret v7.10.1 applies sanitized tool Activity inside the existing
 thread actor using exact thread, turn, run, and tool-call identity. Validated
 calls publish description and command while pending; dispatch alone marks
 running, and results settle without waiting for output or the full turn.
@@ -96,6 +96,18 @@ current view, and exposes only `{ok: true}`. Canonical workspace subscription
 and ordinary detail reads remain the only browser state paths; Stop never
 decorates a command response with viewer read state, projects a second detail,
 or starts a follow-up read.
+
+Flower explicitly requests `CancelModeGraceful`. Floret records the exact
+ThreadID, TurnID, RunID, source, and request time before cancelling execution.
+One five-second window lets dispatched tools finish their existing output and
+result commits. Confirmed results end the turn as cancelled; unconfirmed
+side effects remain `effect_outcome_unknown` and cannot be replayed or retried.
+Undispatched tools are cancelled and real tool errors are preserved. Stop never
+automatically starts queued input. A new message continues in a new turn.
+Summary and detail forward optional canonical `Cancellation` unchanged; active
+plus cancellation means stopping. Floret installs terminal lifecycle and
+canonical results atomically, including direct View and Send reads. Its schema
+11 migration preserves older records without inventing missing Stop provenance.
 
 Redeven resolves one complete `ToolSurface` when it creates the hosted Agent for a new Turn.
 Registry tools with nil provider definitions inherit the registry definitions;
