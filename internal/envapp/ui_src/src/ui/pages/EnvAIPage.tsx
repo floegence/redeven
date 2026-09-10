@@ -91,6 +91,10 @@ export function EnvAIPage(props: EnvAIPageProps) {
     desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
     rpc,
     settingsRevision: env.settingsSeq,
+    isAvailable: () => {
+      const state = readinessController.snapshot().state;
+      return state === 'ready' || state === 'degraded';
+    },
     canMutate: Boolean(
       env.env()?.permissions?.can_read
       && env.env()?.permissions?.can_write

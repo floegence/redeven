@@ -64,6 +64,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   rpc: RedevenV1Rpc;
   canMutate?: boolean;
   settingsRevision?: () => number;
+  isAvailable?: () => boolean;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
   onSettingsChanged?: () => void | Promise<unknown>;
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
@@ -569,7 +570,11 @@ async function loadSettingsSnapshot(
   options: EnvLocalFlowerSurfaceAdapterOptions,
   loadCatalog: () => Promise<ModelsResponse> = loadModels,
 ): Promise<FlowerSettingsSnapshot> {
+  const assertAvailable = () => {
+    if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
+  };
   const settings = await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
+  assertAvailable();
   const exposeDesktopModelSource = options.desktopSessionTargetRoute === 'remote_desktop';
   const desktopModelSource = settings.ai_runtime?.desktop_model_source;
   let catalog: DesktopModelCatalogLoad | undefined;
@@ -588,8 +593,10 @@ async function loadSettingsSnapshot(
   const snapshot = mapSettings(settings, catalog, exposeDesktopModelSource);
   if (!snapshot.model_profile) return snapshot;
   const { hydrateFlowerProviderCatalog } = await import('../../../../../flower_ui/src/settings/modelSelection');
+  assertAvailable();
   const providers = await Promise.all(snapshot.model_profile.providers.map((provider) =>
     hydrateFlowerProviderCatalog(provider, (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }))));
+  assertAvailable();
   return withFlowerWebSearchAvailability({ ...snapshot, model_profile: { ...snapshot.model_profile, providers } }, (catalog?.state === 'loaded' ? catalog.response : await loadCatalog()).models ?? []);
 }
 
