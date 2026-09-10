@@ -101,7 +101,7 @@ it.each(builtInShellThemePresets)('distinguishes update review with readable car
 
   host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:weather"]')!.click();
   const detail = host.querySelector<HTMLButtonElement>('[data-plugin-action="update-external"]')!;
-  await page.elementLocator(host.querySelector<HTMLElement>('#plugin-center-detail-heading')!).hover();
+  await page.elementLocator(host.querySelector<HTMLElement>('[data-plugin-center-detail-heading]')!).hover();
   await expect.poll(() => getComputedStyle(detail).backgroundColor).toBe(idleBackground);
   expectReadable(detail);
   await page.elementLocator(detail).hover();

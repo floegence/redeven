@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
@@ -35,6 +35,7 @@ import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
   showTitle?: boolean;
+  visible?: boolean;
   pluginWidgetCounts?: Readonly<Record<string, number>>;
   projection: PluginInventoryProjection;
   loading: boolean;
@@ -72,6 +73,8 @@ type OfficialInstallFlow =
 
 export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
+  const idPrefix = `plugin-center-${createUniqueId()}`;
+  const [splitDetails, setSplitDetails] = createSignal(false);
   const [activeTab, setActiveTab] = createSignal<PluginCenterTab>(initialTabForProjection(props.projection));
   // The shell supplies an empty fallback projection while the first inventory
   // request is in flight. Treat that fallback as unresolved so the tab follows
@@ -91,7 +94,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     target?: string;
   }>>();
   const [uninstallChoiceFor, setUninstallChoiceFor] = createSignal<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = createSignal(Boolean(props.selectedInventoryKey));
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [officialInstallFlow, setOfficialInstallFlow] = createSignal<OfficialInstallFlow>({ status: 'idle' });
   const [officialInstallDialogOpen, setOfficialInstallDialogOpen] = createSignal(false);
@@ -113,9 +115,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   let officialPreviewController: AbortController | undefined;
   let pluginCenterPanelRef: HTMLDivElement | undefined;
   let pluginCenterSearchRef: HTMLInputElement | undefined;
-  let mobileDetailBackButton: HTMLButtonElement | undefined;
   let detailHeadingRef: HTMLHeadingElement | undefined;
-  let mobileDetailReturnTarget: HTMLButtonElement | undefined;
+  let mobileDetailReturnTarget: HTMLElement | undefined;
   let handledDetailFocusRequest: number | undefined;
   let handledSelectionInventoryKey: string | undefined;
   let handledSelectionFocusRequest: number | undefined;
@@ -150,16 +151,30 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     cancelDeferredPermissionsFocus();
   });
 
-  onMount(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && mobileDetailOpen() && selectedInventoryKey()) {
-        event.preventDefault();
-        closeDetails();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    onCleanup(() => document.removeEventListener('keydown', onKeyDown));
+  createEffect(() => {
+    if (props.visible !== false) return;
+    setExternalDialogOpen(false);
+    setOfficialInstallDialogOpen(false);
+    setUpdateReviewOpen(false);
+    setRetainedDataRecoveryItem(undefined);
+    setUninstallChoiceFor(null);
   });
+
+  const observeContentWidth = (element: HTMLElement) => {
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => setSplitDetails(entry.contentRect.width >= 1100));
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
+  };
+
+  const onCenterKeyDown = (event: KeyboardEvent) => {
+    if (props.visible === false || event.defaultPrevented || event.isComposing || event.key !== 'Escape' || splitDetails() || !selectedInventoryKey()) return;
+    // Portaled menus and confirmations own their keyboard input independently.
+    if (!(event.target instanceof Element) || !event.target.closest('[data-plugin-center-view]')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeDetails();
+  };
 
   const projection = createMemo(() => props.projection);
   const model = createMemo(() => buildPluginCenterModel(projection(), activeTab()));
@@ -310,7 +325,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   createEffect(() => {
     const focusRequest = props.focusRequest;
     const requestedKey = props.selectedInventoryKey;
-    if (!requestedKey) return;
+    if (props.visible === false || !requestedKey) return;
     if (requestedKey === handledSelectionInventoryKey && focusRequest === handledSelectionFocusRequest) return;
     const requestedItem = allItems().find((item) => item.inventoryKey === requestedKey);
     if (requestedItem) {
@@ -320,13 +335,12 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       tabSelection.commitNow(tabForItem(requestedItem));
       if (focusRequest !== undefined && focusRequest !== handledDetailFocusRequest) {
         handledDetailFocusRequest = focusRequest;
-        setMobileDetailOpen(true);
+
         queueMicrotask(() => {
           mobileDetailReturnTarget = Array.from(
             pluginCenterPanelRef?.querySelectorAll<HTMLButtonElement>('[data-plugin-center-item]') ?? [],
           ).find((button) => button.dataset.pluginCenterItem === requestedItem.inventoryKey);
-          if (window.innerWidth < 640) mobileDetailBackButton?.focus({ preventScroll: true });
-          else detailHeadingRef?.focus({ preventScroll: true });
+          detailHeadingRef?.focus({ preventScroll: true });
         });
       }
     }
@@ -373,14 +387,14 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     if (!allItems().some((item) => item.inventoryKey === currentKey)) {
       setProtectedSelectionInventoryKey(undefined);
       setSelectedInventoryKey(undefined);
-      setMobileDetailOpen(false);
+
       return;
     }
     if (props.selectedInventoryKey === currentKey) return;
     if (protectedSelectionInventoryKey() === currentKey) return;
     if (!visibleItems().some((item) => item.inventoryKey === currentKey)) {
       setSelectedInventoryKey(undefined);
-      setMobileDetailOpen(false);
+
     }
   });
 
@@ -600,14 +614,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     }
   };
 
-  const openDetails = (inventoryKey: string, returnTarget: HTMLButtonElement) => {
+  const openDetails = (inventoryKey: string, returnTarget: HTMLElement) => {
     setProtectedSelectionInventoryKey(undefined);
     setSelectedInventoryKey(inventoryKey);
     mobileDetailReturnTarget = returnTarget;
-    setMobileDetailOpen(true);
+
     queueMicrotask(() => {
-      if (window.innerWidth < 640) mobileDetailBackButton?.focus({ preventScroll: true });
-      else detailHeadingRef?.focus({ preventScroll: true });
+      detailHeadingRef?.focus({ preventScroll: true });
     });
   };
 
@@ -616,7 +629,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     mobileDetailReturnTarget = undefined;
     setProtectedSelectionInventoryKey(undefined);
     setSelectedInventoryKey(undefined);
-    setMobileDetailOpen(false);
+
     queueMicrotask(() => {
       if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true });
       else if (pluginCenterSearchRef?.isConnected) pluginCenterSearchRef.focus({ preventScroll: true });
@@ -628,7 +641,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     mobileDetailReturnTarget = undefined;
     setProtectedSelectionInventoryKey(undefined);
     setSelectedInventoryKey(undefined);
-    setMobileDetailOpen(false);
+
   };
 
   const updateQuery = (nextQuery: string) => {
@@ -671,6 +684,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   return (
     <PluginCenterShell
       showTitle={props.showTitle}
+      idPrefix={idPrefix}
+      visible={props.visible}
+      rootRef={observeContentWidth}
+      onKeyDown={onCenterKeyDown}
+      autofocusSearch={!props.selectedInventoryKey}
       query={query()}
       loading={loading()}
       refreshing={refreshPending()}
@@ -723,18 +741,18 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       </Show>
       <div
         ref={pluginCenterPanelRef}
-        id="plugin-center-panel"
+        id={`${idPrefix}-panel`}
         role="tabpanel"
         tabIndex={-1}
-        aria-labelledby={`plugin-center-tab-${activeTab()}`}
+        aria-labelledby={`${idPrefix}-tab-${activeTab()}`}
         data-plugin-center-shell
-        class="relative flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row"
+        class="relative flex min-h-0 flex-1 overflow-hidden"
       >
         <div
           data-plugin-center-master
           class={cn(
-            'min-h-0 min-w-0 w-full flex-1 flex-col border-b sm:w-auto sm:border-b-0',
-            mobileDetailOpen() ? 'hidden sm:flex' : 'flex',
+            'min-h-0 min-w-0 flex-1 flex-col',
+            selectedItem() && !splitDetails() ? 'hidden' : 'flex',
           )}
         >
           <Show when={props.preparing}>
@@ -753,7 +771,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           <div
             data-plugin-center-list
             aria-busy={loading()}
-            class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-start gap-4 overflow-y-auto p-3 sm:p-4"
+            class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-start gap-3 overflow-y-auto p-3 sm:p-4"
           >
             <For each={visibleItems()}>
               {(item, index) => (
@@ -770,7 +788,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   installOperation={installOperationForItem(item)}
                   announceInstallStatus={!(officialInstallDialog()?.item.inventoryKey === item.inventoryKey
                     || retainedDataRecoveryItem()?.inventoryKey === item.inventoryKey
-                    || (selectedInventoryKey() === item.inventoryKey && mobileDetailOpen()))}
+                    || selectedInventoryKey() === item.inventoryKey)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => installItem(item)}
@@ -794,7 +812,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   onUninstall={() => {
                     if (!item.pluginInstanceID) return;
                     setSelectedInventoryKey(item.inventoryKey);
-                    setMobileDetailOpen(true);
+
                     setUninstallChoiceFor(item.pluginInstanceID);
                   }}
                   onOpenSurface={() => openItemSurface(item)}
@@ -826,21 +844,12 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             </Show>
           </div>
         </div>
-        <Show when={selectedItem() && mobileDetailOpen()}>
-          <button
-            type="button"
-            data-plugin-center-drawer-backdrop
-            aria-label={i18n.t('uiCopy.plugin.backToList')}
-            class="absolute inset-0 z-10 cursor-default bg-[var(--redeven-overlay-scrim)] backdrop-blur-[1px]"
-            onClick={closeDetails}
-          />
-        </Show>
         <Show keyed when={selectedItem()}>
           {(item) => (
             <PluginCenterDetails
               item={item}
-              mobileOpen={mobileDetailOpen()}
-              mobileBackRef={(element) => { mobileDetailBackButton = element; }}
+              split={splitDetails()}
+              headingId={`${idPrefix}-detail-heading`}
               detailHeadingRef={(element) => { detailHeadingRef = element; }}
               permissionsRef={setPermissionsFocusTarget}
               onMobileBack={closeDetails}
@@ -1020,7 +1029,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           const item = currentUpdateReviewItem();
           if (item) {
             setSelectedInventoryKey(item.inventoryKey);
-            setMobileDetailOpen(true);
+
             nextPermissionsFocusRequest += 1;
             setPermissionsFocusRequest({ id: nextPermissionsFocusRequest, inventoryKey: item.inventoryKey });
           }
@@ -1246,6 +1255,11 @@ function OfficialPluginInstallDialog(props: {
 
 export function PluginCenterShell(props: {
   showTitle?: boolean;
+  idPrefix?: string;
+  visible?: boolean;
+  autofocusSearch?: boolean;
+  rootRef?: (element: HTMLElement) => void;
+  onKeyDown?: (event: KeyboardEvent) => void;
   query: string;
   searchRef?: (element: HTMLInputElement) => void;
   category: PluginPresentationCategory | 'all';
@@ -1297,13 +1311,15 @@ export function PluginCenterShell(props: {
     if (!action) return i18n.t('uiCopy.plugin.runtimeRecoveryFailed');
     return i18n.t(`uiCopy.plugin.runtimeRecoveryAction.${action}`);
   };
-  let rootRef: HTMLElement | undefined;
+  const localIdPrefix = `plugin-center-${createUniqueId()}`;
+  const idPrefix = () => props.idPrefix ?? localIdPrefix;
+  let searchRef: HTMLInputElement | undefined;
   let handledFocusRequest = 0;
   createEffect(() => {
     const request = props.focusRequest ?? 0;
-    if (request <= handledFocusRequest) return;
+    if (props.visible === false || request <= handledFocusRequest) return;
     handledFocusRequest = request;
-    queueMicrotask(() => rootRef?.focus({ preventScroll: true }));
+    queueMicrotask(() => searchRef?.focus({ preventScroll: true }));
   });
   const administrationItems = (): DropdownItem[] => [{
     id: 'install-external',
@@ -1311,17 +1327,18 @@ export function PluginCenterShell(props: {
     disabled: !props.canManage || props.loading,
   }];
   return (
-    <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="redeven-plugin-motion flex h-full min-h-0 flex-col bg-background text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
+    <section ref={(element) => { props.rootRef?.(element); }} data-plugin-center-view onKeyDown={props.onKeyDown} tabIndex={-1} class="redeven-plugin-motion flex h-full min-h-0 min-w-0 flex-col text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
         <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
           <Show when={props.showTitle !== false}><div class="flex min-w-0 shrink-0 items-center gap-2">
             <h1 class="truncate text-sm font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
           </div></Show>
-          <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[360px] sm:flex-1 sm:basis-auto">
+          <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[480px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
               <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
-                ref={props.searchRef}
+                ref={(element) => { searchRef = element; props.searchRef?.(element); }}
+                data-floe-autofocus={props.autofocusSearch !== false ? '' : undefined}
                 data-plugin-center-search
                 type="search"
                 value={props.query}
@@ -1349,15 +1366,13 @@ export function PluginCenterShell(props: {
                 onSelect={(id) => { if (id === 'install-external') props.onInstallExternal(); }}
                 triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
                 trigger={(
-                  <button
-                    type="button"
+                  <span
                     data-plugin-center-install-external
                     class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
-                    disabled={props.loading}
                     title={i18n.t('uiCopy.plugin.moreActions')}
                   >
                     <MoreHorizontal class="h-3.5 w-3.5" />
-                  </button>
+                  </span>
                 )}
               />
             </Show>
@@ -1388,9 +1403,9 @@ export function PluginCenterShell(props: {
         </div>
         <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-t px-3 py-2 sm:px-4" data-plugin-center-toolbar-secondary>
           <div class="flex max-w-full shrink-0 items-center overflow-x-auto" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
-          <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
-          <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
-          <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
+          <TabButton idPrefix={idPrefix()} id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
+          <TabButton idPrefix={idPrefix()} id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
+          <TabButton idPrefix={idPrefix()} id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
           </div>
           <div class="flex min-w-0 flex-1 basis-[560px] items-center gap-2 overflow-x-auto" data-plugin-center-filter-scroll>
           <div class="flex items-center gap-2" data-plugin-center-filters>
@@ -1514,7 +1529,8 @@ export function PluginCenterDetails(props: {
   marketDetailLoading?: boolean;
   marketDetailError?: unknown;
   onRetryMarketDetail?: () => void;
-  mobileOpen?: boolean;
+  split?: boolean;
+  headingId?: string;
   mobileBackRef?: (element: HTMLButtonElement) => void;
   detailHeadingRef?: (element: HTMLHeadingElement) => void;
   permissionsRef?: (element: HTMLElement) => void;
@@ -1539,10 +1555,9 @@ export function PluginCenterDetails(props: {
   return (
     <aside
       data-plugin-center-details={props.item?.inventoryKey ?? ''}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={props.item ? 'plugin-center-detail-heading' : undefined}
-      class={cn('absolute inset-y-0 right-0 z-20 min-h-0 w-full max-w-full overflow-hidden border-l bg-background shadow-2xl sm:w-[420px] sm:max-w-[min(420px,calc(100vw-2rem))]', props.mobileOpen === false ? 'hidden' : 'redeven-plugin-motion block animate-in fade-in slide-in-from-right-2 duration-200 ease-out motion-reduce:animate-none')}
+      data-detail-layout={props.split ? 'split' : 'page'}
+      aria-labelledby={props.item ? props.headingId : undefined}
+      class="redeven-plugin-motion min-h-0 min-w-0 max-w-full overflow-hidden border-l animate-in fade-in duration-200 motion-reduce:animate-none"
     >
       <Show
         when={props.item}
@@ -1558,7 +1573,7 @@ export function PluginCenterDetails(props: {
                 size="sm"
                 variant="ghost"
                 icon={ArrowLeft}
-                class="min-h-[44px] min-w-[44px] sm:hidden"
+                class={cn("min-h-[44px] min-w-[44px]", props.split && "hidden")}
                 onClick={props.onMobileBack}
               >
                 {i18n.t('uiCopy.plugin.backToList')}
@@ -1566,7 +1581,7 @@ export function PluginCenterDetails(props: {
                 <button
                   type="button"
                   data-plugin-center-drawer-close
-                  class="ml-auto inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-10 sm:w-10"
+                  class={cn("ml-auto h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", props.split ? "inline-flex" : "hidden")}
                   aria-label={i18n.t('uiCopy.plugin.backToList')}
                   title={i18n.t('uiCopy.plugin.backToList')}
                   onClick={props.onMobileBack}
@@ -1574,7 +1589,7 @@ export function PluginCenterDetails(props: {
                   <X class="h-4 w-4" />
                 </button>
               </div>
-              <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} />
+              <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} headingId={props.headingId} />
 
               <Show when={props.runtimeRecovery}>
                 {(recovery) => (
@@ -1609,7 +1624,7 @@ export function PluginCenterDetails(props: {
               />
             </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" data-plugin-detail-scroll-body>
+            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4" data-plugin-detail-scroll-body>
               <div class="space-y-4">
                 <PluginAuthorContent
                   item={item()}
@@ -2038,6 +2053,7 @@ function permissionDescription(group: PluginPermissionGroup, i18n: I18nHelpers):
 }
 
 function TabButton(props: {
+  idPrefix: string;
   id: PluginCenterTab;
   active: PluginCenterTab;
   label: string;
@@ -2059,19 +2075,19 @@ function TabButton(props: {
     if (!next) return;
     event.preventDefault();
     props.onSelect(next);
-    queueMicrotask(() => document.getElementById(`plugin-center-tab-${next}`)?.focus());
+    queueMicrotask(() => document.getElementById(`${props.idPrefix}-tab-${next}`)?.focus());
   };
   return (
     <button
-      id={`plugin-center-tab-${props.id}`}
+      id={`${props.idPrefix}-tab-${props.id}`}
       type="button"
       role="tab"
       aria-selected={isActive()}
-      aria-controls="plugin-center-panel"
+      aria-controls={`${props.idPrefix}-panel`}
       tabIndex={isActive() ? 0 : -1}
       class={cn(
         'min-h-[44px] min-w-[44px] cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 sm:min-h-8 sm:min-w-0 motion-reduce:transition-none',
-        isActive() ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+        isActive() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
       )}
       onClick={() => props.onSelect(props.id)}
       onKeyDown={selectAdjacentTab}

@@ -29,7 +29,7 @@ import { ActivityPluginSurfaceWindow } from './ActivityPluginSurfaceWindow';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PluginConfirmationDialog, createPluginConfirmationQueue } from './PluginConfirmationQueue';
 import { PluginCenterView } from './PluginCenterView';
-import { PluginCenterDialog } from './PluginCenterDialog';
+import { PluginCenterDrawer } from './PluginCenterDrawer';
 import { PluginSurfaceContainer, type PluginSurfaceResolution } from './PluginSurfaceContainer';
 import { PluginPanel } from './PluginPanel';
 import { PluginPinContextMenu } from './PluginPinContextMenu';
@@ -996,7 +996,6 @@ describe('plugin management browser geometry and interaction', () => {
       expect.stringContaining('Lifecycle: All'),
     ]));
     filterTriggers.forEach((trigger) => expect(trigger.querySelector('svg')).not.toBeNull());
-    const masterRectBefore = master.getBoundingClientRect();
 
     item.click();
     await settle();
@@ -1017,20 +1016,18 @@ describe('plugin management browser geometry and interaction', () => {
     expect(controlsRect.top).toBeGreaterThanOrEqual(detailsRect.top - 1);
     expect(controlsRect.bottom).toBeLessThanOrEqual(detailsRect.bottom + 1);
 
-    if (viewport.width >= 640) {
+    if (viewport.width >= 1100) {
       expect(getComputedStyle(master).display).not.toBe('none');
-      expect(getComputedStyle(details).display).not.toBe('none');
       const masterRect = master.getBoundingClientRect();
       expect(Math.abs(masterRect.top - detailsRect.top)).toBeLessThanOrEqual(1);
-      // The details drawer overlays the directory without resizing or rearranging it.
-      expect(detailsRect.left).toBeLessThan(masterRect.right);
-      expect(detailsRect.right).toBeLessThanOrEqual(masterRect.right + 1);
-      expect(Math.abs(masterRect.left - masterRectBefore.left)).toBeLessThanOrEqual(1);
-      expect(Math.abs(masterRect.width - masterRectBefore.width)).toBeLessThanOrEqual(1);
-      if (viewport.width >= 1280) {
-        expect(detailsRect.width).toBeGreaterThanOrEqual(360);
-        expect(detailsRect.width).toBeLessThanOrEqual(420);
-      }
+      expect(Math.abs(detailsRect.left - masterRect.right)).toBeLessThanOrEqual(1);
+      expect(detailsRect.width).toBe(400);
+      const visibleCard = master.querySelector('[data-plugin-center-item]')!;
+      await page.elementLocator(visibleCard).click();
+    } else {
+      expect(getComputedStyle(master).display).toBe('none');
+      expect(detailsRect.width).toBeCloseTo(shell.clientWidth, 0);
+      expect(getComputedStyle(details.querySelector('[data-plugin-center-mobile-back]')!).display).not.toBe('none');
     }
   });
 
@@ -1177,7 +1174,8 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:metrics"]')!.closest('article')!;
-    expect(card.getBoundingClientRect().height).toBeCloseTo(248, 3);
+    expect(getComputedStyle(card).minHeight).toBe('176px');
+    expect(card.getBoundingClientRect().height).toBeGreaterThanOrEqual(176);
     host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:metrics"]')!.click();
     await settle();
 
@@ -1263,7 +1261,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(getComputedStyle(master).display).toBe('none');
     expect(getComputedStyle(details).display).not.toBe('none');
     expectTouchTarget(back);
-    expect(document.activeElement).toBe(back);
+    expect(document.activeElement).toBe(details.querySelector('[data-plugin-center-detail-heading]'));
     expectTouchTarget(host.querySelector<HTMLButtonElement>('[role="switch"]')!);
     expectInsideViewport(details, viewport);
     expectNoHorizontalOverflow(details);
@@ -1301,7 +1299,7 @@ describe('plugin management browser geometry and interaction', () => {
 
     host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
     await settle();
-    const discover = host.querySelector<HTMLButtonElement>('#plugin-center-tab-discover')!;
+    const discover = host.querySelector<HTMLButtonElement>('[role="tab"][id$="-tab-discover"]')!;
     discover.click();
     await settle();
     expect(getComputedStyle(master).display).not.toBe('none');
@@ -1350,7 +1348,7 @@ describe('plugin management browser geometry and interaction', () => {
     const back = navigation.host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
     expect(getComputedStyle(master).display).toBe('none');
     expect(getComputedStyle(details).display).not.toBe('none');
-    expect(document.activeElement).toBe(back);
+    expect(document.activeElement).toBe(details.querySelector('[data-plugin-center-detail-heading]'));
 
     back.click();
     await settle();
@@ -1690,15 +1688,16 @@ describe('Workbench Plugin Center dialog continuity', () => {
           <WorkbenchSurface state={canvas} setState={setCanvas} widgetDefinitions={[definition]} launcherWidgetTypes={[]} enableKeyboard={!open()} />
         </div>
       </div>
-      <PluginCenterDialog open={open()} onOpenChange={setOpen} title="Plugin Center"
+      <PluginCenterDrawer open={open()} onOpenChange={setOpen} title="Plugin Center"
         class="w-[min(1280px,calc(100vw-48px))] max-w-none">
         <PluginCenterView showTitle={false} projection={projection} loading={false} canManagePlugins canOpenPluginSurfaces
           onRefresh={() => undefined} onCommand={() => undefined} />
-      </PluginCenterDialog>
+      </PluginCenterDrawer>
     </>, host));
     await userEvent.click(page.getByTestId('center-entry'));
     await settle();
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await expect.poll(() => dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(981);
     expectInsideViewport(dialog, { width: 1440, height: 1000 });
     expectNoHorizontalOverflow(dialog);
     expect(dialog.querySelectorAll('h1, h2')).toHaveLength(1);
