@@ -28,6 +28,9 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var result ModelGatewayResult
+	if req.WebSearchMode != "" && req.WebSearchMode != providerWebSearchModeDisabled {
+		return result, fmt.Errorf("DeepSeek Responses does not support hosted web search: mode %q", req.WebSearchMode)
+	}
 	if req.ProviderControls.PreviousResponseID != "" {
 		return result, errors.New("DeepSeek Responses requires full history, not previous_response_id")
 	}
@@ -108,13 +111,6 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			return result, fmt.Errorf("DeepSeek tool %s schema: %w", tool.Name, err)
 		}
 		request.Tools = append(request.Tools, fltools.ToolDefinition{Name: aliases.wireName(tool.Name), Description: tool.Description, InputSchema: schema, Strict: p.strictTools})
-	}
-	switch req.WebSearchMode {
-	case "", providerWebSearchModeDisabled:
-	case providerWebSearchModeDeepSeekNative:
-		request.HostedTools = []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search"}}
-	default:
-		return result, fmt.Errorf("unsupported DeepSeek web search mode %q", req.WebSearchMode)
 	}
 	stream, err := gateway.Stream(ctx, request)
 	if err != nil {

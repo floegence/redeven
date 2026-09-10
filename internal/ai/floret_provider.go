@@ -471,8 +471,8 @@ func (p *floretProviderAdapter) requestWebSearchMode(hosted []flprovider.HostedT
 		}
 	}
 	supported := map[string]string{"openai": config.AIWebSearchOpenAI, "openai_compatible": config.AIWebSearchOpenAI,
-		"deepseek": config.AIWebSearchDeepSeek, "moonshot": config.AIWebSearchKimi,
-		"chatglm": config.AIWebSearchGLM, "qwen": config.AIWebSearchQwen}
+		"moonshot": config.AIWebSearchKimi,
+		"chatglm":  config.AIWebSearchGLM, "qwen": config.AIWebSearchQwen}
 	if mode == "" || supported[p.providerType] != mode {
 		return "", fmt.Errorf("unsupported %s hosted search mode %q", p.providerType, mode)
 	}

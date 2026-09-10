@@ -8,11 +8,11 @@ const available = { status: 'available', reason: 'catalog_supported' } as const;
 const missingKey = { status: 'unavailable', reason: 'needs_credentials' } as const;
 
 describe('server-owned search capability', () => {
-  const provider: FlowerProvider = { id: 'deepseek', type: 'deepseek', models: [{ model_name: 'vision-alias', wire_model_name: 'deepseek-v4-flash-vision-exp' }, { model_name: 'another' }] };
-  const snapshot: FlowerSettingsSnapshot = { defaults: { permission_type: 'readonly' }, model_profile: { schema_version: 1, current_model_id: 'deepseek/vision-alias', providers: [provider] }, provider_secrets: [] };
+  const provider: FlowerProvider = { id: 'openai', type: 'openai', models: [{ model_name: 'vision-alias', wire_model_name: 'gpt-5.5' }, { model_name: 'another' }] };
+  const snapshot: FlowerSettingsSnapshot = { defaults: { permission_type: 'readonly' }, model_profile: { schema_version: 1, current_model_id: 'openai/vision-alias', providers: [provider] }, provider_secrets: [] };
 
   it('joins by exact local identity and never treats a provider brand as enabled', () => {
-    const next = withFlowerWebSearchAvailability(snapshot, [{ id: 'deepseek/vision-alias', web_search: available }]);
+    const next = withFlowerWebSearchAvailability(snapshot, [{ id: 'openai/vision-alias', web_search: available }]);
     const models = next.model_profile!.providers[0].models;
     expect(models[0].web_search).toEqual(available);
     expect(models[1].web_search).toBeUndefined();
@@ -21,10 +21,10 @@ describe('server-owned search capability', () => {
   });
 
   it('refreshes alias projections by wire identity and keeps them out of saved preferences', () => {
-    const next = applyFlowerModelDiscovery(provider, [{ model_name: 'deepseek-v4-flash-vision-exp', web_search: available }]);
+    const next = applyFlowerModelDiscovery(provider, [{ model_name: 'gpt-5.5', web_search: available }]);
     expect(cloneFlowerModel(next.models[0]).web_search).toEqual(available);
     expect(JSON.stringify(serializeFlowerProvider(next))).not.toContain('catalog_supported');
-    expect(serializeFlowerProvider(next).model_selection?.custom_models?.[0].wire_model_name).toBe('deepseek-v4-flash-vision-exp');
+    expect(serializeFlowerProvider(next).model_selection?.custom_models?.[0].wire_model_name).toBe('gpt-5.5');
   });
 
   it('reports missing credentials separately from unsupported models', () => {

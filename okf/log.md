@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-09-10 — Correct DeepSeek web search support
+
+- Correct the earlier native-search assumption: the official Responses compatibility table ignores built-in search tools. Mark all shipped DeepSeek models unsupported, reject hosted declarations before dispatch, and keep Responses transport, local page fetching, images, and historical receipt replay.
+- Replace the invalid native-search success fixture with request-boundary regressions and real Flash/Pro/Vision page-fetch and restart qualification. See [DeepSeek Responses](ai/deepseek-responses.md) and [catalog review requirements](ai/model-directory-and-selection.md).
+
 ## 2026-09-10 — Unified Flower web search
 
 - Make reviewed catalog declarations and one pure resolver own search availability, with explicit integration and credential reasons.

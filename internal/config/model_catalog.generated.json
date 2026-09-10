@@ -3600,28 +3600,31 @@
       "status": "not_integrated"
     },
     "deepseek/deepseek-v4-flash": {
-      "mode": "deepseek_native",
       "source_checked_at": "2026-09-10",
+      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution.",
       "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/"
+        "https://api-docs.deepseek.com/guides/responses_api/#tools",
+        "https://api-docs.deepseek.com/api/create-response/"
       ],
-      "status": "supported"
+      "status": "unsupported"
     },
     "deepseek/deepseek-v4-flash-vision-exp": {
-      "mode": "deepseek_native",
       "source_checked_at": "2026-09-10",
+      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution.",
       "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/"
+        "https://api-docs.deepseek.com/guides/responses_api/#tools",
+        "https://api-docs.deepseek.com/api/create-response/"
       ],
-      "status": "supported"
+      "status": "unsupported"
     },
     "deepseek/deepseek-v4-pro": {
-      "mode": "deepseek_native",
       "source_checked_at": "2026-09-10",
+      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution.",
       "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/"
+        "https://api-docs.deepseek.com/guides/responses_api/#tools",
+        "https://api-docs.deepseek.com/api/create-response/"
       ],
-      "status": "supported"
+      "status": "unsupported"
     },
     "google/gemini-2.5-flash": {
       "source_checked_at": "2026-09-10",

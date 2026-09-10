@@ -1,7 +1,7 @@
 ---
 type: AI Provider Contract
 title: DeepSeek Responses
-description: Flower consumes Floret stateless Responses transport and native search.
+description: Flower consumes Floret stateless Responses transport with explicit web tool limits.
 tags: [ai, provider, deepseek]
 timestamp: 2026-09-10T00:00:00Z
 ---
@@ -20,14 +20,19 @@ Each request sends full input history. The route never sends `messages`,
 to `reasoning.effort: none`; the selectable high and max levels keep their
 existing model-catalog contract.
 
-The reviewed directory enables native search for Flash, Pro, and Vision using
-the actual wire model identity. Native search is declared in the Agent tool surface and sent as `web_search`.
-Hosted search events and citation sources flow through Floret observation;
-search is never dispatched as a local tool. The current conversation and
-history retain a typed hosted search item, including queries, safe sources, and
-failed outcomes. Refresh and Runtime restart preserve this canonical activity;
-Redeven does not rebuild it from transport diagnostics. Short requests such as automatic
-titles have no hosted search surface and cannot initiate a search.
+The official Responses tool compatibility table marks `web_search` and other
+built-in tools as ignored. Responses format compatibility does not provide
+hosted execution. The reviewed directory therefore marks Flash, Pro, and Vision
+search as `unsupported`, without a search protocol. The shared resolver exposes
+that fact to model APIs, UI, prompts, and normal Turn requests. New requests have
+no native search declaration; this does not disable Responses, image input, or
+local function tools such as `web_fetch` for a known public URL.
+
+Unsupported hosted search configurations, including a frozen declaration from
+an earlier Flower version, fail explicitly before dispatch. They are not silently
+sent to an endpoint that ignores them, replaced with another search service, or
+removed from an admitted Turn. A new Turn resolves the corrected declaration.
+Automatic titles remain on Responses without search tools.
 
 ## Model-specific image input
 
@@ -46,20 +51,25 @@ image/history mirror.
 
 # Boundaries
 
-Floret owns raw response items, including reasoning and opaque search results.
+Floret owns raw response items, including reasoning and historical opaque search results.
 The host passes state through without interpreting or reconstructing it. Model
 or surface changes invalidate continuation through the existing compatibility
 boundary. Supplemental-context Turns retain Floret's no-state privacy boundary:
 canonical conversation still replays, but ephemeral host context never becomes
 provider continuation state. There is no host history mirror or Chat fallback.
+The official guide still accepts historical `web_search_call` input from earlier
+model responses. Reading that history is separate from declaring new search tools;
+canonical records are not rewritten when the current capability is corrected.
 
 # Evidence
 
 - `redeven:internal/ai/model_gateway_deepseek.go` - Thin released-gateway adapter.
 - `redeven:internal/ai/floret_provider.go` - Opaque state and request tool surface.
-- `redeven:internal/ai/floret_runtime.go` - Agent hosted search declaration.
-- `redeven:internal/ai/model_gateway_deepseek_test.go` - Native search, alias replay, and title isolation.
+- `redeven:internal/ai/floret_runtime.go` - Catalog-owned Turn tool surface.
+- `redeven:internal/ai/model_gateway_deepseek_test.go` - Historical receipt replay, aliases, images, and title isolation.
 - `redeven:internal/ai/thread_model_switch_integration_test.go` - Turn surface switching and replay.
+- `redeven:internal/ai/web_search_capability_test.go` - Rejection of ignored hosted tools.
+- [Official request tools contract](https://api-docs.deepseek.com/api/create-response/)
 - [Official Responses guide](https://api-docs.deepseek.com/guides/responses_api/)
 - [Model and context runtime](model-context-runtime.md)
 
@@ -84,9 +94,11 @@ Desktop and Env App share [the web operation presentation](../../internal/flower
 The source list initially shows five entries, with keyboard-accessible expansion;
 source titles, domains, full URLs, and two-line snippets support inspection.
 
-The opt-in `TestE2E_FlowerDeepSeekV4NativeSearch` qualification starts from the
-production Service and normal Turn admission for Flash and Vision, including a
-staged Vision image, canonical hosted search sources, and a restart follow-up.
-It fails when no real hosted result or source is returned; an assistant's verbal
-claim is never sufficient. Run the existing DeepSeek qualification script with
-a configured official credential. Normal CI uses deterministic HTTP fixtures.
+The opt-in `TestE2E_FlowerDeepSeekV4WebResearchBoundary` qualification starts from
+the production Service and normal Turn admission for Flash, Pro, and Vision.
+It checks the unsupported model projection, accurate prompt, absence of search
+tools on every request, a real successful `web_fetch` with verified page content,
+staged Vision image input, and a restart follow-up. Run the existing DeepSeek
+qualification script with a configured official credential. Normal CI uses
+deterministic HTTP fixtures. Unsupported native search is not tested as though
+it were available, and an assistant's verbal capability claim is never evidence.

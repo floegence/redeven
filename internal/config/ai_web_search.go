@@ -9,7 +9,6 @@ import (
 const (
 	AIWebSearchDisabled = "disabled"
 	AIWebSearchOpenAI   = "openai_responses_builtin"
-	AIWebSearchDeepSeek = "deepseek_native"
 	AIWebSearchKimi     = "kimi_builtin"
 	AIWebSearchGLM      = "glm_web_search_tool"
 	AIWebSearchQwen     = "qwen_responses_web_search"

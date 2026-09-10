@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ import (
 
 // Paid opt-in qualification goes through normal model selection and admission.
 // Credentials and raw provider receipts never become test output.
-func TestE2E_FlowerDeepSeekV4NativeSearch(t *testing.T) {
+func TestE2E_FlowerDeepSeekV4WebResearchBoundary(t *testing.T) {
 	if os.Getenv("REDEVEN_FLOWER_CONTEXT_E2E") != "1" {
 		t.Skip("enable the real DeepSeek qualification")
 	}
@@ -26,7 +27,7 @@ func TestE2E_FlowerDeepSeekV4NativeSearch(t *testing.T) {
 	if apiKey == "" {
 		t.Fatal("DeepSeek credential is required")
 	}
-	for _, model := range []string{"deepseek-v4-flash", "deepseek-v4-flash-vision-exp"} {
+	for _, model := range []string{"deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp"} {
 		t.Run(model, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 			defer cancel()
@@ -35,12 +36,24 @@ func TestE2E_FlowerDeepSeekV4NativeSearch(t *testing.T) {
 			defer func() {
 				recorder.mu.Lock()
 				defer recorder.mu.Unlock()
+				if recorder.err != nil {
+					t.Error(recorder.err)
+				}
+				if len(recorder.observations) < 3 {
+					t.Errorf("requests=%d, want fetch, result, and restart follow-up", len(recorder.observations))
+				}
 				for _, observation := range recorder.observations {
-					if observation.NativeSearchTools != 1 || observation.Model != model {
-						t.Errorf("wire search count=%d model=%s", observation.NativeSearchTools, observation.Model)
+					if observation.NativeSearchTools != 0 || observation.Model != model || !observation.SearchUnavailablePrompt {
+						t.Errorf("wire boundary: native tools=%d model=%s unavailable prompt=%v", observation.NativeSearchTools, observation.Model, observation.SearchUnavailablePrompt)
+					}
+					if !slices.Contains(observation.DefinitionToolNames, "web_fetch") || slices.Contains(observation.DefinitionToolNames, "web_search") || slices.Contains(observation.DefinitionToolNames, "web_search_tool") {
+						t.Errorf("unexpected tool definitions: %v", observation.DefinitionToolNames)
+					}
+					if strings.Contains(model, "vision") && !observation.HasImageInput {
+						t.Error("Vision request lost authorized image input")
 					}
 				}
-				t.Logf("verified %d outgoing Turn requests with native search", len(recorder.observations))
+				t.Logf("verified %d outgoing requests: no native search, local fetch available, accurate prompt", len(recorder.observations))
 			}()
 			stateDir := t.TempDir()
 			opts := Options{
@@ -54,14 +67,26 @@ func TestE2E_FlowerDeepSeekV4NativeSearch(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = svc.Close() }()
+			models, err := svc.ListModels()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(models.Models) == 0 {
+				t.Fatal("model projection is empty")
+			}
+			for _, entry := range models.Models {
+				if entry.WebSearch.Status != "unavailable" || entry.WebSearch.Reason != "unsupported" {
+					t.Fatalf("incorrect model search projection: %+v", entry.WebSearch)
+				}
+			}
 			meta := testSendTurnMeta()
-			thread, err := svc.CreateThread(ctx, meta, "Native search qualification", "deepseek/"+model, config.AIPermissionReadonly, "")
+			thread, err := svc.CreateThread(ctx, meta, "Web research boundary", "deepseek/"+model, config.AIPermissionReadonly, "")
 			if err != nil {
 				t.Fatal(err)
 			}
 			request := SendUserTurnRequest{ClientRequestID: "search-qualification", ThreadID: thread.ThreadID,
-				Input:   RunInput{Text: "Use your web_search tool to look up the latest Go release on go.dev. You must actually search the web, then give a short answer with a source citation. Do not use local tools."},
-				Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh}, MaxOutputTokens: 32768, NoUserInteraction: true}}
+				Input:   RunInput{Text: "Use web_fetch to fetch this exact public page: https://example.com/. Report its page heading and cite the URL. This is a page-fetch request, so do not search for URLs or use shell tools."},
+				Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true}}
 			if strings.Contains(model, "vision") {
 				attachSearchTestImage(t, svc, meta, &request)
 			}
@@ -86,22 +111,25 @@ func TestE2E_FlowerDeepSeekV4NativeSearch(t *testing.T) {
 			}
 			if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
 				code, hash, classes := safeDeepSeekFailureFingerprint(detail.Current.Failure)
-				t.Fatalf("search failed: code=%s hash=%s classes=%v", code, hash, classes)
+				t.Fatalf("web research failed: code=%s hash=%s classes=%v", code, hash, classes)
 			}
-			searches, sources := 0, 0
+			fetches := 0
 			for _, item := range detail.Current.Items {
-				if item.Activity == nil || item.Activity.ToolName != "web_search" || item.Activity.Status != "success" {
+				if item.Activity == nil {
 					continue
 				}
-				searches++
-				if item.Activity.Presentation != nil {
-					if payload, ok := item.Activity.Presentation.Payload.(fltools.WebSearchActivityPayload); ok {
-						sources += len(payload.Results)
-					}
+				if item.Activity.ToolName == "web_search" && item.Activity.Status == "success" {
+					t.Fatal("unexpected hosted search activity")
+				}
+				if item.Activity.ToolName != "web_fetch" || item.Activity.Status != "success" || item.Activity.Presentation == nil {
+					continue
+				}
+				if payload, ok := item.Activity.Presentation.Payload.(fltools.WebFetchActivityPayload); ok && payload.StatusCode == 200 && payload.FinalURL == "https://example.com/" && strings.Contains(payload.ContentPreview, "Example Domain") {
+					fetches++
 				}
 			}
-			if searches == 0 || sources == 0 {
-				t.Fatalf("canonical native searches=%d sources=%d", searches, sources)
+			if fetches == 0 {
+				t.Fatal("no canonical successful fetch with verified public page content")
 			}
 			if err := svc.Close(); err != nil {
 				t.Fatal(err)
@@ -111,8 +139,8 @@ func TestE2E_FlowerDeepSeekV4NativeSearch(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Restart and replay use the same canonical provider receipts.
-			sendDeepSeekCompactionTurn(t, ctx, svc, meta, "search-follow-up", thread.ThreadID, "deepseek/"+model, "Using the preceding search result, repeat only the release version. Do not call tools or search again.")
-			t.Logf("canonical native searches=%d sources=%d; restart and follow-up passed", searches, sources)
+			sendDeepSeekCompactionTurn(t, ctx, svc, meta, "search-follow-up", thread.ThreadID, "deepseek/"+model, "From the page already fetched, repeat only its heading. Do not call tools again.")
+			t.Logf("canonical verified page fetches=%d; restart and follow-up passed; native search correctly unavailable", fetches)
 		})
 	}
 }

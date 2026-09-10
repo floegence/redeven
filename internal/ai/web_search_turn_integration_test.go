@@ -30,10 +30,10 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 		braveKey                                                              bool
 	}{
 		{name: "openai", provider: "openai", model: "gpt-5.5", toolType: "web_search_preview", path: "/responses"},
-		{name: "vision", provider: "deepseek", model: "deepseek-v4-flash-vision-exp", toolType: "web_search", path: "/responses"},
-		{name: "fetch_only", provider: "deepseek", model: "deepseek-v4-flash", path: "/responses"},
-		{name: "flash", provider: "deepseek", model: "deepseek-v4-flash", toolType: "web_search", path: "/responses"},
-		{name: "pro_alias", provider: "deepseek", model: "my-pro", wire: "deepseek-v4-pro", toolType: "web_search", path: "/responses"},
+		{name: "vision", provider: "deepseek", model: "deepseek-v4-flash-vision-exp", path: "/responses"},
+		{name: "fetch_only", provider: "openai_compatible", model: "custom", searchMode: "openai_builtin", path: "/responses"},
+		{name: "flash", provider: "deepseek", model: "deepseek-v4-flash", path: "/responses"},
+		{name: "pro_alias", provider: "deepseek", model: "my-pro", wire: "deepseek-v4-pro", path: "/responses"},
 		{name: "kimi", provider: "moonshot", model: "kimi-k2.6", toolType: "builtin_function", path: "/chat/completions"},
 		{name: "glm", provider: "chatglm", model: "glm-5.1", toolType: "web_search", path: "/chat/completions"},
 		{name: "qwen", provider: "qwen", model: "qwen3.6-plus", toolType: "web_search", path: "/responses"},
@@ -139,6 +139,9 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			if (models.Models[0].WebSearch.Status == "available") != (wantSearch || tc.name == "fetch_only") {
 				t.Fatalf("model projection=%+v", models.Models[0].WebSearch)
 			}
+			if tc.provider == "deepseek" && models.Models[0].WebSearch.Reason != "unsupported" {
+				t.Fatalf("DeepSeek projection=%+v", models.Models[0].WebSearch)
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			if len(mainBodies) != 1 {
@@ -155,7 +158,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			hosted, local := 0, 0
 			for _, value := range body["tools"].([]any) {
 				tool := value.(map[string]any)
-				if tool["type"] == tc.toolType && tc.toolType != "" {
+				if tool["type"] == "web_search" || tool["type"] == "web_search_preview" || tool["type"] == "builtin_function" {
 					hosted++
 				}
 				if tool["name"] == "web_search_tool" {
@@ -170,7 +173,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			}
 			raw, _ := json.Marshal(body)
 			if tc.name == "vision" && !strings.Contains(string(raw), `"type":"input_image"`) {
-				t.Fatal("Vision search lost its image")
+				t.Fatal("unsupported search disabled Vision image input")
 			}
 			if strings.Contains(string(raw), "URL discovery is unavailable") == wantSearch {
 				t.Fatalf("prompt/search mismatch: search=%v", wantSearch)
@@ -256,7 +259,6 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		if call == 1 {
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "search-first", "status": "completed", "output": []any{
-				map[string]any{"type": "web_search_call", "id": "native-search", "status": "completed", "opaque_results": "canonical-search-receipt", "action": map[string]any{"type": "search", "query": "Go release", "sources": []any{map[string]any{"type": "url", "url": "https://go.dev/dl/", "title": "Go downloads"}}}},
 				map[string]any{"type": "function_call", "id": "ask", "call_id": "ask", "name": "ask_user", "arguments": args},
 			}}})
 			return
@@ -270,24 +272,17 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 	defer server.Close()
 	stateDir := t.TempDir()
 	opts := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-		Config:         &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Type: "deepseek", BaseURL: server.URL, Models: config.AIProviderCatalog("deepseek")}}},
+		Config: &config.AIConfig{CurrentModelID: "search/model-a", Providers: []config.AIProvider{{ID: "search", Type: "openai_compatible", BaseURL: server.URL,
+			Models: []config.AIProviderModel{{ModelName: "model-a"}, {ModelName: "model-b"}}, WebSearch: &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeOpenAIBuiltin}}}},
 		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil }}
-	if failure == "settings_changed" {
-		opts.Config.Providers[0].Type = "openai_compatible"
-		for i := range opts.Config.Providers[0].Models {
-			opts.Config.Providers[0].Models[i].ReasoningCapability = config.AIReasoningCapability{}
-			opts.Config.Providers[0].Models[i].DefaultReasoningSelection = config.AIReasoningSelection{}
-		}
-		opts.Config.Providers[0].WebSearch = &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeOpenAIBuiltin}
-	}
 	svc, err := NewService(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = svc.Close() }()
 	meta := testSendTurnMeta()
-	thread, err := svc.CreateThread(t.Context(), meta, "Search lifecycle", "deepseek/deepseek-v4-flash", "", "")
+	thread, err := svc.CreateThread(t.Context(), meta, "Search lifecycle", "search/model-a", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,10 +304,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		t.Fatal(err)
 	}
 	failed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "failed" })
-	wantFailure := "DeepSeek provider status 400"
-	if failure == "settings_changed" {
-		wantFailure = "400"
-	}
+	wantFailure := "400"
 	if failure == "misrouted" {
 		wantFailure = "provider returned a local function call for hosted tool"
 	}
@@ -323,23 +315,10 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		t.Fatal(err)
 	}
 	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
-	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "deepseek/deepseek-v4-flash-vision-exp"); err != nil {
+	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "search/model-b"); err != nil {
 		t.Fatal(err)
 	}
 	sendAndWaitForModelSwitch(t, svc, meta, thread.ThreadID, "New turn after model switch.", "")
-	detail, err := svc.GetFlowerThreadDetail(t.Context(), meta, thread.ThreadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	searches := 0
-	for _, item := range detail.Current.Items {
-		if item.Activity != nil && item.Activity.ToolName == "web_search" && item.Activity.Status == "success" {
-			searches++
-		}
-	}
-	if failure != "settings_changed" && searches != 1 {
-		t.Fatalf("canonical hosted searches=%d", searches)
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	if len(bodies) != 4 {
@@ -373,7 +352,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 			t.Fatalf("request %d changed the frozen tool surface", index)
 		}
 	}
-	if bodies[3]["model"] != "deepseek-v4-flash-vision-exp" {
+	if bodies[3]["model"] != "model-b" {
 		t.Fatal("new turn did not adopt model switch")
 	}
 }

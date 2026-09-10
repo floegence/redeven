@@ -73,7 +73,7 @@ def reasoning(pid, model, rules):
 
 
 SEARCH_MODES = {
-    'openai': 'openai_responses_builtin', 'deepseek': 'deepseek_native',
+    'openai': 'openai_responses_builtin',
     'moonshot': 'kimi_builtin', 'chatglm': 'glm_web_search_tool',
     'qwen': 'qwen_responses_web_search',
 }
