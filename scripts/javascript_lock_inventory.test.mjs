@@ -186,6 +186,22 @@ test('parsePnpmLock accepts only the supported pnpm v9 package schema', () => {
   );
 });
 
+test('pnpm release tarballs retain their package version and merge npm provenance', () => {
+  const url = 'https://github.com/example/sdk/releases/download/v1.2.3/sdk-1.2.3.tgz';
+  const metadata = { version: '1.2.3', resolution: { tarball: url, integrity: `sha512-${'a'.repeat(86)}==` } };
+  const pnpmLock = { lockfileVersion: '9.0', packages: { [`@example/sdk@${url}`]: metadata } };
+  const inventory = collectJavaScriptLockInventory([{
+    label: 'UI', pnpmLock,
+    packageLock: { packages: { 'node_modules/@example/sdk': { version: '1.2.3', license: 'MIT' } } },
+  }]);
+  assert.equal(inventory.length, 1);
+  assert.equal(inventory[0].version, '1.2.3');
+  assert.deepEqual(inventory[0].lockKinds, ['npm', 'pnpm']);
+  for (const invalid of [{ ...metadata, version: undefined }, { ...metadata, resolution: { tarball: url } }]) {
+    assert.throws(() => parsePnpmLock({ ...pnpmLock, packages: { [`@example/sdk@${url}`]: invalid } }), /tarball requires an exact version and integrity/u);
+  }
+});
+
 test('resolvePackageLicense fails closed without exact evidence or an audited override', () => {
   assert.deepEqual(resolvePackageLicense({ name: 'unknown', version: '1.0.0', licenses: [] }), {
     license: 'UNKNOWN',

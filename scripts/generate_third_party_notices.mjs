@@ -49,6 +49,7 @@ const npmLicenseOverrides = new Map([
 ]);
 
 const npmCoordinateLicenseOverrides = new Map([
+  ['@floegence/redeven-service-templates@0.6.0', { license: 'MIT', note: 'Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field.' }],
 	['@noble/hashes@2.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['react@19.2.8', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@babel/helper-plugin-utils@7.29.7', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],

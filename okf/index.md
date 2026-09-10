@@ -17,6 +17,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
 - [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
 - [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.
+- [Redeven Service Template format compatibility](architecture/service-template-format-compatibility.md) - Read branded and historical source formats without rewriting original files.
+- [GitHub service template sources](architecture/managed-service-git-sources.md) - Import original directories through either download location and review source changes before committing them.
 - [Independent Host service lifecycle](architecture/independent-host-services.md) - Preserve application processes across management restarts and safely recover native ownership and private opening sessions.
 - [Managed Web Services](architecture/managed-web-services.md) - Resolve current templates with fixed releases, exact bindings, applied Runtime digests, and explicit failure recovery.
 - [Web Service management recovery](architecture/service-management-recovery.md) - Review current facts, resume partial uninstall, and detach or restore management without losing resource control.

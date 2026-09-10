@@ -141,7 +141,7 @@ func TestManagementMigrationFailureRollsBackRebuiltTables(t *testing.T) {
 	}
 	db.Close()
 	spec := registrySchemaSpec()
-	spec.Migrations[len(spec.Migrations)-1].Apply = func(tx *sql.Tx) error {
+	spec.Migrations[2].Apply = func(tx *sql.Tx) error {
 		if err := applyManagementSchema(tx); err != nil {
 			return err
 		}

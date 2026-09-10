@@ -17,7 +17,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v2"
-	registryCurrentSchemaVersion = 4
+	registryCurrentSchemaVersion = 5
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -32,8 +32,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 1, ToVersion: 2, Apply: migrateRegistryV1ToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryV3ToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryV4ToV5},
 		},
-		Verify: func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 4) },
+		Verify: func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 5) },
 	}
 }
 
@@ -70,7 +71,10 @@ func initializeCurrentRegistry(tx *sql.Tx) error {
 	if _, err := tx.Exec(addDefaultAppPath); err != nil {
 		return err
 	}
-	return applyManagementSchema(tx)
+	if err := applyManagementSchema(tx); err != nil {
+		return err
+	}
+	return applyTemplateSourcesSchema(tx)
 }
 
 func initializeRegistryV1(tx *sql.Tx) error {
@@ -237,6 +241,11 @@ func verifyRegistryShape(tx *sql.Tx, version int) error {
 			return err
 		}
 	}
+	if version >= 5 {
+		if err := applyTemplateSourcesSchema(expected); err != nil {
+			return err
+		}
+	}
 	read := func(source *sql.Tx) ([]string, error) {
 		rows, err := source.Query(`SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__redeven_db_meta' ORDER BY type, name`)
 		if err != nil {
@@ -283,6 +292,10 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 		"managed_web_service_operations", "managed_web_service_release_checks", "managed_web_service_resources",
 		"managed_web_service_template_requests", "managed_web_service_templates", "managed_web_services", "port_forwards",
 	}
+	if version >= 5 {
+		wantTables = append(wantTables, "managed_web_service_template_sources")
+		slices.Sort(wantTables)
+	}
 	if !slices.Equal(tables, wantTables) {
 		return fmt.Errorf("port forward registry v2 table mismatch: got %v, want %v", tables, wantTables)
 	}
@@ -301,6 +314,9 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	if version >= 4 {
 		wantColumns["managed_web_services"] = append(wantColumns["managed_web_services"], "management_state", "archived_forward_json")
 		wantColumns["managed_web_service_resources"] = append(wantColumns["managed_web_service_resources"], "stable_identity", "ownership")
+	}
+	if version >= 5 {
+		wantColumns["managed_web_service_template_sources"] = strings.Split(templateSourceColumns, ",")
 	}
 	for table, want := range wantColumns {
 		got, err := sqliteutil.TableColumnNamesTx(tx, table)

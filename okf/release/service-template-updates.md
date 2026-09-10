@@ -23,7 +23,7 @@ The template repository's configured release sources select the official npm
 platforms, and manifest content digests must verify before catalog revisions and
 the catalog patch version advance. Each changed template increments its own
 revision. The catalog is published with a new immutable module tag after
-isolated generation, Registry preflight, and all upstream Go tests.
+isolated generation, Registry preflight, generated-contract verification, SDK acquisition tests, and all upstream Go tests, including the complete frozen historical-format fixtures.
 
 ## Published dependency adoption
 
@@ -62,6 +62,10 @@ marks failed runs and records diagnostics in the job summary. Each run removes
 only its own temporary worktree and private branch.
 
 # Boundaries
+
+The schema/acquisition npm SDK is independently pinned to a formal upstream release tarball and SHA-512 in Desktop and Env App lockfiles. SDK changes require explicit source review and both acquisition-mode tests; a catalog recommendation-only patch does not automatically change that SDK dependency.
+
+External GitHub template sources are outside this watcher. They are checked and updated only through the user-driven [Git source review](../architecture/managed-service-git-sources.md) flow, never by repository scheduling or application startup.
 
 The watcher creates no Redeven product release tag or installation package.
 Catalog recommendations reach users through the next normal Redeven release.

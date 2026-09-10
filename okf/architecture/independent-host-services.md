@@ -53,7 +53,7 @@ The backend provides `actions.open`, `actions.restore_management`, opening state
 
 Endpoint reachability is checked separately from process identity. A running process with an unavailable loopback endpoint remains Running and reports unavailable opening. Runtime-owned proxy connections may be interrupted while Runtime is offline; reopening reconnects through the existing authorized Forward route. The contract does not promise uninterrupted WebSockets, system boot autostart, or application crash supervision.
 
-Template scripts, environment, output modes, hook limits, and URL validation are defined by the [template contract](managed-web-service-templates.md).
+Template scripts, environment, output modes, hook limits, and URL validation are defined by the [template contract](managed-web-service-templates.md). Imported Host templates receive `REDEVEN_TEMPLATE_DIR` pointing to the active original source directory for helper files; [Git source review](managed-service-git-sources.md) prevents replacement during associated service operations and opening hooks.
 
 # Evidence
 

@@ -34,6 +34,7 @@
     "@floegence/floe-webapp-protocol": "0.50.6",
     "@floegence/floeterm-terminal-web": "0.19.1",
     "@floegence/flowersec-core": "5.1.0",
+    "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
     "@floegence/redevplugin-contracts": "3.0.31",
     "@floegence/redevplugin-ui": "3.0.31",
     "@fontsource/ibm-plex-mono": "5.3.0",

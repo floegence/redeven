@@ -119,6 +119,9 @@ func (g *Server) handleManagedTemplateRoute(w http.ResponseWriter, r *http.Reque
 	if rest != "" {
 		parts = strings.Split(rest, "/")
 	}
+	if g.handleManagedTemplateSourceRoute(w, r, parts) {
+		return true
+	}
 	if r.Method == http.MethodGet && len(parts) == 0 {
 		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
 			return true

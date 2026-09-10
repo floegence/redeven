@@ -462,6 +462,24 @@ Rules:
   opaque upstream identifiers and product-owned coordination state, but must
   not turn a migration into a shadow copy of Floret or ReDevPlugin state.
 
+## Redeven Service Template Boundary
+
+- `redeven-service-templates` owns branded source documents, frozen historical
+  schemas, pure deterministic format adapters, shared types, validation, and
+  GitHub directory acquisition. Consume its released Go module and SDK artifacts.
+- Pure data compatibility is required for every formally supported external
+  template format. Readers adapt only in memory, preserve original bytes and
+  historical defaults, and retain historical regression fixtures permanently.
+  These adapters have no expiry while their format remains supported.
+- Redeven owns authenticated import, original source directories, Registry
+  pointers, namespace isolation, manual preview/confirmation, and one current
+  service executor. Do not persist normalized external execution definitions.
+- Credentials are request-scoped. Neither import mode executes scripts or
+  installs service dependencies. Source checks and updates require user action;
+  format adaptation and source updates never automatically restart services.
+- Template compatibility does not revive discarded database lineages. Registry
+  changes retain `portforward_registry_v2` and every contiguous migration.
+
 ## Published Dependency Policy
 
 - `redeven` is a downstream consumer of `floeterm`, `floe-webapp`, `flowersec`, and `redevplugin`.

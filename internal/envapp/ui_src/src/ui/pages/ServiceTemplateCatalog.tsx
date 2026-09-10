@@ -1,3 +1,4 @@
+import type { Spec, TemplateParameter, HostTemplateSpec, ContainerTemplateSpec, ContainerMountSpec } from '@floegence/redeven-service-templates';
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
@@ -24,57 +25,19 @@ export type ServiceTemplateIcon = Readonly<{
   sha256: string;
 }>;
 
-export type ServiceTemplateRuntimeSpec = Readonly<{
+type DeepReadonly<T> = T extends ReadonlyArray<infer Item> ? ReadonlyArray<DeepReadonly<Item>> : T extends object ? {readonly [Key in keyof T]: DeepReadonly<T[Key]>} : T;
+
+// Form controls narrow the choices accepted by Runtime while the published
+// SDK remains the sole owner of execution fields and transfer shapes.
+export type ServiceTemplateRuntimeSpec = DeepReadonly<Omit<Spec, 'schema_version' | 'endpoint' | 'parameters' | 'host' | 'container'> & {
   schema_version: 6;
-  kind: ServiceTemplateKind;
-  endpoint: Readonly<{
-    scheme: 'http' | 'https';
-    container_port?: number;
-    fixed_host_port?: number;
-    path?: string;
-    health_path?: string;
-    health_protocol?: string;
-    startup_timeout_sec?: number;
-  }>;
-  parameters?: ReadonlyArray<Readonly<{ name: string; label: string; description?: string; type: 'text' | 'number' | 'boolean' | 'secret' | 'path'; required?: boolean; default?: string }>>;
-  host?: Readonly<{
-    after_start_script?: string;
-    open_script?: string;
-    output_mode?: 'discard' | 'private_file';
-    install_script?: string;
-    start_script: string;
-    stop_script?: string;
-    uninstall_script?: string;
-    environment?: Readonly<Record<string, string>>;
-    artifact?: Readonly<{ download_url: string; size_bytes: number; sha256: string; executable_rel_path: string }>;
-    npm?: Readonly<{ package_name: string; version: string; registry_url: string; auth_token_parameter?: string; executable: string }>;
-  }>;
-  container?: Readonly<{
-    image: string;
-    entrypoint?: ReadonlyArray<string>;
-    command?: ReadonlyArray<string>;
-    environment?: Readonly<Record<string, string>>;
-    labels?: Readonly<Record<string, string>>;
-    restart_policy?: string;
-    network_mode?: string;
-    pid_mode?: string;
-    ipc_mode?: string;
-    ports?: ReadonlyArray<Readonly<{ resource_id?: string; container_port: number; host_port?: number; host_ip?: string; protocol?: string }>>;
-    mounts?: ReadonlyArray<Readonly<{ resource_id?: string; type: 'workspace' | 'bind' | 'volume' | 'tmpfs'; source?: string; target: string; read_only?: boolean; tmpfs_options?: ReadonlyArray<string> }>>;
-    cap_add?: ReadonlyArray<string>;
-    cap_drop?: ReadonlyArray<string>;
-    devices?: ReadonlyArray<Readonly<{ resource_id?: string; host_path: string; container_path?: string; permissions?: string }>>;
-    privileged?: boolean;
-    security_opts?: ReadonlyArray<string>;
-    user?: string;
-    read_only_root: boolean;
-    memory_bytes?: number;
-    cpus?: number;
-    pids_limit?: number;
-    shm_size_bytes?: number;
+  endpoint: Spec['endpoint'] & {scheme: 'http' | 'https'};
+  parameters?: Array<Omit<TemplateParameter, 'type'> & {type: 'text' | 'number' | 'boolean' | 'secret' | 'path'}>;
+  host?: Omit<HostTemplateSpec, 'output_mode'> & {output_mode?: 'discard' | 'private_file'};
+  container?: Omit<ContainerTemplateSpec, 'runtime_profile' | 'mounts'> & {
     runtime_profile?: 'restricted' | 'interactive_desktop';
-  }>;
-  compose?: Readonly<{ yaml: string; main_service: string }>;
+    mounts?: Array<Omit<ContainerMountSpec, 'type'> & {type: 'workspace' | 'bind' | 'volume' | 'tmpfs'}>;
+  };
 }>;
 
 export type HostLifecycleStep = Readonly<{
@@ -110,7 +73,7 @@ export type ServiceTemplatePresentation = Readonly<{
   id: string;
   name: string;
   description: string;
-  source: 'builtin' | 'custom';
+  source: 'builtin' | 'custom' | 'git';
   kind: ServiceTemplateKind;
   icon?: ServiceTemplateIcon;
   deploymentLabel: string;
@@ -399,6 +362,8 @@ export type ServiceTemplateCatalogProps = Readonly<{
   onCategoryChange: (category: ServiceTemplateCategory) => void;
   onQueryChange: (query: string) => void;
   onCreate: (kind: ServiceTemplateKind) => void;
+  onImport?: () => void;
+  onCheckSource?: (templateID: string) => void;
   onDeploy: (templateID: string) => void;
 	onOpen: (templateID: string) => void;
 	onVersions?: (templateID: string) => void;
@@ -445,7 +410,7 @@ export function ServiceTemplateIdentity(props: {
           <h3 class={cn('min-w-0 text-sm font-semibold leading-5 text-foreground', props.compact && 'truncate')} dir="auto">{props.template.name}</h3>
           <Show when={!props.compact}>
             <span class="service-template-source-badge inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
-              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : i18n.t('webServices.managed.custom')}
+              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
             </span>
           </Show>
         </div>
@@ -455,7 +420,7 @@ export function ServiceTemplateIdentity(props: {
         <Show when={props.metadata !== undefined} fallback={
         <div class={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground', props.compact ? 'mt-0.5 leading-4' : 'mt-2')} data-template-metadata>
           <Show when={props.compact}>
-            <span>{props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}</span>
+            <span>{props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}</span>
             <span aria-hidden="true">·</span>
           </Show>
           <span>{props.template.deploymentLabel}</span>
@@ -553,7 +518,7 @@ export function ServiceTemplateRow(props: {
           <div class="mt-1 flex min-w-0 items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-1.5 truncate text-[10px] leading-4 text-muted-foreground" data-template-metadata>
               <span class="service-template-row__source truncate">
-                {props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : i18n.t('webServices.managed.custom')}
+                {props.template.source === 'builtin' ? i18n.t('webServices.managed.builtIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
               </span>
               <span aria-hidden="true">·</span>
               <span class="shrink-0">{props.template.deploymentLabel}</span>
@@ -577,11 +542,13 @@ export function ServiceTemplateDetailsPane(props: {
 	onOpen: () => void;
 	onVersions?: () => void;
   onDuplicate: () => void;
+  onCheckSource?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   const menuItems = (): DropdownItem[] => [
+    ...(props.template.source === 'git' ? [{id:'check-source',label:i18n.t('webServices.sources.checkUpdates'),disabled:!props.canManage}] : []),
     ...(props.template.installed ? [{
       id: 'open',
       label: props.template.openUnavailableReason
@@ -589,11 +556,12 @@ export function ServiceTemplateDetailsPane(props: {
         : i18n.t('webServices.actions.open'),
       disabled: !props.template.openable,
     }] : []),
-    {
+    ...(props.template.source !== 'git' ? [{
       id: 'duplicate',
       label: i18n.t('webServices.managed.duplicate'),
       disabled: !props.template.duplicateable || !props.canManage,
-    },
+    }] : []),
+    ...(props.template.source === 'git' ? [{id:'delete',label:i18n.t('webServices.managed.deleteTemplate'),disabled:props.template.installed || !props.canManage}] : []),
     ...(props.template.editable ? [
       {
         id: 'edit',
@@ -608,7 +576,8 @@ export function ServiceTemplateDetailsPane(props: {
     ] : []),
   ];
   const selectMenuItem = (id: string) => {
-    if (id === 'open') props.onOpen();
+    if (id === 'check-source') props.onCheckSource?.();
+    else if (id === 'open') props.onOpen();
     else if (id === 'duplicate') props.onDuplicate();
     else if (id === 'edit') props.onEdit();
     else if (id === 'delete') props.onDelete();
@@ -630,7 +599,7 @@ export function ServiceTemplateDetailsPane(props: {
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 flex-wrap items-center gap-2">
             <span class="text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : i18n.t('webServices.managed.custom')}
+              {props.template.source === 'builtin' ? i18n.t('webServices.managed.redevenBuiltIn') : props.template.source === 'git' ? i18n.t('webServices.sources.github') : i18n.t('webServices.managed.custom')}
             </span>
             <Show when={props.template.developerPreview}>
               <Tag variant="warning" tone="soft" size="sm">{i18n.t('webServices.managed.developerPreview')}</Tag>
@@ -742,6 +711,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
   }, { category: props.category, active: false });
   const [requestedTemplateID, setRequestedTemplateID] = createSignal<string | null>(null);
   const builtInTemplates = createMemo(() => props.templates.filter((template) => template.source === 'builtin'));
+  const gitTemplates = createMemo(() => props.templates.filter((template) => template.source === 'git'));
   const customTemplates = createMemo(() => props.templates.filter((template) => template.source === 'custom'));
   const selectedTemplate = createMemo(() => {
     const requestedID = requestedTemplateID();
@@ -806,6 +776,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
               aria-label={i18n.t('webServices.managed.searchTemplates')}
             />
           </div>
+          <Show when={props.onImport}><Button size="sm" variant="outline" class="min-h-9 shrink-0" disabled={!props.canManage} onClick={() => props.onImport?.()}>{i18n.t('webServices.sources.import')}</Button></Show>
           <Dropdown
             align="end"
             items={createItems()}
@@ -863,6 +834,14 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                         onKeyDown={moveRowSelection}
                       />
                       <TemplateGroup
+                        title={i18n.t('webServices.sources.groupTitle')}
+                        description={i18n.t('webServices.sources.groupDescription')}
+                        templates={gitTemplates()}
+                        selectedTemplateID={selectedTemplate()?.id}
+                        onSelect={setRequestedTemplateID}
+                        onKeyDown={moveRowSelection}
+                      />
+                      <TemplateGroup
                         title={i18n.t('webServices.managed.customTemplates')}
                         description={i18n.t('webServices.managed.customTemplatesDescription')}
                         templates={customTemplates()}
@@ -880,6 +859,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
 					  onOpen={() => props.onOpen(template.id)}
 					  onVersions={() => props.onVersions?.(template.id)}
                       onDuplicate={() => props.onDuplicate(template.id)}
+                      onCheckSource={() => props.onCheckSource?.(template.id)}
                       onEdit={() => props.onEdit(template.id)}
                       onDelete={() => props.onDelete(template.id)}
                     />
