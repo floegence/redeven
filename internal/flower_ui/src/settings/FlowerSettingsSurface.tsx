@@ -1,3 +1,4 @@
+import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
@@ -129,27 +130,6 @@ function normalizeSecretPatch(value: string | null | undefined): string | null |
   if (value === null) return null;
   const text = trim(value);
   return text ? text : undefined;
-}
-
-function providerWebSearchLabel(
-  provider: FlowerProviderDraft,
-  snapshot: FlowerSettingsSnapshot | null,
-  copy: FlowerSettingsCopy,
-): Readonly<{ supported: boolean; enabled: boolean; label: string }> {
-  const type = provider.type;
-  const builtIn = copy.builtInWebSearch[type] ?? '';
-  if (builtIn) return { supported: true, enabled: true, label: builtIn };
-  if (!flowerProviderNeedsWebSearchConfig(provider.type)) return { supported: false, enabled: false, label: copy.webSearchNotSupported };
-  switch (provider.web_search?.mode ?? 'disabled') {
-    case 'openai_builtin':
-      return { supported: true, enabled: true, label: copy.openAIBuiltIn };
-    case 'brave':
-      return providerWebSearchSecretConfigured(snapshot, provider.id) || Boolean(trim(provider.web_search_api_key))
-        ? { supported: true, enabled: true, label: copy.braveSearch }
-        : { supported: true, enabled: false, label: copy.needsBraveKey };
-    default:
-      return { supported: true, enabled: false, label: copy.webSearchDisabled };
-  }
 }
 
 function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProviderDraft {
@@ -665,7 +645,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                     const modelNames = () => provider.models.map((model) => trim(model.model_name)).filter(Boolean);
                     const hasImageInput = () => provider.models.some((model) => flowerModelSupportsImage(model.input_modalities));
                     const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
-                    const webSearch = () => providerWebSearchLabel(provider, props.snapshot, copy());
+                    const webSearch = () => flowerProviderSearchSummary(provider.models, copy().dialog.catalog);
                     return (
                       <div
                         class={cn('flower-settings-provider-card', isDefault() && 'flower-settings-provider-card-active')}
@@ -705,12 +685,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                                 <Show when={modelNames().length > 3}><span class="text-[11px] text-muted-foreground">+{modelNames().length - 3}</span></Show>
                               </div>
                             </div>
-                            <Show when={webSearch().supported}>
-                              <div class="flex items-center gap-2 text-xs">
-                                <span class="w-16 flex-shrink-0 text-muted-foreground">{copy().web}</span>
-                                <span class={cn('flower-settings-dot-pill', webSearch().enabled && 'flower-settings-dot-pill-active')}>{webSearch().label}</span>
-                              </div>
-                            </Show>
+                            <div class="flex items-center gap-2 text-xs">
+                              <span class="w-16 flex-shrink-0 text-muted-foreground">{copy().web}</span>
+                              <span class={cn('flower-settings-dot-pill', webSearch().enabled && 'flower-settings-dot-pill-active')}>{webSearch().label}</span>
+                            </div>
                             <Show when={hasImageInput()}>
                               <div class="flex items-center gap-2 text-xs">
                                 <span class="w-16 flex-shrink-0 text-muted-foreground">{copy().vision}</span>

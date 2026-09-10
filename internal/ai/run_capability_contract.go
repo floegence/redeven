@@ -1,6 +1,10 @@
 package ai
 
-import "strings"
+import (
+	"strings"
+
+	flprovider "github.com/floegence/floret/v7/provider"
+)
 
 type runCapabilityContract struct {
 	AllowUserInteraction           bool     `json:"allow_user_interaction"`
@@ -13,7 +17,7 @@ type runCapabilityContract struct {
 	allowedSignalSet map[string]struct{}
 }
 
-func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, supportsAskUserQuestionBatches bool) runCapabilityContract {
+func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, supportsAskUserQuestionBatches bool, hosted ...flprovider.HostedToolDefinition) runCapabilityContract {
 	allowUserInteraction := r == nil || !r.noUserInteraction
 	allowedTools := make([]string, 0, len(tools))
 	seenTools := make(map[string]struct{}, len(tools))
@@ -27,6 +31,12 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 		}
 		seenTools[name] = struct{}{}
 		allowedTools = append(allowedTools, name)
+	}
+	for _, def := range hosted {
+		if _, exists := seenTools[def.Name]; !exists {
+			allowedTools = append(allowedTools, def.Name)
+			seenTools[def.Name] = struct{}{}
+		}
 	}
 	allowedSignals := make([]string, 0, 2)
 	seenSignals := make(map[string]struct{}, len(signals))

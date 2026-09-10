@@ -1,3 +1,4 @@
+import { WebSearchCapabilityBadge } from './WebSearchCapabilityBadge';
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
 import { retainEqualValue, retainKeyedItems } from './presentationIdentity';
@@ -2564,6 +2565,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     disabled?: boolean;
     providerType?: FlowerProviderType;
     supportsImageInput: boolean;
+    webSearch?: import('./contracts/flowerSurfaceContracts').FlowerWebSearchAvailability;
     contextWindow?: number;
     maxOutputTokens?: number;
     reasoningCapability?: FlowerReasoningCapability;
@@ -2583,6 +2585,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           source: 'model_profile',
           providerType: provider.type,
           supportsImageInput: flowerModelSupportsImage(model.input_modalities),
+webSearch: model.web_search,
           ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
           ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
           ...(model.reasoning_capability ? { reasoningCapability: model.reasoning_capability } : {}),
@@ -2599,6 +2602,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       label: trimString(model.label) || trimString(model.id),
       source: 'desktop_model_source' as const,
       supportsImageInput: flowerModelSupportsImage(model.input_modalities),
+webSearch: model.web_search,
       ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
       ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
       ...(model.reasoning_capability ? { reasoningCapability: model.reasoning_capability } : {}),
@@ -2720,7 +2724,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const provider = snapshot()?.model_profile?.providers.find((item) => trimString(item.id) === providerID);
     const secrets = snapshot()?.provider_secrets.find((secret) => secret.provider_id === providerID);
     if (!provider || !secrets?.provider_api_key_configured) return false;
-    return provider.web_search?.mode !== 'brave' || Boolean(secrets.web_search_api_key_configured);
+    return true;
   };
   const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
   const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));
@@ -10016,6 +10020,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <span> · Image</span>
             </Show>
           </span>
+          <WebSearchCapabilityBadge availability={option.webSearch} copy={copy().settings.dialog.catalog} />
           <Show when={attachmentSupport()} keyed>
             {(state) => (
               <span

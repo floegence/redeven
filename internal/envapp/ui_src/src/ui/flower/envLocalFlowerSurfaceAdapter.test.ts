@@ -862,6 +862,7 @@ describe('Env local Flower surface adapter', () => {
             },
           });
         }
+        if (url === '/_redeven_proxy/api/ai/models') return jsonResponse({ models: [{ id: 'remote/gpt-5.4', web_search: { status: 'available', reason: 'catalog_supported' } }] });
         throw new Error(`unexpected fetch: ${url}`);
       });
       const adapter = createEnvLocalFlowerSurfaceAdapter({
@@ -875,7 +876,8 @@ describe('Env local Flower surface adapter', () => {
 
       expect(snapshot.model_profile?.current_model_id).toBe('remote/gpt-5.4');
       expect(snapshot.model_source).toBeUndefined();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(snapshot.model_profile?.providers[0].models[0].web_search?.status).toBe('available');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     },
   );
 

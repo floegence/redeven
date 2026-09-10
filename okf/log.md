@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-09-10 — Unified Flower web search
+
+- Make reviewed catalog declarations and one pure resolver own search availability, with explicit integration and credential reasons.
+- Align model APIs, both settings entrances, shared badges, prompts, native/local tool surfaces, and transport routing. Include DeepSeek Vision and strict full-Turn qualification. See [model directory](ai/model-directory-and-selection.md) and [DeepSeek Responses](ai/deepseek-responses.md).
+
 ## 2026-09-10: Consistent Flower Stop
 
 - Consume released Floret v7.10.1 graceful Stop and canonical cancellation facts.

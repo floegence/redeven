@@ -2,8 +2,8 @@ import type { FlowerProvider, FlowerProviderDraft, FlowerProviderModel, FlowerPr
 import { recommendedModelsForFlowerProviderType } from './providerCatalog';
 
 export function cloneFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
-  const { model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection } = model;
-  return JSON.parse(JSON.stringify({ model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection }));
+  const { web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection } = model;
+  return JSON.parse(JSON.stringify({ web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection }));
 }
 
 export function flowerProviderUsesCatalog(type: FlowerProviderType): boolean {
@@ -20,7 +20,7 @@ export function flowerProviderModelChoices(provider: FlowerProviderDraft): Flowe
   for (const model of provider.models) {
     if (!choices.has(model.model_name)) choices.set(model.model_name, model);
   }
-  return [...choices.values()];
+  return [...choices.values()].map((model) => ({ ...model, web_search: provider.models.find((selected) => selected.model_name === model.model_name)?.web_search ?? model.web_search }));
 }
 
 function applyModelOverride(model: FlowerProviderModel, override?: FlowerProviderModel): FlowerProviderModel {
@@ -49,11 +49,16 @@ function equalValue(a: unknown, b: unknown): boolean {
 
 const overrideKeys = ['wire_model_name', 'context_window', 'max_output_tokens', 'effective_context_window_percent', 'input_modalities', 'reasoning_capability', 'default_reasoning_selection'] as const;
 
+function serializeFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
+  const { web_search: _search, ...intent } = cloneFlowerModel(model);
+  return intent;
+}
+
 // Serialize only intent. Filtering and collapsing the UI never enter this path.
 export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerProvider {
   const out: FlowerProvider = {
     id: provider.id, name: provider.name, type: provider.type, base_url: provider.base_url,
-    web_search: provider.web_search, models: provider.models.map(cloneFlowerModel),
+    web_search: provider.web_search, models: provider.models.map(serializeFlowerModel),
   };
   if (!flowerProviderUsesCatalog(provider.type) && provider.type !== 'ollama') return out;
   const catalog = provider.type === 'ollama' ? (provider.catalog_models ?? []) : recommendedModelsForFlowerProviderType(provider.type);
@@ -62,12 +67,12 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
   const disabled = new Set((provider.model_selection?.disabled_models ?? []).filter((name) => !catalogByName.has(name)));
   for (const name of selected) disabled.delete(name);
   for (const model of catalog) if (!selected.has(model.model_name)) disabled.add(model.model_name);
-  const customModels = (provider.model_selection?.custom_models ?? []).filter((model) => disabled.has(model.model_name) && !selected.has(model.model_name)).map(cloneFlowerModel);
+  const customModels = (provider.model_selection?.custom_models ?? []).filter((model) => disabled.has(model.model_name) && !selected.has(model.model_name)).map(serializeFlowerModel);
   const overrides = new Map((provider.model_selection?.model_overrides ?? []).filter((model) => !selected.has(model.model_name)).map((model) => [model.model_name, model]));
   for (const model of provider.models) {
     const preset = catalogByName.get(model.model_name);
     if (!preset) {
-      if (provider.type !== 'ollama') customModels.push(cloneFlowerModel(model));
+      if (provider.type !== 'ollama') customModels.push(serializeFlowerModel(model));
       continue;
     }
     const changes = Object.fromEntries(overrideKeys.flatMap((key) => {
@@ -80,7 +85,7 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
   }
   return {
     ...out, models: [], model_selection: {
-      disabled_models: [...disabled].sort(), custom_models: customModels, model_overrides: [...overrides.values()],
+      disabled_models: [...disabled].sort(), custom_models: customModels, model_overrides: [...overrides.values()].map(serializeFlowerModel),
     },
   };
 }
@@ -109,7 +114,7 @@ export function filterFlowerModels<T extends FlowerProviderModel>(models: readon
 }
 
 export function applyFlowerModelDiscovery(provider: FlowerProviderDraft, catalog: readonly FlowerProviderModel[]): FlowerProviderDraft {
-  if (provider.type !== 'ollama') return { ...provider, catalog_models: catalog };
+  if (provider.type !== 'ollama') return { ...provider, catalog_models: catalog, models: provider.models.map((model) => ({ ...model, web_search: catalog.find((item) => (item.wire_model_name ?? item.model_name) === (model.wire_model_name ?? model.model_name))?.web_search ?? model.web_search })) };
   const persisted = provider.catalog_models ? serializeFlowerProvider(provider) : { ...provider, model_selection: provider.model_selection ?? {} };
   return { ...provider, model_selection: persisted.model_selection, catalog_models: catalog, models: resolveFlowerProviderModels(persisted, catalog) };
 }

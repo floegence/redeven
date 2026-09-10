@@ -1,3 +1,4 @@
+import { withFlowerWebSearchAvailability } from '../../../../internal/flower_ui/src/webSearchCapability';
 import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../internal/flower_ui/src/settings/modelSelection';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import type {
@@ -105,6 +106,7 @@ type ModelsResponse = Readonly<{
     context_window?: number;
     max_output_tokens?: number;
     input_modalities?: readonly string[];
+    web_search?: FlowerProviderModel['web_search'];
     reasoning_capability?: FlowerProviderModel['reasoning_capability'];
   }>[];
 }>;
@@ -486,12 +488,12 @@ function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse
   return trim(models.current_model);
 }
 
-async function loadSettingsSnapshot(bridge: DesktopSettingsBridge): Promise<FlowerSettingsSnapshot> {
+async function loadSettingsSnapshot(bridge: DesktopSettingsBridge, models?: ModelsResponse): Promise<FlowerSettingsSnapshot> {
   const snapshot = mapRuntimeFlowerSettings(await runtimeJSON<AgentSettingsResponse>(bridge, 'GET', '/_redeven_proxy/api/settings'));
   if (!snapshot.model_profile) return snapshot;
   const providers = await Promise.all(snapshot.model_profile.providers.map((provider) => provider.type === 'ollama'
     ? hydrateFlowerProviderCatalog(provider, (input) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/model_catalog', input)) : provider));
-  return { ...snapshot, model_profile: { ...snapshot.model_profile, providers } };
+  return withFlowerWebSearchAvailability({ ...snapshot, model_profile: { ...snapshot.model_profile, providers } }, (models ?? await loadModels(bridge)).models ?? []);
 }
 
 async function loadModels(bridge: DesktopSettingsBridge): Promise<ModelsResponse> {
@@ -668,8 +670,8 @@ export async function launchLocalEnvironmentFlowerTurn(
   const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
   if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error('Enter a message or add an attachment before sending.');
   const existingThreadID = trim(input.thread_id);
-  const snapshot = existingThreadID ? null : await loadSettingsSnapshot(bridge);
   const models = existingThreadID ? null : await loadModels(bridge);
+  const snapshot = existingThreadID ? null : await loadSettingsSnapshot(bridge, models ?? undefined);
   const modelID = trim(input.model_id) || (snapshot && models ? currentModelID(snapshot, models) : '');
   if (!existingThreadID && !modelID) throw new Error('Select a Flower model before starting a chat.');
   const permissionType = trim(input.permission_type)
@@ -821,8 +823,8 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
-      await runtimeJSON<ModelsResponse>(bridge, 'PUT', '/_redeven_proxy/api/ai/current_model', { model_id: mid });
-      const snapshot = await loadSettingsSnapshot(bridge);
+      const models = await runtimeJSON<ModelsResponse>(bridge, 'PUT', '/_redeven_proxy/api/ai/current_model', { model_id: mid });
+      const snapshot = await loadSettingsSnapshot(bridge, models);
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },

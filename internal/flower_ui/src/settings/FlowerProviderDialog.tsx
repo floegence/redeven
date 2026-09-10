@@ -1,10 +1,12 @@
+import { WebSearchCapabilityBadge } from '../WebSearchCapabilityBadge';
+import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { ModelCatalogControls } from './ModelCatalogControls';
 import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, flowerProviderModelChoices, setFlowerModelsEnabled } from './modelSelection';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
-import { For, Show, createEffect, createSignal } from 'solid-js';
-import { createStore, produce, reconcile } from 'solid-js/store';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
 import { ChevronDown, Pencil } from '@floegence/floe-webapp-core/icons';
 import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
@@ -61,17 +63,20 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [discoveryError, setDiscoveryError] = createSignal('');
   const catalog = () => store.draft ? flowerProviderModelChoices(store.draft) : [];
   const visibleModels = () => filterFlowerModels(catalog(), query());
+  const discoveryIdentity = (draft: FlowerProviderDraft) => JSON.stringify([draft.id, draft.type, draft.base_url, draft.provider_api_key, draft.web_search, draft.web_search_api_key, props.webSearchKeyConfigured]);
+  let discoverySequence = 0;
   const discover = async () => {
     const draft = store.draft;
-    if (!draft || !props.onDiscoverModels || loading()) return;
-    const identity = [draft.id, draft.type, draft.base_url, draft.provider_api_key].join('|');
+    if (!draft || !props.onDiscoverModels) return;
+    const sequence = ++discoverySequence;
+    const identity = discoveryIdentity(draft);
     setLoading(true); setDiscoveryError('');
     try {
       const result = await props.onDiscoverModels({ provider_id: draft.id, type: draft.type, base_url: draft.base_url, api_key: draft.provider_api_key ?? undefined });
       const current = store.draft;
-      if (props.open && current && identity === [current.id, current.type, current.base_url, current.provider_api_key].join('|')) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models)));
-    } catch (error) { setDiscoveryError(error instanceof Error ? error.message : String(error)); }
-    finally { setLoading(false); }
+      if (sequence === discoverySequence && props.open && current && identity === discoveryIdentity(current)) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models)));
+    } catch (error) { if (sequence === discoverySequence) setDiscoveryError(error instanceof Error ? error.message : String(error)); }
+    finally { if (sequence === discoverySequence) setLoading(false); }
   };
   const [customModelName, setCustomModelName] = createSignal('');
   const [editingModelName, setEditingModelName] = createSignal('');
@@ -89,8 +94,28 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     }
   });
 
+  const automaticDiscoveryIdentity = createMemo(() => {
+    if (!props.open || !store.draft || !props.onDiscoverModels) return '';
+    const draft = store.draft;
+    if (draft.type === 'openrouter' || draft.type === 'ollama' || draft.type === 'openai_compatible') return '';
+    return discoveryIdentity(draft);
+  });
+  createEffect(() => {
+    if (!automaticDiscoveryIdentity()) return;
+    const timer = setTimeout(() => { void untrack(discover); }, 200);
+    onCleanup(() => clearTimeout(timer));
+  });
+
   const updateProvider = (patch: Partial<FlowerProviderDraft>) => {
-    setStore('draft', produce((d) => { if (d) Object.assign(d, patch); }));
+    setStore('draft', (draft) => {
+      if (!draft) return draft;
+      const next = { ...draft, ...patch };
+      if ('base_url' in patch || 'web_search' in patch || 'web_search_api_key' in patch) {
+        next.models = next.models.map((model) => ({ ...model, web_search: undefined }));
+        next.catalog_models = undefined;
+      }
+      return next;
+    });
   };
 
   const changeProviderType = (type: FlowerProviderType) => {
@@ -186,7 +211,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                   const expanded = () => editMode || expandedProviderType() === item.value;
                   const panelID = `flower-provider-type-${item.value}`;
                   const providerID = () => String(store.draft!.id ?? '').trim();
-                  const builtInSearch = () => copy().builtInWebSearch[store.draft!.type] ?? '';
+                  const searchSummary = () => flowerProviderSearchSummary(store.draft!.models, copy().catalog);
                   return (
                     <div class={cn('rounded-lg border bg-background transition', expanded() ? 'border-primary/50 ring-1 ring-primary/15' : 'border-border')}>
                       <button
@@ -308,9 +333,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     {props.webSearchKeyConfigured || String(store.draft!.web_search_api_key ?? '').trim() ? copy().braveKeyReady : copy().needsBraveKey}
                                   </FlowerSettingsPill>
                                 </Show>
-                                <Show when={builtInSearch()}>
-                                  {(label) => <FlowerSettingsPill tone="success">{label()}</FlowerSettingsPill>}
-                                </Show>
+                                <FlowerSettingsPill tone={searchSummary().enabled ? 'success' : 'default'}>{searchSummary().label}</FlowerSettingsPill>
                               </div>
                             </section>
 
@@ -319,7 +342,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 title={copy().recommendedModelsTitle}
                                 description={copy().recommendedModelsDescription}
                               />
-                              <ModelCatalogControls copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={(store.draft!.type === 'openrouter' || store.draft!.type === 'ollama') && props.onDiscoverModels ? discover : undefined} />
+                              <ModelCatalogControls copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels && store.draft?.type !== 'openai_compatible' ? discover : undefined} />
                               <Show
                                 when={visibleModels().length > 0}
                                 fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().catalog.empty}</div>}
@@ -345,6 +368,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                             <div class="min-w-0 flex-1">
                                               <div class="flex items-center gap-2">
                                                 <span class={cn('font-mono text-sm font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset.display_name || modelName()}</span>
+                                                <WebSearchCapabilityBadge availability={model().web_search} copy={copy().catalog} />
                                                 <Show when={preset.status}><FlowerSettingsPill>{preset.status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
                                                 <Show when={preset.wire_model_name}>
                                                   <span class="font-mono text-[11px] text-muted-foreground">{preset.wire_model_name!}</span>

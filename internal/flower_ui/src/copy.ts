@@ -133,7 +133,6 @@ export type FlowerSettingsCopy = Readonly<{
   braveSearch: string;
   needsBraveKey: string;
   providerTypeLabels: FlowerProviderTypeLabels;
-  builtInWebSearch: Readonly<Partial<Record<FlowerProviderType, string>>>;
   autoSave: FlowerAutoSaveCopy;
   validation: Readonly<{
     providerIDRequired: string;
@@ -188,7 +187,6 @@ export type FlowerProviderDialogCopy = Readonly<{
   needsKey: string;
   braveKeyReady: string;
   needsBraveKey: string;
-  builtInWebSearch: Readonly<Partial<Record<FlowerProviderType, string>>>;
   recommendedModelsTitle: string;
   recommendedModelsDescription: string;
   modelNote: (noteKey: FlowerProviderModelNoteKey | undefined) => string;
@@ -1113,13 +1111,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     braveSearch: 'Brave Search',
     needsBraveKey: 'Needs Brave key',
     providerTypeLabels: localizedFlowerProviderTypeLabels('en-US'),
-    builtInWebSearch: {
-      openai: 'OpenAI built-in web search',
-      moonshot: 'Kimi built-in web search',
-      chatglm: 'GLM built-in web search',
-      deepseek: 'DeepSeek built-in web search',
-      qwen: 'Qwen built-in web search',
-    },
+
     autoSave: {
       saving: 'Saving',
       saveFailed: 'Save failed',
@@ -1190,13 +1182,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       needsKey: 'Needs key',
       braveKeyReady: 'Brave key ready',
       needsBraveKey: 'Needs Brave key',
-      builtInWebSearch: {
-        openai: 'OpenAI built-in web search',
-        moonshot: 'Kimi built-in web search',
-        chatglm: 'GLM built-in web search',
-        deepseek: 'DeepSeek built-in web search',
-        qwen: 'Qwen built-in web search',
-      },
+
       recommendedModelsTitle: "Models",
       recommendedModelsDescription: "Choose the models available in Flower. Search and collapse keep your selection.",
       modelNote: (noteKey) => localizedFlowerProviderModelNote('en-US', noteKey),

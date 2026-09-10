@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Generate the offline Flower catalog. Network access requires --update."""
 import argparse
+import datetime
+import urllib.parse
 import hashlib
 import json
 import pathlib
@@ -70,8 +72,39 @@ def reasoning(pid, model, rules):
     return cap
 
 
+SEARCH_MODES = {
+    'openai': 'openai_responses_builtin', 'deepseek': 'deepseek_native',
+    'moonshot': 'kimi_builtin', 'chatglm': 'glm_web_search_tool',
+    'qwen': 'qwen_responses_web_search',
+}
+
+
+def search_declarations(rules):
+    declarations = {}
+    for group in rules.get('web_search', []):
+        pid = group['provider']
+        status = group['status']
+        mode = group.get('mode', '')
+        if pid not in SOURCES or status not in ['supported', 'unsupported', 'not_integrated']:
+            raise ValueError(f'{pid}: invalid web search declaration')
+        if (status == 'supported' and (not mode or mode != SEARCH_MODES.get(pid))) or (status != 'supported' and mode):
+            raise ValueError(f'{pid}: web search mode does not match the adapter')
+        sources = group.get('source_urls', [])
+        if not sources or any(urllib.parse.urlparse(url).scheme != 'https' or not urllib.parse.urlparse(url).netloc for url in sources):
+            raise ValueError(f'{pid}: web search requires source URLs')
+        datetime.date.fromisoformat(group['source_checked_at'])
+        if not group['models']:
+            raise ValueError(f'{pid}: empty web search review')
+        for mid in group['models']:
+            key = pid + '/' + mid
+            if not mid or key in declarations:
+                raise ValueError(f'{key}: duplicate or empty web search model')
+            declarations[key] = {key: value for key, value in group.items() if key not in ['provider', 'models']}
+    return declarations
+
+
 def generate(data, rules):
-    result = {'source': data['source'], 'sha256': data['sha256'], 'checked_at': rules['checked_at'], 'providers': {}}
+    result = {'source': data['source'], 'sha256': data['sha256'], 'checked_at': rules['checked_at'], 'providers': {}, 'web_search': search_declarations(rules)}
     for pid, models in data['providers'].items():
         output = []
         for mid, original in models.items():
@@ -87,6 +120,8 @@ def generate(data, rules):
                 continue
             if pid == 'google' and not mid.startswith('gemini-'):
                 continue
+            if pid + '/' + mid not in result['web_search']:
+                raise ValueError(f'{pid}/{mid}: missing reviewed web search declaration')
             limits = model['limit']
             if limits.get('context', 0) <= 0 or limits.get('output', 0) <= 0:
                 raise ValueError(f'{pid}/{mid}: missing token limits')

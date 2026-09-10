@@ -370,9 +370,10 @@ describe('Local Environment Flower surface adapter', () => {
     });
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'GET /_redeven_proxy/api/settings',
-      'GET /_redeven_proxy/api/ai/threads?limit=200',
-      'GET /_redeven_proxy/api/settings',
       'GET /_redeven_proxy/api/ai/models',
+      'GET /_redeven_proxy/api/ai/threads?limit=200',
+      'GET /_redeven_proxy/api/ai/models',
+      'GET /_redeven_proxy/api/settings',
       'POST /_redeven_proxy/api/ai/turns',
     ]);
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/turns')?.body).toMatchObject({

@@ -249,6 +249,15 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventSources, Sources: flowerSourcesToFloret(result.Sources)})
 		}
 		if len(result.ToolCalls) > 0 {
+			for _, call := range result.ToolCalls {
+				for _, hosted := range providerReq.HostedTools {
+					if call.Name == hosted.Name {
+						err := fmt.Errorf("provider returned a local function call for hosted tool %q", hosted.Name)
+						sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
+						return
+					}
+				}
+			}
 			toolCalls, err := floretToolCallsFromFlower(result.ToolCalls)
 			if err != nil {
 				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
@@ -395,19 +404,18 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	if req.MaxOutputTokens > 0 {
 		budgets.MaxOutputToken = int(req.MaxOutputTokens)
 	}
-	webSearch := p.webSearch
-	if p.providerType == "deepseek" {
-		webSearch = providerWebSearchModeDisabled
-		for _, hosted := range req.HostedTools {
-			if hosted.Name != "web_search" || hosted.Type != "web_search" || p.webSearch != providerWebSearchModeDeepSeekNative {
-				return ModelGatewayRequest{}, fmt.Errorf("unsupported DeepSeek hosted tool %q", hosted.Name)
-			}
-			webSearch = providerWebSearchModeDeepSeekNative
-		}
+	webSearch, err := p.requestWebSearchMode(req.HostedTools)
+	if err != nil {
+		return ModelGatewayRequest{}, err
 	}
 	var previousState *ModelGatewayState
 	if (p.providerType == "deepseek" || p.providerType == "google") && previous != nil {
 		previousState = &ModelGatewayState{Kind: previous.Kind, ID: previous.ID, Attributes: cloneStringMap(previous.Attributes)}
+	}
+	protocol := p.stateCompatibilityRoute()
+	if p.providerType == DesktopModelSourceProviderType {
+		// The Desktop executor owns the actual provider and its transport.
+		protocol = ""
 	}
 	return ModelGatewayRequest{
 		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState,
@@ -417,6 +425,7 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		Budgets:          budgets,
 		ProviderControls: controls,
 		WebSearchMode:    webSearch,
+		Protocol:         protocol,
 	}, nil
 }
 
@@ -437,26 +446,31 @@ func (p *floretProviderAdapter) stateCompatibilityRoute() string {
 	if p == nil {
 		return ""
 	}
-	if p.providerType == "openai" {
-		return "openai-responses"
+	return config.AIProviderProtocol(p.providerType, p.webSearch)
+}
+
+func (p *floretProviderAdapter) requestWebSearchMode(hosted []flprovider.HostedToolDefinition) (string, error) {
+	if len(hosted) == 0 {
+		return providerWebSearchModeDisabled, nil
 	}
-	switch p.providerType {
-	case "deepseek":
-		return "deepseek-responses-v1"
-	case "anthropic":
-		return "anthropic-messages"
-	case DesktopModelSourceProviderType:
-		return "desktop-model-source"
-	case "google", "openai_compatible", "openrouter", "xai", "groq", "ollama", "chatglm", "qwen":
-		if p.webSearch == providerWebSearchModeOpenAIResponsesBuiltin ||
-			p.webSearch == providerWebSearchModeQwenResponsesWebSearch ||
-			(p.providerType == "openai_compatible" && p.webSearch == providerWebSearchModeExternalBrave) {
-			return "openai-responses"
+	if len(hosted) != 1 || hosted[0].Name != "web_search" || hosted[0].Type != "web_search" || len(hosted[0].Parameters) != 0 {
+		return "", errors.New("invalid provider web search tool surface")
+	}
+	mode := p.webSearch
+	if len(hosted[0].Options) > 0 {
+		var ok bool
+		mode, ok = hosted[0].Options["wire_shape"].(string)
+		if !ok || len(hosted[0].Options) != 1 {
+			return "", errors.New("invalid web search wire shape")
 		}
-		return "openai-chat-completions"
-	default:
-		return "openai-chat-completions"
 	}
+	supported := map[string]string{"openai": config.AIWebSearchOpenAI, "openai_compatible": config.AIWebSearchOpenAI,
+		"deepseek": config.AIWebSearchDeepSeek, "moonshot": config.AIWebSearchKimi,
+		"chatglm": config.AIWebSearchGLM, "qwen": config.AIWebSearchQwen}
+	if mode == "" || supported[p.providerType] != mode {
+		return "", fmt.Errorf("unsupported %s hosted search mode %q", p.providerType, mode)
+	}
+	return mode, nil
 }
 
 func sendFloretProviderEvent(ctx context.Context, out chan<- flprovider.Event, ev flprovider.Event) {

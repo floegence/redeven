@@ -86,6 +86,7 @@ type ModeFlags struct {
 }
 
 type ModelGatewayRequest struct {
+	Protocol         string                   `json:"protocol,omitempty"`
 	RunID            flidentity.RunID         `json:"run_id,omitempty"`
 	PromptScopeID    flidentity.PromptScopeID `json:"prompt_scope_id,omitempty"`
 	PreviousState    *ModelGatewayState       `json:"previous_state,omitempty"`

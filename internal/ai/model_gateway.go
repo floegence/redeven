@@ -29,13 +29,13 @@ const (
 )
 
 const (
-	providerWebSearchModeDisabled               = "disabled"
-	providerWebSearchModeOpenAIResponsesBuiltin = "openai_responses_builtin"
-	providerWebSearchModeKimiBuiltin            = "kimi_builtin"
-	providerWebSearchModeGLMWebSearchTool       = "glm_web_search_tool"
-	providerWebSearchModeDeepSeekNative         = "deepseek_native"
-	providerWebSearchModeQwenResponsesWebSearch = "qwen_responses_web_search"
-	providerWebSearchModeExternalBrave          = "external_brave"
+	providerWebSearchModeDisabled               = config.AIWebSearchDisabled
+	providerWebSearchModeOpenAIResponsesBuiltin = config.AIWebSearchOpenAI
+	providerWebSearchModeKimiBuiltin            = config.AIWebSearchKimi
+	providerWebSearchModeGLMWebSearchTool       = config.AIWebSearchGLM
+	providerWebSearchModeDeepSeekNative         = config.AIWebSearchDeepSeek
+	providerWebSearchModeQwenResponsesWebSearch = config.AIWebSearchQwen
+	providerWebSearchModeExternalBrave          = config.AIWebSearchBrave
 )
 
 func mergeAnyFields(base map[string]any, next map[string]any) map[string]any {
@@ -72,86 +72,15 @@ func providerReasoningSelection(controls ProviderControls) (config.AIReasoningSe
 	return selection, capability, nil
 }
 
-type providerWebSearchCapability struct {
-	Mode         string
-	Reason       string
-	RegisterTool bool
-}
-
-func resolveProviderWebSearchCapability(provider config.AIProvider, modelName string) providerWebSearchCapability {
-	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
-	modelName = strings.TrimSpace(modelName)
-	capability := providerWebSearchCapability{
-		Mode:   providerWebSearchModeDisabled,
-		Reason: "unsupported_provider",
+func resolveProviderWebSearchCapability(provider config.AIProvider, modelName string) config.AIWebSearchResolution {
+	wire := strings.TrimSpace(modelName)
+	for _, model := range provider.EffectiveModels() {
+		if model.ModelName == wire {
+			wire = model.EffectiveWireModelName()
+			break
+		}
 	}
-	switch providerType {
-	case "openai":
-		if shouldUseStrictOpenAIToolSchema(providerType, provider.BaseURL) {
-			capability.Mode = providerWebSearchModeOpenAIResponsesBuiltin
-			capability.Reason = "official_openai"
-			return capability
-		}
-		capability.Reason = "openai_not_official_endpoint"
-		return capability
-	case "moonshot":
-		if modelName == "kimi-k2.6" {
-			capability.Mode = providerWebSearchModeKimiBuiltin
-			capability.Reason = "curated_moonshot_model"
-			return capability
-		}
-		capability.Reason = "unsupported_moonshot_model"
-		return capability
-	case "chatglm":
-		if modelName == "glm-5.1" {
-			capability.Mode = providerWebSearchModeGLMWebSearchTool
-			capability.Reason = "curated_glm_model"
-			return capability
-		}
-		capability.Reason = "unsupported_glm_model"
-		return capability
-	case "deepseek":
-		switch modelName {
-		case "deepseek-v4-pro", "deepseek-v4-flash":
-			capability.Mode = providerWebSearchModeDeepSeekNative
-			capability.Reason = "curated_deepseek_model"
-			return capability
-		default:
-			capability.Reason = "unsupported_deepseek_model"
-			return capability
-		}
-	case "qwen":
-		switch modelName {
-		case "qwen3.6-plus", "qwen3.6-plus-2026-04-02", "qwen3.6-flash", "qwen3.6-flash-2026-04-16":
-			capability.Mode = providerWebSearchModeQwenResponsesWebSearch
-			capability.Reason = "curated_qwen_model"
-			return capability
-		default:
-			capability.Reason = "unsupported_qwen_model"
-			return capability
-		}
-	case "openai_compatible":
-		mode := ""
-		if provider.WebSearch != nil {
-			mode = strings.ToLower(strings.TrimSpace(provider.WebSearch.Mode))
-		}
-		switch mode {
-		case config.AIProviderWebSearchModeOpenAIBuiltin:
-			capability.Mode = providerWebSearchModeOpenAIResponsesBuiltin
-			capability.Reason = "openai_compatible_configured_builtin"
-			return capability
-		case config.AIProviderWebSearchModeBrave:
-			capability.Mode = providerWebSearchModeExternalBrave
-			capability.Reason = "openai_compatible_configured_brave"
-			capability.RegisterTool = true
-			return capability
-		default:
-			capability.Reason = "openai_compatible_disabled"
-			return capability
-		}
-	default:
-		return capability
-	}
+	return config.ResolveAIWebSearch(provider, wire, true)
 }
 
 type openAIProvider struct {
@@ -188,7 +117,16 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	if strings.TrimSpace(req.Model) == "" {
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
-	useChat := p.forceChat && !requiresOpenAIResponsesRoute(req)
+	useChat := p.forceChat
+	switch req.Protocol {
+	case "":
+	case "openai-chat-completions":
+		useChat = true
+	case "openai-responses":
+		useChat = false
+	default:
+		return ModelGatewayResult{}, fmt.Errorf("unsupported OpenAI-compatible protocol %q", req.Protocol)
+	}
 	route := "openai-responses"
 	if useChat {
 		route = "openai-chat"
@@ -550,19 +488,6 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
 	return result, nil
-}
-
-func requiresOpenAIResponsesRoute(req ModelGatewayRequest) bool {
-	switch strings.TrimSpace(req.WebSearchMode) {
-	case providerWebSearchModeOpenAIResponsesBuiltin, providerWebSearchModeQwenResponsesWebSearch:
-		return true
-	}
-	for _, tool := range req.Tools {
-		if strings.TrimSpace(tool.Name) == "web.search" {
-			return true
-		}
-	}
-	return false
 }
 
 func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {

@@ -803,7 +803,7 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		if def.Name == "attachment.read" && (r == nil || r.host.openLiveAttachment == nil || !r.attachmentToolReadEnabled) {
 			continue
 		}
-		if def.Name == "web.search" && (r == nil || !r.webSearchToolEnabled) {
+		if def.Name == "web.search" && (r == nil || !r.webSearch.LocalTool()) {
 			continue
 		}
 		if !r.allowSubagentDelegate {

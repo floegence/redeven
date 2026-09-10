@@ -76,23 +76,6 @@ export function flowerProviderNeedsWebSearchConfig(type: FlowerProviderType): bo
   return type === 'openai_compatible';
 }
 
-export function flowerBuiltInWebSearchLabel(type: FlowerProviderType): string {
-  switch (type) {
-    case 'openai':
-      return 'OpenAI built-in web search';
-    case 'moonshot':
-      return 'Kimi built-in web search';
-    case 'chatglm':
-      return 'GLM built-in web search';
-    case 'deepseek':
-      return 'DeepSeek built-in web search';
-    case 'qwen':
-      return 'Qwen built-in web search';
-    default:
-      return '';
-  }
-}
-
 export function flowerProviderDisplayName(provider: Pick<FlowerProvider, 'id' | 'name' | 'type'>): string {
   const name = String(provider.name ?? '').trim();
   if (flowerProviderUsesCustomName(provider.type)) return name || provider.id || flowerProviderTypeLabel(provider.type);

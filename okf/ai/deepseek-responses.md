@@ -3,12 +3,12 @@ type: AI Provider Contract
 title: DeepSeek Responses
 description: Flower consumes Floret stateless Responses transport and native search.
 tags: [ai, provider, deepseek]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 ---
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.9.0 Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.10.1 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.
@@ -20,7 +20,8 @@ Each request sends full input history. The route never sends `messages`,
 to `reasoning.effort: none`; the selectable high and max levels keep their
 existing model-catalog contract.
 
-Native search is declared in the Agent tool surface and sent as `web_search`.
+The reviewed directory enables native search for Flash, Pro, and Vision using
+the actual wire model identity. Native search is declared in the Agent tool surface and sent as `web_search`.
 Hosted search events and citation sources flow through Floret observation;
 search is never dispatched as a local tool. The current conversation and
 history retain a typed hosted search item, including queries, safe sources, and
@@ -82,3 +83,10 @@ or repeat search when the public projection is corrected.
 Desktop and Env App share [the web operation presentation](../../internal/flower_ui/src/WebSearchActivity.tsx).
 The source list initially shows five entries, with keyboard-accessible expansion;
 source titles, domains, full URLs, and two-line snippets support inspection.
+
+The opt-in `TestE2E_FlowerDeepSeekV4NativeSearch` qualification starts from the
+production Service and normal Turn admission for Flash and Vision, including a
+staged Vision image, canonical hosted search sources, and a restart follow-up.
+It fails when no real hosted result or source is returned; an assistant's verbal
+claim is never sufficient. Run the existing DeepSeek qualification script with
+a configured official credential. Normal CI uses deterministic HTTP fixtures.

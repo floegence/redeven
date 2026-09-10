@@ -253,7 +253,11 @@ func buildPromptReportingSection(spec promptProfileSpec) promptSection {
 }
 
 func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) promptSection {
-	hasSearch := promptToolAvailable(snapshot.AvailableToolNames, "web.search")
+	searchName := "web.search"
+	if promptToolAvailable(snapshot.AvailableToolNames, "web_search") {
+		searchName = "web_search"
+	}
+	hasSearch := promptToolAvailable(snapshot.AvailableToolNames, searchName)
 	hasFetch := promptToolAvailable(snapshot.AvailableToolNames, "web_fetch")
 	hasTerminal := promptToolAvailable(snapshot.AvailableToolNames, "terminal.exec")
 	lines := []string{
@@ -290,6 +294,9 @@ func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) pro
 		lines = append(lines,
 			"- Use curl only when web_fetch cannot express required authentication, custom headers, a non-GET request, or a binary download. Never use curl for URL discovery or to bypass a target blocked by web_fetch.",
 		)
+	}
+	for i := range lines {
+		lines[i] = strings.ReplaceAll(lines[i], "web.search", searchName)
 	}
 	return newPromptSection("online_research_capability", lines...)
 }
