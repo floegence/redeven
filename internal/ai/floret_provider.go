@@ -413,6 +413,12 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 		previousState = &ModelGatewayState{Kind: previous.Kind, ID: previous.ID, Attributes: cloneStringMap(previous.Attributes)}
 	}
 	protocol := p.stateCompatibilityRoute()
+	if webSearch != providerWebSearchModeDisabled {
+		// Floret may restore a native tool from an earlier Turn configuration.
+		// Its frozen wire shape owns transport; tool-free titles use the
+		// adapter's resolved transport without enabling search.
+		protocol = config.AIProviderProtocol(p.providerType, webSearch)
+	}
 	if p.providerType == DesktopModelSourceProviderType {
 		// The Desktop executor owns the actual provider and its transport.
 		protocol = ""
