@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin package review
 description: Review official updates and external packages against exact Host-verified source and permission evidence.
 tags: [ui, plugins, review, lifecycle]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 ---
 # Summary
 
@@ -14,7 +14,15 @@ ReDevPlugin owns package inspection, validation, and atomic lifecycle mutation. 
 ## Update review and confirmation
 
 Plugin Center's Updates card and inspector expose one primary `Review update`
-action. Opening it creates an exact update intent, shows the loading review in
+action. Installed and Updates cards and the inspector give this action the same
+solid information-color treatment, distinct from ordinary primary actions. The
+fill and contrasting label derive from the active shell theme; the refresh icon
+inherits the label color. Enabled hover, keyboard focus, and disabled feedback
+remain visible, and normal and hovered labels retain at least 4.5:1 contrast in
+every shipped shell preset. The existing update badge and explicit action label
+keep the update discoverable without relying on color alone.
+
+Opening it creates an exact update intent, shows the loading review in
 the same interaction, and never submits a mutation, changes tabs, or replaces
 the current selection. For an official plugin, that loading state waits for the
 Shell's single market-then-inventory refresh, relocates the exact inventory key,
@@ -160,3 +168,4 @@ stale candidates, infer permission from source trust, or replay an uncertain upd
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Binds exact update target and candidate identity.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/externalPluginSecurityProjection.ts:1` - Projects permission and security evidence.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1` - Verifies responsive review and confirmation behavior.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterUpdateTheme.browser.test.tsx:1` - Verifies update action distinction, contrast, and interaction states across shell presets.

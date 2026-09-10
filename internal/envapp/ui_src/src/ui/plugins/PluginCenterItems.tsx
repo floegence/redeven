@@ -1,11 +1,11 @@
 import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { CheckCircle, Download, MoreHorizontal, Play, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { CheckCircle, Download, MoreHorizontal, Play, Refresh, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginInstallSummary } from './PluginInstallStatus';
@@ -158,7 +158,11 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             data-plugin-center-card-primary={primaryAction() === 'install' ? undefined : props.item.inventoryKey}
             data-plugin-center-install={primaryAction() === 'install' ? props.item.inventoryKey : undefined}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
-            class={cn('inline-flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50', PLUGIN_PRESS_MOTION_CLASS)}
+            class={cn(
+              'inline-flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+              PLUGIN_PRESS_MOTION_CLASS,
+              primaryAction() === 'review_update' ? PLUGIN_UPDATE_ACTION_CLASS : 'bg-primary text-primary-foreground hover:bg-primary/90',
+            )}
             aria-busy={commandPending()}
             disabled={commandPending() || ((primaryAction() === 'review_update' || primaryAction() === 'install') && (!props.canManage || props.managementDisabled))
               || (primaryAction() === 'open' && (!props.canOpenSurfaces || !props.item.defaultLaunchTarget))
@@ -166,10 +170,10 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             onClick={(event) => activatePrimary(event.currentTarget)}
           >
             {commandPending()
-              ? <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
+              ? <Refresh class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
               : primaryAction() === 'install' ? <Download class="h-4 w-4 shrink-0" />
               : primaryAction() === 'review_update'
-              ? <RefreshIcon class="h-4 w-4 shrink-0" />
+              ? <Refresh class="h-4 w-4 shrink-0" />
               : primaryAction() === 'open' ? <Play class="h-4 w-4 shrink-0" />
                 : primaryAction() === 'enable' ? <CheckCircle class="h-4 w-4 shrink-0" />
                   : <MoreHorizontal class="h-4 w-4 shrink-0" />}

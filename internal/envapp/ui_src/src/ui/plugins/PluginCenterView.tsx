@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
@@ -26,7 +26,7 @@ import type {
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, PLUGIN_UPDATE_ACTION_CLASS, pluginLifecycleLabel, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
@@ -2243,7 +2243,7 @@ function PluginActions(props: {
           data-plugin-action={primaryActionDataID(presentation().primaryAction)}
           variant="primary"
           size="sm"
-          class="min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8"
+          class={cn('min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
           loading={commandPending()}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}
@@ -2403,7 +2403,7 @@ function primaryActionIcon(action: PluginPrimaryAction) {
   switch (action) {
     case 'install': return Download;
     case 'open': return CheckCircle;
-    case 'review_update': return RefreshIcon;
+    case 'review_update': return Refresh;
     case 'enable': return Play;
     case 'view_policy':
     case 'view_trust': return Shield;
