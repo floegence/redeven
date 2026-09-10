@@ -300,7 +300,7 @@ export function GitTemplateImport(props: {
   });
   return (
     <Dialog
-      class="max-w-2xl rounded-xl"
+      class="h-[min(44rem,85dvh)] max-w-2xl rounded-xl [&>div]:[scrollbar-gutter:stable]"
       open={props.open}
       closeLabel={i18n.t('webServices.actions.cancel')}
       onOpenChange={(open) => {
