@@ -310,8 +310,10 @@ describe('Flower progress indicator', () => {
     expect(anchorRule).toContain('flex-direction: column');
     expect(menuRule).toContain('position: absolute');
     expect(menuRule).toContain('bottom: calc(100% + 0.625rem)');
-    expect(menuRule).toContain('backdrop-filter: blur(18px)');
-    expect(menuRule).toContain('box-shadow');
+    expect(menuRule).toContain('background: var(--card)');
+    expect(menuRule).not.toContain('backdrop-filter');
+    expect(menuRule).not.toContain('box-shadow');
+    expect(surfaceSource()).toMatch(/id=\{FLOWER_COMPOSER_COMMAND_MENU_ID\}\s+data-floe-surface="floating"/);
     expect(itemRule).toContain('grid-template-columns: auto minmax(0, 1fr)');
     expect(itemRule).toContain('grid-template-rows: auto auto');
     expect(css).toContain(".flower-composer-command-item[aria-selected='true'],");
