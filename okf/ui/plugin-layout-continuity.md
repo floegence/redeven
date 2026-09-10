@@ -26,14 +26,11 @@ retire the other. Repeated Open activates the existing target within that mode.
 Versions, permissions, enable state, and plugin business data still belong to the
 same platform instance. Retaining layout does not restore unsaved plugin memory.
 
-Plugin Center uses the current mode's management container. Workbench keeps a
-large retained dialog above its inert canvas, with the existing overlay, focus,
-and keyboard contracts. Canvas shortcuts are suspended while the management
-dialog covers it or its mode is inactive. Search, filters, scroll, and selection
-survive closing.
-Successful placement dismisses management and focuses the component; placement
-failure retains management and error feedback. Activity retains its management
-page. Neither path creates a plugin-center canvas widget.
+[Plugin Center interaction](plugin-center-interaction.md) owns the retained
+Workbench drawer, Activity page, and modal input/focus contract. Successful
+placement dismisses management and focuses the component after input isolation
+ends; placement failure retains management and error feedback. Neither path
+creates a plugin-center canvas widget.
 
 ## Placement and deletion
 

@@ -1358,10 +1358,9 @@ describe('plugin management browser geometry and interaction', () => {
     navigation.openDetails('instance:metrics');
     await settle();
     const reopenedDetails = navigation.host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
-    const reopenedBack = navigation.host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
     expect(getComputedStyle(master).display).toBe('none');
     expect(getComputedStyle(reopenedDetails).display).not.toBe('none');
-    expect(document.activeElement).toBe(reopenedBack);
+    expect(document.activeElement).toBe(reopenedDetails.querySelector('[data-plugin-center-detail-heading]'));
   });
 
   it('moves desktop keyboard focus into details for shell navigation requests', async () => {
@@ -1688,8 +1687,7 @@ describe('Workbench Plugin Center dialog continuity', () => {
           <WorkbenchSurface state={canvas} setState={setCanvas} widgetDefinitions={[definition]} launcherWidgetTypes={[]} enableKeyboard={!open()} />
         </div>
       </div>
-      <PluginCenterDrawer open={open()} onOpenChange={setOpen} title="Plugin Center"
-        class="w-[min(1280px,calc(100vw-48px))] max-w-none">
+      <PluginCenterDrawer open={open()} onOpenChange={setOpen} title="Plugin Center">
         <PluginCenterView showTitle={false} projection={projection} loading={false} canManagePlugins canOpenPluginSurfaces
           onRefresh={() => undefined} onCommand={() => undefined} />
       </PluginCenterDrawer>

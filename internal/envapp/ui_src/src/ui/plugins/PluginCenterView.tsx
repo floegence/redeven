@@ -75,6 +75,21 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
   const idPrefix = `plugin-center-${createUniqueId()}`;
   const [splitDetails, setSplitDetails] = createSignal(false);
+  let contentRoot: HTMLElement | undefined;
+  let scrollSnapshot: { element: HTMLElement; top: number; left: number }[] = [];
+  let restoreScrollPending = false;
+  let restoreScrollFrame: number | undefined;
+  const scheduleScrollRestore = () => {
+    if (!restoreScrollPending || restoreScrollFrame !== undefined) return;
+    restoreScrollFrame = requestAnimationFrame(() => {
+      restoreScrollFrame = undefined;
+      if (props.visible === false || !contentRoot?.isConnected || !contentRoot.clientWidth) return;
+      for (const { element, top, left } of scrollSnapshot) {
+        if (element.isConnected) element.scrollTo({ top, left, behavior: 'instant' });
+      }
+      restoreScrollPending = false;
+    });
+  };
   const [activeTab, setActiveTab] = createSignal<PluginCenterTab>(initialTabForProjection(props.projection));
   // The shell supplies an empty fallback projection while the first inventory
   // request is in flight. Treat that fallback as unresolved so the tab follows
@@ -116,7 +131,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   let pluginCenterPanelRef: HTMLDivElement | undefined;
   let pluginCenterSearchRef: HTMLInputElement | undefined;
   let detailHeadingRef: HTMLHeadingElement | undefined;
-  let mobileDetailReturnTarget: HTMLElement | undefined;
+  let detailReturnTarget: HTMLElement | undefined;
   let handledDetailFocusRequest: number | undefined;
   let handledSelectionInventoryKey: string | undefined;
   let handledSelectionFocusRequest: number | undefined;
@@ -149,10 +164,22 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     officialPreviewController?.abort('Plugin Center disposed');
     marketDetailController?.abort('Plugin Center disposed');
     cancelDeferredPermissionsFocus();
+    if (restoreScrollFrame !== undefined) cancelAnimationFrame(restoreScrollFrame);
   });
 
   createEffect(() => {
-    if (props.visible !== false) return;
+    if (props.visible !== false) {
+      scheduleScrollRestore();
+      return;
+    }
+    // Retaining DOM ownership preserves controls, but browsers reset scroll
+    // offsets when a Portal detaches. Restore only these product scroll regions.
+    if (contentRoot?.isConnected && contentRoot.clientWidth) {
+      scrollSnapshot = [...contentRoot.querySelectorAll<HTMLElement>(
+        '[data-plugin-center-list], [data-plugin-detail-scroll-body], [data-plugin-center-filter-scroll]',
+      )].map((element) => ({ element, top: element.scrollTop, left: element.scrollLeft }));
+      restoreScrollPending = true;
+    }
     setExternalDialogOpen(false);
     setOfficialInstallDialogOpen(false);
     setUpdateReviewOpen(false);
@@ -161,8 +188,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   const observeContentWidth = (element: HTMLElement) => {
+    contentRoot = element;
     if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(([entry]) => setSplitDetails(entry.contentRect.width >= 1100));
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry.contentRect.width) return;
+      setSplitDetails(entry.contentRect.width >= 1100);
+      scheduleScrollRestore();
+    });
     observer.observe(element);
     onCleanup(() => observer.disconnect());
   };
@@ -337,7 +369,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         handledDetailFocusRequest = focusRequest;
 
         queueMicrotask(() => {
-          mobileDetailReturnTarget = Array.from(
+          detailReturnTarget = Array.from(
             pluginCenterPanelRef?.querySelectorAll<HTMLButtonElement>('[data-plugin-center-item]') ?? [],
           ).find((button) => button.dataset.pluginCenterItem === requestedItem.inventoryKey);
           detailHeadingRef?.focus({ preventScroll: true });
@@ -617,7 +649,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const openDetails = (inventoryKey: string, returnTarget: HTMLElement) => {
     setProtectedSelectionInventoryKey(undefined);
     setSelectedInventoryKey(inventoryKey);
-    mobileDetailReturnTarget = returnTarget;
+    detailReturnTarget = returnTarget;
 
     queueMicrotask(() => {
       detailHeadingRef?.focus({ preventScroll: true });
@@ -625,8 +657,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
 
   const closeDetails = () => {
-    const returnTarget = mobileDetailReturnTarget;
-    mobileDetailReturnTarget = undefined;
+    const returnTarget = detailReturnTarget;
+    detailReturnTarget = undefined;
     setProtectedSelectionInventoryKey(undefined);
     setSelectedInventoryKey(undefined);
 
@@ -638,7 +670,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
 
   const clearDetailSelection = () => {
-    mobileDetailReturnTarget = undefined;
+    detailReturnTarget = undefined;
     setProtectedSelectionInventoryKey(undefined);
     setSelectedInventoryKey(undefined);
 
@@ -812,7 +844,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   onUninstall={() => {
                     if (!item.pluginInstanceID) return;
                     setSelectedInventoryKey(item.inventoryKey);
-
+                    // Narrow layouts replace the card with details. The
+                    // confirmation returns to that visible destination.
+                    detailHeadingRef?.focus({ preventScroll: true });
                     setUninstallChoiceFor(item.pluginInstanceID);
                   }}
                   onOpenSurface={() => openItemSurface(item)}
@@ -852,7 +886,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               headingId={`${idPrefix}-detail-heading`}
               detailHeadingRef={(element) => { detailHeadingRef = element; }}
               permissionsRef={setPermissionsFocusTarget}
-              onMobileBack={closeDetails}
+              onBack={closeDetails}
               canManage={canManage()}
               canOpenSurfaces={canOpenSurfaces()}
               runtimeRecovery={item.pluginInstanceID ? props.runtimeRecoveryByInstanceID?.[item.pluginInstanceID] : undefined}
@@ -1531,10 +1565,9 @@ export function PluginCenterDetails(props: {
   onRetryMarketDetail?: () => void;
   split?: boolean;
   headingId?: string;
-  mobileBackRef?: (element: HTMLButtonElement) => void;
   detailHeadingRef?: (element: HTMLHeadingElement) => void;
   permissionsRef?: (element: HTMLElement) => void;
-  onMobileBack?: () => void;
+  onBack?: () => void;
   canManage: boolean;
   canOpenSurfaces: boolean;
   runtimeRecovery?: PluginRuntimeRecoveryPresentation;
@@ -1568,13 +1601,12 @@ export function PluginCenterDetails(props: {
             <div class="shrink-0 space-y-4 border-b px-4 py-4" data-plugin-detail-controls>
               <div class="flex items-center justify-between gap-3">
                 <Button
-                ref={props.mobileBackRef}
                 data-plugin-center-mobile-back
                 size="sm"
                 variant="ghost"
                 icon={ArrowLeft}
                 class={cn("min-h-[44px] min-w-[44px]", props.split && "hidden")}
-                onClick={props.onMobileBack}
+                onClick={props.onBack}
               >
                 {i18n.t('uiCopy.plugin.backToList')}
                 </Button>
@@ -1584,7 +1616,7 @@ export function PluginCenterDetails(props: {
                   class={cn("ml-auto h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", props.split ? "inline-flex" : "hidden")}
                   aria-label={i18n.t('uiCopy.plugin.backToList')}
                   title={i18n.t('uiCopy.plugin.backToList')}
-                  onClick={props.onMobileBack}
+                  onClick={props.onBack}
                 >
                   <X class="h-4 w-4" />
                 </button>
@@ -2257,9 +2289,9 @@ function PluginActions(props: {
       <div class="flex min-w-0 items-center gap-2" data-plugin-action-row>
         <Button
           data-plugin-action={primaryActionDataID(presentation().primaryAction)}
-          variant="primary"
+          variant={presentation().primaryAction === 'open' ? 'outline' : 'primary'}
           size="sm"
-          class={cn('min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
+          class={cn('min-h-[44px] min-w-0 justify-center text-xs sm:min-h-8', presentation().primaryAction !== 'open' && 'flex-1', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
           loading={commandPending()}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}
@@ -2275,17 +2307,15 @@ function PluginActions(props: {
             items={overflowItems()}
             onSelect={selectOverflowAction}
             triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
-            triggerClass="shrink-0 rounded-md"
+            triggerClass="ml-auto shrink-0 rounded-md"
             trigger={(
-              <Button
+              <span
                 data-plugin-action="more"
-                variant="outline"
-                size="icon"
-                class="min-h-[44px] min-w-[44px] shrink-0 sm:min-h-8 sm:min-w-8"
+                class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md border hover:bg-muted sm:min-h-8 sm:min-w-8"
                 title={i18n.t('uiCopy.plugin.moreActions')}
               >
                 <MoreHorizontal class="h-4 w-4" />
-              </Button>
+              </span>
             )}
           />
         </Show>

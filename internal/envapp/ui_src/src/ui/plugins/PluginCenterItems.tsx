@@ -161,7 +161,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             data-plugin-center-install={primaryAction() === 'install' ? props.item.inventoryKey : undefined}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
             class={cn(
-              'inline-flex min-h-9 min-w-0 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+              'inline-flex min-h-[44px] min-w-0 cursor-pointer sm:min-h-9 items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
               PLUGIN_PRESS_MOTION_CLASS,
               primaryAction() === 'review_update' ? PLUGIN_UPDATE_ACTION_CLASS
                 : primaryAction() === 'install' || primaryAction() === 'enable' ? 'bg-primary text-primary-foreground hover:bg-primary/90'
@@ -215,7 +215,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             <span
               ref={menuTrigger}
               data-plugin-center-card-menu={props.item.inventoryKey}
-              class={cn('inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
+              class={cn('inline-flex h-11 w-11 shrink-0 cursor-pointer sm:h-9 sm:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
               title={i18n.t('uiCopy.plugin.moreActions')}
             >
               <MoreHorizontal class="h-4 w-4" />

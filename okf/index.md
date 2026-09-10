@@ -89,6 +89,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin package review](ui/plugin-package-review.md) - Review exact update and external-package evidence before mutation.
 - [Plugin layout continuity](ui/plugin-layout-continuity.md) - Preserve plugin placements through updates, recovery, and independent display modes.
 - [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.
+- [Plugin Center interaction](ui/plugin-center-interaction.md) - Browse, filter, and manage plugins with retained drawer state and correct modal input.
 - [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.
 - [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.

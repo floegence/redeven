@@ -97,6 +97,19 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        dismissPluginCenterBackdrop: async ({ page }) => {
+          const frame = await frameForSelector(page, '[data-test-workbench-background]');
+          const target = await frame.locator('[data-test-background]').boundingBox();
+          if (!target) throw new Error('Plugin Center background target is unavailable');
+          const x = target.x + 8;
+          const y = target.y + 8;
+          // Native pointer events must exercise hit testing during the transition;
+          // locator clicks intentionally wait until moving elements settle.
+          await page.mouse.click(x, y);
+          const isolatedDuringExit = await frame.locator('[data-test-workbench-background]').evaluate((element) => element.hasAttribute('inert'));
+          await page.mouse.click(x, y);
+          return { isolatedDuringExit };
+        },
         dragWorkbenchPlugin: async ({ page }, delta: Readonly<{ x: number; y: number }>) => {
           const frame = await frameForSelector(page, '[data-plugin-continuity-canvas]');
           const handle = frame.locator('[data-floe-workbench-widget-id="plugin-continuity"] .workbench-widget__drag');

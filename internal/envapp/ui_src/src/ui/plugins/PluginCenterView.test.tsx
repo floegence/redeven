@@ -2058,7 +2058,7 @@ describe('PluginCenterView', () => {
     expect(findDocumentButton('Uninstall').disabled).toBe(true);
     openActivity.click();
     await vi.waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect((mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).disabled).toBe(false));
+    expect(mount.querySelector('[data-plugin-action="more"]')?.closest('[role="button"]')?.getAttribute('aria-disabled')).not.toBe('true');
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
     findDocumentButton('Open').click();
@@ -3342,4 +3342,25 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(document.activeElement).toBe(search);
   });
+});
+
+
+it('gives retained Activity and Workbench instances independent tab and heading associations', () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  dispose = render(() => <>
+    <PluginCenterView projection={{ items: [metricsPlugin] }} loading={false} selectedInventoryKey="catalog:metrics"
+      canManagePlugins canOpenPluginSurfaces onRefresh={vi.fn()} onCommand={vi.fn()} />
+    <PluginCenterView projection={{ items: [metricsPlugin] }} loading={false} selectedInventoryKey="catalog:metrics"
+      canManagePlugins canOpenPluginSurfaces onRefresh={vi.fn()} onCommand={vi.fn()} />
+  </>, host);
+  const ids = [...host.querySelectorAll('[id]')].map((element) => element.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const root of host.querySelectorAll('[data-plugin-center-view]')) {
+    for (const tab of root.querySelectorAll('[role="tab"]')) {
+      expect(root.contains(document.getElementById(tab.getAttribute('aria-controls')!))).toBe(true);
+    }
+    const details = root.querySelector('[data-plugin-center-details]')!;
+    expect(details.contains(document.getElementById(details.getAttribute('aria-labelledby')!))).toBe(true);
+  }
 });
