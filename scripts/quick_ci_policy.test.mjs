@@ -40,6 +40,7 @@ const allowedQuickGateCommands = new Set([
   "node scripts/check_go_version_consistency.mjs",
   "node scripts/check_managed_service_catalog_boundary.mjs",
   "python3 scripts/check_flower_storage_compatibility.py",
+  "python3 scripts/model-catalog/test_generate.py",
   "python3 scripts/model-catalog/generate.py --check",
   "node --test scripts/check_readme_localizations.test.mjs",
   "node scripts/check_readme_localizations.mjs",
