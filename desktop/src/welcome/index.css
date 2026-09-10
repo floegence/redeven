@@ -35,19 +35,9 @@
   --redeven-welcome-card: var(--card);
   --redeven-welcome-card-border: var(--border);
   --redeven-welcome-tile: color-mix(in srgb, var(--redeven-welcome-panel-bg) 76%, var(--redeven-welcome-card) 24%);
-  --redeven-welcome-card-shadow:
-    0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent),
-    0 18px 45px color-mix(in srgb, var(--foreground) 10%, transparent);
   --redeven-welcome-soft-shadow:
     0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent),
     0 12px 30px color-mix(in srgb, var(--foreground) 7%, transparent);
-  --redeven-welcome-overlay-shadow:
-    0 14px 40px -22px color-mix(in srgb, var(--foreground) 42%, transparent),
-    0 24px 50px -28px color-mix(in srgb, var(--foreground) 28%, transparent);
-}
-
-.redeven-desktop-overlay-surface {
-  box-shadow: var(--redeven-welcome-overlay-shadow);
 }
 
 html,
@@ -556,19 +546,6 @@ html:not(.dark) .redeven-welcome-surface {
   }
 }
 
-/*
- * Dialog visual hierarchy: backdrop separation + panel edge definition.
- *
- * Without these overrides the floe Dialog defaults produce a backdrop whose
- * opacity (80 %) and blur (4 px) leave the panel nearly indistinguishable from
- * the background, especially in dark mode where --background and --card are
- * only 2 % lightness apart.  Lower opacity lets the page content show through
- * the mask and the stronger blur creates a frosted-glass depth cue.  Heavier
- * composite shadows on the panel replace the default shadow-lg (invisible on
- * dark backgrounds) with a multi-layer ring-plus-spread that reads in both
- * light and dark themes.
- */
-
 /* ── Dialog layout: desktop titlebar safe area ── */
 
 [data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] {
@@ -625,35 +602,7 @@ html:not(.dark) .redeven-welcome-surface {
   width: min(58rem, 96vw);
 }
 
-/* ── Dialog backdrop: lower opacity, stronger blur ── */
-
-[data-floe-dialog-backdrop] {
-  background-color: color-mix(in srgb, var(--background) 48%, transparent);
-  backdrop-filter: blur(10px);
-}
-
-.dark [data-floe-dialog-backdrop] {
-  background-color: color-mix(in srgb, var(--background) 42%, transparent);
-  backdrop-filter: blur(14px);
-}
-
-/* ── Dialog panel: visible border + composite shadow ── */
-
-[data-floe-dialog-panel] {
-  border-color: color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--foreground) 4%, transparent),
-    0 8px 28px -10px color-mix(in srgb, var(--foreground) 16%, transparent),
-    0 18px 48px -18px color-mix(in srgb, var(--foreground) 12%, transparent);
-}
-
-.dark [data-floe-dialog-panel] {
-  border-color: color-mix(in srgb, var(--border) 78%, var(--foreground) 22%);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--foreground) 7%, transparent),
-    0 8px 28px -10px color-mix(in srgb, var(--foreground) 22%, transparent),
-    0 18px 48px -18px color-mix(in srgb, var(--foreground) 16%, transparent);
-}
+/* Floe owns dialog material; Desktop only adjusts layout above. */
 
 /* ── Environment card grid ── */
 
@@ -681,21 +630,12 @@ html:not(.dark) .redeven-welcome-surface {
   display: flex;
   min-height: auto;
   flex-direction: column;
-  box-shadow:
-    0 1px 3px color-mix(in srgb, var(--foreground) 3%, transparent);
-  transition:
-    transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    border-color 200ms ease,
-    box-shadow 250ms ease;
+  transition: background-color 120ms ease-out;
 }
 
 html:not(.dark) .redeven-environment-card {
-  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, var(--redeven-surface-highlight-source) 12%);
   border-radius: 0.5rem;
   background: var(--redeven-welcome-card);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent),
-    0 14px 34px -30px color-mix(in srgb, var(--foreground) 42%, transparent);
 }
 
 /*
@@ -710,55 +650,29 @@ html:not(.dark) .redeven-environment-card {
 }
 
 .redeven-environment-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--border) 40%, var(--primary) 60%);
   background: color-mix(in srgb, var(--card) 98%, var(--primary) 2%);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--primary) 8%, transparent),
-    0 8px 20px -6px color-mix(in srgb, var(--foreground) 10%, transparent),
-    0 18px 36px -12px color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 html:not(.dark) .redeven-environment-card:hover {
-  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 42%, var(--primary) 58%);
   background: color-mix(in srgb, var(--redeven-welcome-card) 96%, var(--primary) 4%);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--primary) 14%, transparent),
-    0 8px 20px -14px color-mix(in srgb, var(--foreground) 24%, transparent),
-    0 18px 42px -24px color-mix(in srgb, var(--foreground) 20%, transparent);
 }
 
 .redeven-environment-card--featured {
-  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--primary) 5%, var(--card)), var(--card));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 html:not(.dark) .redeven-environment-card--featured {
-  border-color: color-mix(in srgb, var(--primary) 30%, var(--redeven-welcome-card-border));
   background: color-mix(in srgb, var(--primary) 5%, var(--redeven-welcome-card));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 58%, transparent),
-    0 12px 30px -26px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .redeven-environment-card--open {
-  border-color: color-mix(in srgb, var(--success) 34%, var(--border));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--success) 6%, var(--card)), var(--card));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--success) 8%, transparent),
-    0 1px 4px color-mix(in srgb, var(--success) 4%, transparent);
 }
 
 html:not(.dark) .redeven-environment-card--open {
-  border-color: color-mix(in srgb, var(--success) 34%, var(--redeven-welcome-card-border));
   background: color-mix(in srgb, var(--success) 6%, var(--redeven-welcome-card));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 50%, transparent),
-    0 1px 4px color-mix(in srgb, var(--success) 8%, transparent);
 }
 
 .redeven-environment-card__flower-button {
@@ -1517,13 +1431,8 @@ html:not(.dark) .redeven-header-separator {
   gap: 0.75rem;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: 0.5rem;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, var(--redeven-surface-highlight-source) 6%), var(--card));
-  box-shadow:
-    0 14px 34px -18px color-mix(in srgb, var(--foreground) 28%, transparent),
-    0 8px 22px -18px color-mix(in srgb, var(--foreground) 18%, transparent);
+  background: var(--card);
   padding: 0.85rem 0.95rem;
-  backdrop-filter: blur(12px);
 }
 
 .redeven-desktop-toast[data-tone='success'] {
@@ -4320,4 +4229,47 @@ pre,
 @media (prefers-reduced-motion: reduce) {
   .ssh-settings-chevron { transition: none; }
   .ssh-settings-form { animation: none; }
+}
+
+/* Product selection uses immediate fill feedback; Floe owns floating depth. */
+@media (forced-colors: none) {
+  :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) {
+    --redeven-welcome-card-border: var(--floe-surface-edge);
+    --redeven-welcome-rail-border: var(--floe-surface-divider);
+
+    .redeven-header-separator,
+    .redeven-theme-picker__mode-section {
+      border-color: var(--floe-surface-divider);
+    }
+
+    .redeven-console-tab,
+    .redeven-console-filter,
+    .redeven-provider-pill,
+    .redeven-runtime-chip,
+    .redeven-theme-picker__mode,
+    .redeven-theme-picker__theme {
+      border-color: transparent;
+      box-shadow: none;
+      transform: none;
+      transition: none;
+    }
+
+    .redeven-console-tab:hover,
+    .redeven-console-filter:hover,
+    .redeven-provider-pill:hover,
+    .redeven-theme-picker__mode:hover,
+    .redeven-theme-picker__theme:hover {
+      background: color-mix(in srgb, var(--primary) 4%, var(--card));
+    }
+
+    .redeven-console-tab[data-active='true'],
+    .redeven-console-filter[data-active='true'],
+    .redeven-provider-pill[data-active='true'],
+    .redeven-runtime-chip,
+    .redeven-theme-picker__mode[aria-checked='true'],
+    .redeven-theme-picker__theme[aria-checked='true'] {
+      background: color-mix(in srgb, var(--primary) 10%, var(--card));
+      color: var(--foreground);
+    }
+  }
 }

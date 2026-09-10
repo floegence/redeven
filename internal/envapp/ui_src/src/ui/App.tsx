@@ -67,6 +67,7 @@ function buildFloeConfig(t: I18nHelpers['t']) {
       defaultTheme: shellTheme?.getSnapshot().source ?? 'system',
       shellPresets: builtInShellThemePresets,
       defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS,
+      defaultSurfaceStyle: 'soft-neumorphic',
     },
     // Users frequently type in Terminal/Editor; command palette should always be available (Cmd/Ctrl+K).
     commands: { ignoreWhenTyping: false },

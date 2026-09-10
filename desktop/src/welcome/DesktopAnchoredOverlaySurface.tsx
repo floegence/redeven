@@ -183,6 +183,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
         role={props.role}
         aria-modal={props.ariaModal}
         aria-label={props.ariaLabel}
+        data-floe-surface="floating"
         data-placement={resolvedPlacement()}
         data-placement-lock={props.placementLock}
         class={cn(

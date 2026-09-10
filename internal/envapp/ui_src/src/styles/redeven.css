@@ -1771,95 +1771,6 @@ html.dark .git-changes-table-pending {
   padding: 0.5rem 0.625rem;
 }
 
-.settings-policy-toggle-row [role='checkbox'],
-.settings-policy-toggle-row [class*='w-3.5'][class*='h-3.5'][class*='border-input'][class*='bg-background'] {
-  border-color: color-mix(in srgb, var(--foreground) 35%, var(--border));
-  background: color-mix(in srgb, var(--background) 92%, var(--redeven-surface-shadow-source) 8%);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--foreground) 14%, transparent);
-}
-
-.settings-policy-toggle-row [role='checkbox'][aria-checked='true'],
-.settings-policy-toggle-row [role='checkbox'][data-state='checked'],
-.settings-policy-toggle-row [class*='w-3.5'][class*='h-3.5'][class*='border-primary'][class*='bg-primary'] {
-  border-color: var(--primary);
-  background: var(--primary);
-}
-
-.env-debug-console-switch {
-  border-color: color-mix(in srgb, var(--foreground) 16%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--background) 96%, var(--card)) 0%,
-      color-mix(in srgb, var(--muted) 54%, var(--background)) 100%
-    );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 40%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--background) 46%, transparent);
-}
-
-.env-debug-console-switch:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--background) 94%, var(--card)) 0%,
-      color-mix(in srgb, var(--muted) 62%, var(--background)) 100%
-    );
-}
-
-.env-debug-console-switch[data-state='checked'] {
-  border-color: color-mix(in srgb, var(--primary) 54%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--primary) 88%, var(--redeven-surface-highlight-source) 12%) 0%,
-      color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%) 100%
-    );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 26%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
-    0 8px 18px -16px color-mix(in srgb, var(--primary) 44%, transparent);
-}
-
-:root[data-floe-shell-theme='classic-dark'] .env-debug-console-switch[data-state='checked'],
-:root:not([data-floe-shell-theme]).dark .env-debug-console-switch[data-state='checked'] {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--primary) 84%, var(--redeven-surface-highlight-source) 16%) 0%,
-      color-mix(in srgb, var(--primary) 70%, var(--foreground) 30%) 100%
-    );
-}
-
-.env-debug-console-switch__thumb {
-  transform: translateX(0.25rem);
-  border: 1px solid color-mix(in srgb, var(--foreground) 10%, var(--border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--redeven-surface-highlight-source) 96%, var(--background) 4%) 0%,
-      color-mix(in srgb, var(--background) 94%, var(--redeven-surface-shadow-source) 6%) 100%
-    );
-  box-shadow:
-    0 1px 2px var(--redeven-shadow-color),
-    0 0 0 1px color-mix(in srgb, var(--redeven-surface-highlight-source) 28%, transparent);
-}
-
-.env-debug-console-switch[data-state='checked'] .env-debug-console-switch__thumb {
-  transform: translateX(1.35rem);
-  border-color: color-mix(in srgb, var(--redeven-surface-highlight-source) 34%, var(--primary));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--redeven-surface-highlight-source) 98%, var(--background) 2%) 0%,
-      color-mix(in srgb, var(--redeven-surface-highlight-source) 90%, var(--background) 10%) 100%
-    );
-  box-shadow:
-    0 2px 8px var(--redeven-shadow-color),
-    0 0 0 1px color-mix(in srgb, var(--redeven-surface-highlight-source) 36%, transparent);
-}
-
 .redeven-surface-panel {
   border-color: var(--redeven-stroke-panel) !important;
   background: var(--redeven-surface-panel) !important;
@@ -1875,9 +1786,8 @@ html.dark .git-changes-table-pending {
 
 .redeven-surface-panel--interactive {
   transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    opacity 150ms ease;
+    background-color 120ms ease-out,
+    opacity 120ms ease-out;
 }
 
 .redeven-surface-panel--interactive:hover {
@@ -6263,5 +6173,40 @@ html.dark .browser-editor-setup {
     outline: 2px solid Highlight;
     outline-offset: -2px;
     box-shadow: none;
+  }
+}
+
+/* Product roles follow the released material without owning a second shadow system. */
+@media (forced-colors: none) {
+  :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) {
+    --redeven-stroke-panel: var(--floe-surface-edge);
+    --redeven-stroke-panel-strong: color-mix(in srgb, var(--border) 36%, var(--background));
+    --redeven-stroke-overlay: var(--floe-surface-edge);
+    --redeven-stroke-control: color-mix(in srgb, var(--border) 36%, var(--background));
+    --redeven-stroke-control-strong: color-mix(in srgb, var(--border) 52%, var(--background));
+    --redeven-stroke-divider: var(--floe-surface-divider);
+    --git-table-gridline: var(--floe-surface-divider);
+    --redeven-settings-sidebar-border: var(--floe-surface-edge);
+    --redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 8%, var(--redeven-settings-inset-bg));
+    --redeven-settings-divider: color-mix(in srgb, var(--foreground) 3%, var(--redeven-settings-inset-bg));
+    --redeven-settings-choice-selected-border: var(--floe-surface-edge);
+    --redeven-overlay-scrim: color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent);
+  }
+
+  :root.dark[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) {
+    --redeven-overlay-scrim: color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
+  }
+
+  :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) .redeven-surface-panel--interactive:hover {
+    background: color-mix(in srgb, var(--primary) 4%, var(--redeven-surface-panel)) !important;
+  }
+
+  :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) .redeven-surface-segmented__item {
+    transition: none;
+  }
+
+  :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) .redeven-surface-segmented__item--active {
+    border-color: transparent !important;
+    background: color-mix(in srgb, var(--primary) 8%, var(--redeven-surface-panel)) !important;
   }
 }

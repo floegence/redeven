@@ -151,6 +151,10 @@ describe('WindowModal', () => {
 
     vi.advanceTimersByTime(1);
     await Promise.resolve();
+    // Floe retains the panel through the final exit paint before disposal.
+    expect(host.querySelector('[data-testid="window-modal-overlay"]')).toBeTruthy();
+    vi.advanceTimersByTime(16);
+    await Promise.resolve();
     expect(host.querySelector('[data-testid="window-modal-overlay"]')).toBeNull();
   });
 });

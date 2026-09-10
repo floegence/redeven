@@ -15,6 +15,7 @@ let dispose: (() => void) | undefined;
 afterEach(() => {
   dispose?.(); document.body.replaceChildren();
   document.documentElement.removeAttribute('data-floe-shell-theme');
+  document.documentElement.removeAttribute('data-floe-surface-style');
   document.documentElement.classList.remove('dark', 'light');
 });
 it('keeps product input boundaries stable across every shell theme', () => {
@@ -40,6 +41,7 @@ it('keeps product input boundaries stable across every shell theme', () => {
     <div class="flower-surface"><div class="flower-composer" data-floe-input-surface><textarea aria-label="Conversation composer" /></div></div>
   </>, host);
   for (const preset of builtInShellThemePresets) {
+    document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
     document.documentElement.dataset.floeShellTheme = preset.name;
     document.documentElement.classList.toggle('dark', preset.mode === 'dark');
     document.documentElement.classList.toggle('light', preset.mode === 'light');

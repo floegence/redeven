@@ -136,12 +136,13 @@ export function WindowModal(props: WindowModalProps) {
           <div
             data-testid="window-modal-backdrop"
             data-floating-presence={modalPresence.state()}
-            class="absolute inset-0 cursor-pointer bg-background/56 backdrop-blur-[1.5px] floe-floating-presence floe-floating-backdrop"
+            class="absolute inset-0 cursor-pointer bg-[var(--redeven-overlay-scrim)] floe-floating-presence floe-floating-backdrop"
             onMouseDown={() => requestClose()}
             onClick={() => requestClose()}
           />
           <div
             ref={dialogRef}
+            data-floe-surface="floating"
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
@@ -150,14 +151,14 @@ export function WindowModal(props: WindowModalProps) {
             tabIndex={-1}
             data-floating-presence={modalPresence.state()}
             class={cn(
-              'relative z-[1] flex max-h-full w-[min(32rem,calc(100%-1rem))] max-w-full flex-col overflow-hidden rounded-md border border-border/80 bg-background shadow-[0_28px_72px_-44px_var(--redeven-shadow-color)] outline-none',
+              'relative z-[1] flex max-h-full w-[min(32rem,calc(100%-1rem))] max-w-full flex-col overflow-hidden rounded-md border border-border/80 bg-background outline-none',
               'floe-floating-presence floe-floating-dialog-panel',
               props.class,
             )}
             onMouseDown={(event) => event.stopPropagation()}
             onKeyDown={handleKeyDown}
           >
-            <div class="border-b border-border/70 px-4 pt-4 pb-3">
+            <div data-floe-surface-divider class="border-b border-border/70 px-4 pt-4 pb-3">
               <div id={titleId} class="text-sm font-semibold text-foreground">{props.title}</div>
               <Show when={props.description}>
                 <div id={descriptionId} class="mt-1 text-xs leading-5 text-muted-foreground">{props.description}</div>
