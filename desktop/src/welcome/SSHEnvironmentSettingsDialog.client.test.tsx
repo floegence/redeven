@@ -143,8 +143,7 @@ describe('SSH environment settings interactions', () => {
     expect(panel?.isConnected).toBe(true);
     expect(panel?.getAttribute('data-floating-presence')).toBe('exiting');
     expect(document.body.textContent).not.toContain('Discard changes?');
-    await new Promise((resolve) => setTimeout(resolve, 160));
-    expect(panel?.isConnected).toBe(false);
+    await expect.poll(() => panel?.isConnected, { timeout: 300, interval: 10 }).toBe(false);
   });
 
   it('starts a fresh editing session when the same environment is reopened', async () => {
@@ -152,7 +151,7 @@ describe('SSH environment settings interactions', () => {
     button('Advanced settingsAutomatic · Default directory · GitHub Releases · 10 s').click();
     input('label', 'Discarded');
     button('Close').click();
-    await new Promise((resolve) => setTimeout(resolve, 160));
+    await expect.poll(() => document.querySelector('[data-floe-dialog-panel]'), { timeout: 300, interval: 10 }).toBeNull();
     harness.setState({ ...initial, label: 'Latest saved name' });
     harness.setOpen(true);
     await settle();
