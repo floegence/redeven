@@ -149,7 +149,7 @@ describe('Activity disclosure interaction', () => {
     button.focus();
     await userEvent.keyboard(' ');
     await waitFor(() => rowFor(runtime, 'early').textContent?.includes('Waiting for tool details') === true);
-    expect(toggleFor(runtime, 'file').getAttribute('aria-expanded')).toBe('true');
+    expect(toggleFor(runtime, 'file').getAttribute('aria-expanded')).toBe('false');
     expect(rowFor(runtime, 'file').textContent).toContain('Access denied');
     const ready = { ...early, status: 'success' as const, payload: { operation: 'use_skill', rows: [{ title: 'Guide loaded', content: 'Ready for diagnostics', format: 'text' }] } };
     live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), ready, file], 3) });
@@ -175,10 +175,10 @@ describe('Activity disclosure interaction', () => {
     const { runtime, live } = await mount(items);
     live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, 2) });
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const failed = items.map((item) => item.item_id === 'read-23'
-      ? { ...item, status: 'error' as const, payload: { ...item.payload, error: { message: 'Diagnostic session failed' } } }
+    const waiting = items.map((item) => item.item_id === 'read-23'
+      ? { ...item, status: 'waiting' as const, needs_attention: true }
       : item);
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(failed, 3) });
+    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(waiting, 3) });
     await waitFor(() => rowFor(runtime, 'read-23').getAttribute('data-state') === 'open');
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;

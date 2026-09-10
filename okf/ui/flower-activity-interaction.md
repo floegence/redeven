@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-09-09T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 ---
 # Summary
 
@@ -27,9 +27,10 @@ details message. Unknown tools remain neutral; no arbitrary payload, stdin, or
 private path becomes an inspector fallback. File preview stays a separate
 secondary action.
 
-The existing manual-open map is the only user-choice authority. Errors, waiting
-items, and attention facts default open only without a manual choice. Ordinary
-pending, running, and completed calls default closed. Current replacements and
+The existing manual-open map is the only user-choice authority. Waiting items and
+non-error attention facts default open only without a manual choice. Ordinary
+pending, running, completed, and failed calls default closed. Failure never
+overrides a manual choice; its summary remains visible in the collapsed row. Current replacements and
 navigation within the same Flower surface preserve manual choices. This state
 does not require a backend migration or survive a browser restart.
 

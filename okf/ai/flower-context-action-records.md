@@ -20,7 +20,7 @@ Target fields on text, terminal, and process context are bounded durable routing
 
 Before admission, the normalized action is stored only inside the unadmitted queued command. The canonical JSON writer preserves required zero values and rejects unknown kinds. Queue decode is strict; invalid JSON or an invalid item is an execution error, not a default empty action or unsupported-chip repair path. Once Floret admits the exact `TurnID`, Redeven removes the queued prompt/action record with the rest of the command.
 
-Redeven consumes published Floret v7.9.1. Before `Send`, one mapper creates
+Redeven consumes published Floret v7.9.2. Before `Send`, one mapper creates
 ordered references and durable `MessageContextItem` snapshots. Reference text is
 rendered once by Floret; host metadata supplies additional source and routing
 facts. File and directory `ResourceRef` values remain opaque inside Floret and

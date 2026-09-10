@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-08-31T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 quality_exception: Cross-boundary ownership contract covering the one typed ThreadService lifecycle, restart safety, product mapping, and live projection invariants.
 ---
 # Summary
@@ -13,6 +13,14 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 # Contract
 
 ## Typed runtime
+
+Published Floret v7.9.2 applies sanitized tool Activity inside the existing
+thread actor using exact thread, turn, run, and tool-call identity. Validated
+calls publish description and command while pending; dispatch alone marks
+running, and results settle without waiting for output or the full turn.
+Canonical loading cannot overwrite newer live tool facts during execution.
+Redeven consumes the same current view for HTTP and workspace subscriptions;
+it does not cache raw tool arguments or own another tool lifecycle.
 
 One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced, canceled, or terminal token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
 
