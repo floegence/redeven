@@ -9765,6 +9765,7 @@ webSearch: model.web_search,
         <div
           ref={subagentDropdownRef}
           id="flower-subagents-dropdown"
+          data-floe-surface="floating"
           class="flower-subagents-dropdown"
           role="dialog"
           aria-label={subagentsCopy().title}
@@ -10824,6 +10825,7 @@ webSearch: model.web_search,
                 <Show when={composerCommandMenuVisible()}>
                   <div
                     id={FLOWER_COMPOSER_COMMAND_MENU_ID}
+                    data-floe-surface="floating"
                     class="flower-composer-command-menu"
                     role="listbox"
                     aria-label={copy().chat.commandMenuLabel}
@@ -10861,6 +10863,7 @@ webSearch: model.web_search,
               </Show>
               <div
                 data-floe-input-surface={companionCollapsed() ? undefined : ''}
+                data-floe-surface={companionCollapsed() ? 'flat' : 'inset'}
                 class={cn(
                   'flower-composer p-3',
                   bottomActionMode() !== 'chat' && 'flower-decision-surface',

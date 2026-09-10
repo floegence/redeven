@@ -1293,12 +1293,8 @@ html.dark .flower-component-shell {
   gap: 0.375rem;
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 74%, transparent);
   border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 92%, transparent);
+  background: var(--card);
   padding: 0.35rem;
-  box-shadow:
-    0 24px 46px -34px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent),
-    0 2px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 42%, transparent) inset;
-  backdrop-filter: blur(18px);
 }
 
 .flower-composer-reference-layer {
@@ -7043,7 +7039,7 @@ html.dark .flower-component-shell {
   overflow: visible;
   container-name: flower-bottom-composer;
   container-type: inline-size;
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+  transition: border-color 120ms ease-out;
 }
 
 /* The companion owns the collapsed outline; only an open editor paints its own surface. */
@@ -7051,8 +7047,6 @@ html.dark .flower-component-shell {
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 46%, transparent);
   border-radius: 0.875rem;
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 92%, var(--flower-chat-surface) 8%);
-  box-shadow: 0 10px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 44%, transparent);
-  backdrop-filter: blur(10px);
 }
 
 .flower-approval-surface {
@@ -8140,13 +8134,7 @@ button.flower-attachment-preview-trigger:disabled {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--flower-subagents-border) 86%, transparent);
   border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--flower-subagents-panel) 96%, transparent);
-  backdrop-filter: blur(16px) saturate(115%);
-  -webkit-backdrop-filter: blur(16px) saturate(115%);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--foreground) 4%, transparent) inset,
-    0 10px 24px -12px color-mix(in srgb, var(--redeven-surface-shadow-source) 34%, transparent),
-    0 24px 56px -24px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
+  background: var(--card);
   transform-origin: top right;
   animation: flower-subagents-dropdown-enter 120ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
@@ -8487,35 +8475,14 @@ button.flower-attachment-preview-trigger:disabled {
   opacity: 0.45;
 }
 
-[data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window) {
-  --flower-subagent-window-shadow-key: color-mix(in srgb, var(--redeven-shadow-color) 72%, transparent);
-  --flower-subagent-window-shadow-ambient: color-mix(in srgb, var(--redeven-shadow-color) 42%, transparent);
-  border-radius: 6px;
-  box-shadow:
-    0 4px 14px -4px var(--flower-subagent-window-shadow-key),
-    0 28px 64px -20px var(--flower-subagent-window-shadow-ambient);
-  transition: box-shadow 140ms ease;
-}
-
-[data-floe-geometry-surface='floating-window']:has(
-  > .flower-subagent-detail-window[data-floe-floating-window-state='active']
-) {
-  --flower-subagent-window-shadow-key: color-mix(in srgb, var(--redeven-shadow-color) 86%, transparent);
-  --flower-subagent-window-shadow-ambient: color-mix(in srgb, var(--redeven-shadow-color) 54%, transparent);
-}
-
 .flower-subagent-detail-window {
   --flower-subagent-window-surface: var(--redeven-chat-surface);
   --flower-subagent-window-surface-soft: color-mix(in srgb, var(--redeven-chat-surface) 92%, var(--background) 8%);
   --flower-subagent-window-surface-band: var(--redeven-code-chrome);
   --flower-subagent-window-surface-raised: var(--redeven-chat-surface-raised);
-  --flower-subagent-window-border: color-mix(in srgb, var(--redeven-chat-border) 55%, var(--foreground) 45%);
-  --flower-subagent-window-border-active: color-mix(in srgb, var(--redeven-status-primary-border) 55%, var(--foreground) 45%);
-  --flower-subagent-window-border-soft: color-mix(in srgb, var(--redeven-chat-border) 68%, transparent);
-  --flower-subagent-window-edge-highlight: color-mix(in srgb, var(--foreground) 14%, transparent);
-  --flower-subagent-window-edge-highlight-soft: color-mix(in srgb, var(--foreground) 8%, transparent);
-  --flower-subagent-window-edge-shade: color-mix(in srgb, var(--redeven-shadow-color) 42%, transparent);
-  --flower-subagent-window-edge-shade-soft: color-mix(in srgb, var(--redeven-shadow-color) 24%, transparent);
+  --flower-subagent-window-border: var(--redeven-stroke-panel);
+  --flower-subagent-window-border-active: var(--redeven-stroke-panel-strong);
+  --flower-subagent-window-border-soft: var(--redeven-stroke-divider);
   --flower-subagent-window-text: var(--redeven-chat-text);
   --flower-subagent-window-muted: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   --flower-subagent-window-accent: var(--redeven-categorical-2);
@@ -8526,29 +8493,14 @@ button.flower-attachment-preview-trigger:disabled {
   border-radius: 6px;
   background: var(--flower-subagent-window-surface);
   color: var(--flower-subagent-window-text);
-  box-shadow:
-    0 1px 0 var(--flower-subagent-window-edge-highlight) inset,
-    1px 0 0 var(--flower-subagent-window-edge-highlight-soft) inset,
-    0 -1px 0 var(--flower-subagent-window-edge-shade) inset,
-    -1px 0 0 var(--flower-subagent-window-edge-shade-soft) inset;
 }
 
 .flower-subagent-detail-window[data-floe-floating-window-state='active'] {
   border-color: var(--flower-subagent-window-border-active);
-  box-shadow:
-    0 1px 0 var(--flower-subagent-window-edge-highlight) inset,
-    1px 0 0 var(--flower-subagent-window-edge-highlight-soft) inset,
-    0 -1px 0 var(--flower-subagent-window-edge-shade) inset,
-    -1px 0 0 var(--flower-subagent-window-edge-shade-soft) inset;
 }
 
 .flower-subagent-detail-window[data-floe-floating-window-state='inactive'] {
   border-color: var(--flower-subagent-window-border);
-  box-shadow:
-    0 1px 0 var(--flower-subagent-window-edge-highlight) inset,
-    1px 0 0 var(--flower-subagent-window-edge-highlight-soft) inset,
-    0 -1px 0 var(--flower-subagent-window-edge-shade) inset,
-    -1px 0 0 var(--flower-subagent-window-edge-shade-soft) inset;
 }
 
 .flower-subagent-detail-window[data-floe-floating-window-surface='true'] [data-floe-floating-window-titlebar='true'] {
@@ -8557,7 +8509,6 @@ button.flower-attachment-preview-trigger:disabled {
   border-color: var(--flower-subagent-window-border-soft);
   background: var(--flower-subagent-window-surface-raised);
   padding-inline: 0.875rem 0.625rem;
-  box-shadow: 0 1px 0 var(--flower-subagent-window-edge-highlight-soft) inset;
 }
 
 .flower-subagent-detail-window [data-floe-floating-window-titlebar='true'] h2 {
@@ -9255,10 +9206,6 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window) {
-    transition: none !important;
-  }
-
   .flower-subagent-detail-loading-row {
     animation: none !important;
   }

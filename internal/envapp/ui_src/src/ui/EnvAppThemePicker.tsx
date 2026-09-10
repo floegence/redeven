@@ -283,6 +283,7 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
           role="dialog"
           aria-modal="false"
           aria-label={i18n.t('shell.themePicker.title')}
+          data-floe-surface="floating"
           data-envapp-theme-menu="topbar"
           class="absolute top-[calc(100%+0.5rem)] right-0 z-[90] w-[min(30rem,calc(100vw-1rem))] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl max-sm:fixed max-sm:top-12 max-sm:right-2 max-sm:left-2 max-sm:w-auto"
           onFocusOut={(event) => {

@@ -5,19 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  createFloatingPresence: (options: { open: () => boolean }) => ({
-    mounted: () => Boolean(options.open()),
-    exiting: () => false,
-    state: () => (options.open() ? 'entered' : 'exited'),
-  }),
-  Button: (props: any) => (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
-      {props.children}
-    </button>
-  ),
-}));
-
 vi.mock('./settings/SettingsPrimitives', () => ({
   SettingRow: (props: any) => (
     <div>
@@ -70,19 +57,16 @@ describe('EnvDebugConsoleSettingsPanel', () => {
     expect(host.textContent).not.toContain('UI metrics start on open');
     expect(host.textContent).not.toContain('Open floating console');
 
-    const switchButton = host.querySelector('button[role="switch"]') as HTMLButtonElement | null;
+    const switchButton = host.querySelector('input[role="switch"]') as HTMLInputElement | null;
     expect(switchButton).not.toBeNull();
-    expect(switchButton?.getAttribute('data-state')).toBe('unchecked');
-    expect(switchButton?.className).toContain('env-debug-console-switch');
-    expect(switchButton?.className).toContain('shrink-0');
-    expect(switchButton?.className).toContain('flex-none');
-    expect(switchButton?.className).toContain('cursor-pointer');
-    expect(switchButton?.className).toContain('focus-visible:ring-2');
-    expect(host.querySelector('.env-debug-console-switch__thumb')).not.toBeNull();
-    expect(host.querySelectorAll('button')).toHaveLength(1);
+    expect(switchButton?.checked).toBe(false);
+    expect(switchButton?.getAttribute('aria-checked')).toBe('false');
+    expect(switchButton?.getAttribute('aria-label')).toBeTruthy();
+    expect(host.querySelector('[data-floe-surface-part="switch-thumb"]')).not.toBeNull();
+    expect(host.querySelectorAll('[role="switch"]')).toHaveLength(1);
   });
 
-  it('marks the enabled state for the theme-aware switch styles', () => {
+  it('uses the native checked state for the shared switch', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -94,10 +78,21 @@ describe('EnvDebugConsoleSettingsPanel', () => {
       />
     ), host);
 
-    const switchButton = host.querySelector('button[role="switch"]') as HTMLButtonElement | null;
+    const switchButton = host.querySelector('input[role="switch"]') as HTMLInputElement | null;
     expect(switchButton).not.toBeNull();
-    expect(switchButton?.getAttribute('data-state')).toBe('checked');
+    expect(switchButton?.checked).toBe(true);
     expect(switchButton?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('forwards the native toggle immediately', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onEnabledChange = vi.fn();
+    render(() => <EnvDebugConsoleSettingsPanel enabled={false} canInteract onEnabledChange={onEnabledChange} />, host);
+    const input = host.querySelector<HTMLInputElement>('input[role="switch"]')!;
+    input.click();
+    expect(onEnabledChange).toHaveBeenCalledOnce();
+    expect(onEnabledChange).toHaveBeenCalledWith(true);
   });
 
   it('disables the switch when the session cannot interact', () => {
@@ -113,7 +108,7 @@ describe('EnvDebugConsoleSettingsPanel', () => {
       />
     ), host);
 
-    const switchButton = host.querySelector('button[role="switch"]') as HTMLButtonElement | null;
+    const switchButton = host.querySelector('input[role="switch"]') as HTMLInputElement | null;
     expect(switchButton).not.toBeNull();
     expect(switchButton?.disabled).toBe(true);
     switchButton?.click();

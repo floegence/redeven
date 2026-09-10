@@ -206,11 +206,13 @@ afterEach(() => {
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.removeAttribute('data-floe-shell-theme');
+  document.documentElement.removeAttribute('data-floe-surface-style');
   document.documentElement.removeAttribute('style');
 });
 
 describe('Settings theme hierarchy', () => {
-  it('keeps structure quiet and selection clear in every built-in shell theme', async () => {
+  it.each(['standard', 'soft-neumorphic'])('keeps structure quiet and selection clear in every built-in shell theme with %s material', async (material) => {
+    document.documentElement.dataset.floeSurfaceStyle = material;
     expect(builtInShellThemePresets).toHaveLength(24);
 
     for (const preset of builtInShellThemePresets) {

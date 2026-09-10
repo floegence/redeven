@@ -626,6 +626,7 @@ function buildDesktopFloeConfig(i18n: DesktopI18n) {
       defaultTheme: themeBridge?.getSnapshot().source ?? 'system',
       shellPresets: builtInShellThemePresets,
       defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS,
+      defaultSurfaceStyle: 'soft-neumorphic',
     },
     commands: {
       ignoreWhenTyping: false,
@@ -6924,7 +6925,7 @@ function DesktopActionToastViewport(props: Readonly<{
                   exit={{ opacity: 0, x: 24 }}
                   transition={{ duration: 0.25 }}
                 >
-                  <div class="redeven-desktop-toast" data-tone={toast.tone} role={toast.tone === 'error' ? 'alert' : 'status'}>
+                  <div data-floe-surface="floating" class="redeven-desktop-toast" data-tone={toast.tone} role={toast.tone === 'error' ? 'alert' : 'status'}>
                     <div class="redeven-desktop-toast__icon" aria-hidden="true">
                       {toast.tone === 'success'
                         ? <Check class="h-3.5 w-3.5" />
