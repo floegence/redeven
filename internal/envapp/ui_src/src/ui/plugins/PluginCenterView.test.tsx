@@ -274,7 +274,7 @@ describe('PluginCenterView', () => {
     const install = mount.querySelector('[data-plugin-center-install="catalog:metrics"]') as HTMLButtonElement;
     expect(details).not.toBeNull();
     expect(install.textContent).toContain('Install');
-    expect(install.closest('article')?.querySelector('.h-12.w-12')).not.toBeNull();
+    expect(install.closest('article')?.querySelector('.h-10.w-10')).not.toBeNull();
     install.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
@@ -627,7 +627,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    (mount.querySelector('#plugin-center-tab-updates') as HTMLButtonElement).click();
+    (mount.querySelector('[role="tab"][id$="-tab-updates"]') as HTMLButtonElement).click();
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:metrics"]')).not.toBeNull());
     const update = mount.querySelector('[data-plugin-center-update="catalog:metrics"]') as HTMLButtonElement;
     expect(update.textContent).toContain('Review update');
@@ -723,8 +723,8 @@ describe('PluginCenterView', () => {
 
     expect(details.className).toContain('overflow-hidden');
     expect(details.className).not.toContain('overflow-y-auto');
-    expect(details.className).toContain('absolute');
-    expect(details.className).not.toContain('sm:relative');
+    expect(details.className).not.toContain('absolute');
+    expect(details.hasAttribute('aria-modal')).toBe(false);
     expect(controls.className).toContain('shrink-0');
     expect(body.className).toContain('min-h-0');
     expect(body.className).toContain('flex-1');
@@ -782,12 +782,12 @@ describe('PluginCenterView', () => {
 
     const discover = mount.querySelector('[role="tab"][aria-selected="true"]');
     const panel = mount.querySelector('[role="tabpanel"]');
-    expect(discover?.id).toBe('plugin-center-tab-discover');
+    expect(discover?.id).toMatch(/-tab-discover$/);
     expect(panel?.getAttribute('aria-labelledby')).toBe(discover?.id);
     expect(discover?.getAttribute('aria-controls')).toBe(panel?.id);
 
     (discover as HTMLButtonElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-    expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toBe('plugin-center-tab-installed');
+    expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toMatch(/-tab-installed$/);
   });
 
   it('adopts the first installed projection after mounting with an empty inventory', () => {
@@ -814,7 +814,7 @@ describe('PluginCenterView', () => {
       }],
     });
 
-    expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toBe('plugin-center-tab-installed');
+    expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toMatch(/-tab-installed$/);
     expect(mount.querySelector('[data-plugin-center-item^="instance:"]')).not.toBeNull();
   });
 
@@ -1147,7 +1147,7 @@ describe('PluginCenterView', () => {
 
     await Promise.resolve();
     const back = mount.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
-    expect(document.activeElement).toBe(back);
+    expect(document.activeElement).toBe(mount.querySelector('[data-plugin-center-detail-heading]'));
     back.click();
     await Promise.resolve();
     expect(getComputedStyle(mount.querySelector<HTMLElement>('[data-plugin-center-master]')!).display).not.toBe('none');
@@ -1156,7 +1156,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(getComputedStyle(mount.querySelector<HTMLElement>('[data-plugin-center-details]')!).display).not.toBe('none');
-    expect(document.activeElement).toBe(mount.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]'));
+    expect(document.activeElement).toBe(mount.querySelector('[data-plugin-center-detail-heading]'));
 
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
   });
@@ -1184,7 +1184,7 @@ describe('PluginCenterView', () => {
     const master = mount.querySelector<HTMLElement>('[data-plugin-center-master]')!;
     const details = mount.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     expect(master.classList).toContain('hidden');
-    expect(details.classList).toContain('block');
+    expect(details.dataset.detailLayout).toBe('page');
 
     const search = mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
     search.focus();
@@ -1199,7 +1199,7 @@ describe('PluginCenterView', () => {
     item.click();
     await Promise.resolve();
     await Promise.resolve();
-    const discover = mount.querySelector<HTMLButtonElement>('#plugin-center-tab-discover')!;
+    const discover = mount.querySelector<HTMLButtonElement>('[role="tab"][id$="-tab-discover"]')!;
     discover.focus();
     discover.click();
     await Promise.resolve();

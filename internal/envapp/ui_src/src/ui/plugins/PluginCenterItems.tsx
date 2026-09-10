@@ -23,7 +23,7 @@ export function PluginCenterItem(props: {
   installOperation?: PluginInstallExecutionProjection;
   announceInstallStatus?: boolean;
   entranceDelayMs?: number;
-  onOpenDetails: (target: HTMLButtonElement) => void;
+  onOpenDetails: (target: HTMLElement) => void;
   onInstall: () => void;
   onUpdate: () => void;
   onEnable: () => void;
@@ -55,7 +55,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
       ? undefined
       : operation;
   };
-  let menuTrigger: HTMLButtonElement | undefined;
+  let menuTrigger: HTMLSpanElement | undefined;
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
   const primaryAction = () => actions().primaryAction;
   const commandPending = () => props.commandPendingType !== undefined;
@@ -98,7 +98,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
     ...(actions().canUninstall ? [{ id: 'uninstall', label: i18n.t('uiCopy.plugin.uninstall'), disabled: !props.canManage || props.managementDisabled }] : []),
     { id: 'details', label: i18n.t('uiCopy.plugin.viewDetails') },
   ];
-  const selectMenuItem = (id: string, target: HTMLButtonElement) => {
+  const selectMenuItem = (id: string, target: HTMLElement) => {
     if (id === 'open') props.onOpenSurface();
     else if (id === 'enable') props.onEnable();
     else if (id === 'disable') props.onDisable();
@@ -110,7 +110,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
     <article
       data-plugin-directory-card={props.item.inventoryKey}
       class={cn(
-        'redeven-plugin-directory-card group/card grid h-[248px] min-w-0 grid-rows-[minmax(0,1fr)_56px] gap-3 rounded-lg border bg-card p-4 text-card-foreground [transition-duration:180ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
+        'redeven-plugin-directory-card group/card flex min-h-[176px] min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground [transition-duration:180ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
         PLUGIN_ENTER_MOTION_CLASS,
         props.selected && 'border-primary bg-primary/[0.035] ring-1 ring-primary/20',
       )}
@@ -121,7 +121,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         type="button"
         data-plugin-center-item={props.item.inventoryKey}
         aria-current={props.selected ? 'true' : undefined}
-        class="grid min-h-0 min-w-0 cursor-pointer grid-rows-[64px_minmax(0,1fr)_20px] gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        class="flex min-h-0 min-w-0 flex-1 cursor-pointer flex-col gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`${displayName()}: ${i18n.t('uiCopy.plugin.viewDetails')}`}
         onClick={(event) => props.onOpenDetails(event.currentTarget)}
       >
@@ -134,6 +134,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             </span>
           </span>
         </span>
+        <Show when={(runtimeRecovery() && runtimeRecovery()?.state !== 'ready') || (summary()?.trim() && summary()?.trim() !== displayName().trim())}>
         <span class="line-clamp-2 break-words text-xs leading-5 text-muted-foreground" lang={presentation()?.resolved_locale} dir="auto">
           <Show when={runtimeRecovery() && runtimeRecovery()?.state !== 'ready'} fallback={(
             <Show when={summary()?.trim() !== displayName().trim()}>{summary()}</Show>
@@ -143,7 +144,8 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             </span>
           </Show>
         </span>
-        <span class="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+        </Show>
+        <span class="mt-auto flex w-full min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
           <span class="min-w-0 truncate" title={publisher()} lang={presentation()?.resolved_locale} dir="auto">{publisher()}</span>
           <Show when={version()}>
             {(value) => <><span aria-hidden="true">·</span><span class="max-w-[35%] shrink-0 truncate" title={`v${value()}`}>v{value()}</span></>}
@@ -159,9 +161,11 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             data-plugin-center-install={primaryAction() === 'install' ? props.item.inventoryKey : undefined}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
             class={cn(
-              'inline-flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+              'inline-flex min-h-9 min-w-0 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
               PLUGIN_PRESS_MOTION_CLASS,
-              primaryAction() === 'review_update' ? PLUGIN_UPDATE_ACTION_CLASS : 'bg-primary text-primary-foreground hover:bg-primary/90',
+              primaryAction() === 'review_update' ? PLUGIN_UPDATE_ACTION_CLASS
+                : primaryAction() === 'install' || primaryAction() === 'enable' ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'border bg-background text-foreground hover:bg-muted',
             )}
             aria-busy={commandPending()}
             disabled={commandPending() || ((primaryAction() === 'review_update' || primaryAction() === 'install') && (!props.canManage || props.managementDisabled))
@@ -202,20 +206,20 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           align="end"
           items={menuItems()}
           onSelect={(id) => {
-            if (menuTrigger) selectMenuItem(id, menuTrigger);
+            const target = menuTrigger?.closest<HTMLElement>('[role="button"]');
+            if (target) selectMenuItem(id, target);
           }}
           triggerAriaLabel={`${displayName()}: ${i18n.t('uiCopy.plugin.moreActions')}`}
-          triggerClass="shrink-0 rounded-md"
+          triggerClass="ml-auto shrink-0 rounded-md"
           trigger={(
-            <button
+            <span
               ref={menuTrigger}
-              type="button"
               data-plugin-center-card-menu={props.item.inventoryKey}
               class={cn('inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
               title={i18n.t('uiCopy.plugin.moreActions')}
             >
               <MoreHorizontal class="h-4 w-4" />
-            </button>
+            </span>
           )}
         />
       </div>

@@ -74,7 +74,7 @@ export function PluginIcon(props: {
         size() === 'launcher' && 'h-16 w-16 rounded-2xl',
         size() === 'dock' && 'h-[42px] w-[42px] rounded-xl',
         size() === 'detail' && 'h-12 w-12 rounded-xl',
-        size() === 'card' && 'h-12 w-12 rounded-lg',
+        size() === 'card' && 'h-10 w-10 rounded-lg',
         size() === 'row' && 'h-10 w-10 rounded-lg',
         props.class,
       )}
@@ -160,6 +160,7 @@ export function PluginIdentityHeader(props: {
   item: PluginInventoryItem;
   description?: boolean;
   class?: string;
+  headingId?: string;
   headingRef?: (element: HTMLHeadingElement) => void;
 }): JSX.Element {
   const i18n = useI18n();
@@ -177,7 +178,7 @@ export function PluginIdentityHeader(props: {
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <h2
-            id={props.headingRef ? 'plugin-center-detail-heading' : undefined}
+            id={props.headingId}
             ref={props.headingRef}
             tabIndex={props.headingRef ? -1 : undefined}
             data-plugin-center-detail-heading={props.headingRef ? '' : undefined}

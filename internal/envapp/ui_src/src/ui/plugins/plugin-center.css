@@ -1,0 +1,40 @@
+.redeven-plugin-center-drawer {
+  width: min(1400px, calc(100vw - 48px));
+  max-width: none;
+  height: min(820px, 82dvh, calc(100dvh - 84px));
+  background: var(--redeven-surface-main);
+  border-color: var(--redeven-surface-panel-border);
+}
+
+[data-plugin-center-view] {
+  container-type: inline-size;
+  background: var(--redeven-surface-main);
+}
+
+[data-plugin-center-toolbar],
+[data-plugin-center-details] {
+  background: var(--redeven-surface-panel-elevated);
+}
+
+[data-plugin-center-list] {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+[data-plugin-center-details] {
+  width: 400px;
+  flex: 0 0 400px;
+}
+
+[data-plugin-center-details][data-detail-layout='page'] {
+  width: 100%;
+  flex: 1 1 0%;
+  border-left: 0;
+}
+
+@media (max-width: 639px) {
+  .redeven-plugin-center-drawer {
+    width: calc(100vw - 24px);
+    height: min(820px, 82dvh, calc(100dvh - 76px));
+  }
+}

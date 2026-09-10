@@ -111,7 +111,7 @@ import type {
 import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import { ActivityPluginSurfacePage } from './plugins/ActivityPluginSurfacePage';
 import { PluginPinContextMenu } from './plugins/PluginPinContextMenu';
-import { PluginCenterDialog } from './plugins/PluginCenterDialog';
+import { PluginCenterDrawer } from './plugins/PluginCenterDrawer';
 import type { PluginSurfaceResolution } from './plugins/PluginSurfaceContainer';
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
@@ -1651,6 +1651,18 @@ export function EnvAppShell() {
   });
 
   const [workbenchPluginCenterOpen, setWorkbenchPluginCenterOpen] = createSignal(false);
+  const [workbenchPluginCenterPresent, setWorkbenchPluginCenterPresent] = createSignal(false);
+  let pluginCenterFocusTarget: PluginSurfaceLaunchTarget | undefined;
+  const onPluginCenterPresenceChange = (present: boolean) => {
+    setWorkbenchPluginCenterPresent(present);
+    if (present || !pluginCenterFocusTarget) return;
+    const target = pluginCenterFocusTarget;
+    pluginCenterFocusTarget = undefined;
+    queueMicrotask(() => {
+      if (viewMode() === 'workbench') workbenchPluginSurfaceController?.focus(target);
+    });
+  };
+  const workbenchPluginCenterBlocking = () => workbenchPluginCenterOpen() || workbenchPluginCenterPresent();
   const [workbenchPluginCenterVisited, setWorkbenchPluginCenterVisited] = createSignal(false);
   const [pluginWidgetCounts, setPluginWidgetCounts] = createSignal<Record<string, number>>({});
   const refreshPluginWidgetCounts = async () => {
@@ -1791,8 +1803,9 @@ export function EnvAppShell() {
         await controller.open(currentTarget);
       }
       updatePluginPanel({ open: false });
+      if (workbenchPluginCenterPresent()) pluginCenterFocusTarget = currentTarget;
+      else if (viewMode() === mode) queueMicrotask(() => controller.focus(currentTarget));
       setWorkbenchPluginCenterOpen(false);
-      if (viewMode() === mode) queueMicrotask(() => controller.focus(currentTarget));
       return;
     }
     const existingPage = [...activityPluginPageRuntimes.entries()].find(([, runtime]) => {
@@ -3075,6 +3088,9 @@ export function EnvAppShell() {
 
   const recoverySnapshot = reconnectController.snapshot;
   const recoveryVisible = createMemo(() => recoverySnapshot().state !== 'idle');
+  createEffect(() => {
+    if (viewMode() !== 'workbench' || recoveryVisible()) setWorkbenchPluginCenterOpen(false);
+  });
   const activityFlowerLauncherVisible = createMemo(() => (
     flowerTurnLauncherOpen() && flowerTurnLauncherHandoff()?.mode === 'activity'
   ));
@@ -3743,7 +3759,7 @@ export function EnvAppShell() {
 
   const renderPluginCenter = (embedded = false) => (
         <PluginCenterView
-          showTitle={!embedded}
+          visible={embedded ? workbenchPluginCenterOpen() && viewMode() === 'workbench' : viewMode() === 'activity' && layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID}
           pluginWidgetCounts={pluginWidgetCounts()}
           projection={pluginInventoryProjection() ?? { items: [] }}
           loading={pluginInventoryInitialPending()}
@@ -3768,7 +3784,7 @@ export function EnvAppShell() {
           onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
           onCommitExternal={commitExternalPluginPackage}
           onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
-          onClose={embedded ? undefined : closePluginCenter}
+          onClose={closePluginCenter}
         />
   );
 
@@ -4955,12 +4971,12 @@ export function EnvAppShell() {
     <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden outline-none" tabindex={-1}>
       <div
         class={`h-full min-h-0 ${recoveryVisible() ? 'pointer-events-none' : ''}`}
-        inert={recoveryVisible() || workbenchPluginCenterOpen()}
-        aria-hidden={recoveryVisible() || workbenchPluginCenterOpen() ? 'true' : undefined}
+        inert={recoveryVisible() || workbenchPluginCenterBlocking()}
+        aria-hidden={recoveryVisible() || workbenchPluginCenterBlocking() ? 'true' : undefined}
       >
         <Show when={!accessGateVisible() || recoveryVisible()}>
           <EnvWorkbenchPage
-            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterOpen() && !recoveryVisible()}
+            inputEnabled={viewMode() === 'workbench' && !workbenchPluginCenterBlocking() && !recoveryVisible()}
             dockItems={pluginDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
             dockActions={[{
@@ -4976,7 +4992,7 @@ export function EnvAppShell() {
             pluginSurfaceHost={{
               coordinator: pluginSurfaceCoordinator,
               confirmationQueue: pluginConfirmationQueue,
-              workbenchVisible: () => viewMode() === 'workbench' && !workbenchPluginCenterOpen(),
+              workbenchVisible: () => viewMode() === 'workbench' && !workbenchPluginCenterBlocking(),
               resolveTarget: resolveCurrentPluginSurfaceTarget,
               resolveSurface: resolvePluginSurface,
               onOpenPluginDetails: (inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure),
@@ -4992,11 +5008,11 @@ export function EnvAppShell() {
         </Show>
       </div>
       <Show when={workbenchPluginCenterVisited()}>
-        <PluginCenterDialog open={workbenchPluginCenterOpen() && viewMode() === 'workbench'}
-          onOpenChange={setWorkbenchPluginCenterOpen} title={i18n.t('uiCopy.plugin.centerTitle')}
-          class="w-[min(1280px,calc(100vw-48px))] max-w-none">
+        <PluginCenterDrawer open={workbenchPluginCenterOpen() && viewMode() === 'workbench' && !recoveryVisible()}
+          onOpenChange={setWorkbenchPluginCenterOpen} onPresenceChange={onPluginCenterPresenceChange}
+          title={i18n.t('uiCopy.plugin.centerTitle')}>
           {renderPluginCenter(true)}
-        </PluginCenterDialog>
+        </PluginCenterDrawer>
       </Show>
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>
         <Show
