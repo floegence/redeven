@@ -59,21 +59,23 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		}
 	}
 
-	webSearchCapability := resolveProviderWebSearchCapability(providerCfg, modelName)
-	if enableFlowerWebSearchTool(providerCfg, webSearchCapability) {
-		webSearchCapability.RegisterTool = true
+	webSearchCapability := config.ResolveAIWebSearch(providerCfg, capability.WireModelName, true)
+	if webSearchCapability.Mode == config.AIWebSearchBrave {
+		configured := false
+		if r.resolveWebSearchKey != nil {
+			key, found, err := r.resolveWebSearchKey(providerCfg.ID)
+			if err != nil {
+				return nil, fmt.Errorf("resolve web search credential: %w", err)
+			}
+			configured = found && strings.TrimSpace(key) != ""
+		}
+		webSearchCapability = config.ResolveAIWebSearch(providerCfg, capability.WireModelName, configured)
 	}
-	r.webSearchMode = webSearchCapability.Mode
-	r.webSearchToolEnabled = webSearchCapability.RegisterTool
+	if webSearchCapability.Reason == "invalid_configuration" {
+		return nil, errors.New("invalid web search configuration")
+	}
+	r.webSearch = webSearchCapability
 	r.attachmentToolReadEnabled = req.ModelCapability.SupportsTools && r.host.openLiveAttachment != nil
-	r.recordRunDiagnostic("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
-		"resolved":          webSearchCapability.Mode,
-		"reason":            webSearchCapability.Reason,
-		"web_search_tool":   webSearchCapability.RegisterTool,
-		"provider_type":     providerType,
-		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
-		"model":             modelName,
-	})
 	sharedState := newFloretToolRuntimeState(newTodoRuntimeState())
 	r.toolRuntimeState = sharedState
 	r.ensureSkillManager()
@@ -89,6 +91,24 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	if err != nil {
 		return nil, r.failRun("Failed to initialize run tool surface", err)
 	}
+	searchStatus, searchReason := webSearchCapability.Status, webSearchCapability.Reason
+	localSearch, hostedSearch := false, len(initialSurface.HostedTools) > 0
+	for _, name := range initialSurface.CapabilityContract.AllowedTools {
+		if name == "web.search" {
+			localSearch = true
+		}
+	}
+	if searchStatus == "available" && !localSearch && !hostedSearch {
+		searchStatus, searchReason = "unavailable", "tool_restricted"
+	}
+	r.recordRunDiagnostic("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
+		"resolved": webSearchCapability.Mode, "reason": searchReason,
+		"status": searchStatus, "resolved_status": webSearchCapability.Status, "declaration_status": webSearchCapability.DeclarationStatus,
+		"web_search_tool": localSearch, "hosted_search_tool": hostedSearch,
+		"provider_type": providerType, "provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
+		"model": modelName, "wire_model": capability.WireModelName,
+		"protocol": config.AIProviderProtocol(providerType, webSearchCapability.Mode),
+	})
 	req.Options.PermissionType = permissionTypeString(initialSurface.PermissionType)
 	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
 		"engine":                        "floret",
@@ -115,7 +135,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 			MaxOutputToken: req.Options.MaxOutputTokens,
 			MaxCostUSD:     req.Options.MaxCostUSD,
 		},
-		r.webSearchMode,
+		r.webSearch.Mode,
 		withFloretAttachmentResolver(r.resolveFloretMessageAttachment, req.ModelCapability.SupportsImageInput, req.ModelCapability.SupportsFileInput),
 		withFloretAttachmentToolRead(r.attachmentToolReadEnabled),
 		withFloretRequestAdmission(r.admitFloretProviderRequest),
@@ -188,8 +208,8 @@ func buildFloretThreadAgent(
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
 	}
-	if provider.providerType == "deepseek" && provider.webSearch == providerWebSearchModeDeepSeekNative {
-		agentOptions = append(agentOptions, flruntime.WithAgentHostedTools(flprovider.HostedToolDefinition{Name: "web_search", Type: "web_search"}))
+	if len(surface.HostedTools) > 0 {
+		agentOptions = append(agentOptions, flruntime.WithAgentHostedTools(surface.HostedTools...))
 	}
 	if manualCompactions != nil {
 		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))
@@ -199,16 +219,6 @@ func buildFloretThreadAgent(
 		provider,
 		agentOptions...,
 	)
-}
-
-func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability providerWebSearchCapability) bool {
-	if capability.RegisterTool {
-		return true
-	}
-	if strings.TrimSpace(capability.Mode) != providerWebSearchModeExternalBrave {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(providerCfg.Type), "openai_compatible")
 }
 
 func redevenFloretAgentConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy, reasoning config.AIReasoningSelection) flconfig.AgentConfig {

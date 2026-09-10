@@ -24,8 +24,13 @@ type ModelCatalogRequest struct {
 	APIKey     string `json:"api_key,omitempty"`
 }
 
+type ModelCatalogModel struct {
+	config.AIProviderModel
+	WebSearch config.AIWebSearchAvailability `json:"web_search"`
+}
+
 type ModelCatalogResponse struct {
-	Models []config.AIProviderModel `json:"models"`
+	Models []ModelCatalogModel `json:"models"`
 }
 
 // DiscoverModelCatalog queries an explicitly selected endpoint without changing
@@ -39,7 +44,15 @@ func (s *Service) DiscoverModelCatalog(ctx context.Context, in ModelCatalogReque
 		in.APIKey = key
 	}
 	models, err := discoverModelCatalog(ctx, in, &http.Client{Timeout: 20 * time.Second})
-	return ModelCatalogResponse{Models: models}, err
+	if err != nil {
+		return ModelCatalogResponse{}, err
+	}
+	provider := config.AIProvider{ID: in.ProviderID, Type: in.Type, BaseURL: in.BaseURL}
+	out := make([]ModelCatalogModel, 0, len(models))
+	for _, model := range models {
+		out = append(out, ModelCatalogModel{AIProviderModel: model, WebSearch: config.ResolveAIWebSearch(provider, model.EffectiveWireModelName(), false).AIWebSearchAvailability})
+	}
+	return ModelCatalogResponse{Models: out}, nil
 }
 
 func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *http.Client) ([]config.AIProviderModel, error) {

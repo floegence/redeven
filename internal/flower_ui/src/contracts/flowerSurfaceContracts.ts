@@ -40,7 +40,10 @@ export type FlowerReasoningCapability = Readonly<{
   fixture?: string;
 }>;
 
+export type FlowerWebSearchAvailability = Readonly<{ status: 'available' | 'unavailable'; reason: string }>;
+
 export type FlowerProviderModel = Readonly<{
+  web_search?: FlowerWebSearchAvailability;
   display_name?: string;
   status?: string;
   model_name: string;
@@ -97,6 +100,7 @@ export type FlowerProviderSecretState = Readonly<{
 }>;
 
 export type FlowerModelSourceModel = Readonly<{
+  web_search?: FlowerWebSearchAvailability;
   id: string;
   label: string;
   context_window?: number;

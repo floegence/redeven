@@ -3386,5 +3386,946 @@
     ]
   },
   "sha256": "a55f5a544d356a15a6491bc3293f2dabb692a381e65cce69fee4741de9636733",
-  "source": "https://models.dev/api.json"
+  "source": "https://models.dev/api.json",
+  "web_search": {
+    "anthropic/claude-fable-5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-fable-5-1": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-haiku-4-5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-haiku-4-5-20251001": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-opus-4-5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-opus-4-5-20251101": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-opus-4-6": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-opus-4-7": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-opus-4-8": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-opus-5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-sonnet-4-5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-sonnet-4-5-20250929": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-sonnet-4-6": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "anthropic/claude-sonnet-5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.claude.com/docs/en/models/overview"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.5-air": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.5-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.5v": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.6": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.6v": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.7": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.7-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-4.7-flashx": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-5-turbo": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-5.1": {
+      "mode": "glm_web_search_tool",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "supported"
+    },
+    "chatglm/glm-5.2": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-5.3": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-5.3-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "chatglm/glm-5v-turbo": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.z.ai/guides/overview/migrate-to-glm-new"
+      ],
+      "status": "not_integrated"
+    },
+    "deepseek/deepseek-v4-flash": {
+      "mode": "deepseek_native",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://api-docs.deepseek.com/guides/responses_api/"
+      ],
+      "status": "supported"
+    },
+    "deepseek/deepseek-v4-flash-vision-exp": {
+      "mode": "deepseek_native",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://api-docs.deepseek.com/guides/responses_api/"
+      ],
+      "status": "supported"
+    },
+    "deepseek/deepseek-v4-pro": {
+      "mode": "deepseek_native",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://api-docs.deepseek.com/guides/responses_api/"
+      ],
+      "status": "supported"
+    },
+    "google/gemini-2.5-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-2.5-flash-lite": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-2.5-pro": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3-flash-preview": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.1-flash-lite": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.1-pro-preview": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.1-pro-preview-customtools": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.5-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.5-flash-lite": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.6-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.7-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-3.8-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-flash-latest": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "google/gemini-flash-lite-latest": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://ai.google.dev/gemini-api/docs/openai"
+      ],
+      "status": "not_integrated"
+    },
+    "groq/openai/gpt-oss-120b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://console.groq.com/docs/models"
+      ],
+      "status": "not_integrated"
+    },
+    "groq/openai/gpt-oss-20b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://console.groq.com/docs/models"
+      ],
+      "status": "not_integrated"
+    },
+    "groq/qwen/qwen3.6-27b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://console.groq.com/docs/models"
+      ],
+      "status": "not_integrated"
+    },
+    "groq/qwen/qwen3.8-27b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://console.groq.com/docs/models"
+      ],
+      "status": "not_integrated"
+    },
+    "moonshot/kimi-k2.6": {
+      "mode": "kimi_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.kimi.com/docs/models"
+      ],
+      "status": "supported"
+    },
+    "moonshot/kimi-k2.7-code": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.kimi.com/docs/models"
+      ],
+      "status": "not_integrated"
+    },
+    "moonshot/kimi-k2.7-code-highspeed": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.kimi.com/docs/models"
+      ],
+      "status": "not_integrated"
+    },
+    "moonshot/kimi-k3": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://platform.kimi.com/docs/models"
+      ],
+      "status": "not_integrated"
+    },
+    "openai/gpt-4.1": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-4.1-mini": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-4o": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-4o-2024-08-06": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-4o-2024-11-20": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-4o-mini": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5-mini": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5-nano": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5-pro": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.1": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.2": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.2-pro": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.3-codex": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.4": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.4-mini": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.4-nano": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.4-pro": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.5": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.5-pro": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.6": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.6-luna": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.6-sol": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-5.6-terra": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/gpt-6-astra": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/o3": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "openai/o3-pro": {
+      "mode": "openai_responses_builtin",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://developers.openai.com/api/docs/models"
+      ],
+      "status": "supported"
+    },
+    "qwen/qvq-max": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen-max": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen-plus": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen-turbo": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen-vl-max": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen-vl-plus": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen2-5-14b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen2-5-32b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen2-5-72b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen2-5-7b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen2-5-vl-72b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen2-5-vl-7b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-14b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-235b-a22b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-32b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-8b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-coder-30b-a3b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-coder-480b-a35b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-coder-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-coder-plus": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-max": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-next-80b-a3b-instruct": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-next-80b-a3b-thinking": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-vl-235b-a22b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-vl-30b-a3b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3-vl-plus": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.5-122b-a10b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.5-27b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.5-35b-a3b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.5-397b-a17b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.5-plus": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.6-27b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.6-35b-a3b": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.6-flash": {
+      "mode": "qwen_responses_web_search",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "supported"
+    },
+    "qwen/qwen3.6-flash-2026-04-16": {
+      "mode": "qwen_responses_web_search",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "supported"
+    },
+    "qwen/qwen3.6-max-preview": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.6-plus": {
+      "mode": "qwen_responses_web_search",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "supported"
+    },
+    "qwen/qwen3.6-plus-2026-04-02": {
+      "mode": "qwen_responses_web_search",
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "supported"
+    },
+    "qwen/qwen3.7-max": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.7-plus": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.8-flash": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwen3.8-max": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "qwen/qwq-plus": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://www.alibabacloud.com/help/en/model-studio/models"
+      ],
+      "status": "not_integrated"
+    },
+    "xai/grok-4.3": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.x.ai/developers/models"
+      ],
+      "status": "not_integrated"
+    },
+    "xai/grok-4.5": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.x.ai/developers/models"
+      ],
+      "status": "not_integrated"
+    },
+    "xai/grok-4.6": {
+      "source_checked_at": "2026-09-10",
+      "source_urls": [
+        "https://docs.x.ai/developers/models"
+      ],
+      "status": "not_integrated"
+    }
+  }
 }

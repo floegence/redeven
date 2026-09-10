@@ -1,3 +1,4 @@
+import { withFlowerWebSearchAvailability } from '../../../../../flower_ui/src/webSearchCapability';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import {
@@ -96,6 +97,7 @@ type ModelsResponse = Readonly<{
     context_window?: number;
     max_output_tokens?: number;
     input_modalities?: readonly string[];
+    web_search?: FlowerProviderModel['web_search'];
     reasoning_capability?: FlowerProviderModel['reasoning_capability'];
   }>[];
 }>;
@@ -368,6 +370,7 @@ function mapDesktopModels(models: ModelsResponse): readonly FlowerModelSourceMod
     const reasoningCapability = normalizeFlowerReasoningCapability(model.reasoning_capability);
     return [{
       id,
+      web_search: model.web_search,
       label: trim(model.label) || id,
       ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
       ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
@@ -587,7 +590,7 @@ async function loadSettingsSnapshot(
   const { hydrateFlowerProviderCatalog } = await import('../../../../../flower_ui/src/settings/modelSelection');
   const providers = await Promise.all(snapshot.model_profile.providers.map((provider) =>
     hydrateFlowerProviderCatalog(provider, (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }))));
-  return { ...snapshot, model_profile: { ...snapshot.model_profile, providers } };
+  return withFlowerWebSearchAvailability({ ...snapshot, model_profile: { ...snapshot.model_profile, providers } }, (catalog?.state === 'loaded' ? catalog.response : await loadCatalog()).models ?? []);
 }
 
 async function loadModels(): Promise<ModelsResponse> {

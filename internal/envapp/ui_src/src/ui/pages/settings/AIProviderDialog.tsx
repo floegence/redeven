@@ -20,7 +20,8 @@ import {
   providerTypeRequiresBaseURL,
 } from './aiCatalog';
 import { useI18n } from '../../i18n';
-import { localizedProviderBuiltInWebSearchLabel } from './providerWebSearchI18n';
+import { WebSearchCapabilityBadge } from '../../../../../../flower_ui/src/WebSearchCapabilityBadge';
+import { flowerProviderSearchSummary } from '../../../../../../flower_ui/src/webSearchCapability';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 import {
   CapabilityTag,
@@ -199,9 +200,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                     <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
                       {provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                     </SettingsPill>
-                    <Show when={localizedProviderBuiltInWebSearchLabel(i18n, provider().type)}>
-                      {(label) => <SettingsPill tone="success">{label()}</SettingsPill>}
-                    </Show>
+                    <SettingsPill tone={flowerProviderSearchSummary(models(), catalogCopy()).enabled ? 'success' : 'default'}>{flowerProviderSearchSummary(models(), catalogCopy()).label}</SettingsPill>
                   </div>
                 </div>
                 <nav class="space-y-1" aria-label={props.title}>
@@ -365,9 +364,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         {provider().type === 'ollama' ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                       </SettingsPill>
                       <SettingsPill>{providerTypeDisplayLabel(provider().type)}</SettingsPill>
-                      <Show when={localizedProviderBuiltInWebSearchLabel(i18n, provider().type)}>
-                        {(label) => <SettingsPill tone="success">{label()}</SettingsPill>}
-                      </Show>
+                      <SettingsPill tone={flowerProviderSearchSummary(models(), catalogCopy()).enabled ? 'success' : 'default'}>{flowerProviderSearchSummary(models(), catalogCopy()).label}</SettingsPill>
                     </div>
                   </section>
                 </Show>
@@ -409,6 +406,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     </Button>
                                   </div>
                                   <div class="mt-2 flex flex-wrap gap-1.5">
+                                    <WebSearchCapabilityBadge availability={preset.web_search} copy={catalogCopy()} />
                                     <CapabilityTag active>{i18n.t('flowerSettings.textCapability')}</CapabilityTag>
                                     <CapabilityTag active={modelSupportsImageInput(preset.input_modalities)}>{i18n.t('flowerSettings.imageInputCapability')}</CapabilityTag>
                                     <Show when={selected()}>

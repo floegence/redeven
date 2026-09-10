@@ -19,6 +19,16 @@ Thread snapshots, list items, and thread patches carry `model_id` and `reasoning
 
 See [reasoning selection ownership](flower-reasoning-selection.md) for loading, draft, and submission rules.
 
+## Web search presentation
+
+Model choices display the shared search badge from the server's readonly
+`web_search` projection. Search availability is independent of ordinary chat
+readiness. Settings show the selected model set's actual state, including mixed
+availability and missing Brave credentials, using the same localized labels in
+Desktop and Env App. A provider brand or frontend model name never enables search.
+Unreviewed pending draft projections are displayed as pending and never saved as
+user preferences. See [model directory ownership](../ai/model-directory-and-selection.md).
+
 ## Permission and navigation
 
 Permission follows the same ownership boundary: environment `defaults.permission_type` applies only to new Threads. A new-thread draft stores `permission_type_override` only after an explicit choice and clears it when matching the loaded default; existing Threads use their own `permission_type`. While settings load, the control is a non-interactive safety placeholder and never persists `approval_required`. Launch omits `permission_type` without an override; the backend resolves and freezes the default in Thread settings. Saving the default updates unmodified new-thread drafts, never existing Threads or explicit overrides.

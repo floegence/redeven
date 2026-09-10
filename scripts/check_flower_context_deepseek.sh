@@ -14,13 +14,13 @@ SECRETS_FILE="$SOURCE_STATE_ROOT/secrets.json"
   exit 2
 }
 
-provider_count=$(jq -r '(.ai // .).providers | map(select((.type // "" | ascii_downcase) == "deepseek" and any(.models[]?; .model_name == "deepseek-v4-flash") and any(.models[]?; .model_name == "deepseek-v4-pro"))) | length' "$CONFIG_FILE")
+provider_count=$(jq -r '(.ai // .).providers | map(select((.type // "" | ascii_downcase) == "deepseek")) | length' "$CONFIG_FILE")
 [[ "$provider_count" == "1" ]] || {
-  echo "Flower context qualification requires exactly one DeepSeek provider with deepseek-v4-flash and deepseek-v4-pro" >&2
+  echo "Flower context qualification requires exactly one configured DeepSeek provider" >&2
   exit 2
 }
 
-provider_id=$(jq -r '(.ai // .).providers[] | select((.type // "" | ascii_downcase) == "deepseek" and any(.models[]?; .model_name == "deepseek-v4-flash") and any(.models[]?; .model_name == "deepseek-v4-pro")) | .id' "$CONFIG_FILE")
+provider_id=$(jq -r '(.ai // .).providers[] | select((.type // "" | ascii_downcase) == "deepseek") | .id' "$CONFIG_FILE")
 base_url=$(jq -r --arg id "$provider_id" '(.ai // .).providers[] | select(.id == $id) | .base_url // ""' "$CONFIG_FILE")
 api_key=$(jq -r --arg id "$provider_id" '(.ai // .).provider_api_keys[$id] // empty' "$SECRETS_FILE")
 if [[ -z "$api_key" ]]; then
@@ -31,7 +31,7 @@ fi
   exit 2
 }
 
-echo "Running Flower structured Ask User, context-prefix, Flash/Pro model-switch, compaction, and native search qualification"
+echo "Running Flower structured Ask User, context-prefix, Flash/Pro model-switch, compaction, and Flash/Vision native search qualification"
 cd "$ROOT_DIR"
 REDEVEN_FLOWER_CONTEXT_E2E=1 \
 REDEVEN_FLOWER_CONTEXT_E2E_BASE_URL="$base_url" \

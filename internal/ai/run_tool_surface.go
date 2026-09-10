@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	fltools "github.com/floegence/floret/v7/tools"
 )
 
@@ -14,6 +15,7 @@ type runToolSurface struct {
 	PermissionSnapshot PermissionSnapshot
 	CapabilityContract runCapabilityContract
 	FloretToolItems    []fltools.Tool
+	HostedTools        []flprovider.HostedToolDefinition
 	SystemPrompt       string
 	HostContext        map[string]string
 }
@@ -108,7 +110,12 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 	if cfg.IncludeControlSignalsInSnapshot {
 		activeSignals = filterToolsByNames(activeSignals, permissionSnapshot.PromptCapabilityNames)
 	}
-	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, cfg.SupportsAskUserQuestionBatches)
+	var hosted []flprovider.HostedToolDefinition
+	_, searchAllowed := r.toolAllowlist["web_search"]
+	if r.webSearch.HostedTool() && (len(r.toolAllowlist) == 0 || searchAllowed) {
+		hosted = []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search", Options: map[string]any{"wire_shape": r.webSearch.Mode}}}
+	}
+	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, cfg.SupportsAskUserQuestionBatches, hosted...)
 	floretToolItems, err := buildFloretTools(r, activeTools, cfg.State)
 	if err != nil {
 		return runToolSurface{}, err
@@ -130,6 +137,7 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 		PermissionSnapshot: permissionSnapshot,
 		CapabilityContract: capabilityContract,
 		FloretToolItems:    floretToolItems,
+		HostedTools:        hosted,
 		SystemPrompt:       systemPrompt,
 		HostContext:        hostContext,
 	}, nil

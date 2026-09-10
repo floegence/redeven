@@ -168,6 +168,7 @@ run_step "checking Desktop plugin startup smoke syntax" node --check scripts/smo
 run_step "checking Gateway protocol contract" ./scripts/check_gateway_protocol_contract.sh
 run_step "checking Floret dependency boundary" ./scripts/check_floret_dependency_boundary.sh
 run_step "checking immutable Flower upgrade fixtures" python3 scripts/check_flower_storage_compatibility.py
+run_step "checking model search review contracts" python3 scripts/model-catalog/test_generate.py
 run_step "checking generated Agent model catalog" python3 scripts/model-catalog/generate.py --check
 run_step "checking Flower live protocol" ./scripts/check_flower_live_protocol.sh
 run_step "checking built renderer and terminal recovery E2E" ./scripts/check_renderer_e2e.sh

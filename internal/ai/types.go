@@ -21,15 +21,16 @@ import (
 )
 
 type Model struct {
-	ID                  string                       `json:"id"`
-	Label               string                       `json:"label,omitempty"`
-	Source              string                       `json:"source,omitempty"`
-	SourceLabel         string                       `json:"source_label,omitempty"`
-	ContextWindow       int                          `json:"context_window,omitempty"`
-	MaxOutputTokens     int                          `json:"max_output_tokens,omitempty"`
-	InputModalities     []string                     `json:"input_modalities,omitempty"`
-	SupportsImageInput  bool                         `json:"supports_image_input,omitempty"`
-	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	WebSearch           config.AIWebSearchAvailability `json:"web_search"`
+	ID                  string                         `json:"id"`
+	Label               string                         `json:"label,omitempty"`
+	Source              string                         `json:"source,omitempty"`
+	SourceLabel         string                         `json:"source_label,omitempty"`
+	ContextWindow       int                            `json:"context_window,omitempty"`
+	MaxOutputTokens     int                            `json:"max_output_tokens,omitempty"`
+	InputModalities     []string                       `json:"input_modalities,omitempty"`
+	SupportsImageInput  bool                           `json:"supports_image_input,omitempty"`
+	ReasoningCapability config.AIReasoningCapability   `json:"reasoning_capability,omitempty"`
 }
 
 type RequestUserInputPrompt struct {

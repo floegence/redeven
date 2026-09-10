@@ -32,6 +32,7 @@ type deepSeekContextObservation struct {
 	MessageToolCallNames   []string
 	MessageToolResultNames []string
 	DefinitionToolNames    []string
+	NativeSearchTools      int
 	SystemHash             string
 	ToolsHash              string
 	MarkerPresence         []bool
@@ -124,6 +125,13 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 		}
 	}
 	for _, rawTool := range envelope.Tools {
+		var kind struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(rawTool, &kind)
+		if kind.Type == "web_search" {
+			observation.NativeSearchTools++
+		}
 		var tool struct {
 			Name string `json:"name"`
 		}

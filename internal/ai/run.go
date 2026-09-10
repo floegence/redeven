@@ -76,8 +76,7 @@ type runOptions struct {
 	AllowSubagentDelegate       bool
 	ToolAllowlist               []string
 	NoUserInteraction           bool
-	WebSearchToolEnabled        bool
-	WebSearchMode               string
+	WebSearch                   config.AIWebSearchResolution
 	SkillManager                *skillManager
 	SubagentRuntime             subagentRuntime
 	ToolTargetPolicy            ToolTargetPolicy
@@ -180,8 +179,7 @@ type run struct {
 	muManualCompaction       sync.Mutex
 	contextCompactionAnchors map[string]FlowerTimelineAnchor
 
-	webSearchToolEnabled      bool
-	webSearchMode             string
+	webSearch                 config.AIWebSearchResolution
 	attachmentToolReadEnabled bool
 
 	collectedWebSources     map[string]SourceRef // url -> source
@@ -335,8 +333,7 @@ func newRun(opts runOptions) *run {
 		lifecycleMinEmitGap:         600 * time.Millisecond,
 		collectedWebSources:         make(map[string]SourceRef),
 		collectedWebSourceOrder:     make([]string, 0, 8),
-		webSearchToolEnabled:        opts.WebSearchToolEnabled,
-		webSearchMode:               strings.TrimSpace(opts.WebSearchMode),
+		webSearch:                   opts.WebSearch,
 		subagentRuntime:             opts.SubagentRuntime,
 		currentThinkingBlockIndex:   -1,
 		activityFileActions:         make(map[string]FlowerActivityFileAction),

@@ -865,6 +865,26 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 	if err != nil && cfg.HasModelProfile() {
 		return nil, errors.Join(err, catalogErr)
 	}
+	if cfg != nil {
+		for _, provider := range cfg.Providers {
+			if config.ResolveAIWebSearch(provider, "", false).Mode != config.AIWebSearchBrave {
+				continue
+			}
+			configured := false
+			if s.resolveWebSearchKey != nil {
+				key, found, keyErr := s.resolveWebSearchKey(provider.ID)
+				if keyErr != nil {
+					return nil, fmt.Errorf("resolve web search credential: %w", keyErr)
+				}
+				configured = found && strings.TrimSpace(key) != ""
+			}
+			for i := range configModels {
+				if strings.HasPrefix(configModels[i].ID, provider.ID+"/") {
+					configModels[i].WebSearch = config.ResolveAIWebSearch(provider, "", configured).AIWebSearchAvailability
+				}
+			}
+		}
+	}
 	seen := make(map[string]struct{}, len(configModels))
 	if currentModelID != "" {
 		out.CurrentModel = currentModelID
@@ -924,6 +944,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 				}
 				capability := desktopModelSourceModelCapability(m)
 				model := Model{
+					WebSearch:           config.AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated"},
 					ID:                  modelID,
 					Label:               label,
 					Source:              modelSourceDesktopModelSource,
@@ -992,7 +1013,7 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 				continue
 			}
 			seenModel[id] = struct{}{}
-			models = append(models, configModelView(id, pn+" / "+firstNonEmpty(m.DisplayName, m.WireModelName, modelName), p.Type, m))
+			models = append(models, configModelView(id, pn+" / "+firstNonEmpty(m.DisplayName, m.WireModelName, modelName), p, m))
 		}
 	}
 	currentModelID := strings.TrimSpace(cfg.CurrentModelID)
@@ -1016,8 +1037,9 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 	return models, currentModelID, nil
 }
 
-func configModelView(id string, label string, providerType string, m config.AIProviderModel) Model {
+func configModelView(id string, label string, provider config.AIProvider, m config.AIProviderModel) Model {
 	return Model{
+		WebSearch:           config.ResolveAIWebSearch(provider, m.EffectiveWireModelName(), false).AIWebSearchAvailability,
 		ID:                  strings.TrimSpace(id),
 		Label:               strings.TrimSpace(label),
 		Source:              modelSourceRuntimeConfig,
@@ -1026,7 +1048,7 @@ func configModelView(id string, label string, providerType string, m config.AIPr
 		MaxOutputTokens:     m.MaxOutputTokens,
 		InputModalities:     m.NormalizedInputModalities(),
 		SupportsImageInput:  m.SupportsImageInput(),
-		ReasoningCapability: m.EffectiveReasoningCapability(providerType),
+		ReasoningCapability: m.EffectiveReasoningCapability(provider.Type),
 	}
 }
 

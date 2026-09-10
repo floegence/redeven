@@ -61,95 +61,95 @@ func TestResolveProviderWebSearchCapability_CuratedNativeProviders(t *testing.T)
 		wantTool   bool
 	}{
 		{
-			name:       "official_openai",
+			name:       "catalog_supported",
 			provider:   config.AIProvider{Type: "openai", BaseURL: "https://api.openai.com/v1"},
 			modelName:  "gpt-5.5",
 			wantMode:   providerWebSearchModeOpenAIResponsesBuiltin,
-			wantReason: "official_openai",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "moonshot_kimi",
 			provider:   config.AIProvider{Type: "moonshot"},
 			modelName:  "kimi-k2.6",
 			wantMode:   providerWebSearchModeKimiBuiltin,
-			wantReason: "curated_moonshot_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "glm_5_1",
 			provider:   config.AIProvider{Type: "chatglm"},
 			modelName:  "glm-5.1",
 			wantMode:   providerWebSearchModeGLMWebSearchTool,
-			wantReason: "curated_glm_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "deepseek_v4_pro",
 			provider:   config.AIProvider{Type: "deepseek"},
 			modelName:  "deepseek-v4-pro",
 			wantMode:   providerWebSearchModeDeepSeekNative,
-			wantReason: "curated_deepseek_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "deepseek_v4_flash",
 			provider:   config.AIProvider{Type: "deepseek"},
 			modelName:  "deepseek-v4-flash",
 			wantMode:   providerWebSearchModeDeepSeekNative,
-			wantReason: "curated_deepseek_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "qwen_plus",
 			provider:   config.AIProvider{Type: "qwen"},
 			modelName:  "qwen3.6-plus",
 			wantMode:   providerWebSearchModeQwenResponsesWebSearch,
-			wantReason: "curated_qwen_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "qwen_plus_snapshot",
 			provider:   config.AIProvider{Type: "qwen"},
 			modelName:  "qwen3.6-plus-2026-04-02",
 			wantMode:   providerWebSearchModeQwenResponsesWebSearch,
-			wantReason: "curated_qwen_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "qwen_flash",
 			provider:   config.AIProvider{Type: "qwen"},
 			modelName:  "qwen3.6-flash",
 			wantMode:   providerWebSearchModeQwenResponsesWebSearch,
-			wantReason: "curated_qwen_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "qwen_flash_snapshot",
 			provider:   config.AIProvider{Type: "qwen"},
 			modelName:  "qwen3.6-flash-2026-04-16",
 			wantMode:   providerWebSearchModeQwenResponsesWebSearch,
-			wantReason: "curated_qwen_model",
+			wantReason: "catalog_supported",
 		},
 		{
 			name:       "qwen_max_preview_excluded",
 			provider:   config.AIProvider{Type: "qwen"},
 			modelName:  "qwen3.6-max-preview",
 			wantMode:   providerWebSearchModeDisabled,
-			wantReason: "unsupported_qwen_model",
+			wantReason: "not_integrated",
 		},
 		{
-			name:       "openai_compatible_disabled",
+			name:       "not_configured",
 			provider:   config.AIProvider{Type: "openai_compatible", WebSearch: &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeDisabled}},
 			modelName:  "custom-model",
 			wantMode:   providerWebSearchModeDisabled,
-			wantReason: "openai_compatible_disabled",
+			wantReason: "not_configured",
 		},
 		{
 			name:       "openai_compatible_builtin",
 			provider:   config.AIProvider{Type: "openai_compatible", WebSearch: &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeOpenAIBuiltin}},
 			modelName:  "custom-model",
 			wantMode:   providerWebSearchModeOpenAIResponsesBuiltin,
-			wantReason: "openai_compatible_configured_builtin",
+			wantReason: "configured",
 		},
 		{
 			name:       "openai_compatible_brave",
 			provider:   config.AIProvider{Type: "openai_compatible", WebSearch: &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeBrave}},
 			modelName:  "custom-model",
 			wantMode:   providerWebSearchModeExternalBrave,
-			wantReason: "openai_compatible_configured_brave",
+			wantReason: "configured",
 			wantTool:   true,
 		},
 	}
@@ -165,8 +165,8 @@ func TestResolveProviderWebSearchCapability_CuratedNativeProviders(t *testing.T)
 			if capability.Reason != tc.wantReason {
 				t.Fatalf("Reason=%q, want %q", capability.Reason, tc.wantReason)
 			}
-			if capability.RegisterTool != tc.wantTool {
-				t.Fatalf("RegisterTool=%v, want %v", capability.RegisterTool, tc.wantTool)
+			if capability.LocalTool() != tc.wantTool {
+				t.Fatalf("RegisterTool=%v, want %v", capability.LocalTool(), tc.wantTool)
 			}
 		})
 	}
@@ -747,6 +747,7 @@ func TestOpenAICompatibleBuiltinWebSearch_AttachesResponsesHostedTool(t *testing
 		Model:         "compat-model",
 		Messages:      []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
 		WebSearchMode: providerWebSearchModeOpenAIResponsesBuiltin,
+		Protocol:      "openai-responses",
 	}, nil)
 	if err != nil {
 		t.Fatalf("StreamTurn: %v", err)
@@ -1000,6 +1001,7 @@ func TestQwenResponsesBuiltinWebSearch_AttachesResponsesTool(t *testing.T) {
 		Model:         "qwen3.6-plus",
 		Messages:      []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
 		WebSearchMode: providerWebSearchModeQwenResponsesWebSearch,
+		Protocol:      "openai-responses",
 	}, nil)
 	if err != nil {
 		t.Fatalf("StreamTurn: %v", err)

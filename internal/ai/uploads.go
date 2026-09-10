@@ -383,9 +383,7 @@ func providerSupportsNativeFileAttachments(provider config.AIProvider, modelName
 		return true
 	case "qwen", "openai_compatible":
 		mode := resolveProviderWebSearchCapability(provider, modelName).Mode
-		return mode == providerWebSearchModeOpenAIResponsesBuiltin ||
-			mode == providerWebSearchModeQwenResponsesWebSearch ||
-			(providerType == "openai_compatible" && mode == providerWebSearchModeExternalBrave)
+		return config.AIProviderProtocol(providerType, mode) == "openai-responses"
 	default:
 		return false
 	}

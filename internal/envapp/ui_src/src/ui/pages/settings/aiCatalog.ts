@@ -10,7 +10,6 @@ import {
   FLOWER_PROVIDER_PRESETS,
   FLOWER_PROVIDER_TYPES,
   defaultFlowerContextWindowForProviderType,
-  flowerBuiltInWebSearchLabel,
   flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
@@ -206,10 +205,6 @@ export function providerSupportsCustomModelNames(providerType: AIProviderType): 
   return flowerProviderSupportsCustomModels(providerType);
 }
 
-export function providerBuiltInWebSearchLabel(providerType: AIProviderType): string | undefined {
-  return flowerBuiltInWebSearchLabel(providerType) || undefined;
-}
-
 export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
   return {
     model_selection: row.model_selection,
@@ -223,7 +218,7 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
       ? { mode: row?.web_search?.mode === 'openai_builtin' || row?.web_search?.mode === 'brave' ? row.web_search.mode : 'disabled' }
       : undefined,
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
-      display_name: m.display_name, status: m.status,
+      display_name: m.display_name, status: m.status, web_search: m.web_search,
       model_name: String(m?.model_name ?? ''),
       wire_model_name: String(m?.wire_model_name ?? ''),
       context_window: normalizePositiveInteger(m?.context_window),
@@ -240,7 +235,7 @@ export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
   out.models = models.map((m) => ({
-    display_name: m.display_name, status: m.status,
+    display_name: m.display_name, status: m.status, web_search: m.web_search,
       model_name: String(m?.model_name ?? ''),
     wire_model_name: String(m?.wire_model_name ?? '').trim() || undefined,
     context_window: normalizeContextWindowByProvider(out.type, m?.context_window),

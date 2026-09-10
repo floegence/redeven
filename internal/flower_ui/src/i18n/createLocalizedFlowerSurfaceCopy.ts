@@ -594,13 +594,7 @@ function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): Flowe
     braveSearch: t(i18n, k('braveSearch')),
     needsBraveKey: t(i18n, k('needsBraveKey')),
     providerTypeLabels: localizedFlowerProviderTypeLabels(i18n.locale),
-    builtInWebSearch: {
-      openai: t(i18n, k('openAIBuiltInWebSearch')),
-      moonshot: t(i18n, k('kimiBuiltInWebSearch')),
-      chatglm: t(i18n, k('glmBuiltInWebSearch')),
-      deepseek: t(i18n, k('deepSeekBuiltInWebSearch')),
-      qwen: t(i18n, k('qwenBuiltInWebSearch')),
-    },
+
     autoSave: {
       saving: t(i18n, k('autoSaveSaving')),
       saveFailed: t(i18n, k('autoSaveFailed')),
@@ -677,13 +671,7 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
     needsKey: t(i18n, k('dialogNeedsKey')),
     braveKeyReady: t(i18n, k('dialogBraveKeyReady')),
     needsBraveKey: t(i18n, k('dialogNeedsBraveKey')),
-    builtInWebSearch: {
-      openai: t(i18n, k('openAIBuiltInWebSearch')),
-      moonshot: t(i18n, k('kimiBuiltInWebSearch')),
-      chatglm: t(i18n, k('glmBuiltInWebSearch')),
-      deepseek: t(i18n, k('deepSeekBuiltInWebSearch')),
-      qwen: t(i18n, k('qwenBuiltInWebSearch')),
-    },
+
     recommendedModelsTitle: t(i18n, k('dialogRecommendedModelsTitle')),
     recommendedModelsDescription: t(i18n, k('dialogRecommendedModelsDescription')),
     modelNote: (noteKey) => localizedFlowerProviderModelNote(i18n.locale, noteKey),

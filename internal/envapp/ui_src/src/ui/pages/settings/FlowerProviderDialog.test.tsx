@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlowerProviderDialog } from '../../../../../../flower_ui/src/settings/FlowerProviderDialog';
 import { defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../flower_ui/src/settings/modelSelection';
-import type { FlowerProviderDraft } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerProviderDraft, FlowerModelCatalogDiscovery } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   createFloatingPresence: (options: { open: () => boolean }) => ({
@@ -62,12 +62,12 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 
 afterEach(() => { document.body.innerHTML = ''; });
 
-function mountDialog(mode: 'create' | 'edit' = 'create') {
+function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelCatalogDiscovery) {
   const host = document.createElement('div'); document.body.append(host);
   const [open, setOpen] = createSignal(true);
   const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'brand', type: 'openai', models: defaultFlowerProviderModels('openai') });
   let confirmed: FlowerProviderDraft | undefined;
-  const dispose = render(() => <FlowerProviderDialog open={open()} mode={mode} provider={provider()} keyConfigured webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
+  const dispose = render(() => <FlowerProviderDialog onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
   const button = (text: string) => {
     const el = [...host.querySelectorAll('button')].find((element) => element.textContent?.trim() === text);
     if (!el) throw new Error(`Missing button: ${text}`);
@@ -83,6 +83,26 @@ function mountDialog(mode: 'create' | 'edit' = 'create') {
 }
 
 describe('shared Flower provider dialog', () => {
+  it('refreshes native capabilities from the server and shows mixed support without brand inference', async () => {
+    vi.useFakeTimers();
+    const models = defaultFlowerProviderModels('deepseek').map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
+    const discover = vi.fn(async () => ({ models }));
+    const dialog = mountDialog('edit', discover);
+    try {
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: defaultFlowerProviderModels('deepseek') });
+      expect(dialog.host.textContent).not.toContain('DeepSeek built-in web search');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(dialog.host.querySelectorAll('[data-web-search="available"]')).toHaveLength(3);
+      expect(discover).toHaveBeenCalledTimes(1);
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: [models[0], { ...models[1], web_search: { status: 'unavailable', reason: 'not_integrated' } }] });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(discover).toHaveBeenCalledTimes(1);
+      expect(dialog.host.textContent).toContain('Web search available for some models');
+      expect(dialog.host.querySelector('[data-web-search="unavailable"]')?.textContent).toBe('Web search not integrated');
+      expect(dialog.button('Save provider').disabled).toBe(false);
+    } finally { dialog.dispose(); vi.useRealTimers(); }
+  });
+
   it('keeps a disabled custom vision model visible after clearing and reopening', () => {
     const dialog = mountDialog('edit');
     try {

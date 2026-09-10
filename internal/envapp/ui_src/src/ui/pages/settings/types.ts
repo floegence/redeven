@@ -1,5 +1,7 @@
 import type { FlowerProviderModelNoteKey } from '../../../../../../flower_ui/src/settings/providerModelNotes';
 import type {
+  FlowerProviderModel,
+  FlowerWebSearchAvailability,
   FlowerReasoningCapability,
   FlowerModelSelection,
   FlowerReasoningSelection,
@@ -16,18 +18,7 @@ export type PermissionPolicy = Readonly<{
 
 export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openrouter' | 'xai' | 'groq' | 'ollama' | 'openai_compatible';
 
-export type AIProviderModel = Readonly<{
-  display_name?: string;
-  status?: string;
-  model_name: string;
-  wire_model_name?: string;
-  context_window?: number;
-  max_output_tokens?: number;
-  effective_context_window_percent?: number;
-  input_modalities?: readonly AIInputModality[];
-  reasoning_capability?: FlowerReasoningCapability;
-  default_reasoning_selection?: FlowerReasoningSelection;
-}>;
+export type AIProviderModel = FlowerProviderModel;
 
 export type AIInputModality = 'text' | 'image';
 
@@ -254,6 +245,7 @@ export type SkillBrowseFileResponse = Readonly<{
 export type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
 
 export type AIProviderModelRow = {
+  web_search?: FlowerWebSearchAvailability;
   display_name?: string;
   status?: string;
   model_name: string;
@@ -279,6 +271,7 @@ export type AIProviderRow = {
 };
 
 export type AIProviderModelPreset = Readonly<{
+  web_search?: FlowerWebSearchAvailability;
   display_name?: string;
   status?: string;
   model_name: string;
