@@ -4087,7 +4087,17 @@ export function EnvPortForwardsPage() {
         onSelect={setWorkspacePath}
       />
 
-      <GitTemplateImport open={gitImportOpen()} template={gitImportTemplate()} onClose={() => setGitImportOpen(false)} onImported={() => { void loadManaged(); }} serviceName={(id) => managedState().find((item) => item.service_id === id)?.name || id} />
+      <GitTemplateImport
+        open={gitImportOpen()}
+        environmentName={ctx.env()?.name || ctx.env_id()}
+        template={gitImportTemplate()}
+        onClose={() => setGitImportOpen(false)}
+        onImported={() => {
+          void loadManaged();
+          notify.success(i18n.t('webServices.managed.templateSaved'), i18n.t('webServices.managed.templateSavedMessage'));
+        }}
+        serviceName={(id) => managedState().find((item) => item.service_id === id)?.name || id}
+      />
       <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-sm text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
 
       <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-sm">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
