@@ -114,19 +114,20 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tc.name == "vision" {
+			switch tc.name {
+			case "vision":
 				request := SendUserTurnRequest{ClientRequestID: "vision-search", ThreadID: thread.ThreadID, Input: RunInput{Text: "search admission"}}
 				attachSearchTestImage(t, svc, meta, &request)
 				if _, err := svc.SendUserTurn(t.Context(), meta, request); err != nil {
 					t.Fatal(err)
 				}
 				waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
-			} else if tc.name == "fetch_only" {
+			case "fetch_only":
 				if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "fetch-only", ThreadID: thread.ThreadID, Input: RunInput{Text: "Fetch a known URL."}, Options: RunOptions{ToolAllowlist: []string{"web_fetch"}}}); err != nil {
 					t.Fatal(err)
 				}
 				waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
-			} else {
+			default:
 				sendAndWaitForModelSwitch(t, svc, meta, thread.ThreadID, "search admission", "")
 			}
 			waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.TitleStatus == "ready" })
@@ -217,7 +218,7 @@ func (transport searchTestTransport) RoundTrip(request *http.Request) (*http.Res
 }
 
 func TestNativeSearchSurvivesWaitingRetryAndRestart(t *testing.T) {
-	for _, failure := range []string{"rejected", "misrouted"} {
+	for _, failure := range []string{"rejected", "misrouted", "settings_changed"} {
 		t.Run(failure, func(t *testing.T) { testNativeSearchLifecycle(t, failure) })
 	}
 }
@@ -260,6 +261,10 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 			}}})
 			return
 		}
+		if r.URL.Path == "/chat/completions" {
+			fmt.Fprint(w, "data: {\"id\":\"new-turn\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Completed\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+			return
+		}
 		writeDeepSeekIntegrationTextResponse(w, flusher, fmt.Sprintf("done-%d", call), "Search completed.")
 	}))
 	defer server.Close()
@@ -268,6 +273,14 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		Config:         &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Type: "deepseek", BaseURL: server.URL, Models: config.AIProviderCatalog("deepseek")}}},
 		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil }}
+	if failure == "settings_changed" {
+		opts.Config.Providers[0].Type = "openai_compatible"
+		for i := range opts.Config.Providers[0].Models {
+			opts.Config.Providers[0].Models[i].ReasoningCapability = config.AIReasoningCapability{}
+			opts.Config.Providers[0].Models[i].DefaultReasoningSelection = config.AIReasoningSelection{}
+		}
+		opts.Config.Providers[0].WebSearch = &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeOpenAIBuiltin}
+	}
 	svc, err := NewService(opts)
 	if err != nil {
 		t.Fatal(err)
@@ -285,6 +298,9 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
+	if failure == "settings_changed" {
+		opts.Config.Providers[0].WebSearch.Mode = config.AIProviderWebSearchModeDisabled
+	}
 	svc, err = NewService(opts)
 	if err != nil {
 		t.Fatal(err)
@@ -294,6 +310,9 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 	}
 	failed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "failed" })
 	wantFailure := "DeepSeek provider status 400"
+	if failure == "settings_changed" {
+		wantFailure = "400"
+	}
 	if failure == "misrouted" {
 		wantFailure = "provider returned a local function call for hosted tool"
 	}
@@ -318,7 +337,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 			searches++
 		}
 	}
-	if searches != 1 {
+	if failure != "settings_changed" && searches != 1 {
 		t.Fatalf("canonical hosted searches=%d", searches)
 	}
 	mu.Lock()
@@ -330,17 +349,27 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		hosted := 0
 		for _, value := range body["tools"].([]any) {
 			tool := value.(map[string]any)
-			if tool["type"] == "web_search" {
+			if tool["type"] == "web_search" || tool["type"] == "web_search_preview" {
 				hosted++
 			}
 			if tool["name"] == "web_search" {
 				t.Fatal("native search entered local tool schema")
 			}
 		}
-		if hosted != 1 {
-			t.Fatalf("request %d hosted=%d", index, hosted)
+		wantHosted := 1
+		if failure == "settings_changed" && index >= 2 {
+			wantHosted = 0
 		}
-		if index < 3 && !reflect.DeepEqual(body["tools"], bodies[0]["tools"]) {
+		if hosted != wantHosted {
+			t.Fatalf("request %d hosted=%d, want %d", index, hosted, wantHosted)
+		}
+		frozenRequests := 3
+		if failure == "settings_changed" {
+			// Canonical user retry admits a new Turn in Floret. The resumed
+			// waiting Turn retains search; the new Turn adopts disabled search.
+			frozenRequests = 2
+		}
+		if index < frozenRequests && !reflect.DeepEqual(body["tools"], bodies[0]["tools"]) {
 			t.Fatalf("request %d changed the frozen tool surface", index)
 		}
 	}

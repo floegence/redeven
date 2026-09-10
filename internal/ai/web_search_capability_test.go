@@ -2,10 +2,10 @@ package ai
 
 import (
 	"context"
-
-	flprovider "github.com/floegence/floret/v7/provider"
 	"strings"
 	"testing"
+
+	flprovider "github.com/floegence/floret/v7/provider"
 
 	"github.com/floegence/redeven/internal/config"
 )
