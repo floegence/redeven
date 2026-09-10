@@ -63,6 +63,84 @@ describe('GitHub source review in the browser', () => {
     localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY);
     api.request.mockReset();
   });
+  for (const [width, height, scoped] of [
+    [1280, 1000, false],
+    [390, 760, false],
+    [1280, 900, true],
+  ] as const) {
+    it(`keeps dialog geometry stable when disclosures toggle at ${width}×${height}, scoped=${scoped}`, async () => {
+      await page.viewport(width, height);
+      document.documentElement.classList.toggle('dark', width < 500);
+      window.redevenDesktopTemplateSources = { acquire: vi.fn(), cancel: vi.fn() };
+      const scrollbarStyle = document.createElement('style');
+      // Exercise a space-consuming scrollbar even on systems using overlay scrollbars.
+      scrollbarStyle.textContent =
+        '[data-floe-dialog-panel] > div { scrollbar-width: auto; } [data-floe-dialog-panel] > div::-webkit-scrollbar { width: 14px; }';
+      document.body.append(scrollbarStyle);
+      const host = document.createElement('div');
+      if (scoped) {
+        host.setAttribute('data-floe-dialog-surface-host', 'true');
+        host.setAttribute('data-floe-surface-portal-layer', 'true');
+        host.style.cssText = 'position:absolute;left:140px;top:90px;width:850px;height:460px';
+      }
+      document.body.append(host);
+      dispose = render(
+        () => (
+          <GitTemplateImport open onClose={() => undefined} onImported={() => undefined} serviceName={(id) => id} />
+        ),
+        host,
+      );
+      await expect.element(page.getByRole('dialog')).toBeVisible();
+      const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+      await expect
+        .element(panel.closest<HTMLElement>('[data-floe-dialog-mode]')!)
+        .toHaveAttribute('data-floe-dialog-mode', scoped ? 'surface' : 'global');
+      await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
+      await Promise.all(panel.getAnimations().map((animation) => animation.finished));
+      const title = panel.querySelector('h2')!;
+      const footer = Array.from(panel.querySelectorAll('button')).at(-1)!;
+      const link = panel.querySelector<HTMLInputElement>('input[placeholder="https://github.com/owner/repository"]')!;
+      const initial = [panel, title, footer].map((element) => element.getBoundingClientRect());
+      const initialLink = link.getBoundingClientRect();
+      const checkGeometry = () => {
+        [panel, title, footer].forEach((element, index) => {
+          const actual = element.getBoundingClientRect();
+          for (const edge of ['x', 'y', 'width', 'height'] as const) {
+            expect(actual[edge], `${element.tagName} ${edge}`).toBeCloseTo(initial[index][edge], 1);
+          }
+        });
+        expect(link.getBoundingClientRect().x).toBeCloseTo(initialLink.x, 1);
+        expect(link.getBoundingClientRect().width).toBeCloseTo(initialLink.width, 1);
+        expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+      };
+      const sourceOptions = panel.querySelector<HTMLDetailsElement>('[data-source-options]')!;
+      const privateRepository = panel.querySelector<HTMLDetailsElement>('[data-private-repository]')!;
+      for (const details of [sourceOptions, privateRepository]) {
+        await userEvent.click(details.querySelector('summary')!);
+        expect(details.open).toBe(true);
+        checkGeometry();
+      }
+      const scroller = Array.from(panel.children).find(
+        (child) => getComputedStyle(child).overflowY === 'auto',
+      ) as HTMLElement;
+      expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+      expect(scroller.offsetWidth - scroller.clientWidth).toBeGreaterThan(0);
+      const credential = panel.querySelector<HTMLInputElement>('input[type=password]')!;
+      await userEvent.fill(credential, 'request-only-token');
+      for (const details of [privateRepository, sourceOptions]) {
+        await userEvent.click(details.querySelector('summary')!);
+        expect(details.open).toBe(false);
+        checkGeometry();
+      }
+      expect(credential.value).toBe('request-only-token');
+      const boundary = scoped ? host.getBoundingClientRect() : { top: 0, left: 0, right: width, bottom: height };
+      expect(initial[0].top).toBeGreaterThanOrEqual(boundary.top);
+      expect(initial[0].left).toBeGreaterThanOrEqual(boundary.left);
+      expect(initial[0].right).toBeLessThanOrEqual(boundary.right);
+      expect(initial[0].bottom).toBeLessThanOrEqual(boundary.bottom);
+      expect(api.request).not.toHaveBeenCalled();
+    });
+  }
   for (const [locale, width, dark] of [
     ['en-US', 1280, false],
     ['zh-CN', 1280, true],
