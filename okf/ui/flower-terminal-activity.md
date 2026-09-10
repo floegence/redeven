@@ -17,7 +17,9 @@ Floret owns the nested `ActivityItem.presentation` contract and merges results w
 
 Published Floret v7.9.2 publishes validated call presentation before tool output.
 The collapsed row immediately shows its description; expanding immediately
-reveals the sanitized command. Only the output region may wait for output.
+reveals the sanitized command. All tool details remain collapsed until manually opened, including waiting and
+running calls with attention facts. Running titles retain the existing sweep.
+Only the output region may wait for output.
 Result events settle the row while the model continues generating, and current
 replacements preserve manual disclosure, command selection, and scroll ownership.
 

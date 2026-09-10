@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-09-10 — Manual-only tool disclosure
+
+- Remove status- and attention-driven automatic expansion from the shared Flower activity controller. Pending, waiting, and running tools remain collapsed while running titles retain their sweep.
+- Preserve manual disclosure through result updates and navigation; approval controls remain in the composer. See [activity interaction](ui/flower-activity-interaction.md) and [terminal presentation](ui/flower-terminal-activity.md).
+
 ## 2026-09-10 — Immediate tool presentation and consistent failure disclosure
 
 - Adopt published Floret v7.9.2 so validated tool descriptions and commands are visible before output and results settle during continued model generation.

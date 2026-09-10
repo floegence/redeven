@@ -168,7 +168,39 @@ describe('Activity disclosure interaction', () => {
   });
 
 
-  it('keeps following through automatic attention expansion without claiming a reading anchor', async () => {
+  it.each(['pending', 'waiting', 'running'] as const)('keeps %s tools with attention facts collapsed and shows the running title sweep', async (status) => {
+    const tool = activityItem({
+      item_id: 'active-command', tool_id: 'active-command', tool_name: 'terminal.exec',
+      renderer: 'terminal', label: 'Inspect environment status', status, needs_attention: true,
+      payload: { operation: 'exec', command: 'printf READY', output: '' },
+    });
+    const { runtime, live } = await mount([write(), tool]);
+    expect(toggleFor(runtime, tool.item_id).getAttribute('aria-expanded')).toBe('false');
+    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), tool], 2) });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const row = rowFor(runtime, tool.item_id);
+    const toggle = toggleFor(runtime, tool.item_id);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(row.querySelector('.flower-activity-inline-details')).toBeNull();
+    const running = { ...tool, status: 'running' as const, label: 'Inspecting environment status' };
+    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), running], 3) });
+    await waitFor(() => row.textContent?.includes(running.label) === true);
+    expect(toggleFor(runtime, tool.item_id)).toBe(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(row.querySelector('.flower-activity-inline-details')).toBeNull();
+    const title = row.querySelector<HTMLElement>('.flower-activity-inline-title')!;
+    expect(window.getComputedStyle(title, '::after').animationName).toBe('flower-activity-title-sweep');
+    expect(window.getComputedStyle(title, '::after').pointerEvents).toBe('none');
+    await userEvent.click(toggle);
+    await waitFor(() => row.querySelector('.flower-activity-terminal-command')?.textContent === 'printf READY');
+    const finished = { ...running, status: 'success' as const, payload: { ...running.payload, exit_code: 0, output: 'Ready' } };
+    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), finished], 4) });
+    await waitFor(() => row.getAttribute('data-flower-activity-status') === 'success');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(window.getComputedStyle(title, '::after').animationName).toBe('none');
+  });
+
+  it('keeps waiting tools collapsed without disturbing transcript following', async () => {
     const items = [write(), ...Array.from({ length: 24 }, (_, index) => activityItem({
       ...read(), item_id: `read-${index}`, tool_id: `read-${index}`, label: `Check diagnostic output ${index}`,
     }))];
@@ -179,7 +211,8 @@ describe('Activity disclosure interaction', () => {
       ? { ...item, status: 'waiting' as const, needs_attention: true }
       : item);
     live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(waiting, 3) });
-    await waitFor(() => rowFor(runtime, 'read-23').getAttribute('data-state') === 'open');
+    await waitFor(() => rowFor(runtime, 'read-23').getAttribute('data-flower-activity-status') === 'waiting');
+    expect(toggleFor(runtime, 'read-23').getAttribute('aria-expanded')).toBe('false');
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
     expect(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight).toBeLessThanOrEqual(1);

@@ -141,13 +141,13 @@ describe('SSH terminal activity', () => {
     await page.viewport(1280, 900);
   });
 
-  it('keeps failure summaries visible, waiting details open, and termination expandable', async () => {
+  it('keeps failure summaries visible and all terminal details manually expandable', async () => {
     const failure = activityItem({ ...read(), item_id: 'failed', tool_id: 'failed', label: '检查失败的诊断', status: 'error', payload: { operation: 'read', error: { message: 'Session closed' } } });
     const waiting = activityItem({ ...write(), item_id: 'waiting', tool_id: 'waiting', label: '等待 SSH 输入授权', status: 'waiting', requires_approval: true, approval_state: 'requested' });
     const stopped = activityItem({ ...read(), item_id: 'stopped', tool_id: 'stopped', label: '停止诊断任务', payload: { operation: 'terminate', command: 'ssh udesk26', output: 'Stopped', terminated: true } });
     const { runtime } = await mount([write(), failure, waiting, stopped]);
     expect(toggleFor(runtime, 'failed').getAttribute('aria-expanded')).toBe('false');
-    expect(toggleFor(runtime, 'waiting').getAttribute('aria-expanded')).toBe('true');
+    expect(toggleFor(runtime, 'waiting').getAttribute('aria-expanded')).toBe('false');
     expect(rowFor(runtime, 'failed').textContent).toContain('Session closed');
     toggleFor(runtime, 'stopped').click();
     await waitFor(() => rowFor(runtime, 'stopped').textContent?.includes('Stopped') === true);
