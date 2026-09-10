@@ -11,9 +11,9 @@ const FLOE_WEBAPP_DEPENDENCIES = [
 ] as const;
 
 const FLOE_WEBAPP_RELEASE_SET = {
-  '@floegence/floe-webapp-boot': '0.51.0',
-  '@floegence/floe-webapp-core': '0.51.0',
-  '@floegence/floe-webapp-protocol': '0.51.0',
+  '@floegence/floe-webapp-boot': '0.52.1',
+  '@floegence/floe-webapp-core': '0.52.1',
+  '@floegence/floe-webapp-protocol': '0.52.1',
 } as const;
 
 const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
