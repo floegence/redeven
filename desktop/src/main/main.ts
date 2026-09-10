@@ -1,3 +1,5 @@
+import { DesktopTemplateSources } from './templateSources';
+import { TEMPLATE_SOURCE_ACQUIRE_CHANNEL, TEMPLATE_SOURCE_CANCEL_CHANNEL } from '../shared/desktopTemplateSources';
 import { CodeSpaceBrowserSessions } from './codespaceBrowserSessions';
 import { createNativeCodeSpaceGateway, type NativeCodeSpaceGateway } from './codespaceNativeGateway';
 import { createLocalNativeCodeSpaceRoute } from './codespaceNativeRoute';
@@ -18200,6 +18202,19 @@ if (!app.requestSingleInstanceLock()) {
       message: 'Unsupported desktop runtime action.',
     };
   });
+  const templateSources = new DesktopTemplateSources();
+  const templateSourceOwners = new Set<number>();
+  ipcMain.handle(TEMPLATE_SOURCE_ACQUIRE_CHANNEL, async (event, request) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (!record || record.root_window?.webContentsID !== event.sender.id || event.senderFrame !== event.sender.mainFrame) return { ok: false, error_code: 'PERMISSION_DENIED' };
+    if (!templateSourceOwners.has(event.sender.id)) {
+      const owner = event.sender.id;
+      templateSourceOwners.add(owner);
+      event.sender.once('destroyed', () => { templateSources.cancelOwner(owner); templateSourceOwners.delete(owner); });
+    }
+    return templateSources.acquire(event.sender.id, request);
+  });
+  ipcMain.handle(TEMPLATE_SOURCE_CANCEL_CHANNEL, (event, operationID) => { templateSources.cancel(event.sender.id, operationID); });
   ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL, async (event, request): Promise<DesktopCodeWorkspacePackagePrepareResponse> => {
     const normalized = normalizeDesktopCodeWorkspacePackagePrepareRequest(request);
     if (!normalized) {

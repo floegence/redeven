@@ -89,8 +89,17 @@ export function parsePnpmLock(lock) {
     if (!isRecord(meta)) {
       throw new Error(`pnpm v9 package metadata must be an object: ${packageKey}`);
     }
+    const identity = parsePnpmPackageKey(packageKey);
+    if (identity.version.startsWith('https://')) {
+      if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(String(meta.version ?? ''))
+          || meta.resolution?.tarball !== identity.version
+          || !/^sha512-[A-Za-z0-9+/]{86}==$/u.test(String(meta.resolution?.integrity ?? ''))) {
+        throw new Error(`pnpm release tarball requires an exact version and integrity: ${packageKey}`);
+      }
+      identity.version = meta.version;
+    }
     return {
-      ...parsePnpmPackageKey(packageKey),
+      ...identity,
       license: '',
       lockKind: 'pnpm',
       platformFiltered: Array.isArray(meta.os) || Array.isArray(meta.cpu) || Array.isArray(meta.libc),

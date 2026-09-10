@@ -47,6 +47,8 @@ const VISIBLE_ATTRIBUTES = new Set([
 ]);
 
 const EXCEPTIONS: readonly Exception[] = [
+  { file: 'src/ui/pages/GitTemplateImport.tsx', kind: 'placeholder', text: 'https://github.com/owner/repository', reason: 'Literal GitHub HTTPS repository URL example.' },
+  { file: 'src/ui/pages/GitTemplateImport.tsx', kind: 'text', text: 'SHA-256:', reason: 'Standard content-digest algorithm identifier shown with the reviewed file hash.' },
   { file: 'src/ui/EnvAppShell.tsx', kind: 'alt', text: 'Redeven', reason: 'Protected product name used as the logo alternative text.' },
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'collect_ui_metrics', reason: 'Raw event identifier shown by the diagnostic console.' },
   { file: 'src/ui/debugConsole/DebugConsoleWindow.tsx', kind: 'text', text: 'visible', reason: 'Raw lifecycle enum value in the diagnostic console.' },

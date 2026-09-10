@@ -2138,6 +2138,23 @@ describe('EnvPortForwardsPage', () => {
     expect(host.querySelector('[data-template-id="custom-host"]')).toBeNull();
   });
 
+  it('uses an external template default locale when the user locale is absent', async () => {
+    const template = { template_id: 'git_locale', service_family_id: 'git_family', name: 'Metadata name', description: 'Metadata description', default_locale: 'zh-CN', localizations: { 'zh-CN': { name: '示例服务', description: '原始模板的默认语言。' } }, source: 'git', deployment: 'host', revision: 1, available: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] };
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
+      if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    const row = host.querySelector('[data-template-id="git_locale"]');
+    expect(row?.textContent).toContain('示例服务');
+    expect(row?.textContent).not.toContain('Metadata name');
+  });
+
   it('duplicates a built-in service template as an independent custom template', async () => {
     const source = { template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
     let duplicateBody: Record<string, unknown> | null = null;

@@ -1,3 +1,5 @@
+import { GitTemplateImport } from './GitTemplateImport';
+import type { ResolvedSource } from '@floegence/redeven-service-templates';
 import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
@@ -117,7 +119,8 @@ type ManagedService = Readonly<{
   template_id: string;
   name: string;
   description?: string;
-  template_source: 'builtin' | 'custom';
+  template_source: 'builtin' | 'custom' | 'git';
+  default_locale?: string;
   deployment: ManagedDeployment;
   workspace_path: string;
   workspace_ownership: 'pending' | 'redeven_created' | 'user_selected';
@@ -279,7 +282,10 @@ type ManagedTemplateNotice = Readonly<{
 
 type ManagedTemplateSpec = ServiceTemplateRuntimeSpec;
 
-type ManagedCatalogTemplate = Readonly<{
+export type ManagedCatalogTemplate = Readonly<{
+  default_locale?: string;
+  source_sha256?: string;
+  git_source?: ResolvedSource & {sha256: string; document_template_id: string; document_family_id: string};
   template_id: string;
   name: string;
   description: string;
@@ -293,7 +299,7 @@ type ManagedCatalogTemplate = Readonly<{
   localizations?: Readonly<Record<string, ManagedTemplateLocalization>>;
   icon?: ServiceTemplateIcon;
   notices?: ReadonlyArray<ManagedTemplateNotice>;
-  source: 'builtin' | 'custom';
+  source: 'builtin' | 'custom' | 'git';
   deployment: ManagedDeployment;
   container_mode?: 'single' | 'compose';
   revision: number;
@@ -1229,17 +1235,18 @@ function managedTemplateKind(template: ManagedCatalogTemplate): ServiceTemplateK
 function managedLocalization(
   localizations: Readonly<Record<string, ManagedTemplateLocalization>> | undefined,
   locale: string,
+  defaultLocale = 'en-US',
 ): ManagedTemplateLocalization | undefined {
-  return localizations?.[locale] ?? localizations?.[locale.split('-')[0]] ?? localizations?.['en-US'];
+  return localizations?.[locale] ?? localizations?.[locale.split('-')[0]] ?? localizations?.[defaultLocale];
 }
 
 function managedTemplateLocalizedIdentity(template: ManagedCatalogTemplate, i18n: WebServicesI18n): Readonly<{ name: string; description: string }> {
-  const localized = managedLocalization(template.localizations, i18n.locale());
+  const localized = managedLocalization(template.localizations, i18n.locale(), template.default_locale);
   return { name: localized?.name || template.name, description: localized?.description || template.description };
 }
 
 function managedServiceLocalizedIdentity(service: ManagedService, i18n: WebServicesI18n): Readonly<{ name: string; description: string }> {
-  const localized = managedLocalization(service.localizations, i18n.locale());
+  const localized = managedLocalization(service.localizations, i18n.locale(), service.default_locale);
   return { name: localized?.name || service.name || service.template_id, description: localized?.description || service.description || '' };
 }
 
@@ -1247,8 +1254,9 @@ function localizedManagedNotices(
   notices: readonly ManagedTemplateNotice[] | undefined,
   localizations: Readonly<Record<string, ManagedTemplateLocalization>> | undefined,
   locale: string,
+  defaultLocale = 'en-US',
 ): ManagedTemplateNotice[] {
-  const localized = managedLocalization(localizations, locale)?.notices ?? {};
+  const localized = managedLocalization(localizations, locale, defaultLocale)?.notices ?? {};
   return (notices ?? []).map((notice) => ({ ...notice, title: localized[notice.id]?.title, description: localized[notice.id]?.description }));
 }
 
@@ -1537,7 +1545,7 @@ function managedServicePresentation(service: ManagedService, i18n: WebServicesI1
     id: service.template_id,
     name: identity.name,
     description: identity.description,
-    source: service.template_source === 'custom' ? 'custom' : 'builtin',
+    source: service.template_source || 'custom',
     kind,
     icon: service.icon,
     deploymentLabel: managedDeploymentLabel(service.deployment, i18n),
@@ -2238,6 +2246,8 @@ export function EnvPortForwardsPage() {
   const [workspacePath, setWorkspacePath] = createSignal('');
   const [managedAccessMode, setManagedAccessMode] = createSignal<WebServiceAccessMode>('unified_proxy');
   const [workspacePickerOpen, setWorkspacePickerOpen] = createSignal(false);
+  const [gitImportOpen, setGitImportOpen] = createSignal(false);
+  const [gitImportTemplate, setGitImportTemplate] = createSignal<ManagedCatalogTemplate>();
   const [templateDrawerOpen, setTemplateDrawerOpen] = createSignal(false);
   const [templateDrawerView, setTemplateDrawerView] = createSignal<TemplateDrawerView>('catalog');
   const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('host');
@@ -2598,6 +2608,9 @@ export function EnvPortForwardsPage() {
 
   const templateUnavailableReason = (template: ManagedCatalogTemplate | null | undefined) => {
     switch (template?.reason_code) {
+      case 'TEMPLATE_SCHEMA_UNSUPPORTED': return i18n.t('webServices.sources.upgradeRequired');
+      case 'TEMPLATE_SOURCE_UNAVAILABLE':
+      case 'TEMPLATE_SOURCE_DIGEST_MISMATCH': return i18n.t('webServices.sources.failed');
       case 'PLATFORM_UNSUPPORTED': return i18n.t('webServices.managed.unavailable.platform');
       case 'CATALOG_TRUST_UNAVAILABLE': return i18n.t('webServices.managed.unavailable.catalogTrust');
       case 'CATALOG_UNAVAILABLE': return i18n.t('webServices.managedCatalogUnavailable');
@@ -2697,7 +2710,7 @@ export function EnvPortForwardsPage() {
 		const target = releasePickerTarget();
 		if (!target) return 'redeven';
 		const source = target.kind === 'template' ? templateByID(target.id)?.source : target.service?.template_source;
-		return source === 'custom' ? 'template' : 'redeven';
+		return source === 'builtin' ? 'redeven' : 'template';
 	});
 	const managedUpdatePlanNoticesAccepted = () => requiredNoticesAccepted(managedUpdatePlan()?.notices, updateNoticeAcceptances());
 	const managedUpdatePlanRequiresStopped = () => Boolean(managedUpdatePlan()?.requires_stopped && (releasePickerTarget()?.service?.desired_state !== 'stopped' || releasePickerTarget()?.service?.observed_state !== 'stopped'));
@@ -2708,7 +2721,7 @@ export function EnvPortForwardsPage() {
 	};
 	const installReleaseRiskHints = createMemo(() => {
 		const selected = selectedTemplateRelease()?.candidate;
-		if (selected) return releaseRiskHintIDs(selected, selectedTemplate()?.source === 'custom' ? 'template' : 'redeven');
+		if (selected) return releaseRiskHintIDs(selected, selectedTemplate()?.source === 'builtin' ? 'redeven' : 'template');
 		const template = selectedTemplate();
 		const release = template?.recommended_release;
 		if (!release || release.kind === 'none') return [];
@@ -3754,6 +3767,8 @@ export function EnvPortForwardsPage() {
               onCategoryChange={setTemplateCategory}
               onQueryChange={setTemplateSearch}
               onCreate={beginTemplateCreate}
+              onImport={() => {setGitImportTemplate(undefined);setGitImportOpen(true);}}
+              onCheckSource={(id) => {setGitImportTemplate(templateByID(id));setGitImportOpen(true);}}
               onDeploy={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }}
               onOpen={openInstalledTemplate}
 			  onVersions={openTemplateReleasePicker}
@@ -3861,7 +3876,7 @@ export function EnvPortForwardsPage() {
               </section>
               <Show when={(template.notices?.length ?? 0) > 0}>
                 <ManagedTemplateNotices
-                  notices={localizedManagedNotices(template.notices, template.localizations, i18n.locale())}
+                  notices={localizedManagedNotices(template.notices, template.localizations, i18n.locale(), template.default_locale)}
                   accepted={installNoticeAcceptances()}
                   disabled={managedInstallSubmitting()}
                   onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))}
@@ -4072,6 +4087,7 @@ export function EnvPortForwardsPage() {
         onSelect={setWorkspacePath}
       />
 
+      <GitTemplateImport open={gitImportOpen()} template={gitImportTemplate()} onClose={() => setGitImportOpen(false)} onImported={() => { void loadManaged(); }} serviceName={(id) => managedState().find((item) => item.service_id === id)?.name || id} />
       <Dialog open={templateDuplicate() !== null} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-sm text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
 
       <ConfirmDialog open={templateDelete() !== null} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-sm">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
@@ -4146,7 +4162,7 @@ export function EnvPortForwardsPage() {
 			  <div><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.updatePlanExpires')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(plan.expires_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div></div>
             </div>
             <Show when={managedUpdatePlanRequiresStopped()}><div class="rounded-md border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning">{i18n.t('webServices.managed.downgradeRequiresStopped')}</div></Show>
-            <Show when={(plan.notices?.length ?? 0) > 0}><ManagedTemplateNotices notices={localizedManagedNotices(plan.notices, releasePickerTarget()?.service?.localizations, i18n.locale())} accepted={updateNoticeAcceptances()} disabled={false} onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))} /></Show>
+            <Show when={(plan.notices?.length ?? 0) > 0}><ManagedTemplateNotices notices={localizedManagedNotices(plan.notices, releasePickerTarget()?.service?.localizations, i18n.locale(), releasePickerTarget()?.service?.default_locale)} accepted={updateNoticeAcceptances()} disabled={false} onAcceptedChange={(noticeID, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [noticeID]: accepted }))} /></Show>
             <ManagedReleaseRiskHints riskIDs={plan.risk_ids ?? []} />
             </section>}</Show>
           </div>

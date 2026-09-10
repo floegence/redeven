@@ -89,6 +89,7 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 		Notices: append([]TemplateNotice(nil), targetTemplate.Notices...), Identity: targetIdentity, Spec: targetSpec, ExpiresAt: expiresAt,
 	}
 	release.Candidate = selected.Candidate
+	templateSpecSHA256 = templateSourceRuntimeDigest(templateSpecSHA256, targetTemplate.SourceSHA256)
 	cached := cachedUpdatePlan{Plan: plan, ServiceID: service.ServiceID, TemplateID: service.TemplateID, TemplateSpecSHA256: templateSpecSHA256, SelectedCandidateID: selectedCandidateID, Release: release, ExpiresAt: expiresAt}
 	m.releaseMu.Lock()
 	for key, existing := range m.updatePlans {
@@ -200,7 +201,7 @@ func (m *Manager) resolveUpdatePlan(ctx context.Context, service *pfregistry.Man
 	if err != nil {
 		return nil, err
 	}
-	if templateSpecSHA256 != cached.TemplateSpecSHA256 {
+	if templateSourceRuntimeDigest(templateSpecSHA256, template.SourceSHA256) != cached.TemplateSpecSHA256 {
 		return nil, serviceError("UPDATE_PLAN_STALE", "The service template changed after this update plan was created.", 409, true, nil)
 	}
 	targetIdentity := cached.Plan.TargetRelease

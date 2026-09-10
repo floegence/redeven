@@ -2,6 +2,7 @@ package managedwebservice
 
 import (
 	"context"
+	"strings"
 )
 
 func (m *Manager) OpenSession(ctx context.Context, serviceID string, request OpenSessionRequest) (*OpenSession, error) {
@@ -42,6 +43,25 @@ func (m *Manager) openExistingSession(ctx context.Context, serviceID string) (*O
 	service, forward, err := m.serviceAndForward(ctx, serviceID)
 	if err != nil {
 		return nil, err
+	}
+	m.requestMu.Lock()
+	if m.templateSourceUses == nil {
+		m.templateSourceUses = map[string]int{}
+	}
+	m.templateSourceUses[service.TemplateID]++
+	m.requestMu.Unlock()
+	defer func() {
+		m.requestMu.Lock()
+		m.templateSourceUses[service.TemplateID]--
+		if m.templateSourceUses[service.TemplateID] == 0 {
+			delete(m.templateSourceUses, service.TemplateID)
+		}
+		m.requestMu.Unlock()
+	}()
+	if strings.HasPrefix(service.TemplateID, "git_") {
+		if _, err := m.Template(ctx, service.TemplateID); err != nil {
+			return nil, err
+		}
 	}
 	active, err := m.registry.GetActiveManagedOperation(ctx, serviceID)
 	if err != nil {

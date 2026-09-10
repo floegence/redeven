@@ -442,6 +442,7 @@ func (d *hostScriptDriver) serviceEnvironmentForRun(ctx context.Context, service
 	}
 	root := d.instanceRoot(service)
 	base := map[string]string{
+		"REDEVEN_TEMPLATE_DIR":        resolved.Template.SourceDirectory,
 		"REDEVEN_SERVICE_RUN_DIR":     runRoot,
 		"REDEVEN_SERVICE_OUTPUT_FILE": filepath.Join(runRoot, "output"),
 		"REDEVEN_SERVICE_ID":          service.ServiceID,

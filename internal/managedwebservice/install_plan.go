@@ -76,6 +76,7 @@ func (m *Manager) PreflightInstall(ctx context.Context, req CreateRequest) (*Ins
 	if err != nil {
 		return nil, err
 	}
+	digest = templateSourceRuntimeDigest(digest, template.SourceSHA256)
 	fingerprint := installRequestFingerprint(req)
 	plan := InstallPlan{ServiceID: id, WorkspacePath: req.WorkspacePath, WorkspaceOwnership: ownership, ExpiresAtUnixMs: time.Now().Add(updatePlanTTL).UnixMilli()}
 	plan.PlanDigest = requestFingerprint(id, fingerprint, digest)
@@ -107,6 +108,7 @@ func (m *Manager) reviewedInstall(req CreateRequest, template Template) (*Instal
 	cached, ok := m.installPlans[req.PlanDigest]
 	m.mu.Unlock()
 	_, digest, err := canonicalTemplateSpec(*template.Spec)
+	digest = templateSourceRuntimeDigest(digest, template.SourceSHA256)
 	workspace := cached.Workspace
 	inspectDirectory(&workspace)
 	if err != nil || !ok || cached.Plan.ExpiresAtUnixMs < time.Now().UnixMilli() || cached.Fingerprint != installRequestFingerprint(req) || cached.TemplateDigest != digest || workspace.Presence != cached.Workspace.Presence || workspace.Generation != cached.Workspace.Generation || workspace.StableIdentity != cached.Workspace.StableIdentity {

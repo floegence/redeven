@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	templatecontract "github.com/floegence/redeven-service-templates/template"
+
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
@@ -12,7 +14,7 @@ const (
 	ContainerRuntimeProfileInteractiveDesktop = "interactive_desktop"
 )
 
-type Deployment string
+type Deployment = templatecontract.Deployment
 
 const (
 	DeploymentHost      Deployment = "host"
@@ -37,29 +39,13 @@ const (
 	ActionRecover      OperationAction = "recover"
 )
 
-type TemplateNotice struct {
-	ID                      string `json:"id"`
-	Revision                int64  `json:"revision"`
-	Severity                string `json:"severity"`
-	AcknowledgementRequired bool   `json:"acknowledgement_required"`
-}
+type TemplateNotice = templatecontract.Notice
 
-type LocalizedTemplateNotice struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-}
+type LocalizedTemplateNotice = templatecontract.LocalizedNotice
 
-type TemplateLocalization struct {
-	Name        string                             `json:"name"`
-	Description string                             `json:"description"`
-	Notices     map[string]LocalizedTemplateNotice `json:"notices,omitempty"`
-}
+type TemplateLocalization = templatecontract.Localization
 
-type TemplateIcon struct {
-	MediaType string `json:"media_type"`
-	Data      string `json:"data"`
-	SHA256    string `json:"sha256"`
-}
+type TemplateIcon = templatecontract.IconAsset
 
 type DeploymentAvailability struct {
 	Deployment Deployment `json:"deployment"`
@@ -106,152 +92,66 @@ type HostLifecyclePlan struct {
 }
 
 type Template struct {
-	TemplateID            string                          `json:"template_id"`
-	Name                  string                          `json:"name"`
-	Description           string                          `json:"description"`
-	RecommendedRelease    *ReleaseIdentity                `json:"recommended_release,omitempty"`
-	ReleaseSource         string                          `json:"release_source,omitempty"`
-	DeveloperPreview      bool                            `json:"developer_preview"`
-	DiskBytes             int64                           `json:"disk_bytes"`
-	DataLocation          string                          `json:"data_location"`
-	SourceURL             string                          `json:"source_url"`
-	DockerSourceURL       string                          `json:"docker_source_url"`
-	Localizations         map[string]TemplateLocalization `json:"localizations,omitempty"`
-	Icon                  *TemplateIcon                   `json:"icon,omitempty"`
-	Notices               []TemplateNotice                `json:"notices,omitempty"`
-	Deployments           []DeploymentAvailability        `json:"deployments"`
-	DefaultWorkspacePath  string                          `json:"default_workspace_path"`
-	DefaultAccessMode     string                          `json:"default_access_mode"`
-	WorkspaceRoots        []WorkspaceRoot                 `json:"workspace_roots"`
-	Source                string                          `json:"source"`
-	Deployment            Deployment                      `json:"deployment"`
-	ContainerMode         string                          `json:"container_mode,omitempty"`
-	Revision              int64                           `json:"revision"`
-	Editable              bool                            `json:"editable"`
-	Duplicateable         bool                            `json:"duplicateable"`
-	DerivedFromTemplateID string                          `json:"derived_from_template_id,omitempty"`
-	DerivedFromRevision   int64                           `json:"derived_from_revision,omitempty"`
-	ServiceFamilyID       string                          `json:"service_family_id"`
-	Available             bool                            `json:"available"`
-	ReasonCode            string                          `json:"reason_code,omitempty"`
-	Reason                string                          `json:"reason,omitempty"`
-	Spec                  *TemplateSpec                   `json:"spec,omitempty"`
-	EffectiveSpec         *TemplateSpec                   `json:"effective_spec,omitempty"`
-	HostLifecyclePlan     *HostLifecyclePlan              `json:"host_lifecycle_plan,omitempty"`
-	SortOrder             int                             `json:"-"`
+	DefaultLocale         string                            `json:"default_locale,omitempty"`
+	GitSource             *pfregistry.ManagedTemplateSource `json:"git_source,omitempty"`
+	SourceSHA256          string                            `json:"source_sha256,omitempty"`
+	SourceDirectory       string                            `json:"-"`
+	TemplateID            string                            `json:"template_id"`
+	Name                  string                            `json:"name"`
+	Description           string                            `json:"description"`
+	RecommendedRelease    *ReleaseIdentity                  `json:"recommended_release,omitempty"`
+	ReleaseSource         string                            `json:"release_source,omitempty"`
+	DeveloperPreview      bool                              `json:"developer_preview"`
+	DiskBytes             int64                             `json:"disk_bytes"`
+	DataLocation          string                            `json:"data_location"`
+	SourceURL             string                            `json:"source_url"`
+	DockerSourceURL       string                            `json:"docker_source_url"`
+	Localizations         map[string]TemplateLocalization   `json:"localizations,omitempty"`
+	Icon                  *TemplateIcon                     `json:"icon,omitempty"`
+	Notices               []TemplateNotice                  `json:"notices,omitempty"`
+	Deployments           []DeploymentAvailability          `json:"deployments"`
+	DefaultWorkspacePath  string                            `json:"default_workspace_path"`
+	DefaultAccessMode     string                            `json:"default_access_mode"`
+	WorkspaceRoots        []WorkspaceRoot                   `json:"workspace_roots"`
+	Source                string                            `json:"source"`
+	Deployment            Deployment                        `json:"deployment"`
+	ContainerMode         string                            `json:"container_mode,omitempty"`
+	Revision              int64                             `json:"revision"`
+	Editable              bool                              `json:"editable"`
+	Duplicateable         bool                              `json:"duplicateable"`
+	DerivedFromTemplateID string                            `json:"derived_from_template_id,omitempty"`
+	DerivedFromRevision   int64                             `json:"derived_from_revision,omitempty"`
+	ServiceFamilyID       string                            `json:"service_family_id"`
+	Available             bool                              `json:"available"`
+	ReasonCode            string                            `json:"reason_code,omitempty"`
+	Reason                string                            `json:"reason,omitempty"`
+	Spec                  *TemplateSpec                     `json:"spec,omitempty"`
+	EffectiveSpec         *TemplateSpec                     `json:"effective_spec,omitempty"`
+	HostLifecyclePlan     *HostLifecyclePlan                `json:"host_lifecycle_plan,omitempty"`
+	SortOrder             int                               `json:"-"`
 }
 
-type TemplateParameter struct {
-	Name        string `json:"name"`
-	Label       string `json:"label"`
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type"`
-	Required    bool   `json:"required,omitempty"`
-	Default     string `json:"default,omitempty"`
-}
+type TemplateParameter = templatecontract.TemplateParameter
 
-type WebEndpointSpec struct {
-	Scheme         string `json:"scheme"`
-	ContainerPort  int    `json:"container_port,omitempty"`
-	FixedHostPort  int    `json:"fixed_host_port,omitempty"`
-	Path           string `json:"path,omitempty"`
-	HealthPath     string `json:"health_path,omitempty"`
-	HealthProtocol string `json:"health_protocol,omitempty"`
-	StartupTimeout int    `json:"startup_timeout_sec,omitempty"`
-}
+type WebEndpointSpec = templatecontract.WebEndpointSpec
 
-type HostArtifactSpec struct {
-	DownloadURL       string `json:"download_url"`
-	SizeBytes         int64  `json:"size_bytes"`
-	SHA256            string `json:"sha256"`
-	ExecutableRelPath string `json:"executable_rel_path"`
-}
+type HostArtifactSpec = templatecontract.HostArtifactSpec
 
-type NPMHostPackageSpec struct {
-	PackageName        string `json:"package_name"`
-	Version            string `json:"version"`
-	RegistryURL        string `json:"registry_url"`
-	AuthTokenParameter string `json:"auth_token_parameter,omitempty"`
-	Executable         string `json:"executable"`
-}
+type NPMHostPackageSpec = templatecontract.NPMHostPackageSpec
 
-type HostTemplateSpec struct {
-	InstallScript    string              `json:"install_script,omitempty"`
-	StartScript      string              `json:"start_script"`
-	StopScript       string              `json:"stop_script,omitempty"`
-	UninstallScript  string              `json:"uninstall_script,omitempty"`
-	Environment      map[string]string   `json:"environment,omitempty"`
-	Artifact         *HostArtifactSpec   `json:"artifact,omitempty"`
-	NPM              *NPMHostPackageSpec `json:"npm,omitempty"`
-	AfterStartScript string              `json:"after_start_script,omitempty"`
-	OpenScript       string              `json:"open_script,omitempty"`
-	OutputMode       string              `json:"output_mode,omitempty"`
-}
+type HostTemplateSpec = templatecontract.HostTemplateSpec
 
-type ContainerMountSpec struct {
-	ResourceID   string   `json:"resource_id,omitempty"`
-	Type         string   `json:"type"`
-	Source       string   `json:"source,omitempty"`
-	Target       string   `json:"target"`
-	ReadOnly     bool     `json:"read_only,omitempty"`
-	TmpfsOptions []string `json:"tmpfs_options,omitempty"`
-}
+type ContainerMountSpec = templatecontract.ContainerMountSpec
 
-type ContainerPortSpec struct {
-	ResourceID    string `json:"resource_id,omitempty"`
-	ContainerPort int    `json:"container_port"`
-	HostPort      int    `json:"host_port,omitempty"`
-	HostIP        string `json:"host_ip,omitempty"`
-	Protocol      string `json:"protocol,omitempty"`
-}
+type ContainerPortSpec = templatecontract.ContainerPortSpec
 
-type ContainerDeviceSpec struct {
-	ResourceID    string `json:"resource_id,omitempty"`
-	HostPath      string `json:"host_path"`
-	ContainerPath string `json:"container_path,omitempty"`
-	Permissions   string `json:"permissions,omitempty"`
-}
+type ContainerDeviceSpec = templatecontract.ContainerDeviceSpec
 
-type ContainerTemplateSpec struct {
-	Image          string                `json:"image"`
-	Entrypoint     []string              `json:"entrypoint,omitempty"`
-	Command        []string              `json:"command,omitempty"`
-	Environment    map[string]string     `json:"environment,omitempty"`
-	Labels         map[string]string     `json:"labels,omitempty"`
-	RestartPolicy  string                `json:"restart_policy,omitempty"`
-	NetworkMode    string                `json:"network_mode,omitempty"`
-	PIDMode        string                `json:"pid_mode,omitempty"`
-	IPCMode        string                `json:"ipc_mode,omitempty"`
-	Ports          []ContainerPortSpec   `json:"ports,omitempty"`
-	Mounts         []ContainerMountSpec  `json:"mounts,omitempty"`
-	CapAdd         []string              `json:"cap_add,omitempty"`
-	CapDrop        []string              `json:"cap_drop,omitempty"`
-	Devices        []ContainerDeviceSpec `json:"devices,omitempty"`
-	Privileged     bool                  `json:"privileged,omitempty"`
-	SecurityOpts   []string              `json:"security_opts,omitempty"`
-	User           string                `json:"user,omitempty"`
-	ReadOnlyRoot   bool                  `json:"read_only_root"`
-	MemoryBytes    int64                 `json:"memory_bytes,omitempty"`
-	CPUs           float64               `json:"cpus,omitempty"`
-	PIDsLimit      int64                 `json:"pids_limit,omitempty"`
-	ShmSizeBytes   int64                 `json:"shm_size_bytes,omitempty"`
-	RuntimeProfile string                `json:"runtime_profile,omitempty"`
-}
+type ContainerTemplateSpec = templatecontract.ContainerTemplateSpec
 
-type ComposeTemplateSpec struct {
-	YAML        string `json:"yaml"`
-	MainService string `json:"main_service"`
-}
+type ComposeTemplateSpec = templatecontract.ComposeTemplateSpec
 
-type TemplateSpec struct {
-	SchemaVersion int                    `json:"schema_version"`
-	Kind          Deployment             `json:"kind"`
-	Endpoint      WebEndpointSpec        `json:"endpoint"`
-	Parameters    []TemplateParameter    `json:"parameters,omitempty"`
-	Host          *HostTemplateSpec      `json:"host,omitempty"`
-	Container     *ContainerTemplateSpec `json:"container,omitempty"`
-	Compose       *ComposeTemplateSpec   `json:"compose,omitempty"`
-}
+type TemplateSpec = templatecontract.Spec
 
 type CreateRequest struct {
 	PlanDigest              string            `json:"plan_digest,omitempty"`
@@ -500,6 +400,7 @@ type CreateResult struct {
 }
 
 type ServiceView struct {
+	DefaultLocale string       `json:"default_locale,omitempty"`
 	Facts         ServiceFacts `json:"facts"`
 	PrimaryAction string       `json:"primary_action"`
 	Status        string       `json:"status"`

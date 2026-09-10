@@ -122,7 +122,7 @@ func (m *Manager) resolveCurrentRuntime(ctx context.Context, service *pfregistry
 	return &resolvedRuntime{
 		Template: *template, BaseSpec: materialized, Spec: effective, Configuration: validated, ConfigurationJSON: effectiveConfigurationJSON,
 		ConfigurationSHA256: effectiveConfigurationDigest, Release: *release, Binding: *binding,
-		Parameters: parameters, RuntimeSpecSHA256: runtimeDigest,
+		Parameters: parameters, RuntimeSpecSHA256: templateSourceRuntimeDigest(runtimeDigest, template.SourceSHA256),
 	}, nil
 }
 
@@ -169,4 +169,11 @@ func validRuntimeSpecSHA256(value string) bool {
 		}
 	}
 	return true
+}
+
+func templateSourceRuntimeDigest(digest, sourceDigest string) string {
+	if sourceDigest == "" {
+		return digest
+	}
+	return requestFingerprint("template-source-v1", digest, sourceDigest)
 }

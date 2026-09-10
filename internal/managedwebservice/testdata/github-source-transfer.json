@@ -1,0 +1,28 @@
+{
+  "source": {
+    "repository": "example/templates",
+    "repository_id": 123,
+    "ref": "develop",
+    "path": "",
+    "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "files": [
+    {
+      "path": "template.json",
+      "mode": "100644",
+      "content": "ewogICJzY2hlbWFfdmVyc2lvbiI6IDIsCiAgInRlbXBsYXRlX2lkIjogInNvdXJjZS1maXh0dXJlIiwKICAic2VydmljZV9mYW1pbHlfaWQiOiAic291cmNlLWZpeHR1cmUiLAogICJyZXZpc2lvbiI6IDEsCiAgInNwZWMiOiB7CiAgICAic2NoZW1hX3ZlcnNpb24iOiA1LAogICAgImtpbmQiOiAiaG9zdCIsCiAgICAiZW5kcG9pbnQiOiB7CiAgICAgICJzY2hlbWUiOiAiaHR0cCIsCiAgICAgICJwYXRoIjogIi8iLAogICAgICAiaGVhbHRoX3BhdGgiOiAiLyIKICAgIH0sCiAgICAiaG9zdCI6IHsKICAgICAgInN0YXJ0X3NjcmlwdCI6ICJleGVjIFwiJFJFREVWRU5fVEVNUExBVEVfRElSL3NjcmlwdHMvc3RhcnQuc2hcIiIsCiAgICAgICJvcGVuX3RhcmdldCI6IHsKICAgICAgICAibW9kZSI6ICJzdGFydHVwX291dHB1dF91cmwiLAogICAgICAgICJsaW5lX3ByZWZpeCI6ICJSZWFkeTogIgogICAgICB9CiAgICB9CiAgfQp9Cg=="
+    },
+    {
+      "path": "locales/en-US.json",
+      "mode": "100644",
+      "content": "eyJuYW1lIjoiSGlzdG9yaWNhbCBzb3VyY2UgZml4dHVyZSIsImRlc2NyaXB0aW9uIjoiUHVibGlzaGVkIHYyL3Y1IGNvbXBhdGliaWxpdHkgYW5kIHRyYW5zZmVyIGV2aWRlbmNlLiJ9Cg=="
+    },
+    {
+      "path": "scripts/start.sh",
+      "mode": "100755",
+      "content": "IyEvYmluL3NoCnByaW50ZiAiaGVscGVyLXJlYWQ6JXMiICIkUkVERVZFTl9URU1QTEFURV9ESVIiID4gIiRSRURFVkVOX1dPUktTUEFDRS9oZWxwZXItcmVzdWx0Igo="
+    }
+  ],
+  "sha256": "f750df25d3eb356ca6df9d051202019f916b0de105b50e1443e7449ac71ae99a"
+}

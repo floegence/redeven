@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed Web Service Templates
 description: Consume one signed-off versioned service catalog whose release is a recommendation, not a user-version restriction.
 tags: [architecture, templates, managed-services, localization, supply-chain]
-timestamp: 2026-09-07T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 ---
 # Summary
 
@@ -16,7 +16,7 @@ timestamp: 2026-09-07T00:00:00Z
 
 ## Published bundle
 
-The template repository publishes a versioned Go module. Each template lives at `templates/<template-id>/template.json`, with locale files under `locales/<locale>.json` and passive assets under `assets/`. Its reproducible schema-v2 bundle includes:
+The template repository publishes a versioned Go module. Each template lives at `templates/<template-id>/redeven-service-template.json`, with locale files under `locales/<locale>.json` and passive assets under `assets/`. Its reproducible schema-v2 bundle includes:
 
 - template and service-family identity, revision, deployment kind, and TemplateSpec v6;
 - `recommended_version`, npm or OCI source, exact default platform artifact, platform matrix, access mode, and resource requirements;
@@ -24,7 +24,7 @@ The template repository publishes a versioned Go module. Each template lives at 
 
 `recommended_version` must equal the default npm package version or every platform's default image tag. It means only the version Redeven recommends and installs when the user makes no version choice. It is not a whitelist, minimum, automatic-update target, or authority to replace an installed release. Discovery declarations identify a source only; the bundle cannot block preview, deprecated, special, or non-SemVer releases.
 
-The Go package exports only read-only bundle bytes, module version, manifest, and SHA-256. It contains no driver or migration code. Service-specific license and provenance statements remain in that repository; Redeven's root notice declares only the module dependency and generic Host runtime it downloads.
+The catalog package exports read-only bundle bytes, module version, manifest, and SHA-256. Its sibling `template` package owns public source schemas, shared types, GitHub acquisition, and pure data adapters. Neither package contains service drivers or database migrations. [Format compatibility](service-template-format-compatibility.md) owns branded source-v3 identity and the historical input matrix; compiled catalog schema v2 is independent of source-document versioning. Service-specific license and provenance statements remain in that repository; Redeven's root notice declares only the module dependency and generic Host runtime it downloads.
 
 ## Redeven mapping
 
@@ -46,7 +46,7 @@ Private output is truncated in place after successful opening persistence. While
 
 Hook results can contain credentials and never enter ordinary logs, operation output, or audit. Diagnostics contain only hook phase, duration, exit code, and safe error codes. The returned URL must use the declared HTTP/HTTPS scheme, a loopback host, the service's exact port, and a valid relative opening path after conversion. Hook code cannot select an external target or bypass the existing Forward authorization and proxy authentication. Hook failure changes opening availability without stopping a running service. Lifecycle and legacy-instance recovery are defined in the [independent Host lifecycle](independent-host-services.md).
 
-Built-in installed state is matched by exact template ID. Template responses expose `recommended_release`, `release_source`, and the exact default artifact, never an ambiguous `version`. The default workspace path is presentation-only and is not created while browsing, saving, copying, or checking versions. Custom templates remain Registry-owned user content, use their entered name and description, derive their default release from the exact npm or image reference, and are marked as user-configured sources. Both built-in and custom templates enter the same generic Host, Container, or Compose lifecycle after validation.
+Built-in installed state is matched by exact template ID. Template responses expose `recommended_release`, `release_source`, and the exact default artifact, never an ambiguous `version`. The default workspace path is presentation-only and is not created while browsing, saving, copying, or checking versions. Custom templates remain Registry-owned user content, use their entered name and description, derive their default release from the exact npm or image reference, and are marked as user-configured sources. Built-in, custom, and imported GitHub templates enter the same generic Host, Container, or Compose lifecycle after validation. [Git sources](managed-service-git-sources.md) own original-directory persistence, temporary acquisition credentials, and manual source review.
 
 ## Change contract
 
@@ -54,12 +54,12 @@ A catalog change is released upstream first, then Redeven upgrades to that publi
 
 # Boundaries
 
-Redeven does not keep a compatibility directory, template fingerprints, retired paths, container names, data-volume markers, process rules, service-specific localizations, or application assets. The catalog does not execute services, own Registry records, choose user releases silently, or bypass Redeven permission and resource policies.
+Redeven does not copy upstream compatibility adapters or service-specific template fingerprints, retired paths, container names, data-volume markers, process rules, service-specific localizations, or application assets. The catalog does not execute services, own Registry records, choose user releases silently, or bypass Redeven permission and resource policies.
 
 # Evidence
 
 - `redeven:go.mod` - Pins the released catalog module without local dependency wiring.
 - `redeven:internal/managedwebservice/builtin_templates.go` - Verifies and maps bundle records into generic templates.
-- `redeven:internal/managedwebservice/types.go` - Defines current TemplateSpec, localization, icon, and lifecycle API shapes.
+- `redeven:internal/managedwebservice/types.go` - Aliases the published TemplateSpec, localization, and icon types and defines product lifecycle responses.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ServiceTemplateCatalog.tsx` - Presents localized verified content through the common catalog UI.
 - `redeven:scripts/check_managed_service_catalog_boundary.mjs` - Enforces repository ownership of service-specific content.

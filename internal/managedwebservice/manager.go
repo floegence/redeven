@@ -50,26 +50,30 @@ type Manager struct {
 	compose           deploymentDriver
 	healthCheck       func(context.Context, *pfregistry.ManagedService) error
 
-	requestMu         sync.Mutex
-	releaseMu         sync.Mutex
-	releaseItems      map[string]cachedReleaseCandidate
-	releaseViews      map[string]ReleaseCandidateResult
-	releaseCursors    map[string]cachedReleaseCursor
-	updatePlans       map[string]cachedUpdatePlan
-	releaseCancel     context.CancelFunc
-	releaseClient     *http.Client
-	mu                sync.Mutex
-	workers           sync.WaitGroup
-	cancelByOp        map[string]context.CancelFunc
-	listeners         map[string]map[uint64]chan pfregistry.ManagedOperation
-	reporters         map[string]*operationReporter
-	nextListener      uint64
-	managementCtx     context.Context
-	managementCancel  context.CancelFunc
-	maintenanceCancel context.CancelFunc
-	openFlights       singleflight.Group
-	installPlans      map[string]cachedInstallPlan
-	closed            bool
+	templateSourceMu     sync.RWMutex
+	templateSources      map[string]cachedTemplateSource
+	templateSourceUses   map[string]int
+	templateSourceClient *http.Client
+	requestMu            sync.Mutex
+	releaseMu            sync.Mutex
+	releaseItems         map[string]cachedReleaseCandidate
+	releaseViews         map[string]ReleaseCandidateResult
+	releaseCursors       map[string]cachedReleaseCursor
+	updatePlans          map[string]cachedUpdatePlan
+	releaseCancel        context.CancelFunc
+	releaseClient        *http.Client
+	mu                   sync.Mutex
+	workers              sync.WaitGroup
+	cancelByOp           map[string]context.CancelFunc
+	listeners            map[string]map[uint64]chan pfregistry.ManagedOperation
+	reporters            map[string]*operationReporter
+	nextListener         uint64
+	managementCtx        context.Context
+	managementCancel     context.CancelFunc
+	maintenanceCancel    context.CancelFunc
+	openFlights          singleflight.Group
+	installPlans         map[string]cachedInstallPlan
+	closed               bool
 }
 
 func New(opts ManagerOptions) (*Manager, error) {
@@ -114,6 +118,9 @@ func New(opts ManagerOptions) (*Manager, error) {
 	m.container = &containerTemplateDriver{manager: m, adapter: opts.Containers}
 	m.compose = &composeTemplateDriver{manager: m, adapter: opts.Containers}
 	if err := m.registry.MarkManagedOperationsInterrupted(context.Background()); err != nil {
+		return nil, err
+	}
+	if err := m.cleanupTemplateSourceOrphans(context.Background()); err != nil {
 		return nil, err
 	}
 	_ = os.RemoveAll(filepath.Join(root, ".staging"))
@@ -189,6 +196,18 @@ func (m *Manager) Catalog(ctx context.Context) ([]Template, error) {
 		return nil, err
 	}
 	if m.registry != nil {
+		sources, err := m.registry.ListManagedTemplateSources(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, source := range sources {
+			item, _, readErr := m.readSourceTemplate(ctx, source)
+			if readErr != nil {
+				code, reason, _, _ := ErrorDetails(readErr)
+				item = &Template{TemplateID: source.TemplateID, Source: "git", GitSource: &source, SourceSHA256: source.SHA256, ServiceFamilyID: sourceIdentity(source.RepositoryID, source.DocumentFamilyID), Name: source.Name, Description: source.Description, DefaultLocale: source.DefaultLocale, Revision: source.Revision, Deployment: Deployment(source.Deployment), ReasonCode: code, Reason: reason, Deployments: []DeploymentAvailability{}}
+			}
+			items = append(items, *item)
+		}
 		custom, err := m.registry.ListManagedTemplates(ctx)
 		if err != nil {
 			return nil, err
@@ -394,6 +413,8 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			}
 		}
 		if templateErr == nil {
+			view.DefaultLocale = currentTemplate.DefaultLocale
+			view.Icon, view.Localizations = currentTemplate.Icon, currentTemplate.Localizations
 			view.ReleaseStatus.RecommendedRelease = currentTemplate.RecommendedRelease
 		}
 		if releaseView, ok := m.releaseView("service:" + service.ServiceID); ok {

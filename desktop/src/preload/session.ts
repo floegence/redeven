@@ -1,3 +1,4 @@
+import { bootstrapDesktopTemplateSources } from './desktopTemplateSources';
 /// <reference lib="dom" />
 
 import { bootstrapDesktopEmbeddedDragHostBridge } from './desktopEmbeddedDragHost';
@@ -19,3 +20,5 @@ bootstrapDesktopShellBridge();
 bootstrapDesktopStateStorageBridge();
 bootstrapDesktopThemeBridge();
 bootstrapDesktopUpdateBridge();
+
+bootstrapDesktopTemplateSources();
