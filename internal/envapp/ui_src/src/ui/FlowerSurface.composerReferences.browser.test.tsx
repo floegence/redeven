@@ -85,7 +85,9 @@ describe('Flower composer reference browser interaction', () => {
     expect(focusedRect.width).toBe(unfocusedGeometry.width);
     expect(focusedRect.height).toBe(unfocusedGeometry.height);
     expect(focusedStyle.borderTopWidth).toBe(unfocusedGeometry.borderWidth);
-    expect(focusedStyle.boxShadow).toContain('0px 10px 24px -22px');
+    expect(composer.dataset.floeSurface).toBe('inset');
+    expect(focusedStyle.boxShadow).toBe(unfocusedGeometry.boxShadow);
+    expect(focusedStyle.backdropFilter).toBe('none');
     expect(enterRect.width).toBe(28);
     expect(enterRect.height).toBe(28);
     expect(copyRect.right).toBeLessThanOrEqual(enterRect.left);

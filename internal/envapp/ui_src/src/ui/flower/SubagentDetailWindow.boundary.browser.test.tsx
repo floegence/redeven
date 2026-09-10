@@ -24,6 +24,7 @@ const disposers: Array<() => void> = [];
 afterEach(() => {
   while (disposers.length > 0) disposers.pop()?.();
   document.documentElement.classList.remove('light', 'dark');
+  document.documentElement.removeAttribute('data-floe-surface-style');
   document.body.innerHTML = '';
 });
 
@@ -106,6 +107,7 @@ async function nextFrame(count = 2): Promise<void> {
 async function mountWindow(theme: Theme) {
   document.documentElement.classList.remove('light', 'dark');
   document.documentElement.classList.add(theme);
+  document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
 
   const fixture = document.createElement('div');
   fixture.dataset.subagentBoundaryFixture = theme;
@@ -133,17 +135,17 @@ async function mountWindow(theme: Theme) {
   return { fixture, geometry, surface, open };
 }
 
-function assertContinuousBorder(surface: HTMLElement, adjacentBackground: string): void {
+function assertQuietBorder(surface: HTMLElement, adjacentBackground: string): void {
   const style = getComputedStyle(surface);
   const adjacent = parseRGBColor(adjacentBackground);
-  const borderColors = [style.borderTopColor, style.borderRightColor, style.borderBottomColor, style.borderLeftColor];
-  const borderWidths = [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth];
-
-  expect(borderWidths).toEqual(['1px', '1px', '1px', '1px']);
-  for (const borderColor of borderColors) {
-    const parsed = parseRGBColor(borderColor);
+  const colors = [style.borderTopColor, style.borderRightColor, style.borderBottomColor, style.borderLeftColor];
+  expect([style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth])
+    .toEqual(['1px', '1px', '1px', '1px']);
+  expect(new Set(colors).size).toBe(1);
+  for (const color of colors) {
+    const parsed = parseRGBColor(color);
     expect(parsed.alpha).toBe(1);
-    expect(contrastRatio(parsed, adjacent)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(parsed, adjacent)).toBeLessThan(1.5);
   }
 }
 
@@ -160,10 +162,12 @@ describe('Subagent detail window boundary', () => {
       expect(surfaceStyle.backgroundColor).not.toBe(fixtureStyle.backgroundColor);
       expect(parseRGBColor(surfaceStyle.backgroundColor).alpha).toBe(1);
       expect(surfaceStyle.borderRadius).toBe('6px');
-      expect(geometryStyle.borderRadius).toBe('6px');
-      expect(geometryStyle.boxShadow).not.toBe('none');
+      expect(geometryStyle.boxShadow).toBe('none');
+      expect(geometryStyle.contain).not.toContain('paint');
+      expect(surface.dataset.floeSurface).toBe('floating');
+      expect(surfaceStyle.backdropFilter).toBe('none');
       expect(surfaceStyle.boxShadow).toContain('inset');
-      assertContinuousBorder(surface, fixtureStyle.backgroundColor);
+      assertQuietBorder(surface, fixtureStyle.backgroundColor);
 
       const titlebar = surface.querySelector<HTMLElement>("[data-floe-floating-window-titlebar='true']");
       const overview = surface.querySelector<HTMLElement>('.flower-subagent-detail-overview');
@@ -183,7 +187,7 @@ describe('Subagent detail window boundary', () => {
       }));
       await nextFrame();
       expect(surface.dataset.floeFloatingWindowState).toBe('inactive');
-      assertContinuousBorder(surface, fixtureStyle.backgroundColor);
+      assertQuietBorder(surface, fixtureStyle.backgroundColor);
 
       disposers.pop()?.();
       fixture.remove();
