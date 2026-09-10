@@ -40,6 +40,8 @@ published `@floegence/floe-webapp-core/input-focus.css` asset and maps its theme
 variables to the existing Desktop palette. It does not copy CSS rules or load
 the full renderer stylesheet into that document.
 
+# Boundaries
+
 Third-party frames, separate application views, and editor-internal input
 carriers retain their own published integration boundaries. Redeven does not
 inject global styles into those surfaces. This presentation contract changes no

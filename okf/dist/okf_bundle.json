@@ -870,7 +870,7 @@
               "ui"
             ],
             "summary": "Published floe-webapp owns input focus presentation. Redeven supplies product\nlayout, semantic state, and one declared boundary for custom compound inputs.\nFocus changes only the existing border color; geometry and decorative shadows\nstay stable. Conflicting host styles fail source or browser checks and must be\nremoved at their owner. No fallback stylesheet overrides the released contract.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.git-browser-visual-states",
@@ -14057,15 +14057,22 @@
         "title": "Input focus boundaries",
         "type": "UI Contract"
       },
-      "body_length": 2905,
+      "body_length": 2919,
       "summary": "Published floe-webapp owns input focus presentation. Redeven supplies product\nlayout, semantic state, and one declared boundary for custom compound inputs.\nFocus changes only the existing border color; geometry and decorative shadows\nstay stable. Conflicting host styles fail source or browser checks and must be\nremoved at their owner. No fallback stylesheet overrides the released contract.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## One visible boundary\n\nOrdinary inputs, textareas, and native selects consume Floe's default rule.\nCompound controls declare `data-floe-input-surface` on their existing visible\nboundary. Their inner editors remain frameless, including chat composers,\nsearch fields, path editing, and fields with prefixes or suffixes. Focus within\nthat boundary changes its border color without an additional outline, ring,\nspaced contour, glow, background change, or focus shadow. Focus never changes\nborder width, padding, or dimensions. Underlined inputs retain their underline.\n\nErrors use `aria-invalid` and preserve error color. Disabled controls cannot\nacquire an interactive focus appearance. Readonly inputs remain focusable.\nForced colors use the upstream system border color. Buttons, links, checkboxes,\nand switches retain their distinct keyboard focus indicators; a button inside\nan input boundary follows the upstream compound-control treatment.\n\n## Published ownership\n\nDesktop Welcome, Env App, and Flower consume the same released Floe dependency.\nProduct selectors may define normal and hover appearance but must not override\nFloe's input focus state. Trusted scriptless Web Service chrome embeds the\npublished `@floegence/floe-webapp-core/input-focus.css` asset and maps its theme\nvariables to the existing Desktop palette. It does not copy CSS rules or load\nthe full renderer stylesheet into that document.\n\nThird-party frames, separate application views, and editor-internal input\ncarriers retain their own published integration boundaries. Redeven does not\ninject global styles into those surfaces. This presentation contract changes no\nIPC, persistence, authentication, or navigation authority.",
-          "char_count": 1702
+          "body": "## One visible boundary\n\nOrdinary inputs, textareas, and native selects consume Floe's default rule.\nCompound controls declare `data-floe-input-surface` on their existing visible\nboundary. Their inner editors remain frameless, including chat composers,\nsearch fields, path editing, and fields with prefixes or suffixes. Focus within\nthat boundary changes its border color without an additional outline, ring,\nspaced contour, glow, background change, or focus shadow. Focus never changes\nborder width, padding, or dimensions. Underlined inputs retain their underline.\n\nErrors use `aria-invalid` and preserve error color. Disabled controls cannot\nacquire an interactive focus appearance. Readonly inputs remain focusable.\nForced colors use the upstream system border color. Buttons, links, checkboxes,\nand switches retain their distinct keyboard focus indicators; a button inside\nan input boundary follows the upstream compound-control treatment.\n\n## Published ownership\n\nDesktop Welcome, Env App, and Flower consume the same released Floe dependency.\nProduct selectors may define normal and hover appearance but must not override\nFloe's input focus state. Trusted scriptless Web Service chrome embeds the\npublished `@floegence/floe-webapp-core/input-focus.css` asset and maps its theme\nvariables to the existing Desktop palette. It does not copy CSS rules or load\nthe full renderer stylesheet into that document.",
+          "char_count": 1411
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Third-party frames, separate application views, and editor-internal input\ncarriers retain their own published integration boundaries. Redeven does not\ninject global styles into those surfaces. This presentation contract changes no\nIPC, persistence, authentication, or navigation authority.",
+          "char_count": 289
         }
       ],
       "evidence": [
@@ -15577,5 +15584,5 @@
       ]
     }
   ],
-  "source_sha256": "d391557cc4ba3dc16fbfb7989b8807aaa07cade6fe07d06fb75e72948ba7aebe"
+  "source_sha256": "ce63f5ca2d4cedd605b480b8fd710346b59f8f2a27f84f6c23825c03c45f9871"
 }
