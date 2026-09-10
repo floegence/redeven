@@ -27,12 +27,13 @@ details message. Unknown tools remain neutral; no arbitrary payload, stdin, or
 private path becomes an inspector fallback. File preview stays a separate
 secondary action.
 
-The existing manual-open map is the only user-choice authority. Waiting items and
-non-error attention facts default open only without a manual choice. Ordinary
-pending, running, completed, and failed calls default closed. Failure never
-overrides a manual choice; its summary remains visible in the collapsed row. Current replacements and
-navigation within the same Flower surface preserve manual choices. This state
-does not require a backend migration or survive a browser restart.
+The existing manual-open map is the only disclosure authority. All tool details
+start closed, including pending, waiting, running, completed, and failed calls.
+Status and attention facts never open a panel. Running tools show the existing
+title sweep while collapsed; settlement stops the sweep without changing the
+user's choice. Error summaries remain visible in the row. Current replacements
+and navigation within the same Flower surface preserve manual choices. This
+state does not require a backend migration or survive a browser restart.
 
 Triggers expose a pointer cursor, focus indication, `aria-expanded`, and
 `aria-controls`. Enter and Space retain native activation. Before closing a

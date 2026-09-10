@@ -8647,7 +8647,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const disclosureControl = createFlowerActivityDisclosureController({
       manualOpen: () => openActivityRuns()[disclosureKey()],
-      needsAttention: () => item().status !== 'error' && (item().status === 'waiting' || item().needs_attention === true),
       onManualOpenChange: (open) => {
         const key = disclosureKey();
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
