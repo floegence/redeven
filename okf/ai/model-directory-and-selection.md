@@ -34,7 +34,12 @@ and a review date. Supported entries identify an existing adapter protocol.
 `unsupported` requires explicit supplier evidence; an unimplemented integration
 uses `not_integrated`. Generation rejects missing reviews, unknown or mismatched
 protocols, duplicate IDs, and missing evidence. No newly shipped model silently
-inherits a disabled search default. Extra reviewed snapshot IDs preserve already
+inherits a disabled search default. Review the complete tool compatibility table;
+accepting Responses syntax or HTTP 200 does not prove hosted execution. Before
+marking a new search integration supported, qualify a real search result or
+hosted event through normal Turn admission. If that fails, resolve the discrepancy
+before enabling the capability. DeepSeek explicitly ignores built-in search, so
+its reviewed models use `unsupported` and its adapter cannot declare hosted search. Extra reviewed snapshot IDs preserve already
 supported Qwen configurations. User-owned OpenAI models retain the existing
 official-endpoint search contract; compatible endpoints retain their explicit
 `disabled`, `openai_builtin`, and `brave` choices.

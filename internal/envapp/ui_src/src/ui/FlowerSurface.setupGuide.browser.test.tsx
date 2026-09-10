@@ -22,11 +22,13 @@ describe('Flower setup browser presentation', () => {
     let modelID = 'search/vision';
     const loadSettings = async (): Promise<ReturnType<typeof settingsSnapshot>> => ({ ...snapshot, model_profile: {
         schema_version: 1, current_model_id: modelID, providers: [
-          { id: 'search', type: 'deepseek', models: [{ model_name: 'vision', wire_model_name: 'deepseek-v4-flash-vision-exp', web_search: { status: 'available', reason: 'catalog_supported' } }] },
+          { id: 'search', type: 'openai', models: [{ model_name: 'vision', wire_model_name: 'gpt-5.5', web_search: { status: 'available', reason: 'catalog_supported' } }] },
+          { id: 'deepseek', type: 'deepseek', models: [{ model_name: 'deepseek-v4-flash-vision-exp', web_search: { status: 'unavailable', reason: 'unsupported' } }] },
           { id: 'brave', type: 'openai_compatible', web_search: { mode: 'brave' }, models: [{ model_name: 'custom', web_search: { status: 'unavailable', reason: 'needs_credentials' } }] },
         ],
       }, provider_secrets: [
         { provider_id: 'search', provider_api_key_configured: true, web_search_api_key_configured: false },
+        { provider_id: 'deepseek', provider_api_key_configured: true, web_search_api_key_configured: false },
         { provider_id: 'brave', provider_api_key_configured: true, web_search_api_key_configured: false },
       ] });
     const runtime = renderSurfaceWithAdapter({
@@ -35,9 +37,13 @@ describe('Flower setup browser presentation', () => {
     });
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-trigger')));
     (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
-    await waitFor(() => document.querySelectorAll('[data-web-search]').length === 2);
+    await waitFor(() => document.querySelectorAll('[data-web-search]').length === 3);
     expect(document.querySelector('[data-web-search="available"]')?.textContent).toBe('Web search');
-    const unavailable = document.querySelector('[data-web-search="unavailable"]') as HTMLElement;
+    const unavailableItems = [...document.querySelectorAll('[data-web-search="unavailable"]')] as HTMLElement[];
+    const unsupported = unavailableItems.find((item) => item.textContent === 'Web search not supported')!;
+    expect(unsupported).toBeDefined();
+    expect((unsupported.closest('button') as HTMLButtonElement).disabled).toBe(false);
+    const unavailable = unavailableItems.find((item) => item.textContent === 'Search API key required')!;
     expect(unavailable.textContent).toBe('Search API key required');
     const option = unavailable.closest('button') as HTMLButtonElement;
     expect(option.disabled).toBe(false);

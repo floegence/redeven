@@ -33,7 +33,6 @@ const (
 	providerWebSearchModeOpenAIResponsesBuiltin = config.AIWebSearchOpenAI
 	providerWebSearchModeKimiBuiltin            = config.AIWebSearchKimi
 	providerWebSearchModeGLMWebSearchTool       = config.AIWebSearchGLM
-	providerWebSearchModeDeepSeekNative         = config.AIWebSearchDeepSeek
 	providerWebSearchModeQwenResponsesWebSearch = config.AIWebSearchQwen
 	providerWebSearchModeExternalBrave          = config.AIWebSearchBrave
 )

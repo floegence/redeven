@@ -14,7 +14,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-func TestDeepSeekResponsesRouteSearchReasoningAndAliasReplay(t *testing.T) {
+func TestDeepSeekResponsesReplaysHistoricalSearchWithoutEnablingIt(t *testing.T) {
 	var bodies []map[string]json.RawMessage
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/responses" {
@@ -25,6 +25,7 @@ func TestDeepSeekResponsesRouteSearchReasoningAndAliasReplay(t *testing.T) {
 			t.Error(err)
 		}
 		bodies = append(bodies, body)
+		// Historical response items remain readable even though current tools ignore hosted search.
 		output := `[{"type":"reasoning","content":[{"type":"reasoning_text","text":"checking"}]},{"type":"web_search_call","id":"ws1","status":"completed","opaque_results":"receipt","action":{"type":"search","query":"docs"}},{"type":"function_call","id":"item1","call_id":"call1","name":"okf_index","arguments":"{}"}]`
 		if len(bodies) > 1 {
 			output = `[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}]`
@@ -40,11 +41,10 @@ func TestDeepSeekResponsesRouteSearchReasoningAndAliasReplay(t *testing.T) {
 		t.Fatal("DeepSeek did not use Floret transport")
 	}
 	controls := ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, ReasoningCapability: config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro")}
-	adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-pro", controls, TurnBudgets{}, providerWebSearchModeDeepSeekNative)
+	adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-pro", controls, TurnBudgets{}, providerWebSearchModeDisabled)
 	req := flprovider.Request{RunID: "run", PromptScopeID: "scope", Reasoning: controls.ReasoningSelection, Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "docs?"}}}
 	// Use the same canonical dotted tool name the runtime exposes.
 	req.Tools = deepSeekTestTools()
-	req.HostedTools = []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search"}}
 	stream, err := adapter.Stream(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +85,17 @@ func TestDeepSeekResponsesRouteSearchReasoningAndAliasReplay(t *testing.T) {
 		}
 	}
 	for _, body := range bodies {
+		var tools []struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(body["tools"], &tools); err != nil {
+			t.Fatal(err)
+		}
+		for _, tool := range tools {
+			if tool.Type != "function" {
+				t.Fatalf("unexpected hosted tool: %s", tool.Type)
+			}
+		}
 		if _, ok := body["messages"]; ok {
 			t.Fatal("used chat")
 		}
@@ -108,7 +119,7 @@ func deepSeekTestTools() []fltools.ToolDefinition {
 }
 
 func TestDeepSeekShortRequestDoesNotEnableSearch(t *testing.T) {
-	adapter := newFloretProviderAdapter(&deepSeekProvider{}, "deepseek", "deepseek-v4-pro", ProviderControls{}, TurnBudgets{}, providerWebSearchModeDeepSeekNative)
+	adapter := newFloretProviderAdapter(&deepSeekProvider{}, "deepseek", "deepseek-v4-pro", ProviderControls{}, TurnBudgets{}, providerWebSearchModeDisabled)
 	request, err := adapter.turnRequest(context.Background(), flprovider.Request{Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "title"}}})
 	if err != nil {
 		t.Fatal(err)

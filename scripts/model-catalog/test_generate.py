@@ -40,8 +40,17 @@ class SearchDeclarationTests(unittest.TestCase):
             for model in models:
                 wire = model.get('wire_model_name', model['model_name'])
                 self.assertIn(provider + '/' + wire, generated['web_search'])
-        self.assertEqual(generated['web_search']['deepseek/deepseek-v4-flash-vision-exp']['mode'], 'deepseek_native')
+        for model in generated['providers']['deepseek']:
+            review = generated['web_search']['deepseek/' + model['model_name']]
+            self.assertEqual(review['status'], 'unsupported')
+            self.assertNotIn('mode', review)
         self.assertEqual(generated['web_search']['qwen/qwen3.6-plus-2026-04-02']['status'], 'supported')
+
+    def test_deepseek_cannot_enable_an_ignored_builtin_protocol(self):
+        group = next(g for g in self.rules['web_search'] if g['provider'] == 'deepseek')
+        group.update(status='supported', mode='deepseek_native')
+        with self.assertRaisesRegex(ValueError, 'mode does not match the adapter'):
+            generator.generate(self.data, self.rules)
 
 
 if __name__ == '__main__':

@@ -15,7 +15,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-func TestFlowerForkContinuesToolHistoryAfterHostedSearchAndRestart(t *testing.T) {
+func TestFlowerForkContinuesToolHistoryAfterRestart(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
@@ -30,11 +30,15 @@ func TestFlowerForkContinuesToolHistoryAfterHostedSearchAndRestart(t *testing.T)
 			writeDeepSeekIntegrationTextResponse(w, flusher, "title", "Fork history")
 			return
 		}
+		for _, definition := range definitions {
+			if definition.(map[string]any)["type"] != "function" {
+				t.Error("current DeepSeek request enabled a hosted tool")
+			}
+		}
 		if requests.Add(1) == 1 {
 			output := []any{
-				map[string]any{"type": "reasoning", "content": []any{map[string]any{"type": "reasoning_text", "text": "Before search;"}}},
-				map[string]any{"type": "web_search_call", "id": "search", "status": "completed", "action": map[string]any{"type": "search", "query": "history"}},
-				map[string]any{"type": "reasoning", "content": []any{map[string]any{"type": "reasoning_text", "text": "After search;"}}},
+				map[string]any{"type": "reasoning", "content": []any{map[string]any{"type": "reasoning_text", "text": "Before tools;"}}},
+				map[string]any{"type": "reasoning", "content": []any{map[string]any{"type": "reasoning_text", "text": "Calling index;"}}},
 				map[string]any{"type": "function_call", "id": "item1", "call_id": "index1", "name": "okf_index", "arguments": "{}"},
 				map[string]any{"type": "function_call", "id": "item2", "call_id": "index2", "name": "okf_index", "arguments": "{}"},
 			}

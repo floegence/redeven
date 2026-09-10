@@ -117,7 +117,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
-- [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport, reasoning, and native search.
+- [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.
 - [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.
 - [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, bounded status previews, canonical membership, and complete handoffs.
 - [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.

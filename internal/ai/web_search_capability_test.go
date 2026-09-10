@@ -10,10 +10,27 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-func TestDeepSeekVisionSearchCatalogAdmission(t *testing.T) {
-	capability := resolveProviderWebSearchCapability(config.AIProvider{Type: "deepseek"}, "deepseek-v4-flash-vision-exp")
-	if capability.Mode != providerWebSearchModeDeepSeekNative {
-		t.Fatalf("Vision search mode=%q, want native search", capability.Mode)
+func TestDeepSeekCatalogDoesNotAdvertiseIgnoredBuiltinTools(t *testing.T) {
+	for _, model := range config.AIProviderCatalog("deepseek") {
+		capability := resolveProviderWebSearchCapability(config.AIProvider{Type: "deepseek"}, model.EffectiveWireModelName())
+		if capability.Status != "unavailable" || capability.Reason != "unsupported" || capability.Mode != providerWebSearchModeDisabled || capability.HostedTool() || capability.LocalTool() {
+			t.Errorf("%s advertises ignored search: %+v", model.ModelName, capability)
+		}
+	}
+}
+
+func TestDeepSeekRejectsFrozenUnsupportedHostedSearch(t *testing.T) {
+	adapter := newFloretProviderAdapter(nil, "deepseek", "deepseek-v4-flash", ProviderControls{}, TurnBudgets{}, providerWebSearchModeDisabled)
+	_, err := adapter.turnRequest(context.Background(), flprovider.Request{HostedTools: []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search", Options: map[string]any{"wire_shape": "deepseek_native"}}}})
+	if err == nil || !strings.Contains(err.Error(), "unsupported deepseek hosted search") {
+		t.Fatalf("unsupported frozen declaration was silently accepted: %v", err)
+	}
+}
+
+func TestDeepSeekGatewayRejectsHostedSearchBeforeDispatch(t *testing.T) {
+	_, err := (&deepSeekProvider{}).StreamTurn(context.Background(), ModelGatewayRequest{Model: "deepseek-v4-flash", WebSearchMode: "deepseek_native"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "DeepSeek Responses does not support hosted web search") {
+		t.Fatalf("unsupported search reached gateway preparation: %v", err)
 	}
 }
 

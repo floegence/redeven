@@ -25,23 +25,25 @@ import (
 )
 
 type deepSeekContextObservation struct {
-	Index                  int
-	Model                  string
-	MessageHashes          []string
-	MessageRoles           []string
-	MessageToolCallNames   []string
-	MessageToolResultNames []string
-	DefinitionToolNames    []string
-	NativeSearchTools      int
-	SystemHash             string
-	ToolsHash              string
-	MarkerPresence         []bool
-	MarkerMessageIndexes   []int
-	HasPreviousResponseID  bool
-	ProviderMetadataFields int
-	HasLegacyInteraction   bool
-	ResponseToolNames      []string
-	ResponseFinishReasons  []string
+	Index                   int
+	Model                   string
+	MessageHashes           []string
+	MessageRoles            []string
+	MessageToolCallNames    []string
+	MessageToolResultNames  []string
+	DefinitionToolNames     []string
+	NativeSearchTools       int
+	HasImageInput           bool
+	SearchUnavailablePrompt bool
+	SystemHash              string
+	ToolsHash               string
+	MarkerPresence          []bool
+	MarkerMessageIndexes    []int
+	HasPreviousResponseID   bool
+	ProviderMetadataFields  int
+	HasLegacyInteraction    bool
+	ResponseToolNames       []string
+	ResponseFinishReasons   []string
 }
 
 type deepSeekContextRecorder struct {
@@ -72,14 +74,16 @@ func (r *deepSeekContextRecorder) record(body []byte) *deepSeekContextObservatio
 		return nil
 	}
 	observation := deepSeekContextObservation{
-		Index:                 -1,
-		Model:                 strings.TrimSpace(envelope.Model),
-		MessageHashes:         make([]string, 0, len(envelope.Messages)),
-		MessageRoles:          make([]string, 0, len(envelope.Messages)),
-		MarkerPresence:        make([]bool, len(r.markers)),
-		MarkerMessageIndexes:  make([]int, len(r.markers)),
-		HasPreviousResponseID: len(envelope.PreviousResponseID) > 0 && string(envelope.PreviousResponseID) != "null",
-		HasLegacyInteraction:  bytes.Contains(body, []byte("Agent requested user input")) || bytes.Contains(body, []byte(`"interaction_response"`)),
+		Index:                   -1,
+		HasImageInput:           bytes.Contains(body, []byte(`"type":"input_image"`)),
+		SearchUnavailablePrompt: bytes.Contains(body, []byte("URL discovery is unavailable")),
+		Model:                   strings.TrimSpace(envelope.Model),
+		MessageHashes:           make([]string, 0, len(envelope.Messages)),
+		MessageRoles:            make([]string, 0, len(envelope.Messages)),
+		MarkerPresence:          make([]bool, len(r.markers)),
+		MarkerMessageIndexes:    make([]int, len(r.markers)),
+		HasPreviousResponseID:   len(envelope.PreviousResponseID) > 0 && string(envelope.PreviousResponseID) != "null",
+		HasLegacyInteraction:    bytes.Contains(body, []byte("Agent requested user input")) || bytes.Contains(body, []byte(`"interaction_response"`)),
 	}
 	if len(envelope.ResponseID) > 0 && string(envelope.ResponseID) != "null" {
 		observation.ProviderMetadataFields++

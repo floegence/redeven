@@ -53,5 +53,5 @@ Redeven never stores a fork saga, source/destination turn or run identity mappin
 - `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.
 - `redeven:internal/ai/thread_authority_boundary_test.go` - Proves foreign endpoint ThreadIDs fail before canonical mutation.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces the released typed v7 dependency boundary.
-- `redeven:internal/ai/thread_fork_tool_history_test.go` - Exercises hosted search, two local calls, fork, restart, and continuation through the product service and published DeepSeek gateway.
+- `redeven:internal/ai/thread_fork_tool_history_test.go` - Exercises two local calls with reasoning, fork, restart, and continuation through the product service and published DeepSeek gateway.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.fork.test.shared.tsx` - Checks fork selection, continued input, completed replies, refresh, and live-stream reconnection in the shared UI.

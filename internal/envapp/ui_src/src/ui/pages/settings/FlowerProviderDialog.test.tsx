@@ -85,20 +85,35 @@ function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelC
 describe('shared Flower provider dialog', () => {
   it('refreshes native capabilities from the server and shows mixed support without brand inference', async () => {
     vi.useFakeTimers();
-    const models = defaultFlowerProviderModels('deepseek').map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
+    const models = defaultFlowerProviderModels('openai').map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
     const discover = vi.fn(async () => ({ models }));
     const dialog = mountDialog('edit', discover);
     try {
-      dialog.setProvider({ id: 'brand', type: 'deepseek', models: defaultFlowerProviderModels('deepseek') });
-      expect(dialog.host.textContent).not.toContain('DeepSeek built-in web search');
+      dialog.setProvider({ id: 'brand', type: 'openai', models: defaultFlowerProviderModels('openai') });
+      expect(dialog.host.textContent).not.toContain('OpenAI built-in web search');
       await vi.advanceTimersByTimeAsync(1000);
-      expect(dialog.host.querySelectorAll('[data-web-search="available"]')).toHaveLength(3);
+      expect(dialog.host.querySelectorAll('[data-web-search="available"]')).toHaveLength(models.length);
       expect(discover).toHaveBeenCalledTimes(1);
-      dialog.setProvider({ id: 'brand', type: 'deepseek', models: [models[0], { ...models[1], web_search: { status: 'unavailable', reason: 'not_integrated' } }] });
+      dialog.setProvider({ id: 'brand', type: 'openai', models: [models[0], { ...models[1], web_search: { status: 'unavailable', reason: 'not_integrated' } }] });
       await vi.advanceTimersByTimeAsync(1000);
       expect(discover).toHaveBeenCalledTimes(1);
       expect(dialog.host.textContent).toContain('Web search available for some models');
       expect(dialog.host.querySelector('[data-web-search="unavailable"]')?.textContent).toBe('Web search not integrated');
+      expect(dialog.button('Save provider').disabled).toBe(false);
+    } finally { dialog.dispose(); vi.useRealTimers(); }
+  });
+
+  it('shows DeepSeek as unsupported while keeping the provider usable', async () => {
+    vi.useFakeTimers();
+    const models = defaultFlowerProviderModels('deepseek').map((model) => ({ ...model, web_search: { status: 'unavailable', reason: 'unsupported' } as const }));
+    const discover = vi.fn(async () => ({ models }));
+    const dialog = mountDialog('edit', discover);
+    try {
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: defaultFlowerProviderModels('deepseek') });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(dialog.host.querySelector('[data-web-search="available"]')).toBeNull();
+      expect(dialog.host.querySelectorAll('[data-web-search="unavailable"]')).toHaveLength(models.length);
+      expect(dialog.host.textContent).toContain('Web search not supported');
       expect(dialog.button('Save provider').disabled).toBe(false);
     } finally { dialog.dispose(); vi.useRealTimers(); }
   });
