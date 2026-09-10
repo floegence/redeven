@@ -133,6 +133,7 @@ check_github_workflows() {
 run_step "checking final rebased diff" git diff --check "${base}...${tip}"
 run_step "checking Go formatting" check_go_formatting
 run_step "checking shell syntax" check_shell_syntax
+run_step "checking bounded CI source policy" node --test scripts/quick_ci_policy.test.mjs
 run_step "linting GitHub Actions workflows" check_github_workflows
 run_step "checking Go toolchain consistency" node scripts/check_go_version_consistency.mjs
 run_step "checking Managed Service catalog boundary" node scripts/check_managed_service_catalog_boundary.mjs
