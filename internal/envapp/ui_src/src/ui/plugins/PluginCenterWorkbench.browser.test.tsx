@@ -29,6 +29,7 @@ afterEach(() => {
 });
 
 const browserCommands = commands as unknown as {
+  dismissPluginCenterBackdrop: () => Promise<{ isolatedDuringExit: boolean }>;
   wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<{ before: number; after: number }>;
 };
 
@@ -62,7 +63,7 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
           { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
           { kind: 'plugin', item, action: 'open_details' },
         ] }} onClose={() => setLauncher(false)} onOpenCenter={() => openCenter()}
-          onOpenPluginDetails={openCenter} onOpenPluginSurface={() => undefined} />
+          onOpenPluginDetails={openCenter} onOpenPluginSurface={() => undefined} onSetPluginPin={() => undefined} />
       </div>
     </div>
     <PluginCenterDrawer open={open()} onOpenChange={setOpen} onPresenceChange={setPresent} title="Plugin Center">
@@ -75,7 +76,12 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
     await page.elementLocator(host.querySelector('[data-test-launcher]')!).click();
     const selector = details ? `[data-plugin-panel-tile="${item.inventoryKey}"]` : '[data-plugin-center-market-action]';
     await expect.poll(() => document.querySelector(selector)).not.toBeNull();
-    await page.elementLocator(document.querySelector(selector)!).click();
+    if (details) {
+      await page.elementLocator(document.querySelector(selector)!).click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'Plugin information', exact: true }).click();
+    } else {
+      await page.elementLocator(document.querySelector(selector)!).click();
+    }
     await expect.poll(() => document.querySelector('[data-floe-dialog-presentation="bottom-drawer"] [data-floe-dialog-panel]')?.getAttribute('data-floating-presence')).toBe('open');
   };
   return { host, enter, onRefresh, onBackground, onWheel, onCommand };
@@ -87,6 +93,7 @@ it.each([{ width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 1
     const fixture = mountWorkbench();
     await fixture.enter();
     const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+    await expect.poll(() => panel.getBoundingClientRect().bottom).toBe(height - 20);
     const rect = panel.getBoundingClientRect();
     expect(rect.top).toBeGreaterThanOrEqual(64);
     expect(rect.width).toBe(Math.min(1400, width - 48));
@@ -130,6 +137,7 @@ it('keeps nested confirmation focus and Escape independent from the drawer', asy
   await userEvent.keyboard('{Escape}');
   await expect.poll(() => child.isConnected).toBe(false);
   expect(panel.isConnected).toBe(true);
+  await expect.poll(() => panel.contains(document.activeElement)).toBe(true);
   expect(panel.querySelector('[data-plugin-center-details]')).not.toBeNull();
   await userEvent.keyboard('{Escape}');
   expect(panel.querySelector('[data-plugin-center-details]')).toBeNull();
@@ -145,15 +153,13 @@ it('retains search, filters, selection and scroll while excluding background inp
   const search = document.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
   await page.elementLocator(search).fill('Weather');
   await page.elementLocator(document.querySelector('[data-plugin-center-filter="source"]')!).click();
-  await page.getByRole('menuitem', { name: 'External plugin', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'External', exact: true }).click();
   const list = document.querySelector<HTMLElement>('[data-plugin-center-list]')!;
   const scroll = await browserCommands.wheelScrollRegion({ regionSelector: '[data-plugin-center-list]', deltaY: 550 });
   expect(scroll.after).toBeGreaterThan(scroll.before);
   expect(fixture.onWheel).not.toHaveBeenCalled();
   const savedScroll = list.scrollTop;
-  await page.elementLocator(document.querySelector('[data-plugin-center-close]')!).click();
-  expect(fixture.host.querySelector('[data-test-workbench-background]')?.hasAttribute('inert')).toBe(true);
-  await page.elementLocator(document.querySelector('[data-floe-dialog-backdrop]')!).click({ position: { x: 8, y: 8 } });
+  expect((await browserCommands.dismissPluginCenterBackdrop()).isolatedDuringExit).toBe(true);
   expect(fixture.onBackground).not.toHaveBeenCalled();
   await expect.poll(() => document.querySelector('[data-floe-dialog-panel]')).toBeNull();
   await page.elementLocator(fixture.host.querySelector('[data-test-background]')!).click();
@@ -161,8 +167,35 @@ it('retains search, filters, selection and scroll while excluding background inp
   await fixture.enter();
   expect(document.querySelector('[data-plugin-center-search]')).toBe(search);
   expect(search.value).toBe('Weather');
-  expect(document.querySelector('[data-plugin-center-filter="source"]')?.textContent).toContain('External plugin');
+  expect(document.querySelector('[data-plugin-center-filter="source"]')?.textContent).toContain('External');
   expect(list.scrollTop).toBe(savedScroll);
+  await page.elementLocator(list.querySelectorAll('[data-plugin-center-item]')[6]).click();
+  const selectedKey = document.querySelector('[data-plugin-center-details]')!.getAttribute('data-plugin-center-details');
+  await page.elementLocator(document.querySelector('[data-plugin-center-close]')!).click();
+  await expect.poll(() => document.querySelector('[data-floe-dialog-panel]')).toBeNull();
+  await fixture.enter();
+  expect(document.querySelector('[data-plugin-center-details]')!.getAttribute('data-plugin-center-details')).toBe(selectedKey);
+  expect(document.activeElement).toBe(search);
+});
+
+it('returns from a narrow uninstall confirmation to visible details and preserves failed Open feedback', async () => {
+  await page.viewport(1024, 768);
+  const fixture = mountWorkbench();
+  await fixture.enter();
+  const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+  fixture.onCommand.mockRejectedValueOnce(new Error('The plugin component could not be opened.'));
+  await page.elementLocator(panel.querySelector('[data-plugin-center-card-primary]')!).click();
+  await expect.poll(() => panel.querySelector('[data-plugin-center-error]')?.textContent).toContain('could not be opened');
+  expect(panel.isConnected).toBe(true);
+  await page.elementLocator(panel.querySelector('[data-plugin-center-card-menu]')!).click();
+  await page.getByRole('menuitem', { name: 'Uninstall', exact: true }).click();
+  await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(2);
+  const confirmation = [...document.querySelectorAll<HTMLElement>('[data-floe-dialog-panel]')].find((element) => element !== panel)!;
+  await expect.poll(() => confirmation.contains(document.activeElement)).toBe(true);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => confirmation.isConnected).toBe(false);
+  await expect.poll(() => document.activeElement).toBe(panel.querySelector('[data-plugin-center-detail-heading]'));
+  expect(panel.isConnected).toBe(true);
 });
 
 it('opens an interactive management surface outside the inert Workbench after a Dock interaction', async () => {

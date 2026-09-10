@@ -3,13 +3,15 @@ import { DialogPlacementProvider, type DialogProps } from '@floegence/floe-webap
 import { Dialog } from '../primitives/EnvAppModal';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
-export function PluginCenterDrawer(props: DialogProps): JSX.Element {
+type PluginCenterDrawerProps = Pick<DialogProps, 'open' | 'onOpenChange' | 'onPresenceChange' | 'title' | 'children'>;
+
+export function PluginCenterDrawer(props: PluginCenterDrawerProps): JSX.Element {
   return <DialogPlacementProvider mode="global" globalZIndex={ENV_APP_FLOATING_LAYER.productModal}>
     <PersistentDrawer {...props} />
   </DialogPlacementProvider>;
 }
 
-function PersistentDrawer(props: DialogProps): JSX.Element {
+function PersistentDrawer(props: PluginCenterDrawerProps): JSX.Element {
   // Keep the content owner inside the global placement context so its nested
   // confirmations share the same modal contract and survive drawer recreation.
   const content = untrack(() => props.children);

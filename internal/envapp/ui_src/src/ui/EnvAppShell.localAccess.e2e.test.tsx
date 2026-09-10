@@ -4039,6 +4039,38 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('dismisses the retained Workbench manager across mode changes and connection recovery', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    const drawer = () => host.querySelector('.redeven-plugin-center-drawer');
+    const changeMode = async (label: string) => {
+      findButtonByText(host, label)!.click();
+      await flushUntil(() => host.querySelector(`[data-testid="display-mode-view-${label.toLowerCase()}"]`)?.getAttribute('style')?.includes('display: block') ?? false, 60);
+    };
+    try {
+      await flushUntil(() => Boolean(pluginPanelState.lastProps?.onOpenCenter), 60);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(drawer()));
+      await changeMode('Activity');
+      await changeMode('Workbench');
+      expect(drawer()).toBeNull();
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(drawer()));
+      publishProtocolWaiting({ code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' });
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="connection-recovery-view"]')));
+      expect(drawer()).toBeNull();
+      publishProtocolConnected();
+      await vi.waitFor(() => expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeNull(), { timeout: 2500 });
+      expect(drawer()).toBeNull();
+    } finally { dispose(); }
+  }, 10000);
+
   it('opens in the clicked mode and keeps Activity and Workbench containers independent', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

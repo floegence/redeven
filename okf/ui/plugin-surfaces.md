@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows and pinned pages, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 ---
 # Summary
@@ -81,39 +81,9 @@ summary. Size, content layout, search, focus loop, and close behavior remain
 product-owned. Activity placement keeps the existing Shell-root modal behavior,
 including its header divider; both placements omit the installed and attention
 summary footer.
-Plugin Center opens in the current mode: a dedicated Activity page or a retained Workbench management dialog above the canvas. Both use the same content and category/search projection. The Workbench dialog preserves search, filters, scroll, and selection across close/reopen, isolates canvas input, and restores entry focus. A successful Open dismisses management and focuses the current mode's container; failed placement leaves management available. Its local filters combine
-source (official catalog or external), trust, and lifecycle without rebuilding
-identity. Every filter trigger permanently names its dimension and current
-value, exposes a dropdown affordance, and keeps one clear-all action visible
-whenever search, category, source, trust, or lifecycle filtering is active.
-The title, search, refresh, and administrative menu form a compact primary
-toolbar; tabs, categories, and filters form a second scroll-contained band
-without page-level horizontal overflow. Discover, Installed, and Updates use
-one responsive compact card directory with 48px identity icons and independent
-primary, surface, overflow, and detail commands. Updates carry an explicit
-information treatment and update command. Refresh status remains outside the
-card grid, so a pending refresh cannot appear as a duplicate card. The inspector
-orders identity and summary, primary actions, manifest-owned author description
-and highlights, required and optional permissions, issue evidence, and collapsed
-technical information. Its identity and primary-action region remains stable
-while the author, permission, issue, and technical body scrolls independently;
-long localized copy cannot push the current action out of view. Policy caps,
-effective grants, revocation, and required-to-open semantics remain distinct.
-Startup recovery is per installed plugin rather than a Plugin Center-wide
-loading boundary. The shell, catalog, filters, and ready plugin actions remain
-interactive while another plugin recovers. Each recovering card names its own
-state; each failed card shows the safe reason and one explicit Retry action, and
-only that failed plugin's Open controls are disabled. Repeated Retry input shares
-the in-flight recovery operation and cannot create duplicate submissions.
-The directory opens with no inspector selected. Only an explicit item selection
-or Shell exact-key request opens detail; closing detail preserves the directory
-tab, query, and filters, then restores the originating exact item when it is
-visible or the search field when retained filters hide it. A committed external
-install or update protects its exact instance selection from retained filters
-until the user changes directory context or closes detail. A Shell request remains
-bound to its requested item even when retained filters exclude it. External
-installation is visible only to administrators as a lower-weight overflow action
-and does not compete with primary discovery.
+
+[Plugin Center interaction](plugin-center-interaction.md) owns the shared directory,
+retained Workbench drawer, responsive details, modal input, and management focus.
 
 Plugin motion is progressive feedback rather than an interaction gate. The
 Launcher establishes backdrop depth before its content settles, and its panel
