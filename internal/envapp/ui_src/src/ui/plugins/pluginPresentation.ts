@@ -4,6 +4,7 @@ import type { I18nHelpers } from '../i18n';
 export const PLUGIN_MOBILE_TOUCH_TARGET_CLASS = 'min-h-[46px] min-w-[46px] sm:min-h-0 sm:min-w-0';
 export const PLUGIN_ENTER_MOTION_CLASS = 'redeven-plugin-motion redeven-plugin-enter-up animate-in fade-in duration-200 ease-out motion-reduce:animate-none';
 export const PLUGIN_PRESS_MOTION_CLASS = 'redeven-plugin-motion transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-150 ease-out active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none';
+export const PLUGIN_UPDATE_ACTION_CLASS = 'bg-[var(--redeven-status-info-foreground)] text-[var(--background)] enabled:hover:bg-[color-mix(in_srgb,var(--redeven-status-info-foreground)_88%,var(--foreground))]';
 
 export type PluginPrimaryAction =
   | 'install'
