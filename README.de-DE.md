@@ -20,9 +20,9 @@
 <!-- readme-locales:end -->
 
 <p align="center">
-  <strong>Deine Computer und Server in einem Browser-Tab.</strong><br>
-  Terminal, Dateibrowser, IDE und KI,
-  <br>alles auf deiner eigenen Hardware und Ende-zu-Ende verschlüsselt.
+  <strong>Where machines become workspaces.</strong><br>
+  Sicherer Zugriff auf Computer und Server,
+  <br>mit Werkzeugen, KI und Diensten auf einer vernetzten Plattform.
 </p>
 
 <p align="center">
@@ -49,9 +49,9 @@
 
 ## Was ist Redeven?
 
-Redeven ist eine einzelne Binärdatei, die deine Computer und Server in einem Browser-Tab zusammenführt. Statt zwischen SSH-Terminals, Dateibrowsern, Monitoring-Dashboards, Portweiterleitungen und IDE-Fenstern zu wechseln, erhältst du einen einheitlichen Arbeitsbereich auf der Hardware, die du selbst kontrollierst.
+Redeven verbindet Computer und Server in einer gemeinsamen Arbeitsumgebung für Dateien, Terminals, Git, browserbasierte Entwicklung, KI, Dienste und Überwachung. Eine einzelne Laufzeit-Binärdatei läuft auf dem Host und ermöglicht den Zugriff über Browser, Desktop, CLI oder SSH.
 
-Redeven läuft auf deinem Rechner, auf entfernten Servern oder auf jedem erreichbaren SSH-Host. Deine Dateien, Prozesse, API-Schlüssel und Zugangsdaten bleiben dort, wo sie hingehören. Redeven überträgt deine Klartextdaten nicht durch fremde Infrastruktur.
+Dateien und Prozesse bleiben auf dem Host. Flowersec schützt Sitzungen in entfernten Arbeitsumgebungen durch Ende-zu-Ende-Verschlüsselung.
 
 - **Clients verbinden sich mit einer Endpunkt-Laufzeit**: Browser, Desktop, CLI und über SSH gehostete Sitzungen greifen auf denselben von der Laufzeit verwalteten Arbeitsbereich zu.
 - **Die Laufzeit ist die Vertrauensgrenze**: Eine einzelne Go-Binärdatei verwaltet Dateien, Terminals, Monitoring, Git, die Weiterleitung von Webdiensten, das Workbench-Layout, Notizen, die Einrichtung von Browser Editor und Flower.

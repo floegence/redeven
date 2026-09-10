@@ -60,6 +60,7 @@
   ],
   "required_literals": [
     "Redeven",
+    "Where machines become workspaces.",
     "Redeven Desktop",
     "Redeven Cloud",
     "Flowersec",
@@ -128,8 +129,8 @@
       "english_name": "Simplified Chinese",
       "file": "README.zh-CN.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "7397ef9f43a1701de269c72582be04fb149dba7896abf4a2ab86a17aa7cfb646"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "7da793ed984e58c178354643e4f2cb7ab2795b4e9ea1663962729e1a0bb24669"
       }
     },
     {
@@ -138,8 +139,8 @@
       "english_name": "Traditional Chinese",
       "file": "README.zh-TW.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "639603f04eda9205f26652c9ee6b7c1414aae4aa4778f2d69ff8ad62fdb84c8e"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "d627752f40c81c9618f391ad93bd9e2e778804dde78fceb4fbbaaa4f46d2a534"
       }
     },
     {
@@ -148,8 +149,8 @@
       "english_name": "Japanese",
       "file": "README.ja-JP.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "499cbf761c17c61adc0c91c7539af8408568188d9db3598e2c0b6703da904ee0"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "011fb6b033b127546f0eeefc218ef36925a3557e035787e3cfe5a135334ed424"
       }
     },
     {
@@ -158,8 +159,8 @@
       "english_name": "Korean",
       "file": "README.ko-KR.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "7ec16a5db56e2422ef1eec12b3e8e956474ea0af7156b9e65eae1c731b8c67ce"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "1947507a0a1266ff94927c1d4fee2c88edc0f47130cee3fa42c3924e0f4a43ce"
       }
     },
     {
@@ -168,8 +169,8 @@
       "english_name": "German",
       "file": "README.de-DE.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "6066fbc090864f49522dd512ae8ec9239c00ced0535398ff49f9ad6ac073b792"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "54021857b23e73c78aa9172c1e70b0be0385c8465e0da07c634c910c4c4ba761"
       }
     },
     {
@@ -178,8 +179,8 @@
       "english_name": "French",
       "file": "README.fr-FR.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "942926517e458dcb81666643d8b9728621e491eb6994fffd4c073abda2cc7248"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "cb37f32dd68553e2466452dc63478866804792c35d4c4b265f9684710471de18"
       }
     },
     {
@@ -188,8 +189,8 @@
       "english_name": "Spanish",
       "file": "README.es-ES.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "c83b28861eb6409415fa30c004fec2b7ee3edb2f4cc07253adeacbac6f03f826"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "08fbac88416f5f40c5dab4011e095816021abf60aafb07201517a9fe56bfaeb2"
       }
     },
     {
@@ -198,8 +199,8 @@
       "english_name": "Brazilian Portuguese",
       "file": "README.pt-BR.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "927258467f7998fc00d6aa7ca4c77599ed294eb37d20f10bbe8d9cf4a72d7ae3"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "21e4377e484425315ec3b2a4072633f6155c10d1abfa39cec8138f4ddf8e1b59"
       }
     },
     {
@@ -208,8 +209,8 @@
       "english_name": "Russian",
       "file": "README.ru-RU.md",
       "synchronization": {
-        "source_sha256": "5988e577d45d7c9c1aad249b000bc84a97c9411f101854843e29d414302dcee6",
-        "content_sha256": "125b9159d8eb78a1315288368546827a37455fc64e983715db61ce1352d85227"
+        "source_sha256": "40d849686fc7887d33cd88baaeb427c98c6e4a34c12a2b55920efe42b31adbd9",
+        "content_sha256": "7938967b65659adebd7ad1660da669d030fc61b9cab0e7cd00549d932ab4981e"
       }
     }
   ]

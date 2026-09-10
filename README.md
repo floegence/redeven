@@ -20,9 +20,9 @@
 <!-- readme-locales:end -->
 
 <p align="center">
-  <strong>Your computers &amp; servers, in one browser tab.</strong><br>
-  Terminal, file browser, IDE, and AI —
-  <br>all on your own hardware, end-to-end encrypted.
+  <strong>Where machines become workspaces.</strong><br>
+  Secure access to computers and servers,
+  <br>with tools, AI, and services in one connected platform.
 </p>
 
 <p align="center">
@@ -49,9 +49,9 @@
 
 ## What is Redeven?
 
-Redeven is a single binary that brings your computers and servers into one browser tab. Instead of juggling SSH terminals, file browsers, monitoring dashboards, port forwarding, and IDE windows, you get one unified workspace on the hardware you already control.
+Redeven connects computers and servers through a unified workspace for files, terminals, Git, browser-based development, AI, services, and monitoring. A single runtime binary runs on the host, with access through a browser, Desktop, CLI, or SSH.
 
-It runs on your machine, your remote servers, or any reachable SSH host. Your files, processes, API keys, and credentials stay where they belong — Redeven does not move your plaintext through anyone else's infrastructure.
+Files and processes stay on the host. Flowersec protects remote workspace sessions with end-to-end encryption.
 
 - **Clients connect to an endpoint runtime** — Browser, Desktop, CLI, and SSH-hosted sessions all enter the same runtime-managed workspace.
 - **The runtime is the trust boundary** — a single Go binary owns files, terminals, monitoring, Git, web-service forwarding, Workbench layout, notes, Browser Editor setup, and Flower access.

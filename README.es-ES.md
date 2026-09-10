@@ -20,9 +20,9 @@
 <!-- readme-locales:end -->
 
 <p align="center">
-  <strong>Tus ordenadores y servidores, en una sola pestaña del navegador.</strong><br>
-  Terminal, explorador de archivos, IDE e IA,
-  <br>todo en tu propio hardware y con cifrado de extremo a extremo.
+  <strong>Where machines become workspaces.</strong><br>
+  Acceso seguro a ordenadores y servidores,
+  <br>con herramientas, IA y servicios en una plataforma conectada.
 </p>
 
 <p align="center">
@@ -49,9 +49,9 @@
 
 ## ¿Qué es Redeven?
 
-Redeven es un único binario que reúne tus ordenadores y servidores en una pestaña del navegador. En lugar de alternar entre terminales SSH, exploradores de archivos, paneles de supervisión, reenvíos de puertos y ventanas del IDE, obtienes un espacio de trabajo unificado en el hardware que ya controlas.
+Redeven conecta ordenadores y servidores mediante un espacio de trabajo unificado para archivos, terminales, Git, desarrollo en el navegador, IA, servicios y supervisión. Un único binario de ejecución funciona en el host y permite acceder desde un navegador, Desktop, la CLI o SSH.
 
-Se ejecuta en tu equipo, en servidores remotos o en cualquier host SSH accesible. Tus archivos, procesos, claves de API y credenciales permanecen donde deben estar: Redeven no mueve tus datos en texto claro a través de infraestructura ajena.
+Los archivos y procesos permanecen en el host. Flowersec protege las sesiones de trabajo remoto con cifrado de extremo a extremo.
 
 - **Los clientes se conectan a un entorno de ejecución del endpoint**: el navegador, Desktop, la CLI y las sesiones alojadas mediante SSH entran en el mismo espacio de trabajo administrado por el entorno de ejecución.
 - **El entorno de ejecución es el límite de confianza**: un único binario de Go gestiona archivos, terminales, supervisión, Git, reenvío de servicios web, la disposición de Workbench, notas, la configuración de Browser Editor y Flower.

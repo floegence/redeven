@@ -20,9 +20,9 @@
 <!-- readme-locales:end -->
 
 <p align="center">
-  <strong>Vos ordinateurs et serveurs dans un seul onglet de navigateur.</strong><br>
-  Terminal, explorateur de fichiers, IDE et IA,
-  <br>le tout sur votre propre matériel, avec chiffrement de bout en bout.
+  <strong>Where machines become workspaces.</strong><br>
+  Un accès sécurisé aux ordinateurs et aux serveurs,
+  <br>avec outils, IA et services sur une même plateforme connectée.
 </p>
 
 <p align="center">
@@ -49,9 +49,9 @@
 
 ## Qu'est-ce que Redeven ?
 
-Redeven est un binaire unique qui réunit vos ordinateurs et vos serveurs dans un seul onglet de navigateur. Au lieu de jongler entre terminaux SSH, explorateurs de fichiers, tableaux de bord de supervision, redirections de ports et fenêtres d'IDE, vous disposez d'un espace de travail unifié sur le matériel que vous contrôlez déjà.
+Redeven relie ordinateurs et serveurs dans un espace de travail unifié réunissant fichiers, terminaux, Git, développement dans le navigateur, IA, services et supervision. Un seul binaire d’exécution fonctionne sur l’hôte, accessible depuis un navigateur, Desktop, la CLI ou SSH.
 
-Il s'exécute sur votre machine, vos serveurs distants ou tout hôte SSH accessible. Vos fichiers, processus, clés d'API et identifiants restent là où ils doivent se trouver : Redeven ne fait pas transiter vos données en clair par l'infrastructure d'un tiers.
+Les fichiers et les processus restent sur l’hôte. Flowersec protège les sessions de travail à distance par un chiffrement de bout en bout.
 
 - **Les clients se connectent à un environnement d'exécution de point de terminaison** : le navigateur, Desktop, la CLI et les sessions hébergées via SSH accèdent tous au même espace de travail géré par l'environnement d'exécution.
 - **L'environnement d'exécution est la frontière de confiance** : un seul binaire Go gère les fichiers, les terminaux, la supervision, Git, le transfert des services web, la disposition Workbench, les notes, la configuration de Browser Editor et l'accès à Flower.
