@@ -11,6 +11,7 @@ import {
   clearFlowerSurfaceNotifications,
   deferred,
   flowerSurfaceNotifications,
+  flush,
   inputRequest,
   liveBootstrap,
   renderSurfaceWithAdapter,
@@ -849,11 +850,13 @@ describe('Flower bottom decision surface', () => {
     const action = approval('approval-stop');
     const approvalThread = thread({
       thread_id: 'thread-approval-stop',
+      active_run_id: action.run_id,
       status: 'waiting_approval',
       approval_actions: [action],
     });
     const stoppedThread = {
       ...approvalThread,
+      cancellation: { thread_id: approvalThread.thread_id, turn_id: 'turn-1', run_id: action.run_id, source: 'user_stop', mode: 'graceful' as const, requested_at: '2026-09-10T03:00:00Z' },
       status: 'canceled' as const,
       active_run_id: undefined,
       approval_actions: [],
@@ -901,15 +904,20 @@ describe('Flower bottom decision surface', () => {
     expect(stop.disabled).toBe(true);
     expect(stop.dataset.loading).toBe('true');
     stopResponse.resolve();
-    await waitFor(() => stop.dataset.loading !== 'true');
+    await flush();
+    expect(stop.dataset.loading).toBe('true');
+    expect(stop.disabled).toBe(true);
+    expect(stop.getAttribute('aria-label')).toBe('Stopping...');
     publishStopped.resolve();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
     expect(stopThread).toHaveBeenCalledTimes(1);
     expect(submitApproval).not.toHaveBeenCalled();
+    expect(runtime.querySelector('.flower-turn-stop-notice')?.textContent).toContain('Stopped');
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
     await waitFor(() => document.activeElement === runtime.querySelector('[data-flower-bottom-mode="chat"] textarea'));
   });
 
-  it('shows a pending stop state and never reports stop request failures to the user', async () => {
+  it('shows a pending stop state and an actionable failure without losing the approval', async () => {
     clearFlowerSurfaceNotifications();
     const action = approval('approval-stop-failure');
     const approvalThread = thread({
@@ -940,7 +948,10 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => !stop.disabled);
     expect(stop.getAttribute('aria-label')).toBe('Stop');
     expect(stopThread).toHaveBeenCalledTimes(1);
-    expect(flowerSurfaceNotifications()).toHaveLength(0);
+    expect(flowerSurfaceNotifications()).toEqual([{ tone: 'error', message: 'Could not stop this turn. Try Stop again.' }]);
+    expect(runtime.querySelector('[data-flower-bottom-mode="approval"]')).not.toBeNull();
+    stop.click();
+    await waitFor(() => stopThread.mock.calls.length === 2);
   });
 
   it('does not steal focus when the user leaves the approval surface during submission', async () => {
