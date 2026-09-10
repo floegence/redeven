@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-09-10 — Immediate tool presentation and consistent failure disclosure
+
+- Adopt published Floret v7.9.2 so validated tool descriptions and commands are visible before output and results settle during continued model generation.
+- Document actor ownership and unchanged public current-view consumption in [Floret thread runtime](ai/floret-thread-runtime.md).
+- Keep failed tools collapsed by default, preserve manual disclosure, and retain visible error summaries in [activity interaction](ui/flower-activity-interaction.md) and [terminal presentation](ui/flower-terminal-activity.md).
+
 ## 2026-09-09 — Reasoning default presentation
 
 Clarified that Default is a configuration choice rather than an enabled state.

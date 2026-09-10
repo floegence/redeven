@@ -3,6 +3,7 @@ import './flower-feature.css';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import type {
   FlowerLiveStreamEnvelope,
   FlowerRuntimeCurrentView,
@@ -1435,6 +1436,84 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(window.getComputedStyle(errorTitle, '::after').animationName).toBe('none');
     expect(window.getComputedStyle(runningTarget).textOverflow).toBe('ellipsis');
     expect(runningTarget.title).toBe('https://example.test/a/very/long/path/that/must/remain/truncated/while-the-title-sweep-is-running');
+  });
+
+  it('keeps failed tool details collapsed until explicitly opened', async () => {
+    const threadID = 'thread-failed-tool-collapsed';
+    const failedThread = thread({
+      thread_id: threadID,
+      messages: [{
+        id: 'failed-tool-message', turn_id: 'turn-failed-tool', role: 'assistant', content: '', status: 'complete', created_at_ms: 10,
+        blocks: [activityTimeline({ thread_id: threadID, turn_id: 'turn-failed-tool', run_id: 'run-failed-tool', items: [activityItem({
+          item_id: 'failed-command', tool_id: 'failed-command', tool_name: 'terminal.exec', renderer: 'terminal',
+          label: 'Inspect environment status', status: 'error', needs_attention: true,
+          payload: { operation: 'exec', command: 'redeven env status --json', output: 'command not found', exit_code: 127, error: { message: 'Terminal process exited with code 127' } },
+        })] })],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [failedThread]), loadThread: vi.fn(async () => liveBootstrap(failedThread, 1)) });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="failed-command"]')));
+    const row = runtime.querySelector<HTMLElement>('[data-flower-activity-item-id="failed-command"]')!;
+    const toggle = row.querySelector<HTMLButtonElement>('button.flower-activity-inline-button')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(row.textContent).toContain('Inspect environment status');
+    expect(row.textContent).toContain('Terminal process exited with code 127');
+    expect(row.querySelector('[data-flower-activity-terminal-panel]')).toBeNull();
+    toggle.click();
+    await waitFor(() => toggle.getAttribute('aria-expanded') === 'true');
+    expect(row.querySelector('.flower-activity-terminal-command')?.textContent).toContain('redeven env status --json');
+    expect(row.querySelector('.flower-activity-terminal-output')?.textContent).toContain('command not found');
+  });
+
+  it('shows the running command before output and preserves manual disclosure when it fails', async () => {
+    const threadID = 'thread-live-command-presentation';
+    const activeThread = thread({ thread_id: threadID, status: 'running', active_run_id: 'run-live-command' });
+    const current = (version: number, status: 'running' | 'error', output = ''): FlowerRuntimeCurrentView => ({
+      ...runtimeCurrentView(activeThread, version),
+      turn_id: 'turn-live-command',
+      items: [{
+        id: 'tool-live-command', ordinal: 1, turn_id: 'turn-live-command', run_id: 'run-live-command', kind: 'tool', live: status === 'running',
+        activity: {
+          item_id: 'tool-live-command', tool_id: 'command-call', tool_name: 'terminal.exec', kind: 'tool', status, severity: 'normal', requires_approval: false,
+          needs_attention: status === 'error',
+          presentation: { label: 'Inspect environment status', renderer: 'terminal', payload: { operation: 'exec', command: 'printf READY', output, ...(status === 'error' ? { exit_code: 1, error: { message: 'Diagnostic failed' } } : {}) } },
+        },
+      }],
+    });
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [activeThread] }]);
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [activeThread]), loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(activeThread, current(1, 'running')), current: current(1, 'running') })), connectLiveStream: stream.connect });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-live-command"]')));
+    const row = runtime.querySelector<HTMLElement>('[data-flower-activity-item-id="tool-live-command"]')!;
+    const toggle = row.querySelector<HTMLButtonElement>('button.flower-activity-inline-button')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(row.textContent).toContain('Inspect environment status');
+    toggle.click();
+    await waitFor(() => toggle.getAttribute('aria-expanded') === 'true');
+    const command = row.querySelector<HTMLElement>('.flower-activity-terminal-command')!;
+    expect(command.textContent).toBe('printf READY');
+    expect(row.textContent).toContain('Waiting for output');
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.selectNodeContents(command);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: current(2, 'error', 'Diagnostic output') });
+    await waitFor(() => row.textContent?.includes('Diagnostic output') === true);
+    expect(row.querySelector('.flower-activity-terminal-command')).toBe(command);
+    expect(selection.toString()).toBe('printf READY');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(row.textContent).not.toContain('Waiting for output');
+    selection.removeAllRanges();
+    toggle.click();
+    await waitFor(() => toggle.getAttribute('aria-expanded') === 'false');
+    stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: current(3, 'error', 'Diagnostic output updated') });
+    await wait(40);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('uses semantic terminal titles and keeps safe empty terminal disclosures', async () => {

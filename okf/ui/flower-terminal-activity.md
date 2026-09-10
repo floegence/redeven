@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower terminal activity presentation
 description: Terminal output, truthful result messages, safe input confirmation, and read-only controls.
 tags: [ai, flower, terminal, presentation]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 ---
 # Summary
 
@@ -14,6 +14,12 @@ Flower renders canonical Floret v7 Activity facts. Host-authored labels and desc
 ## Terminal facts
 
 Floret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Redeven maps the same typed presentation from bootstrap and live current replacement. Labels and descriptions are authoritative; the typed operation supplies localized fallback text. Existing v7 history without an operation retains the known terminal fallback. Redeven consumes the additions from published Floret v7.3.1. The public activity sanitizer preserves the existing `terminated` outcome so stopped-command details survive live delivery and history loading.
+
+Published Floret v7.9.2 publishes validated call presentation before tool output.
+The collapsed row immediately shows its description; expanding immediately
+reveals the sanitized command. Only the output region may wait for output.
+Result events settle the row while the model continues generating, and current
+replacements preserve manual disclosure, command selection, and scroll ownership.
 
 Every `exec`, `read`, `write`, and `terminate` row exposes a chevron and detail panel from its first appearance. The semantic title explains intent once. Expanded details prioritize the returned output, directly below a compact command header when a safe command is available. They do not repeat the description or render a status/metadata table. Missing command snapshots do not expose opaque process ids or invent a target.
 
@@ -33,7 +39,7 @@ Details are read-only, offer localized icon actions to reveal and copy the comma
 
 Activity details are designed renderer views, never arbitrary payload inspectors. Errors, terminals, files, patches, web search, questions, completion, todos, and SubAgents each prioritize their user-facing information. Read, list, find, grep, glob, and web views expose semantic scalars or bounded scalar lists: path, root, query, pattern, URL, and count. Unknown tools use a neutral `Called <semantic label>` title and the same allowlist. A human label never authorizes nested `data`, `result`, or protocol JSON.
 
-Failed tools retain the public summary in the row and complete public message in an initially expanded error detail. Error codes, retryability, tool/item ids, and lifecycle diagnostics remain hidden. Successful tools omit generic completion summaries and event codes such as `tool execution completed`, `todos.updated`, `file.updated`, `success`, `completed`, and `ok`. Rich metadata belongs only to explicit product renderers such as OKF and skill activation. Presentation never changes Floret status, ordering, persistence, read acknowledgement, audit state, or terminal settlement.
+Failed tools retain the public summary in the row and complete public message in an manually expandable error detail. Error codes, retryability, tool/item ids, and lifecycle diagnostics remain hidden. Successful tools omit generic completion summaries and event codes such as `tool execution completed`, `todos.updated`, `file.updated`, `success`, `completed`, and `ok`. Rich metadata belongs only to explicit product renderers such as OKF and skill activation. Presentation never changes Floret status, ordering, persistence, read acknowledgement, audit state, or terminal settlement.
 
 # Evidence
 
