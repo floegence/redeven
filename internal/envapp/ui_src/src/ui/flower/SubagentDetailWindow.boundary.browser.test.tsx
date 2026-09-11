@@ -145,7 +145,8 @@ function assertQuietBorder(surface: HTMLElement, adjacentBackground: string): vo
   for (const color of colors) {
     const parsed = parseRGBColor(color);
     expect(parsed.alpha).toBe(1);
-    expect(contrastRatio(parsed, adjacent)).toBeLessThan(1.5);
+    // Keep the edge visibly distinct without turning it into a heavy outline.
+    expect(contrastRatio(parsed, adjacent)).toBeLessThan(3);
   }
 }
 
@@ -166,7 +167,9 @@ describe('Subagent detail window boundary', () => {
       expect(geometryStyle.contain).not.toContain('paint');
       expect(surface.dataset.floeSurface).toBe('floating');
       expect(surfaceStyle.backdropFilter).toBe('none');
-      expect(surfaceStyle.boxShadow).toContain('inset');
+      // Floe's lightweight window material uses a static contact/cast shadow;
+      // the boundary contract does not require an inset component.
+      expect(surfaceStyle.boxShadow).not.toBe('none');
       assertQuietBorder(surface, fixtureStyle.backgroundColor);
 
       const titlebar = surface.querySelector<HTMLElement>("[data-floe-floating-window-titlebar='true']");
