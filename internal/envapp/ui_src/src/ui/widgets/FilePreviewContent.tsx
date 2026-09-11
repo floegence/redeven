@@ -5,7 +5,7 @@ import { Check, Copy, Download, Loader2, Pencil, Save, X } from '@floegence/floe
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
-import type { FilePreviewDescriptor } from '../utils/filePreview';
+import type { FilePreviewDescriptor, FilePreviewSurface } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
@@ -15,7 +15,7 @@ import { useI18n } from '../i18n';
 
 export interface FilePreviewContentProps {
   /** Surface ownership for the preview shell. Window is reserved for desktop floating hosts. */
-  surface?: 'main' | 'window';
+  surface?: FilePreviewSurface;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   showHeader?: boolean;

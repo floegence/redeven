@@ -15,6 +15,7 @@ import {
 } from './pdfPreviewRuntime';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
 import { useI18n } from '../i18n';
+import type { FilePreviewSurface } from '../utils/filePreview';
 
 const PDF_PREVIEW_INSET = 12;
 const PDF_ZOOM_STEP = 0.1;
@@ -167,6 +168,7 @@ function PdfPreviewPage(props: {
 }
 
 export interface PdfPreviewPaneProps {
+  surface?: FilePreviewSurface;
   bytes?: Uint8Array<ArrayBuffer> | null;
 }
 
@@ -639,7 +641,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
   };
 
   return (
-    <div class={cn('relative flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+    <div class={cn('relative flex h-full min-h-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
       <div class="pdf-preview-controls pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-center justify-between gap-2">
         <div class="pointer-events-auto flex min-w-0 items-center gap-2 rounded-md border border-border/80 bg-background/90 px-2 py-1 shadow-lg backdrop-blur-sm">
           <span class="rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -685,7 +687,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
       <div
         ref={viewportEl}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        class="pdf-preview-pane min-h-0 flex-1 overflow-auto bg-muted/20 p-3"
+        class={cn('pdf-preview-pane min-h-0 flex-1 overflow-auto p-3', props.surface === 'window' ? 'redeven-file-preview-surface-window' : 'bg-muted/20')}
       >
         <Show
           when={!renderError()}

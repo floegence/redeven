@@ -4,14 +4,14 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { ConfirmDialog } from '../primitives/EnvAppModal';
 
-import type { FilePreviewDescriptor } from '../utils/filePreview';
+import type { FilePreviewDescriptor, FilePreviewSurface } from '../utils/filePreview';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { FilePreviewContent } from './FilePreviewContent';
 import { WindowModal } from './WindowModal';
 import { useI18n } from '../i18n';
 
 export interface FilePreviewPanelProps {
-  surface?: 'main' | 'window';
+  surface?: FilePreviewSurface;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;

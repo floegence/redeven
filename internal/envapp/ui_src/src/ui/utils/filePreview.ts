@@ -1,6 +1,8 @@
 // File preview helpers: extension classification, language resolution, and basic content sniffing.
 
 export type PreviewMode = 'text' | 'markdown' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'video' | 'audio' | 'binary' | 'unsupported';
+/** Surface ownership for a file preview. Desktop floating windows use the window material. */
+export type FilePreviewSurface = 'main' | 'window';
 export type TextPreviewPresentation = 'plain' | 'code';
 
 export interface FilePreviewDescriptor {
