@@ -384,11 +384,14 @@ describe('Env local Flower surface adapter', () => {
 	});
 
   it.each([
+    ['not_configured', {
+      binding_state: 'bound', connected: true, configured: false, available: false, model_count: 0, missing_key_provider_ids: [],
+    }],
     ['missing_keys', {
-      binding_state: 'bound', connected: true, available: false, model_count: 0, missing_key_provider_ids: ['openai'],
+      binding_state: 'bound', connected: true, configured: true, available: false, model_count: 0, missing_key_provider_ids: ['openai'],
     }],
     ['empty', {
-      binding_state: 'bound', connected: true, available: false, model_count: 0, missing_key_provider_ids: [],
+      binding_state: 'bound', connected: true, configured: true, available: false, model_count: 0, missing_key_provider_ids: [],
     }],
     ['connecting', {
       binding_state: 'connecting', connected: false, available: false, model_count: 0,
@@ -431,6 +434,9 @@ describe('Env local Flower surface adapter', () => {
     });
     expect(sourceStatus).not.toHaveProperty('ready');
     expect(sourceStatus).not.toHaveProperty('model_count');
+    if (expectedState === 'not_configured') {
+      expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/models')).toBe(false);
+    }
   });
 
   it('maps a missing Runtime Desktop capability to unsupported', async () => {
@@ -445,11 +451,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_source).toEqual({
-      kind: 'desktop_model_source',
-      state: 'unsupported',
-      label: 'Desktop',
-    });
+    expect((await adapter.loadSettings()).model_source).toBeUndefined();
   });
 
   it('rejects a Desktop catalog entry from an unexpected source', async () => {

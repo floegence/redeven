@@ -65,6 +65,7 @@ export type AIRuntimeStatus = Readonly<{
   desktop_model_source?: Readonly<{
     binding_state?: string;
     connected?: boolean;
+    configured?: boolean;
     available?: boolean;
     model_source?: string;
     session_id?: string;

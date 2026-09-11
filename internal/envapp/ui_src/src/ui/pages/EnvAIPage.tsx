@@ -123,10 +123,12 @@ export function EnvAIPage(props: EnvAIPageProps) {
             providers: status.missing_key_provider_ids.join(', '),
           });
         }
+        if (status.state === 'not_configured') return i18n.t('flowerSettings.desktopModelNotConfigured');
         if (status.state === 'empty') return i18n.t('flowerSettings.desktopModelNoUsableModel');
         if (status.state === 'unsupported') return i18n.t('flowerSettings.desktopModelUnsupported');
         if (status.state === 'expired') return i18n.t('flowerSettings.desktopModelExpired');
         if (status.state === 'connecting') return i18n.t('flowerSurface.chat.handlerStillStarting');
+        if (status.state === 'unbound') return i18n.t('flowerSettings.desktopModelSourceNotReady');
         if (status.state === 'error' && trim(status.diagnostic_message)) {
           return i18n.t('flowerSettings.desktopModelBindingFailedWithError', {
             message: trim(status.diagnostic_message),
@@ -135,11 +137,17 @@ export function EnvAIPage(props: EnvAIPageProps) {
         return i18n.t('flowerSettings.desktopModelBindingFailed');
       },
       localSettings: {
-        label: i18n.t('flowerChat.header.aiSettings'),
+        label: i18n.t('flowerSettings.desktopFlowerSettingsAction'),
         run: async () => {
           if (!await openFlowerSettings()) {
             throw new Error(i18n.t('settings.connection.manageConnectionFailedMessage'));
           }
+        },
+      },
+      remoteSettings: {
+        label: i18n.t('flowerSettings.remoteFlowerSettingsAction'),
+        run: async () => {
+          env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } });
         },
       },
       runtimeSettings: {

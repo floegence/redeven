@@ -78,6 +78,7 @@ type DesktopModelSourceSession struct {
 type DesktopModelSourceStatus struct {
 	BindingState          string   `json:"binding_state,omitempty"`
 	Connected             bool     `json:"connected"`
+	Configured            bool     `json:"configured"`
 	Available             bool     `json:"available"`
 	ModelSource           string   `json:"model_source,omitempty"`
 	SessionID             string   `json:"session_id,omitempty"`
@@ -541,6 +542,7 @@ func (c *desktopModelSourceClient) mergeStatusLocked(remote DesktopModelSourceSt
 	status := &DesktopModelSourceStatus{
 		BindingState:          string(binding.State),
 		Connected:             c.conn != nil && binding.State == runtimeservice.BindingStateBound,
+		Configured:            remote.Configured || (remote.BindingState == "" && snapshot != nil && snapshot.Configured),
 		Available:             remote.Available || modelCount > 0,
 		ModelSource:           firstNonEmpty(remote.ModelSource, binding.ModelSource, DesktopModelSourceDefaultSource),
 		SessionID:             firstNonEmpty(remote.SessionID, binding.SessionID),
@@ -1097,6 +1099,7 @@ func (e *desktopModelSourceExecutor) status() (*DesktopModelSourceStatus, error)
 	return &DesktopModelSourceStatus{
 		BindingState:          string(runtimeservice.BindingStateBound),
 		Connected:             true,
+		Configured:            snapshot != nil && snapshot.Configured,
 		Available:             snapshot != nil && len(snapshot.Models) > 0,
 		ModelSource:           firstNonEmpty(e.session.Source, DesktopModelSourceDefaultSource),
 		SessionID:             e.session.SessionID,

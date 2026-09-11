@@ -334,6 +334,7 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceStatus{
 				BindingState:    string(runtimeservice.BindingStateBound),
 				Connected:       true,
+				Configured:      true,
 				Available:       true,
 				ModelSource:     DesktopModelSourceDefaultSource,
 				SessionID:       "desktop-session",
@@ -401,6 +402,43 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 	}
 	if out.Runtime.DesktopModelSource == nil || !out.Runtime.DesktopModelSource.Connected {
 		t.Fatalf("DesktopModelSource=%#v, want connected", out.Runtime.DesktopModelSource)
+	}
+	if !out.Runtime.DesktopModelSource.Configured {
+		t.Fatalf("DesktopModelSource.Configured=false, want true")
+	}
+}
+
+func TestServiceRuntimeStatusReportsDesktopProviderNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	modelSource, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+		if frame.Method == "ai.status.get" {
+			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceStatus{
+				BindingState: string(runtimeservice.BindingStateBound),
+				Connected:    true,
+				Configured:   false,
+				ModelSource:  DesktopModelSourceDefaultSource,
+				SessionID:    "desktop-session",
+			})
+		}
+		return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
+	})
+	defer cleanup()
+
+	svc := &Service{desktopModelSource: modelSource}
+	status := svc.RuntimeStatus(context.Background())
+	if status == nil || status.DesktopModelSource == nil {
+		t.Fatalf("RuntimeStatus=%#v, want Desktop model source", status)
+	}
+	if status.DesktopModelSource.Configured {
+		t.Fatalf("Configured=true, want false: %#v", status.DesktopModelSource)
+	}
+	raw, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"configured":false`) {
+		t.Fatalf("RuntimeStatus JSON=%s, want configured=false", raw)
 	}
 }
 

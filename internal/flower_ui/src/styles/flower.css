@@ -2267,6 +2267,42 @@ html.dark .flower-component-shell {
   transition: background-color 140ms ease, color 140ms ease;
 }
 
+.flower-model-source-status-action-text {
+  width: auto;
+  min-height: 1.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  max-width: 100%;
+  height: auto;
+  padding: 0.3125rem 0.5rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.flower-model-source-status-setup {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.flower-model-source-status-setup .flower-model-source-status-message {
+  padding-right: 1.75rem;
+  overflow: visible;
+  white-space: normal;
+}
+
+.flower-model-source-status-setup .flower-model-source-status-actions {
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+}
+
+.flower-model-source-status-setup .flower-model-source-status-refresh {
+  position: absolute;
+  top: -0.4375rem;
+  right: 0;
+}
+
 .flower-model-source-status-action:hover,
 .flower-model-source-status-action:focus-visible {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
