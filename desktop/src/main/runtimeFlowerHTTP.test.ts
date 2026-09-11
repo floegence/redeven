@@ -7,6 +7,7 @@ import {
 	invalidateRuntimeFlowerAccessOnStatus,
 	openRuntimeFlowerHTTPStream,
 	parseRuntimeFlowerJSON,
+	requestRuntimeFlowerHTTP,
 	readRuntimeFlowerHTTPResponse,
 	runtimeFlowerDeleteQuery,
 	runtimeFlowerInvalidJSONError,
@@ -92,6 +93,28 @@ describe('readRuntimeFlowerHTTPResponse', () => {
         code: 'runtime_flower_invalid_json',
         message: 'Flower returned an invalid JSON response.',
         status: 200,
+      });
+    } finally {
+      await close(server);
+    }
+  });
+});
+
+describe('requestRuntimeFlowerHTTP', () => {
+  it('honors a request-specific timeout for bootstrap reads', async () => {
+    const server = http.createServer((_request, _response) => {
+      // Keep the socket open until the client-side deadline fires.
+    });
+    const port = await listen(server);
+    try {
+      const pending = requestRuntimeFlowerHTTP(
+        new URL(`http://127.0.0.1:${port}/threads`),
+        { method: 'GET', path: '/threads' },
+        { timeoutMs: 20 },
+      );
+      await expect(pending).rejects.toThrow(/timed out/i);
+      await pending.catch((error: unknown) => {
+        expect((error as { code?: string }).code).toBe('runtime_flower_timeout');
       });
     } finally {
       await close(server);

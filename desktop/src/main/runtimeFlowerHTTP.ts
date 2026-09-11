@@ -85,14 +85,14 @@ export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promis
 export function requestRuntimeFlowerHTTP(
   url: URL,
   request: RuntimeFlowerRequest,
-  options: Readonly<{ headers?: Readonly<Record<string, string>>; accept?: string }> = {},
+  options: Readonly<{ headers?: Readonly<Record<string, string>>; accept?: string; timeoutMs?: number }> = {},
 ): Promise<RuntimeFlowerHTTPResponse> {
   return new Promise((resolve, reject) => {
     const body = request.body === undefined ? '' : JSON.stringify(request.body);
     const client = url.protocol === 'https:' ? https : http;
     const req = client.request(url, {
       method: request.method,
-      timeout: 120_000,
+      timeout: Math.max(1, Math.floor(options.timeoutMs ?? 120_000)),
       headers: {
         Accept: options.accept ?? 'application/json',
         ...(options.headers ?? {}),
@@ -105,7 +105,9 @@ export function requestRuntimeFlowerHTTP(
       void readRuntimeFlowerHTTPResponse(response).then(resolve, reject);
     });
     req.on('timeout', () => {
-      req.destroy(new Error('Flower runtime request timed out.'));
+      const error = new Error('Flower runtime request timed out.');
+      Object.assign(error, { code: 'runtime_flower_timeout' });
+      req.destroy(error);
     });
     req.on('error', reject);
     if (body) req.write(body);

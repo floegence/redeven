@@ -1129,15 +1129,27 @@ function runtimeFlowerErrorFromUnknown(error: unknown): RuntimeFlowerError {
   );
 }
 
+function runtimeFlowerTimeoutError(code: string, message: string): Error {
+  const error = new Error(message);
+  Object.assign(error, { code });
+  return error;
+}
+
 class RuntimeFlowerTransportError extends Error {
   constructor(cause: unknown) {
     super(cause instanceof Error ? cause.message : compact(cause) || 'Flower runtime response was unavailable.', { cause });
     this.name = 'RuntimeFlowerTransportError';
+    if (cause && typeof cause === 'object' && 'code' in cause) {
+      Object.assign(this, { code: compact((cause as { code?: unknown }).code) });
+    }
   }
 }
 
 const LOCAL_UI_ACCESS_COOKIE_NAME = 'redeven_local_access';
 const runtimeFlowerAccessCookies = new Map<string, string>();
+const runtimeFlowerTargetInFlight = new Map<string, Promise<RuntimeFlowerTarget>>();
+const RUNTIME_FLOWER_READINESS_TIMEOUT_MS = 15_000;
+const RUNTIME_FLOWER_BOOTSTRAP_REQUEST_TIMEOUT_MS = 10_000;
 const RUNTIME_FLOWER_ATTACHMENT_MAX_BYTES = 64 * 1024 * 1024;
 const RUNTIME_FLOWER_STREAMS_PER_SENDER = 8;
 const RUNTIME_FLOWER_STREAMS_GLOBAL = 64;
@@ -2005,6 +2017,7 @@ function clearLocalEnvironmentRuntimeRecord(environment: DesktopLocalEnvironment
   if (localEnvironmentRuntimeRecord?.environment_id === environment.id) {
     localEnvironmentRuntimeRecord = null;
   }
+  runtimeFlowerTargetInFlight.delete(`local:${localHostRuntimeLifecycleTargetKey(environment)}`);
   localRuntimeMaintenanceByEnvironmentID.delete(environment.id);
 }
 
@@ -3489,6 +3502,7 @@ async function clearDesktopStateForReinstallTarget(
   }
   if (affected.has((await loadDesktopPreferencesCached()).local_environment.id)) {
     localEnvironmentRuntimeRecord = null;
+    runtimeFlowerTargetInFlight.clear();
     runtimeFlowerAccessCookies.clear();
   }
 }
@@ -3893,6 +3907,7 @@ async function prepareDesktopForUpdateInstallation(): Promise<void> {
       // Windows Desktop owns only the Session and Bridge processes. WSL Runtime
       // processes remain running until the user stops the registered Environment.
       localEnvironmentRuntimeRecord = null;
+      runtimeFlowerTargetInFlight.clear();
       runtimeFlowerAccessCookies.clear();
       return;
     }
@@ -3918,6 +3933,7 @@ async function prepareDesktopForUpdateInstallation(): Promise<void> {
       });
     }
     localEnvironmentRuntimeRecord = null;
+    runtimeFlowerTargetInFlight.delete(`local:${localHostRuntimeLifecycleTargetKey(environment)}`);
     runtimeFlowerAccessCookies.clear();
   })();
   try {
@@ -10028,8 +10044,7 @@ async function ensureWSLRuntimeFlowerTarget(
   };
 }
 
-async function ensureRuntimeFlowerRecord(): Promise<RuntimeFlowerTarget> {
-  const preferences = await loadDesktopPreferencesCached();
+async function ensureRuntimeFlowerRecordUncoalesced(preferences: DesktopPreferences): Promise<RuntimeFlowerTarget> {
   if (desktopPlatformCapabilities.wsl_environment) {
     return ensureWSLRuntimeFlowerTarget(preferences);
   }
@@ -10124,6 +10139,24 @@ async function ensureRuntimeFlowerRecord(): Promise<RuntimeFlowerTarget> {
   );
 }
 
+async function ensureRuntimeFlowerRecord(): Promise<RuntimeFlowerTarget> {
+  const preferences = await loadDesktopPreferencesCached();
+  const targetKey = desktopPlatformCapabilities.wsl_environment
+    ? `wsl:${preferences.default_flower_runtime_target_id || 'default'}`
+    : `local:${localHostRuntimeLifecycleTargetKey(preferences.local_environment)}`;
+  const inFlight = runtimeFlowerTargetInFlight.get(targetKey);
+  if (inFlight) return inFlight;
+  const request = ensureRuntimeFlowerRecordUncoalesced(preferences);
+  runtimeFlowerTargetInFlight.set(targetKey, request);
+  const release = () => {
+    if (runtimeFlowerTargetInFlight.get(targetKey) === request) {
+      runtimeFlowerTargetInFlight.delete(targetKey);
+    }
+  };
+  void request.then(release, release);
+  return request;
+}
+
 function requireSuccessfulRuntimeFlowerLifecycle(result: DesktopLauncherActionResult): void {
   if (result.ok) {
     return;
@@ -10212,13 +10245,42 @@ async function runtimeFlowerAccessHeaders(
   };
 }
 
+function runtimeFlowerBootstrapTimeout(path: string, method: RuntimeFlowerRequest['method']): number | undefined {
+  if (method !== 'GET') return undefined;
+  const pathname = new URL(path, 'http://runtime-flower.local').pathname;
+  return pathname === '/_redeven_proxy/api/settings'
+    || pathname === '/_redeven_proxy/api/ai/models'
+    || pathname === '/_redeven_proxy/api/ai/threads'
+    ? RUNTIME_FLOWER_BOOTSTRAP_REQUEST_TIMEOUT_MS
+    : undefined;
+}
+
+async function withRuntimeFlowerTimeout<T>(promise: Promise<T>, timeoutMs: number, code: string, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(runtimeFlowerTimeoutError(code, message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> {
   const method = runtimeFlowerMethod(request.method);
   const path = runtimeFlowerPath(request.path);
   if (!runtimeFlowerMethodAllowed(path, method)) {
     throw new Error('Flower runtime request method is not allowed for this path.');
   }
-  const flowerTarget = await ensureRuntimeFlowerRecord();
+  const flowerTarget = await withRuntimeFlowerTimeout(
+    ensureRuntimeFlowerRecord(),
+    RUNTIME_FLOWER_READINESS_TIMEOUT_MS,
+    'runtime_flower_readiness_timeout',
+    'Desktop could not prepare the Runtime for Flower in time.',
+  );
   const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));
   const environment = flowerTarget.local_environment;
@@ -10256,7 +10318,10 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   let accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));
   let response: RuntimeFlowerHTTPResponse;
   try {
-    response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+    response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, {
+      headers: accessHeaders,
+      timeoutMs: runtimeFlowerBootstrapTimeout(path, method),
+    });
   } catch (error) {
     throw new RuntimeFlowerTransportError(error);
   }
@@ -10264,7 +10329,10 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
     accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));
     try {
-      response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+      response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, {
+        headers: accessHeaders,
+        timeoutMs: runtimeFlowerBootstrapTimeout(path, method),
+      });
     } catch (error) {
       throw new RuntimeFlowerTransportError(error);
     }

@@ -500,6 +500,28 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const FLOWER_THREAD_LIST_TIMEOUT_MS = 10_000;
+
+function flowerThreadListTimeout(): Error {
+  const error = new Error('Conversations could not be loaded in time.');
+  Object.assign(error, { code: 'flower_thread_list_timeout' });
+  return error;
+}
+
+async function withFlowerThreadListTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(flowerThreadListTimeout()), FLOWER_THREAD_LIST_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 const FLOWER_APPROVAL_CONFLICT_ERROR_CODE = 'AI_APPROVAL_CONFLICT';
 const FLOWER_ACTIVE_TURN_ADMISSION_ERROR_CODE = 'floret_thread_admission_blocked';
 
@@ -796,7 +818,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [modelSourceRefreshing, setModelSourceRefreshing] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
-  const [threadsLoaded, setThreadsLoaded] = createSignal(false);
+  const [threadListState, setThreadListState] = createSignal<'loading' | 'ready' | 'error'>('loading');
+  const [threadListError, setThreadListError] = createSignal('');
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
   const [settingsOpened, setSettingsOpened] = createSignal(false);
@@ -4001,12 +4024,14 @@ webSearch: model.web_search,
   const performThreadsRefresh = async (): Promise<boolean> => {
     const refreshSequence = ++threadsRefreshSequence;
     setThreadsRefreshing(true);
+    setThreadListState('loading');
+    setThreadListError('');
     try {
-      const next = (await props.adapter.listThreads()).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
+      const next = (await withFlowerThreadListTimeout(props.adapter.listThreads())).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
       if (refreshSequence !== threadsRefreshSequence) {
         return false;
       }
-      setThreadsLoaded(true);
+      setThreadListState('ready');
       setLoadError('');
       const selectedID = selectedThreadID();
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
@@ -4034,7 +4059,9 @@ webSearch: model.web_search,
       }
       return true;
     } catch (error) {
-      setLoadError(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      setThreadListState('error');
+      setThreadListError(message);
       return false;
     } finally {
       setThreadsRefreshing(false);
@@ -11410,7 +11437,10 @@ webSearch: model.web_search,
           activeThreadID={selectedThreadID()}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
-          loading={!threadsLoaded()}
+          loading={threadListState() === 'loading'}
+          error={threadListError()}
+          errorTitle={copy().chat.loadErrorTitle}
+          errorRetryLabel={copy().threadList.refreshLabel}
           warmup={surfaceWarmupActive()}
           copy={copy().threadList}
           onQueryChange={setHistoryFilter}

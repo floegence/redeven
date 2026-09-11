@@ -254,6 +254,9 @@ export type FlowerThreadListProps = Readonly<{
   query: string;
   refreshing?: boolean;
   loading?: boolean;
+  error?: string;
+  errorTitle?: string;
+  errorRetryLabel?: string;
   warmup?: boolean;
   copy?: FlowerThreadListCopy;
   onQueryChange: (query: string) => void;
@@ -301,6 +304,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   });
   const warmupRows = [0, 1, 2, 3, 4, 5] as const;
   const showLoadingSkeleton = createMemo(() => (props.warmup === true || props.loading === true) && props.items.length === 0);
+  const showLoadError = createMemo(() => Boolean(props.error?.trim()) && !showLoadingSkeleton());
   const searchDisabled = createMemo(() => showLoadingSkeleton());
 
   const openMenu = (event: MouseEvent | KeyboardEvent, item: FlowerThreadListItem) => {
@@ -405,10 +409,24 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             </For>
           </div>
         )}>
-          <Show
-            when={filtered().length > 0}
-            fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
-          >
+          <Show when={!showLoadError()} fallback={(
+            <div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm" role="alert">
+              <div class="font-medium">{props.errorTitle || copy().title}</div>
+              <div class="mt-1 text-xs text-muted-foreground">{props.error}</div>
+              <button
+                type="button"
+                class="mt-3 rounded-md border px-3 py-1.5 text-xs font-medium"
+                onClick={props.onRefresh}
+                disabled={props.refreshing}
+              >
+                {props.refreshing ? copy().working : (props.errorRetryLabel || copy().refreshLabel)}
+              </button>
+            </div>
+          )}>
+            <Show
+              when={filtered().length > 0}
+              fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
+            >
             <For each={groupKeys()}>
               {(groupKey) => {
                 const group = () => groupByKey().get(groupKey);
@@ -444,6 +462,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                 );
               }}
             </For>
+            </Show>
           </Show>
         </Show>
       </div>
