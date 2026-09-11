@@ -11,6 +11,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.
 - [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.
 - [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.
+- [Observation and target action events](architecture/observation-events.md) - Publish target action progress on the canonical Flower stream with target-scoped media.
 - [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.
 - [Web Services interface](architecture/web-services-interface.md) - Read service status, open archives, and resolve exceptions in compact, accessible Activity and Workbench panels.
 - [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
@@ -118,6 +119,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower historical writer acceptance](ai/flower-upgrade-compatibility.md) - Add immutable writer samples and prove upgrade, continued use and restart at final integration.
 - [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.
 - [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
+- [Computer and browser use runtime](ai/computer-use-runtime.md) - Route typed actions to browser, virtual desktop, and host desktop targets with screenshot provenance and opaque image attachments.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.

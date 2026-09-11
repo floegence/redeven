@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -166,6 +167,20 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 	attachmentResolver := r.floretAttachmentResolver(frozenAttachments, flProvider)
 	flProvider.attachmentResolver = func(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
+		if strings.HasPrefix(strings.TrimSpace(attachment.ResourceRef), "computer://") {
+			if resolver, ok := r.targetToolExecutor.(TargetToolAttachmentResolver); ok {
+				body, err := resolver.ResolveTargetToolAttachment(ctx, strings.TrimSpace(attachment.ResourceRef))
+				if err != nil {
+					return ContentPart{}, err
+				}
+				mimeType := strings.TrimSpace(attachment.MIMEType)
+				if mimeType == "" {
+					mimeType = "image/png"
+				}
+				return ContentPart{Type: "image", Text: strings.TrimSpace(attachment.Name), MimeType: mimeType, FileURI: "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(body)}, nil
+			}
+			return ContentPart{}, errors.New("target attachment resolver is unavailable")
+		}
 		return attachmentResolver(ctx, runtimeAttachmentFromProvider(attachment))
 	}
 	flProvider.identity = gatewayIdentity

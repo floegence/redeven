@@ -46,6 +46,13 @@ type TargetToolExecutor interface {
 	ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error)
 }
 
+// TargetToolAttachmentResolver expands opaque media references returned by a
+// target executor. Bytes stay owned by the executor and are never persisted in
+// tool results or provider state.
+type TargetToolAttachmentResolver interface {
+	ResolveTargetToolAttachment(ctx context.Context, resourceRef string) ([]byte, error)
+}
+
 type TargetToolCall struct {
 	ToolCallID           string          `json:"tool_call_id"`
 	TargetID             string          `json:"target_id"`
@@ -55,18 +62,38 @@ type TargetToolCall struct {
 }
 
 type TargetToolResult struct {
-	TargetID          string `json:"target_id"`
-	ExecutionLocation string `json:"execution_location,omitempty"`
-	Result            any    `json:"result,omitempty"`
+	TargetID          string                 `json:"target_id"`
+	ExecutionLocation string                 `json:"execution_location,omitempty"`
+	Result            any                    `json:"result,omitempty"`
+	Attachments       []TargetToolAttachment `json:"attachments,omitempty"`
+}
+
+type TargetToolAttachment struct {
+	ResourceRef string `json:"resource_ref"`
+	Name        string `json:"name,omitempty"`
+	MIMEType    string `json:"mime_type"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
 }
 
 func toolRequiresTarget(toolName string) bool {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
-	case "file.read", "read_file", "file.edit", "file.write", "apply_patch":
+	case "file.read", "read_file", "file.edit", "file.write", "apply_patch",
+		"computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.wait",
+		"browser.navigate", "browser.back", "browser.reload":
 		return true
 	}
 	return false
+}
+
+func isComputerUseTool(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.wait", "browser.navigate", "browser.back", "browser.reload":
+		return true
+	default:
+		return false
+	}
 }
 
 func requiredTargetCapabilities(toolName string) []string {
@@ -75,6 +102,11 @@ func requiredTargetCapabilities(toolName string) []string {
 		return []string{"read"}
 	case "file.edit", "file.write", "apply_patch":
 		return []string{"write"}
+	case "computer.screenshot":
+		return []string{"observe"}
+	case "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.wait",
+		"browser.navigate", "browser.back", "browser.reload":
+		return []string{"interaction"}
 	default:
 		return nil
 	}

@@ -116,9 +116,18 @@ type ToolResult struct {
 	Error                 *aitools.ToolError `json:"error,omitempty"`
 	Truncated             bool               `json:"truncated,omitempty"`
 	ContentRef            string             `json:"content_ref,omitempty"`
+	Attachments           []ToolAttachment   `json:"attachments,omitempty"`
 	cancellationConfirmed bool
 	dispatchErr           error
 	activityInput         map[string]any
+}
+
+type ToolAttachment struct {
+	ResourceRef string `json:"resource_ref"`
+	Name        string `json:"name,omitempty"`
+	MIMEType    string `json:"mime_type"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
 }
 
 type PendingToolResult struct {
