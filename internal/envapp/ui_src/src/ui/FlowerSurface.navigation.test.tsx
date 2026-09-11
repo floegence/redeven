@@ -1636,4 +1636,46 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-message-bubble-error')?.textContent).toContain('This message failed before Flower produced visible text.');
     expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(0);
   });
+
+  it('leaves the sidebar skeleton and offers retry when the conversation inventory times out', async () => {
+    vi.useFakeTimers();
+    try {
+      const listThreads = vi.fn(() => new Promise<never>(() => undefined));
+      const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads });
+
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runtime.querySelector('.flower-thread-warmup-list')).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(runtime.querySelector('.flower-thread-warmup-list')).toBeNull();
+      expect(runtime.querySelector('[role="alert"]')?.textContent).toContain('Conversations');
+      expect(Array.from(runtime.querySelectorAll('button')).some((button) => button.textContent?.includes('Refresh'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers the conversation list after a retry succeeds', async () => {
+    let attempt = 0;
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error('temporary inventory failure');
+        return [];
+      }),
+      connectLiveStream: async function* (input) {
+        await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+        yield* [];
+      },
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-thread-empty[role="alert"]')));
+    const retry = Array.from(runtime.querySelectorAll('.flower-thread-empty[role="alert"] button')).find((button) => button.textContent?.includes('Refresh')) as HTMLButtonElement | undefined;
+    expect(retry).toBeDefined();
+    retry?.click();
+    await waitFor(() => runtime.querySelector('.flower-thread-empty')?.textContent?.includes('No conversations') ?? false);
+    expect(attempt).toBe(2);
+  });
 });

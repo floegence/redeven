@@ -49,9 +49,10 @@ describe('Flower warmup presentation', () => {
     const surface = readSource(flowerSurfacePath);
     const list = readSource(threadListPath);
 
-    expect(surface).toContain('const [threadsLoaded, setThreadsLoaded] = createSignal(false)');
-    expect(surface).toContain('setThreadsLoaded(true)');
-    expect(surface).toContain('loading={!threadsLoaded()}');
+    expect(surface).toContain("const [threadListState, setThreadListState] = createSignal<'loading' | 'ready' | 'error'>('loading')");
+    expect(surface).toContain("setThreadListState('ready')");
+    expect(surface).toContain("loading={threadListState() === 'loading'}");
+    expect(surface).toContain('error={threadListError()}');
     expect(list).toContain('props.warmup === true || props.loading === true');
   });
 

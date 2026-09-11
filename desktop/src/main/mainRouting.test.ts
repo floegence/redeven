@@ -1585,6 +1585,8 @@ describe('main routing', () => {
     expect(requestEnd).toBeGreaterThan(requestStart);
     const requestSrc = mainSrc.slice(requestStart, requestEnd);
     expect(requestSrc).toContain('const flowerTarget = await ensureRuntimeFlowerRecord();');
+    expect(requestSrc).toContain('runtime_flower_readiness_timeout');
+    expect(requestSrc).toContain('runtimeFlowerBootstrapTimeout(path, method)');
     expect(requestSrc).toContain('const record = flowerTarget.record;');
     expect(requestSrc).toContain('const url = new URL(path, runtimeFlowerBaseURL(record));');
     expect(requestSrc).toContain('runtimeFlowerMethodAllowed(path, method)');
@@ -1598,7 +1600,7 @@ describe('main routing', () => {
       'accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));',
     );
     expect(requestSrc).toContain(
-      'runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders })',
+      'runtimeFlowerRequestHTTP(url, { ...request, method, path }, {',
     );
     expect(requestSrc).not.toContain('requestProviderDesktopSessionMaterial');
     expect(requestSrc).not.toContain('requestDesktopOpenSession');
@@ -1668,7 +1670,7 @@ describe('main routing', () => {
     expect(accessSrc).toContain('...bridgeHeaders');
     expect(accessSrc).toContain('Cookie: runtimeFlowerAccessCookieHeader(cookie)');
 
-    const ensureStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()');
+    const ensureStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecordUncoalesced(');
     const ensureEnd = mainSrc.indexOf('function runtimeFlowerEnvelopeError(', ensureStart);
     expect(ensureStart).toBeGreaterThanOrEqual(0);
     expect(ensureEnd).toBeGreaterThan(ensureStart);
@@ -1691,6 +1693,15 @@ describe('main routing', () => {
     expect(ensureSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress({');
     expect(ensureSrc).not.toContain('setTimeout(');
     expect(ensureSrc).not.toContain('setInterval(');
+
+    const coordinatorStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()');
+    const coordinatorEnd = mainSrc.indexOf('function requireSuccessfulRuntimeFlowerLifecycle(', coordinatorStart);
+    expect(coordinatorStart).toBeGreaterThanOrEqual(0);
+    expect(coordinatorEnd).toBeGreaterThan(coordinatorStart);
+    const coordinatorSrc = mainSrc.slice(coordinatorStart, coordinatorEnd);
+    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight');
+    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight.set(targetKey, request)');
+    expect(coordinatorSrc).toContain('runtimeFlowerTargetInFlight.delete(targetKey)');
 
     expect(mainSrc).not.toContain('async function startLocalHostRuntimeWithLifecycleProgress(');
     expect(mainSrc).not.toContain('async function stopEnvironmentRuntimeFromLauncherUncoordinated(');
