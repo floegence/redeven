@@ -1,0 +1,10 @@
+.codespace-card--stopped {
+  border-color: var(--redeven-stroke-panel) !important;
+  background: color-mix(in srgb, var(--redeven-surface-panel-elevated) 88%, var(--redeven-surface-panel) 12%) !important;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.codespace-card--stopped:hover {
+  border-color: var(--redeven-stroke-panel-strong) !important;
+  background: var(--redeven-surface-panel-elevated) !important;
+}

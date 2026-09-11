@@ -5,6 +5,7 @@
 @import './ui/plugins/plugin-center.css';
 @import './ui/pages/service-template-center.css';
 @import './ui/pages/web-services.css';
+@import './ui/pages/codespaces.css';
 @import './ui/activity-flower-shell.css';
 
 @source './**/*.{ts,tsx,html}';

@@ -492,10 +492,10 @@ function CodespaceCard(props: {
   return (
     <Card
       class={cn(
-        "border transition-all duration-200",
+        "codespace-card border transition-all duration-200",
         isRunning()
           ? "border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]"
-          : cn(redevenSurfaceRoleClass("panelInteractive"), "opacity-75 hover:opacity-100"),
+          : cn(redevenSurfaceRoleClass("panelInteractive"), "codespace-card--stopped"),
         props.contextMenuOpen ? "ring-1 ring-primary/40" : undefined,
       )}
       onContextMenu={props.onContextMenu}

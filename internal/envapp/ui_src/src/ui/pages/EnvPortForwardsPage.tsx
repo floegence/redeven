@@ -1,6 +1,6 @@
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
-import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -2177,6 +2177,7 @@ async function openWebServiceRoute(
 
 export function EnvPortForwardsPage() {
   let pageRoot: HTMLDivElement | undefined;
+  let addressInput: HTMLInputElement | undefined;
   const ctx = useEnvContext();
   const notify = useNotification();
   const outlineControlClass = redevenSurfaceRoleClass('control');
@@ -2197,6 +2198,10 @@ export function EnvPortForwardsPage() {
   const [recentSession, setRecentSession] = createSignal<ForwardSession | null>(null);
   const [forwardMetadataTarget, setForwardMetadataTarget] = createSignal<ForwardMetadataTarget | null>(null);
   const [forwardMetadataSaving, setForwardMetadataSaving] = createSignal(false);
+
+  onMount(() => {
+    addressInput?.focus({ preventScroll: true });
+  });
 
   // Web services resource
   const [refreshSeq, setRefreshSeq] = createSignal(0);
@@ -3427,6 +3432,7 @@ export function EnvPortForwardsPage() {
                 <div class="relative min-w-0 flex-1" data-testid="web-service-address-input-shell">
                   <Globe class="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <Input
+                    ref={(element) => { addressInput = element; }}
                     value={address()}
                     onInput={(event) => {
                       setAddress(event.currentTarget.value);
@@ -3443,27 +3449,29 @@ export function EnvPortForwardsPage() {
                     spellcheck={false}
                     size="sm"
                     class={cn(
-                      'h-10 w-full pl-10 font-mono text-sm',
+                      'h-10 w-full pl-10 pr-12 font-mono text-sm',
                       addressValidationVisible() && 'border-warning/45',
                     )}
+                    autofocus
                     disabled={!canExecute() || addressOpening()}
                     data-testid="web-service-address-input"
                   />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="ghost"
+                    class="web-service-address-submit absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 p-0 text-muted-foreground"
+                    disabled={!canExecute() || addressOpening()}
+                    aria-busy={addressOpening() || undefined}
+                    aria-label={addressOpening() ? openStatus('new-session') : i18n.t('webServices.actions.openAddress')}
+                    title={i18n.t('webServices.actions.openAddress')}
+                    data-testid="web-service-address-open"
+                  >
+                    <Show when={addressOpening()} fallback={<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>}>
+                      <InlineButtonSnakeLoading />
+                    </Show>
+                  </Button>
                 </div>
-                <Button
-                  type="submit"
-                  size="sm"
-                  class="h-10 shrink-0 px-4"
-                  disabled={!canExecute() || addressOpening() || !address().trim()}
-                  aria-busy={addressOpening() || undefined}
-                  aria-label={addressOpening() ? openStatus('new-session') : i18n.t('webServices.actions.openAddress')}
-                  data-testid="web-service-address-open"
-                >
-                  <Show when={addressOpening()} fallback={<ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />}>
-                    <InlineButtonSnakeLoading class="mr-1.5" />
-                  </Show>
-                  {i18n.t('webServices.actions.openAddress')}
-                </Button>
               </div>
               <div
                 id="web-service-address-guidance"
