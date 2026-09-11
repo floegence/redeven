@@ -74,6 +74,13 @@ canonical permission snapshot before model dispatch.
 
 ## Redeven adapter
 
+Computer and browser action results use Floret's published tool-result image
+contract: Redeven supplies opaque screenshot descriptors and a host resolver,
+while Floret owns provider request assembly, replay, and durable descriptor
+state. Restart and continuation resolve the same target reference and verify
+its digest; neither layer persists screenshot base64 or creates a second
+thread lifecycle stream.
+
 Redeven keeps one typed adapter over the published Floret v7 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
 Published Floret v7.5.0 exposes existing `ThreadSummary.TitleGeneration` with

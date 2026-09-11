@@ -40,6 +40,8 @@ Readonly-exclusive helpers are not general aliases. `read_file`, `read_files`, `
 
 When a thread is configured for explicit target routing, the runtime forwards target-scoped builtin calls through `TargetToolExecutor`. The target executor receives a `TargetToolCall` containing `target_id`, `tool_name`, sanitized arguments, and required capabilities. The run layer returns a result payload that preserves or injects `target_id` and `execution_location`, so target-routed tool results cannot lose provenance before they reach the model or activity timeline.
 
+Computer and browser functions are always target-scoped, even when ordinary file tools use the local-runtime policy. Their screenshot attachments use opaque `computer://` references and are expanded only by a target attachment resolver at the Floret provider boundary. The resolver validates MIME, size, and digest through the target-owned media store; it never stores image bytes in durable tool state.
+
 # Boundaries
 
 Tool names are not aliases for deleted knowledge-era tools. Current repository knowledge access uses `okf.index`, `okf.search`, and `okf.open`: index for broad directory discovery, search for short candidate lists, and open for detailed concept content. OKF is an embedded project corpus and does not access the internet; external, current, recent, news, third-party, market, pricing, and general web facts must use direct authoritative URLs or web search discovery instead.

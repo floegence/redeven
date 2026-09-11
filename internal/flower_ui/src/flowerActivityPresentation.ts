@@ -1447,6 +1447,8 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   question: (item) => presentationForQuestion(item),
   subagent: (item, context) => presentationForSubagents(item, context.copy),
   subagent_operation: (item, context) => presentationForSubagents(item, context.copy),
+  computer: (item) => presentationForStructured(item),
+  browser: (item) => presentationForStructured(item),
 };
 
 export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {

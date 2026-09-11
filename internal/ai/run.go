@@ -1330,6 +1330,12 @@ type toolCallOutcome struct {
 	Pending               *PendingToolResult
 	ToolError             *aitools.ToolError
 	RecoveryAction        string
+	Attachments           []ToolAttachment
+}
+
+type targetToolExecution struct {
+	Payload     any
+	Attachments []ToolAttachment
 }
 
 type toolActivityUpdater func(activity *fltools.ActivityPresentation, metadata map[string]any)
@@ -1599,6 +1605,10 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		setToolError(toolErr, recoveryAction, nil)
 		return outcome, nil
+	}
+	if target, ok := result.(targetToolExecution); ok {
+		result = target.Payload
+		outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 	}
 
 	if toolName == "web.search" {
@@ -3079,13 +3089,20 @@ func depthBeyondRoot(root string, path string) int {
 }
 
 func (r *run) shouldRouteTargetTool(toolName string) bool {
-	return toolRequiresTarget(toolName) && r.toolTargetPolicy.requiresExplicitTarget()
+	name := strings.TrimSpace(toolName)
+	if isComputerUseTool(name) {
+		return true
+	}
+	return toolRequiresTarget(name) && r.toolTargetPolicy.requiresExplicitTarget()
 }
 
 func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string, args map[string]any) (any, error) {
 	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
 	targetID := targetIDFromToolArgs(args)
 	if strings.TrimSpace(targetID) == "" {
+		if isComputerUseTool(toolName) {
+			return nil, &targetToolPolicyError{code: "missing_target_id", tool: toolName}
+		}
 		targetID = strings.TrimSpace(policy.DefaultTargetID)
 	}
 	if strings.TrimSpace(targetID) == "" {
@@ -3124,7 +3141,17 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if err != nil {
 		return nil, err
 	}
-	return targetToolResultPayload(result, targetID), nil
+	attachments := make([]ToolAttachment, 0, len(result.Attachments))
+	for _, attachment := range result.Attachments {
+		attachments = append(attachments, ToolAttachment{
+			ResourceRef: strings.TrimSpace(attachment.ResourceRef),
+			Name:        strings.TrimSpace(attachment.Name),
+			MIMEType:    strings.TrimSpace(attachment.MIMEType),
+			SizeBytes:   attachment.SizeBytes,
+			SHA256:      strings.TrimSpace(attachment.SHA256),
+		})
+	}
+	return targetToolExecution{Payload: targetToolResultPayload(result, targetID), Attachments: attachments}, nil
 }
 
 func targetToolResultPayload(result TargetToolResult, requestedTargetID string) any {

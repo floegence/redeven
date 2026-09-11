@@ -755,9 +755,25 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		Structured:  structured,
 		Metadata:    metadata,
 		Activity:    activity,
+		Attachments: floretToolAttachments(result.Attachments),
 		IsError:     isError,
 		DispatchErr: dispatchErr,
 	}, nil
+}
+
+func floretToolAttachments(items []ToolAttachment) []fltools.ArtifactRef {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]fltools.ArtifactRef, 0, len(items))
+	for _, item := range items {
+		ref := strings.TrimSpace(item.ResourceRef)
+		if ref == "" || !strings.HasPrefix(ref, "computer://") {
+			continue
+		}
+		out = append(out, fltools.ArtifactRef{ID: ref, SafeLabel: strings.TrimSpace(item.Name), Kind: "image", MIME: strings.TrimSpace(item.MIMEType), SizeBytes: item.SizeBytes, SHA256: strings.TrimSpace(item.SHA256)})
+	}
+	return out
 }
 
 func floretToolResultProgressToken(result ToolResult, structured map[string]any) string {

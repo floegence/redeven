@@ -100,13 +100,14 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 	if outcome.Success {
 		data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
 		return ToolResult{
-			ToolID:    strings.TrimSpace(call.ID),
-			ToolName:  toolName,
-			Status:    toolResultStatusSuccess,
-			Summary:   toolSuccessSummary(toolName),
-			Details:   "tool execution completed",
-			Data:      data,
-			Truncated: truncated,
+			ToolID:      strings.TrimSpace(call.ID),
+			ToolName:    toolName,
+			Status:      toolResultStatusSuccess,
+			Summary:     toolSuccessSummary(toolName),
+			Details:     "tool execution completed",
+			Data:        data,
+			Truncated:   truncated,
+			Attachments: append([]ToolAttachment(nil), outcome.Attachments...),
 		}, nil
 	}
 	if outcome.ToolError != nil {
@@ -140,6 +141,7 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 		Details:               details,
 		Data:                  data,
 		Truncated:             truncated,
+		Attachments:           append([]ToolAttachment(nil), outcome.Attachments...),
 		Error:                 outcome.ToolError,
 		cancellationConfirmed: outcome.cancellationConfirmed,
 		dispatchErr:           outcome.dispatchErr,
@@ -749,6 +751,7 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 	}
+	defs = append(defs, builtInComputerToolDefinitions()...)
 	defs = append(defs, floretNativeToolDefinitions()...)
 	for i := range defs {
 		defs[i].Presentation = aitools.MustPresentationSpec(defs[i].Name)
