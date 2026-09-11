@@ -96,7 +96,7 @@ it.each([{ width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 1
     await expect.poll(() => panel.getBoundingClientRect().bottom).toBe(height - 20);
     const rect = panel.getBoundingClientRect();
     expect(rect.top).toBeGreaterThanOrEqual(64);
-    expect(rect.width).toBe(Math.min(1400, width - 48));
+    expect(rect.width).toBe(Math.min(1120, width - 48));
     expect(rect.bottom).toBe(height - 20);
     expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
     expect(panel.closest('[inert]')).toBeNull();
@@ -108,7 +108,10 @@ it.each([{ width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 1
     if (panel.clientWidth >= 1100) {
       expect(details.clientWidth).toBe(399);
       expect(master.getBoundingClientRect().right).toBe(details.getBoundingClientRect().left);
-      await page.elementLocator(master.querySelector('[data-plugin-center-card-primary]')!).click();
+      const cardActions = master.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
+      const cardPrimary = master.querySelector<HTMLElement>('[data-plugin-center-card-primary]')!;
+      expect(cardPrimary.getBoundingClientRect().width).toBeGreaterThan(cardActions.getBoundingClientRect().width * 0.7);
+      await page.elementLocator(cardPrimary).click();
       expect(fixture.onCommand).toHaveBeenCalledOnce();
     } else {
       expect(getComputedStyle(master).display).toBe('none');
