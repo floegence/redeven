@@ -390,7 +390,8 @@ function mapDesktopModelSource(
   catalog?: DesktopModelCatalogLoad,
 ): FlowerSettingsSnapshot['model_source'] {
   const source = settings.ai_runtime?.desktop_model_source;
-  if (!source || trim(source.binding_state) === 'unsupported') {
+  if (!source) return undefined;
+  if (trim(source.binding_state) === 'unsupported') {
     return { kind: 'desktop_model_source', state: 'unsupported', label: 'Desktop' };
   }
   const bindingState = trim(source.binding_state);
@@ -413,6 +414,9 @@ function mapDesktopModelSource(
       label: 'Desktop',
       diagnostic_message: 'Desktop model source returned an invalid binding contract.',
     };
+  }
+  if (source.configured === false) {
+    return { kind: 'desktop_model_source', state: 'not_configured', label: 'Desktop' };
   }
   const missingKeyProviderIDs = (source.missing_key_provider_ids ?? []).map(trim).filter(Boolean);
   if (missingKeyProviderIDs.length > 0) {
@@ -582,6 +586,7 @@ async function loadSettingsSnapshot(
     exposeDesktopModelSource
     && trim(desktopModelSource?.binding_state) === 'bound'
     && desktopModelSource?.connected === true
+    && desktopModelSource?.configured !== false
     && (desktopModelSource.missing_key_provider_ids ?? []).length === 0
   ) {
     try {

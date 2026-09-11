@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { page } from 'vitest/browser';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   adapter,
@@ -70,8 +70,10 @@ describe('Flower setup browser presentation', () => {
     expect(iconGlowStyle.filter).toContain('blur');
   });
 
-  it('keeps Desktop recovery status on one compact line at narrow widths', async () => {
+  it('shows both provider setup destinations clearly at narrow widths', async () => {
     await page.viewport(360, 760);
+    const openDesktopSettings = vi.fn(async () => undefined);
+    const openRemoteSettings = vi.fn(async () => undefined);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(false),
       loadSettings: async () => ({
@@ -87,7 +89,8 @@ describe('Flower setup browser presentation', () => {
       listThreads: async () => [],
       modelSourceRecovery: {
         describe: () => 'Desktop is connected, but no usable model is available yet.',
-        localSettings: { label: 'Local Flower settings', run: async () => undefined },
+        localSettings: { label: 'Configure in Desktop Flower settings', run: openDesktopSettings },
+        remoteSettings: { label: 'Configure in this remote environment’s Flower settings', run: openRemoteSettings },
         runtimeSettings: { label: 'Runtime settings', run: async () => undefined },
         connectionCenter: { label: 'Connection center', run: async () => undefined },
       },
@@ -98,14 +101,17 @@ describe('Flower setup browser presentation', () => {
     const message = status.querySelector('.flower-model-source-status-message') as HTMLElement;
     const actions = status.querySelector('.flower-model-source-status-actions') as HTMLElement;
     const messageStyle = getComputedStyle(message);
-    const messageRect = message.getBoundingClientRect();
-    const actionsRect = actions.getBoundingClientRect();
 
-    expect(messageStyle.overflow).toBe('hidden');
+    expect(messageStyle.overflow).toBe('visible');
     expect(messageStyle.textOverflow).toBe('ellipsis');
-    expect(messageStyle.whiteSpace).toBe('nowrap');
+    expect(messageStyle.whiteSpace).toBe('normal');
     expect(message.title).toBe(message.textContent);
-    expect(messageRect.right).toBeLessThanOrEqual(actionsRect.left + 1);
+    expect(actions.classList.contains('flower-model-source-status-actions')).toBe(true);
+    const setupActions = [...status.querySelectorAll<HTMLElement>('[data-model-source-action]')];
+    expect(setupActions.map((item) => item.getAttribute('data-model-source-action'))).toEqual(['local_settings', 'remote_settings']);
+    setupActions[0]?.click();
+    setupActions[1]?.click();
+    await waitFor(() => openDesktopSettings.mock.calls.length === 1 && openRemoteSettings.mock.calls.length === 1);
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
   });
 });

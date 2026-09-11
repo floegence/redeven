@@ -228,7 +228,7 @@ const FlowerSettingsSurface = lazy(() => import('./settings/FlowerSettingsSurfac
 
 type FlowerSurfacePanel = 'chat' | 'settings';
 type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
-type FlowerModelSourceRecoveryActionID = 'local_settings' | 'runtime_settings' | 'connection_center';
+type FlowerModelSourceRecoveryActionID = 'local_settings' | 'remote_settings' | 'runtime_settings' | 'connection_center';
 type FlowerInputDraft = Readonly<{
   answer_kind?: 'choice' | 'custom';
   choice_id?: string;
@@ -2731,6 +2731,7 @@ webSearch: model.web_search,
   const selectedModelNeedsAttention = createMemo(() => !readyForChat() && anyModelReady());
   const unavailableModelSource = createMemo<UnavailableFlowerModelSourceStatus | null>(() => {
     const source = modelSource();
+    if (source && (source.state === 'not_configured' || source.state === 'empty') && snapshot()?.model_profile) return null;
     return source && source.state !== 'ready' ? source : null;
   });
   const modelSourceStatusMessage = createMemo(() => {
@@ -2740,17 +2741,30 @@ webSearch: model.web_search,
   });
   const modelSourceRecoveryAction = (
     status: UnavailableFlowerModelSourceStatus,
-  ): Readonly<{ id: FlowerModelSourceRecoveryActionID; action: FlowerSurfaceAction }> | null => {
+  ): readonly Readonly<{ id: FlowerModelSourceRecoveryActionID; action: FlowerSurfaceAction }>[] => {
     const recovery = props.adapter.modelSourceRecovery;
-    if (!recovery) return null;
-    if (status.state === 'missing_keys' || status.state === 'empty') {
-      return { id: 'local_settings', action: recovery.localSettings };
+    if (!recovery) return [];
+    if ((status.state === 'not_configured' || status.state === 'empty') && !snapshot()?.model_profile && recovery.remoteSettings) {
+      return [
+        { id: 'local_settings', action: recovery.localSettings },
+        { id: 'remote_settings', action: recovery.remoteSettings },
+      ];
     }
     if (status.state === 'unsupported') {
-      return { id: 'runtime_settings', action: recovery.runtimeSettings };
+      return [{ id: 'runtime_settings', action: recovery.runtimeSettings }];
     }
-    return { id: 'connection_center', action: recovery.connectionCenter };
+    if (status.state === 'missing_keys') return [{ id: 'local_settings', action: recovery.localSettings }];
+    return [{ id: 'connection_center', action: recovery.connectionCenter }];
   };
+  const noModelProfileSetupActions = createMemo(() => {
+    const recovery = props.adapter.modelSourceRecovery;
+    const source = modelSource();
+    if (!recovery || !recovery.remoteSettings || snapshot()?.model_profile || (source && source.state !== 'not_configured' && source.state !== 'empty')) return [];
+    return [
+      { id: 'local_settings' as const, action: recovery.localSettings },
+      { id: 'remote_settings' as const, action: recovery.remoteSettings },
+    ];
+  });
   const currentHandlerDecision = createMemo(() => {
     const state = handlerState();
     return 'decision' in state ? state.decision : null;
@@ -10048,10 +10062,11 @@ webSearch: model.web_search,
   const modelSourceStatusRow = (placement: 'footer' | 'menu') => (
     <Show when={unavailableModelSource()} keyed>
       {(status) => {
-        const recoveryAction = modelSourceRecoveryAction(status);
+        const recoveryActions = modelSourceRecoveryAction(status);
         return (
           <div
             class={cn('flower-model-source-status', `flower-model-source-status-${placement}`)}
+            classList={{ 'flower-model-source-status-setup': recoveryActions.length > 1 }}
             data-state={status.state}
             data-placement={placement}
           >
@@ -10071,24 +10086,25 @@ webSearch: model.web_search,
               >
                 <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
               </button>
-              <Show when={recoveryAction}>
+              <For each={recoveryActions}>
                 {(value) => (
                   <button
                     type="button"
                     class="flower-model-source-status-action"
-                    data-model-source-action={value().id}
-                    aria-label={value().action.label}
-                    title={value().action.label}
+                    data-model-source-action={value.id}
+                    aria-label={value.action.label}
+                    title={value.action.label}
+                    classList={{ 'flower-model-source-status-action-text': recoveryActions.length > 1 }}
                     onClick={() => {
-                      void value().action.run().catch((error) => notifyComposerError(getErrorMessage(error)));
+                      void value.action.run().catch((error) => notifyComposerError(getErrorMessage(error)));
                     }}
                   >
-                    {value().id === 'connection_center'
+                    {recoveryActions.length > 1 ? value.action.label : value.id === 'connection_center'
                       ? <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
                       : <Settings class="h-3.5 w-3.5" aria-hidden="true" />}
                   </button>
                 )}
-              </Show>
+              </For>
             </span>
           </div>
         );
@@ -11219,6 +11235,7 @@ webSearch: model.web_search,
                       fallback={(
                         <div
                           class="flower-setup-inline flower-model-source-status flower-model-source-status-footer"
+                          classList={{ 'flower-model-source-status-setup': noModelProfileSetupActions().length > 1 }}
                           data-state="not_configured"
                           data-placement="footer"
                         >
@@ -11227,15 +11244,33 @@ webSearch: model.web_search,
                             {copy().chat.configureProviderBeforeChat}
                           </span>
                           <span class="flower-model-source-status-actions">
-                            <button
-                              type="button"
-                              class="flower-model-source-status-action"
-                              aria-label={copy().chat.settingsLabel}
-                              title={copy().chat.settingsLabel}
-                              onClick={openSettings}
-                            >
-                              <Settings class="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
+                            <For each={noModelProfileSetupActions()}>
+                              {(value) => (
+                                <button
+                                  type="button"
+                                  class="flower-model-source-status-action flower-model-source-status-action-text"
+                                  data-model-source-action={value.id}
+                                  aria-label={value.action.label}
+                                  title={value.action.label}
+                                  onClick={() => {
+                                    void value.action.run().catch((error) => notifyComposerError(getErrorMessage(error)));
+                                  }}
+                                >
+                                  {value.action.label}
+                                </button>
+                              )}
+                            </For>
+                            <Show when={noModelProfileSetupActions().length === 0}>
+                              <button
+                                type="button"
+                                class="flower-model-source-status-action"
+                                aria-label={copy().chat.settingsLabel}
+                                title={copy().chat.settingsLabel}
+                                onClick={openSettings}
+                              >
+                                <Settings class="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            </Show>
                           </span>
                         </div>
                       )}

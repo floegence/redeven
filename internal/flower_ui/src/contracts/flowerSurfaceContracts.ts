@@ -119,6 +119,11 @@ export type FlowerModelSourceStatus =
     }>
   | Readonly<{
       kind: 'desktop_model_source';
+      state: 'not_configured';
+      label: 'Desktop';
+    }>
+  | Readonly<{
+      kind: 'desktop_model_source';
       state: 'missing_keys';
       label: 'Desktop';
       missing_key_provider_ids: readonly string[];
@@ -148,6 +153,7 @@ export type FlowerSurfaceAction = Readonly<{
 export type FlowerModelSourceRecovery = Readonly<{
   describe: (status: Exclude<FlowerModelSourceStatus, { state: 'ready' }>) => string;
   localSettings: FlowerSurfaceAction;
+  remoteSettings?: FlowerSurfaceAction;
   runtimeSettings: FlowerSurfaceAction;
   connectionCenter: FlowerSurfaceAction;
 }>;

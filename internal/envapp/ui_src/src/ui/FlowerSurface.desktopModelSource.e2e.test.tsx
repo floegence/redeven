@@ -82,6 +82,7 @@ describe('Flower Desktop model source E2E', () => {
             desktop_model_source: {
               binding_state: 'bound',
               connected: true,
+              configured: true,
               available: true,
               model_source: 'desktop_local_environment',
               model_count: 2,
