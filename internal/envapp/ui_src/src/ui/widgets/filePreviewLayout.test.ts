@@ -34,8 +34,10 @@ describe('file preview wiring', () => {
     expect(rendererRegistrySrc).toContain("import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';");
     expect(rendererRegistrySrc).toContain('<FilePreviewErrorState');
     expect(rendererRegistrySrc).toContain('export const REDEVEN_FILE_PREVIEW_RENDERERS');
-    expect(rendererRegistrySrc).toContain('<DocxPreviewPane bytes={props.bytes} />');
-    expect(rendererRegistrySrc).toContain('<PdfPreviewPane bytes={props.bytes} />');
+    expect(rendererRegistrySrc).toContain('<DocxPreviewPane bytes={props.bytes} surface={props.surface} />');
+    expect(rendererRegistrySrc).toContain('<PdfPreviewPane bytes={props.bytes} surface={props.surface} />');
+    expect(rendererRegistrySrc).toContain('surface={props.surface} />');
+    expect(rendererRegistrySrc).toContain('redeven-file-preview-surface-window');
     expect(rendererRegistrySrc).toContain('<TextFilePreviewPane');
     expect(contentSrc).not.toContain('<iframe src={props.objectUrl}');
     expect(docxPaneSrc).toContain("import('docx-preview')");

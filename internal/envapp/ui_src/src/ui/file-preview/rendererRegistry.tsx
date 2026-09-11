@@ -1,7 +1,7 @@
 import { For, Show, type JSX } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
-import type { FilePreviewDescriptor, PreviewMode } from '../utils/filePreview';
+import type { FilePreviewDescriptor, FilePreviewSurface, PreviewMode } from '../utils/filePreview';
 import { DocxPreviewPane } from '../widgets/DocxPreviewPane';
 import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
 import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
@@ -23,7 +23,7 @@ export type RedevenFilePreviewRendererId =
   | 'unsupported';
 
 export type RedevenFilePreviewRenderProps = Readonly<{
-  surface?: 'main' | 'window';
+  surface?: FilePreviewSurface;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;
@@ -81,13 +81,13 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 }
 
 function renderImagePreview(props: RedevenFilePreviewRenderProps): JSX.Element {
-  return <ImagePreviewPane item={props.item} descriptor={props.descriptor} objectUrl={props.objectUrl} />;
+  return <ImagePreviewPane item={props.item} descriptor={props.descriptor} objectUrl={props.objectUrl} surface={props.surface} />;
 }
 
 function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
   return (
-    <div class="flex h-full min-h-[18rem] items-center justify-center bg-black p-3">
+    <div class={`flex h-full min-h-[18rem] items-center justify-center p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ' bg-black'}`}>
       <video
         src={props.resourceUrl}
         controls
@@ -103,7 +103,7 @@ function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 function renderAudioPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
   return (
-    <div class="flex h-full min-h-[12rem] items-center justify-center p-6">
+    <div class={`flex h-full min-h-[12rem] items-center justify-center p-6${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
       <audio
         src={props.resourceUrl}
         controls
@@ -119,7 +119,7 @@ function renderAudioPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 function renderSpreadsheetPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
   return (
-    <div class="p-3">
+    <div class={`p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
       <Show when={props.xlsxSheetName}>
         <div class="mb-2 text-[11px] text-muted-foreground">{i18n.t('uiCopy.preview.sheetLabel')} {props.xlsxSheetName}</div>
       </Show>
@@ -175,12 +175,12 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
   {
     id: 'pdf',
     modes: ['pdf'],
-    render: (props) => <PdfPreviewPane bytes={props.bytes} />,
+    render: (props) => <PdfPreviewPane bytes={props.bytes} surface={props.surface} />,
   },
   {
     id: 'docx',
     modes: ['docx'],
-    render: (props) => <DocxPreviewPane bytes={props.bytes} />,
+    render: (props) => <DocxPreviewPane bytes={props.bytes} surface={props.surface} />,
   },
   {
     id: 'xlsx',

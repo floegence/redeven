@@ -6,6 +6,7 @@ import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
 import { useI18n } from '../i18n';
+import type { FilePreviewSurface } from '../utils/filePreview';
 
 const DOCX_RENDER_CLASS_NAME = 'docx-preview-container';
 const DOCX_PREVIEW_INSET = 12;
@@ -77,6 +78,7 @@ function clampScale(scale: number): number {
 }
 
 export interface DocxPreviewPaneProps {
+  surface?: FilePreviewSurface;
   bytes?: Uint8Array<ArrayBuffer> | null;
 }
 
@@ -259,7 +261,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
   };
 
   return (
-    <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+    <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
       <div ref={styleHostEl} class="hidden" aria-hidden="true" />
 
       <Show
@@ -272,7 +274,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
         }
       >
         <>
-          <div class="shrink-0 border-b border-border px-3 py-2">
+          <div class={cn('shrink-0 border-b border-border px-3 py-2', props.surface === 'window' && 'redeven-file-preview-toolbar-window')}>
             <div class="flex items-center justify-end gap-2">
               <Button
                 size="sm"
@@ -316,7 +318,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
           <div
             ref={viewportEl}
             {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-            class="docx-preview-pane relative flex-1 min-h-0 overflow-auto bg-muted/30"
+            class={cn('docx-preview-pane relative flex-1 min-h-0 overflow-auto', props.surface === 'window' ? 'redeven-file-preview-surface-window' : 'bg-muted/30')}
           >
             <div class="box-border min-h-full min-w-full p-3">
               <div class="docx-preview-pane__frame relative mx-auto" style={frameStyle()}>

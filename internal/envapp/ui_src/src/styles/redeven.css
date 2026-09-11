@@ -1785,16 +1785,23 @@ html.dark .git-changes-table-pending {
 }
 
 /* Floating file previews use Floe's published window material as their local
-   reading surface. The variable remap keeps product-owned markdown and text
-   fallback content aligned while Monaco/PDF/image renderers retain ownership
-   of their own palettes. */
+   reading surface. Product-owned content inherits the same semantic palette;
+   embedded document pages, media, and editor canvases retain their own colors. */
 .redeven-file-preview-surface-window {
-  --background: var(--floe-window-background);
-  --foreground: var(--floe-window-foreground);
-  --muted-foreground: var(--floe-window-muted-foreground, var(--muted-foreground));
+  background: var(--floe-window-background, var(--background));
+  color: var(--floe-window-foreground, var(--foreground));
 }
 
 :root[data-floe-surface-style='soft-neumorphic'] .redeven-file-preview-surface-window {
+  --background: var(--floe-window-background);
+  --foreground: var(--floe-window-foreground);
+  --card: color-mix(in srgb, var(--floe-window-background) 92%, var(--floe-window-foreground) 8%);
+  --popover: var(--card);
+  --muted: color-mix(in srgb, var(--floe-window-background) 86%, var(--floe-window-foreground) 14%);
+  --muted-foreground: color-mix(in srgb, var(--floe-window-foreground) 62%, var(--floe-window-background) 38%);
+  --accent: color-mix(in srgb, var(--floe-window-background) 80%, var(--primary) 20%);
+  --accent-foreground: var(--floe-window-foreground);
+  --border: color-mix(in srgb, var(--floe-window-border) 72%, var(--floe-window-background) 28%);
   background: var(--floe-window-background) !important;
   color: var(--floe-window-foreground);
 }

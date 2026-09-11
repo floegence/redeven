@@ -133,4 +133,20 @@ describe('Redeven file preview renderer registry', () => {
     expect(audio?.getAttribute('preload')).toBe('metadata');
     expect(audio?.getAttribute('src')).toBe('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Faudio.mp3');
   });
+
+  it('forwards the window surface to every product-owned renderer', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <>
+        {renderRedevenFilePreviewBody({ descriptor: { mode: 'image' }, surface: 'window' })}
+        {renderRedevenFilePreviewBody({ descriptor: { mode: 'video' }, surface: 'window' })}
+        {renderRedevenFilePreviewBody({ descriptor: { mode: 'audio' }, surface: 'window' })}
+        {renderRedevenFilePreviewBody({ descriptor: { mode: 'xlsx' }, surface: 'window', xlsxRows: [['A1']] })}
+      </>
+    ), host);
+
+    expect(host.querySelectorAll('.redeven-file-preview-surface-window')).toHaveLength(4);
+  });
 });

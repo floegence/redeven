@@ -3,6 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import type { FilePreviewSurface } from '../utils/filePreview';
 import { useI18n } from '../i18n';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
@@ -11,6 +12,7 @@ const IMAGE_MIN_SCALE = 0.25;
 const IMAGE_MAX_SCALE = 4;
 
 export interface ImagePreviewPaneProps {
+  surface?: FilePreviewSurface;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   objectUrl?: string;
@@ -94,7 +96,7 @@ export function ImagePreviewPane(props: ImagePreviewPaneProps) {
   };
 
   return (
-    <div class="relative flex h-full min-h-0 flex-col overflow-hidden bg-muted/20">
+    <div class={cn('relative flex h-full min-h-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : 'bg-muted/20')}>
       <div class="image-preview-controls absolute right-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 rounded-md border border-border/80 bg-background/90 p-1 shadow-lg backdrop-blur-sm">
         <Button size="sm" variant="outline" class="h-7 min-w-7 px-0 font-mono" disabled={!canZoomOut()} aria-label={i18n.t('uiCopy.preview.zoomOutImage')} onClick={() => setManualZoom(scale() - IMAGE_ZOOM_STEP)}>-</Button>
         <div class="min-w-14 px-1 text-center font-mono text-[11px] text-muted-foreground" aria-live="polite">{zoomPercent()}</div>
