@@ -2,13 +2,14 @@ import type { FilePreviewContentProps } from './FilePreviewContent';
 import { FilePreviewContent } from './FilePreviewContent';
 import type { FilePreviewController } from './createFilePreviewController';
 
-export interface FilePreviewControllerContentProps extends Pick<FilePreviewContentProps, 'contentRef' | 'onCopyPath' | 'showHeader'> {
+export interface FilePreviewControllerContentProps extends Pick<FilePreviewContentProps, 'contentRef' | 'onCopyPath' | 'showHeader' | 'surface'> {
   controller: FilePreviewController;
 }
 
 export function FilePreviewControllerContent(props: FilePreviewControllerContentProps) {
   return (
     <FilePreviewContent
+      surface={props.surface}
       item={props.controller.item()}
       descriptor={props.controller.descriptor()}
       text={props.controller.text()}

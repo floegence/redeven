@@ -11,6 +11,7 @@ import { WindowModal } from './WindowModal';
 import { useI18n } from '../i18n';
 
 export interface FilePreviewPanelProps {
+  surface?: 'main' | 'window';
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;
@@ -65,9 +66,10 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
 
   return (
     <>
-      <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+      <div class={cn('redeven-file-preview-panel', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'), 'flex h-full min-h-0 flex-col overflow-hidden')}>
         <div class="min-h-0 flex-1 overflow-hidden">
           <FilePreviewContent
+            surface={props.surface}
             item={props.item}
             descriptor={props.descriptor}
             text={props.text}

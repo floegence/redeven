@@ -23,6 +23,7 @@ export type RedevenFilePreviewRendererId =
   | 'unsupported';
 
 export type RedevenFilePreviewRenderProps = Readonly<{
+  surface?: 'main' | 'window';
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;
@@ -57,6 +58,7 @@ function renderMarkdownPreview(props: RedevenFilePreviewRenderProps): JSX.Elemen
       saveError={props.saveError}
       onDraftChange={props.onDraftChange}
       onSelectionChange={props.onSelectionChange}
+      surface={props.surface}
     />
   );
 }
@@ -73,6 +75,7 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
       saveError={props.saveError}
       onDraftChange={props.onDraftChange}
       onSelectionChange={props.onSelectionChange}
+      surface={props.surface}
     />
   );
 }

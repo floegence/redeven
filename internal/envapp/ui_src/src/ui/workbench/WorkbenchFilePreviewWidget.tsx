@@ -409,6 +409,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       </Show>
       <div class="min-h-0 flex-1 overflow-hidden">
       <FilePreviewPanel
+        surface="main"
         item={controller.item()}
         descriptor={controller.descriptor()}
         text={controller.text()}

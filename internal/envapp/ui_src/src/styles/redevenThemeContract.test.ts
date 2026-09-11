@@ -144,6 +144,9 @@ describe('Redeven Env App surface theme contract', () => {
 
     expect(src).toContain('.redeven-surface-main {');
     expect(src).toContain('background: var(--redeven-surface-main) !important;');
+    expect(src).toContain('.redeven-file-preview-surface-window {');
+    expect(src).toContain('background: var(--floe-window-background) !important;');
+    expect(src).toContain('background: var(--floe-window-titlebar-background);');
     expect(src).toContain('--flower-chat-surface: var(--redeven-surface-main);');
     expect(src).toContain('--redeven-workbench-default-body-surface: var(--redeven-surface-main);');
     expect(src).not.toContain('--background: color-mix(in srgb, var(--redeven-surface-panel)');

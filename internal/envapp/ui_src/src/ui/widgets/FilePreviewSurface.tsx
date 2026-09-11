@@ -28,6 +28,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
     >
       <FilePreviewPanel
         {...props}
+        surface={isMobile() ? 'main' : 'window'}
         closeConfirmVariant={isMobile() ? 'dialog' : 'floating'}
         closeConfirmHost={floatingSurfaceEl()}
       />
