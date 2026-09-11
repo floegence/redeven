@@ -32,7 +32,7 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 
 vi.mock('../file-preview/rendererRegistry', () => ({
   renderRedevenFilePreviewBody: (props: any) => (
-    <div data-testid={`${props.descriptor.mode}-preview-pane`}>
+    <div data-testid={`${props.descriptor.mode}-preview-pane`} data-surface={props.surface ?? 'main'}>
       {`${props.item?.path ?? ''}:${props.text ?? ''}`}
     </div>
   ),
@@ -50,6 +50,27 @@ afterEach(() => {
 });
 
 describe('FilePreviewContent', () => {
+  it('defaults to the main surface and forwards the window surface to the renderer', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const baseProps = {
+      item: { id: '/workspace/demo.md', name: 'demo.md', path: '/workspace/demo.md', type: 'file' as const },
+      descriptor: { mode: 'markdown' as const },
+      text: '# preview',
+    };
+
+    render(() => <FilePreviewContent {...baseProps} />, host);
+    expect(host.querySelector('[data-testid="markdown-preview-pane"]')?.getAttribute('data-surface')).toBe('main');
+    expect(host.querySelector('.redeven-surface-main')).toBeTruthy();
+
+    document.body.innerHTML = '';
+    const windowHost = document.createElement('div');
+    document.body.appendChild(windowHost);
+    render(() => <FilePreviewContent {...baseProps} surface="window" />, windowHost);
+    expect(windowHost.querySelector('[data-testid="markdown-preview-pane"]')?.getAttribute('data-surface')).toBe('window');
+    expect(windowHost.querySelector('.redeven-file-preview-surface-window')).toBeTruthy();
+  });
+
   it('renders the path copy icon inline and briefly shows the copied state', async () => {
     vi.useFakeTimers();
 

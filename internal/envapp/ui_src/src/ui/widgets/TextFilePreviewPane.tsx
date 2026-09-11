@@ -92,6 +92,7 @@ function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
 }
 
 export interface TextFilePreviewPaneProps {
+  surface?: 'main' | 'window';
   path: string;
   descriptor: FilePreviewDescriptor;
   text: string;
@@ -173,7 +174,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   });
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden">
+    <div class={`flex h-full min-h-0 flex-col overflow-hidden${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
       <Show when={(props.saveError ?? '').trim()}>
         <div class="shrink-0 border-b border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
           {props.saveError}

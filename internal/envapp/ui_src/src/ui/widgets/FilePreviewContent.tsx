@@ -14,6 +14,8 @@ import { classifyFilePreviewError } from './filePreviewErrorUtils';
 import { useI18n } from '../i18n';
 
 export interface FilePreviewContentProps {
+  /** Surface ownership for the preview shell. Window is reserved for desktop floating hosts. */
+  surface?: 'main' | 'window';
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   showHeader?: boolean;
@@ -107,9 +109,9 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
   };
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden">
+    <div class={cn('redeven-file-preview', props.surface === 'window' && 'redeven-file-preview-surface-window', 'flex h-full min-h-0 flex-col overflow-hidden')}>
       <Show when={showHeader()}>
-        <div class="flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-2 sm:px-3">
+        <div class={cn('redeven-file-preview-toolbar flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-2 sm:px-3', props.surface === 'window' && 'redeven-file-preview-toolbar-window')}>
           <div class="flex min-w-0 flex-1 items-center gap-2">
             <span class="hidden shrink-0 text-[11px] uppercase tracking-[0.08em] text-muted-foreground sm:inline">{i18n.t('filePreview.pathLabel')}</span>
             <span
@@ -209,7 +211,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           props.contentRef?.(element);
         }}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        class={cn('relative flex-1 min-h-0 overflow-auto', redevenSurfaceRoleClass('main'))}
+        class={cn('relative flex-1 min-h-0 overflow-auto', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}
       >
         <Show when={!resolvedError()}>
           {renderRedevenFilePreviewBody(props)}

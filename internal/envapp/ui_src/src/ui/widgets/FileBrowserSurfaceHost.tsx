@@ -31,7 +31,7 @@ export function FileBrowserSurfaceHost() {
       defaultSize={{ width: 760, height: 580 }}
       minSize={{ width: 420, height: 320 }}
     >
-      <div class="h-full min-h-0 overflow-hidden bg-background">
+      <div class="redeven-file-preview-surface-window h-full min-h-0 overflow-hidden">
         <Show when={fileBrowserSurface.controller.surface()} keyed>
           {(browser) => (
             <RemoteFileBrowser

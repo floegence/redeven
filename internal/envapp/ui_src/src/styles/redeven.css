@@ -1784,6 +1784,26 @@ html.dark .git-changes-table-pending {
   background: var(--redeven-surface-main) !important;
 }
 
+/* Floating file previews use Floe's published window material as their local
+   reading surface. The variable remap keeps product-owned markdown and text
+   fallback content aligned while Monaco/PDF/image renderers retain ownership
+   of their own palettes. */
+.redeven-file-preview-surface-window {
+  --background: var(--floe-window-background);
+  --foreground: var(--floe-window-foreground);
+  --muted-foreground: var(--floe-window-muted-foreground, var(--muted-foreground));
+}
+
+:root[data-floe-surface-style='soft-neumorphic'] .redeven-file-preview-surface-window {
+  background: var(--floe-window-background) !important;
+  color: var(--floe-window-foreground);
+}
+
+:root[data-floe-surface-style='soft-neumorphic'] .redeven-file-preview-toolbar-window {
+  border-color: var(--floe-window-border) !important;
+  background: var(--floe-window-titlebar-background);
+}
+
 .redeven-surface-panel--interactive {
   transition:
     background-color 120ms ease-out,

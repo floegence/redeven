@@ -717,6 +717,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             <Show when={contextPreview()}>
               {(preview) => (
                 <FilePreviewContent
+                  surface="window"
                   item={preview().item}
                   descriptor={preview().descriptor}
                   text={preview().text}

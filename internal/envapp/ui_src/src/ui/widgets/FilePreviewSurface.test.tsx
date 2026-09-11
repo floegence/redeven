@@ -60,7 +60,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
 
 vi.mock('./FilePreviewContent', () => ({
   FilePreviewContent: (props: any) => (
-    <div ref={(element) => props.contentRef?.(element)}>
+    <div ref={(element) => props.contentRef?.(element)} data-surface={props.surface ?? 'main'}>
       <div>{props.item?.path}</div>
       <pre>{props.text}</pre>
       <div>{props.message}</div>
@@ -99,6 +99,7 @@ describe('FilePreviewSurface', () => {
     ), host);
 
     expect(host.querySelector('[data-testid="floating-window"]')).toBeTruthy();
+    expect(host.querySelector('[data-surface="window"]')).toBeTruthy();
     expect((host.querySelector('[data-testid="floating-window"]') as HTMLElement | null)?.className).not.toContain('[&>div>div:last-child]');
     expect(host.querySelector('[data-testid="file-preview-footer"]')).toBeNull();
     expect(host.textContent).not.toContain('Editing');
@@ -140,6 +141,7 @@ describe('FilePreviewSurface', () => {
 
     const dialog = host.querySelector('[data-testid="dialog"]');
     expect(dialog).toBeTruthy();
+    expect(host.querySelector('[data-surface="main"]')).toBeTruthy();
     expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
     expect(dialog?.className).not.toContain('[&>div:last-child]');
     expect(host.textContent).toContain('/workspace/demo.pdf');
