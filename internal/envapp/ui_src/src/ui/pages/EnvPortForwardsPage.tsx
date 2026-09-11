@@ -1,6 +1,6 @@
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
-import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -2206,6 +2206,10 @@ export function EnvPortForwardsPage() {
   const [recentSession, setRecentSession] = createSignal<ForwardSession | null>(null);
   const [forwardMetadataTarget, setForwardMetadataTarget] = createSignal<ForwardMetadataTarget | null>(null);
   const [forwardMetadataSaving, setForwardMetadataSaving] = createSignal(false);
+
+  onMount(() => {
+    if (canExecute()) addressInput?.focus({ preventScroll: true });
+  });
 
   createEffect(() => {
     const active = activation.active();
