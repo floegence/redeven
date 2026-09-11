@@ -1225,6 +1225,8 @@ describe('EnvPortForwardsPage', () => {
     expect(shell?.contains(openButton)).toBe(true);
     expect(openButton?.disabled).toBe(false);
     expect(openButton?.textContent?.trim()).toBe('');
+    expect(openButton?.className).toContain('text-foreground/80');
+    expect(openButton?.className).toContain('hover:text-foreground');
   });
 
   it('shows a managed Example Service card without duplicating its protected forward', async () => {
