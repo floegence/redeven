@@ -1,7 +1,7 @@
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
-import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
-import { cn, useNotification } from '@floegence/floe-webapp-core';
+import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -2190,6 +2190,14 @@ export function EnvPortForwardsPage() {
   const canRead = () => Boolean(ctx.env()?.permissions?.can_read);
   const canExecute = () => Boolean(ctx.env()?.permissions?.can_execute);
   const canManageManagedService = () => Boolean(ctx.env()?.permissions?.can_read && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
+  const activation = (() => {
+    try {
+      return useViewActivation();
+    } catch {
+      // Standalone and embedded surfaces can mount outside the activity activation provider.
+      return { active: () => true, activationSeq: () => 0 };
+    }
+  })();
 
   // Search/filter state
   const [searchQuery, setSearchQuery] = createSignal('');
@@ -2199,8 +2207,15 @@ export function EnvPortForwardsPage() {
   const [forwardMetadataTarget, setForwardMetadataTarget] = createSignal<ForwardMetadataTarget | null>(null);
   const [forwardMetadataSaving, setForwardMetadataSaving] = createSignal(false);
 
-  onMount(() => {
-    addressInput?.focus({ preventScroll: true });
+  createEffect(() => {
+    const active = activation.active();
+    activation.activationSeq();
+    if (!active || !canExecute()) return;
+
+    window.requestAnimationFrame(() => {
+      if (!activation.active() || addressInput?.disabled) return;
+      addressInput?.focus({ preventScroll: true });
+    });
   });
 
   // Web services resource
@@ -3460,7 +3475,7 @@ export function EnvPortForwardsPage() {
                     type="submit"
                     size="sm"
                     variant="ghost"
-                    class="web-service-address-submit absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 p-0 text-muted-foreground"
+                    class="web-service-address-submit absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 p-0 text-foreground/80 transition-colors hover:text-foreground focus-visible:text-foreground"
                     disabled={!canExecute() || addressOpening()}
                     aria-busy={addressOpening() || undefined}
                     aria-label={addressOpening() ? openStatus('new-session') : i18n.t('webServices.actions.openAddress')}
