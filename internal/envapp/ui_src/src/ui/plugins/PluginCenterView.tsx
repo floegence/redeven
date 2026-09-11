@@ -2291,7 +2291,7 @@ function PluginActions(props: {
           data-plugin-action={primaryActionDataID(presentation().primaryAction)}
           variant={presentation().primaryAction === 'open' ? 'outline' : 'primary'}
           size="sm"
-          class={cn('min-h-[44px] min-w-0 justify-center text-xs sm:min-h-8', presentation().primaryAction !== 'open' && 'flex-1', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
+          class={cn('min-h-[44px] min-w-0 flex-1 justify-center px-4 text-sm sm:min-h-8', presentation().primaryAction === 'review_update' && PLUGIN_UPDATE_ACTION_CLASS)}
           loading={commandPending()}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}

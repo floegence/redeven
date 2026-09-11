@@ -1,5 +1,5 @@
 .redeven-plugin-center-drawer {
-  width: min(1400px, calc(100vw - 48px));
+  width: min(1120px, calc(100vw - 48px));
   max-width: none;
   height: min(820px, 82dvh, calc(100dvh - 84px));
   background: var(--redeven-surface-main);

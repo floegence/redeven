@@ -26,7 +26,7 @@ the drawer under `.workbench-surface`, `inert`, or a transformed canvas ancestor
 Other Workbench dialogs retain their local projection and input contracts.
 
 The drawer is centered, 20px above the bottom, with 16px corners. Width is the
-smaller of 1400px and viewport width minus 48px; narrow-screen margins are 12px.
+smaller of 1120px and viewport width minus 48px; narrow-screen margins are 12px.
 Height is the smaller of 820px and 82dvh, capped below the top navigation. It uses
 shared theme surfaces, a thin border, soft shadow, and a light theme scrim.
 Position and opacity animate over 240ms entering and 180ms exiting; reduced

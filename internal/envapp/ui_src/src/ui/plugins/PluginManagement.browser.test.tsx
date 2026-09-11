@@ -1157,6 +1157,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(label.textContent?.trim()).toBe('查看运行时要求');
     expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(16);
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
+    expect(primary.getBoundingClientRect().width).toBeGreaterThan(actions.getBoundingClientRect().width * 0.7);
     expectNoHorizontalOverflow(actions);
 
     card.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:metrics"]')!.click();
