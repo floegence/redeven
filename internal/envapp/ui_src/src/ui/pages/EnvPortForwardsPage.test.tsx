@@ -146,7 +146,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       ))}
     </div>
   ),
-  Input: (props: any) => <input id={props.id} value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} data-testid={props['data-testid']} data-template-field={props['data-template-field']} />,
+  Input: (props: any) => <input ref={props.ref} id={props.id} value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} autofocus={props.autofocus} data-testid={props['data-testid']} data-template-field={props['data-template-field']} />,
   Textarea: (props: any) => <textarea id={props.id} value={props.value} onInput={props.onInput} class={props.class} disabled={props.disabled} placeholder={props.placeholder} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} data-template-field={props['data-template-field']} />,
   Checkbox: (props: any) => <label><input type="checkbox" checked={props.checked} disabled={props.disabled} onChange={(event) => props.onChange?.(event.currentTarget.checked)} />{props.label}</label>,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
@@ -1212,6 +1212,19 @@ describe('EnvPortForwardsPage', () => {
     expect(host.querySelector('#web-service-address-label')).toBeNull();
     expect(inputShell?.className).toContain('relative');
     expect(host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]')?.className).toContain('pl-10');
+  });
+
+  it('focuses the address launcher and keeps its arrow action available before an address is entered', async () => {
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const input = host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]');
+    const shell = host.querySelector<HTMLElement>('[data-testid="web-service-address-input-shell"]');
+    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="web-service-address-open"]');
+    expect(document.activeElement).toBe(input);
+    expect(shell?.contains(openButton)).toBe(true);
+    expect(openButton?.disabled).toBe(false);
+    expect(openButton?.textContent?.trim()).toBe('');
   });
 
   it('shows a managed Example Service card without duplicating its protected forward', async () => {

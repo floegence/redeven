@@ -1553,6 +1553,7 @@ describe('EnvCodespacesPage', () => {
 
     expect(panel?.className).toContain('redeven-surface-panel--strong');
     expect(card?.className).toContain('redeven-surface-panel--interactive');
-    expect(card?.className).toContain('opacity-75');
+    expect(card?.className).toContain('codespace-card--stopped');
+    expect(card?.className).not.toContain('opacity-75');
   });
 });
