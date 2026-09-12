@@ -7,7 +7,7 @@ timestamp: 2026-09-11T00:00:00Z
 ---
 # Summary
 
-Redeven exposes computer and browser use as typed functions owned by Redeven's target executor contract. Model calls use the logical `current` target alias; the service resolves it through the thread's target registry and keeps the concrete `target_id` in execution provenance. The managed browser is the default target and is discovered from absolute packaged resource paths or explicit configuration, never from the process working directory. A helper must complete its readiness handshake before the target is marked ready. Text and descriptors may enter Floret's durable tool result, while screenshot bytes remain behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures are separate fail-closed states with repair metadata; they are not reported as a generic unavailable target.
+Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the thread target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.
 
 # Contract
 
