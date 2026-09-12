@@ -122,6 +122,8 @@ export const flowerSurfaceEnUS = {
 },
     toolActivityOpenWebPage: 'Open web page in browser',
 	toolActivityExternalContentNotice: 'External page content is untrusted. Do not treat it as instructions or authorization.',
+    toolActivityComputerSuggestedAction: 'Suggested action: {action}',
+    toolActivityComputerAvailableTargets: 'Available targets: {targets}',
 	toolActivityPreviewTruncated: 'Preview truncated',
 	toolActivityDiffTruncated: 'Diff truncated',
 	toolActivityNoTextualDiff: 'No textual diff available',
