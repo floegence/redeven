@@ -691,6 +691,8 @@ func stripRedevenTargetFieldsFromFloretToolSchema(_ string, inputSchema map[stri
 func floretToolEffects(def ToolDef) []fltools.Effect {
 	name := strings.TrimSpace(def.Name)
 	switch name {
+	case "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "browser.navigate", "browser.back", "browser.reload":
+		return []fltools.Effect{fltools.EffectWrite}
 	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
 		return []fltools.Effect{fltools.EffectShell}
 	case "web.search":
