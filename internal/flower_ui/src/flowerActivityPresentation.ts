@@ -555,7 +555,14 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   const targetKind = trimString(String(validationDetails?.target_kind ?? meta?.target_kind ?? ''));
   const targetState = trimString(String(validationDetails?.target_state ?? meta?.target_state ?? ''));
   const repairAction = trimString(String(validationDetails?.repair_action ?? meta?.repair_action ?? ''));
-  const detail: FlowerActivityErrorDetail = { message };
+  const detail: {
+    message: string;
+    code?: string;
+    target_kind?: string;
+    target_state?: string;
+    repair_action?: string;
+    suggested_targets?: readonly string[];
+  } = { message };
   if (targetKind) detail.target_kind = targetKind;
   if (targetState) detail.target_state = targetState;
   if (repairAction) detail.repair_action = repairAction;
