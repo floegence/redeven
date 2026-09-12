@@ -5077,6 +5077,31 @@ html.dark .flower-component-shell {
   font-size: 0.75rem;
 }
 
+.flower-activity-computer-block {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.flower-activity-computer-context {
+  font-weight: 600;
+}
+
+.flower-activity-computer-meta {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.flower-activity-computer-frame {
+  display: block;
+  max-width: min(100%, 34rem);
+  max-height: 22rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  object-fit: contain;
+  background: var(--surface-muted);
+}
+
 .flower-activity-inline-icon {
   display: inline-flex;
   align-items: center;

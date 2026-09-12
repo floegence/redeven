@@ -62,11 +62,14 @@ type Options struct {
 	FilesystemScope *filesystemscope.Registry
 	Shell           string
 
-	AIConfig            *config.AIConfig
-	AIWorkloadAdmission ai.WorkloadAdmission
-	Audit               *auditlog.Store
-	Diagnostics         *diagnostics.Store
-	Terminal            *terminal.Manager
+	AIConfig               *config.AIConfig
+	AIWorkloadAdmission    ai.WorkloadAdmission
+	ComputerUseExecutor    ai.TargetToolExecutor
+	ComputerTargetResolver ai.TargetResolver
+	InteractionSafetyGate  ai.InteractionSafetyGate
+	Audit                  *auditlog.Store
+	Diagnostics            *diagnostics.Store
+	Terminal               *terminal.Manager
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
 	// code-server reconnection grace and local app-server routing.
 	LocalUIEnabled           bool
@@ -272,6 +275,9 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ResolveWebSearchProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetWebSearchProviderAPIKey(providerID)
 		},
+		TargetToolExecutor:    opts.ComputerUseExecutor,
+		TargetResolver:        opts.ComputerTargetResolver,
+		InteractionSafetyGate: opts.InteractionSafetyGate,
 	}, opts.newAIService, opts.closeAIService)
 
 	notesPath := filepath.Join(stateAbs, "apps", "notes", "notes.sqlite")

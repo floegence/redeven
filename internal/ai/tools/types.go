@@ -21,6 +21,7 @@ const (
 	ErrorCodePermissionDenied  ErrorCode = "PERMISSION_DENIED"
 	ErrorCodeTargetRequired    ErrorCode = "TARGET_REQUIRED"
 	ErrorCodeTargetUnavailable ErrorCode = "TARGET_UNAVAILABLE"
+	ErrorCodeTakeoverRequired  ErrorCode = "TAKEOVER_REQUIRED"
 	ErrorCodeTimeout           ErrorCode = "TIMEOUT"
 	ErrorCodeCanceled          ErrorCode = "CANCELED"
 	ErrorCodeUnknown           ErrorCode = "UNKNOWN"

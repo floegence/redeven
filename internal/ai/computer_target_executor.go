@@ -134,6 +134,9 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 		return TargetToolResult{}, errors.New(response.Error)
 	}
 	result := TargetToolResult{TargetID: targetID, ExecutionLocation: response.Location, Result: response.Result}
+	if response.Result != nil {
+		result.ActionSummary = strings.TrimSpace(anyToString(response.Result["summary"]))
+	}
 	if response.Screenshot != nil && strings.TrimSpace(response.Screenshot.Data) != "" {
 		body, err := base64.StdEncoding.DecodeString(response.Screenshot.Data)
 		if err != nil {

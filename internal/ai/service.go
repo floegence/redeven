@@ -54,9 +54,11 @@ type Options struct {
 
 	Config *config.AIConfig
 
-	ToolTargetPolicy   ToolTargetPolicy
-	TargetToolExecutor TargetToolExecutor
-	WorkloadAdmission  WorkloadAdmission
+	ToolTargetPolicy      ToolTargetPolicy
+	TargetToolExecutor    TargetToolExecutor
+	TargetResolver        TargetResolver
+	InteractionSafetyGate InteractionSafetyGate
+	WorkloadAdmission     WorkloadAdmission
 
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
@@ -130,8 +132,10 @@ type Service struct {
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
 
-	toolTargetPolicy   ToolTargetPolicy
-	targetToolExecutor TargetToolExecutor
+	toolTargetPolicy      ToolTargetPolicy
+	targetToolExecutor    TargetToolExecutor
+	targetResolver        TargetResolver
+	interactionSafetyGate InteractionSafetyGate
 
 	mu sync.Mutex
 	// threadSettingsMu serializes persisted thread-setting changes with the
@@ -338,6 +342,8 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		resolveWebSearchKey:             resolveWebSearchKey,
 		toolTargetPolicy:                toolTargetPolicy,
 		targetToolExecutor:              opts.TargetToolExecutor,
+		targetResolver:                  opts.TargetResolver,
+		interactionSafetyGate:           opts.InteractionSafetyGate,
 		workloadAdmission:               opts.WorkloadAdmission,
 		workloadLeases:                  make(map[string]*aiWorkloadLease),
 		flowerLiveSubscribersByEndpoint: make(map[string]int),
@@ -472,6 +478,7 @@ func (s *Service) closeService() error {
 	s.mu.Lock()
 	s.serviceClosing = true
 	terminalProcesses := s.terminalProcesses
+	targetExecutor := s.targetToolExecutor
 	s.terminalProcesses = nil
 	ts := s.threadsDB
 	closeFloret := s.closeFloret
@@ -508,6 +515,10 @@ func (s *Service) closeService() error {
 		terminalCloseErr = terminalProcesses.Close(closeCtx)
 		closeCancel()
 	}
+	var targetCloseErr error
+	if closer, ok := targetExecutor.(interface{ Close() error }); ok {
+		targetCloseErr = closer.Close()
+	}
 	if maintenanceStopCh != nil {
 		close(maintenanceStopCh)
 	}
@@ -532,7 +543,7 @@ func (s *Service) closeService() error {
 	if s.readState != nil {
 		readCloseErr = s.readState.Close()
 	}
-	return flowerGenerationCloseError(errors.Join(terminalCloseErr, floretCloseErr, threadCloseErr, readCloseErr))
+	return flowerGenerationCloseError(errors.Join(terminalCloseErr, targetCloseErr, floretCloseErr, threadCloseErr, readCloseErr))
 }
 
 func (s *Service) snapshotThreadStore() *threadstore.Store {
@@ -1301,6 +1312,8 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	baseToolTargetPolicy := s.toolTargetPolicy
 	uploadsDir := s.uploadsDir
 	targetToolExecutor := s.targetToolExecutor
+	targetResolver := s.targetResolver
+	interactionSafetyGate := s.interactionSafetyGate
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
@@ -1370,6 +1383,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		ToolAllowlist: append([]string(nil), req.Options.ToolAllowlist...), NoUserInteraction: req.Options.NoUserInteraction,
 		ToolTargetPolicy: toolTargetPolicy, CanonicalReferenceAuthority: referenceAuthority,
 		TargetToolExecutor: targetToolExecutor,
+		TargetResolver:     targetResolver, InteractionSafetyGate: interactionSafetyGate,
 	})
 	builder.subagentRuntime = newServiceFloretSubagentRuntime(s, builder)
 	return &threadEffect{

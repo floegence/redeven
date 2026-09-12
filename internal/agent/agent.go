@@ -55,6 +55,52 @@ const (
 	controlRPCTypeRuntimeDisconnect uint32 = 41005
 )
 
+func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolver) {
+	// The helper is bundled by desktop/env packaging. During source runs the
+	// repository path remains a useful fallback, while deployments can provide
+	// an explicit immutable path through the environment.
+	nativeCandidates := []string{}
+	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH")); configured != "" {
+		nativeCandidates = append(nativeCandidates, configured)
+	}
+	nativeCandidates = append(nativeCandidates, filepath.Join(filepath.Dir(os.Args[0]), "redeven-computer-host"))
+	for _, candidate := range nativeCandidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			registry := ai.NewTargetRegistry()
+			if err := registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, Ready: true}); err == nil {
+				return ai.NewNativeDesktopTargetExecutor(candidate), registry
+			}
+		}
+	}
+	candidates := []string{}
+	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_HOST_HELPER_PATH")); configured != "" {
+		candidates = append(candidates, configured)
+	}
+	candidates = append(candidates,
+		filepath.Join(filepath.Dir(os.Args[0]), "redevenComputerHost.mjs"),
+		filepath.Join("internal", "envapp", "ui_src", "scripts", "redevenComputerHost.mjs"),
+	)
+	var helper string
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			helper = candidate
+			break
+		}
+	}
+	if helper == "" {
+		return nil, nil
+	}
+	registry := ai.NewTargetRegistry()
+	if err := registry.Register(ai.TargetDescriptor{
+		ID: "browser-main", Kind: "browser.managed", DisplayName: "Redeven Managed Browser",
+		Locality: "local", Capabilities: []string{"observe", "interaction"}, Ready: true,
+	}); err != nil {
+		return nil, nil
+	}
+	executor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
+	return executor, registry
+}
+
 // Floe app ids.
 const (
 	FloeAppRedevenAgent = "com.floegence.redeven.agent"
@@ -361,6 +407,7 @@ func New(opts Options) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	computerExecutor, computerTargets := computerUseRuntime(stateDir)
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
 		Logger:                 logger,
 		StateDir:               stateDir,
@@ -376,6 +423,8 @@ func New(opts Options) (*Agent, error) {
 		FilesystemScope:        filesystemScope,
 		Shell:                  shell,
 		AIConfig:               opts.Config.AI,
+		ComputerUseExecutor:    computerExecutor,
+		ComputerTargetResolver: computerTargets,
 		AIWorkloadAdmission: func(workload runtimeservice.ManagedWorkload) (func(), error) {
 			lease, err := a.admitRuntimeWorkload(workload)
 			if err != nil {

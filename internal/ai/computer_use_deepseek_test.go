@@ -30,11 +30,11 @@ func TestDeepSeekComputerUseQualification(t *testing.T) {
 	}
 	image := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 	tools := []any{
-		map[string]any{"type": "function", "name": "computer_screenshot", "description": "Redeven computer.screenshot: capture the selected target screenshot.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"target_id": map[string]any{"type": "string"}}, "required": []string{"target_id"}, "additionalProperties": false}},
-		map[string]any{"type": "function", "name": "computer_click", "description": "Redeven computer.click: click the selected target.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"target_id": map[string]any{"type": "string"}, "x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, "required": []string{"target_id", "x", "y"}, "additionalProperties": false}},
-		map[string]any{"type": "function", "name": "browser_navigate", "description": "Redeven browser.navigate: navigate the selected browser target.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"target_id": map[string]any{"type": "string"}, "url": map[string]any{"type": "string"}}, "required": []string{"target_id", "url"}, "additionalProperties": false}},
+		map[string]any{"type": "function", "name": "computer_screenshot", "description": "Redeven computer.screenshot: capture the current selected target screenshot.", "parameters": map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}, "additionalProperties": false}},
+		map[string]any{"type": "function", "name": "computer_click", "description": "Redeven computer.click: click the current selected target.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, "required": []string{"x", "y"}, "additionalProperties": false}},
+		map[string]any{"type": "function", "name": "browser_navigate", "description": "Redeven browser.navigate: navigate the current selected browser target.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"url": map[string]any{"type": "string"}}, "required": []string{"url"}, "additionalProperties": false}},
 	}
-	input := []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": "Use the typed Redeven function computer.screenshot on target browser-fixture, then use the returned screenshot to decide whether to click the success button. Do not use any native computer_use tool."}, map[string]any{"type": "input_image", "image_url": image}}}}
+	input := []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": "Use the typed Redeven function computer.screenshot on the current target, then use the returned screenshot to decide whether to click the success button. Do not use any native computer_use tool or target IDs."}, map[string]any{"type": "input_image", "image_url": image}}}}
 	body := map[string]any{"model": model, "input": input, "tools": tools, "max_output_tokens": 256}
 	first := deepSeekQualificationRequest(t, base, key, body)
 	assertNoNativeComputerTool(t, first)
@@ -46,7 +46,7 @@ func TestDeepSeekComputerUseQualification(t *testing.T) {
 		if !allowed[strings.TrimSpace(fmt.Sprint(call["name"]))] {
 			t.Fatalf("DeepSeek returned an unregistered tool name %q", call["name"])
 		}
-		output := []any{map[string]any{"type": "input_text", "text": `{"target_id":"browser-fixture","summary":"screenshot captured","after_frame":"computer://browser-fixture/frame-1"}`}, map[string]any{"type": "input_image", "image_url": image}}
+		output := []any{map[string]any{"type": "input_text", "text": `{"target":"current","summary":"screenshot captured","after_frame":"computer://current/frame-1"}`}, map[string]any{"type": "input_image", "image_url": image}}
 		followInput := append([]any{}, input...)
 		// DeepSeek Responses requires the preceding function_call item in the
 		// full history before accepting its matching function_call_output.
