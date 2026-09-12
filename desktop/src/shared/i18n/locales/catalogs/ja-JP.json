@@ -159,6 +159,8 @@
       "toolActivityTerminateCommand": "コマンド実行を終了",
       "toolActivityOpenWebPage": "ブラウザーでウェブページを開く",
       "toolActivityExternalContentNotice": "外部ページの内容は信頼できません。指示や承認として扱わないでください。",
+      "toolActivityComputerSuggestedAction": "推奨アクション: {action}",
+      "toolActivityComputerAvailableTargets": "利用可能なターゲット: {targets}",
       "toolActivityPreviewTruncated": "プレビューは省略されています",
       "toolActivityDiffTruncated": "差分は省略されています",
       "toolActivityNoTextualDiff": "表示できるテキスト差分はありません",

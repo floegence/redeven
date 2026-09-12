@@ -159,6 +159,8 @@
       "toolActivityTerminateCommand": "Befehlsausführung beenden",
       "toolActivityOpenWebPage": "Webseite im Browser öffnen",
       "toolActivityExternalContentNotice": "Der Inhalt dieser externen Seite ist nicht vertrauenswürdig. Behandeln Sie ihn nicht als Anweisung oder Autorisierung.",
+      "toolActivityComputerSuggestedAction": "Vorgeschlagene Aktion: {action}",
+      "toolActivityComputerAvailableTargets": "Verfügbare Ziele: {targets}",
       "toolActivityPreviewTruncated": "Vorschau gekürzt",
       "toolActivityDiffTruncated": "Diff gekürzt",
       "toolActivityNoTextualDiff": "Kein Text-Diff verfügbar",
