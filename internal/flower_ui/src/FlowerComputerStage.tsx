@@ -19,7 +19,6 @@ export type FlowerComputerStageCopy = Readonly<{
   close: string;
   live: string;
   waiting: string;
-  completed: string;
   noFrame: string;
 }>;
 
@@ -33,7 +32,7 @@ export type FlowerComputerStageProps = Readonly<{
 function statusLabel(status: FlowerComputerStageSnapshot['status'], copy: FlowerComputerStageCopy): string {
   if (status === 'running' || status === 'pending') return copy.live;
   if (status === 'waiting') return copy.waiting;
-  return copy.completed;
+  return copy.live;
 }
 
 export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => (
