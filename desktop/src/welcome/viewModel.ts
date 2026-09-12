@@ -1367,11 +1367,11 @@ function runtimeProviderLinkMenuAction(
   if (!target) {
     return {
       id: 'connect_provider_runtime',
-      label: 'Connect to Redeven Cloud...',
+      label: 'Connect...',
       label_key: 'environmentAction.connectToProviderEllipsis',
       action: {
         intent: 'connect_provider_runtime',
-        label: 'Connect to Redeven Cloud...',
+        label: 'Connect...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         enabled: false,
         variant: 'outline',
@@ -1414,11 +1414,11 @@ function runtimeProviderLinkMenuAction(
     case 'connecting':
       return {
         id: 'connect_provider_runtime',
-        label: 'Connect to Redeven Cloud...',
+        label: 'Connect...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
           intent: 'connect_provider_runtime',
-          label: 'Connect to Redeven Cloud...',
+          label: 'Connect...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
@@ -1455,11 +1455,11 @@ function runtimeProviderLinkMenuAction(
       }
       return {
         id: 'connect_provider_runtime',
-        label: 'Connect to Redeven Cloud...',
+        label: 'Connect...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
           intent: 'connect_provider_runtime',
-          label: 'Connect to Redeven Cloud...',
+          label: 'Connect...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
@@ -1469,11 +1469,11 @@ function runtimeProviderLinkMenuAction(
     case 'unsupported':
       return {
         id: 'connect_provider_runtime',
-        label: 'Connect to Redeven Cloud...',
+        label: 'Connect...',
         label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
           intent: 'connect_provider_runtime',
-          label: 'Connect to Redeven Cloud...',
+          label: 'Connect...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
@@ -1484,7 +1484,7 @@ function runtimeProviderLinkMenuAction(
       break;
   }
   const canConnect = runtimeProviderLinkCanConnect(environment, target);
-  const label = 'Connect to Redeven Cloud...';
+  const label = 'Connect...';
   return {
     id: 'connect_provider_runtime',
     label,
@@ -1619,11 +1619,11 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (environmentSupportsDirectReinstall(environment)) {
     items.push({
       id: 'reinstall_target_wipe',
-      label: 'Erase data and reinstall Redeven',
+      label: 'Uninstall (erase data)',
       label_key: 'environmentAction.reinstallRedevenWipeData',
       action: {
         intent: 'reinstall_target',
-        label: 'Erase data and reinstall Redeven',
+        label: 'Uninstall (erase data)',
         label_key: 'environmentAction.reinstallRedevenWipeData',
         enabled: true,
         variant: 'outline',
@@ -1631,11 +1631,11 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
       },
     }, {
       id: 'reinstall_target_preserve',
-      label: 'Reinstall Redeven and keep data',
+      label: 'Uninstall (keep data)',
       label_key: 'environmentAction.reinstallRedevenKeepData',
       action: {
         intent: 'reinstall_target',
-        label: 'Reinstall Redeven and keep data',
+        label: 'Uninstall (keep data)',
         label_key: 'environmentAction.reinstallRedevenKeepData',
         enabled: true,
         variant: 'outline',
@@ -1649,7 +1649,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   }
   if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
     const refreshPlan = environment.runtime_operations.refresh;
-    const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh Redeven Cloud status' : 'Refresh runtime status';
+    const refreshLabel = 'Refresh';
     items.push({
       id: 'refresh_runtime',
       label: refreshLabel,
@@ -1699,13 +1699,13 @@ function blockedPrimaryActionGuidanceAction(
 function primaryGuidanceActionLabel(action: EnvironmentActionModel): string {
   switch (action.intent) {
     case 'start_runtime':
-      return 'Start runtime';
+      return 'Start';
     case 'update_runtime':
       return action.label;
     case 'restart_runtime':
-      return 'Restart runtime';
+      return 'Restart';
     case 'connect_provider_runtime':
-      return 'Connect to Redeven Cloud';
+      return 'Connect';
     default:
       return 'Continue';
   }
@@ -1719,7 +1719,7 @@ function blockedPrimaryActionRefreshGuidanceAction(
     return null;
   }
   return {
-    label: 'Refresh status',
+    label: 'Refresh',
     emphasis: 'secondary',
     action: refreshAction.action,
   };
@@ -1753,10 +1753,10 @@ function blockedRuntimePrimaryActionGuidanceActions(
         : primarySource.action.label;
     }
     if (primarySource.action.intent === 'restart_runtime') {
-      return 'Restart runtime…';
+      return 'Restart…';
     }
     if (primarySource.action.intent === 'start_runtime') {
-      return 'Start runtime';
+      return 'Start';
     }
     return primarySource.action.label;
   })();
@@ -1776,7 +1776,7 @@ function blockedRuntimePrimaryActionGuidanceActions(
       : null,
     refreshSource
       ? {
-          label: 'Refresh status',
+          label: 'Refresh',
           emphasis: 'secondary',
           action: refreshSource.action,
         }
@@ -2106,20 +2106,20 @@ export function buildProviderBackedEnvironmentActionModel(
         kind: 'split_button',
         primary_action: {
           intent: 'reinstall_target',
-          label: 'Reinstall Redeven',
+          label: 'Reinstall',
           label_key: 'environmentAction.reinstallRedeven',
           enabled: true,
           variant: 'default',
           reinstall_mode: 'wipe_data',
         },
-        menu_button_label: 'Runtime actions',
+        menu_button_label: 'Actions',
         menu_actions: [{
           id: 'refresh_runtime',
-          label: 'Refresh runtime status',
+          label: 'Refresh',
           label_key: 'environmentAction.refreshRuntimeStatus',
           action: {
             intent: 'refresh_runtime',
-            label: 'Refresh runtime status',
+            label: 'Refresh',
             label_key: 'environmentAction.refreshRuntimeStatus',
             enabled: refreshPlan?.availability !== 'blocked',
             variant: 'outline',
@@ -2150,7 +2150,7 @@ export function buildProviderBackedEnvironmentActionModel(
       kind: 'split_button',
       primary_action: primaryAction,
       primary_action_overlay: primaryActionOverlay(environment, menuActions),
-      menu_button_label: 'Runtime actions',
+      menu_button_label: 'Actions',
       menu_actions: menuActions,
     },
   };

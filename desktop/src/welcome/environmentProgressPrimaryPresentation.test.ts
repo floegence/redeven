@@ -161,7 +161,7 @@ describe('openConnectionFailurePrimaryAction', () => {
       variant: 'default',
     };
     const nextActions: DesktopLauncherActionProgress['next_actions'] = [
-      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh' },
       { kind: 'update_runtime', environment_id: 'local-environment', label: 'Update runtime' },
     ];
 
@@ -180,12 +180,12 @@ describe('openConnectionFailurePrimaryAction', () => {
 
   it('uses refresh status when the failure cannot identify a recovery operation', () => {
     const nextActions: DesktopLauncherActionProgress['next_actions'] = [
-      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh' },
     ];
 
     expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed', { nextActions }), openAction)).toEqual({
       intent: 'refresh_runtime',
-      label: 'Refresh status',
+      label: 'Refresh',
       enabled: true,
       variant: 'default',
     });
@@ -193,7 +193,7 @@ describe('openConnectionFailurePrimaryAction', () => {
 
   it('promotes the Desktop update handoff when the Runtime requires a newer Desktop', () => {
     const nextActions: DesktopLauncherActionProgress['next_actions'] = [
-      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh' },
       { kind: 'manage_desktop_update', environment_id: 'local-environment', label: 'Update Redeven Desktop' },
     ];
 
@@ -253,12 +253,12 @@ describe('environmentProgressPanelPrimaryAction', () => {
     expect(environmentProgressPanelPrimaryAction(failedOpen, openAction)).toEqual({
       action: {
         intent: 'reinstall_target',
-        label: 'Reinstall Redeven',
+        label: 'Reinstall',
         enabled: true,
         variant: 'default',
         reinstall_mode: 'wipe_data',
       },
-      label: 'Reinstall Redeven',
+      label: 'Reinstall',
       icon: 'alert_triangle',
       loading: false,
       disabled: false,
@@ -268,7 +268,7 @@ describe('environmentProgressPanelPrimaryAction', () => {
   it('promotes runtime update inside the popup without changing failed card presentation', () => {
     const failedOpen = openConnectionProgress('failed', {
       nextActions: [
-        { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+        { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh' },
         { kind: 'update_runtime', environment_id: 'local-environment', label: 'Update runtime' },
       ],
     });
@@ -308,7 +308,7 @@ describe('environmentProgressPanelPrimaryAction', () => {
   it('offers status refresh for cleanup-failed Open receipts inside the popup', () => {
     const cleanupFailedOpen = openConnectionProgress('cleanup_failed', {
       nextActions: [
-        { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+        { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh' },
       ],
     });
 
@@ -318,7 +318,7 @@ describe('environmentProgressPanelPrimaryAction', () => {
     });
     expect(environmentProgressPanelPrimaryAction(cleanupFailedOpen, openAction)).toEqual({
       action: expect.objectContaining({ intent: 'refresh_runtime' }),
-      label: 'Refresh status',
+      label: 'Refresh',
       icon: 'refresh',
       loading: false,
       disabled: false,
