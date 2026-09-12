@@ -44,6 +44,7 @@ export type AIConfig = Readonly<{
   current_model_id?: string;
   providers?: AIProvider[];
   permission_type?: AIPermissionType;
+  computer_use_enabled?: boolean;
   tool_recovery_enabled?: boolean;
   tool_recovery_allow_path_rewrite?: boolean;
   tool_recovery_allow_probe_tools?: boolean;

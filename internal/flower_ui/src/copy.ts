@@ -110,6 +110,8 @@ export type FlowerSettingsCopy = Readonly<{
   defaultPermissionTitle: string;
   defaultPermissionDescription: string;
   defaultPermissionBadge: string;
+  computerUseTitle: string;
+	computerUseLabel: string;
   permissionTypes: Readonly<Record<FlowerPermissionType, Readonly<{
     label: string;
     description: string;
@@ -1082,6 +1084,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     defaultPermissionTitle: 'Default permission',
     defaultPermissionDescription: 'Applies to new Flower threads. Existing threads keep their own permission.',
     defaultPermissionBadge: 'Default',
+    computerUseTitle: 'Computer and browser use',
+	computerUseLabel: 'Enable computer use',
     permissionTypes: {
       readonly: {
         label: 'Read only',

@@ -525,6 +525,8 @@
     "defaultPermissionTitle": "Default permission",
     "defaultPermissionDescription": "Controls the default tool surface and approval behavior for new Flower threads.",
     "defaultPermissionBadge": "Default",
+    "computerUseTitle": "Computer and browser use",
+    "computerUseLabel": "Enable computer use",
     "permissionReadonlyLabel": "Read only",
     "permissionReadonlyDescription": "Read and search only. No shell, file edits, or write tools.",
     "permissionApprovalRequiredLabel": "Approval required",

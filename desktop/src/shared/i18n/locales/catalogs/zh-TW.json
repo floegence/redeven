@@ -557,6 +557,8 @@
       "defaultPermissionTitle": "預設權限",
       "defaultPermissionDescription": "控制新 Flower 對話預設可用的工具與核准方式。",
       "defaultPermissionBadge": "預設",
+      "computerUseTitle": "電腦與瀏覽器操作",
+      "computerUseLabel": "啟用電腦操作",
       "permissionReadonlyLabel": "唯讀",
       "permissionReadonlyDescription": "僅可讀取與搜尋。無 shell、檔案編輯或寫入工具。",
       "permissionApprovalRequiredLabel": "需要核准",

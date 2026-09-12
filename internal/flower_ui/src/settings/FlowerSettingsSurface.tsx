@@ -165,6 +165,7 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   onDiscoverModels?: FlowerModelCatalogDiscovery;
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
+  onSaveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   saveError?: string;
   savedAt?: number | null;
@@ -183,6 +184,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [permissionSaving, setPermissionSaving] = createSignal(false);
   const [permissionError, setPermissionError] = createSignal('');
   const [permissionSavedAt, setPermissionSavedAt] = createSignal<number | null>(null);
+  const [computerUseEnabled, setComputerUseEnabled] = createSignal(true);
+  const [computerUseSaving, setComputerUseSaving] = createSignal(false);
+  const [computerUseError, setComputerUseError] = createSignal('');
+  const [computerUseSavedAt, setComputerUseSavedAt] = createSignal<number | null>(null);
   const [localError, setLocalError] = createSignal('');
   const [dirty, setDirty] = createSignal(false);
   const [providerDialogOpen, setProviderDialogOpen] = createSignal(false);
@@ -201,6 +206,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     const savedPermission = snapshot.defaults.permission_type ?? 'approval_required';
     setConfirmedPermissionType(savedPermission);
     if (!permissionDirty() && !permissionSaving()) setPermissionType(savedPermission);
+    if (!computerUseSaving()) setComputerUseEnabled(snapshot.defaults.computer_use_enabled !== false);
     setLocalError('');
     setDirty(false);
   });
@@ -226,6 +232,22 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     setPermissionDirty(kind !== confirmedPermissionType());
     setPermissionError('');
     if (focus) focusPermissionType(kind);
+  };
+  const saveComputerUseEnabled = async (enabled: boolean) => {
+    if (!props.onSaveComputerUseEnabled || computerUseSaving()) return;
+    const previous = computerUseEnabled();
+    setComputerUseEnabled(enabled);
+    setComputerUseSaving(true);
+    setComputerUseError('');
+    try {
+      await props.onSaveComputerUseEnabled(enabled);
+      setComputerUseSavedAt(Date.now());
+    } catch (error) {
+      setComputerUseEnabled(previous);
+      setComputerUseError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setComputerUseSaving(false);
+    }
   };
   const movePermissionType = (delta: number) => {
     const currentIndex = Math.max(0, PERMISSION_TYPE_ORDER.indexOf(permissionType()));
@@ -627,6 +649,41 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                 <p role="alert" class="mt-2 text-xs text-destructive">{permissionError()}</p>
               </Show>
           </section>
+
+          <Show when={props.onSaveComputerUseEnabled}>
+            <section class="flower-settings-section flower-settings-computer-use-section">
+              <FlowerSubSectionHeader
+                title={copy().computerUseTitle}
+                actions={(
+                  <FlowerAutoSaveIndicator
+                    dirty={computerUseSaving()}
+                    copy={copy().autoSave}
+                    saving={computerUseSaving()}
+                    error={computerUseError()}
+                    savedAt={computerUseSavedAt()}
+                  />
+                )}
+              />
+              <button
+                type="button"
+                class={cn('flower-settings-toggle-card', computerUseEnabled() && 'flower-settings-toggle-card-active')}
+                role="switch"
+                aria-checked={computerUseEnabled()}
+                disabled={computerUseSaving()}
+                onClick={() => void saveComputerUseEnabled(!computerUseEnabled())}
+              >
+                <span class="flower-settings-toggle-copy">
+                  <span class="flower-settings-toggle-label">{copy().computerUseLabel}</span>
+                </span>
+                <span class={cn('flower-settings-toggle-track', computerUseEnabled() && 'flower-settings-toggle-track-on')} aria-hidden="true">
+                  <span class="flower-settings-toggle-thumb" />
+                </span>
+              </button>
+              <Show when={computerUseError()}>
+                <p role="alert" class="mt-2 text-xs text-destructive">{computerUseError()}</p>
+              </Show>
+            </section>
+          </Show>
 
           <section class="flower-settings-section flower-settings-providers-section">
               <FlowerSubSectionHeader

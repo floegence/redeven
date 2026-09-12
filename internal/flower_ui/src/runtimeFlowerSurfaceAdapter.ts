@@ -112,6 +112,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
+  saveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
@@ -257,6 +258,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     loadSettings: options.loadSettings,
     discoverProviderModels: options.discoverProviderModels,
     saveDefaultPermission: options.saveDefaultPermission,
+    ...(options.saveComputerUseEnabled ? { saveComputerUseEnabled: options.saveComputerUseEnabled } : {}),
     saveModelProfile: options.saveModelProfile,
     listThreads: async () => {
       const result = await options.transport.listThreads();

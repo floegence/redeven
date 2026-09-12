@@ -3345,6 +3345,49 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/computer_use":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err := dec.Decode(&body); err != nil || body.Enabled == nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		enabled := *body.Enabled
+		var updated *config.Config
+		persist := func(next *config.AIConfig) error {
+			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
+				c.AI = next
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			updated = cfg
+			return nil
+		}
+		if err := aiSvc.SetComputerUseEnabled(enabled, persist); err != nil {
+			g.appendAudit(meta, "ai_computer_use_update", "failure", map[string]any{"enabled": enabled}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "ai_computer_use_update", "success", map[string]any{"enabled": enabled}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settingsUpdateView{Settings: g.toSettingsView(updated, aiSvc)}})
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/provider_bundle":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {

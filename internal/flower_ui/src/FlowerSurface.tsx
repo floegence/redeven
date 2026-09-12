@@ -49,6 +49,7 @@ import {
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerThinkingOrb } from './FlowerThinkingOrb';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
+import type { FlowerComputerStageSnapshot } from './FlowerComputerStage';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
@@ -225,6 +226,7 @@ import {
 } from './reasoning';
 
 const FlowerSettingsSurface = lazy(() => import('./settings/FlowerSettingsSurface').then((module) => ({ default: module.FlowerSettingsSurface })));
+const FlowerComputerStage = lazy(() => import('./FlowerComputerStage').then((module) => ({ default: module.FlowerComputerStage })));
 
 type FlowerSurfacePanel = 'chat' | 'settings';
 type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
@@ -4595,6 +4597,12 @@ webSearch: model.web_search,
     }
   };
 
+  const saveComputerUseEnabled = (enabled: boolean) => (
+    props.adapter.saveComputerUseEnabled
+      ? saveSettingsMutation(() => props.adapter.saveComputerUseEnabled!(enabled))
+      : Promise.reject(new Error('Computer use settings are unavailable.'))
+  );
+
   const saveModelProfile = (draft: FlowerSettingsDraft) => (
     saveSettingsMutation(() => props.adapter.saveModelProfile(draft))
   );
@@ -5497,6 +5505,45 @@ webSearch: model.web_search,
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
+  const [computerStageOpen, setComputerStageOpen] = createSignal(true);
+  let lastComputerStageItemID = '';
+  const selectedComputerStage = createMemo<FlowerComputerStageSnapshot | null>(() => {
+    const entries = selectedTimelineEntries();
+    const candidates: FlowerComputerStageSnapshot[] = [];
+    for (let entryIndex = entries.length - 1; entryIndex >= 0; entryIndex -= 1) {
+      const entry = entries[entryIndex];
+      if (entry?.type !== 'message' && entry?.type !== 'queued_turn') continue;
+      const blocks = entry.blocks;
+      for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+        const block = blocks[blockIndex];
+        if (block?.type !== 'activity') continue;
+        for (let itemIndex = block.block.items.length - 1; itemIndex >= 0; itemIndex -= 1) {
+          const item = block.block.items[itemIndex];
+          if (item?.renderer !== 'computer' && item?.renderer !== 'browser') continue;
+          const detail = presentFlowerActivityItem(item).detailBlocks.find((candidate) => candidate.kind === 'computer');
+          if (!detail || detail.kind !== 'computer') continue;
+          candidates.push({
+            item,
+            target: detail.target,
+            action: detail.action,
+            location: detail.location,
+            safety: detail.safety ?? '',
+            ...(detail.frame ? { frame: detail.frame } : {}),
+            status: item.status,
+          });
+        }
+      }
+    }
+    return candidates.find((candidate) => candidate.status === 'running' || candidate.status === 'pending' || candidate.status === 'waiting')
+      ?? candidates[0]
+      ?? null;
+  });
+  createEffect(() => {
+    const stage = selectedComputerStage();
+    if (!stage || stage.item.item_id === lastComputerStageItemID) return;
+    lastComputerStageItemID = stage.item.item_id;
+    setComputerStageOpen(true);
+  });
   createEffect(() => {
     const preview = contextSnapshotPreview();
     if (!preview) return;
@@ -11666,6 +11713,7 @@ webSearch: model.web_search,
                 snapshot={snapshot()}
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}
+                onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
                 onSaveModelProfile={saveModelProfile}
                 saveError={saveError()}
                 savedAt={savedAt()}
@@ -11707,6 +11755,30 @@ webSearch: model.web_search,
           setWorkingDirectoryPickerOpen(false);
         }}
       />
+      <Show when={computerStageOpen() && selectedComputerStage()}>
+        {(stage) => {
+          const frameURL = () => {
+            const value = stage().frame ?? '';
+            if (!value || (!value.startsWith('http://') && !value.startsWith('https://') && !value.startsWith('/'))) return undefined;
+            return attachmentPreviewURL(value);
+          };
+          return (
+            <FlowerComputerStage
+              snapshot={stage()}
+              frameURL={frameURL()}
+              copy={{
+                title: copy().settings.computerUseTitle,
+                close: copy().chat.stop,
+                live: copy().chat.ready,
+                waiting: copy().chat.toolActivityDetailsPending,
+                completed: copy().chat.ready,
+                noFrame: copy().chat.toolActivityDetailsPending,
+              }}
+              onClose={() => setComputerStageOpen(false)}
+            />
+          );
+        }}
+      </Show>
     </main>
   );
 };

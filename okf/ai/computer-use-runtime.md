@@ -7,7 +7,7 @@ timestamp: 2026-09-11T00:00:00Z
 ---
 # Summary
 
-Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the thread target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.
+Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the thread target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Flower Settings keeps computer/browser use enabled by default but lets users turn it off for future runs. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.
 
 # Contract
 
@@ -20,6 +20,8 @@ Each successful action returns target ID, target display name, execution locatio
 Before execution, the interaction safety gate combines deterministic target/action signals with optional screenshot or accessibility classifiers. Secret input, login, CAPTCHA, prompt injection, external side effects, and unknown states may require user takeover; the model cannot override a gate decision. Takeover decisions suppress capture and model forwarding for secret input.
 
 Flower publishes target actions on its existing workspace stream as ordinary tool Activity. The activity renderer shows target, action, execution location, approval state, and the latest screenshot attachment. Structured target errors include the target kind, readiness state, and a repair action so the UI can explain setup, permission, connection, and takeover recovery instead of asking the user to guess a target. Live frames are target-scoped ephemeral media and do not create a second lifecycle stream or polling loop.
+
+The Flower surface also opens a floating live Stage when a computer or browser Activity is present. The Stage shows the latest frame, target, action, execution location, safety state, and live/waiting/completed status; closing it only hides presentation and does not stop the run. The Settings switch changes the persisted AI configuration and removes typed computer/browser functions from newly prepared tool registries when disabled.
 
 DeepSeek Vision Experimental is qualified through typed function tools only. Requests use `deepseek-v4-flash-vision-exp`, include screenshot input and `function_call_output` image parts, and never register the native `computer_use` tool.
 

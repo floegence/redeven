@@ -26,6 +26,26 @@ func TestAIConfigValidate_AllowsPermissionOnly(t *testing.T) {
 	}
 }
 
+func TestAIConfigIsComputerUseEnabledDefaultsOn(t *testing.T) {
+	t.Parallel()
+
+	var nilConfig *AIConfig
+	if !nilConfig.IsComputerUseEnabled() {
+		t.Fatal("nil AI config should keep computer use enabled for legacy callers")
+	}
+	if !(&AIConfig{}).IsComputerUseEnabled() {
+		t.Fatal("omitted computer use setting should default to enabled")
+	}
+	trueValue := true
+	if !(&AIConfig{ComputerUseEnabled: &trueValue}).IsComputerUseEnabled() {
+		t.Fatal("explicitly enabled computer use should remain enabled")
+	}
+	falseValue := false
+	if (&AIConfig{ComputerUseEnabled: &falseValue}).IsComputerUseEnabled() {
+		t.Fatal("explicitly disabled computer use should be disabled")
+	}
+}
+
 func TestAIConfigValidate_RejectsPartialModelProfiles(t *testing.T) {
 	t.Parallel()
 

@@ -32,6 +32,10 @@ type AIConfig struct {
 	// - "full_access": standard tools without per-tool approval
 	PermissionType string `json:"permission_type,omitempty"`
 
+	// ComputerUseEnabled controls whether Flower exposes typed browser and
+	// desktop interaction tools. Omitted legacy configurations default to true.
+	ComputerUseEnabled *bool `json:"computer_use_enabled,omitempty"`
+
 	// ToolRecoveryEnabled controls runtime-level recovery orchestration.
 	//
 	// When enabled, the Go runtime can continue attempts after recoverable tool failures
@@ -47,6 +51,13 @@ type AIConfig struct {
 	// ToolRecoveryFailOnRepeatedSignature controls fail-fast behavior when the same failure signature
 	// repeats across recovery attempts.
 	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
+}
+
+// IsComputerUseEnabled preserves the enabled-by-default behavior for existing
+// configuration files while allowing the Flower settings switch to disable the
+// interaction tool surface explicitly.
+func (c *AIConfig) IsComputerUseEnabled() bool {
+	return c == nil || c.ComputerUseEnabled == nil || *c.ComputerUseEnabled
 }
 
 // AIModelProfile is the complete environment-local model registry used by

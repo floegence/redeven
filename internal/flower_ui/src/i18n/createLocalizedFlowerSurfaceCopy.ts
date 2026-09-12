@@ -563,6 +563,8 @@ function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): Flowe
     defaultPermissionTitle: t(i18n, k('defaultPermissionTitle')),
     defaultPermissionDescription: t(i18n, k('defaultPermissionDescription')),
     defaultPermissionBadge: t(i18n, k('defaultPermissionBadge')),
+    computerUseTitle: t(i18n, k('computerUseTitle')),
+    computerUseLabel: t(i18n, k('computerUseLabel')),
     permissionTypes: {
       readonly: {
         label: t(i18n, k('permissionReadonlyLabel')),

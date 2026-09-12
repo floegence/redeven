@@ -4814,6 +4814,8 @@
       "defaultPermissionTitle": "默认权限",
       "defaultPermissionDescription": "控制新 Flower 线程默认可用的工具和审批方式；已有线程保留各自的权限。",
       "defaultPermissionBadge": "默认",
+      "computerUseTitle": "电脑和浏览器操作",
+      "computerUseLabel": "启用电脑操作",
       "permissionReadonlyLabel": "只读",
       "permissionReadonlyDescription": "仅可读取与搜索。无 shell、文件编辑或写入工具。",
       "permissionApprovalRequiredLabel": "需要审批",

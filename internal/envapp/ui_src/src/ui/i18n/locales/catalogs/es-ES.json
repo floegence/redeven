@@ -4799,6 +4799,8 @@
       "defaultPermissionTitle": "Permiso predeterminado",
       "defaultPermissionDescription": "Controla las herramientas predeterminadas y las aprobaciones para nuevos hilos de Flower.",
       "defaultPermissionBadge": "Valor predeterminado",
+      "computerUseTitle": "Uso del ordenador y del navegador",
+      "computerUseLabel": "Activar el uso del ordenador",
       "permissionReadonlyLabel": "Solo lectura",
       "permissionReadonlyDescription": "Solo lectura y búsqueda. Sin shell, edición de archivos ni herramientas de escritura.",
       "permissionApprovalRequiredLabel": "Aprobación requerida",

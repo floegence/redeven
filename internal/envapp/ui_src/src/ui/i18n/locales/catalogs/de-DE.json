@@ -4799,6 +4799,8 @@
       "defaultPermissionTitle": "Standardberechtigung",
       "defaultPermissionDescription": "Steuert die Standard-Tooloberfläche und das Genehmigungsverhalten für neue Flower-Threads.",
       "defaultPermissionBadge": "Standard",
+      "computerUseTitle": "Computer- und Browser-Nutzung",
+      "computerUseLabel": "Computernutzung aktivieren",
       "permissionReadonlyLabel": "Nur lesen",
       "permissionReadonlyDescription": "Nur lesen und suchen. Keine Shell, keine Dateibearbeitung und keine Schreibwerkzeuge.",
       "permissionApprovalRequiredLabel": "Genehmigung erforderlich",

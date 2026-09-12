@@ -4799,6 +4799,8 @@
       "defaultPermissionTitle": "デフォルト権限",
       "defaultPermissionDescription": "新しい Flower スレッドの既定ツール範囲と承認動作を制御します。",
       "defaultPermissionBadge": "デフォルト",
+      "computerUseTitle": "コンピューターとブラウザーの操作",
+      "computerUseLabel": "コンピューター操作を有効にする",
       "permissionReadonlyLabel": "読み取り専用",
       "permissionReadonlyDescription": "読み取りと検索のみ。shell、ファイル編集、書き込みツールはなし。",
       "permissionApprovalRequiredLabel": "承認が必要",
