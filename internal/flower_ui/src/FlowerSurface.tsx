@@ -11771,7 +11771,6 @@ webSearch: model.web_search,
                 close: copy().chat.stop,
                 live: copy().chat.ready,
                 waiting: copy().chat.toolActivityDetailsPending,
-                completed: copy().chat.ready,
                 noFrame: copy().chat.toolActivityDetailsPending,
               }}
               onClose={() => setComputerStageOpen(false)}
