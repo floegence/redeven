@@ -43,7 +43,13 @@ func TestDeepSeekComputerUseQualification(t *testing.T) {
 	} else {
 		call := calls[0]
 		output := []any{map[string]any{"type": "input_text", "text": `{"target_id":"browser-fixture","summary":"screenshot captured","after_frame":"computer://browser-fixture/frame-1"}`}, map[string]any{"type": "input_image", "image_url": image}}
-		followInput := append(append([]any{}, input...), map[string]any{"type": "function_call_output", "call_id": call["call_id"], "output": output})
+		followInput := append([]any{}, input...)
+		// DeepSeek Responses requires the preceding function_call item in the
+		// full history before accepting its matching function_call_output.
+		if previous, ok := first["output"].([]any); ok {
+			followInput = append(followInput, previous...)
+		}
+		followInput = append(followInput, map[string]any{"type": "function_call_output", "call_id": call["call_id"], "output": output})
 		follow := map[string]any{"model": model, "input": followInput, "tools": tools, "max_output_tokens": 256}
 		second := deepSeekQualificationRequest(t, base, key, follow)
 		assertNoNativeComputerTool(t, second)
