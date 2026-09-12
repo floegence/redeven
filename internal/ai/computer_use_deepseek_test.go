@@ -42,6 +42,10 @@ func TestDeepSeekComputerUseQualification(t *testing.T) {
 		t.Fatalf("DeepSeek did not return a typed function call; response omitted for safety")
 	} else {
 		call := calls[0]
+		allowed := map[string]bool{"computer_screenshot": true, "computer_click": true, "browser_navigate": true}
+		if !allowed[strings.TrimSpace(fmt.Sprint(call["name"]))] {
+			t.Fatalf("DeepSeek returned an unregistered tool name %q", call["name"])
+		}
 		output := []any{map[string]any{"type": "input_text", "text": `{"target_id":"browser-fixture","summary":"screenshot captured","after_frame":"computer://browser-fixture/frame-1"}`}, map[string]any{"type": "input_image", "image_url": image}}
 		followInput := append([]any{}, input...)
 		// DeepSeek Responses requires the preceding function_call item in the
