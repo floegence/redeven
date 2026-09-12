@@ -10100,7 +10100,7 @@ function EnvironmentSplitActionButton(
                                   (item) => item.action.intent === 'update_runtime',
                                 )?.action ?? {
                                   intent: 'update_runtime' as const,
-                                  label: 'Update runtime',
+                                  label: 'Update',
                                   enabled: true,
                                   variant: 'default' as const,
                                 };
@@ -10120,7 +10120,7 @@ function EnvironmentSplitActionButton(
                                 if (action.operation_key && action.preflight_id) {
                                   props.onRunAction({
                                     intent: 'reinstall_target',
-                                    label: 'Reinstall Redeven',
+                                    label: 'Reinstall',
                                     enabled: true,
                                     variant: 'outline',
                                     operation_key: action.operation_key,

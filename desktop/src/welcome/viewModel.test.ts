@@ -599,7 +599,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
     });
     expect(model.action_presentation.primary_action).toMatchObject({
       intent: 'reinstall_target',
-      label: 'Reinstall Redeven',
+      label: 'Reinstall',
       enabled: true,
       reinstall_mode: 'wipe_data',
     });
@@ -688,7 +688,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
 
     expect(model.action_presentation.primary_action).toMatchObject({
       intent: 'reinstall_target',
-      label: 'Reinstall Redeven',
+      label: 'Reinstall',
     });
   });
 
@@ -1845,14 +1845,14 @@ describe('buildEnvironmentCardModel', () => {
       title: 'Start the runtime to continue',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Start runtime',
+          label: 'Start',
           action: expect.objectContaining({
             intent: 'start_runtime',
             enabled: true,
           }),
         }),
         expect.objectContaining({
-          label: 'Refresh status',
+          label: 'Refresh',
           action: expect.objectContaining({
             intent: 'refresh_runtime',
             enabled: true,
@@ -2109,7 +2109,7 @@ describe('buildEnvironmentCardModel', () => {
               }),
             }),
             expect.objectContaining({
-              label: 'Refresh status',
+              label: 'Refresh',
               action: expect.objectContaining({
                 intent: 'refresh_runtime',
                 enabled: true,
@@ -2275,7 +2275,7 @@ describe('buildEnvironmentCardModel', () => {
       expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.menu_actions).toEqual(
         expect.arrayContaining([expect.objectContaining({
           id: 'reinstall_target_wipe',
-          label: 'Erase data and reinstall Redeven',
+          label: 'Uninstall (erase data)',
         })]),
       );
     }
@@ -2336,24 +2336,24 @@ describe('buildEnvironmentCardModel', () => {
           title: 'Redeven Cloud reports offline',
           detail: 'Redeven Cloud currently reports this Environment as offline.',
           actions: [{
-            label: 'Refresh status',
+            label: 'Refresh',
             emphasis: 'secondary',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh Redeven Cloud status',
+              label: 'Refresh',
               enabled: true,
               variant: 'outline',
             },
           }],
         },
-        menu_button_label: 'Runtime actions',
+        menu_button_label: 'Actions',
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh Redeven Cloud status',
+            label: 'Refresh',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh Redeven Cloud status',
+              label: 'Refresh',
               enabled: true,
               variant: 'outline',
             },
@@ -2444,7 +2444,7 @@ describe('buildEnvironmentCardModel', () => {
           title: 'Refresh Redeven Cloud status',
           detail: 'Remote status is not yet confirmed.',
           actions: [{
-            label: 'Refresh status',
+            label: 'Refresh',
             emphasis: 'secondary',
           }],
         },
@@ -2498,11 +2498,11 @@ describe('buildEnvironmentCardModel', () => {
       action_presentation: {
         menu_actions: expect.arrayContaining([{
           id: 'connect_provider_runtime',
-          label: 'Connect to Redeven Cloud...',
+          label: 'Connect...',
           label_key: 'environmentAction.connectToProviderEllipsis',
           action: {
             intent: 'connect_provider_runtime',
-            label: 'Connect to Redeven Cloud...',
+            label: 'Connect...',
             label_key: 'environmentAction.connectToProviderEllipsis',
             enabled: true,
             variant: 'outline',
@@ -2707,14 +2707,14 @@ describe('buildEnvironmentCardModel', () => {
           route: desktopProviderEnvironmentOpenRoute(),
         },
         primary_action_overlay: undefined,
-        menu_button_label: 'Runtime actions',
+        menu_button_label: 'Actions',
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh Redeven Cloud status',
+            label: 'Refresh',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh Redeven Cloud status',
+              label: 'Refresh',
               enabled: true,
               variant: 'outline',
             },
@@ -2903,7 +2903,7 @@ describe('buildEnvironmentCardModel', () => {
             }),
           ]),
         },
-        menu_button_label: 'Runtime actions',
+        menu_button_label: 'Actions',
         menu_actions: [{
           id: 'request_open_access',
           label: 'Request access',
@@ -2963,24 +2963,24 @@ describe('buildEnvironmentCardModel', () => {
           title: 'Redeven Cloud reports offline',
           detail: 'Redeven Cloud currently reports this Environment as offline.',
           actions: [{
-            label: 'Refresh status',
+            label: 'Refresh',
             emphasis: 'secondary',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh Redeven Cloud status',
+              label: 'Refresh',
               enabled: true,
               variant: 'outline',
             },
           }],
         },
-        menu_button_label: 'Runtime actions',
+        menu_button_label: 'Actions',
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh Redeven Cloud status',
+            label: 'Refresh',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh Redeven Cloud status',
+              label: 'Refresh',
               enabled: true,
               variant: 'outline',
             },
@@ -3029,14 +3029,14 @@ describe('buildEnvironmentCardModel', () => {
           route: 'remote_desktop',
         },
         primary_action_overlay: undefined,
-        menu_button_label: 'Runtime actions',
+        menu_button_label: 'Actions',
         menu_actions: [
           {
             id: 'refresh_runtime',
-            label: 'Refresh Redeven Cloud status',
+            label: 'Refresh',
             action: {
               intent: 'refresh_runtime',
-              label: 'Refresh Redeven Cloud status',
+              label: 'Refresh',
               enabled: true,
               variant: 'outline',
             },

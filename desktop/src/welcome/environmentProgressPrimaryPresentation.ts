@@ -101,7 +101,7 @@ export function openConnectionFailurePrimaryAction(
   if (refreshAction) {
     return {
       intent: 'refresh_runtime',
-      label: 'Refresh status',
+      label: 'Refresh',
       enabled: true,
       variant: 'default',
     };
@@ -125,7 +125,7 @@ export function environmentProgressPanelPrimaryAction(
     && reinstallRequest.retry_action?.kind === 'preview_reinstall_target'
       ? {
           intent: 'reinstall_target' as const,
-          label: 'Reinstall Redeven',
+          label: 'Reinstall',
           enabled: true,
           variant: 'default' as const,
           reinstall_mode: reinstallRequest.retry_action.mode ?? 'wipe_data',

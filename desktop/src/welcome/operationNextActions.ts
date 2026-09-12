@@ -22,7 +22,7 @@ export function environmentActionForLauncherRetry(
     case 'restart_environment_runtime':
       return { intent: 'restart_runtime', label: 'Restart', enabled: true, variant: 'default' };
     case 'update_environment_runtime':
-      return { intent: 'update_runtime', label: 'Update runtime', enabled: true, variant: 'default' };
+      return { intent: 'update_runtime', label: 'Update', enabled: true, variant: 'default' };
     case 'preview_reinstall_target':
       return {
         intent: 'reinstall_target',
