@@ -137,12 +137,30 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 		buildPromptSearchTemplateSection(snapshot),
 		buildPromptWebResearchCapabilitySection(snapshot),
 	)
+	if section := buildPromptComputerUseCapabilitySection(snapshot); !section.isEmpty() {
+		sections = append(sections, section)
+	}
 	if snapshot.AllowUserInteraction {
 		sections = append(sections, buildPromptAskUserPolicySection(snapshot))
 	} else if section := buildPromptAutonomousInteractionSection(spec); !section.isEmpty() {
 		sections = append(sections, section)
 	}
 	return sections
+}
+
+func buildPromptComputerUseCapabilitySection(snapshot promptRuntimeSnapshot) promptSection {
+	if !promptToolAvailable(snapshot.AvailableToolNames, "computer.screenshot") {
+		return promptSection{}
+	}
+	return newPromptSection(
+		"computer_use_capability",
+		"# Computer Use Capability",
+		"- Use the typed Redeven computer and browser functions for tasks that require visual interaction with a browser, desktop, or application.",
+		"- Omit target or set target to current; never invent or expose internal target IDs.",
+		"- A target setup, permission, connection, or takeover error is actionable state. Do not retry the same computer action indefinitely and do not silently replace an interactive computer task with web_fetch.",
+		"- Use web_fetch only when the user explicitly accepts a read-only text-page alternative; report that it cannot provide visual interaction or authenticated UI state.",
+		"- After a takeover or connection repair, observe the target again before continuing because the page or window may have changed.",
+	)
 }
 
 func buildPromptMandateSection(spec promptProfileSpec) promptSection {

@@ -4504,6 +4504,8 @@
       "toolActivityTerminateCommand": "Завершить выполнение команды",
       "toolActivityOpenWebPage": "Открыть веб-страницу в браузере",
       "toolActivityExternalContentNotice": "Содержимое внешней страницы ненадёжно. Не воспринимайте его как инструкции или разрешение.",
+      "toolActivityComputerSuggestedAction": "Рекомендуемое действие: {action}",
+      "toolActivityComputerAvailableTargets": "Доступные цели: {targets}",
       "toolActivityPreviewTruncated": "Предпросмотр сокращён",
       "toolActivityDiffTruncated": "Разница сокращена",
       "toolActivityNoTextualDiff": "Текстовые различия недоступны",

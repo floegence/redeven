@@ -8603,6 +8603,24 @@ webSearch: model.web_search,
   const errorDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'error' }>>) => (
     <section class="flower-activity-error-panel" aria-label="Failure reason">
       <div class="flower-activity-error-message">{block().error.message}</div>
+      <Show when={block().error.code || block().error.target_state || block().error.repair_action}>
+        <div class="flower-activity-error-recovery" role="status">
+          <Show when={block().error.code}>
+            <span class="flower-activity-error-chip">{block().error.code}</span>
+          </Show>
+          <Show when={block().error.target_state}>
+            <span class="flower-activity-error-state">{block().error.target_state}</span>
+          </Show>
+          <Show when={block().error.repair_action}>
+            <span class="flower-activity-error-repair">{copy().chat.toolActivityComputerSuggestedAction.replace('{action}', block().error.repair_action!)}</span>
+          </Show>
+        </div>
+      </Show>
+      <Show when={block().error.suggested_targets && block().error.suggested_targets!.length > 0}>
+        <div class="flower-activity-error-targets">
+          {copy().chat.toolActivityComputerAvailableTargets.replace('{targets}', block().error.suggested_targets!.join(', '))}
+        </div>
+      </Show>
     </section>
   );
 

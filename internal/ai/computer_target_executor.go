@@ -59,6 +59,11 @@ type playwrightTargetResponse struct {
 	} `json:"screenshot,omitempty"`
 }
 
+type playwrightTargetReady struct {
+	Type  string `json:"type"`
+	Error string `json:"error,omitempty"`
+}
+
 func NewPlaywrightTargetExecutor(nodeBinary, helperPath, profileDir string) *PlaywrightTargetExecutor {
 	if strings.TrimSpace(nodeBinary) == "" {
 		nodeBinary = "node"
@@ -188,6 +193,39 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 		return nil, err
 	}
 	client := &playwrightTargetClient{cmd: cmd, stdin: stdin, reader: bufio.NewReader(stdout)}
+	readyCh := make(chan []byte, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		line, readErr := client.reader.ReadBytes('\n')
+		if readErr != nil {
+			errCh <- readErr
+			return
+		}
+		readyCh <- bytes.TrimSpace(line)
+	}()
+	readyTimeout := e.Timeout
+	if readyTimeout <= 0 {
+		readyTimeout = 30 * time.Second
+	}
+	timer := time.NewTimer(readyTimeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		_ = cmd.Process.Kill()
+		return nil, ctx.Err()
+	case <-timer.C:
+		_ = cmd.Process.Kill()
+		return nil, context.DeadlineExceeded
+	case err := <-errCh:
+		_ = cmd.Process.Kill()
+		return nil, fmt.Errorf("browser helper readiness failed: %w", err)
+	case line := <-readyCh:
+		var ready playwrightTargetReady
+		if err := json.Unmarshal(line, &ready); err != nil || ready.Type != "ready" {
+			_ = cmd.Process.Kill()
+			return nil, errors.New("browser helper did not complete readiness handshake")
+		}
+	}
 	e.clients[targetID] = client
 	return client, nil
 }

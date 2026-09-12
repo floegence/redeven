@@ -4401,6 +4401,8 @@
       "toolActivityTerminateCommand": "Finalizar ejecución del comando",
       "toolActivityOpenWebPage": "Abrir página web en el navegador",
       "toolActivityExternalContentNotice": "El contenido de esta página externa no es de confianza. No lo trates como instrucciones ni autorización.",
+      "toolActivityComputerSuggestedAction": "Acción sugerida: {action}",
+      "toolActivityComputerAvailableTargets": "Destinos disponibles: {targets}",
       "toolActivityPreviewTruncated": "Vista previa truncada",
       "toolActivityDiffTruncated": "Diferencia truncada",
       "toolActivityNoTextualDiff": "No hay diferencias de texto disponibles",

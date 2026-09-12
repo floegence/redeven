@@ -5495,6 +5495,32 @@ html.dark .flower-component-shell {
   white-space: pre-wrap;
 }
 
+.flower-activity-error-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  color: color-mix(in srgb, var(--foreground) 68%, var(--muted-foreground) 32%);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.flower-activity-error-chip,
+.flower-activity-error-state {
+  border: 1px solid color-mix(in srgb, var(--destructive) 28%, transparent);
+  border-radius: 999px;
+  padding: 0.1rem 0.35rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.625rem;
+}
+
+.flower-activity-error-repair,
+.flower-activity-error-targets {
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+}
+
 .flower-activity-inline-row[data-flower-control-error='true'] .flower-activity-error-panel {
   border-left-color: color-mix(in srgb, var(--muted-foreground) 58%, transparent);
 }

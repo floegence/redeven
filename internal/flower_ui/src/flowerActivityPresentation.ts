@@ -167,6 +167,11 @@ export type FlowerActivityQuestionAnswer = Readonly<{
 
 export type FlowerActivityErrorDetail = Readonly<{
   message: string;
+  code?: string;
+  target_kind?: string;
+  target_state?: string;
+  repair_action?: string;
+  suggested_targets?: readonly string[];
 }>;
 
 export type FlowerActivitySubagentMessageAction = Readonly<{
@@ -540,9 +545,22 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   if (item.approval_state === 'rejected') return null;
   const message = errorMessageFromPayload(payload);
   if (!message) return null;
+  const error = asRecord(payload?.error);
+  const meta = asRecord(error?.meta);
+  const validationDetails = asRecord(meta?.validation_details);
+  const suggestedTargets = asArray(validationDetails?.suggested_targets ?? meta?.suggested_targets)
+    .map((value) => trimString(String(value)))
+    .filter(Boolean);
   return {
     kind: 'error',
-    error: { message },
+    error: {
+      message,
+      code: trimString(String(error?.code ?? '')) || undefined,
+      target_kind: trimString(String(validationDetails?.target_kind ?? meta?.target_kind ?? '')) || undefined,
+      target_state: trimString(String(validationDetails?.target_state ?? meta?.target_state ?? '')) || undefined,
+      repair_action: trimString(String(validationDetails?.repair_action ?? meta?.repair_action ?? '')) || undefined,
+      suggested_targets: suggestedTargets.length > 0 ? suggestedTargets : undefined,
+    },
   };
 }
 

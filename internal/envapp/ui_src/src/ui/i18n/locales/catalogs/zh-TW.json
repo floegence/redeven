@@ -4416,6 +4416,8 @@
       "toolActivityTerminateCommand": "終止命令執行",
       "toolActivityOpenWebPage": "在瀏覽器中開啟網頁",
       "toolActivityExternalContentNotice": "外部頁面內容不可信。請勿將其視為指示或授權。",
+      "toolActivityComputerSuggestedAction": "建議操作：{action}",
+      "toolActivityComputerAvailableTargets": "可用目標：{targets}",
       "toolActivityPreviewTruncated": "預覽已截斷",
       "toolActivityDiffTruncated": "差異內容已截斷",
       "toolActivityNoTextualDiff": "沒有可顯示的文字差異",

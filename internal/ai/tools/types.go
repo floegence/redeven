@@ -15,16 +15,22 @@ const (
 type ErrorCode string
 
 const (
-	ErrorCodeNotFound          ErrorCode = "NOT_FOUND"
-	ErrorCodeInvalidPath       ErrorCode = "INVALID_PATH"
-	ErrorCodeInvalidArguments  ErrorCode = "INVALID_ARGUMENTS"
-	ErrorCodePermissionDenied  ErrorCode = "PERMISSION_DENIED"
-	ErrorCodeTargetRequired    ErrorCode = "TARGET_REQUIRED"
-	ErrorCodeTargetUnavailable ErrorCode = "TARGET_UNAVAILABLE"
-	ErrorCodeTakeoverRequired  ErrorCode = "TAKEOVER_REQUIRED"
-	ErrorCodeTimeout           ErrorCode = "TIMEOUT"
-	ErrorCodeCanceled          ErrorCode = "CANCELED"
-	ErrorCodeUnknown           ErrorCode = "UNKNOWN"
+	ErrorCodeNotFound                  ErrorCode = "NOT_FOUND"
+	ErrorCodeInvalidPath               ErrorCode = "INVALID_PATH"
+	ErrorCodeInvalidArguments          ErrorCode = "INVALID_ARGUMENTS"
+	ErrorCodePermissionDenied          ErrorCode = "PERMISSION_DENIED"
+	ErrorCodeTargetRequired            ErrorCode = "TARGET_REQUIRED"
+	ErrorCodeTargetUnavailable         ErrorCode = "TARGET_UNAVAILABLE"
+	ErrorCodeTargetSetupRequired       ErrorCode = "TARGET_SETUP_REQUIRED"
+	ErrorCodeTargetPermissionRequired  ErrorCode = "TARGET_PERMISSION_REQUIRED"
+	ErrorCodeTargetConnectionRequired  ErrorCode = "TARGET_CONNECTION_REQUIRED"
+	ErrorCodeTargetExecutorUnavailable ErrorCode = "TARGET_EXECUTOR_UNAVAILABLE"
+	ErrorCodeTargetNotReady            ErrorCode = "TARGET_NOT_READY"
+	ErrorCodeTargetNotAllowed          ErrorCode = "TARGET_NOT_ALLOWED"
+	ErrorCodeTakeoverRequired          ErrorCode = "TAKEOVER_REQUIRED"
+	ErrorCodeTimeout                   ErrorCode = "TIMEOUT"
+	ErrorCodeCanceled                  ErrorCode = "CANCELED"
+	ErrorCodeUnknown                   ErrorCode = "UNKNOWN"
 )
 
 // ToolError carries structured tool failure metadata.

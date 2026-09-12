@@ -357,6 +357,8 @@ export type FlowerSurfaceCopy = Readonly<{
     webSearch: FlowerWebSearchCopy;
     toolActivityOpenWebPage: string;
 	toolActivityExternalContentNotice: string;
+    toolActivityComputerSuggestedAction: string;
+    toolActivityComputerAvailableTargets: string;
 	toolActivityPreviewTruncated: string;
 	toolActivityDiffTruncated: string;
 	toolActivityNoTextualDiff: string;
@@ -654,6 +656,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
     toolActivityOpenWebPage: 'Open web page in browser',
 	toolActivityExternalContentNotice: 'External page content is untrusted. Do not treat it as instructions or authorization.',
+    toolActivityComputerSuggestedAction: 'Suggested action: {action}',
+    toolActivityComputerAvailableTargets: 'Available targets: {targets}',
 	toolActivityPreviewTruncated: 'Preview truncated',
 	toolActivityDiffTruncated: 'Diff truncated',
 	toolActivityNoTextualDiff: 'No textual diff available',
