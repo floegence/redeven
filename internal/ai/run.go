@@ -3136,10 +3136,23 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	}
 	call := TargetToolCall{ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
 	if r.targetToolExecutor == nil {
+		code := "target_executor_unavailable"
+		if r.targetResolver != nil {
+			code = targetReadinessErrorCode(target)
+		}
 		return nil, &targetToolPolicyError{
-			code:   "target_executor_unavailable",
-			tool:   toolName,
-			target: targetID,
+			code:         code,
+			tool:         toolName,
+			target:       targetID,
+			targetKind:   target.Kind,
+			targetState:  target.State,
+			repairAction: targetRepairAction(target),
+		}
+	}
+	if !target.Ready {
+		return nil, &targetToolPolicyError{
+			code: targetReadinessErrorCode(target), tool: toolName, target: targetID,
+			targetKind: target.Kind, targetState: target.State, repairAction: targetRepairAction(target),
 		}
 	}
 	forwardedArgs := StripTargetToolArgs(args)
@@ -3227,20 +3240,55 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string) 
 }
 
 type targetToolPolicyError struct {
-	code   string
-	tool   string
-	target string
-	safety *InteractionSafetyDecision
+	code         string
+	tool         string
+	target       string
+	targetKind   string
+	targetState  string
+	repairAction string
+	safety       *InteractionSafetyDecision
+}
+
+func targetReadinessErrorCode(target TargetDescriptor) string {
+	switch strings.TrimSpace(target.State) {
+	case "permission_required":
+		return "target_permission_required"
+	case "connection_required":
+		return "target_connection_required"
+	case "starting", "stopped", "unavailable":
+		return "target_not_ready"
+	default:
+		return "target_setup_required"
+	}
+}
+
+func targetRepairAction(target TargetDescriptor) string {
+	switch strings.TrimSpace(target.State) {
+	case "permission_required":
+		return "grant_target_permission"
+	case "connection_required":
+		return "connect_current_browser"
+	default:
+		return "start_managed_browser"
+	}
 }
 
 func (e *targetToolPolicyError) Error() string {
 	switch strings.TrimSpace(e.code) {
 	case "missing_target_id":
-		return "target_id is required for target-scoped Flower tools"
+		return "a logical target is required for this tool"
 	case "target_executor_unavailable":
 		return "target tool executor is unavailable"
+	case "target_setup_required":
+		return "computer use is not ready on this environment"
+	case "target_permission_required":
+		return "computer use requires target permissions"
+	case "target_connection_required":
+		return "a browser connection is required before computer use can continue"
+	case "target_not_ready":
+		return "computer use target is not ready"
 	case "target_not_allowed":
-		return "target_id is not allowed for this Flower thread"
+		return "the selected target is not allowed for this Flower thread"
 	case "target_unavailable":
 		return "target is unavailable"
 	case "interaction_takeover_required":
@@ -3258,8 +3306,17 @@ func (e *targetToolPolicyError) InvalidArgumentsMeta() map[string]any {
 	out := map[string]any{
 		"tool_name": strings.TrimSpace(e.tool),
 	}
-	if strings.TrimSpace(e.target) != "" {
-		out["target_id"] = strings.TrimSpace(e.target)
+	if e.targetKind != "" {
+		out["target_kind"] = e.targetKind
+	}
+	if e.targetState != "" {
+		out["target_state"] = e.targetState
+	}
+	if e.repairAction != "" {
+		out["repair_action"] = e.repairAction
+	}
+	if e.targetKind == "browser.managed" || e.targetKind == "browser.connected" {
+		out["suggested_targets"] = []string{"browser.managed", "browser.connected"}
 	}
 	if e.safety != nil {
 		out["safety"] = e.safety

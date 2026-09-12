@@ -7,7 +7,7 @@ import (
 )
 
 func builtInComputerToolDefinitions() []ToolDef {
-	target := map[string]any{"target_id": map[string]any{"type": "string", "minLength": 1, "description": "Explicit target session to observe or control."}}
+	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Logical target alias. Omit to use the current target."}}
 	schema := func(properties map[string]any, required []string) json.RawMessage {
 		return toolSchemaRaw(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 	}
@@ -19,7 +19,7 @@ func builtInComputerToolDefinitions() []ToolDef {
 		for k, v := range properties {
 			out[k] = v
 		}
-		return schema(out, append([]string{"target_id"}, required...)), append([]string{"target_id"}, required...)
+		return schema(out, required), required
 	}
 	defs := []ToolDef{}
 	add := func(name, description string, properties map[string]any, required []string, mutating bool, capabilities []ToolCapabilityClass) {

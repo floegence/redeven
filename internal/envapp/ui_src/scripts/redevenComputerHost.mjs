@@ -10,6 +10,8 @@ let page = context.pages()[0] || await context.newPage();
 function response(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
 async function screenshot() { return { mime: 'image/png', data: (await page.screenshot({ type: 'png' })).toString('base64') }; }
 
+response({ type: 'ready', protocol_version: 1, capabilities: ['observe', 'interaction'], execution_location: 'linux_headless_browser' });
+
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of rl) {
   if (!line.trim()) continue;

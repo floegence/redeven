@@ -89,6 +89,19 @@ function loadReleaseArtifactHelpers() {
 
 const bundledRuntimeArtifact = resolveBundledRuntimeArtifact();
 const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
+const computerHostScript = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'scripts', 'redevenComputerHost.mjs');
+const computerHostNodeModules = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'node_modules');
+if (!fs.existsSync(computerHostScript)) {
+  throw new Error(`Computer host helper source is missing: ${computerHostScript}`);
+}
+const computerHostDependencyResources = fs.existsSync(path.join(computerHostNodeModules, 'playwright'))
+  ? [
+      { from: path.join(computerHostNodeModules, 'playwright'), to: 'computer/node_modules/playwright' },
+      ...(fs.existsSync(path.join(computerHostNodeModules, 'playwright-core'))
+        ? [{ from: path.join(computerHostNodeModules, 'playwright-core'), to: 'computer/node_modules/playwright-core' }]
+        : []),
+    ]
+  : [];
 const bundledReDevPluginResources = resolveTargetGoos() !== 'windows'
   ? [
       'redevplugin-runtime',
@@ -192,6 +205,11 @@ export default {
       from: path.join(desktopDir, '.bundle', 'windows-ssh', 'redeven-ssh-askpass.exe'),
       to: 'native/redeven-ssh-askpass.exe',
     }] : []),
+    {
+      from: computerHostScript,
+      to: 'computer/redevenComputerHost.mjs',
+    },
+    ...computerHostDependencyResources,
     {
       from: path.join(repoRoot, 'LICENSE'),
       to: 'licenses/LICENSE',

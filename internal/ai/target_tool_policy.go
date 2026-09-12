@@ -26,6 +26,7 @@ type TargetDescriptor struct {
 	Kind            string   `json:"kind"`
 	DisplayName     string   `json:"display_name"`
 	Locality        string   `json:"locality"`
+	State           string   `json:"state,omitempty"`
 	Capabilities    []string `json:"capabilities,omitempty"`
 	Ready           bool     `json:"ready"`
 	PermissionState string   `json:"permission_state,omitempty"`
@@ -204,7 +205,7 @@ func StripTargetToolArgs(args map[string]any) map[string]any {
 	out := make(map[string]any, len(args))
 	for key, value := range args {
 		switch strings.TrimSpace(key) {
-		case "target_id", "targetId":
+		case "target_id", "targetId", "target":
 			continue
 		default:
 			out[key] = value
@@ -214,7 +215,7 @@ func StripTargetToolArgs(args map[string]any) map[string]any {
 }
 
 func targetIDFromToolArgs(args map[string]any) string {
-	for _, key := range []string{"target_id", "targetId"} {
+	for _, key := range []string{"target", "target_id", "targetId"} {
 		if raw, ok := args[key]; ok {
 			if value := strings.TrimSpace(anyToString(raw)); value != "" {
 				return value

@@ -305,6 +305,9 @@ func activityToolErrorPayload(toolErr *aitools.ToolError) map[string]any {
 		"message":   strings.TrimSpace(toolErr.Message),
 		"retryable": toolErr.Retryable,
 	}
+	if len(toolErr.Meta) > 0 {
+		out["meta"] = toolErr.Meta
+	}
 	return out
 }
 
@@ -340,6 +343,9 @@ func activityToolErrorRecordFromValue(value any) (map[string]any, bool) {
 		"code":      code,
 		"message":   message,
 		"retryable": readBoolField(record, "retryable"),
+	}
+	if meta, ok := record["meta"].(map[string]any); ok && len(meta) > 0 {
+		out["meta"] = meta
 	}
 	return out, true
 }

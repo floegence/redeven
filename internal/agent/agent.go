@@ -56,49 +56,77 @@ const (
 )
 
 func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolver) {
-	// The helper is bundled by desktop/env packaging. During source runs the
-	// repository path remains a useful fallback, while deployments can provide
-	// an explicit immutable path through the environment.
-	nativeCandidates := []string{}
-	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH")); configured != "" {
-		nativeCandidates = append(nativeCandidates, configured)
+	// The managed browser is the default target. Resource paths are derived
+	// from the executable or explicit configuration; never from the process
+	// working directory, which is not stable for packaged or remote runtimes.
+	helper := firstRegularFile(computerHelperCandidates(os.Args[0], stateDir))
+	registry := ai.NewTargetRegistry()
+	target := ai.TargetDescriptor{
+		ID: "browser-main", Kind: "browser.managed", DisplayName: "Redeven Managed Browser",
+		Locality: "local", Capabilities: []string{"observe", "interaction"},
+		State: "setup_required", PermissionState: "helper_missing", Ready: false,
 	}
-	nativeCandidates = append(nativeCandidates, filepath.Join(filepath.Dir(os.Args[0]), "redeven-computer-host"))
-	for _, candidate := range nativeCandidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			registry := ai.NewTargetRegistry()
-			if err := registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, Ready: true}); err == nil {
-				return ai.NewNativeDesktopTargetExecutor(candidate), registry
-			}
-		}
+	if helper != "" {
+		target.State = "ready"
+		target.PermissionState = "granted"
+		target.Ready = true
 	}
-	candidates := []string{}
-	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_HOST_HELPER_PATH")); configured != "" {
-		candidates = append(candidates, configured)
-	}
-	candidates = append(candidates,
-		filepath.Join(filepath.Dir(os.Args[0]), "redevenComputerHost.mjs"),
-		filepath.Join("internal", "envapp", "ui_src", "scripts", "redevenComputerHost.mjs"),
-	)
-	var helper string
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			helper = candidate
-			break
-		}
+	if err := registry.Register(target); err != nil {
+		return nil, registry
 	}
 	if helper == "" {
-		return nil, nil
-	}
-	registry := ai.NewTargetRegistry()
-	if err := registry.Register(ai.TargetDescriptor{
-		ID: "browser-main", Kind: "browser.managed", DisplayName: "Redeven Managed Browser",
-		Locality: "local", Capabilities: []string{"observe", "interaction"}, Ready: true,
-	}); err != nil {
-		return nil, nil
+		if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" {
+			desktop := ai.TargetDescriptor{
+				ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop",
+				Locality: "local", Capabilities: []string{"observe", "interaction"},
+				State: "ready", PermissionState: "unknown", Ready: true,
+			}
+			_ = registry.Register(desktop)
+			_ = registry.SetCurrent("desktop-main")
+			return ai.NewNativeDesktopTargetExecutor(nativeHelper), registry
+		}
+		return nil, registry
 	}
 	executor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
 	return executor, registry
+}
+
+func nativeComputerHelperCandidates(executablePath string) []string {
+	candidates := make([]string, 0, 3)
+	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH")); configured != "" {
+		candidates = append(candidates, configured)
+	}
+	executableDir := filepath.Dir(executablePath)
+	candidates = append(candidates,
+		filepath.Join(executableDir, "redeven-computer-host"),
+		filepath.Join(executableDir, "resources", "computer", "redeven-computer-host"),
+	)
+	return candidates
+}
+
+func computerHelperCandidates(executablePath, stateDir string) []string {
+	candidates := make([]string, 0, 8)
+	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_HOST_HELPER_PATH")); configured != "" {
+		candidates = append(candidates, configured)
+	}
+	executableDir := filepath.Dir(executablePath)
+	candidates = append(candidates,
+		filepath.Join(executableDir, "resources", "computer", "redevenComputerHost.mjs"),
+		filepath.Join(executableDir, "..", "Resources", "computer", "redevenComputerHost.mjs"),
+		filepath.Join(executableDir, "redevenComputerHost.mjs"),
+		filepath.Join(stateDir, "computer", "redevenComputerHost.mjs"),
+	)
+	return candidates
+}
+
+func firstRegularFile(candidates []string) string {
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // Floe app ids.

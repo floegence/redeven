@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -65,5 +66,41 @@ func TestComputerUseUsesCurrentTargetWhenModelOmitsTarget(t *testing.T) {
 	}
 	if payload.Payload.(map[string]any)["target_name"] != "Managed Browser" {
 		t.Fatalf("payload = %#v", payload.Payload)
+	}
+}
+
+func TestComputerUseSchemasUseLogicalCurrentTarget(t *testing.T) {
+	for _, def := range builtInComputerToolDefinitions() {
+		var schema map[string]any
+		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+			t.Fatalf("%s schema: %v", def.Name, err)
+		}
+		properties, ok := schema["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s properties missing", def.Name)
+		}
+		if _, ok := properties["target"]; !ok {
+			t.Fatalf("%s target alias missing", def.Name)
+		}
+		if _, ok := properties["target_id"]; ok {
+			t.Fatalf("%s exposes internal target_id", def.Name)
+		}
+	}
+}
+
+func TestTargetReadinessErrorMetadata(t *testing.T) {
+	target := TargetDescriptor{ID: "browser-main", Kind: "browser.managed", State: "setup_required"}
+	if got := targetReadinessErrorCode(target); got != "target_setup_required" {
+		t.Fatalf("readiness code = %q", got)
+	}
+	if got := targetRepairAction(target); got != "start_managed_browser" {
+		t.Fatalf("repair action = %q", got)
+	}
+	permission := TargetDescriptor{State: "permission_required"}
+	if got := targetReadinessErrorCode(permission); got != "target_permission_required" {
+		t.Fatalf("permission code = %q", got)
+	}
+	if got := targetRepairAction(permission); got != "grant_target_permission" {
+		t.Fatalf("permission repair = %q", got)
 	}
 }

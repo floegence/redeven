@@ -136,6 +136,13 @@ func TestBuildLayeredSystemPrompt_WebResearchDoesNotLeakThroughStaticCache(t *te
 	assertPromptNotContains(t, searchOnly, "web_fetch")
 }
 
+func TestBuildLayeredSystemPrompt_ComputerUseDoesNotFallbackSilently(t *testing.T) {
+	prompt := buildPromptForToolSetTest(t, FlowerPermissionApprovalRequired, []ToolDef{{Name: "computer.screenshot"}, {Name: "computer.click"}, {Name: "web_fetch"}})
+	assertPromptContains(t, prompt, "Use the typed Redeven computer and browser functions")
+	assertPromptContains(t, prompt, "Do not retry the same computer action indefinitely")
+	assertPromptContains(t, prompt, "web_fetch only when the user explicitly accepts a read-only text-page alternative")
+}
+
 func TestBuildLayeredSystemPrompt_RemovesOKFFirstDomainBackgroundRule(t *testing.T) {
 	t.Parallel()
 

@@ -54,11 +54,19 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 		case "missing_target_id":
 			errorCode = ErrorCodeTargetRequired
 		case "target_executor_unavailable":
-			errorCode = ErrorCodeTargetUnavailable
+			errorCode = ErrorCodeTargetExecutorUnavailable
 		case "target_not_allowed":
-			errorCode = ErrorCodePermissionDenied
+			errorCode = ErrorCodeTargetNotAllowed
 		case "target_unavailable":
 			errorCode = ErrorCodeTargetUnavailable
+		case "target_setup_required":
+			errorCode = ErrorCodeTargetSetupRequired
+		case "target_permission_required":
+			errorCode = ErrorCodeTargetPermissionRequired
+		case "target_connection_required":
+			errorCode = ErrorCodeTargetConnectionRequired
+		case "target_not_ready":
+			errorCode = ErrorCodeTargetNotReady
 		case "interaction_takeover_required":
 			errorCode = ErrorCodeTakeoverRequired
 		}

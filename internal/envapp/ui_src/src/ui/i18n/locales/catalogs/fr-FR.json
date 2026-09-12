@@ -4401,6 +4401,8 @@
       "toolActivityTerminateCommand": "Arrêter l’exécution de la commande",
       "toolActivityOpenWebPage": "Ouvrir la page web dans le navigateur",
       "toolActivityExternalContentNotice": "Le contenu de cette page externe n’est pas fiable. Ne le considérez pas comme une instruction ou une autorisation.",
+      "toolActivityComputerSuggestedAction": "Action suggérée : {action}",
+      "toolActivityComputerAvailableTargets": "Cibles disponibles : {targets}",
       "toolActivityPreviewTruncated": "Aperçu tronqué",
       "toolActivityDiffTruncated": "Diff tronqué",
       "toolActivityNoTextualDiff": "Aucun diff textuel disponible",

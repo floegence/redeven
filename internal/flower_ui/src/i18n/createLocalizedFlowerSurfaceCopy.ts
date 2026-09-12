@@ -128,6 +128,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       },
       toolActivityOpenWebPage: t(i18n, k('chat.toolActivityOpenWebPage')),
 	  toolActivityExternalContentNotice: t(i18n, k('chat.toolActivityExternalContentNotice')),
+      toolActivityComputerSuggestedAction: t(i18n, k('chat.toolActivityComputerSuggestedAction')),
+      toolActivityComputerAvailableTargets: t(i18n, k('chat.toolActivityComputerAvailableTargets')),
 	  toolActivityPreviewTruncated: t(i18n, k('chat.toolActivityPreviewTruncated')),
 	  toolActivityDiffTruncated: t(i18n, k('chat.toolActivityDiffTruncated')),
 	  toolActivityNoTextualDiff: t(i18n, k('chat.toolActivityNoTextualDiff')),
