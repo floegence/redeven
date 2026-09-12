@@ -159,6 +159,8 @@
       "toolActivityTerminateCommand": "Encerrar execução do comando",
       "toolActivityOpenWebPage": "Abrir página web no navegador",
       "toolActivityExternalContentNotice": "O conteúdo desta página externa não é confiável. Não o trate como instrução nem autorização.",
+      "toolActivityComputerSuggestedAction": "Ação sugerida: {action}",
+      "toolActivityComputerAvailableTargets": "Alvos disponíveis: {targets}",
       "toolActivityPreviewTruncated": "Prévia truncada",
       "toolActivityDiffTruncated": "Diff truncado",
       "toolActivityNoTextualDiff": "Nenhuma diferença textual disponível",
