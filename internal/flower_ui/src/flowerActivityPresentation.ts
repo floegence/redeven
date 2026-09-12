@@ -551,16 +551,21 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
   const suggestedTargets = asArray(validationDetails?.suggested_targets ?? meta?.suggested_targets)
     .map((value) => trimString(String(value)))
     .filter(Boolean);
+  const code = trimString(String(error?.code ?? ''));
+  const targetKind = trimString(String(validationDetails?.target_kind ?? meta?.target_kind ?? ''));
+  const targetState = trimString(String(validationDetails?.target_state ?? meta?.target_state ?? ''));
+  const repairAction = trimString(String(validationDetails?.repair_action ?? meta?.repair_action ?? ''));
+  const detail: FlowerActivityErrorDetail = { message };
+  if (targetKind) detail.target_kind = targetKind;
+  if (targetState) detail.target_state = targetState;
+  if (repairAction) detail.repair_action = repairAction;
+  if (suggestedTargets.length > 0) detail.suggested_targets = suggestedTargets;
+  // Keep legacy error projections stable; expose the machine code alongside
+  // the new target recovery metadata where it is actionable to the user.
+  if (code && (targetKind || targetState || repairAction || suggestedTargets.length > 0)) detail.code = code;
   return {
     kind: 'error',
-    error: {
-      message,
-      code: trimString(String(error?.code ?? '')) || undefined,
-      target_kind: trimString(String(validationDetails?.target_kind ?? meta?.target_kind ?? '')) || undefined,
-      target_state: trimString(String(validationDetails?.target_state ?? meta?.target_state ?? '')) || undefined,
-      repair_action: trimString(String(validationDetails?.repair_action ?? meta?.repair_action ?? '')) || undefined,
-      suggested_targets: suggestedTargets.length > 0 ? suggestedTargets : undefined,
-    },
+    error: detail,
   };
 }
 
