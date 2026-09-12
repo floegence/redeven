@@ -5115,7 +5115,7 @@ html.dark .flower-component-shell {
   border: 1px solid var(--border-subtle);
   border-radius: 0.9rem;
   background: color-mix(in srgb, var(--surface) 96%, transparent);
-  box-shadow: 0 1.25rem 3rem rgb(0 0 0 / 22%), 0 0.25rem 0.75rem rgb(0 0 0 / 12%);
+  box-shadow: 0 1.25rem 3rem var(--redeven-shadow-color), 0 0.25rem 0.75rem var(--redeven-shadow-color);
   backdrop-filter: blur(1.1rem);
 }
 
@@ -5142,9 +5142,9 @@ html.dark .flower-component-shell {
 .flower-computer-stage-status[data-status='pending'] { color: var(--primary); }
 .flower-computer-stage-close { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 0.4rem; padding: 0.25rem; color: var(--text-muted); background: transparent; cursor: pointer; }
 .flower-computer-stage-close:hover { color: var(--text-strong); background: var(--surface-muted); }
-.flower-computer-stage-frame-wrap { display: flex; min-height: 11rem; align-items: center; justify-content: center; background: #11151b; }
+.flower-computer-stage-frame-wrap { display: flex; min-height: 11rem; align-items: center; justify-content: center; background: var(--surface-muted); }
 .flower-computer-stage-frame { display: block; width: 100%; max-height: min(52vh, 24rem); object-fit: contain; }
-.flower-computer-stage-no-frame { padding: 3rem 1rem; color: rgb(255 255 255 / 70%); font-size: 0.8rem; text-align: center; }
+.flower-computer-stage-no-frame { padding: 3rem 1rem; color: var(--text-muted); font-size: 0.8rem; text-align: center; }
 .flower-computer-stage-meta { flex: 0 0 auto; overflow: hidden; color: var(--text-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 42rem) {
@@ -5208,7 +5208,7 @@ html.dark .flower-component-shell {
   height: 0.95rem;
   border-radius: 50%;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+  box-shadow: 0 1px 2px var(--redeven-shadow-color);
   transition: transform 120ms ease;
 }
 
