@@ -102,43 +102,43 @@ func cleanStringList(values []string) []string {
 var builtinDefinitions = map[string]Definition{
 	"computer.screenshot": {
 		Name: "computer.screenshot", Mutating: false, RequiresApproval: false,
-		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("screenshot"), labelFields("target_id"), resultPayloadFields("target_id", "execution_location", "before_frame", "after_frame", "screenshot"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("screenshot"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "before_frame", "after_frame", "screenshot"), chipFields("target_name", "execution_location")),
 	},
 	"computer.click": {
 		Name: "computer.click", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("click"), labelFields("target_id"), callPayloadFields("x", "y"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("click"), labelFields("target_name", "target_id"), callPayloadFields("x", "y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"computer.double_click": {
 		Name: "computer.double_click", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("double_click"), labelFields("target_id"), callPayloadFields("x", "y"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("double_click"), labelFields("target_name", "target_id"), callPayloadFields("x", "y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"computer.type": {
 		Name: "computer.type", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("type"), labelFields("target_id"), callPayloadFields("text"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location"), redaction(ToolRedactionSpec{ArgFields: []string{"text"}})),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("type"), labelFields("target_name", "target_id"), callPayloadFields("text"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location"), redaction(ToolRedactionSpec{ArgFields: []string{"text"}})),
 	},
 	"computer.key": {
 		Name: "computer.key", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("key"), labelFields("target_id"), callPayloadFields("key"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("key"), labelFields("target_name", "target_id"), callPayloadFields("key"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"computer.scroll": {
 		Name: "computer.scroll", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("scroll"), labelFields("target_id"), callPayloadFields("delta_x", "delta_y"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("scroll"), labelFields("target_name", "target_id"), callPayloadFields("delta_x", "delta_y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"computer.wait": {
 		Name: "computer.wait", Mutating: false, RequiresApproval: false,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "readonly", "computer", "computer", "args", "result"), operation("wait"), labelFields("target_id"), callPayloadFields("milliseconds"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "readonly", "computer", "computer", "args", "result"), operation("wait"), labelFields("target_name", "target_id"), callPayloadFields("milliseconds"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"browser.navigate": {
 		Name: "browser.navigate", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("navigate"), labelFields("target_id", "url"), callPayloadFields("url"), resultPayloadFields("target_id", "execution_location", "url", "after_frame"), chipFields("target_id", "execution_location"), redaction(ToolRedactionSpec{ArgFields: []string{"url"}})),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("navigate"), labelFields("target_name", "target_id", "url"), callPayloadFields("url"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "url", "after_frame"), chipFields("target_name", "execution_location"), redaction(ToolRedactionSpec{ArgFields: []string{"url"}})),
 	},
 	"browser.back": {
 		Name: "browser.back", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("back"), labelFields("target_id"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("back"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"browser.reload": {
 		Name: "browser.reload", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("reload"), labelFields("target_id"), resultPayloadFields("target_id", "execution_location", "after_frame"), chipFields("target_id", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("reload"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"attachment.read": {
 		Name:             "attachment.read",

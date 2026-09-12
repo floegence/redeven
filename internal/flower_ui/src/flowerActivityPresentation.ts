@@ -236,6 +236,14 @@ export type FlowerActivityDetailBlock =
     items: readonly FlowerActivityTodoItem[];
   }>
   | Readonly<{
+    kind: 'computer';
+    target: string;
+    action: string;
+    location: string;
+    frame?: string;
+    safety?: string;
+  }>
+  | Readonly<{
     kind: 'file_read';
     action: FlowerActivityFileAction;
     content: string;
@@ -1436,6 +1444,24 @@ function presentationForStructured(item: FlowerActivityItem): FlowerActivityPres
   };
 }
 
+function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresentation {
+  const payload = asRecord(item.payload);
+  const target = payloadValue(payload, 'target_name', 'target_id') || trimString(item.tool_name);
+  const action = payloadValue(payload, 'action_summary', 'operation') || defaultLabelForItem(item);
+  const location = payloadValue(payload, 'execution_location');
+  const frame = payloadValue(payload, 'after_frame', 'screenshot');
+  const safetyRecord = asRecord(payload.safety);
+  const safety = payloadValue(safetyRecord, 'level', 'reason_codes');
+  const title: FlowerActivityTitle = { kind: 'plain', text: action };
+  return {
+    label: action,
+    title,
+    meta: metaWithError(item, metaForItem(item)),
+    detailLines: [],
+    detailBlocks: [{ kind: 'computer', target, action, location, ...(frame ? { frame } : {}), ...(safety ? { safety } : {}) }],
+  };
+}
+
 const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerActivityRendererHandler>> = {
   structured: (item) => presentationForStructured(item),
   terminal: (item, context) => presentationForTerminal(item, context.copy),
@@ -1447,8 +1473,8 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   question: (item) => presentationForQuestion(item),
   subagent: (item, context) => presentationForSubagents(item, context.copy),
   subagent_operation: (item, context) => presentationForSubagents(item, context.copy),
-  computer: (item) => presentationForStructured(item),
-  browser: (item) => presentationForStructured(item),
+  computer: (item) => presentationForComputer(item),
+  browser: (item) => presentationForComputer(item),
 };
 
 export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {

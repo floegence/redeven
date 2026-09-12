@@ -57,6 +57,10 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 			errorCode = ErrorCodeTargetUnavailable
 		case "target_not_allowed":
 			errorCode = ErrorCodePermissionDenied
+		case "target_unavailable":
+			errorCode = ErrorCodeTargetUnavailable
+		case "interaction_takeover_required":
+			errorCode = ErrorCodeTakeoverRequired
 		}
 		out := &ToolError{
 			Code:      errorCode,

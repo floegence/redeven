@@ -7985,6 +7985,24 @@ webSearch: model.web_search,
     </div>
   );
 
+  const computerBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'computer' }>>) => (
+    <div class="flower-activity-computer-block" data-computer-target={block().target}>
+      <div class="flower-activity-computer-context">{block().target} · {block().action}</div>
+      <Show when={block().location || block().safety}>
+        <div class="flower-activity-computer-meta">{[block().location, block().safety].filter(Boolean).join(' · ')}</div>
+      </Show>
+      <Show when={block().frame}>
+        {(frame) => (
+          <Show when={frame().startsWith('http://') || frame().startsWith('https://') || frame().startsWith('/')}
+            fallback={<div class="flower-activity-inline-detail-line"><span class="flower-activity-inline-detail-key">Frame</span><span class="flower-activity-inline-detail-value">Available in live view</span></div>}
+          >
+            <img class="flower-activity-computer-frame" src={attachmentPreviewURL(frame())} alt={block().target} loading="lazy" />
+          </Show>
+        )}
+      </Show>
+    </div>
+  );
+
   const normalizeTerminalSnapshotStatus = (raw: unknown): FlowerActivityStatus | '' => {
     const value = String(raw ?? '').trim().toLowerCase();
     if (value === 'success' || value === 'succeeded' || value === 'complete' || value === 'completed') return 'success';
@@ -8644,6 +8662,7 @@ webSearch: model.web_search,
     return <Switch>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
       <Match when={detailProps.block.kind === 'structured_rows'}>{structuredRowsBlock(blockOfKind('structured_rows'))}</Match>
+      <Match when={detailProps.block.kind === 'computer'}>{computerBlock(blockOfKind('computer'))}</Match>
       <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
       <Match when={detailProps.block.kind === 'web_search'}>{webSearchBlock(blockOfKind('web_search'))}</Match>
       <Match when={detailProps.block.kind === 'web_fetch'}>{webFetchBlock(blockOfKind('web_fetch'))}</Match>

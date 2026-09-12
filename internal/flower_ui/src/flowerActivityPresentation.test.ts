@@ -74,6 +74,24 @@ function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): Flower
 }
 
 describe('presentFlowerActivityItem', () => {
+  it('presents computer actions with target, action, location, and frame metadata', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'computer.click',
+      renderer: 'computer',
+      payload: {
+        target_name: 'Redeven Managed Browser',
+        action_summary: 'clicked the sign in button',
+        execution_location: 'linux_headless_browser',
+        after_frame: 'https://example.test/frame.png',
+        safety: { level: 'routine' },
+      },
+    }));
+    expect(presentation.label).toBe('clicked the sign in button');
+    expect(presentation.detailBlocks).toEqual([
+      expect.objectContaining({ kind: 'computer', target: 'Redeven Managed Browser', frame: 'https://example.test/frame.png' }),
+    ]);
+  });
+
   it('shows actual terminal target and execution location without guessing from the command', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',

@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 )
 
@@ -15,6 +16,90 @@ type ToolTargetPolicy struct {
 	Mode             string   `json:"mode"`
 	DefaultTargetID  string   `json:"default_target_id,omitempty"`
 	AllowedTargetIDs []string `json:"allowed_target_ids,omitempty"`
+}
+
+// TargetDescriptor is the user-facing identity and capability snapshot for a
+// computer-use target. The executor owns the actual target session; the
+// registry only resolves logical aliases and prevents cross-target routing.
+type TargetDescriptor struct {
+	ID              string   `json:"id"`
+	Kind            string   `json:"kind"`
+	DisplayName     string   `json:"display_name"`
+	Locality        string   `json:"locality"`
+	Capabilities    []string `json:"capabilities,omitempty"`
+	Ready           bool     `json:"ready"`
+	PermissionState string   `json:"permission_state,omitempty"`
+	CurrentURL      string   `json:"current_url,omitempty"`
+	AppBundleID     string   `json:"app_bundle_id,omitempty"`
+}
+
+// TargetResolver maps the model-safe "current" alias to an executor target.
+// It is deliberately separate from TargetToolExecutor so target selection is
+// observable and testable without starting a browser or desktop helper.
+type TargetResolver interface {
+	ResolveTarget(ctx context.Context, alias string) (TargetDescriptor, error)
+}
+
+// InteractionSafetyDecision is the policy result immediately before a target
+// action is executed. A safety gate may request user takeover, but it can
+// never authorize an action that the existing permission policy rejected.
+type InteractionSafetyDecision struct {
+	ActionID          string   `json:"action_id"`
+	Level             string   `json:"level"`
+	ReasonCodes       []string `json:"reason_codes,omitempty"`
+	Confidence        float64  `json:"confidence,omitempty"`
+	SafeToCapture     bool     `json:"safe_to_capture"`
+	SafeToSendToModel bool     `json:"safe_to_send_to_model"`
+	ConfirmationScope string   `json:"confirmation_scope,omitempty"`
+}
+
+// InteractionSafetyGate is called for every computer/browser action. The
+// default implementation is conservative for secrets and external side
+// effects while allowing ordinary observation and navigation.
+type InteractionSafetyGate interface {
+	AssessInteraction(ctx context.Context, call TargetToolCall, target TargetDescriptor) (InteractionSafetyDecision, error)
+}
+
+var ErrInteractionTakeoverRequired = errors.New("interaction takeover required")
+
+type defaultInteractionSafetyGate struct{}
+
+func (defaultInteractionSafetyGate) AssessInteraction(_ context.Context, call TargetToolCall, target TargetDescriptor) (InteractionSafetyDecision, error) {
+	decision := InteractionSafetyDecision{
+		ActionID:          strings.TrimSpace(call.ToolCallID),
+		Level:             "routine",
+		Confidence:        1,
+		SafeToCapture:     true,
+		SafeToSendToModel: true,
+	}
+	if !target.Ready && strings.TrimSpace(target.ID) != "" {
+		decision.Level = "block"
+		decision.ReasonCodes = []string{"target_unavailable"}
+		return decision, errors.New("target is unavailable")
+	}
+	pageSignal := strings.ToLower(strings.TrimSpace(target.CurrentURL))
+	if call.ToolName != "computer.screenshot" && call.ToolName != "computer.wait" &&
+		(strings.Contains(pageSignal, "login") || strings.Contains(pageSignal, "signin") || strings.Contains(pageSignal, "captcha") || strings.Contains(pageSignal, "challenge")) {
+		decision.Level = "takeover"
+		decision.ReasonCodes = []string{"login_or_captcha"}
+		decision.SafeToCapture = false
+		decision.SafeToSendToModel = false
+		return decision, ErrInteractionTakeoverRequired
+	}
+	if call.ToolName == "computer.type" {
+		var args map[string]any
+		if json.Unmarshal(call.Arguments, &args) == nil {
+			text := strings.ToLower(strings.TrimSpace(anyToString(args["text"])))
+			if strings.Contains(text, "password") || strings.Contains(text, "one-time code") {
+				decision.Level = "takeover"
+				decision.ReasonCodes = []string{"secret_input"}
+				decision.SafeToCapture = false
+				decision.SafeToSendToModel = false
+				return decision, ErrInteractionTakeoverRequired
+			}
+		}
+	}
+	return decision, nil
 }
 
 func normalizeToolTargetPolicy(in ToolTargetPolicy) ToolTargetPolicy {
@@ -62,10 +147,13 @@ type TargetToolCall struct {
 }
 
 type TargetToolResult struct {
-	TargetID          string                 `json:"target_id"`
-	ExecutionLocation string                 `json:"execution_location,omitempty"`
-	Result            any                    `json:"result,omitempty"`
-	Attachments       []TargetToolAttachment `json:"attachments,omitempty"`
+	TargetID          string                     `json:"target_id"`
+	TargetName        string                     `json:"target_name,omitempty"`
+	ExecutionLocation string                     `json:"execution_location,omitempty"`
+	ActionSummary     string                     `json:"action_summary,omitempty"`
+	Safety            *InteractionSafetyDecision `json:"safety,omitempty"`
+	Result            any                        `json:"result,omitempty"`
+	Attachments       []TargetToolAttachment     `json:"attachments,omitempty"`
 }
 
 type TargetToolAttachment struct {

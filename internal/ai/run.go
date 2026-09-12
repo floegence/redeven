@@ -82,6 +82,8 @@ type runOptions struct {
 	ToolTargetPolicy            ToolTargetPolicy
 	CanonicalReferenceAuthority *flowerCanonicalReferenceTargetAuthority
 	TargetToolExecutor          TargetToolExecutor
+	TargetResolver              TargetResolver
+	InteractionSafetyGate       InteractionSafetyGate
 
 	LiveMetrics *flowerLiveMetrics
 }
@@ -194,6 +196,8 @@ type run struct {
 	toolTargetPolicy              ToolTargetPolicy
 	canonicalReferenceAuthority   *flowerCanonicalReferenceTargetAuthority
 	targetToolExecutor            TargetToolExecutor
+	targetResolver                TargetResolver
+	interactionSafetyGate         InteractionSafetyGate
 
 	skillManager    *skillManager
 	subagentRuntime subagentRuntime
@@ -342,6 +346,8 @@ func newRun(opts runOptions) *run {
 		toolTargetPolicy:            normalizeToolTargetPolicy(opts.ToolTargetPolicy),
 		canonicalReferenceAuthority: cloneFlowerCanonicalReferenceTargetAuthority(opts.CanonicalReferenceAuthority),
 		targetToolExecutor:          opts.TargetToolExecutor,
+		targetResolver:              opts.TargetResolver,
+		interactionSafetyGate:       opts.InteractionSafetyGate,
 		skillManager:                opts.SkillManager,
 		noUserInteraction:           opts.NoUserInteraction,
 		allowSubagentDelegate: func() bool {
@@ -3100,10 +3106,10 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
 	targetID := targetIDFromToolArgs(args)
 	if strings.TrimSpace(targetID) == "" {
-		if isComputerUseTool(toolName) {
-			return nil, &targetToolPolicyError{code: "missing_target_id", tool: toolName}
-		}
 		targetID = strings.TrimSpace(policy.DefaultTargetID)
+		if isComputerUseTool(toolName) && targetID == "" {
+			targetID = "current"
+		}
 	}
 	if strings.TrimSpace(targetID) == "" {
 		return nil, &targetToolPolicyError{
@@ -3112,13 +3118,23 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			target: "",
 		}
 	}
-	if !targetAllowedByPolicy(policy, targetID) {
-		return nil, &targetToolPolicyError{
-			code:   "target_not_allowed",
-			tool:   toolName,
-			target: targetID,
+	var target TargetDescriptor
+	if r.targetResolver != nil {
+		resolved, resolveErr := r.targetResolver.ResolveTarget(ctx, targetID)
+		if resolveErr != nil {
+			return nil, &targetToolPolicyError{code: "target_unavailable", tool: toolName, target: targetID}
 		}
+		target = resolved
+		targetID = strings.TrimSpace(target.ID)
 	}
+	if !targetAllowedByPolicy(policy, targetID) {
+		return nil, &targetToolPolicyError{code: "target_not_allowed", tool: toolName, target: targetID}
+	}
+	gate := r.interactionSafetyGate
+	if gate == nil {
+		gate = defaultInteractionSafetyGate{}
+	}
+	call := TargetToolCall{ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
 	if r.targetToolExecutor == nil {
 		return nil, &targetToolPolicyError{
 			code:   "target_executor_unavailable",
@@ -3131,15 +3147,24 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if err != nil {
 		return nil, errors.New("invalid args")
 	}
-	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, TargetToolCall{
-		ToolCallID:           strings.TrimSpace(toolID),
-		TargetID:             targetID,
-		ToolName:             strings.TrimSpace(toolName),
-		Arguments:            rawArgs,
-		RequiredCapabilities: requiredTargetCapabilities(toolName),
-	})
+	call.Arguments = rawArgs
+	decision, safetyErr := gate.AssessInteraction(ctx, call, target)
+	if safetyErr != nil {
+		if errors.Is(safetyErr, ErrInteractionTakeoverRequired) {
+			return nil, &targetToolPolicyError{code: "interaction_takeover_required", tool: toolName, target: targetID, safety: &decision}
+		}
+		return nil, safetyErr
+	}
+	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, call)
 	if err != nil {
 		return nil, err
+	}
+	if decision.ActionID == "" {
+		decision.ActionID = strings.TrimSpace(toolID)
+	}
+	result.Safety = &decision
+	if result.TargetName == "" {
+		result.TargetName = target.DisplayName
 	}
 	attachments := make([]ToolAttachment, 0, len(result.Attachments))
 	for _, attachment := range result.Attachments {
@@ -3168,6 +3193,15 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string) 
 		if strings.TrimSpace(anyToString(out["execution_location"])) == "" && executionLocation != "" {
 			out["execution_location"] = executionLocation
 		}
+		if result.TargetName != "" {
+			out["target_name"] = result.TargetName
+		}
+		if result.ActionSummary != "" {
+			out["action_summary"] = result.ActionSummary
+		}
+		if result.Safety != nil {
+			out["safety"] = result.Safety
+		}
 		return out
 	}
 	out := map[string]any{}
@@ -3176,6 +3210,15 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string) 
 	}
 	if executionLocation != "" {
 		out["execution_location"] = executionLocation
+	}
+	if result.TargetName != "" {
+		out["target_name"] = result.TargetName
+	}
+	if result.ActionSummary != "" {
+		out["action_summary"] = result.ActionSummary
+	}
+	if result.Safety != nil {
+		out["safety"] = result.Safety
 	}
 	if result.Result != nil {
 		out["result"] = result.Result
@@ -3187,6 +3230,7 @@ type targetToolPolicyError struct {
 	code   string
 	tool   string
 	target string
+	safety *InteractionSafetyDecision
 }
 
 func (e *targetToolPolicyError) Error() string {
@@ -3197,6 +3241,10 @@ func (e *targetToolPolicyError) Error() string {
 		return "target tool executor is unavailable"
 	case "target_not_allowed":
 		return "target_id is not allowed for this Flower thread"
+	case "target_unavailable":
+		return "target is unavailable"
+	case "interaction_takeover_required":
+		return "user takeover is required before this interaction"
 	default:
 		return "target tool policy denied the tool call"
 	}
@@ -3212,6 +3260,9 @@ func (e *targetToolPolicyError) InvalidArgumentsMeta() map[string]any {
 	}
 	if strings.TrimSpace(e.target) != "" {
 		out["target_id"] = strings.TrimSpace(e.target)
+	}
+	if e.safety != nil {
+		out["safety"] = e.safety
 	}
 	return out
 }
