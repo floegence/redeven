@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import readline from 'node:readline';
 import process from 'node:process';
 import { chromium } from 'playwright';
@@ -8,7 +7,6 @@ const profile = profileIndex >= 0 ? process.argv[profileIndex + 1] : undefined;
 const context = await chromium.launchPersistentContext(profile, { headless: true, viewport: { width: 1280, height: 800 } });
 let page = context.pages()[0] || await context.newPage();
 
-function arg(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : ''; }
 function response(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
 async function screenshot() { return { mime: 'image/png', data: (await page.screenshot({ type: 'png' })).toString('base64') }; }
 
