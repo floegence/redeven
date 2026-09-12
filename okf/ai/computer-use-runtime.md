@@ -23,6 +23,15 @@ Flower publishes target actions on its existing workspace stream as ordinary too
 
 DeepSeek Vision Experimental is qualified through typed function tools only. Requests use `deepseek-v4-flash-vision-exp`, include screenshot input and `function_call_output` image parts, and never register the native `computer_use` tool.
 
+# Boundaries
+
+The target registry owns logical-to-concrete target resolution for a thread;
+executors own browser, virtual desktop, and host desktop lifecycles. Flower owns
+presentation of action observations, while the workspace stream and attachment
+resolver remain the canonical transport and media boundaries. The provider may
+expand an opaque attachment only through the resolver; it does not receive
+durable screenshot bytes or target-control authority.
+
 # Evidence
 
 - `redeven:internal/ai/target_tool_policy.go` - typed target routing, capability requirements, and opaque attachment descriptors.

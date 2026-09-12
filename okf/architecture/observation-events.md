@@ -13,6 +13,13 @@ Target actions are ordinary Flower tool observations. The workspace stream remai
 
 An action publishes running, result, and error observations with tool ID, target ID, execution location, approval state, action summary, and attachment descriptor. The UI reads these events through the existing stream and resolves screenshots through the canonical attachment preview path. It must not open a second lifecycle SSE connection, poll for action state, or infer a target from a browser window.
 
+# Boundaries
+
+Redeven runtime owns action execution and provenance; Flower owns rendering and
+user controls. The canonical workspace stream is the only durable lifecycle
+channel. Live frames are ephemeral target-scoped media and must not become
+timeline events, replay state, or an alternate source of target authority.
+
 # Evidence
 
 - `redeven:internal/ai/run.go` - target tool dispatch and result provenance.

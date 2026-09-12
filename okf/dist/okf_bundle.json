@@ -73,7 +73,7 @@
               "observation"
             ],
             "summary": "Target actions are ordinary Flower tool observations. The workspace stream remains the only lifecycle and replay channel; screenshot descriptors are canonical keyframes, while short-lived live frames are target-scoped media and may be dropped without changing thread state.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "architecture.local-ui-surface",
@@ -1499,7 +1499,7 @@
               "targets"
             ],
             "summary": "Redeven exposes computer and browser use as typed functions owned by Redeven's target executor contract. Model calls use the logical `current` target alias; the service resolves it through the thread's target registry and keeps the concrete `target_id` in execution provenance. The executor owns the browser, Xvfb desktop, or macOS host session and returns explicit execution provenance plus opaque screenshot attachment descriptors. Text and descriptors may enter Floret's durable tool result, while screenshot bytes remain behind the host resolver. A missing target, capability, permission, resolver, or changed attachment fails closed.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ai.tool-approval-runtime",
@@ -2618,7 +2618,7 @@
         "title": "Computer and browser use runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 3953,
+      "body_length": 4413,
       "summary": "Redeven exposes computer and browser use as typed functions owned by Redeven's target executor contract. Model calls use the logical `current` target alias; the service resolves it through the thread's target registry and keeps the concrete `target_id` in execution provenance. The executor owns the browser, Xvfb desktop, or macOS host session and returns explicit execution provenance plus opaque screenshot attachment descriptors. Text and descriptors may enter Floret's durable tool result, while screenshot bytes remain behind the host resolver. A missing target, capability, permission, resolver, or changed attachment fails closed.",
       "sections": [
         {
@@ -2627,6 +2627,13 @@
           "level": 1,
           "body": "The supported functions are `computer.screenshot`, `computer.click`, `computer.double_click`, `computer.type`, `computer.key`, `computer.scroll`, `computer.wait`, `browser.navigate`, `browser.back`, and `browser.reload`. Coordinates are CSS viewport coordinates; a target adapter converts them to physical coordinates when required. Observation requires readonly capability. Input, navigation, and reload use the existing interaction/mutation permission and approval path; `full_access` skips per-action approval without skipping argument, capability, target, or cancellation checks.\n\n`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. `VirtualDesktopTarget` owns an Xvfb display and delegates X11 input and capture through the same typed contract. `DesktopTarget` is hosted by the Electron main process and a versioned JSONL native helper using Accessibility, CGEvent, and screen capture APIs. No target may silently fall back to the Redeven control surface.\n\nEach successful action returns target ID, target display name, execution location, an action summary, a safety decision, and an after-frame attachment. Attachment descriptors contain an opaque `computer://` resource reference, MIME, byte size, and SHA-256. Provider renderers resolve bytes only at request time; durable state stores descriptor and hash, never base64. A resolver error, unknown reference, changed bytes, or unsupported model capability is an explicit error.\n\nBefore execution, the interaction safety gate combines deterministic target/action signals with optional screenshot or accessibility classifiers. Secret input, login, CAPTCHA, prompt injection, external side effects, and unknown states may require user takeover; the model cannot override a gate decision. Takeover decisions suppress capture and model forwarding for secret input.\n\nFlower publishes target actions on its existing workspace stream as ordinary tool Activity. The activity renderer shows target, action, execution location, approval state, and the latest screenshot attachment. Live frames are target-scoped ephemeral media and do not create a second lifecycle stream or polling loop.\n\nDeepSeek Vision Experimental is qualified through typed function tools only. Requests use `deepseek-v4-flash-vision-exp`, include screenshot input and `function_call_output` image parts, and never register the native `computer_use` tool.",
           "char_count": 2416
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "The target registry owns logical-to-concrete target resolution for a thread;\nexecutors own browser, virtual desktop, and host desktop lifecycles. Flower owns\npresentation of action observations, while the workspace stream and attachment\nresolver remain the canonical transport and media boundaries. The provider may\nexpand an opaque attachment only through the resolver; it does not receive\ndurable screenshot bytes or target-control authority.",
+          "char_count": 444
         }
       ],
       "evidence": [
@@ -7359,7 +7366,7 @@
         "title": "Observation and target action events",
         "type": "Architecture Contract"
       },
-      "body_length": 998,
+      "body_length": 1319,
       "summary": "Target actions are ordinary Flower tool observations. The workspace stream remains the only lifecycle and replay channel; screenshot descriptors are canonical keyframes, while short-lived live frames are target-scoped media and may be dropped without changing thread state.",
       "sections": [
         {
@@ -7368,6 +7375,13 @@
           "level": 1,
           "body": "An action publishes running, result, and error observations with tool ID, target ID, execution location, approval state, action summary, and attachment descriptor. The UI reads these events through the existing stream and resolves screenshots through the canonical attachment preview path. It must not open a second lifecycle SSE connection, poll for action state, or infer a target from a browser window.",
           "char_count": 405
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Redeven runtime owns action execution and provenance; Flower owns rendering and\nuser controls. The canonical workspace stream is the only durable lifecycle\nchannel. Live frames are ephemeral target-scoped media and must not become\ntimeline events, replay state, or an alternate source of target authority.",
+          "char_count": 305
         }
       ],
       "evidence": [
@@ -16484,5 +16498,5 @@
       ]
     }
   ],
-  "source_sha256": "1ec7516d8d173d47085d1c1458dbe60b2cb3ef5fbbe1571e950270c05c97e516"
+  "source_sha256": "e8acd4ee551f6a92e6ab27dc94a13e23c5247c28942345feb773c4fd78398389"
 }
