@@ -696,6 +696,36 @@ func (s *Service) SetDefaultPermissionType(permissionType string, persist func(n
 	return nil
 }
 
+// SetComputerUseEnabled updates whether future Flower turns may use browser
+// and desktop interaction tools. Existing runs keep their admitted tool
+// surface; the setting applies when a new run is prepared.
+func (s *Service) SetComputerUseEnabled(enabled bool, persist func(next *config.AIConfig) error) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if persist == nil {
+		return errors.New("missing persist function")
+	}
+
+	s.mu.Lock()
+	next := config.AIConfig{}
+	if s.cfg != nil {
+		next = *s.cfg
+	}
+	next.ComputerUseEnabled = &enabled
+	if err := next.Validate(); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := persist(&next); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.cfg = &next
+	s.mu.Unlock()
+	return nil
+}
+
 // SetModelProfile replaces the environment model profile while preserving
 // Flower defaults and runtime recovery settings. Passing nil clears only the
 // model profile.

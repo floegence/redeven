@@ -5102,6 +5102,120 @@ html.dark .flower-component-shell {
   background: var(--surface-muted);
 }
 
+.flower-computer-stage {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 80;
+  display: flex;
+  width: min(42vw, 38rem);
+  min-width: 19rem;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: 0 1.25rem 3rem rgb(0 0 0 / 22%), 0 0.25rem 0.75rem rgb(0 0 0 / 12%);
+  backdrop-filter: blur(1.1rem);
+}
+
+.flower-computer-stage-header,
+.flower-computer-stage-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.flower-computer-stage-header { border-bottom: 1px solid var(--border-subtle); }
+.flower-computer-stage-footer { border-top: 1px solid var(--border-subtle); }
+.flower-computer-stage-heading { display: grid; min-width: 0; gap: 0.15rem; }
+.flower-computer-stage-eyebrow { color: var(--text-muted); font-size: 0.7rem; letter-spacing: 0.02em; }
+.flower-computer-stage-target,
+.flower-computer-stage-action { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flower-computer-stage-target { color: var(--text-strong); font-size: 0.83rem; }
+.flower-computer-stage-action { color: var(--text-strong); font-size: 0.78rem; }
+.flower-computer-stage-header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.flower-computer-stage-status { color: var(--text-muted); font-size: 0.7rem; white-space: nowrap; }
+.flower-computer-stage-status[data-status='running'],
+.flower-computer-stage-status[data-status='pending'] { color: var(--primary); }
+.flower-computer-stage-close { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 0.4rem; padding: 0.25rem; color: var(--text-muted); background: transparent; cursor: pointer; }
+.flower-computer-stage-close:hover { color: var(--text-strong); background: var(--surface-muted); }
+.flower-computer-stage-frame-wrap { display: flex; min-height: 11rem; align-items: center; justify-content: center; background: #11151b; }
+.flower-computer-stage-frame { display: block; width: 100%; max-height: min(52vh, 24rem); object-fit: contain; }
+.flower-computer-stage-no-frame { padding: 3rem 1rem; color: rgb(255 255 255 / 70%); font-size: 0.8rem; text-align: center; }
+.flower-computer-stage-meta { flex: 0 0 auto; overflow: hidden; color: var(--text-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 42rem) {
+  .flower-computer-stage { right: 0.75rem; bottom: 0.75rem; width: calc(100vw - 1.5rem); min-width: 0; }
+}
+
+.flower-settings-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.flower-settings-toggle-card:hover,
+.flower-settings-toggle-card-active {
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--border-subtle));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-muted));
+}
+
+.flower-settings-toggle-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.flower-settings-toggle-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.flower-settings-toggle-description {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.flower-settings-toggle-track {
+  display: inline-flex;
+  align-items: center;
+  width: 2.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  padding: 0.15rem;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  transition: background 120ms ease;
+}
+
+.flower-settings-toggle-track-on {
+  background: var(--primary);
+}
+
+.flower-settings-toggle-thumb {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+  transition: transform 120ms ease;
+}
+
+.flower-settings-toggle-track-on .flower-settings-toggle-thumb {
+  transform: translateX(1rem);
+}
+
 .flower-activity-inline-icon {
   display: inline-flex;
   align-items: center;

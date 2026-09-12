@@ -161,6 +161,7 @@ export type FlowerModelSourceRecovery = Readonly<{
 export type FlowerSettingsSnapshot = Readonly<{
   defaults: Readonly<{
     permission_type: FlowerPermissionType;
+    computer_use_enabled?: boolean;
   }>;
   model_profile: FlowerModelProfile | null;
   provider_secrets: readonly FlowerProviderSecretState[];
@@ -1140,6 +1141,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
+  saveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string) => Promise<FlowerThreadView>;

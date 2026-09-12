@@ -4799,6 +4799,8 @@
       "defaultPermissionTitle": "Autorisation par défaut",
       "defaultPermissionDescription": "Définit les outils disponibles par défaut et le comportement des approbations pour les nouvelles conversations Flower.",
       "defaultPermissionBadge": "Par défaut",
+      "computerUseTitle": "Utilisation de l’ordinateur et du navigateur",
+      "computerUseLabel": "Activer l’utilisation de l’ordinateur",
       "permissionReadonlyLabel": "Lecture seule",
       "permissionReadonlyDescription": "Lecture et recherche uniquement. Pas de shell, d’édition de fichiers ni d’outils d’écriture.",
       "permissionApprovalRequiredLabel": "Approbation requise",

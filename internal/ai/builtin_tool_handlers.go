@@ -803,6 +803,9 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		return fmt.Errorf("nil tool registry")
 	}
 	for _, def := range builtInToolDefinitions() {
+		if isComputerUseToolName(def.Name) && r != nil && r.cfg != nil && !r.cfg.IsComputerUseEnabled() {
+			continue
+		}
 		if def.Name == "attachment.read" && (r == nil || r.host.openLiveAttachment == nil || !r.attachmentToolReadEnabled) {
 			continue
 		}

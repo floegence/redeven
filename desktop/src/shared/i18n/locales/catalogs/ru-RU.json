@@ -566,6 +566,8 @@
       "defaultPermissionTitle": "Разрешение по умолчанию",
       "defaultPermissionDescription": "Управляет набором инструментов и порядком подтверждения действий по умолчанию для новых бесед Flower.",
       "defaultPermissionBadge": "По умолчанию",
+      "computerUseTitle": "Использование компьютера и браузера",
+      "computerUseLabel": "Включить управление компьютером",
       "permissionReadonlyLabel": "Только чтение",
       "permissionReadonlyDescription": "Только чтение и поиск. Без shell, редактирования файлов и инструментов записи.",
       "permissionApprovalRequiredLabel": "Требуется подтверждение",

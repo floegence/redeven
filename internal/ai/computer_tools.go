@@ -2,9 +2,15 @@ package ai
 
 import (
 	"encoding/json"
+	"strings"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
+
+func isComputerUseToolName(name string) bool {
+	name = strings.TrimSpace(name)
+	return strings.HasPrefix(name, "computer.") || strings.HasPrefix(name, "browser.")
+}
 
 func builtInComputerToolDefinitions() []ToolDef {
 	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Logical target alias. Omit to use the current target."}}

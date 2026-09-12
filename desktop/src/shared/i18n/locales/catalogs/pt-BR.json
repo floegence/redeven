@@ -557,6 +557,8 @@
       "defaultPermissionTitle": "Permissão padrão",
       "defaultPermissionDescription": "Controla o conjunto padrão de ferramentas e o comportamento de aprovação para novas conversas do Flower.",
       "defaultPermissionBadge": "Padrão",
+      "computerUseTitle": "Uso do computador e do navegador",
+      "computerUseLabel": "Ativar uso do computador",
       "permissionReadonlyLabel": "Somente leitura",
       "permissionReadonlyDescription": "Apenas leitura e busca. Sem shell, edição de arquivos ou ferramentas de escrita.",
       "permissionApprovalRequiredLabel": "Aprovação obrigatória",

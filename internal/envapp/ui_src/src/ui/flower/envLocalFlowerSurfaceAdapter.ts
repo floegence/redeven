@@ -487,7 +487,10 @@ function mapSettings(
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
   return {
-    defaults: { permission_type: normalizePermissionType(ai?.permission_type) },
+    defaults: {
+      permission_type: normalizePermissionType(ai?.permission_type),
+      computer_use_enabled: ai?.computer_use_enabled !== false,
+    },
     model_profile: modelProfile,
     provider_secrets: (modelProfile?.providers ?? []).map((provider) => ({
       provider_id: provider.id,
@@ -803,6 +806,16 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     discoverProviderModels: (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }),
     saveDefaultPermission: async (permissionType) => {
       await updateDefaultAIPermission(normalizePermissionType(permissionType));
+      invalidateSettingsCache();
+      const snapshot = await loadCachedSettings();
+      if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      return snapshot;
+    },
+    saveComputerUseEnabled: async (enabled) => {
+      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      });
       invalidateSettingsCache();
       const snapshot = await loadCachedSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
