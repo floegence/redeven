@@ -416,8 +416,48 @@ func subagentsToolInputSchema() map[string]any {
 }
 
 func toolSchemaRaw(m map[string]any) json.RawMessage {
-	b, _ := json.Marshal(m)
+	b, _ := json.Marshal(normalizeToolSchemaValue(m))
 	return b
+}
+
+// normalizeToolSchemaValue is the single construction boundary for provider
+// tool schemas. JSON Schema's required keyword is an array when present; a
+// nil Go slice must never become JSON null in a provider request.
+func normalizeToolSchemaValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if key == "required" && isNilToolSchemaValue(item) {
+				out[key] = []string{}
+				continue
+			}
+			out[key] = normalizeToolSchemaValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = normalizeToolSchemaValue(item)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func isNilToolSchemaValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	switch typed := value.(type) {
+	case []string:
+		return typed == nil
+	case []any:
+		return typed == nil
+	default:
+		return false
+	}
 }
 
 func redevenAskUserSignalInputSchema(base map[string]any) map[string]any {

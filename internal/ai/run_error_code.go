@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	openai "github.com/openai/openai-go"
 )
@@ -20,6 +21,8 @@ const (
 	runErrorCodeProviderUnreachable        = "provider_unreachable"
 	runErrorCodeProviderStreamInterrupted  = "provider_stream_interrupted"
 	runErrorCodeProviderModelUnavailable   = "provider_model_unavailable"
+	runErrorCodeProviderRequestInvalid     = "provider_request_invalid"
+	runErrorCodeProviderRequestRejected    = "provider_request_rejected"
 	runErrorCodeModelGatewayContract       = "model_gateway_contract_failed"
 	runErrorCodeFloretEngineFailed         = "floret_engine_failed"
 	runErrorCodeFloretControlContract      = "floret_control_contract_failed"
@@ -43,6 +46,10 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening."
 	case runErrorCodeProviderModelUnavailable:
 		return "The selected model is not available from this provider. Choose another model in the Local AI Profile."
+	case runErrorCodeProviderRequestInvalid:
+		return "DeepSeek rejected Flower's tool request format. Update Redeven and retry; no browser action was run."
+	case runErrorCodeProviderRequestRejected:
+		return "The selected AI provider rejected Flower's request. Check the provider details and retry; no browser action was run."
 	case runErrorCodeModelGatewayContract:
 		return "The model source returned an incomplete tool call. No tool was run. Try again or choose another model."
 	case runErrorCodeFloretEngineFailed:
@@ -70,6 +77,18 @@ func classifyRunFailureCode(err error, fallback string) string {
 	var openAIError *openai.Error
 	if errors.As(err, &openAIError) && openAIError != nil {
 		if code := providerHTTPStatusRunErrorCode(openAIError.StatusCode); code != "" {
+			return code
+		}
+	}
+	var providerHTTPError *flprovider.ProviderHTTPError
+	if errors.As(err, &providerHTTPError) && providerHTTPError != nil {
+		if providerHTTPError.StatusCode >= 400 && providerHTTPError.StatusCode < 500 {
+			if strings.EqualFold(strings.TrimSpace(providerHTTPError.Code), "invalid_request_error") || providerHTTPError.StatusCode == http.StatusBadRequest {
+				return runErrorCodeProviderRequestInvalid
+			}
+			return runErrorCodeProviderRequestRejected
+		}
+		if code := providerHTTPStatusRunErrorCode(providerHTTPError.StatusCode); code != "" {
 			return code
 		}
 	}

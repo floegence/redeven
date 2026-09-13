@@ -5953,6 +5953,7 @@ webSearch: model.web_search,
         flowerTimelineHasUserRejectedTool(selectedTimelineEntries())
         && (code === 'provider_unreachable' || code === 'provider_stream_interrupted')
       )
+      || code === 'provider_request_invalid'
     ));
     const actionable = code === 'provider_auth_failed'
       || code === 'provider_missing_key'

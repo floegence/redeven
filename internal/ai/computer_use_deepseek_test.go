@@ -29,20 +29,19 @@ func TestDeepSeekComputerUseQualification(t *testing.T) {
 		t.Fatal("DeepSeek qualification base URL and API key are required")
 	}
 	image := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-	tools := []any{
-		map[string]any{"type": "function", "name": "computer_screenshot", "description": "Redeven computer.screenshot: capture the current selected target screenshot.", "parameters": map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}, "additionalProperties": false}},
-		map[string]any{"type": "function", "name": "computer_click", "description": "Redeven computer.click: click the current selected target.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, "required": []string{"x", "y"}, "additionalProperties": false}},
-		map[string]any{"type": "function", "name": "browser_navigate", "description": "Redeven browser.navigate: navigate the current selected browser target.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"url": map[string]any{"type": "string"}}, "required": []string{"url"}, "additionalProperties": false}},
-	}
+	tools := productionDeepSeekQualificationTools(t)
 	input := []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": "Use the typed Redeven function computer.screenshot on the current target, then use the returned screenshot to decide whether to click the success button. Do not use any native computer_use tool or target IDs."}, map[string]any{"type": "input_image", "image_url": image}}}}
 	body := map[string]any{"model": model, "input": input, "tools": tools, "max_output_tokens": 256}
 	first := deepSeekQualificationRequest(t, base, key, body)
 	assertNoNativeComputerTool(t, first)
 	if calls := deepSeekFunctionCalls(first); len(calls) == 0 {
-		t.Fatalf("DeepSeek did not return a typed function call; response omitted for safety")
+		t.Fatalf("DeepSeek did not return a typed function call; output types=%v", deepSeekOutputSummary(first))
 	} else {
 		call := calls[0]
-		allowed := map[string]bool{"computer_screenshot": true, "computer_click": true, "browser_navigate": true}
+		allowed := map[string]bool{}
+		for _, tool := range tools {
+			allowed[strings.TrimSpace(fmt.Sprint(tool["name"]))] = true
+		}
 		if !allowed[strings.TrimSpace(fmt.Sprint(call["name"]))] {
 			t.Fatalf("DeepSeek returned an unregistered tool name %q", call["name"])
 		}
@@ -58,6 +57,35 @@ func TestDeepSeekComputerUseQualification(t *testing.T) {
 		second := deepSeekQualificationRequest(t, base, key, follow)
 		assertNoNativeComputerTool(t, second)
 	}
+}
+
+func deepSeekOutputSummary(response map[string]any) []string {
+	items, _ := response["output"].([]any)
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if record, ok := item.(map[string]any); ok {
+			out = append(out, strings.TrimSpace(fmt.Sprint(record["type"])))
+		}
+	}
+	return out
+}
+
+func productionDeepSeekQualificationTools(t *testing.T) []map[string]any {
+	t.Helper()
+	defs := builtInComputerToolDefinitions()
+	aliases, err := newOpenAIProviderToolAliases(defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]map[string]any, 0, len(defs))
+	for _, def := range defs {
+		var schema map[string]any
+		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+			t.Fatalf("%s schema: %v", def.Name, err)
+		}
+		out = append(out, map[string]any{"type": "function", "name": aliases.wireName(def.Name), "description": def.Description, "parameters": schema})
+	}
+	return out
 }
 
 func deepSeekQualificationRequest(t *testing.T, base, key string, body map[string]any) map[string]any {
