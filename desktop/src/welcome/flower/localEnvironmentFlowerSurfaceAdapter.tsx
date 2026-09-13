@@ -7,6 +7,7 @@ import type {
 } from '../../shared/settingsIPC';
 import type {
   RuntimeFlowerError,
+  RuntimeFlowerComputerFrame,
   RuntimeFlowerFailureKind,
   RuntimeFlowerRequest,
   RuntimeFlowerRequestResult,
@@ -824,6 +825,16 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         enabled,
       });
       return loadSettingsSnapshot(bridge);
+    },
+    loadComputerFrame: async (input) => {
+      input.signal.throwIfAborted();
+      const frame = await runtimeJSON<RuntimeFlowerComputerFrame>(bridge, 'GET',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/computer-media/${encodeURIComponent(input.target_id)}/${encodeURIComponent(input.sha256)}`);
+      input.signal.throwIfAborted();
+      if (!(frame.bytes instanceof Uint8Array) || frame.mime_type !== 'image/png') {
+        throw new Error('Flower returned invalid computer media.');
+      }
+      return new Blob([new Uint8Array(frame.bytes)], { type: frame.mime_type });
     },
     saveModelProfile: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));

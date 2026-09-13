@@ -77,18 +77,17 @@ describe('presentFlowerActivityItem', () => {
   it('presents computer actions with target, action, location, and frame metadata', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'computer.click',
-      renderer: 'computer',
+      renderer: 'structured',
+      target_refs: [{ kind: 'computer_frame', label: 'Redeven Managed Browser', resource_ref: `computer://browser-main/${'a'.repeat(64)}` }],
+      chips: [{ kind: 'execution_location', label: 'location', value: 'linux_headless_browser' }],
       payload: {
-        target_name: 'Redeven Managed Browser',
         action_summary: 'clicked the sign in button',
-        execution_location: 'linux_headless_browser',
-        after_frame: 'https://example.test/frame.png',
         safety: { level: 'routine' },
       },
     }));
     expect(presentation.label).toBe('clicked the sign in button');
     expect(presentation.detailBlocks).toEqual([
-      expect.objectContaining({ kind: 'computer', target: 'Redeven Managed Browser', frame: 'https://example.test/frame.png' }),
+      expect.objectContaining({ kind: 'computer', target_id: 'browser-main', target: 'Redeven Managed Browser', frame: `computer://browser-main/${'a'.repeat(64)}` }),
     ]);
   });
 

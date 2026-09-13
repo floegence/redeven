@@ -5546,6 +5546,11 @@ webSearch: model.web_search,
       ?? null;
   });
   createEffect(() => {
+    selectedThreadID();
+    lastComputerStageItemID = '';
+    setComputerStageOpen(true);
+  });
+  createEffect(() => {
     const stage = selectedComputerStage();
     if (!stage || stage.item.item_id === lastComputerStageItemID) return;
     lastComputerStageItemID = stage.item.item_id;
@@ -8047,21 +8052,9 @@ webSearch: model.web_search,
         <div class="flower-activity-computer-meta">{[block().location, block().safety].filter(Boolean).join(' · ')}</div>
       </Show>
       <Show when={block().frame}>
-        {(frame) => (
-          <Show when={frame().startsWith('http://') || frame().startsWith('https://') || frame().startsWith('/')}
-            fallback={
-              <button
-                type="button"
-                class="flower-activity-inline-button"
-                onClick={() => setComputerStageOpen(true)}
-              >
-                {copy().settings.computerUseTitle}
-              </button>
-            }
-          >
-            <img class="flower-activity-computer-frame" src={attachmentPreviewURL(frame())} alt={block().target} loading="lazy" />
-          </Show>
-        )}
+        <button type="button" class="flower-activity-inline-button" onClick={() => setComputerStageOpen(true)}>
+          {copy().settings.computerUseTitle}
+        </button>
       </Show>
     </div>
   );
@@ -11765,17 +11758,11 @@ webSearch: model.web_search,
           setWorkingDirectoryPickerOpen(false);
         }}
       />
-      <Show when={computerStageOpen() && selectedComputerStage()}>
+      <Show when={computerStageOpen() && Boolean(selectedComputerStage()?.frame) && selectedComputerStage()}>
         {(stage) => {
-          const frameURL = () => {
-            const value = stage().frame ?? '';
-            if (!value || (!value.startsWith('http://') && !value.startsWith('https://') && !value.startsWith('/'))) return undefined;
-            return attachmentPreviewURL(value);
-          };
           return (
             <FlowerComputerStage
               snapshot={stage()}
-              frameURL={frameURL()}
               frameRef={stage().frame}
               threadID={selectedThreadID()}
               loadFrame={props.adapter.loadComputerFrame}
@@ -11785,6 +11772,7 @@ webSearch: model.web_search,
                 // like the destructive Stop action.
                 close: copy().settings.backToChat,
                 noFrame: copy().chat.toolActivityDetailsPending,
+                retry: copy().chat.handlerRetry,
               }}
               onClose={() => setComputerStageOpen(false)}
             />

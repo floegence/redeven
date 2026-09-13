@@ -101,6 +101,10 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 				return result, fmt.Errorf("unsupported DeepSeek content part %q", part.Type)
 			}
 		}
+		if mapped.ToolResult != nil {
+			mapped.ToolResult.Attachments = mapped.Attachments
+			mapped.Attachments = nil
+		}
 		request.Messages = append(request.Messages, mapped)
 	}
 	for _, tool := range req.Tools {

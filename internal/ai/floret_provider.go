@@ -496,7 +496,11 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 		if msg.Text != "" {
 			parts = append(parts, ContentPart{Type: "text", Text: msg.Text})
 		}
-		for attachmentIndex, attachment := range msg.Attachments {
+		attachments := msg.Attachments
+		if msg.ToolResult != nil {
+			attachments = append(append([]flprovider.Attachment(nil), attachments...), msg.ToolResult.Attachments...)
+		}
+		for attachmentIndex, attachment := range attachments {
 			if p == nil || resolver == nil {
 				return nil, fmt.Errorf("floret model message %d attachment %d has no host resolver", i, attachmentIndex)
 			}

@@ -1232,6 +1232,14 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		TargetRefs: activityFileActionTargetRefs(payload),
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
+	if strings.HasPrefix(toolName, "computer.") || strings.HasPrefix(toolName, "browser.") {
+		if ref := strings.TrimSpace(anyToString(payload["after_frame"])); computerFrameResourcePattern.MatchString(ref) {
+			activity.TargetRefs = []fltools.ActivityTargetRef{{
+				Kind: "computer_frame", ResourceRef: ref,
+				Label: firstNonEmptyString(anyToString(payload["target_name"]), anyToString(payload["target_id"]), "Computer"),
+			}}
+		}
+	}
 	return contractSafeActivityPresentationForTool(toolName, activity), nil
 }
 

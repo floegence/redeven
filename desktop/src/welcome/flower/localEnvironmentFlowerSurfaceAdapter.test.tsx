@@ -133,6 +133,18 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('loads computer media through the Desktop runtime bridge', async () => {
+    const bytes = new Uint8Array([137, 80, 78, 71]);
+    const bridge = bridgeFor(() => ({ bytes, mime_type: 'image/png' }));
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    expect(adapter.loadComputerFrame).toBeTypeOf('function');
+    const blob = await adapter.loadComputerFrame!({ thread_id: 'thread-1', target_id: 'browser-main',
+      resource_ref: `computer://browser-main/${'a'.repeat(64)}`, sha256: 'a'.repeat(64), signal: new AbortController().signal });
+    expect(blob.type).toBe('image/png');
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith({ method: 'GET',
+      path: `/_redeven_proxy/api/ai/threads/thread-1/computer-media/browser-main/${'a'.repeat(64)}` });
+  });
   it('streams live events through Desktop IPC without the removed long-poll route', async () => {
     let streamListener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
     const startRuntimeFlowerStream = vi.fn(async (request: RuntimeFlowerStreamRequest) => {

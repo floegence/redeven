@@ -568,7 +568,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.10.3"
+		floretVersion = "v7.11.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -656,14 +656,14 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v7 v7.10.3",
+			"github.com/floegence/floret/v7 v7.11.0",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
 			"published Flowersec Go and Core v5.1.0 plus Floe Webapp v0.52.2 for both the Desktop shell and Env App",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 16",
+			"\"compatibility_epoch\": 17",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",

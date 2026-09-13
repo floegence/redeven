@@ -12,7 +12,45 @@ import {
 	runtimeFlowerDeleteQuery,
 	runtimeFlowerInvalidJSONError,
 	runtimeFlowerPrivateBridgeHeaders,
+  runtimeFlowerComputerFrame,
 } from './runtimeFlowerHTTP';
+import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH } from '../shared/runtimeFlowerIPC';
+
+describe('computer media transport', () => {
+  it('preserves binary bytes across the runtime response boundary', async () => {
+    const bytes = Buffer.from([137, 80, 78, 71, 255, 0, 128]);
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, { 'Content-Type': 'image/png' });
+      response.end(bytes);
+    });
+    const port = await listen(server);
+    try {
+      const frame = runtimeFlowerComputerFrame(await request(port));
+      expect(frame.mime_type).toBe('image/png');
+      expect(frame.bytes).toEqual(new Uint8Array(bytes));
+    } finally { await close(server); }
+  });
+
+  it('allows only thread-scoped hash-addressed media paths', () => {
+    const path = `/_redeven_proxy/api/ai/threads/thread-1/computer-media/browser-main/${'a'.repeat(64)}`;
+    expect(RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path)).toBe(true);
+    for (const value of [path + '?secret=1', path + '/extra', path.replace('browser-main', '..'), path.slice(0, -1)]) {
+      expect(RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(value)).toBe(false);
+    }
+  });
+
+  it('accepts realistic screenshot sizes and rejects empty or oversized responses', () => {
+    const response = { status: 200, headers: { 'content-type': 'image/png' }, body: '', bytes: Buffer.alloc(20_000) };
+    expect(runtimeFlowerComputerFrame(response).bytes.length).toBe(20_000);
+    for (const size of [0, (10 << 20) + 1]) {
+      expect(() => runtimeFlowerComputerFrame({ ...response, bytes: Buffer.alloc(size) })).toThrow('invalid computer media');
+    }
+  });
+
+  it.each(['text/html', 'application/json', 'image/svg+xml'])('rejects %s as computer media', (type) => {
+    expect(() => runtimeFlowerComputerFrame({ status: 200, headers: { 'content-type': type }, body: '', bytes: Buffer.from('not a screenshot') })).toThrow('invalid computer media');
+  });
+});
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve, reject) => {

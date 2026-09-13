@@ -328,6 +328,7 @@ export type FlowerActivityTargetRef = Readonly<{
   kind: string;
   label: string;
   uri?: string;
+  resource_ref?: string;
   line?: number;
 }>;
 
