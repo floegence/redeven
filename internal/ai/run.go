@@ -3214,6 +3214,7 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string) 
 	executionLocation := strings.TrimSpace(result.ExecutionLocation)
 	if payload, ok := result.Result.(map[string]any); ok && payload != nil {
 		out := cloneAnyMap(payload)
+		addTargetFrameFields(out, result.Attachments)
 		if strings.TrimSpace(anyToString(out["target_id"])) == "" && targetID != "" {
 			out["target_id"] = targetID
 		}
@@ -3250,7 +3251,28 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string) 
 	if result.Result != nil {
 		out["result"] = result.Result
 	}
+	addTargetFrameFields(out, result.Attachments)
 	return out
+}
+
+// addTargetFrameFields keeps the opaque screenshot reference in the activity
+// payload even when an executor returns attachments separately from its result
+// object. The UI resolves the reference through the authenticated media route.
+func addTargetFrameFields(payload map[string]any, attachments []TargetToolAttachment) {
+	if payload == nil || strings.TrimSpace(anyToString(payload["after_frame"])) != "" {
+		return
+	}
+	for _, attachment := range attachments {
+		ref := strings.TrimSpace(attachment.ResourceRef)
+		if ref == "" || !strings.HasPrefix(ref, "computer://") || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MIMEType)), "image/") {
+			continue
+		}
+		payload["after_frame"] = ref
+		if strings.TrimSpace(anyToString(payload["screenshot"])) == "" {
+			payload["screenshot"] = ref
+		}
+		return
+	}
 }
 
 type targetToolPolicyError struct {
