@@ -20,7 +20,7 @@ describe('Flower computer stage', () => {
           thread_id: threadID, run_id: 'computer-run', turn_id: 'computer-turn', status: 'running',
           items: [activityItem({
             item_id: 'computer-screenshot', tool_id: 'computer-screenshot', tool_name: 'computer.screenshot',
-            renderer: 'computer', status: 'running', label: 'Reading test page',
+            renderer: 'structured', status: 'running', label: 'Reading test page',
             payload: {
               target_id: 'browser-main', target_name: 'Redeven Managed Browser',
               action_summary: 'Reading test page', execution_location: 'local', after_frame: FRAME_REF,

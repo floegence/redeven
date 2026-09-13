@@ -870,12 +870,7 @@ func activityRendererFromSpec(spec aitools.ToolPresentationSpec, ok bool) fltool
 		fltools.ActivityRendererQuestion,
 		fltools.ActivityRendererCompletion,
 		fltools.ActivityRendererSubAgent,
-		fltools.ActivityRendererSubAgentOperation,
-		// Computer/browser are Redeven-owned renderer values. Floret's
-		// renderer enum predates these values; preserve them instead of
-		// collapsing the activity to the generic structured renderer.
-		"computer",
-		"browser":
+		fltools.ActivityRendererSubAgentOperation:
 		return renderer
 	default:
 		return fltools.ActivityRendererStructured
