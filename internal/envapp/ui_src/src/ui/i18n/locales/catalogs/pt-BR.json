@@ -4413,8 +4413,6 @@
       "send": "Enviar",
       "stop": "Parar",
       "stopping": "Parando...",
-      "stopped": "Interrompido",
-      "stoppedDescription": "Este turno terminou. Envie uma nova mensagem para continuar. As alterações já feitas serão mantidas.",
       "stopOutcomeUnknownTitle": "Interrompido com resultados não confirmados",
       "stopOutcomeUnknownDescription": "Algumas operações podem ter sido concluídas. Verifique os resultados antes de continuar. Este turno não será executado novamente de forma automática.",
       "stopRequestFailed": "Não foi possível interromper este turno. Clique em Parar novamente.",

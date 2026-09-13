@@ -4413,8 +4413,6 @@
       "send": "Envoyer",
       "stop": "Arrêter",
       "stopping": "Arrêt en cours...",
-      "stopped": "Arrêté",
-      "stoppedDescription": "Ce tour est terminé. Envoyez un nouveau message pour continuer. Les modifications déjà effectuées sont conservées.",
       "stopOutcomeUnknownTitle": "Arrêté avec des résultats non confirmés",
       "stopOutcomeUnknownDescription": "Certaines opérations sont peut-être terminées. Vérifiez leurs résultats avant de continuer. Ce tour ne sera pas relancé automatiquement.",
       "stopRequestFailed": "Impossible d’arrêter ce tour. Cliquez à nouveau sur Arrêter.",

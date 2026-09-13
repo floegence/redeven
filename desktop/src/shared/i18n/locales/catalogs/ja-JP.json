@@ -171,8 +171,6 @@
       "send": "送信",
       "stop": "停止",
       "stopping": "停止中...",
-      "stopped": "停止しました",
-      "stoppedDescription": "このターンは終了しました。続けるには新しいメッセージを送信してください。実行済みの変更は保持されます。",
       "stopOutcomeUnknownTitle": "停止しましたが、一部の結果は未確認です",
       "stopOutcomeUnknownDescription": "一部の操作は完了している可能性があります。続ける前に結果を確認してください。このターンが自動的に再実行されることはありません。",
       "stopRequestFailed": "このターンを停止できませんでした。もう一度「停止」を押してください。",

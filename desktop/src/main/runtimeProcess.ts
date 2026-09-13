@@ -1,9 +1,11 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import { execFile as execFileCallback, spawn, type ChildProcessByStdio } from 'node:child_process';
 import { once } from 'node:events';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+import { promisify } from 'node:util';
 
 import {
   DesktopOperationFailureError,
@@ -17,7 +19,7 @@ import {
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
 } from '../shared/runtimeService';
-import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
+import { sanitizeDesktopChildEnvironment, withBundledCLIEnvironment } from './desktopProcessEnvironment';
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
@@ -37,6 +39,45 @@ const DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS = 10_000;
 const DEFAULT_RUNTIME_STABILITY_WINDOW_MS = 1_200;
 const DEFAULT_RUNTIME_STABILITY_POLL_MS = 250;
 const MAX_RECENT_LOG_CHARS = 8_000;
+const execFile = promisify(execFileCallback);
+
+export class BundledCLIUnavailableError extends Error {
+  readonly code = 'CLI_UNAVAILABLE';
+
+  constructor(readonly executablePath: string, cause?: unknown) {
+    super(`The bundled Redeven CLI is unavailable at ${executablePath}.`, { cause });
+    this.name = 'BundledCLIUnavailableError';
+  }
+}
+
+export class BundledCLIVersionMismatchError extends Error {
+  readonly code = 'CLI_VERSION_MISMATCH';
+
+  constructor(readonly executablePath: string, readonly expected: string, readonly actual: string) {
+    super(`The bundled Redeven CLI does not match the running Desktop bundle (expected ${expected}, got ${actual}).`);
+    this.name = 'BundledCLIVersionMismatchError';
+  }
+}
+
+async function validateBundledCLIIdentity(executablePath: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const expectedVersion = String(env.REDEVEN_DESKTOP_BUNDLE_VERSION ?? env.REDEVEN_DESKTOP_VERSION ?? '').trim();
+  const expectedCommit = String(env.REDEVEN_DESKTOP_BUNDLE_COMMIT ?? '').trim();
+  if (expectedVersion === '' && expectedCommit === '') return;
+  let stdout: string;
+  try {
+    ({ stdout } = await execFile(executablePath, ['version'], { env, timeout: 5_000, windowsHide: true }));
+  } catch (error) {
+    throw new BundledCLIUnavailableError(executablePath, error);
+  }
+  const match = String(stdout).trim().match(/^redeven\s+(\S+)\s+\(([^)]+)\)/iu);
+  const actualVersion = match?.[1] ?? '';
+  const actualCommit = match?.[2] ?? '';
+  const versionMatches = expectedVersion === '' || actualVersion.replace(/^v/iu, '') === expectedVersion.replace(/^v/iu, '');
+  const commitMatches = expectedCommit === '' || actualCommit === expectedCommit || actualCommit.startsWith(expectedCommit) || expectedCommit.startsWith(actualCommit);
+  if (!versionMatches || !commitMatches) {
+    throw new BundledCLIVersionMismatchError(executablePath, [expectedVersion, expectedCommit].filter(Boolean).join(' '), [actualVersion, actualCommit].filter(Boolean).join(' '));
+  }
+}
 
 type SpawnedRuntimeProcess = ChildProcessByStdio<Writable, Readable, Readable>;
 type RuntimeProcessCommand = 'desktop-runtime-inventory' | 'desktop-runtime-stop';
@@ -765,10 +806,17 @@ async function writeStartupSecretsToStdin(child: SpawnedRuntimeProcess, envelope
 
 export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promise<ManagedRuntimeLaunch> {
   throwIfRuntimeAborted(args.signal);
-  const mergedEnv = sanitizeDesktopChildEnvironment({
+  const executablePath = path.resolve(String(args.executablePath ?? '').trim());
+  try {
+    await fs.access(executablePath, fsSync.constants.X_OK);
+  } catch (error) {
+    throw new BundledCLIUnavailableError(executablePath, error);
+  }
+  const mergedEnv = withBundledCLIEnvironment(sanitizeDesktopChildEnvironment({
     ...process.env,
     ...args.env,
-  });
+  }), executablePath);
+  await validateBundledCLIIdentity(executablePath, mergedEnv);
   const stateRoot = String(args.stateRoot ?? '').trim() || undefined;
   const runtimeRoot = String(args.runtimeRoot ?? stateRoot ?? '').trim() || undefined;
   const runtimeAttachTimeoutMs = args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS;

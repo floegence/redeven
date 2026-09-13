@@ -912,7 +912,7 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
     expect(stopThread).toHaveBeenCalledTimes(1);
     expect(submitApproval).not.toHaveBeenCalled();
-    expect(runtime.querySelector('.flower-turn-stop-notice')?.textContent).toContain('Stopped');
+    expect(runtime.querySelector('.flower-turn-stop-notice')).toBeNull();
     expect(runtime.querySelector('.flower-error-card')).toBeNull();
     await waitFor(() => document.activeElement === runtime.querySelector('[data-flower-bottom-mode="chat"] textarea'));
   });

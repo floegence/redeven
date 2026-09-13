@@ -23,6 +23,8 @@ Flower publishes target actions on its existing workspace stream as ordinary too
 
 The Flower surface also opens a floating live Stage when a computer or browser Activity is present. The Stage shows the latest frame, target, action, execution location, safety state, and live/waiting/completed status; closing it only hides presentation and does not stop the run. The Settings switch changes the persisted AI configuration and removes typed computer/browser functions from newly prepared tool registries when disabled.
 
+User initiated Stop is a control action, not a transcript message. The service records the canonical cancellation fact, audit entry, and safety outcome, while Flower clears the transient stop affordance after acknowledgement and leaves completed messages and keyframes intact. An unconfirmed external effect remains a visible safety error because it requires the user to verify the outcome and must not be replayed automatically.
+
 DeepSeek Vision Experimental is qualified through typed function tools only. Requests use `deepseek-v4-flash-vision-exp`, include screenshot input and `function_call_output` image parts, and never register the native `computer_use` tool.
 
 # Boundaries

@@ -4413,8 +4413,6 @@
       "send": "Senden",
       "stop": "Stoppen",
       "stopping": "Wird gestoppt...",
-      "stopped": "Gestoppt",
-      "stoppedDescription": "Dieser Durchgang ist beendet. Senden Sie eine neue Nachricht, um fortzufahren. Bereits vorgenommene Änderungen bleiben erhalten.",
       "stopOutcomeUnknownTitle": "Gestoppt mit unbestätigten Ergebnissen",
       "stopOutcomeUnknownDescription": "Einige Vorgänge wurden möglicherweise abgeschlossen. Prüfen Sie die Ergebnisse, bevor Sie fortfahren. Dieser Durchgang wird nicht automatisch erneut ausgeführt.",
       "stopRequestFailed": "Dieser Durchgang konnte nicht gestoppt werden. Klicken Sie erneut auf „Stoppen“.",
