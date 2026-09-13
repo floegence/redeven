@@ -46,6 +46,7 @@ await once(server, 'listening');
 const fixtureURL = `http://127.0.0.1:${server.address().port}`;
 const protocol = [];
 const protocolErrors = [];
+let providerRequestsWithoutImage = 0;
 const proxy = http.createServer(async (request, response) => {
   try {
     const chunks = [];
@@ -57,6 +58,12 @@ const proxy = http.createServer(async (request, response) => {
       assert((body.tools ?? []).every((tool) => tool.type === 'function'));
       protocol.push({ model: body.model, toolCount: body.tools?.length ?? 0,
         imageToolOutput: (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image')) });
+      const hasToolCall = (body.input ?? []).some((item) => item.type === 'function_call');
+      const hasImage = (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image'));
+      if (hasToolCall && !hasImage) providerRequestsWithoutImage += 1;
+      if (providerRequestsWithoutImage >= 3) {
+        throw new Error('provider received repeated tool calls without an input_image; aborting instead of waiting for a false success');
+      }
     }
     const upstream = await fetch(new URL(request.url, provider.base_url), {
       method: request.method, headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
