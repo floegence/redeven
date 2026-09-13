@@ -14,9 +14,14 @@ type Meta struct {
 	UserPublicID      string `json:"user_public_id"`
 	UserEmail         string `json:"user_email"`
 	NamespacePublicID string `json:"namespace_public_id"`
-	CanRead           bool   `json:"can_read"`
-	CanWrite          bool   `json:"can_write"`
-	CanExecute        bool   `json:"can_execute"`
+	// PlatformAIGrant is a short-lived capability for the global AI Gateway.
+	// It never contains a Provider API key or rate card data.
+	PlatformAIGrant              string `json:"platform_ai_grant,omitempty"`
+	PlatformAIGatewayURL         string `json:"platform_ai_gateway_url,omitempty"`
+	PlatformAIEntitlementVersion int64  `json:"platform_ai_entitlement_version,omitempty"`
+	CanRead                      bool   `json:"can_read"`
+	CanWrite                     bool   `json:"can_write"`
+	CanExecute                   bool   `json:"can_execute"`
 	// CanAdmin gates management actions on the data plane (e.g. codespace create/delete/rename).
 	//
 	// NOTE: this is the namespace-level "admin" bit computed service-side and delivered by the control plane.
