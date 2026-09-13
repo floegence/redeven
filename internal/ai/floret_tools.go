@@ -756,6 +756,19 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	if err != nil {
 		return fltools.Result{}, err
 	}
+	attachments := floretToolAttachments(result.Attachments)
+	if len(attachments) == 0 {
+		if data, ok := structured["data"].(map[string]any); ok {
+			for key, value := range data {
+				if strings.HasSuffix(key, "frame") || key == "screenshot" {
+					if ref := strings.TrimSpace(anyToString(value)); strings.HasPrefix(ref, "computer://") {
+						attachments = []fltools.ArtifactRef{{ID: ref, SafeLabel: "screenshot", Kind: "image", MIME: "image/png"}}
+						break
+					}
+				}
+			}
+		}
+	}
 	return fltools.Result{
 		CallID:      strings.TrimSpace(result.ToolID),
 		Name:        strings.TrimSpace(result.ToolName),
@@ -763,7 +776,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		Structured:  structured,
 		Metadata:    metadata,
 		Activity:    activity,
-		Attachments: floretToolAttachments(result.Attachments),
+		Attachments: attachments,
 		IsError:     isError,
 		DispatchErr: dispatchErr,
 	}, nil
