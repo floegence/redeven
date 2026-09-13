@@ -61,6 +61,7 @@ function settingsResponse(): AgentSettingsResponse {
         }],
       }],
       permission_type: 'approval_required',
+      computer_use_enabled: true,
     },
     ai_secrets: {
       provider_api_key_set: { default: true },
@@ -243,6 +244,7 @@ describe('Local Environment Flower surface adapter', () => {
   it('maps runtime settings to the shared Flower snapshot without dropping model metadata', () => {
     const snapshot = mapRuntimeFlowerSettings(settingsResponse());
 
+    expect(snapshot.defaults.computer_use_enabled).toBe(true);
     expect(snapshot.model_profile?.providers[0].models[0]).toEqual({
       model_name: 'gpt-4.1',
       context_window: 128000,
@@ -255,6 +257,21 @@ describe('Local Environment Flower surface adapter', () => {
       provider_api_key_configured: true,
       web_search_api_key_configured: true,
     }]);
+  });
+
+  it('exposes the computer-use setting through the Desktop runtime route', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor(async (request) => {
+      calls.push(request);
+      if (request.method === 'GET' && request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      return {};
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    await adapter.saveComputerUseEnabled?.(false);
+
+    expect(calls[0]).toEqual({ method: 'PUT', path: '/_redeven_proxy/api/ai/computer_use', body: { enabled: false } });
+    expect(calls.some((request) => request.method === 'GET' && request.path === '/_redeven_proxy/api/settings')).toBe(true);
   });
 
   it('builds provider bundle updates for the runtime gateway', () => {
