@@ -142,9 +142,8 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-turn-stopping')));
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft');
     stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: running.thread_id, current: { ...stopping, view_version: 3, activity: 'idle', run_progress: undefined, last_outcome: 'cancelled' } });
-    await waitFor(() => Boolean(runtime.querySelector('.flower-turn-stop-notice')));
-    expect(runtime.querySelector('.flower-turn-stop-notice')?.textContent).toContain('Changes already made are kept.');
-    expect(runtime.querySelector('.flower-turn-stopping')).toBeNull();
+    await waitFor(() => runtime.querySelector('.flower-turn-stopping') === null);
+    expect(runtime.querySelector('.flower-turn-stop-notice')).toBeNull();
     expect(runtime.querySelector('.flower-error-card')).toBeNull();
     expect(stopThread).toHaveBeenCalledTimes(1);
   });

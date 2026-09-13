@@ -9,6 +9,7 @@ import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { DesktopOperationFailureError } from './desktopOperationFailure';
 import {
   attachManagedRuntimeFromStatus,
+  BundledCLIUnavailableError,
   inspectLocalManagedRuntimeProcesses,
   launchStartedFreshManagedRuntime,
   startManagedRuntime,
@@ -371,6 +372,29 @@ describe('runtimeProcess', () => {
         runtime_root: runtimeRoot,
         state_root: stateRoot,
       });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when the bundled runtime/CLI is missing', async () => {
+    await expect(startManagedRuntime({
+      executablePath: path.join(os.tmpdir(), 'redeven-missing-bundled-cli'),
+      runtimeArgs: [],
+    })).rejects.toBeInstanceOf(BundledCLIUnavailableError);
+  });
+
+  it('rejects a bundled CLI whose version does not match Desktop', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-cli-version-'));
+    const executablePath = path.join(dir, 'redeven');
+    await fs.writeFile(executablePath, '#!/bin/sh\nprintf "redeven v0.0.1 (oldcommit) build\\n"\n', 'utf8');
+    await fs.chmod(executablePath, 0o755);
+    try {
+      await expect(startManagedRuntime({
+        executablePath,
+        runtimeArgs: [],
+        env: { REDEVEN_DESKTOP_BUNDLE_VERSION: 'v0.0.2', REDEVEN_DESKTOP_BUNDLE_COMMIT: 'newcommit' },
+      })).rejects.toMatchObject({ code: 'CLI_VERSION_MISMATCH' });
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

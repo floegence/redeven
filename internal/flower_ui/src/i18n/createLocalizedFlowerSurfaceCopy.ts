@@ -140,8 +140,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       send: t(i18n, k('chat.send')),
       stop: t(i18n, k('chat.stop')),
       stopping: t(i18n, k('chat.stopping')),
-      stopped: t(i18n, k('chat.stopped')),
-      stoppedDescription: t(i18n, k('chat.stoppedDescription')),
       stopOutcomeUnknownTitle: t(i18n, k('chat.stopOutcomeUnknownTitle')),
       stopOutcomeUnknownDescription: t(i18n, k('chat.stopOutcomeUnknownDescription')),
       stopRequestFailed: t(i18n, k('chat.stopRequestFailed')),

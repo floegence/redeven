@@ -1432,7 +1432,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadStopPending = createMemo(() => (
     stoppingThreadIDs().has(trimString(selectedThreadID())) || flowerThreadIsStopping(selectedThread())
   ));
-  const selectedThreadStopped = createMemo(() => selectedThread()?.status === 'canceled' && selectedThread()?.cancellation?.source === 'user_stop');
   createEffect(() => {
     const cache = threadCache();
     for (const threadID of stoppingThreadIDs()) {
@@ -10890,12 +10889,6 @@ webSearch: model.web_search,
               </For>
               <For each={visibleTransportOutbox()}>{(submission) => transportOutboxEntry(() => submission)}</For>
               {threadLevelApprovalPanel()}
-              <Show when={selectedThreadStopped()}>
-                <div class="flower-turn-stop-notice text-sm text-muted-foreground" role="status">
-                  <div class="font-medium">{copy().chat.stopped}</div>
-                  <div>{copy().chat.stoppedDescription}</div>
-                </div>
-              </Show>
             </Show>
           </div>
         </div>
