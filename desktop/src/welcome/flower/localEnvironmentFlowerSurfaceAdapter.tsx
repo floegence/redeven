@@ -386,7 +386,10 @@ export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): Flowe
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
   return {
-    defaults: { permission_type: normalizePermissionType(ai?.permission_type) },
+    defaults: {
+      permission_type: normalizePermissionType(ai?.permission_type),
+      computer_use_enabled: ai?.computer_use_enabled !== false,
+    },
     model_profile: modelProfile,
     provider_secrets: (modelProfile?.providers ?? []).map((provider) => ({
       provider_id: provider.id,
@@ -813,6 +816,12 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     saveDefaultPermission: async (permissionType) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/default_permission', {
         permission_type: normalizePermissionType(permissionType),
+      });
+      return loadSettingsSnapshot(bridge);
+    },
+    saveComputerUseEnabled: async (enabled) => {
+      await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/computer_use', {
+        enabled,
       });
       return loadSettingsSnapshot(bridge);
     },
