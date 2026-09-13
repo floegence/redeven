@@ -762,11 +762,8 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	// slice. Without this recovery the provider receives only computer:// text
 	// and vision models repeatedly request screenshots forever.
 	if len(attachments) == 0 {
-		for _, key := range []string{"after_frame", "screenshot", "frame_ref"} {
-			if ref := strings.TrimSpace(anyToString(structured[key])); strings.HasPrefix(ref, "computer://") {
-				attachments = []fltools.ArtifactRef{{ID: ref, SafeLabel: "screenshot", Kind: "image", MIME: "image/png"}}
-				break
-			}
+		if ref := computerFrameRef(structured); ref != "" {
+			attachments = []fltools.ArtifactRef{{ID: ref, SafeLabel: "screenshot", Kind: "image", MIME: "image/png"}}
 		}
 	}
 	return fltools.Result{
@@ -780,6 +777,29 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		IsError:     isError,
 		DispatchErr: dispatchErr,
 	}, nil
+}
+
+func computerFrameRef(value any) string {
+	switch item := value.(type) {
+	case map[string]any:
+		for key, child := range item {
+			if key == "after_frame" || key == "screenshot" || key == "frame_ref" {
+				if ref := strings.TrimSpace(anyToString(child)); strings.HasPrefix(ref, "computer://") {
+					return ref
+				}
+			}
+			if ref := computerFrameRef(child); ref != "" {
+				return ref
+			}
+		}
+	case []any:
+		for _, child := range item {
+			if ref := computerFrameRef(child); ref != "" {
+				return ref
+			}
+		}
+	}
+	return ""
 }
 
 func floretToolAttachments(items []ToolAttachment) []fltools.ArtifactRef {
