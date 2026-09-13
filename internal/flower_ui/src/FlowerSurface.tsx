@@ -5530,7 +5530,8 @@ webSearch: model.web_search,
         if (block?.type !== 'activity') continue;
         for (let itemIndex = block.block.items.length - 1; itemIndex >= 0; itemIndex -= 1) {
           const item = block.block.items[itemIndex];
-          if (item?.renderer !== 'computer' && item?.renderer !== 'browser') continue;
+          const toolName = item?.tool_name || '';
+          if (item?.renderer !== 'computer' && item?.renderer !== 'browser' && !toolName.startsWith('computer.') && !toolName.startsWith('browser.')) continue;
           const detail = presentFlowerActivityItem(item).detailBlocks.find((candidate) => candidate.kind === 'computer');
           if (!detail || detail.kind !== 'computer') continue;
           candidates.push({

@@ -418,6 +418,8 @@ function todoItemsFromPayload(payload: Readonly<Record<string, unknown>> | undef
 
 function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
   if (trimString(item.tool_name).startsWith('terminal.')) return 'terminal';
+  const toolName = trimString(item.tool_name);
+  if (toolName.startsWith('computer.') || toolName.startsWith('browser.')) return toolName.startsWith('browser.') ? 'browser' : 'computer';
   return item.renderer ?? 'structured';
 }
 

@@ -287,12 +287,11 @@ func TestComputerToolActivityPreservesComputerRenderer(t *testing.T) {
 		if presentation == nil {
 			t.Fatalf("%s presentation is nil", toolName)
 		}
-		want := fltools.ActivityRenderer("computer")
-		if strings.HasPrefix(toolName, "browser.") {
-			want = fltools.ActivityRenderer("browser")
+		if presentation.Renderer != fltools.ActivityRendererStructured {
+			t.Fatalf("%s renderer=%q, want structured", toolName, presentation.Renderer)
 		}
-		if presentation.Renderer != want {
-			t.Fatalf("%s renderer=%q, want %q", toolName, presentation.Renderer, want)
+		if _, err := json.Marshal(presentation); err != nil {
+			t.Fatalf("%s presentation must satisfy Floret renderer contract: %v", toolName, err)
 		}
 	}
 }
