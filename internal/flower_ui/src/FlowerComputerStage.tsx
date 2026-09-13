@@ -26,7 +26,6 @@ export type FlowerComputerStageCopy = Readonly<{
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;
   frameURL?: string;
-  frameError?: string;
   frameRef?: string;
   threadID?: string;
   loadFrame?: (input: Readonly<{ thread_id: string; target_id: string; resource_ref: string; sha256: string; signal: AbortSignal }>) => Promise<Blob>;
@@ -42,13 +41,13 @@ function statusLabel(status: FlowerComputerStageSnapshot['status'], copy: Flower
 
 export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => {
   const [resolvedURL, setResolvedURL] = createSignal(props.frameURL);
-  const [resolvedError, setResolvedError] = createSignal(props.frameError || '');
+  const [resolvedError, setResolvedError] = createSignal('');
   createEffect(() => {
     const ref = props.frameRef || '';
     const targetID = props.snapshot.targetID || '';
     if (!ref || !targetID || !props.threadID || !props.loadFrame) {
       setResolvedURL(props.frameURL);
-      setResolvedError(props.frameError || '');
+      setResolvedError('');
       return;
     }
     const match = /^computer:\/\/[^/]+\/([a-f0-9]{64})$/u.exec(ref);
