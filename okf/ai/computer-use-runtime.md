@@ -21,7 +21,7 @@ Before execution, the interaction safety gate combines deterministic target/acti
 
 Flower publishes target actions on its existing workspace stream as ordinary tool Activity. The activity renderer shows target, action, execution location, approval state, and the latest screenshot attachment. Structured target errors include the target kind, readiness state, and a repair action so the UI can explain setup, permission, connection, and takeover recovery instead of asking the user to guess a target. Live frames are target-scoped ephemeral media and do not create a second lifecycle stream or polling loop.
 
-The Flower surface also opens a floating live Stage when a computer or browser Activity is present. The Stage shows the latest frame, target, action, execution location, safety state, and live/waiting/completed status; closing it only hides presentation and does not stop the run. The Settings switch changes the persisted AI configuration and removes typed computer/browser functions from newly prepared tool registries when disabled.
+The Flower surface also opens a floating live Stage when a computer or browser Activity is present. Opaque `computer://` frame references are resolved through the authenticated thread media endpoint into a short-lived Blob URL; the opaque reference is never assigned directly to an image element. The Stage shows the latest frame, target, action, execution location, safety state, and live/waiting/completed status; closing it only hides presentation and does not stop the run. A failed resolver displays an explicit unavailable-frame state. The Settings switch changes the persisted AI configuration and removes typed computer/browser functions from newly prepared tool registries when disabled.
 
 User initiated Stop is a control action, not a transcript message. The service records the canonical cancellation fact, audit entry, and safety outcome, while Flower clears the transient stop affordance after acknowledgement and leaves completed messages and keyframes intact. An unconfirmed external effect remains a visible safety error because it requires the user to verify the outcome and must not be replayed automatically.
 
@@ -45,6 +45,9 @@ durable screenshot bytes or target-control authority.
 - `redeven:internal/ai/virtual_desktop_target.go` - Xvfb lifecycle and unavailable-target failure.
 - `redeven:desktop/src/main/computerHost.ts` - versioned Desktop helper protocol.
 - `redeven:internal/ai/floret_runtime.go` - target attachment expansion at the provider boundary.
+- `redeven:internal/ai/service.go` and `redeven:internal/codeapp/appserver/server.go` - authenticated, hash-checked Flower media resolution boundary for computer frames.
+- `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - Blob URL lifecycle and explicit unavailable-frame rendering.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - browser-level evidence that a `computer://` frame reaches the floating Stage resolver.
 - `redeven:internal/ai/computer_use_deepseek_test.go` - online DeepSeek typed-tool and image-output qualification.
 - `redeven:internal/agent/agent.go` - absolute helper discovery, default managed-browser target state, and native helper fallback.
 - `redeven:desktop/electron-builder.config.mjs` - packaged managed-browser helper resource.

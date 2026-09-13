@@ -756,7 +756,7 @@ export type FlowerThreadView = Readonly<{
 
 export type FlowerLiveStreamEnvelope = Readonly<{
   schema_version: number;
-  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state';
+  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame';
   thread_id?: string;
   summaries?: readonly FlowerThreadSnapshot[];
   /** Typed current-state replacement from Floret; never contains replay metadata. */
@@ -769,6 +769,17 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];
   read_status?: FlowerThreadReadStatus;
+  computer_frame?: Readonly<{
+    session_id: string;
+    target_id: string;
+    resource_ref: string;
+    sha256: string;
+    mime_type: string;
+    width?: number;
+    height?: number;
+    sequence: number;
+    captured_at_ms?: number;
+  }>;
 }>;
 
 export type FlowerSubmitApprovalRequest = Readonly<{
@@ -1168,6 +1179,13 @@ export type FlowerSurfaceAdapter = Readonly<{
   readStagedLongText?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => Promise<FlowerStagedLongTextReadResult>;
   loadStagedAttachmentPreview?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope, signal: AbortSignal) => Promise<Blob>;
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
+  loadComputerFrame?: (input: Readonly<{
+    thread_id: string;
+    target_id: string;
+    resource_ref: string;
+    sha256: string;
+    signal: AbortSignal;
+  }>) => Promise<Blob>;
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;

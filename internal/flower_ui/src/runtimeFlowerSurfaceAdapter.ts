@@ -124,6 +124,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   readStagedLongText?: FlowerSurfaceAdapter['readStagedLongText'];
   loadStagedAttachmentPreview?: FlowerSurfaceAdapter['loadStagedAttachmentPreview'];
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
+  loadComputerFrame?: FlowerSurfaceAdapter['loadComputerFrame'];
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<unknown>;
@@ -189,7 +190,7 @@ function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapter
 function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveStreamEnvelope {
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const kind = trim(value.kind);
-  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state') {
+  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame') {
     throw new Error('Flower live stream returned an unsupported envelope.');
   }
   const summaries = Array.isArray(value.summaries)
@@ -206,6 +207,21 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   const contextCompactions = mapFlowerContextCompactions(value.context_compactions);
   const timelineDecorations = mapFlowerTimelineDecorations(value.timeline_decorations);
   const contextUsage = mapContextUsage(value.context_usage);
+  const rawFrame = value.computer_frame && typeof value.computer_frame === 'object' ? value.computer_frame as Record<string, unknown> : undefined;
+  const computerFrame = rawFrame && typeof rawFrame.session_id === 'string' && typeof rawFrame.target_id === 'string'
+    && typeof rawFrame.resource_ref === 'string' && typeof rawFrame.sha256 === 'string' && typeof rawFrame.mime_type === 'string'
+    ? {
+      session_id: rawFrame.session_id,
+      target_id: rawFrame.target_id,
+      resource_ref: rawFrame.resource_ref,
+      sha256: rawFrame.sha256,
+      mime_type: rawFrame.mime_type,
+      ...(Number.isFinite(Number(rawFrame.width)) ? { width: Number(rawFrame.width) } : {}),
+      ...(Number.isFinite(Number(rawFrame.height)) ? { height: Number(rawFrame.height) } : {}),
+      sequence: Math.max(0, Math.floor(Number(rawFrame.sequence))),
+      ...(Number.isFinite(Number(rawFrame.captured_at_ms)) ? { captured_at_ms: Number(rawFrame.captured_at_ms) } : {}),
+    }
+    : undefined;
   const subagents = mapFlowerSubagents(value.subagents, 'live.subagents');
   return {
     schema_version: Math.floor(Number(value.schema_version)),
@@ -218,6 +234,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     ...(contextUsage ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
+    ...(computerFrame ? { computer_frame: computerFrame } : {}),
     ...(kind === 'viewer.read_state' ? { read_status: mapFlowerReadStatus(value.read_status) } : {}),
   } as FlowerLiveStreamEnvelope;
 }
@@ -383,6 +400,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),
     ...(options.canMutate !== false && options.loadStagedAttachmentPreview ? { loadStagedAttachmentPreview: options.loadStagedAttachmentPreview } : {}),
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
+    ...(options.loadComputerFrame ? { loadComputerFrame: options.loadComputerFrame } : {}),
     resolveStorageGeneration: options.resolveStorageGeneration,
     launchTurn: options.launchTurn,
     retryThread: async (threadID) => {
