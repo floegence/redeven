@@ -2179,7 +2179,7 @@ func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider.Type)) {
-	case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", DesktopModelSourceProviderType:
+	case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", "redeven_platform", DesktopModelSourceProviderType:
 		return true
 	default:
 		return false

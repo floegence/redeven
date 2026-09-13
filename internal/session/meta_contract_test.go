@@ -10,19 +10,22 @@ func TestMetaJSONContract(t *testing.T) {
 	t.Parallel()
 
 	expected := map[string]string{
-		"ChannelID":         "channel_id",
-		"EndpointID":        "endpoint_id",
-		"FloeApp":           "floe_app",
-		"CodeSpaceID":       "code_space_id",
-		"SessionKind":       "session_kind",
-		"UserPublicID":      "user_public_id",
-		"UserEmail":         "user_email",
-		"NamespacePublicID": "namespace_public_id",
-		"CanRead":           "can_read",
-		"CanWrite":          "can_write",
-		"CanExecute":        "can_execute",
-		"CanAdmin":          "can_admin",
-		"CreatedAtUnixMs":   "created_at_unix_ms",
+		"ChannelID":                    "channel_id",
+		"EndpointID":                   "endpoint_id",
+		"FloeApp":                      "floe_app",
+		"CodeSpaceID":                  "code_space_id",
+		"SessionKind":                  "session_kind",
+		"UserPublicID":                 "user_public_id",
+		"UserEmail":                    "user_email",
+		"NamespacePublicID":            "namespace_public_id",
+		"PlatformAIGrant":              "platform_ai_grant",
+		"PlatformAIGatewayURL":         "platform_ai_gateway_url",
+		"PlatformAIEntitlementVersion": "platform_ai_entitlement_version",
+		"CanRead":                      "can_read",
+		"CanWrite":                     "can_write",
+		"CanExecute":                   "can_execute",
+		"CanAdmin":                     "can_admin",
+		"CreatedAtUnixMs":              "created_at_unix_ms",
 	}
 
 	typ := reflect.TypeOf(Meta{})

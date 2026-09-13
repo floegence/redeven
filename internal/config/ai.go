@@ -88,6 +88,7 @@ type AIProvider struct {
 	// - "groq"
 	// - "ollama"
 	// - "openai_compatible"
+	// - "redeven_platform" (global Platform AI Gateway; no local API key)
 	Type string `json:"type"`
 
 	// BaseURL overrides the provider endpoint (example: "https://api.openai.com/v1").
@@ -362,7 +363,7 @@ func (p *AIModelProfile) Validate() error {
 
 		t := strings.ToLower(strings.TrimSpace(provider.Type))
 		switch t {
-		case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
+		case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", "redeven_platform":
 		default:
 			return fmt.Errorf("providers[%d]: invalid type %q", i, t)
 		}

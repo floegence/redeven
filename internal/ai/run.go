@@ -876,6 +876,20 @@ func (r *run) resolveModelGatewayForModel(modelID string, providerID string, pro
 	if providerCfg == nil {
 		return resolvedRunModelGateway{}, fmt.Errorf("unknown provider %q", providerID)
 	}
+	if strings.EqualFold(strings.TrimSpace(providerCfg.Type), platformGatewayProviderType) {
+		if r.sessionMeta == nil || strings.TrimSpace(r.sessionMeta.PlatformAIGrant) == "" {
+			return resolvedRunModelGateway{}, errors.New("platform AI grant is missing from session metadata")
+		}
+		gatewayURL := strings.TrimSpace(providerCfg.BaseURL)
+		if gatewayURL == "" {
+			gatewayURL = strings.TrimSpace(r.sessionMeta.PlatformAIGatewayURL)
+		}
+		adapter, err := newPlatformGatewayProvider(gatewayURL, r.sessionMeta.PlatformAIGrant, modelID, r.sessionMeta.PlatformAIEntitlementVersion)
+		if err != nil {
+			return resolvedRunModelGateway{}, err
+		}
+		return resolvedRunModelGateway{provider: *providerCfg, providerType: platformGatewayProviderType, modelName: modelName, adapterOverride: adapter}, nil
+	}
 
 	providerDisplay := providerID
 	if n := strings.TrimSpace(providerCfg.Name); n != "" {
