@@ -4426,15 +4426,6 @@ webSearch: model.web_search,
 	});
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
-    if (envelope.kind === 'computer.frame') {
-      // Frame bytes stay behind the authenticated adapter resolver; the
-      // workspace stream carries only the short-lived descriptor.
-      const frame = envelope.computer_frame;
-      if (frame && envelope.thread_id === selectedThreadID()) {
-        setLiveComputerFrame(frame);
-      }
-      return;
-    }
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
       if (envelope.kind === 'ready') flowerLiveReadyCount += 1;
       const selectedID = selectedThreadID();
@@ -5482,7 +5473,6 @@ webSearch: model.web_search,
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
     lastComputerStageItemID = '';
-    setLiveComputerFrame(undefined);
     setSelectedThreadID(tid);
     scheduleThreadSelectionAfterPaint(tid, claimedSequence);
   };
@@ -5515,7 +5505,6 @@ webSearch: model.web_search,
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
-  const [liveComputerFrame, setLiveComputerFrame] = createSignal<NonNullable<FlowerLiveStreamEnvelope['computer_frame']>>();
   const [computerStageOpen, setComputerStageOpen] = createSignal(true);
   let lastComputerStageItemID = '';
   const selectedComputerStage = createMemo<FlowerComputerStageSnapshot | null>(() => {
@@ -5531,7 +5520,7 @@ webSearch: model.web_search,
         for (let itemIndex = block.block.items.length - 1; itemIndex >= 0; itemIndex -= 1) {
           const item = block.block.items[itemIndex];
           const toolName = item?.tool_name || '';
-          if (item?.renderer !== 'computer' && item?.renderer !== 'browser' && !toolName.startsWith('computer.') && !toolName.startsWith('browser.')) continue;
+          if (toolName[0] !== 'c' && toolName[0] !== 'b') continue;
           const detail = presentFlowerActivityItem(item).detailBlocks.find((candidate) => candidate.kind === 'computer');
           if (!detail || detail.kind !== 'computer') continue;
           candidates.push({
@@ -11783,7 +11772,7 @@ webSearch: model.web_search,
             <FlowerComputerStage
               snapshot={stage()}
               frameURL={frameURL()}
-              frameRef={liveComputerFrame()?.resource_ref || stage().frame}
+              frameRef={stage().frame}
               threadID={selectedThreadID()}
               loadFrame={props.adapter.loadComputerFrame}
               copy={{
