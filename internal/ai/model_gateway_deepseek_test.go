@@ -228,3 +228,50 @@ func TestDeepSeekVisionUsesPreparedImageAndPreservesToolContinuation(t *testing.
 		t.Fatal("pure text DeepSeek model accepted an image")
 	}
 }
+
+func TestDeepSeekAdapterPreservesToolResultImages(t *testing.T) {
+	var imageOutput bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Input []struct {
+				Type   string          `json:"type"`
+				Output json.RawMessage `json:"output"`
+			} `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		for _, item := range body.Input {
+			if item.Type == "function_call_output" && strings.Contains(string(item.Output), `"type":"input_image"`) {
+				imageOutput = true
+			}
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"vision\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"inspected\"}]}]}}\n\n")
+	}))
+	defer server.Close()
+	base, err := newProviderAdapter("deepseek", server.URL, "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-flash-vision-exp", ProviderControls{}, TurnBudgets{}, providerWebSearchModeDisabled)
+	adapter.supportsImageInput = true
+	adapter.attachmentResolver = func(context.Context, flprovider.Attachment) (ContentPart, error) {
+		return ContentPart{Type: "image", FileURI: "data:image/png;base64,AQID", MimeType: "image/png"}, nil
+	}
+	req := flprovider.Request{Messages: []flprovider.Message{
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "screen", Name: "computer.screenshot", Args: "{}"}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "screen", ToolName: "computer.screenshot", Text: "captured",
+			Attachments: []flprovider.Attachment{{ResourceRef: "computer://browser-main/" + strings.Repeat("a", 64), MIMEType: "image/png", Name: "screen.png", SizeBytes: 3}}}},
+	}}
+	prepared, err := adapter.turnRequest(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := base.StreamTurn(context.Background(), prepared, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !imageOutput {
+		t.Fatal("production provider adapter lost tool-result image before DeepSeek function_call_output")
+	}
+}

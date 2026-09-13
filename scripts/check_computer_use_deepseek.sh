@@ -6,16 +6,14 @@ if [[ "${REDEVEN_COMPUTER_USE_E2E}" != "1" ]]; then
   echo "computer-use qualification disabled (set REDEVEN_COMPUTER_USE_E2E=1)"
   exit 0
 fi
-: "${REDEVEN_COMPUTER_USE_E2E_BASE_URL:?set the DeepSeek Responses base URL}"
-: "${REDEVEN_COMPUTER_USE_E2E_API_KEY:?set the DeepSeek API key in the environment}"
 model="${REDEVEN_COMPUTER_USE_MODEL:-deepseek-v4-flash-vision-exp}"
 if [[ "$model" != "deepseek-v4-flash-vision-exp" ]]; then
   echo "qualification requires deepseek-v4-flash-vision-exp" >&2
   exit 1
 fi
 
-# The test owns a deterministic BrowserTarget fixture and sends only Redeven
-# typed functions. The API key is consumed by the provider adapter and is
-# never passed as a test argument or printed by the test process.
+# Drive the actual built Desktop, its production tool registry, and the model
+# adapter. A direct HTTP response with fabricated screenshots is not acceptance.
 export GOWORK=off
-go test ./internal/ai -run '^TestDeepSeekComputerUseQualification$' -count=1 -v
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec node "$root/internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs"

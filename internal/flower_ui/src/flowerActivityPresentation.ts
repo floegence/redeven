@@ -1479,11 +1479,12 @@ function presentationForStructured(item: FlowerActivityItem): FlowerActivityPres
 
 function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = asRecord(item.payload);
-  const targetID = payloadValue(payload, 'target_id');
-  const target = payloadValue(payload, 'target_name', 'target_id') || trimString(item.tool_name);
+  const frameTarget = item.target_refs?.find((ref) => ref.kind === 'computer_frame');
+  const frame = frameTarget?.resource_ref;
+  const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1];
+  const target = frameTarget?.label || item.label || trimString(item.tool_name);
   const action = payloadValue(payload, 'action_summary', 'operation') || defaultLabelForItem(item);
-  const location = payloadValue(payload, 'execution_location');
-  const frame = payloadValue(payload, 'after_frame', 'screenshot');
+  const location = item.chips?.find((chip) => chip.kind === 'execution_location')?.value ?? '';
   const safetyRecord = asRecord(payload.safety);
   const safety = payloadValue(safetyRecord, 'level', 'reason_codes');
   const title: FlowerActivityTitle = { kind: 'plain', text: action };

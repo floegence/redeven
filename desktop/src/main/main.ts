@@ -246,6 +246,7 @@ import {
   openRuntimeFlowerHTTPStream,
   runtimeFlowerPrivateBridgeHeaders,
   runtimeFlowerDeleteQuery,
+  runtimeFlowerComputerFrame,
 	runtimeFlowerInvalidJSONError,
   type RuntimeFlowerHTTPResponse,
 } from './runtimeFlowerHTTP';
@@ -450,6 +451,7 @@ import {
 import {
   CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL,
   REQUEST_RUNTIME_FLOWER_CHANNEL,
+  RUNTIME_FLOWER_COMPUTER_MEDIA_PATH,
   RUNTIME_FLOWER_STREAM_EVENT_CHANNEL,
   START_RUNTIME_FLOWER_STREAM_CHANNEL,
   normalizeRuntimeFlowerStreamID,
@@ -9942,6 +9944,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/fs/list', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/computer_use', methods: ['PUT'] },
+  { path: RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/models', methods: ['GET'] },
@@ -10357,6 +10360,9 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   const error = runtimeFlowerEnvelopeError(parsed, response.status);
   if (error) {
     return { ok: false, error, failureKind: 'response' };
+  }
+  if (RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path) && response.status === 200) {
+    return { ok: true, data: runtimeFlowerComputerFrame(response) };
   }
   const invalidJSONError = runtimeFlowerInvalidJSONError(response, parsed);
   if (invalidJSONError) {

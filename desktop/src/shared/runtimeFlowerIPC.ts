@@ -3,6 +3,10 @@ export const START_RUNTIME_FLOWER_STREAM_CHANNEL = 'redeven-desktop:runtime-flow
 export const CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL = 'redeven-desktop:runtime-flower-stream-cancel';
 export const RUNTIME_FLOWER_STREAM_EVENT_CHANNEL = 'redeven-desktop:runtime-flower-stream-event';
 
+export const RUNTIME_FLOWER_COMPUTER_MEDIA_PATH = /^\/_redeven_proxy\/api\/ai\/threads\/[A-Za-z0-9_-]+\/computer-media\/[A-Za-z0-9_-]+\/[a-f0-9]{64}$/u;
+
+export type RuntimeFlowerComputerFrame = Readonly<{ bytes: Uint8Array; mime_type: string }>;
+
 export type RuntimeFlowerRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type RuntimeFlowerRequest = Readonly<{

@@ -676,7 +676,7 @@ function mapActivityChip(raw: unknown): FlowerActivityChip | null {
 function mapActivityTargetRef(raw: unknown, index: number): FlowerActivityTargetRef | null {
   const record = plainRecordValue(raw);
   if (!record) return null;
-  const allowed = new Set(['kind', 'label', 'uri', 'line']);
+  const allowed = new Set(['kind', 'label', 'uri', 'resource_ref', 'line']);
   for (const key of Object.keys(record)) {
     if (!allowed.has(key)) {
       throw new Error(`Flower contract error: activity_item.presentation.target_refs[${index}].${key} is not part of the activity target ref contract.`);
@@ -689,6 +689,7 @@ function mapActivityTargetRef(raw: unknown, index: number): FlowerActivityTarget
     kind,
     label,
     ...(trim(record.uri) ? { uri: trim(record.uri) } : {}),
+    ...(trim(record.resource_ref) ? { resource_ref: trim(record.resource_ref) } : {}),
     ...(record.line !== undefined ? { line: nonNegativeInteger(record.line, `activity_item.presentation.target_refs[${index}].line`) } : {}),
   };
 }

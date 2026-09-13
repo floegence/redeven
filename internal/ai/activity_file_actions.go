@@ -366,6 +366,9 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 		if uri := activityMapString(ref, "uri"); activityPublicURI(uri) {
 			next["uri"] = uri
 		}
+		if resource := activityMapString(ref, "resource_ref"); kind == "computer_frame" && computerFrameResourcePattern.MatchString(resource) {
+			next["resource_ref"] = resource
+		}
 		if line, ok := activityPublicLineNumber(ref["line"]); ok {
 			next["line"] = line
 		}

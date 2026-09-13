@@ -5092,16 +5092,6 @@ html.dark .flower-component-shell {
   font-size: 0.8rem;
 }
 
-.flower-activity-computer-frame {
-  display: block;
-  max-width: min(100%, 34rem);
-  max-height: 22rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
-  object-fit: contain;
-  background: var(--surface-muted);
-}
-
 .flower-computer-stage {
   position: fixed;
   right: 1.25rem;
@@ -5113,39 +5103,16 @@ html.dark .flower-component-shell {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.9rem;
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  border-radius: 0.5rem;
+  background: var(--surface);
   box-shadow: 0 1.25rem 3rem var(--redeven-shadow-color), 0 0.25rem 0.75rem var(--redeven-shadow-color);
-  backdrop-filter: blur(1.1rem);
 }
 
-.flower-computer-stage-header,
-.flower-computer-stage-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 0.9rem;
-}
-
-.flower-computer-stage-header { border-bottom: 1px solid var(--border-subtle); }
-.flower-computer-stage-footer { border-top: 1px solid var(--border-subtle); }
-.flower-computer-stage-heading { display: grid; min-width: 0; gap: 0.15rem; }
-.flower-computer-stage-eyebrow { color: var(--text-muted); font-size: 0.7rem; letter-spacing: 0.02em; }
-.flower-computer-stage-target,
-.flower-computer-stage-action { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flower-computer-stage-target { color: var(--text-strong); font-size: 0.83rem; }
-.flower-computer-stage-action { color: var(--text-strong); font-size: 0.78rem; }
-.flower-computer-stage-header-actions { display: flex; align-items: center; gap: 0.5rem; }
-.flower-computer-stage-status { color: var(--text-muted); font-size: 0.7rem; white-space: nowrap; }
-.flower-computer-stage-status[data-status='running'],
-.flower-computer-stage-status[data-status='pending'] { color: var(--primary); }
-.flower-computer-stage-close { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 0.4rem; padding: 0.25rem; color: var(--text-muted); background: transparent; cursor: pointer; }
+.flower-computer-stage-close { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 1; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); border-radius: 0.4rem; width: 1.75rem; height: 1.75rem; color: var(--text-muted); background: var(--surface); cursor: pointer; }
 .flower-computer-stage-close:hover { color: var(--text-strong); background: var(--surface-muted); }
 .flower-computer-stage-frame-wrap { display: flex; min-height: 11rem; align-items: center; justify-content: center; background: var(--surface-muted); }
 .flower-computer-stage-frame { display: block; width: 100%; max-height: min(52vh, 24rem); object-fit: contain; }
 .flower-computer-stage-no-frame { padding: 3rem 1rem; color: var(--text-muted); font-size: 0.8rem; text-align: center; }
-.flower-computer-stage-meta { flex: 0 0 auto; overflow: hidden; color: var(--text-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 42rem) {
   .flower-computer-stage { right: 0.75rem; bottom: 0.75rem; width: calc(100vw - 1.5rem); min-width: 0; }

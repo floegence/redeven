@@ -279,7 +279,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 	}
 }
 
-func TestComputerToolActivityPreservesComputerRenderer(t *testing.T) {
+func TestComputerToolActivityPreservesPublishedRenderer(t *testing.T) {
 	t.Parallel()
 
 	for _, toolName := range []string{"computer.screenshot", "browser.navigate"} {
@@ -292,6 +292,36 @@ func TestComputerToolActivityPreservesComputerRenderer(t *testing.T) {
 		}
 		if _, err := json.Marshal(presentation); err != nil {
 			t.Fatalf("%s presentation must satisfy Floret renderer contract: %v", toolName, err)
+		}
+	}
+}
+
+func TestComputerResultFrameSurvivesActivitySerialization(t *testing.T) {
+	ref := "computer://browser-main/" + strings.Repeat("a", 64)
+	for _, name := range []string{"computer.screenshot", "computer.click", "computer.key", "browser.navigate"} {
+		result, err := floretToolResultFromFlower(nil, ToolResult{
+			ToolID: "frame-call", ToolName: name, Status: toolResultStatusSuccess,
+			Data:        map[string]any{"target_id": "browser-main", "target_name": "Redeven Managed Browser", "after_frame": ref},
+			Attachments: []ToolAttachment{{ResourceRef: ref, MIMEType: "image/png", SHA256: strings.Repeat("a", 64)}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := json.Marshal(result.Activity)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var replay fltools.ActivityPresentation
+		if err := json.Unmarshal(body, &replay); err != nil {
+			t.Fatal(err)
+		}
+		if len(replay.TargetRefs) != 1 || replay.TargetRefs[0].Kind != "computer_frame" || replay.TargetRefs[0].ResourceRef != ref {
+			t.Fatalf("%s lost screenshot at public activity boundary: %s", name, body)
+		}
+		public := publicActivityItem(observation.ActivityItem{ItemID: "tool:frame-call", ToolID: "frame-call", ToolName: name,
+			Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: &replay})
+		if public.Presentation == nil || len(public.Presentation.TargetRefs) != 1 || public.Presentation.TargetRefs[0].ResourceRef != ref {
+			t.Fatalf("%s lost screenshot in public timeline: %+v", name, public)
 		}
 	}
 }

@@ -2,10 +2,13 @@ package ai
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
+
+var computerFrameResourcePattern = regexp.MustCompile(`^computer://[A-Za-z0-9_-]+/[a-f0-9]{64}$`)
 
 func isComputerUseToolName(name string) bool {
 	name = strings.TrimSpace(name)

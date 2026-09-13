@@ -5,7 +5,14 @@ import {
 	normalizeDesktopPrivateBridgeToken,
 } from './desktopPrivateBridge';
 import type { StartupReport } from './startup';
-import type { RuntimeFlowerError, RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
+import type { RuntimeFlowerComputerFrame, RuntimeFlowerError, RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
+
+export function runtimeFlowerComputerFrame(response: RuntimeFlowerHTTPResponse): RuntimeFlowerComputerFrame {
+  if (response.headers['content-type'] !== 'image/png' || response.bytes.length === 0 || response.bytes.length > (10 << 20)) {
+    throw new Error('Flower returned invalid computer media.');
+  }
+  return { bytes: new Uint8Array(response.bytes), mime_type: 'image/png' };
+}
 
 export type RuntimeFlowerHTTPResponse = Readonly<{
   status: number;
