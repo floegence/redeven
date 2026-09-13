@@ -242,6 +242,7 @@ export type FlowerActivityDetailBlock =
   }>
   | Readonly<{
     kind: 'computer';
+    target_id?: string;
     target: string;
     action: string;
     location: string;
@@ -1476,6 +1477,7 @@ function presentationForStructured(item: FlowerActivityItem): FlowerActivityPres
 
 function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = asRecord(item.payload);
+  const targetID = payloadValue(payload, 'target_id');
   const target = payloadValue(payload, 'target_name', 'target_id') || trimString(item.tool_name);
   const action = payloadValue(payload, 'action_summary', 'operation') || defaultLabelForItem(item);
   const location = payloadValue(payload, 'execution_location');
@@ -1488,7 +1490,7 @@ function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresen
     title,
     meta: metaWithError(item, metaForItem(item)),
     detailLines: [],
-    detailBlocks: [{ kind: 'computer', target, action, location, ...(frame ? { frame } : {}), ...(safety ? { safety } : {}) }],
+    detailBlocks: [{ kind: 'computer', ...(targetID ? { target_id: targetID } : {}), target, action, location, ...(frame ? { frame } : {}), ...(safety ? { safety } : {}) }],
   };
 }
 

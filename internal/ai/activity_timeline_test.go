@@ -279,6 +279,24 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 	}
 }
 
+func TestComputerToolActivityPreservesComputerRenderer(t *testing.T) {
+	t.Parallel()
+
+	for _, toolName := range []string{"computer.screenshot", "browser.navigate"} {
+		presentation := toolStartActivityPresentation(toolName, map[string]any{"target": "current"})
+		if presentation == nil {
+			t.Fatalf("%s presentation is nil", toolName)
+		}
+		want := fltools.ActivityRenderer("computer")
+		if strings.HasPrefix(toolName, "browser.") {
+			want = fltools.ActivityRenderer("browser")
+		}
+		if presentation.Renderer != want {
+			t.Fatalf("%s renderer=%q, want %q", toolName, presentation.Renderer, want)
+		}
+	}
+}
+
 func TestToolStartActivityPresentationTrimsLabelToContract(t *testing.T) {
 	t.Parallel()
 

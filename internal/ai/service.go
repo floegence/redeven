@@ -184,6 +184,23 @@ type Service struct {
 	lifecycleCancel          context.CancelFunc
 }
 
+// ResolveTargetToolAttachment exposes a short-lived target screenshot to the
+// authenticated Flower media boundary. The executor remains the sole owner
+// of the bytes; Service only provides the runtime access boundary.
+func (s *Service) ResolveTargetToolAttachment(ctx context.Context, resourceRef string) ([]byte, error) {
+	s.mu.Lock()
+	executor := s.targetToolExecutor
+	s.mu.Unlock()
+	if executor == nil {
+		return nil, errors.New("target attachment resolver is unavailable")
+	}
+	resolver, ok := executor.(TargetToolAttachmentResolver)
+	if !ok {
+		return nil, errors.New("target attachment resolver is unavailable")
+	}
+	return resolver.ResolveTargetToolAttachment(ctx, strings.TrimSpace(resourceRef))
+}
+
 type resolvedRunModel struct {
 	ID                        string
 	ProviderID                string

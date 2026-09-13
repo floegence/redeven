@@ -4426,6 +4426,15 @@ webSearch: model.web_search,
 	});
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
+    if (envelope.kind === 'computer.frame') {
+      // Frame bytes stay behind the authenticated adapter resolver; the
+      // workspace stream carries only the short-lived descriptor.
+      const frame = envelope.computer_frame;
+      if (frame && envelope.thread_id === selectedThreadID()) {
+        setLiveComputerFrame(frame);
+      }
+      return;
+    }
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
       if (envelope.kind === 'ready') flowerLiveReadyCount += 1;
       const selectedID = selectedThreadID();
@@ -5472,6 +5481,8 @@ webSearch: model.web_search,
     setThreadLoadError('');
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
+    lastComputerStageItemID = '';
+    setLiveComputerFrame(undefined);
     setSelectedThreadID(tid);
     scheduleThreadSelectionAfterPaint(tid, claimedSequence);
   };
@@ -5504,6 +5515,7 @@ webSearch: model.web_search,
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
+  const [liveComputerFrame, setLiveComputerFrame] = createSignal<NonNullable<FlowerLiveStreamEnvelope['computer_frame']>>();
   const [computerStageOpen, setComputerStageOpen] = createSignal(true);
   let lastComputerStageItemID = '';
   const selectedComputerStage = createMemo<FlowerComputerStageSnapshot | null>(() => {
@@ -5524,6 +5536,7 @@ webSearch: model.web_search,
           candidates.push({
             item,
             target: detail.target,
+            ...(detail.target_id ? { targetID: detail.target_id } : {}),
             action: detail.action,
             location: detail.location,
             safety: detail.safety ?? '',
@@ -5533,8 +5546,9 @@ webSearch: model.web_search,
         }
       }
     }
-    return candidates.find((candidate) => candidate.status === 'running' || candidate.status === 'pending' || candidate.status === 'waiting')
-      ?? candidates[0]
+    const active = candidates.find((candidate) => candidate.status === 'running' || candidate.status === 'pending' || candidate.status === 'waiting');
+    if (active) return active;
+    return candidates[0]
       ?? null;
   });
   createEffect(() => {
@@ -8041,7 +8055,15 @@ webSearch: model.web_search,
       <Show when={block().frame}>
         {(frame) => (
           <Show when={frame().startsWith('http://') || frame().startsWith('https://') || frame().startsWith('/')}
-            fallback={<div class="flower-activity-inline-detail-line"><span class="flower-activity-inline-detail-key">Frame</span><span class="flower-activity-inline-detail-value">Available in live view</span></div>}
+            fallback={
+              <button
+                type="button"
+                class="flower-activity-inline-button"
+                onClick={() => setComputerStageOpen(true)}
+              >
+                {copy().settings.computerUseTitle}
+              </button>
+            }
           >
             <img class="flower-activity-computer-frame" src={attachmentPreviewURL(frame())} alt={block().target} loading="lazy" />
           </Show>
@@ -11760,9 +11782,14 @@ webSearch: model.web_search,
             <FlowerComputerStage
               snapshot={stage()}
               frameURL={frameURL()}
+              frameRef={liveComputerFrame()?.resource_ref || stage().frame}
+              threadID={selectedThreadID()}
+              loadFrame={props.adapter.loadComputerFrame}
               copy={{
                 title: copy().settings.computerUseTitle,
-                close: copy().chat.stop,
+                // Closing the Stage only hides the panel; it must never read
+                // like the destructive Stop action.
+                close: copy().settings.backToChat,
                 live: copy().chat.ready,
                 waiting: copy().chat.toolActivityDetailsPending,
                 noFrame: copy().chat.toolActivityDetailsPending,

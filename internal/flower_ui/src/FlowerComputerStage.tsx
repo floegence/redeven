@@ -1,11 +1,12 @@
 import type { Component } from 'solid-js';
-import { Show } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { XCircle } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerActivityItem } from './contracts/flowerSurfaceContracts';
 
 export type FlowerComputerStageSnapshot = Readonly<{
   item: FlowerActivityItem;
+  targetID?: string;
   target: string;
   action: string;
   location: string;
@@ -25,6 +26,10 @@ export type FlowerComputerStageCopy = Readonly<{
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;
   frameURL?: string;
+  frameError?: string;
+  frameRef?: string;
+  threadID?: string;
+  loadFrame?: (input: Readonly<{ thread_id: string; target_id: string; resource_ref: string; sha256: string; signal: AbortSignal }>) => Promise<Blob>;
   copy: FlowerComputerStageCopy;
   onClose: () => void;
 }>;
@@ -35,7 +40,29 @@ function statusLabel(status: FlowerComputerStageSnapshot['status'], copy: Flower
   return copy.live;
 }
 
-export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => (
+export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => {
+  const [resolvedURL, setResolvedURL] = createSignal(props.frameURL);
+  const [resolvedError, setResolvedError] = createSignal(props.frameError || '');
+  createEffect(() => {
+    const ref = props.frameRef || '';
+    const targetID = props.snapshot.targetID || '';
+    if (!ref || !targetID || !props.threadID || !props.loadFrame) {
+      setResolvedURL(props.frameURL);
+      setResolvedError(props.frameError || '');
+      return;
+    }
+    const match = /^computer:\/\/[^/]+\/([a-f0-9]{64})$/u.exec(ref);
+    if (!match) { setResolvedURL(undefined); setResolvedError('Frame reference is invalid.'); return; }
+    const controller = new AbortController();
+    let objectURL = '';
+    setResolvedURL(undefined); setResolvedError('Loading live frame…');
+    void props.loadFrame({ thread_id: props.threadID, target_id: targetID, resource_ref: ref, sha256: match[1], signal: controller.signal }).then((blob) => {
+      if (controller.signal.aborted) return;
+      objectURL = URL.createObjectURL(blob); setResolvedURL(objectURL); setResolvedError('');
+    }).catch(() => { if (!controller.signal.aborted) { setResolvedURL(undefined); setResolvedError('Live frame is unavailable.'); } });
+    onCleanup(() => { controller.abort(); if (objectURL) URL.revokeObjectURL(objectURL); });
+  });
+  return (
   <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title}>
     <header class="flower-computer-stage-header">
       <div class="flower-computer-stage-heading">
@@ -50,8 +77,18 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       </div>
     </header>
     <div class="flower-computer-stage-frame-wrap">
-      <Show when={props.frameURL} fallback={<div class="flower-computer-stage-no-frame" role="status">{props.copy.noFrame}</div>}>
-        {(url) => <img class="flower-computer-stage-frame" src={url()} alt={props.snapshot.action} />}
+      <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame" role="status">{resolvedError() || props.copy.noFrame}</div>}>
+        {(url) => (
+          <img
+            class="flower-computer-stage-frame"
+            src={url()}
+            alt={props.snapshot.action}
+            onError={() => {
+              setResolvedURL(undefined);
+              setResolvedError('Live frame is unavailable.');
+            }}
+          />
+        )}
       </Show>
     </div>
     <footer class="flower-computer-stage-footer">
@@ -64,4 +101,5 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       </Show>
     </footer>
   </section>
-);
+  );
+};

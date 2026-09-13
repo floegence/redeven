@@ -201,6 +201,24 @@ async function uploadEnvLocalFlowerAttachment(input: FlowerAttachmentUploadInput
   };
 }
 
+async function loadEnvComputerFrame(input: Readonly<{
+  thread_id: string;
+  target_id: string;
+  resource_ref: string;
+  sha256: string;
+  signal: AbortSignal;
+}>): Promise<Blob> {
+  const init = await prepareLocalApiRequestInit({ method: 'GET', signal: input.signal });
+  const response = await fetch(
+    `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/computer-media/${encodeURIComponent(input.target_id)}/${encodeURIComponent(input.sha256)}`,
+    init,
+  );
+  if (!response.ok) throw new LocalApiError({ message: 'Computer frame is unavailable.', status: response.status });
+  const body = await response.blob();
+  if (!body.type.startsWith('image/')) throw new Error('Computer frame returned an unsupported media type.');
+  return body;
+}
+
 function mapEnvStagedLongText(raw: unknown, expected: FlowerStagedAttachment): FlowerStagedLongTextReadResult {
   const record = raw && typeof raw === 'object' ? raw as Readonly<{
     attachment?: unknown;
@@ -898,6 +916,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ),
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
+    loadComputerFrame: loadEnvComputerFrame,
     resolveStorageGeneration: async () => {
       const result = await fetchLocalApiJSON<{ storage_generation: string }>('/_redeven_proxy/api/ai/storage-generation', { method: 'GET' });
       if (typeof result.storage_generation !== 'string' || (result.storage_generation && !/^[a-f0-9]{32}$/u.test(result.storage_generation))) throw new Error('Invalid Flower storage generation.');

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"database/sql"
 	"encoding/base32"
@@ -4233,6 +4234,52 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"storage_generation": aiSvc.StorageGeneration()}})
+		return
+
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/") && strings.Contains(r.URL.Path, "/computer-media/"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		const prefix = "/_redeven_proxy/api/ai/threads/"
+		rest := strings.TrimPrefix(r.URL.Path, prefix)
+		parts := strings.Split(strings.TrimPrefix(rest, "/"), "/computer-media/")
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid computer media reference"})
+			return
+		}
+		threadID, mediaPath := strings.TrimSpace(parts[0]), strings.Trim(strings.TrimSpace(parts[1]), "/")
+		mediaParts := strings.Split(mediaPath, "/")
+		if len(mediaParts) != 2 || strings.TrimSpace(mediaParts[0]) == "" || strings.TrimSpace(mediaParts[1]) == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid computer media reference"})
+			return
+		}
+		if detail, err := aiSvc.GetFlowerThreadDetail(r.Context(), meta, threadID); err != nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "computer frame is unavailable"})
+			return
+		} else if detail == nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "computer frame is unavailable"})
+			return
+		}
+		resourceRef := "computer://" + mediaParts[0] + "/" + mediaParts[1]
+		body, err := aiSvc.ResolveTargetToolAttachment(r.Context(), resourceRef)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "computer frame is unavailable"})
+			return
+		}
+		digest := fmt.Sprintf("%x", sha256.Sum256(body))
+		if digest != mediaParts[1] {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer frame digest mismatch"})
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("ETag", `"`+digest+`"`)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
 		return
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/turns":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
