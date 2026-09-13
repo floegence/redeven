@@ -26,7 +26,12 @@ for await (const line of rl) {
     else if (req.tool_name === 'computer.click') { await page.mouse.click(Number(args.x), Number(args.y)); summary = `clicked (${args.x}, ${args.y})`; }
     else if (req.tool_name === 'computer.double_click') { await page.mouse.dblclick(Number(args.x), Number(args.y)); summary = `double clicked (${args.x}, ${args.y})`; }
     else if (req.tool_name === 'computer.type') { await page.keyboard.type(String(args.text)); summary = 'typed text'; }
-    else if (req.tool_name === 'computer.key') { await page.keyboard.press(String(args.key)); summary = `pressed ${args.key}`; }
+    else if (req.tool_name === 'computer.key') {
+      const rawKey = String(args.key);
+      const keyAliases = { ctrl: 'Control', control: 'Control', cmd: 'Meta', command: 'Meta', esc: 'Escape', return: 'Enter', del: 'Delete', spacebar: ' ' };
+      const key = keyAliases[rawKey.toLowerCase()] || rawKey;
+      await page.keyboard.press(key); summary = `pressed ${key}`;
+    }
     else if (req.tool_name === 'computer.scroll') { await page.mouse.wheel(Number(args.delta_x || 0), Number(args.delta_y || 0)); summary = 'scrolled'; }
     else if (req.tool_name === 'computer.wait') { await page.waitForTimeout(Math.min(30000, Math.max(0, Number(args.milliseconds || 0)))); summary = 'waited for page'; }
     else if (req.tool_name !== 'computer.screenshot') throw new Error(`unsupported tool ${req.tool_name}`);

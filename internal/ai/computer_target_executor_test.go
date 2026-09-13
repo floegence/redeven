@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,5 +43,16 @@ func TestPlaywrightTargetExecutorFixture(t *testing.T) {
 	}
 	if _, err := executor.ExecuteTargetTool(context.Background(), TargetToolCall{ToolCallID: "click", TargetID: "fixture", ToolName: "computer.click", Arguments: click}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTargetToolResultPayloadCarriesAttachmentFrame(t *testing.T) {
+	ref := "computer://browser-main/" + strings.Repeat("a", 64)
+	payload, ok := targetToolResultPayload(TargetToolResult{
+		TargetID:    "browser-main",
+		Attachments: []TargetToolAttachment{{ResourceRef: ref, MIMEType: "image/png"}},
+	}, "browser-main").(map[string]any)
+	if !ok || payload["after_frame"] != ref || payload["screenshot"] != ref {
+		t.Fatalf("payload frame=%#v", payload)
 	}
 }
