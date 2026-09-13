@@ -595,6 +595,10 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 		if err != nil || !json.Valid(b) {
 			return nil, fmt.Errorf("invalid Floret tool schema for %s", name)
 		}
+		var schema any
+		if err := json.Unmarshal(b, &schema); err != nil || !validateToolSchemaValue(schema) {
+			return nil, fmt.Errorf("invalid Floret tool schema for %s: required must be an array when present", name)
+		}
 		out = append(out, ToolDef{
 			Name:        name,
 			Description: strings.TrimSpace(def.Description),
@@ -602,6 +606,32 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 		})
 	}
 	return out, nil
+}
+
+func validateToolSchemaValue(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			if key == "required" {
+				if item == nil {
+					return false
+				}
+				if _, ok := item.([]any); !ok {
+					return false
+				}
+			}
+			if !validateToolSchemaValue(item) {
+				return false
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if !validateToolSchemaValue(item) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, error) {

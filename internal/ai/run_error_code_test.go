@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	openai "github.com/openai/openai-go"
 )
@@ -33,6 +34,8 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "openai rate limit", err: &openai.Error{StatusCode: http.StatusTooManyRequests}, want: runErrorCodeProviderRateLimited},
 		{name: "openai model unavailable", err: &openai.Error{StatusCode: http.StatusNotFound}, want: runErrorCodeProviderModelUnavailable},
 		{name: "openai server unavailable", err: &openai.Error{StatusCode: http.StatusBadGateway}, want: runErrorCodeProviderUnreachable},
+		{name: "DeepSeek invalid request", err: &flprovider.ProviderHTTPError{Provider: "DeepSeek", StatusCode: http.StatusBadRequest, Code: "invalid_request_error", Message: "invalid schema"}, want: runErrorCodeProviderRequestInvalid},
+		{name: "provider rejected request", err: &flprovider.ProviderHTTPError{Provider: "DeepSeek", StatusCode: http.StatusUnprocessableEntity, Code: "rejected", Message: "rejected"}, want: runErrorCodeProviderRequestRejected},
 		{
 			name: "openai compatible wrapped server unavailable",
 			err:  errors.New(`POST "https://api.deepseek.com/chat/completions": 502 Bad Gateway {"error":{"message":"unavailable"}}`),

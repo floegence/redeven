@@ -85,6 +85,37 @@ func TestComputerUseSchemasUseLogicalCurrentTarget(t *testing.T) {
 		if _, ok := properties["target_id"]; ok {
 			t.Fatalf("%s exposes internal target_id", def.Name)
 		}
+		if required, exists := schema["required"]; exists && required == nil {
+			t.Fatalf("%s required must not be null", def.Name)
+		}
+	}
+}
+
+func TestComputerUseSchemasEncodeEmptyRequiredAsArray(t *testing.T) {
+	for _, def := range builtInComputerToolDefinitions() {
+		var schema map[string]any
+		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+			t.Fatal(err)
+		}
+		required, ok := schema["required"]
+		if !ok {
+			t.Fatalf("%s required missing", def.Name)
+		}
+		if _, ok := required.([]any); !ok {
+			t.Fatalf("%s required = %#v, want array", def.Name, required)
+		}
+	}
+}
+
+func TestBuiltinToolSchemasNeverEncodeNullRequired(t *testing.T) {
+	for _, def := range builtInToolDefinitions() {
+		var schema any
+		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+			t.Fatalf("%s schema: %v", def.Name, err)
+		}
+		if !validateToolSchemaValue(schema) {
+			t.Fatalf("%s schema contains an invalid required keyword", def.Name)
+		}
 	}
 }
 
