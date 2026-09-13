@@ -757,15 +757,15 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		return fltools.Result{}, err
 	}
 	attachments := floretToolAttachments(result.Attachments)
+	// Keep the media contract intact even when an executor encoded the frame
+	// provenance in its structured payload but omitted the parallel attachment
+	// slice. Without this recovery the provider receives only computer:// text
+	// and vision models repeatedly request screenshots forever.
 	if len(attachments) == 0 {
-		if data, ok := structured["data"].(map[string]any); ok {
-			for key, value := range data {
-				if strings.HasSuffix(key, "frame") || key == "screenshot" {
-					if ref := strings.TrimSpace(anyToString(value)); strings.HasPrefix(ref, "computer://") {
-						attachments = []fltools.ArtifactRef{{ID: ref, SafeLabel: "screenshot", Kind: "image", MIME: "image/png"}}
-						break
-					}
-				}
+		for _, key := range []string{"after_frame", "screenshot", "frame_ref"} {
+			if ref := strings.TrimSpace(anyToString(structured[key])); strings.HasPrefix(ref, "computer://") {
+				attachments = []fltools.ArtifactRef{{ID: ref, SafeLabel: "screenshot", Kind: "image", MIME: "image/png"}}
+				break
 			}
 		}
 	}
