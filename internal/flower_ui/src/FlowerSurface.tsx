@@ -5536,9 +5536,13 @@ webSearch: model.web_search,
         }
       }
     }
-    const active = candidates.find((candidate) => candidate.status === 'running' || candidate.status === 'pending' || candidate.status === 'waiting');
+    const active = candidates.find((candidate) => (
+      (candidate.status === 'running' || candidate.status === 'pending' || candidate.status === 'waiting')
+      && Boolean(candidate.frame)
+    ));
     if (active) return active;
-    return candidates[0]
+    return candidates.find((candidate) => Boolean(candidate.frame))
+      ?? candidates[0]
       ?? null;
   });
   createEffect(() => {
@@ -11780,8 +11784,6 @@ webSearch: model.web_search,
                 // Closing the Stage only hides the panel; it must never read
                 // like the destructive Stop action.
                 close: copy().settings.backToChat,
-                live: copy().chat.ready,
-                waiting: copy().chat.toolActivityDetailsPending,
                 noFrame: copy().chat.toolActivityDetailsPending,
               }}
               onClose={() => setComputerStageOpen(false)}

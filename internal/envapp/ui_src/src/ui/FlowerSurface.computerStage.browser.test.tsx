@@ -43,7 +43,8 @@ describe('Flower computer stage', () => {
     await waitFor(() => loadComputerFrame.mock.calls.length === 1);
     await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(runtime.querySelector('.flower-computer-stage')?.getAttribute('role')).toBe('dialog');
-    expect(runtime.querySelector('.flower-computer-stage-target')?.textContent).toContain('Redeven Managed Browser');
+    expect(runtime.querySelector('.flower-computer-stage-header')).toBeNull();
+    expect(runtime.querySelector('.flower-computer-stage-footer')).toBeNull();
     expect(runtime.querySelector('.flower-computer-stage-frame')).not.toBeNull();
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({
       thread_id: threadID, target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64),

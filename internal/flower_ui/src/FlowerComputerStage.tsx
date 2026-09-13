@@ -18,8 +18,6 @@ export type FlowerComputerStageSnapshot = Readonly<{
 export type FlowerComputerStageCopy = Readonly<{
   title: string;
   close: string;
-  live: string;
-  waiting: string;
   noFrame: string;
 }>;
 
@@ -32,12 +30,6 @@ export type FlowerComputerStageProps = Readonly<{
   copy: FlowerComputerStageCopy;
   onClose: () => void;
 }>;
-
-function statusLabel(status: FlowerComputerStageSnapshot['status'], copy: FlowerComputerStageCopy): string {
-  if (status === 'running' || status === 'pending') return copy.live;
-  if (status === 'waiting') return copy.waiting;
-  return copy.live;
-}
 
 export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => {
   const [resolvedURL, setResolvedURL] = createSignal(props.frameURL);
@@ -63,20 +55,9 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   });
   return (
   <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title}>
-    <header class="flower-computer-stage-header">
-      <div class="flower-computer-stage-heading">
-        <span class="flower-computer-stage-eyebrow">{props.copy.title}</span>
-        <strong class="flower-computer-stage-target">{props.snapshot.target}</strong>
-      </div>
-      <div class="flower-computer-stage-header-actions">
-        <span class="flower-computer-stage-status" data-status={props.snapshot.status}>{statusLabel(props.snapshot.status, props.copy)}</span>
-        <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}>
-          <XCircle class="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-    </header>
+    <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button>
     <div class="flower-computer-stage-frame-wrap">
-      <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame" role="status">{resolvedError() || props.copy.noFrame}</div>}>
+      <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame" role="status" aria-label={resolvedError() || props.copy.noFrame} />}>
         {(url) => (
           <img
             class="flower-computer-stage-frame"
@@ -90,15 +71,6 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         )}
       </Show>
     </div>
-    <footer class="flower-computer-stage-footer">
-      <span class="flower-computer-stage-action">{props.snapshot.action}</span>
-      <Show when={props.snapshot.location || props.snapshot.safety}>
-        <span class="flower-computer-stage-meta">
-          <Show when={props.snapshot.location}>{props.snapshot.location}</Show>
-          <Show when={props.snapshot.safety}> · {props.snapshot.safety}</Show>
-        </span>
-      </Show>
-    </footer>
   </section>
   );
 };
