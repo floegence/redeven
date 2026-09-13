@@ -179,7 +179,11 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	if err := os.MkdirAll(profile, 0o700); err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, e.NodeBinary, e.HelperPath, "--profile", profile)
+	// The helper is a target-scoped session, so it must outlive the individual
+	// tool call that created it. Binding the child to that call's context would
+	// terminate the browser immediately after the first action and make every
+	// subsequent action fail with a broken pipe.
+	cmd := exec.Command(e.NodeBinary, e.HelperPath, "--profile", profile)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
