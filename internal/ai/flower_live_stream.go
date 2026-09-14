@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -51,6 +52,7 @@ const (
 type FlowerLiveStreamRequest struct{}
 
 type FlowerLiveStreamEnvelope struct {
+	ObserverID          string                     `json:"observer_id,omitempty"`
 	SchemaVersion       int64                      `json:"schema_version"`
 	Kind                FlowerLiveStreamKind       `json:"kind"`
 	ThreadID            string                     `json:"thread_id,omitempty"`
@@ -118,16 +120,22 @@ type flowerLiveEncodedBatch struct {
 }
 
 type flowerLiveSubscriber struct {
-	id           uint64
-	endpointID   string
-	userPublicID string
-	queue        chan *flowerLiveEncodedBatch
-	media        chan *flowerLiveEncodedBatch
-	queueLimit   int
-	queuedBytes  int
-	initializing bool
-	buffered     []*flowerLiveEncodedBatch
-	closed       bool
+	observerID      string
+	observerContext context.Context
+	viewerMu        sync.Mutex
+	viewerRevision  uint64
+	viewerCancel    context.CancelFunc
+	viewerStop      func()
+	id              uint64
+	endpointID      string
+	userPublicID    string
+	queue           chan *flowerLiveEncodedBatch
+	media           chan *flowerLiveEncodedBatch
+	queueLimit      int
+	queuedBytes     int
+	initializing    bool
+	buffered        []*flowerLiveEncodedBatch
+	closed          bool
 }
 
 type FlowerLiveStreamSubscription struct {
@@ -162,6 +170,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	}
 	s.flowerLiveSubscriberSeq++
 	subscriber := &flowerLiveSubscriber{
+		observerID: rand.Text(), observerContext: ctx,
 		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID,
 		media: make(chan *flowerLiveEncodedBatch, 1),
 		queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit), queueLimit: flowerLiveSubscriberBatchLimit, initializing: true,
@@ -200,7 +209,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 		}
 	}
 	ready := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, Summaries: summaries,
+		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, Summaries: summaries, ObserverID: subscriber.observerID,
 	})
 	s.mu.Lock()
 	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber, ready, currentBaselines)
@@ -490,6 +499,14 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	queuedBatches := len(subscriber.queue) + len(subscriber.buffered)
 	queuedBytes := subscriber.queuedBytes
 	subscriber.closed = true
+	if subscriber.viewerCancel != nil {
+		subscriber.viewerCancel()
+	}
+	if subscriber.viewerStop != nil {
+		go subscriber.viewerStop()
+		subscriber.viewerStop = nil
+		subscriber.viewerCancel = nil
+	}
 	subscriber.buffered = nil
 	for len(subscriber.queue) > 0 {
 		batch := <-subscriber.queue

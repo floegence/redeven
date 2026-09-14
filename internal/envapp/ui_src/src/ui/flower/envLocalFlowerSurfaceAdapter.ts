@@ -917,6 +917,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
     loadComputerFrame: loadEnvComputerFrame,
+    setComputerViewer: async (input) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/computer/view', { method: 'PUT', body: JSON.stringify(input) }); },
     resolveStorageGeneration: async () => {
       const result = await fetchLocalApiJSON<{ storage_generation: string }>('/_redeven_proxy/api/ai/storage-generation', { method: 'GET' });
       if (typeof result.storage_generation !== 'string' || (result.storage_generation && !/^[a-f0-9]{32}$/u.test(result.storage_generation))) throw new Error('Invalid Flower storage generation.');

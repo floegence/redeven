@@ -126,6 +126,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   loadComputerFrame?: FlowerSurfaceAdapter['loadComputerFrame'];
   connectComputerBrowser?: FlowerSurfaceAdapter['connectComputerBrowser'];
+  setComputerViewer?: FlowerSurfaceAdapter['setComputerViewer'];
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<unknown>;
@@ -227,6 +228,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   return {
     schema_version: Math.floor(Number(value.schema_version)),
     kind,
+    ...(trim(value.observer_id) ? { observer_id: trim(value.observer_id) } : {}),
     ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
     ...(summaries ? { summaries } : {}),
     ...(current ? { current } : {}),
@@ -402,6 +404,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.loadStagedAttachmentPreview ? { loadStagedAttachmentPreview: options.loadStagedAttachmentPreview } : {}),
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
     ...(options.loadComputerFrame ? { loadComputerFrame: options.loadComputerFrame } : {}),
+    ...(options.setComputerViewer ? { setComputerViewer: options.setComputerViewer } : {}),
     ...(options.connectComputerBrowser ? { connectComputerBrowser: options.connectComputerBrowser } : {}),
     resolveStorageGeneration: options.resolveStorageGeneration,
     launchTurn: options.launchTurn,

@@ -11,13 +11,14 @@ import (
 // Flower. Executors remain responsible for lifecycle and bytes; this registry
 // only provides safe alias resolution and readiness snapshots.
 type TargetRegistry struct {
-	mu      sync.RWMutex
-	targets map[string]TargetDescriptor
-	current string
+	mu       sync.RWMutex
+	targets  map[string]TargetDescriptor
+	current  string
+	bindings map[string]string
 }
 
 func NewTargetRegistry() *TargetRegistry {
-	return &TargetRegistry{targets: make(map[string]TargetDescriptor)}
+	return &TargetRegistry{targets: make(map[string]TargetDescriptor), bindings: make(map[string]string)}
 }
 
 func (r *TargetRegistry) Register(target TargetDescriptor) error {
@@ -71,6 +72,37 @@ func (r *TargetRegistry) Update(target TargetDescriptor) error {
 	}
 	r.targets[target.ID] = target
 	return nil
+}
+
+// BindThreadTarget records the logical current target for one thread. A
+// thread binding is independent from the process default and can never select
+// an unregistered target.
+func (r *TargetRegistry) BindThreadTarget(threadID, targetID string) error {
+	threadID, targetID = strings.TrimSpace(threadID), strings.TrimSpace(targetID)
+	if threadID == "" || targetID == "" {
+		return errors.New("thread and target are required")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.targets[targetID]; !ok {
+		return errors.New("target is not registered")
+	}
+	if r.bindings == nil {
+		r.bindings = make(map[string]string)
+	}
+	r.bindings[threadID] = targetID
+	return nil
+}
+
+func (r *TargetRegistry) ResolveTargetForThread(_ context.Context, threadID, alias string) (TargetDescriptor, error) {
+	threadID = strings.TrimSpace(threadID)
+	alias = strings.TrimSpace(alias)
+	r.mu.RLock()
+	if (alias == "" || alias == "current") && threadID != "" {
+		alias = r.bindings[threadID]
+	}
+	r.mu.RUnlock()
+	return r.ResolveTarget(context.Background(), alias)
 }
 
 func (r *TargetRegistry) ResolveTarget(_ context.Context, alias string) (TargetDescriptor, error) {

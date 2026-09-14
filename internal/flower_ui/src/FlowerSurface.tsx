@@ -777,6 +777,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
   const liveTransport = createLiveTransport<FlowerLiveStreamEnvelope>();
+  const [computerObserverID, setComputerObserverID] = createSignal('');
+  const [computerLiveFrame, setComputerLiveFrame] = createSignal<FlowerLiveStreamEnvelope>();
+  let computerViewerRevision = 0;
   const companionRunTracker = new FlowerCompanionRunTracker();
   const [companionRunRevision, setCompanionRunRevision] = createSignal(0);
   const [companionRunReceipt, setCompanionRunReceipt] = createSignal<FlowerCompanionTerminalTransition>();
@@ -4426,6 +4429,16 @@ webSearch: model.web_search,
 	});
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
+    if (envelope.kind === 'computer.frame') {
+      const frame = envelope.computer_frame;
+      if (envelope.thread_id !== selectedThreadID() || !frame || frame.session_id !== computerObserverID()
+        || frame.target_id !== selectedComputerStage()?.targetID || !computerStageOpen()) return;
+      const previous = computerLiveFrame()?.computer_frame;
+      if (previous?.session_id === frame.session_id && previous.sequence >= frame.sequence) return;
+      setComputerLiveFrame(envelope);
+      return;
+    }
+    if (envelope.kind === 'ready') { setComputerObserverID(envelope.observer_id ?? ''); setComputerLiveFrame(undefined); }
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
       if (envelope.kind === 'ready') flowerLiveReadyCount += 1;
       const selectedID = selectedThreadID();
@@ -4545,7 +4558,7 @@ webSearch: model.web_search,
     const stop = liveTransport.start({
       connect,
       onCurrent: frames.push,
-      onBoundary: frames.boundary,
+      onBoundary: () => { frames.boundary(); setComputerObserverID(''); setComputerLiveFrame(undefined); },
       onTerminalError: (error) => setThreadLoadError(threadDetailUserError(error)),
     });
     onCleanup(() => { frames.dispose(); stop(); });
@@ -5558,6 +5571,7 @@ webSearch: model.web_search,
   createEffect(() => {
     selectedThreadID();
     lastComputerStageItemID = '';
+    setComputerLiveFrame(undefined);
     setComputerStageOpen(true);
   });
   createEffect(() => {
@@ -5565,6 +5579,33 @@ webSearch: model.web_search,
     if (!stage || stage.item.item_id === lastComputerStageItemID) return;
     lastComputerStageItemID = stage.item.item_id;
     setComputerStageOpen(true);
+  });
+  const computerViewerKey = createMemo(() => {
+    const stage = selectedComputerStage();
+    return computerStageOpen() && documentVisible() && computerObserverID() && stage?.frame && stage.targetID
+      && selectedThread()?.status === 'running'
+      ? JSON.stringify([computerObserverID(), selectedThreadID(), stage.targetID]) : '';
+  });
+  createEffect(() => {
+    const key = computerViewerKey();
+    const update = props.adapter.setComputerViewer;
+    if (!key || !update) return;
+    const [observer_id, thread_id, target_id] = JSON.parse(key) as string[];
+    const resource_ref = untrack(() => selectedComputerStage()?.frame);
+    let disposed = false;
+    void update({ observer_id, revision: ++computerViewerRevision, thread_id, target_id, resource_ref })
+      .catch((error) => { if (!disposed) setThreadLoadError(threadDetailUserError(error)); });
+    onCleanup(() => {
+      disposed = true;
+      // The workspace disconnect independently cancels the server sampler.
+      void update({ observer_id, revision: ++computerViewerRevision }).catch(() => undefined);
+    });
+  });
+  const computerStageFrameRef = createMemo(() => {
+    const stage = selectedComputerStage();
+    const live = computerLiveFrame();
+    return live?.thread_id === selectedThreadID() && live.computer_frame?.target_id === stage?.targetID
+      ? live.computer_frame?.resource_ref : stage?.frame;
   });
   createEffect(() => {
     const preview = contextSnapshotPreview();
@@ -11777,7 +11818,7 @@ webSearch: model.web_search,
           return (
             <FlowerComputerStage
               snapshot={stage()}
-              frameRef={stage().frame}
+              frameRef={computerStageFrameRef()}
               threadID={selectedThreadID()}
               loadFrame={props.adapter.loadComputerFrame}
               copy={{

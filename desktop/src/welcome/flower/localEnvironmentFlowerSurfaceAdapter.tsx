@@ -837,6 +837,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       }
       return new Blob([new Uint8Array(frame.bytes)], { type: frame.mime_type });
     },
+    setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
     connectComputerBrowser: async (cdpURL): Promise<FlowerTargetDescriptor> => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/connect', { cdp_url: cdpURL }),
     saveModelProfile: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));

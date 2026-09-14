@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -125,5 +126,25 @@ done
 	_, err = executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "desktop-main", ToolName: "computer.screenshot"})
 	if err != nil {
 		t.Fatalf("fresh observation inherited interrupted protocol: %v", err)
+	}
+}
+
+func TestNativeDesktopTargetExecutorPreservesSafeFailureCode(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "helper.sh")
+	if err := os.WriteFile(helper, []byte(`#!/bin/sh
+while IFS= read -r line; do
+  request_id=$(printf '%s' "$line" | sed -n 's/.*"request_id":"\([^"]*\)".*/\1/p')
+  target_id=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
+  printf '{"type":"error","request_id":"%s","target_id":"%s","error_code":"FRAME_UNAVAILABLE","error":"Authorization: private-fixture-secret"}\n' "$request_id" "$target_id"
+done
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	executor := NewNativeDesktopTargetExecutor(helper)
+	t.Cleanup(func() { _ = executor.Close() })
+	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.screenshot"})
+	classified := aitools.ClassifyError(aitools.Invocation{ToolName: "computer.screenshot"}, err)
+	if classified == nil || classified.Code != "FRAME_UNAVAILABLE" || strings.Contains(classified.Message, "private-fixture-secret") || classified.Retryable {
+		t.Fatalf("unsafe or untyped failure: %+v", classified)
 	}
 }

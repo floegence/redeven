@@ -168,7 +168,7 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 	}
 	if strings.TrimSpace(response.Error) != "" {
 		healthy = true
-		return TargetToolResult{}, errors.New(response.Error)
+		return TargetToolResult{}, computerTargetFailure(call, response.Error)
 	}
 	result := TargetToolResult{TargetID: targetID, ExecutionLocation: response.Location, Result: response.Result}
 	if response.Result != nil {
@@ -183,6 +183,7 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 		ref := "computer://" + targetID + "/" + hex.EncodeToString(sum[:])
 		e.mediaMu.Lock()
 		e.media[ref] = append([]byte(nil), body...)
+		result.frameBytes = body
 		e.mediaMu.Unlock()
 		mime := strings.TrimSpace(response.Screenshot.MIME)
 		if mime == "" {
@@ -321,4 +322,10 @@ func stopPlaywrightClient(client *playwrightTargetClient) {
 		_ = client.cmd.Process.Kill()
 		<-done
 	}
+}
+
+func (e *PlaywrightTargetExecutor) releaseTargetFrame(ref string) {
+	e.mediaMu.Lock()
+	defer e.mediaMu.Unlock()
+	delete(e.media, ref)
 }

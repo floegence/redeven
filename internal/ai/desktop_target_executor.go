@@ -147,6 +147,7 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 		Type      string         `json:"type"`
 		TargetID  string         `json:"target_id"`
 		Error     string         `json:"error"`
+		ErrorCode string         `json:"error_code"`
 		Payload   map[string]any `json:"payload"`
 	}
 	if err := json.Unmarshal(line, &event); err != nil {
@@ -157,7 +158,7 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 	}
 	if event.Type == "error" || strings.TrimSpace(event.Error) != "" {
 		healthy = true
-		return TargetToolResult{}, errors.New(event.Error)
+		return TargetToolResult{}, computerTargetFailure(call, event.ErrorCode)
 	}
 	if event.Type != "result" {
 		return TargetToolResult{}, errors.New("desktop target helper returned no result")
@@ -175,6 +176,7 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 			ref := "computer://" + event.TargetID + "/" + hash
 			e.mediaMu.Lock()
 			e.media[ref] = append([]byte(nil), body...)
+			result.frameBytes = body
 			e.mediaMu.Unlock()
 			result.Attachments = []TargetToolAttachment{{ResourceRef: ref, Name: "desktop-screenshot.png", MIMEType: mime, SizeBytes: int64(len(body)), SHA256: hash}}
 			delete(event.Payload, "screenshot_base64")
@@ -241,4 +243,10 @@ func (e *NativeDesktopTargetExecutor) stopLocked() {
 		_ = e.cmd.Wait()
 	}
 	e.cmd, e.stdin, e.stdout, e.reader = nil, nil, nil, nil
+}
+
+func (e *NativeDesktopTargetExecutor) releaseTargetFrame(ref string) {
+	e.mediaMu.Lock()
+	defer e.mediaMu.Unlock()
+	delete(e.media, ref)
 }

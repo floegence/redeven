@@ -16,6 +16,7 @@ type ComputerUseRuntime struct {
 	closed     bool
 	mu         sync.RWMutex
 	registry   *TargetRegistry
+	media      computerMediaStore
 	executors  map[string]TargetToolExecutor
 	liveFrames map[string]*computerLiveSampler
 	liveWG     sync.WaitGroup
@@ -92,11 +93,26 @@ type TargetStartupError struct{ Code, Reason string }
 
 func (e *TargetStartupError) Error() string { return e.Code + ": " + e.Reason }
 
-func NewComputerUseRuntime(registry *TargetRegistry, executors map[string]TargetToolExecutor) *ComputerUseRuntime {
-	return &ComputerUseRuntime{registry: registry, executors: executors}
+func NewComputerUseRuntime(registry *TargetRegistry, executors map[string]TargetToolExecutor, mediaDirectory string) *ComputerUseRuntime {
+	return &ComputerUseRuntime{registry: registry, executors: executors, media: computerMediaStore{directory: mediaDirectory}}
 }
 func (r *ComputerUseRuntime) ResolveTarget(ctx context.Context, alias string) (TargetDescriptor, error) {
 	return r.registry.ResolveTarget(ctx, alias)
+}
+func (r *ComputerUseRuntime) ResolveTargetForThread(ctx context.Context, threadID, alias string) (TargetDescriptor, error) {
+	target, err := r.registry.ResolveTargetForThread(ctx, threadID, alias)
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
+	if strings.TrimSpace(threadID) != "" && (strings.TrimSpace(alias) == "" || strings.TrimSpace(alias) == "current") {
+		if err := r.registry.BindThreadTarget(threadID, target.ID); err != nil {
+			return TargetDescriptor{}, err
+		}
+	}
+	return target, nil
+}
+func (r *ComputerUseRuntime) BindThreadTarget(threadID, targetID string) error {
+	return r.registry.BindThreadTarget(threadID, targetID)
 }
 func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
 	r.mu.RLock()
@@ -143,28 +159,35 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 	result, err := executor.ExecuteTargetTool(ctx, call)
 	if err != nil {
 		if target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID); resolveErr == nil {
-			target.Ready = false
-			target.State = "stopped"
-			_ = r.registry.Update(target)
+			var failure *targetToolPolicyError
+			if errors.As(err, &failure) {
+				// A capture failure or a safety pause says nothing about helper liveness.
+				if failure.targetState != "" {
+					target.Ready, target.State = false, failure.targetState
+					_ = r.registry.Update(target)
+				}
+			} else {
+				target.Ready, target.State = false, "stopped"
+				_ = r.registry.Update(target)
+			}
+		}
+	}
+	if err == nil && len(result.Attachments) > 0 {
+		for _, attachment := range result.Attachments {
+			if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
+				defer release.releaseTargetFrame(attachment.ResourceRef)
+			}
+			if !call.liveFrame {
+				if storeErr := r.media.put(ctx, attachment, result.frameBytes); storeErr != nil {
+					return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+				}
+			}
 		}
 	}
 	return result, err
 }
 func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, ref string) ([]byte, error) {
-	r.mu.RLock()
-	executors := make([]TargetToolExecutor, 0, len(r.executors))
-	for _, executor := range r.executors {
-		executors = append(executors, executor)
-	}
-	r.mu.RUnlock()
-	for _, executor := range executors {
-		if resolver, ok := executor.(TargetToolAttachmentResolver); ok {
-			if body, err := resolver.ResolveTargetToolAttachment(ctx, ref); err == nil {
-				return body, nil
-			}
-		}
-	}
-	return nil, errors.New("target attachment is unavailable")
+	return r.media.read(ctx, ref)
 }
 func (r *ComputerUseRuntime) Close() error {
 	r.connectMu.Lock()

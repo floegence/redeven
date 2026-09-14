@@ -4,6 +4,7 @@ import './flower-feature.css';
 import { describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
+import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { FlowerComputerStage } from '../../../../flower_ui/src/FlowerComputerStage';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -68,9 +69,23 @@ describe('Flower computer stage', () => {
     const loadComputerFrame = vi.fn(async () => new Blob([
       Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0)),
     ], { type: 'image/png' })).mockRejectedValueOnce(new Error('FRAME_UNAVAILABLE'));
+    let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
+    const setComputerViewer = vi.fn(async () => undefined);
     const runtime = renderSurfaceWithAdapterProps({
       ...adapter(true),
       loadComputerFrame,
+      setComputerViewer,
+      connectLiveStream: async function* ({ signal }) {
+        yield { schema_version: 1, kind: 'ready', observer_id: 'observer-1', summaries: [current] };
+        while (!signal.aborted) {
+          const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>((resolve) => {
+            const abort = () => resolve(undefined);
+            deliver = (value) => { signal.removeEventListener('abort', abort); resolve(value); };
+            signal.addEventListener('abort', abort, { once: true });
+          });
+          if (envelope) yield envelope;
+        }
+      },
       listThreads: vi.fn(async () => [current]),
       loadThread: vi.fn(async () => liveBootstrap(current, 1)),
     }, { focusThreadRequest: { request_id: 'focus-computer-stage', thread_id: threadID } });
@@ -88,7 +103,20 @@ describe('Flower computer stage', () => {
       thread_id: threadID, target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64),
     }));
     expect(loadComputerFrame).toHaveBeenCalledTimes(2);
+    await waitFor(() => setComputerViewer.mock.calls.length > 0);
+    expect(setComputerViewer).toHaveBeenCalledWith(expect.objectContaining({ observer_id: 'observer-1', thread_id: threadID, target_id: 'browser-main' }));
+    const frame = { session_id: 'observer-1', target_id: 'browser-main', resource_ref: `computer://browser-main/${'b'.repeat(64)}`, sha256: 'b'.repeat(64), mime_type: 'image/png', sequence: 2 };
+    deliver({ schema_version: 1, kind: 'computer.frame', thread_id: 'another-thread', computer_frame: frame });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(loadComputerFrame).toHaveBeenCalledTimes(2);
+    deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: frame });
+    await waitFor(() => loadComputerFrame.mock.calls.length === 3);
+    await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
+    expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame.resource_ref }));
+    expect(runtime.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
     (runtime.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-computer-stage') === null);
+    await waitFor(() => setComputerViewer.mock.calls.length === 2);
+    expect(setComputerViewer).toHaveBeenLastCalledWith({ observer_id: 'observer-1', revision: 2 });
   });
 });

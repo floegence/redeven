@@ -108,7 +108,6 @@ type run struct {
 	desktopModelSource   *desktopModelSourceClient
 	liveMetrics          *flowerLiveMetrics
 	publishComputerFrame func(FlowerComputerFrame)
-	liveFrameTargets     map[string]struct{}
 
 	id                 string // Floret canonical RunID; empty before durable admission.
 	executionKey       string
@@ -3146,12 +3145,23 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	}
 	var target TargetDescriptor
 	if r.targetResolver != nil {
-		resolved, resolveErr := r.targetResolver.ResolveTarget(ctx, targetID)
-		if resolveErr != nil {
-			return nil, &targetToolPolicyError{code: "target_unavailable", tool: toolName, target: targetID}
+		if threaded, ok := r.targetResolver.(interface {
+			ResolveTargetForThread(context.Context, string, string) (TargetDescriptor, error)
+		}); ok {
+			resolved, resolveErr := threaded.ResolveTargetForThread(ctx, r.threadID, targetID)
+			if resolveErr != nil {
+				return nil, &targetToolPolicyError{code: "target_unavailable", tool: toolName, target: targetID}
+			}
+			target = resolved
+			targetID = strings.TrimSpace(target.ID)
+		} else {
+			resolved, resolveErr := r.targetResolver.ResolveTarget(ctx, targetID)
+			if resolveErr != nil {
+				return nil, &targetToolPolicyError{code: "target_unavailable", tool: toolName, target: targetID}
+			}
+			target = resolved
+			targetID = strings.TrimSpace(target.ID)
 		}
-		target = resolved
-		targetID = strings.TrimSpace(target.ID)
 	}
 	if !targetAllowedByPolicy(policy, targetID) {
 		return nil, &targetToolPolicyError{code: "target_not_allowed", tool: toolName, target: targetID}
@@ -3211,26 +3221,6 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	result.Safety = &decision
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
-	}
-	if runtime, ok := r.targetResolver.(interface {
-		StartComputerLiveFrames(context.Context, string, string, string, func(FlowerComputerFrame)) (func(), error)
-	}); ok && r.publishComputerFrame != nil {
-		if r.liveFrameTargets == nil {
-			r.liveFrameTargets = make(map[string]struct{})
-		}
-		if _, started := r.liveFrameTargets[targetID]; !started {
-			sessionID := r.id
-			if sessionID == "" {
-				sessionID = r.messageID
-			}
-			if sessionID == "" {
-				sessionID = toolID
-			}
-			if stop, startErr := runtime.StartComputerLiveFrames(ctx, r.threadID, sessionID, targetID, r.publishComputerFrame); startErr == nil {
-				r.liveFrameTargets[targetID] = struct{}{}
-				_ = stop
-			}
-		}
 	}
 	attachments := make([]ToolAttachment, 0, len(result.Attachments))
 	for _, attachment := range result.Attachments {
@@ -3366,6 +3356,12 @@ func (e *targetToolPolicyError) Error() string {
 		return "the selected target is not allowed for this Flower thread"
 	case "target_unavailable":
 		return "target is unavailable"
+	case "frame_unavailable":
+		return "The screenshot is unavailable. Observe the target before continuing; do not replay the previous action."
+	case "invalid_computer_arguments":
+		return "The computer action has invalid arguments."
+	case "target_action_failed":
+		return "The computer action failed. Inspect the target before continuing."
 	case "interaction_takeover_required":
 		return "user takeover is required before this interaction"
 	default:
