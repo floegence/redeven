@@ -1,11 +1,15 @@
 ---
 name: redeven-environment
-description: Use when handling Redeven environment status, lifecycle operations, target routing, target diagnostics, or command execution against Redeven local, SSH, provider, gateway, or runtime targets.
+description: Use for explicit user requests to inspect, diagnose, start, stop, restart, or update a Redeven environment, or to run OS-level diagnostics on a selected machine.
 ---
 
 # Redeven Environment
 
-Use this skill for Redeven environment requests, including environment status, lifecycle actions, target routing, diagnostics, and command execution against a selected Redeven target.
+Use this skill only when the user explicitly requests environment status,
+lifecycle operations, or OS-level diagnostics on a selected Redeven machine.
+Computer Use and Browser Use setup, connection, permission, and takeover states
+belong to the Computer Use Runtime. Those states must not activate this skill
+or invoke the CLI to create or repair a browser or desktop executor.
 
 ## Core Rules
 

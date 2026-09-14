@@ -85,7 +85,18 @@ func (r *TargetRegistry) ResolveTarget(_ context.Context, alias string) (TargetD
 	}
 	target, ok := r.targets[alias]
 	if !ok {
-		return TargetDescriptor{}, errors.New("target is not registered")
+		for _, candidate := range r.targets {
+			if candidate.Kind != alias {
+				continue
+			}
+			if ok {
+				return TargetDescriptor{}, errors.New("target kind has multiple bindings")
+			}
+			target, ok = candidate, true
+		}
+		if !ok {
+			return TargetDescriptor{}, errors.New("target is not registered")
+		}
 	}
 	return target, nil
 }

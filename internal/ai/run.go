@@ -3163,6 +3163,13 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			repairAction: targetRepairAction(target),
 		}
 	}
+	if preparer, ok := r.targetToolExecutor.(TargetPreparer); ok {
+		var prepareErr error
+		target, prepareErr = preparer.PrepareTarget(ctx, target)
+		if prepareErr != nil {
+			return nil, prepareErr
+		}
+	}
 	if !target.Ready {
 		return nil, &targetToolPolicyError{
 			code: targetReadinessErrorCode(target), tool: toolName, target: targetID,

@@ -65,13 +65,24 @@ type playwrightTargetReady struct {
 	Type            string `json:"type"`
 	ProtocolVersion int    `json:"protocol_version"`
 	Error           string `json:"error,omitempty"`
+	Reason          string `json:"reason,omitempty"`
 }
 
 func NewPlaywrightTargetExecutor(nodeBinary, helperPath, profileDir string) *PlaywrightTargetExecutor {
-	if strings.TrimSpace(nodeBinary) == "" {
-		nodeBinary = "node"
-	}
 	return &PlaywrightTargetExecutor{NodeBinary: nodeBinary, HelperPath: helperPath, ProfileDir: profileDir, Timeout: 30 * time.Second, clients: map[string]*playwrightTargetClient{}, media: map[string][]byte{}}
+}
+
+func (e *PlaywrightTargetExecutor) EnsureTargetReady(ctx context.Context, targetID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed {
+		return errors.New("browser target executor is closed")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := e.clientLocked(ctx, targetID)
+	return err
 }
 
 func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
@@ -193,10 +204,10 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	if client := e.clients[targetID]; client != nil {
 		return client, nil
 	}
-	profile := e.ProfileDir
-	if profile == "" {
-		profile = filepath.Join(os.TempDir(), "redeven-computer-use")
+	if !filepath.IsAbs(e.NodeBinary) || !filepath.IsAbs(e.HelperPath) || !filepath.IsAbs(e.ProfileDir) {
+		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_paths_not_absolute"}
 	}
+	profile := e.ProfileDir
 	profile = filepath.Join(profile, targetID)
 	if err := os.MkdirAll(profile, 0o700); err != nil {
 		return nil, err
@@ -218,7 +229,7 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	if err != nil {
 		return nil, err
 	}
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -250,12 +261,24 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 		return nil, ctx.Err()
 	case <-timer.C:
 		return nil, context.DeadlineExceeded
-	case err := <-errCh:
-		return nil, fmt.Errorf("browser helper readiness failed: %w", err)
+	case <-errCh:
+		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_missing"}
 	case line := <-readyCh:
 		var handshake playwrightTargetReady
-		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 1 || handshake.Error != "" {
-			return nil, errors.New("browser helper did not complete readiness handshake")
+		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 1 {
+			return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_invalid"}
+		}
+		if handshake.Error != "" {
+			code := handshake.Error
+			if code != "TARGET_CONNECTION_REQUIRED" {
+				code = "TARGET_SETUP_REQUIRED"
+			}
+			reason := "browser_launch_failed"
+			switch handshake.Reason {
+			case "browser_dependency_missing", "browser_connection_failed", "browser_launch_failed":
+				reason = handshake.Reason
+			}
+			return nil, &TargetStartupError{Code: code, Reason: reason}
 		}
 	}
 	ready = true

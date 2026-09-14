@@ -89,26 +89,10 @@ function loadReleaseArtifactHelpers() {
 
 const bundledRuntimeArtifact = resolveBundledRuntimeArtifact();
 const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
-const computerHostScript = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'scripts', 'redevenComputerHost.mjs');
-const nativeComputerHostBinary = path.join(repoRoot, 'desktop', 'native', 'computer-host', '.build', 'release', 'redeven-computer-host');
-if (resolveTargetGoos() === 'darwin' && !fs.existsSync(nativeComputerHostBinary)) {
-  execFileSync('/usr/bin/swift', ['build', '-c', 'release', '--package-path', path.join(repoRoot, 'desktop', 'native', 'computer-host')], { stdio: 'inherit' });
+const computerResources = path.join(path.dirname(bundledDesktopManifest), 'computer');
+if (resolveTargetGoos() !== 'windows' && !fs.existsSync(path.join(computerResources, 'manifest.json'))) {
+  throw new Error('Bundled computer resources are missing. Rebuild the Desktop runtime bundle.');
 }
-const computerHostNodeModules = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'node_modules');
-if (!fs.existsSync(computerHostScript)) {
-  throw new Error(`Computer host helper source is missing: ${computerHostScript}`);
-}
-const computerHostDependencyResources = fs.existsSync(path.join(computerHostNodeModules, 'playwright'))
-  ? [
-      { from: path.join(computerHostNodeModules, 'playwright'), to: 'computer/node_modules/playwright' },
-      ...(fs.existsSync(path.join(computerHostNodeModules, 'playwright-core'))
-        ? [{ from: path.join(computerHostNodeModules, 'playwright-core'), to: 'computer/node_modules/playwright-core' }]
-        : []),
-    ]
-  : [];
-const nativeComputerHostResources = resolveTargetGoos() === 'darwin' && fs.existsSync(nativeComputerHostBinary)
-  ? [{ from: nativeComputerHostBinary, to: 'computer/redeven-computer-host' }]
-  : [];
 const bundledReDevPluginResources = resolveTargetGoos() !== 'windows'
   ? [
       'redevplugin-runtime',
@@ -212,12 +196,7 @@ export default {
       from: path.join(desktopDir, '.bundle', 'windows-ssh', 'redeven-ssh-askpass.exe'),
       to: 'native/redeven-ssh-askpass.exe',
     }] : []),
-    {
-      from: computerHostScript,
-      to: 'computer/redevenComputerHost.mjs',
-    },
-    ...computerHostDependencyResources,
-    ...nativeComputerHostResources,
+    ...(resolveTargetGoos() === 'windows' ? [] : [{ from: computerResources, to: 'bin/computer' }]),
     {
       from: path.join(repoRoot, 'LICENSE'),
       to: 'licenses/LICENSE',

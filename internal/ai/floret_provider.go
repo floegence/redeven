@@ -37,11 +37,25 @@ type floretProviderAdapter struct {
 
 type floretProviderAdapterOption func(*floretProviderAdapter)
 
+// A transport that can freeze its wire request owns both its budget and its
+// stream. Hosts must not substitute an estimate of the intermediate DTO.
+type modelGatewayRequestPreparer interface {
+	prepareTurn(context.Context, ModelGatewayRequest) (preparedModelGatewayTurn, error)
+}
+
+type preparedModelGatewayTurn interface {
+	StreamTurn(context.Context, func(StreamEvent)) (ModelGatewayResult, error)
+	TokenEstimate() flprovider.TokenEstimate
+	RenderedPayloadFingerprint() string
+	Close() error
+}
+
 type preparedFloretModelRequest struct {
 	mu              sync.Mutex
 	adapter         *floretProviderAdapter
 	providerRequest flprovider.Request
 	request         ModelGatewayRequest
+	transport       preparedModelGatewayTurn
 	estimate        flprovider.TokenEstimate
 	fingerprint     string
 	streamed        bool
@@ -122,7 +136,9 @@ func (p *floretProviderAdapter) Stream(ctx context.Context, req flprovider.Reque
 		close(out)
 		return out, nil
 	}
-	return p.streamPreparedTurn(ctx, req, turnReq), nil
+	return p.streamPreparedTurn(ctx, req, func(ctx context.Context, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+		return p.base.StreamTurn(ctx, turnReq, onEvent)
+	}), nil
 }
 
 func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
@@ -132,6 +148,16 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	turnReq, err := p.turnRequest(ctx, req)
 	if err != nil {
 		return nil, err
+	}
+	if preparer, ok := p.base.(modelGatewayRequestPreparer); ok {
+		transport, err := preparer.prepareTurn(ctx, turnReq)
+		if err != nil {
+			return nil, err
+		}
+		return &preparedFloretModelRequest{
+			adapter: p, providerRequest: req, transport: transport,
+			estimate: transport.TokenEstimate(), fingerprint: transport.RenderedPayloadFingerprint(),
+		}, nil
 	}
 	payload, err := json.Marshal(turnReq)
 	if err != nil {
@@ -180,7 +206,7 @@ func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGateway
 	}, nil
 }
 
-func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, providerReq flprovider.Request, turnReq ModelGatewayRequest) <-chan flprovider.Event {
+func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, providerReq flprovider.Request, execute func(context.Context, func(StreamEvent)) (ModelGatewayResult, error)) <-chan flprovider.Event {
 	out := make(chan flprovider.Event, 32)
 	go func() {
 		defer close(out)
@@ -229,7 +255,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 				}
 			}
 		}
-		result, err := p.base.StreamTurn(requestContext, turnReq, onEvent)
+		result, err := execute(requestContext, onEvent)
 		if err != nil {
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 			return
@@ -303,7 +329,13 @@ func (p *preparedFloretModelRequest) Stream(ctx context.Context) (<-chan flprovi
 		return nil, errors.New("prepared model request adapter is unavailable")
 	}
 	p.streamed = true
-	return p.adapter.streamPreparedTurn(ctx, p.providerRequest, p.request), nil
+	if p.transport != nil {
+		return p.adapter.streamPreparedTurn(ctx, p.providerRequest, p.transport.StreamTurn), nil
+	}
+	base, request := p.adapter.base, p.request
+	return p.adapter.streamPreparedTurn(ctx, p.providerRequest, func(ctx context.Context, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+		return base.StreamTurn(ctx, request, onEvent)
+	}), nil
 }
 
 func (p *preparedFloretModelRequest) TokenEstimate() flprovider.TokenEstimate {
@@ -333,6 +365,11 @@ func (p *preparedFloretModelRequest) Close() error {
 	p.adapter = nil
 	p.providerRequest = flprovider.Request{}
 	p.request = ModelGatewayRequest{}
+	if p.transport != nil {
+		err := p.transport.Close()
+		p.transport = nil
+		return err
+	}
 	return nil
 }
 

@@ -1,12 +1,15 @@
 /* global window, document */
 import assert from 'node:assert/strict';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { chromium } from 'playwright';
+import { findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -19,9 +22,7 @@ const source = process.env.REDEVEN_COMPUTER_CONFIG_ROOT;
 assert(source, 'REDEVEN_COMPUTER_CONFIG_ROOT must contain the authorized local DeepSeek configuration');
 const config = JSON.parse(await readFile(path.join(source, 'config.json'), 'utf8'));
 const secrets = JSON.parse(await readFile(path.join(source, 'secrets.json'), 'utf8'));
-const provider = config.ai.providers.find((entry) => entry.type === 'deepseek');
-const apiKey = secrets.ai.provider_api_keys[provider?.id];
-assert(provider && apiKey, 'local DeepSeek configuration is missing');
+const { provider, apiKey } = findDeepSeekProvider(config, secrets);
 const model = 'deepseek-v4-flash-vision-exp';
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const browser = await chromium.connectOverCDP(cdp);
@@ -70,29 +71,30 @@ await once(server, 'listening');
 const fixtureURL = `http://127.0.0.1:${server.address().port}`;
 const protocol = [];
 const protocolErrors = [];
-let providerRequestsWithoutImage = 0;
 const proxy = http.createServer(async (request, response) => {
   try {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const raw = Buffer.concat(chunks);
+    let record;
     if (request.url === '/responses') {
       const body = JSON.parse(raw.toString());
       assert.equal(body.model, model);
       assert((body.tools ?? []).every((tool) => tool.type === 'function'));
-      protocol.push({ model: body.model, toolCount: body.tools?.length ?? 0, tools: (body.tools ?? []).map((tool) => tool.name),
-        imageToolOutput: (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image')) });
-      const hasToolCall = (body.input ?? []).some((item) => item.type === 'function_call');
-      const hasImage = (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image'));
-      if (hasToolCall && !hasImage) providerRequestsWithoutImage += 1;
-      if (providerRequestsWithoutImage >= 3) {
-        throw new Error('provider received repeated tool calls without an input_image; aborting instead of waiting for a false success');
-      }
+      record = { model: body.model, wireBytes: raw.length, toolCount: body.tools?.length ?? 0, tools: (body.tools ?? []).map((tool) => tool.name),
+        imageCount: (body.input ?? []).reduce((count, item) => {
+          const content = item.type === 'function_call_output' ? item.output : item.content;
+          return count + (Array.isArray(content) ? content.filter((part) => part.type === 'input_image').length : 0);
+        }, 0),
+        imageToolOutput: (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image')) };
+      protocol.push(record);
+
     }
     const upstream = await fetch(new URL(request.url, provider.base_url), {
       method: request.method, headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       ...(raw.length ? { body: raw } : {}),
     });
+    if (record) record.httpStatus = upstream.status;
     response.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') ?? 'application/json' });
     Readable.fromWeb(upstream.body).pipe(response);
   } catch (error) {
@@ -107,9 +109,34 @@ const request = (method, url, body) => page.evaluate(async ({ method, url, body 
   if (!result.ok) throw new Error(`Runtime request failed: ${result.error.code || result.error.status}`);
   return result.data;
 }, { method, url, body });
+async function waitForProgress(predicate, label, timeout = 180_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const status = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status');
+    if (status === 'failed' || status === 'canceled') {
+      const id = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
+      const response = await request('GET', `/_redeven_proxy/api/ai/threads/${id}`);
+      const root = response.data ?? response;
+      throw new Error(`${label}: thread ${id} ${status} (${root.thread?.run_error_code ?? 'unknown'})`);
+    }
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`${label} timed out`);
+}
+const stageHasImage = () => page.evaluate(() => {
+  const image = document.querySelector('.flower-computer-stage-frame');
+  return image?.naturalWidth >= 640 && image.complete;
+});
+
 const evidence = [];
 const ownedThreads = new Set();
 let threadID;
+let nativeDirectory;
+let nativeProcess;
+let nativeExit;
+let nativeEvidence;
+const nativeRequested = process.env.REDEVEN_COMPUTER_NATIVE_E2E === '1';
 try {
   await page.bringToFront();
   await request('PUT', '/_redeven_proxy/api/ai/provider_bundle', {
@@ -138,16 +165,12 @@ try {
     threadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
     ownedThreads.add(threadID);
     console.log(`Turn ${index + 1} submitted through Flower Composer.`);
-    await page.waitForFunction(() => {
-      const image = document.querySelector('.flower-computer-stage-frame');
-      return image?.naturalWidth >= 640 && image?.complete;
-    }, null, { timeout: 180_000 });
+    await waitForProgress(stageHasImage, 'Stage image');
     if (index < 2) {
-      const deadline = Date.now() + 180_000;
-      while (completed < index + 1 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForProgress(() => completed >= index + 1, 'fixture click');
       assert.equal(completed, index + 1, 'the actual fixture click did not finish');
     }
-    await page.waitForFunction(() => !document.querySelector('[data-flower-primary-action="stop"], .flower-composer-stop-inline'), null, { timeout: 180_000 });
+    await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'turn completion');
     await page.waitForFunction(() => {
       const image = document.querySelector('.flower-computer-stage-frame');
       return image?.naturalWidth >= 640 && image.complete;
@@ -172,11 +195,57 @@ try {
     evidence.push({ turn: index + 1, fixtureCompleted: completed, ...(index === 2 ? { controls: { ...controls } } : {}), frame, screenshot });
     console.log(JSON.stringify(evidence.at(-1)));
   }
+  if (nativeRequested) {
+    assert.equal(process.platform, 'darwin', 'native qualification requires macOS');
+    nativeDirectory = await mkdtemp(path.join(output, 'native-fixture-'));
+    const executable = path.join(nativeDirectory, 'Fixture');
+    const resultFile = path.join(nativeDirectory, 'result.json');
+    await promisify(execFile)('swiftc', [path.join(root, 'scripts/fixtures/nativeComputerUse.swift'), '-o', executable, '-framework', 'AppKit']);
+    nativeProcess = spawn(executable, [resultFile], { stdio: 'ignore' });
+    nativeExit = once(nativeProcess, 'exit');
+    await waitForProgress(() => readFile(resultFile).then(() => true, () => false), 'native fixture readiness', 15_000);
+    const nativeTurns = [];
+    for (const [index, prompt] of [
+      'In the macOS Flower Native Fixture application, inspect the desktop and click Complete native step exactly twice. Take a fresh screenshot to check that Clicks is 2. Use computer tools for the native desktop, not the managed browser or terminal.',
+      'Continue in the macOS Flower Native Fixture application. Double click the blue area. Enter Flower in the text field and press Enter. Click inside the Scroll area and scroll down. Wait for the app to settle, then take a fresh screenshot to verify all four indicators are complete. Use only computer tools on the native desktop.',
+    ].entries()) {
+      const composer = page.locator('.flower-surface textarea').first();
+      await composer.fill(prompt); await composer.press('Enter');
+      await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
+      console.log(`Native application turn ${index + 1} submitted through Flower Composer.`);
+      await waitForProgress(async () => {
+        const state = JSON.parse(await readFile(resultFile, 'utf8'));
+        return index === 0 ? state.clicks === 2 : state.complete && state.scrollOffset > 0 && state.wheelEvents > 0;
+      }, 'native fixture effects');
+      await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'native turn completion');
+      await waitForProgress(stageHasImage, 'native Stage image');
+      const frame = await page.evaluate(() => {
+        const img = document.querySelector('.flower-computer-stage-frame');
+        const stage = document.querySelector('.flower-computer-stage');
+        return { target: stage.getAttribute('data-computer-target'), width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), visibleText: stage.innerText.trim(), role: stage.getAttribute('role') };
+      });
+      assert(frame.blob && frame.visibleText === '' && frame.role === 'dialog');
+      const state = JSON.parse(await readFile(resultFile, 'utf8'));
+      assert.equal(frame.target, 'desktop-main', 'Stage is showing another target');
+      assert.equal(frame.width, state.geometry.displayWidth);
+      assert.equal(frame.height, state.geometry.displayHeight);
+      const screenshot = path.join(output, `native-turn-${index + 1}.png`);
+      await page.screenshot({ path: screenshot });
+      nativeTurns.push({ frame, state, screenshot });
+      console.log(JSON.stringify({ nativeTurn: index + 1, frame, state }));
+    }
+    nativeEvidence = { turns: nativeTurns };
+    nativeProcess.kill('SIGTERM');
+    await nativeExit;
+    nativeProcess = undefined;
+    await rm(nativeDirectory, { recursive: true, force: true });
+    nativeDirectory = undefined;
+  }
   await page.locator('.flower-computer-stage-close').click();
   assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'closing Stage must hide the viewer');
   await page.locator('.flower-activity-inline-button[aria-expanded="false"]').filter({ hasText: /^screenshot/u }).last().click();
   await page.locator('.flower-activity-computer-block .flower-activity-inline-button').last().click();
-  await page.waitForFunction(() => document.querySelector('.flower-computer-stage-frame')?.naturalWidth === 1280);
+  await waitForProgress(stageHasImage, 'reopened Stage image');
   await page.locator('.flower-chat-header-actions > .flower-header-icon-button').last().click();
   const toggle = page.locator('.flower-settings-computer-use-section [role="switch"]');
   await toggle.waitFor();
@@ -194,7 +263,7 @@ try {
   await composer.press('Enter');
   await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
   ownedThreads.add(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id'));
-  await page.waitForFunction(() => !document.querySelector('[data-flower-primary-action="stop"], .flower-composer-stop-inline'), null, { timeout: 180_000 });
+  await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'turn completion');
   const disabledRequests = protocol.slice(disabledRequestStart);
   assert(disabledRequests.length > 0, 'disabled-settings turn never reached the provider');
   assert(disabledRequests.every((entry) => entry.tools.every((tool) => !/^(computer|browser)[_.]/u.test(tool))), 'disabled setting still registered computer/browser tools');
@@ -214,7 +283,7 @@ try {
   await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
   ownedThreads.add(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id'));
   await page.waitForFunction(() => document.querySelector('.flower-computer-stage-frame')?.naturalWidth === 1280, null, { timeout: 180_000 });
-  await page.waitForFunction(() => !document.querySelector('[data-flower-primary-action="stop"], .flower-composer-stop-inline'), null, { timeout: 180_000 });
+  await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'turn completion');
   assert(protocol.slice(enabledRequestStart).some((entry) => entry.imageToolOutput), 're-enabled setting did not restore visual tool execution');
   assert.equal(completed, 2, 'observation-only turn unexpectedly mutated the fixture');
   assert(threadID, 'Composer did not expose the actual selected thread');
@@ -229,15 +298,23 @@ try {
   const expectedTools = ['browser.navigate', 'browser.back', 'browser.reload', 'computer.screenshot', 'computer.click', 'computer.double_click', 'computer.type', 'computer.key', 'computer.scroll', 'computer.wait'];
   for (const tool of expectedTools) assert(activities.some((item) => item.tool === tool), `actual thread did not execute ${tool}`);
   assert(activities.some((item) => item.targetRefs?.some((ref) => ref.resource_ref?.startsWith('computer://'))), 'public thread lost media provenance');
+  if (nativeRequested) {
+    const nativeTools = activities.filter((item) => item.targetRefs?.some((ref) => ref.resource_ref?.startsWith('computer://desktop-main/'))).map((item) => item.tool);
+    for (const tool of expectedTools.filter((name) => name.startsWith('computer.'))) assert(nativeTools.includes(tool), `native desktop did not complete ${tool}`);
+  }
   assert(protocol.some((entry) => entry.imageToolOutput), 'the actual provider never received a tool-result image');
   assert.equal(protocolErrors.length, 0, 'provider protocol assertions failed');
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'managed-browser-desktop-ui', model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
-  console.log('Managed-browser Desktop UI qualification passed; other targets and takeover require separate qualification.');
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  console.log(`${nativeRequested ? 'Managed-browser and native desktop' : 'Managed-browser'} Desktop UI qualification passed; other targets and takeover require separate qualification.`);
 } catch (error) {
   await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => undefined);
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID, completed, controls, evidence, protocol, protocolErrors, failure: String(error).split('\n')[0] }, null, 2));
+  const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
+  const current = threadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`).catch(() => null) : null;
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID, completed, controls, evidence, nativeEvidence, nativeState, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
+  if (nativeProcess) { nativeProcess.kill('SIGKILL'); await nativeExit; }
+  if (nativeDirectory) await rm(nativeDirectory, { recursive: true, force: true });
   for (const id of ownedThreads) if (id) await request('POST', `/_redeven_proxy/api/ai/threads/${id}/cancel`).catch(() => undefined);
   await request('PUT', '/_redeven_proxy/api/ai/provider_bundle', {
     model_profile: { current_model_id: `${provider.id}/${model}`, providers: [provider] },

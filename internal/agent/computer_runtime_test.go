@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai"
@@ -23,20 +24,18 @@ func TestComputerUseRuntimeUsesConfiguredAbsoluteHelperFromAnyWorkingDirectory(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.ID != "browser-main" || target.Kind != "browser.managed" || !target.Ready || target.State != "ready" {
+	if target.ID != "browser-main" || target.Kind != "browser.managed" || target.Ready || target.State != "setup_required" {
 		t.Fatalf("target = %+v", target)
 	}
-	if got := executor.(*ai.PlaywrightTargetExecutor).HelperPath; got != helper {
-		t.Fatalf("helper path = %q, want %q", got, helper)
-	}
+
 }
 
 func TestComputerUseRuntimeReportsSetupRequiredWhenHelperIsMissing(t *testing.T) {
 	t.Setenv("REDEVEN_COMPUTER_HOST_HELPER_PATH", filepath.Join(t.TempDir(), "missing.mjs"))
 	t.Setenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH", filepath.Join(t.TempDir(), "missing-native"))
 	executor, resolver := computerUseRuntime(filepath.Join(t.TempDir(), "state"))
-	if executor != nil {
-		t.Fatal("missing helper should not produce an executor")
+	if executor == nil {
+		t.Fatal("runtime owner should remain available to report setup state")
 	}
 	target, err := resolver.ResolveTarget(t.Context(), "current")
 	if err != nil {
@@ -48,8 +47,11 @@ func TestComputerUseRuntimeReportsSetupRequiredWhenHelperIsMissing(t *testing.T)
 }
 
 func TestComputerUseRuntimeFallsBackToReadyNativeTargetWhenBrowserHelperMissing(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native desktop registration is macOS-only")
+	}
 	native := filepath.Join(t.TempDir(), "redeven-computer-host")
-	if err := os.WriteFile(native, []byte("#!/bin/sh\nprintf '{\"screen_recording\":true,\"accessibility\":true}'\n"), 0o700); err != nil {
+	if err := os.WriteFile(native, []byte("#!/bin/sh\nprintf '{\"protocol_version\":1,\"screen_recording\":true,\"accessibility\":true}'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("REDEVEN_COMPUTER_HOST_HELPER_PATH", filepath.Join(t.TempDir(), "missing-browser"))
@@ -62,31 +64,40 @@ func TestComputerUseRuntimeFallsBackToReadyNativeTargetWhenBrowserHelperMissing(
 	if err != nil {
 		t.Fatal(err)
 	}
+	target, err = executor.(ai.TargetPreparer).PrepareTarget(t.Context(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = executor.(*ai.ComputerUseRuntime).Close() })
 	if target.ID != "desktop-main" || !target.Ready {
 		t.Fatalf("current target = %+v", target)
 	}
 }
 
 func TestComputerUseRuntimeRegistersNativeTargetAlongsideManagedBrowser(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("native desktop registration is macOS-only")
+	}
+	t.Setenv("REDEVEN_COMPUTER_CONNECTED_CDP_URL", "http://127.0.0.1:19222")
 	managed := filepath.Join(t.TempDir(), "redevenComputerHost.mjs")
 	native := filepath.Join(t.TempDir(), "redeven-computer-host")
 	if err := os.WriteFile(managed, []byte("// fixture"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(native, []byte("#!/bin/sh\nprintf '{\"screen_recording\":true,\"accessibility\":true}'\n"), 0o700); err != nil {
+	if err := os.WriteFile(native, []byte("#!/bin/sh\nprintf '{\"protocol_version\":1,\"screen_recording\":true,\"accessibility\":true}'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("REDEVEN_COMPUTER_HOST_HELPER_PATH", managed)
 	t.Setenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH", native)
 	executor, resolver := computerUseRuntime(filepath.Join(t.TempDir(), "state"))
-	if _, ok := executor.(*ai.MultiTargetExecutor); !ok {
+	if _, ok := executor.(*ai.ComputerUseRuntime); !ok {
 		t.Fatalf("executor = %T, want multiplexed target executor", executor)
 	}
 	target, err := resolver.ResolveTarget(t.Context(), "desktop-main")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.Kind != "desktop.screen" || !target.Ready {
+	if target.Kind != "desktop.screen" || target.Ready {
 		t.Fatalf("target = %+v", target)
 	}
 }

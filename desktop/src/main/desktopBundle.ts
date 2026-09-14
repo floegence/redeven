@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { validateComputerResources } from './computerResources';
 
 const DESKTOP_BUNDLE_MANIFEST_NAME = 'desktop-bundle-manifest.json';
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -212,8 +213,8 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
   let decoded: unknown;
   try { decoded = JSON.parse(manifestFile.bytes.toString('utf8')); } catch { throw new Error('Desktop bundle manifest is not valid JSON.'); }
   const manifest = requireObject(decoded, 'manifest');
-  requireExactKeys(manifest, ['architecture', 'commit', 'distribution_kind', 'managed_wsl_runtime', 'platform', 'provenance', 'runtime_files', 'runtime_files_sha256', 'schema_version', 'version'], 'manifest');
-  if (manifest.schema_version !== 4) throw new Error('Desktop bundle manifest schema is unsupported.');
+  requireExactKeys(manifest, ['architecture', 'commit', 'computer_manifest_sha256', 'distribution_kind', 'managed_wsl_runtime', 'platform', 'provenance', 'runtime_files', 'runtime_files_sha256', 'schema_version', 'version'], 'manifest');
+  if (manifest.schema_version !== 5) throw new Error('Desktop bundle manifest schema is unsupported.');
   const version = compact(manifest.version);
   const commit = compact(manifest.commit);
   const platform = compact(manifest.platform);
@@ -260,6 +261,7 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
   const validatedWSLArchive = validated.find((artifact) => path.basename(artifact.path) === 'redeven_linux_amd64.tar.gz');
   let managedWSLRuntime: DesktopManagedWSLRuntimeAttestation | undefined;
   if (platform === 'windows') {
+    if (manifest.computer_manifest_sha256 !== null) throw new Error('Managed WSL bundle must not contain host computer resources.');
     if (!validatedWSLArchive) throw new Error('Desktop bundle managed WSL archive is missing after validation.');
     managedWSLRuntime = parseManagedWSLRuntimeAttestation(manifest.managed_wsl_runtime, wslArchive!, version, commit);
   } else {
@@ -268,6 +270,7 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
     }
     if (!validatedRuntime) throw new Error('Desktop bundle Runtime executable is missing after validation.');
     await validateBinaryIdentity(validatedRuntime.path, version, commit);
+    await validateComputerResources(root, manifest.computer_manifest_sha256, platform, architecture);
   }
   return {
     root,

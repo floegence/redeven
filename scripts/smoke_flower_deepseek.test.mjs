@@ -26,35 +26,39 @@ import {
 const expectedConfiguration = {
   root: '/tmp/redeven-flower-smoke-01a00852',
   workspace: '/tmp/redeven-flower-smoke-01a00852/workspace',
-  model: 'deepseek-v4-flash',
+  model: 'deepseek-v4-flash-vision-exp',
   localUIPort: 43924,
   cdpPort: 43925,
   inspectorPort: 43926,
 };
 
-test('smoke configuration locks root, workspace, ports, and DeepSeek V4 Flash', () => {
+test('smoke configuration locks provenance and Vision while accepting distinct available ports', () => {
   assert.doesNotThrow(() => assertSmokeConfiguration(expectedConfiguration));
   for (const patch of [
     { model: 'deepseek-v4-pro' },
     { root: '/tmp/other' },
     { workspace: '/tmp/other/workspace' },
-    { localUIPort: 43824 },
-    { cdpPort: 43825 },
-    { inspectorPort: 43826 },
   ]) {
     assert.throws(() => assertSmokeConfiguration({ ...expectedConfiguration, ...patch }), /locked/u);
   }
+  assert.doesNotThrow(() => assertSmokeConfiguration({ ...expectedConfiguration, localUIPort: 31000, cdpPort: 31001, inspectorPort: 31002 }));
+  for (const patch of [{ localUIPort: 0 }, { cdpPort: 65536 }, { inspectorPort: 2.5 }, { cdpPort: 43924 }]) {
+    assert.throws(() => assertSmokeConfiguration({ ...expectedConfiguration, ...patch }), /port/u);
+  }
 });
 
-test('Desktop launch receives the locked local UI port', async () => {
+test('Desktop launch and cleanup record the actual allocated ports', async () => {
   const runner = await readFile(new URL('./smoke_flower_deepseek.sh', import.meta.url), 'utf8');
   assert.match(runner, /REDEVEN_DESKTOP_LOCAL_UI_BIND="127\.0\.0\.1:\$LOCAL_UI_PORT"/u);
-  assert.match(runner, /LOCAL_UI_PORT=43924/u);
+  assert.match(runner, /local_ui: Number\(localUI\), cdp: Number\(cdp\), inspector: Number\(inspector\)/u);
+  assert.match(runner, /LAUNCH_PID=\$!\ncapture_manifest/u);
+  assert.match(runner, /SMOKE_SUITE.*computer/u);
+  assert.doesNotMatch(runner, /4392[456]/u);
   assert.match(runner, /owned_pids=\$\(node .* owned-pids/u);
   assert.doesNotMatch(runner, /\$\{owned\[@\]\}/u);
 });
 
-test('provider selection requires an exact DeepSeek provider key and forces flash model', () => {
+test('provider selection requires an exact DeepSeek provider key and forces the Vision model', () => {
   const selected = findDeepSeekProvider({
     current_model_id: 'deepseek-profile/deepseek-v4-pro',
     providers: [{
@@ -62,12 +66,31 @@ test('provider selection requires an exact DeepSeek provider key and forces flas
       models: [{ model_name: 'deepseek-v4-pro' }, { model_name: 'deepseek-v4-flash' }],
     }],
   }, { provider_api_keys: { 'deepseek-profile': 'smoke-test-secret' } });
-  assert.equal(selected.currentModelID, 'deepseek-profile/deepseek-v4-flash');
+  assert.equal(selected.currentModelID, 'deepseek-profile/deepseek-v4-flash-vision-exp');
   assert.equal(selected.provider.type, 'deepseek');
   assert.equal(selected.apiKey, 'smoke-test-secret');
   assert.throws(() => findDeepSeekProvider({
     providers: [{ id: 'deepseek-profile', type: 'deepseek', models: [{ model_name: 'deepseek-v4-flash' }] }],
   }, { provider_api_keys: {} }), /API key is missing/u);
+});
+
+
+test('Vision qualification normalizes only its isolated provider copy', () => {
+  for (const models of [[], [{ model_name: 'deepseek-v4-flash-vision-exp' }]]) {
+    const config = { ai: { providers: [{ id: 'ds', type: 'deepseek', model_selection: {}, models }] } };
+    const original = structuredClone(config);
+    const result = findDeepSeekProvider(config, { ai: { provider_api_keys: { ds: 'test-only-secret' } } });
+    assert.deepEqual(config, original);
+    assert.deepEqual(result.provider.model_selection, {});
+    assert.equal(result.provider.models, undefined);
+  }
+});
+
+test('shipped DeepSeek catalog supplies image capability for qualification', async () => {
+  const catalog = JSON.parse(await readFile(new URL('../internal/config/model_catalog.generated.json', import.meta.url), 'utf8'));
+  const model = catalog.providers.deepseek.find((entry) => entry.model_name === expectedConfiguration.model);
+  assert(model?.input_modalities.includes('image'));
+  assert(model?.input_modalities.includes('text'));
 });
 
 test('canonical evidence unwraps the API envelope and preserves canonical IDs', () => {

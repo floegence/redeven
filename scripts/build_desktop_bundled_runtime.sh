@@ -190,6 +190,7 @@ const { join } = require("node:path");
 const expected = [
   "desktop-bundle-manifest.json",
 ];
+if (process.env.BUNDLE_GOOS !== "windows") expected.push("computer");
 if (process.env.BUNDLE_GOOS === "windows") expected.push("redeven_linux_amd64.tar.gz");
 else expected.push("redeven");
 if (process.env.BUNDLE_GOOS !== "windows") expected.push(
@@ -209,6 +210,7 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
 }
 for (const name of actual) {
   const stat = lstatSync(join(process.env.BUNDLE_DIR, name));
+  if (name === "computer" && stat.isDirectory() && !stat.isSymbolicLink()) continue;
   if (stat.isSymbolicLink() || !stat.isFile()) fail(`bundle entry must be a regular file: ${name}`);
 }
 function fail(message) {
@@ -243,6 +245,7 @@ if (provenance !== "packaged_bundle" && provenance !== "development_bundle") fai
 function descriptor(name, executable) {
   const filePath = join(root, name);
   const stat = lstatSync(filePath);
+  if (name === "computer" && stat.isDirectory() && !stat.isSymbolicLink()) continue;
   if (stat.isSymbolicLink() || !stat.isFile()) fail(`bundle entry must be a regular file: ${name}`);
   if (executable && (stat.mode & 0o111) === 0) fail(`bundle entry must be executable: ${name}`);
   const bytes = readFileSync(filePath);
@@ -292,7 +295,8 @@ const suiteIdentity = {
   })).sort((left, right) => left.name.localeCompare(right.name)),
 };
 const manifest = {
-  schema_version: 4,
+  schema_version: 5,
+  computer_manifest_sha256: platform === "windows" ? null : createHash("sha256").update(readFileSync(join(root, "computer", "manifest.json"))).digest("hex"),
   version: version.startsWith("v") ? version : `v${version}`,
   commit,
   platform,
@@ -455,6 +459,11 @@ main() {
     "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
       --scan-root "$working_bundle" \
       --runtime-target "${goos}/${goarch}"
+  fi
+  if [ "$goos" != "windows" ]; then
+    local node_arch="$goarch"
+    if [ "$node_arch" = "amd64" ]; then node_arch="x64"; fi
+    node "$SCRIPT_DIR/stage_computer_resources.mjs" "$working_bundle/computer" "$goos" "$node_arch"
   fi
   write_bundle_manifest "$working_bundle" "$goos" "$goarch" "$bundle_version" "$bundle_commit"
   assert_bundle_inventory "$working_bundle" "$from_archive" "$goos"

@@ -30,6 +30,11 @@ INITIAL_GIT_STATUS=
 CLEANUP_STARTED=false
 
 [[ $# -eq 0 ]] || { echo "usage: $0" >&2; exit 2; }
+SMOKE_SUITE=${REDEVEN_FLOWER_SMOKE_SUITE:-flower}
+case "$SMOKE_SUITE" in
+  flower|computer|computer-native) ;;
+  *) echo "Unknown Flower smoke suite: $SMOKE_SUITE" >&2; exit 2 ;;
+esac
 
 if [[ -e "$SMOKE_ROOT" ]]; then
   echo "Flower smoke root already exists; refusing to overwrite $SMOKE_ROOT" >&2
@@ -37,6 +42,7 @@ if [[ -e "$SMOKE_ROOT" ]]; then
 fi
 
 node "$SCRIPT_DIR/smoke_flower_deepseek.mjs" check-ports "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT"
+node "$SCRIPT_DIR/generate_third_party_notices.mjs" --check
 
 mkdir -p "$STATE_ROOT/catalog" "$RUNTIME_STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" "$REPORT_ROOT"
 SOURCE_CONFIG_HASH_BEFORE=$(shasum -a 256 "$SOURCE_STATE_ROOT/config.json" | awk '{print $1}')
@@ -93,20 +99,20 @@ capture_manifest() {
     [[ "$runtime_pid" =~ ^[0-9]+$ ]] && pids=$(printf '%s\n%s\n' "$pids" "$runtime_pid")
   done < <(find "$TEMP_ROOT" -type f -name startup-report.json -print 2>/dev/null)
   pids=$(printf '%s\n' "$pids" | awk '/^[0-9]+$/' | sort -n -u)
-  PID_VALUES="$pids" node - "$MANIFEST_FILE" "$ROOT_DIR" "$STATE_ROOT" "$commit" <<'NODE'
+  PID_VALUES="$pids" node - "$MANIFEST_FILE" "$ROOT_DIR" "$STATE_ROOT" "$commit" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" <<'NODE'
 const fs = require('node:fs');
-const [file, worktree, stateRoot, commit] = process.argv.slice(2);
+const [file, worktree, stateRoot, commit, localUI, cdp, inspector] = process.argv.slice(2);
 const pids = String(process.env.PID_VALUES ?? '').split(/\s+/u).filter(Boolean).map(Number);
 fs.writeFileSync(file, `${JSON.stringify({
   schema_version: 1, worktree, stateRoot, commit,
-  ports: { local_ui: 43924, cdp: 43925, inspector: 43926 }, pids,
+  ports: { local_ui: Number(localUI), cdp: Number(cdp), inspector: Number(inspector) }, pids,
 }, null, 2)}\n`, { mode: 0o600 });
 NODE
 }
 
 stop_owned() {
-  [[ -f "$MANIFEST_FILE" ]] || return 0
   capture_manifest
+  [[ -f "$MANIFEST_FILE" ]] || return 0
   local owned_pids pid
   owned_pids=$(node "$SCRIPT_DIR/smoke_flower_deepseek.mjs" owned-pids "$MANIFEST_FILE")
   while IFS= read -r pid; do
@@ -155,6 +161,24 @@ cleanup() {
   FINAL_GIT_STATUS=$(git -C "$ROOT_DIR" status --porcelain=v1)
   [[ "$INITIAL_GIT_STATUS" == "$FINAL_GIT_STATUS" ]] && git_unchanged=true || status=1
   node "$SCRIPT_DIR/smoke_flower_deepseek.mjs" check-ports "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" && ports_released=true || status=1
+  # Keep only diagnostic evidence. Browser profiles and Runtime stores can
+  # contain credentials even after removing the source JSON credential files.
+  if [[ "$ports_released" == true ]]; then
+    node - "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" <<'NODE'
+const fs = require('node:fs');
+function makeDirectoriesWritable(root) {
+  if (!fs.existsSync(root)) return;
+  fs.chmodSync(root, 0o700);
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeDirectoriesWritable(`${root}/${entry.name}`);
+  }
+}
+for (const root of process.argv.slice(2)) {
+  makeDirectoriesWritable(root);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+NODE
+  fi
   node - "$REPORT_ROOT/cleanup.json" "$REPORT_ROOT/result.json" "$secret_leak_found" "$source_unchanged" "$git_unchanged" "$ports_released" "$provider_state_removed" <<'NODE'
 const fs = require('node:fs');
 const [file, resultFile, secretLeakFound, sourceUnchanged, gitUnchanged, portsReleased, providerStateRemoved] = process.argv.slice(2);
@@ -201,6 +225,7 @@ REDEVEN_AGENT_FORCE_INSTALL=1 \
   "$ROOT_DIR/scripts/dev_desktop.sh" --no-stop --no-devtools \
     --remote-debugging-port "$CDP_PORT" --inspect-port "$INSPECTOR_PORT" >"$DESKTOP_LOG" 2>&1 &
 LAUNCH_PID=$!
+capture_manifest
 
 deadline=$((SECONDS + 240))
 until curl -fsS "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; do
@@ -231,12 +256,36 @@ commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
 node - "$REPORT_ROOT/run-config.json" "$ROOT_DIR" "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" "$REPORT_ROOT" "$commit" "$RUNTIME_PID" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$REDEVEN_FLOWER_SMOKE_MODEL" <<'NODE'
 const fs = require('node:fs');
 const [file, worktree, stateRoot, userDataRoot, cacheRoot, tempRoot, workspace, reportRoot, commit, runtimePID, localUIPort, cdpPort, inspectorPort, model] = process.argv.slice(2);
+const { execFileSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
+const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const sourceDiffSHA256 = digest(execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd: worktree }));
+const untrackedSourceSHA256 = Object.fromEntries(execFileSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd: worktree }).toString().split('\0').filter(Boolean).map((name) => [name, digest(fs.readFileSync(`${worktree}/${name}`))]));
+const bundleRoot = `${stateRoot}/desktop/bundles`;
+const manifests = fs.readdirSync(bundleRoot).filter((name) => /^[a-f0-9]{64}$/u.test(name));
+if (manifests.length !== 1) throw new Error('Qualification must use one immutable runtime bundle');
+const bundleManifest = fs.readFileSync(`${bundleRoot}/${manifests[0]}/desktop-bundle-manifest.json`);
+const bundleManifestSHA256 = digest(bundleManifest);
+if (bundleManifestSHA256 !== manifests[0]) throw new Error('Runtime bundle manifest identity changed');
+fs.writeFileSync(`${reportRoot}/bundle-manifest.json`, bundleManifest, { mode: 0o600 });
 fs.writeFileSync(file, `${JSON.stringify({
   root: '/tmp/redeven-flower-smoke-01a00852', workspace, model,
+  sourceDiffSHA256, untrackedSourceSHA256, bundleManifestSHA256,
   localUIPort: Number(localUIPort), cdpPort: Number(cdpPort), inspectorPort: Number(inspectorPort),
   worktree, stateRoot, userDataRoot, cacheRoot, tempRoot, reportRoot, commit, runtimePID: Number(runtimePID),
   playwrightRoot: `${worktree}/internal/envapp/ui_src/node_modules`,
 }, null, 2)}\n`, { mode: 0o600 });
 NODE
 
-node "$SCRIPT_DIR/smoke_flower_deepseek.mjs" run "$REPORT_ROOT/run-config.json"
+if [[ "$SMOKE_SUITE" == computer* ]]; then
+  NATIVE_E2E=0
+  [[ "$SMOKE_SUITE" != computer-native ]] || NATIVE_E2E=1
+  REDEVEN_COMPUTER_NATIVE_E2E="$NATIVE_E2E" \
+  REDEVEN_COMPUTER_USE_E2E=1 \
+  REDEVEN_DESKTOP_CDP="http://127.0.0.1:$CDP_PORT" \
+  REDEVEN_COMPUTER_EVIDENCE_DIR="$REPORT_ROOT/computer" \
+  REDEVEN_COMPUTER_CONFIG_ROOT="$SOURCE_STATE_ROOT" \
+    "$SCRIPT_DIR/check_computer_use_deepseek.sh"
+else
+  node "$SCRIPT_DIR/smoke_flower_deepseek.mjs" run "$REPORT_ROOT/run-config.json"
+fi

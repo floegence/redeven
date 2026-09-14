@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -39,7 +40,7 @@ done
 	if err := os.WriteFile(helper, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	executor := NewPlaywrightTargetExecutor("sh", helper, t.TempDir())
+	executor := NewPlaywrightTargetExecutor("/bin/sh", helper, t.TempDir())
 	t.Cleanup(func() { _ = executor.Close() })
 	return executor
 }
@@ -127,7 +128,11 @@ func TestPlaywrightTargetExecutorFixture(t *testing.T) {
 	}))
 	defer server.Close()
 	helper := filepath.Join("..", "envapp", "ui_src", "scripts", "redevenComputerHost.mjs")
-	executor := NewPlaywrightTargetExecutor("node", helper, t.TempDir())
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor := NewPlaywrightTargetExecutor(node, helper, t.TempDir())
 	defer executor.Close()
 	execute := func(tool string, args map[string]any) TargetToolResult {
 		t.Helper()
@@ -199,7 +204,7 @@ func TestPlaywrightTargetExecutorFixture(t *testing.T) {
 	// the next observation to establish a fresh session without manual cleanup.
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	_, err := executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "fixture", ToolName: "computer.wait", Arguments: json.RawMessage(`{"milliseconds":30000}`)})
+	_, err = executor.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "fixture", ToolName: "computer.wait", Arguments: json.RawMessage(`{"milliseconds":30000}`)})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("cancel actual helper: %v", err)
 	}

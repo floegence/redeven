@@ -7,7 +7,7 @@ timestamp: 2026-09-14T00:00:00Z
 ---
 # Summary
 
-Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the thread target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Flower Settings keeps computer/browser use enabled by default but lets users turn it off for future runs. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.
+Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Flower Settings keeps computer/browser use enabled by default but lets users turn it off for future runs. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.
 
 # Contract
 
@@ -20,7 +20,7 @@ once from canonical descriptors without relaxing subsequent prefix checks.
 
 The supported functions are `computer.screenshot`, `computer.click`, `computer.double_click`, `computer.type`, `computer.key`, `computer.scroll`, `computer.wait`, `browser.navigate`, `browser.back`, and `browser.reload`. Coordinates are CSS viewport coordinates; a target adapter converts them to physical coordinates when required. Observation requires readonly capability. Input, navigation, and reload use the existing interaction/mutation permission and approval path; `full_access` skips per-action approval without skipping argument, capability, target, or cancellation checks.
 
-`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped under the Desktop `computer/` resources directory and announces capabilities before requests are accepted. Native desktop input and screenshot adapters are production-ready only when their helper handshake and macOS permissions succeed; Xvfb still requires an explicit input/capture adapter. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
+`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped beside the Runtime under `computer/` and announces capabilities before requests are accepted. Native desktop input and screenshot adapters are usable only when their helper handshake and macOS permissions succeed; Xvfb still requires an explicit input/capture adapter. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
 
 Each managed-browser response must match both the outstanding request ID and
 target ID. Cancellation, timeout, malformed responses, and transport failures
@@ -46,6 +46,24 @@ User initiated Stop is a control action, not a transcript message. The service r
 
 DeepSeek Vision Experimental is qualified through typed function tools only. Requests use `deepseek-v4-flash-vision-exp`, include screenshot input and `function_call_output` image parts, and never register the native `computer_use` tool.
 
+DeepSeek budget admission and streaming use the same prepared request from
+published Floret v7.11.2. Visual input uses the upstream image token bound;
+base64 transport bytes are not counted as ordinary text. The Redeven adapter
+maps product data and preserves admission, cancellation, and event semantics;
+it does not independently estimate the DeepSeek intermediate DTO. Large images,
+tool results, and replay must retain their exact transmitted bytes.
+
+Desktop development snapshots and installers consume the same computer resource
+inventory, bound by SHA-256 to bundle manifest schema 5. The build includes a
+checksum-verified official Node distribution, complete Playwright packages,
+Chromium distribution and native helper. Framework symlinks must remain inside
+the Chromium subtree. Runtime configuration uses absolute bundle paths, never
+source paths or a PATH lookup. Desktop validates the closed inventory before
+startup. Missing dependencies fail the build rather than producing an empty
+resource set. Helper startup reports only closed reason codes, never CDP
+credentials or raw Playwright startup exceptions. Native screen capture excludes
+the Desktop window owner's windows to prevent viewer recursion.
+
 # Qualification boundary
 
 The Desktop qualification records the thread selected by the actual Composer,
@@ -56,12 +74,16 @@ before closing its fixture and provider proxy. Its success scope is explicitly
 `managed-browser-desktop-ui`; it is not acceptance of connected Chrome, native
 apps, Xvfb, takeover, or continuous video.
 
-The current production constructor selects the native helper only when the
-managed-browser helper is absent. On macOS, both adapters are registered when
-their helpers are ready and their permission capability handshake passes; the
-target registry routes each concrete target to its own executor. The native
+On macOS, browser and native adapters register independently as unready.
+The Computer Use Runtime checks readiness after target authorization and before
+execution; only a real browser startup or native permission handshake marks a
+target ready. File presence and CDP configuration do not grant readiness. The native
 Swift helper validates permissions, emits balanced
-mouse/keyboard events, and captures a normalized display frame. The Xvfb
+mouse/keyboard events, moves the pointer before clicking, compensates for the
+system natural-scrolling preference, and captures a normalized display frame.
+The native executor owns the helper across tool-call contexts and reaps it on
+interrupted exchanges or shutdown. Electron supplies packaged resource paths
+and UI; it does not run a second native helper owner. The Xvfb
 executor is a lifecycle wrapper and requires an input/capture implementation.
 The default safety gate uses target
 metadata and action arguments; real page/password/OTP detection and a complete
@@ -70,7 +92,8 @@ limitations must not be reported as completed platform or safety support.
 
 # Boundaries
 
-The target registry owns logical-to-concrete target resolution for a thread;
+The target registry currently owns runtime-level logical target resolution;
+thread-specific bindings remain an unqualified implementation requirement.
 executors own browser, virtual desktop, and host desktop lifecycles. Flower owns
 presentation of action observations, while the workspace stream and attachment
 resolver remain the canonical transport and media boundaries. The provider may
@@ -85,15 +108,17 @@ durable screenshot bytes or target-control authority.
 - `redeven:internal/ai/computer_target_executor_test.go` - interrupted-session retirement, response correlation, process reaping, and real browser action effects.
 - `redeven:internal/ai/desktop_target_executor.go` - native Desktop JSONL executor and screenshot attachment resolver.
 - `redeven:internal/ai/virtual_desktop_target.go` - Xvfb lifecycle and unavailable-target failure.
-- `redeven:desktop/src/main/computerHost.ts` - versioned Desktop helper protocol.
 - `redeven:internal/ai/floret_runtime.go` - target attachment expansion at the provider boundary.
 - `redeven:internal/ai/service.go` and `redeven:internal/codeapp/appserver/server.go` - authenticated, hash-checked Flower media resolution boundary for computer frames.
 - `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - Blob URL lifecycle and explicit unavailable-frame rendering.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - browser-level evidence that a `computer://` frame reaches the floating Stage resolver.
 - `redeven:internal/ai/activity_timeline_test.go` - screenshot references survive Floret JSON serialization and public timeline filtering.
 - `redeven:internal/ai/model_gateway_deepseek_test.go` - the production adapter preserves nested tool images through the DeepSeek wire renderer.
+- `redeven:internal/ai/floret_provider_prepared_test.go` - large desktop image budgeting, exact wire fingerprint, and single admission/resolution through the published prepared request.
 - `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx` - Desktop Welcome media loading through authorized IPC.
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs` - opt-in built Desktop qualification through Composer, real DeepSeek, fixture completion, decoded Stage pixels, and provider image-output evidence.
-- `redeven:scripts/check_macos_computer_host_fixture.sh` - repeatable macOS AppKit window fixture that proves a native helper click changes a real application control and cleans up its process.
-- `redeven:internal/agent/agent.go` - absolute helper discovery, default managed-browser target state, and native helper fallback.
-- `redeven:desktop/electron-builder.config.mjs` - packaged managed-browser helper resource.
+- `redeven:scripts/check_macos_computer_host_fixture.sh` - real AppKit controls and scroll offset after input, with bounded helper waits and process cleanup on success, failure, and cancellation.
+- `redeven:internal/agent/agent.go` - absolute helper discovery and independent browser/native registration.
+- `redeven:desktop/electron-builder.config.mjs` - shared immutable computer resources for the packaged shell.
+- `redeven:internal/ai/computer_runtime.go` - single adapter lifecycle and readiness owner.
+- `redeven:scripts/stage_computer_resources.test.mjs` - relocated resource bundle with empty browser cache and no source/PATH dependency.

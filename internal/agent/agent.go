@@ -14,7 +14,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -67,77 +66,47 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 		Locality: "local", Capabilities: []string{"observe", "interaction"},
 		State: "setup_required", PermissionState: "helper_missing", Ready: false,
 	}
-	if helper != "" {
-		target.State = "ready"
-		target.PermissionState = "granted"
-		target.Ready = true
-	}
+
 	if err := registry.Register(target); err != nil {
 		return nil, registry
 	}
-	if helper == "" {
-		if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" {
-			ready, permission := nativeComputerHelperReadiness(nativeHelper)
-			desktop := ai.TargetDescriptor{
-				ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop",
-				Locality: "local", Capabilities: []string{"observe", "interaction"},
-				State: "ready", PermissionState: permission, Ready: ready,
-			}
-			if !ready && permission == "permission_required" {
-				desktop.State = "permission_required"
-			}
-			_ = registry.Register(desktop)
-			_ = registry.SetCurrent("desktop-main")
-			return ai.NewNativeDesktopTargetExecutor(nativeHelper), registry
+	executors := make(map[string]ai.TargetToolExecutor)
+	if helper != "" {
+		executors["browser-main"] = ai.NewPlaywrightTargetExecutor(computerNodePath(helper), helper, filepath.Join(stateDir, "computer", "profiles"))
+		if connected := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_CONNECTED_CDP_URL")); connected != "" {
+			connectedExecutor := ai.NewPlaywrightTargetExecutor(computerNodePath(helper), helper, filepath.Join(stateDir, "computer", "profiles"))
+			connectedExecutor.CDPURL = connected
+			_ = registry.Register(ai.TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "stopped", PermissionState: "not_checked", Ready: false})
+			executors["browser-connected"] = connectedExecutor
 		}
-		return nil, registry
-	}
-	executor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
-	if connected := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_CONNECTED_CDP_URL")); connected != "" {
-		connectedExecutor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
-		connectedExecutor.CDPURL = connected
-		_ = registry.Register(ai.TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true})
-		return ai.NewMultiTargetExecutor(map[string]ai.TargetToolExecutor{"browser-main": executor, "browser-connected": connectedExecutor}), registry
 	}
 	if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" && runtime.GOOS == "darwin" {
-		ready, permission := nativeComputerHelperReadiness(nativeHelper)
-		state, readyState := "ready", ready
-		if !ready && permission == "permission_required" {
-			state, readyState = "permission_required", false
+		_ = registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "stopped", PermissionState: "not_checked", Ready: false})
+		executors["desktop-main"] = ai.NewNativeDesktopTargetExecutor(nativeHelper)
+		if helper == "" {
+			_ = registry.SetCurrent("desktop-main")
 		}
-		_ = registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: state, PermissionState: permission, Ready: readyState})
-		return ai.NewMultiTargetExecutor(map[string]ai.TargetToolExecutor{"browser-main": executor, "desktop-main": ai.NewNativeDesktopTargetExecutor(nativeHelper)}), registry
 	}
-	return executor, registry
+	runtime := ai.NewComputerUseRuntime(registry, executors)
+	return runtime, runtime
 }
 
-func nativeComputerHelperReadiness(helper string) (bool, string) {
-	output, err := exec.Command(helper, "--capabilities").Output()
-	if err != nil {
-		return false, "helper_unavailable"
+func computerNodePath(helper string) string {
+	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_NODE_PATH")); configured != "" {
+		return configured
 	}
-	var result struct {
-		ScreenRecording bool `json:"screen_recording"`
-		Accessibility   bool `json:"accessibility"`
-	}
-	if json.Unmarshal(bytes.TrimSpace(output), &result) != nil {
-		return false, "helper_unavailable"
-	}
-	if !result.ScreenRecording || !result.Accessibility {
-		return false, "permission_required"
-	}
-	return true, "granted"
+	return filepath.Join(filepath.Dir(helper), "node")
 }
 
 func nativeComputerHelperCandidates(executablePath string) []string {
 	candidates := make([]string, 0, 3)
 	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH")); configured != "" {
-		candidates = append(candidates, configured)
+		return []string{configured}
 	}
 	executableDir := filepath.Dir(executablePath)
 	candidates = append(candidates,
 		filepath.Join(executableDir, "redeven-computer-host"),
-		filepath.Join(executableDir, "resources", "computer", "redeven-computer-host"),
+		filepath.Join(executableDir, "computer", "redeven-computer-host"),
 		filepath.Join(executableDir, "..", "computer", "redeven-computer-host"),
 	)
 	return candidates
@@ -146,11 +115,11 @@ func nativeComputerHelperCandidates(executablePath string) []string {
 func computerHelperCandidates(executablePath, stateDir string) []string {
 	candidates := make([]string, 0, 8)
 	if configured := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_HOST_HELPER_PATH")); configured != "" {
-		candidates = append(candidates, configured)
+		return []string{configured}
 	}
 	executableDir := filepath.Dir(executablePath)
 	candidates = append(candidates,
-		filepath.Join(executableDir, "resources", "computer", "redevenComputerHost.mjs"),
+		filepath.Join(executableDir, "computer", "redevenComputerHost.mjs"),
 		filepath.Join(executableDir, "..", "Resources", "computer", "redevenComputerHost.mjs"),
 		filepath.Join(executableDir, "redevenComputerHost.mjs"),
 		filepath.Join(stateDir, "computer", "redevenComputerHost.mjs"),
@@ -160,6 +129,9 @@ func computerHelperCandidates(executablePath, stateDir string) []string {
 
 func firstRegularFile(candidates []string) string {
 	for _, candidate := range candidates {
+		if !filepath.IsAbs(candidate) {
+			continue
+		}
 		info, err := os.Stat(candidate)
 		if err == nil && !info.IsDir() {
 			return candidate
