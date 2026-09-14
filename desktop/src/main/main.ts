@@ -1227,6 +1227,15 @@ function bundledComputerHostHelperPath(): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+function bundledNativeComputerHostHelperPath(): string | undefined {
+  const configured = compact(process.env.REDEVEN_COMPUTER_NATIVE_HELPER_PATH);
+  if (configured && path.isAbsolute(configured) && existsSync(configured)) return configured;
+  const candidates = app.isPackaged
+    ? [path.join(process.resourcesPath, 'computer', 'redeven-computer-host')]
+    : [path.resolve(app.getAppPath(), 'native', 'computer-host', '.build', 'release', 'redeven-computer-host')];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
 function resolveDesktopBundleVersion(): string {
   const clean = [
     process.env.REDEVEN_DESKTOP_BUNDLE_VERSION,
@@ -9811,9 +9820,12 @@ async function prepareManagedEnvironmentRuntime(input: Readonly<{
     bootstrap: null,
   });
   const computerHostHelperPath = bundledComputerHostHelperPath();
-  const runtimeEnv = computerHostHelperPath
-    ? { ...launchPlan.env, REDEVEN_COMPUTER_HOST_HELPER_PATH: computerHostHelperPath }
-    : launchPlan.env;
+  const nativeComputerHostHelperPath = bundledNativeComputerHostHelperPath();
+  const runtimeEnv = {
+    ...launchPlan.env,
+    ...(computerHostHelperPath ? { REDEVEN_COMPUTER_HOST_HELPER_PATH: computerHostHelperPath } : {}),
+    ...(nativeComputerHostHelperPath ? { REDEVEN_COMPUTER_NATIVE_HELPER_PATH: nativeComputerHostHelperPath } : {}),
+  };
   const launch = await startManagedRuntime({
     executablePath: bundledRuntimeExecutablePath(),
     runtimeArgs: launchPlan.args,
