@@ -58,8 +58,9 @@ apps, Xvfb, takeover, or continuous video.
 
 The current production constructor selects the native helper only when the
 managed-browser helper is absent. On macOS, both adapters are registered when
-their helpers are ready and the target registry routes each concrete target to
-its own executor. The native Swift helper validates permissions, emits balanced
+their helpers are ready and their permission capability handshake passes; the
+target registry routes each concrete target to its own executor. The native
+Swift helper validates permissions, emits balanced
 mouse/keyboard events, and captures a normalized display frame. The Xvfb
 executor is a lifecycle wrapper and requires an input/capture implementation.
 The default safety gate uses target
