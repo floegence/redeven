@@ -172,7 +172,7 @@ if (fs.existsSync(resultFile)) {
   fs.writeFileSync(resultFile, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
 }
 NODE
-  if [[ "${REDEVEN_FLOWER_SMOKE_KEEP_EVIDENCE:-0}" == "1" ]]; then
+  if [[ "${REDEVEN_FLOWER_SMOKE_KEEP_EVIDENCE:-0}" == "1" || "$status" -ne 0 ]]; then
     echo "Flower smoke evidence: $REPORT_ROOT"
   else
     node - "$SMOKE_ROOT" <<'NODE'
