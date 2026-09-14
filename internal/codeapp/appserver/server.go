@@ -4265,7 +4265,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resourceRef := "computer://" + mediaParts[0] + "/" + mediaParts[1]
-		body, err := aiSvc.ResolveTargetToolAttachment(r.Context(), resourceRef)
+		body, err := aiSvc.ResolveTargetToolAttachmentForThread(r.Context(), meta, threadID, mediaParts[0], resourceRef)
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "computer frame is unavailable"})
 			return
