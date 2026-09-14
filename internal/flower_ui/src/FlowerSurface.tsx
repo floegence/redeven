@@ -5339,6 +5339,7 @@ webSearch: model.web_search,
   };
 
   const startCompose = () => {
+    const previousSessionKey = currentComposerSessionKey();
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     cancelDeferredThreadSelection();
@@ -5349,10 +5350,10 @@ webSearch: model.web_search,
     transcriptScroll.startFollowing();
     cancelSelectedThreadTailReveal();
     closeSubagentOverlays();
-		setSelectedThreadID('');
+    setSelectedThreadID('');
 	// A new chat must not inherit a slash command or transient input state
 	// from the previously selected thread.
-	updateComposerSessionDraft(PENDING_NEW_THREAD_ID, (draft) => ({
+    updateComposerSessionDraft(PENDING_NEW_THREAD_ID, (draft) => ({
 		...draft,
 		chatDraft: '',
 		references: [],
@@ -7281,6 +7282,16 @@ webSearch: model.web_search,
       applyRuntimeCurrent(result.current);
       return result;
     }));
+    if (previousSessionKey !== PENDING_NEW_THREAD_ID) {
+      updateComposerSessionDraft(previousSessionKey, (draft) => ({
+        ...draft,
+        chatDraft: '',
+        references: [],
+        inputPromptSignature: '',
+        inputDrafts: {},
+        activeInputQuestionID: '',
+      }));
+    }
     for (const result of results) {
       if (result.status === 'fulfilled') {
         focusAfterSubmit = true;
