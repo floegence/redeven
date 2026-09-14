@@ -40,3 +40,22 @@ done
 		t.Fatal(err)
 	}
 }
+
+func TestNativeDesktopTargetExecutorRejectsMismatchedResponse(t *testing.T) {
+	dir := t.TempDir()
+	helper := filepath.Join(dir, "helper.sh")
+	content := `#!/bin/sh
+while IFS= read -r line; do
+  printf '%s\n' '{"type":"result","request_id":"wrong","target_id":"other","payload":{}}'
+done
+`
+	if err := os.WriteFile(helper, []byte(content), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	executor := NewNativeDesktopTargetExecutor(helper)
+	defer executor.Close()
+	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "call", TargetID: "desktop-main", ToolName: "computer.screenshot"})
+	if err == nil || !strings.Contains(err.Error(), "provenance") {
+		t.Fatalf("mismatched response accepted: %v", err)
+	}
+}

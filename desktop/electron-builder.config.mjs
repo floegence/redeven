@@ -91,6 +91,9 @@ const bundledRuntimeArtifact = resolveBundledRuntimeArtifact();
 const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
 const computerHostScript = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'scripts', 'redevenComputerHost.mjs');
 const nativeComputerHostBinary = path.join(repoRoot, 'desktop', 'native', 'computer-host', '.build', 'release', 'redeven-computer-host');
+if (resolveTargetGoos() === 'darwin' && !fs.existsSync(nativeComputerHostBinary)) {
+  execFileSync('/usr/bin/swift', ['build', '-c', 'release', '--package-path', path.join(repoRoot, 'desktop', 'native', 'computer-host')], { stdio: 'inherit' });
+}
 const computerHostNodeModules = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'node_modules');
 if (!fs.existsSync(computerHostScript)) {
   throw new Error(`Computer host helper source is missing: ${computerHostScript}`);
