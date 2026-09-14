@@ -3219,7 +3219,11 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			r.liveFrameTargets = make(map[string]struct{})
 		}
 		if _, started := r.liveFrameTargets[targetID]; !started {
-			if stop, startErr := runtime.StartComputerLiveFrames(ctx, r.threadID, r.id, targetID, r.publishComputerFrame); startErr == nil {
+			sessionID := r.id
+			if sessionID == "" {
+				sessionID = r.messageID
+			}
+			if stop, startErr := runtime.StartComputerLiveFrames(ctx, r.threadID, sessionID, targetID, r.publishComputerFrame); startErr == nil {
 				r.liveFrameTargets[targetID] = struct{}{}
 				_ = stop
 			}
