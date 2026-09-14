@@ -143,7 +143,7 @@ func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stre
 	defer cancel()
 	var result ModelGatewayResult
 	aliases := p.aliases
-	stream, err := p.PreparedRequest.Stream(ctx)
+	stream, err := p.Stream(ctx)
 	if err != nil {
 		return result, err
 	}
