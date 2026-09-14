@@ -294,6 +294,7 @@ function isEnvPage(page) {
 async function ensureFlowerSurface(page) {
   const surface = flowerSurface(page);
   if (await surface.isVisible().catch(() => false)) return;
+  if (!isEnvPage(page)) throw new Error(`Flower surface unavailable on unexpected page ${page.url()}`);
   const activityMode = page.getByRole('tab', { name: /^Activity$/u });
   await activityMode.waitFor({ state: 'visible', timeout: 60_000 });
   if (await activityMode.getAttribute('aria-selected') !== 'true') {
@@ -302,7 +303,11 @@ async function ensureFlowerSurface(page) {
   const entry = page.getByRole('button', { name: 'Flower', exact: true });
   await entry.waitFor({ state: 'visible', timeout: 60_000 });
   await entry.click();
-  await surface.waitFor({ state: 'visible', timeout: 60_000 });
+  try {
+    await surface.waitFor({ state: 'visible', timeout: 60_000 });
+  } catch (error) {
+    throw new Error(`Flower surface did not mount at ${page.url()}: ${String(error)}`);
+  }
 }
 
 function flowerSurface(page) {
