@@ -201,6 +201,35 @@ func (s *Service) ResolveTargetToolAttachment(ctx context.Context, resourceRef s
 	return resolver.ResolveTargetToolAttachment(ctx, strings.TrimSpace(resourceRef))
 }
 
+// ResolveTargetToolAttachmentForThread enforces that a frame was emitted by the
+// requested thread and target before expanding its opaque bytes.
+func (s *Service) ResolveTargetToolAttachmentForThread(ctx context.Context, meta *session.Meta, threadID, targetID, resourceRef string) ([]byte, error) {
+	threadID, targetID, resourceRef = strings.TrimSpace(threadID), strings.TrimSpace(targetID), strings.TrimSpace(resourceRef)
+	if threadID == "" || targetID == "" || resourceRef == "" {
+		return nil, errors.New("computer frame ownership is invalid")
+	}
+	detail, err := s.GetFlowerThreadDetail(ctx, meta, threadID)
+	if err != nil || detail == nil {
+		return nil, errors.New("computer frame thread is unavailable")
+	}
+	owned := false
+	for _, item := range detail.Current.Items {
+		if item.Activity == nil || item.Activity.Presentation == nil {
+			continue
+		}
+		for _, ref := range item.Activity.Presentation.TargetRefs {
+			if ref.Kind == "computer_frame" && ref.ResourceRef == resourceRef && strings.Contains(resourceRef, "computer://"+targetID+"/") {
+				owned = true
+				break
+			}
+		}
+	}
+	if !owned {
+		return nil, errors.New("computer frame does not belong to thread target")
+	}
+	return s.ResolveTargetToolAttachment(ctx, resourceRef)
+}
+
 type resolvedRunModel struct {
 	ID                        string
 	ProviderID                string
