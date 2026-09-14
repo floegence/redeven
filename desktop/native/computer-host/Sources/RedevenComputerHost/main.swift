@@ -88,10 +88,7 @@ if CommandLine.arguments.contains("--capabilities") {
                 let point = try CGPoint(x: number("x"), y: number("y"))
                 let bounds = CGDisplayBounds(CGMainDisplayID())
                 guard CGRect(origin: .zero, size: bounds.size).contains(point) else { throw NativeInput.invalid("Coordinates are outside the display viewport.") }
-                // Flower uses a top-left viewport origin; AppKit window/content
-                // coordinates and CGEvent use the display's opposite vertical
-                // origin. Convert once at the host boundary.
-                events = try NativeInput.click(at: CGPoint(x: point.x + bounds.minX, y: bounds.maxY - point.y), count: tool == "computer.double_click" ? 2 : 1)
+                events = try NativeInput.click(at: CGPoint(x: point.x + bounds.minX, y: point.y + bounds.minY), count: tool == "computer.double_click" ? 2 : 1)
             case "computer.type": events = try NativeInput.text(text("text"))
             case "computer.key": events = try NativeInput.key(text("key"))
             case "computer.scroll": events = try NativeInput.scroll(x: number("delta_x", default: 0), y: number("delta_y"))
