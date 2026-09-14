@@ -4260,6 +4260,25 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"storage_generation": aiSvc.StorageGeneration()}})
 		return
 
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/computer/view":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var request ai.ComputerViewerRequest
+		decoder := json.NewDecoder(io.LimitReader(r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid computer viewer request"})
+			return
+		}
+		if err := aiSvc.SetComputerViewer(r.Context(), meta, request); err != nil {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer viewer unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		return
+
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/") && strings.Contains(r.URL.Path, "/computer-media/"):
 		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 		if !ok {

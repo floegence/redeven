@@ -140,6 +140,7 @@ type TargetToolAttachmentResolver interface {
 }
 
 type TargetToolCall struct {
+	liveFrame            bool
 	ToolCallID           string          `json:"tool_call_id"`
 	TargetID             string          `json:"target_id"`
 	ToolName             string          `json:"tool_name"`
@@ -148,6 +149,7 @@ type TargetToolCall struct {
 }
 
 type TargetToolResult struct {
+	frameBytes        []byte
 	TargetID          string                     `json:"target_id"`
 	TargetName        string                     `json:"target_name,omitempty"`
 	ExecutionLocation string                     `json:"execution_location,omitempty"`

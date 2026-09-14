@@ -28,6 +28,7 @@ const (
 	ErrorCodeTargetNotReady            ErrorCode = "TARGET_NOT_READY"
 	ErrorCodeTargetNotAllowed          ErrorCode = "TARGET_NOT_ALLOWED"
 	ErrorCodeTakeoverRequired          ErrorCode = "TAKEOVER_REQUIRED"
+	ErrorCodeFrameUnavailable          ErrorCode = "FRAME_UNAVAILABLE"
 	ErrorCodeTimeout                   ErrorCode = "TIMEOUT"
 	ErrorCodeCanceled                  ErrorCode = "CANCELED"
 	ErrorCodeUnknown                   ErrorCode = "UNKNOWN"

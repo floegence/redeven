@@ -64,3 +64,27 @@ func TestDefaultInteractionSafetyGateBlocksSecretLikeInput(t *testing.T) {
 		t.Fatalf("unexpected safety decision: %#v", decision)
 	}
 }
+
+func TestTargetRegistryKeepsCurrentTargetPerThread(t *testing.T) {
+	registry := NewTargetRegistry()
+	if err := registry.Register(TargetDescriptor{ID: "browser", Kind: "browser.managed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(TargetDescriptor{ID: "desktop", Kind: "desktop.screen"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.BindThreadTarget("thread-a", "browser"); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.BindThreadTarget("thread-b", "desktop"); err != nil {
+		t.Fatal(err)
+	}
+	a, err := registry.ResolveTargetForThread(t.Context(), "thread-a", "current")
+	if err != nil || a.ID != "browser" {
+		t.Fatalf("a=%+v err=%v", a, err)
+	}
+	b, err := registry.ResolveTargetForThread(t.Context(), "thread-b", "current")
+	if err != nil || b.ID != "desktop" {
+		t.Fatalf("b=%+v err=%v", b, err)
+	}
+}

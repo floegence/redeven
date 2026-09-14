@@ -85,6 +85,9 @@ for await (const line of rl) {
     else if (req.tool_name === 'computer.wait') { await page.waitForTimeout(Math.min(30000, Math.max(0, Number(args.milliseconds || 0)))); summary = 'waited for page'; }
     else if (req.tool_name !== 'computer.screenshot') throw new Error(`unsupported tool ${req.tool_name}`);
     response({ id: req.id, target_id: req.target_id, execution_location: executionLocation, result: { summary, url: page.url(), title: await page.title() }, screenshot: await screenshot() });
-  } catch (error) { response({ id: req.id, target_id: req.target_id, error: String(error?.message || error) }); }
+  } catch {
+    const code = page.isClosed() ? (cdpURL ? 'TARGET_CONNECTION_REQUIRED' : 'TARGET_NOT_READY') : 'TARGET_ACTION_FAILED';
+    response({ id: req.id, target_id: req.target_id, error: code });
+  }
 }
 if (!browser) await context.close();

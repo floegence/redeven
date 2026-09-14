@@ -758,6 +758,7 @@ export type FlowerThreadView = Readonly<{
 export type FlowerLiveStreamEnvelope = Readonly<{
   schema_version: number;
   kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame';
+  observer_id?: string;
   thread_id?: string;
   summaries?: readonly FlowerThreadSnapshot[];
   /** Typed current-state replacement from Floret; never contains replay metadata. */
@@ -1195,6 +1196,9 @@ export type FlowerSurfaceAdapter = Readonly<{
     sha256: string;
     signal: AbortSignal;
   }>) => Promise<Blob>;
+  setComputerViewer?: (input: Readonly<{
+    observer_id: string; revision: number; thread_id?: string; target_id?: string; resource_ref?: string;
+  }>) => Promise<void>;
   connectComputerBrowser?: (cdpURL: string) => Promise<FlowerTargetDescriptor>;
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;

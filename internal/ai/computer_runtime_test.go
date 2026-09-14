@@ -21,7 +21,7 @@ func runtimeFixture(t *testing.T, handshake string) (*ComputerUseRuntime, *Playw
 		t.Fatal(err)
 	}
 	executor := NewPlaywrightTargetExecutor("/bin/sh", helper, t.TempDir())
-	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": executor})
+	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": executor}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
 	return runtime, executor
 }

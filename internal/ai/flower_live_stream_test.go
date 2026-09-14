@@ -900,3 +900,71 @@ func TestFlowerLiveStreamSlowViewerKeepsLatestFrameWithoutClosingLifecycle(t *te
 		t.Fatalf("expected newest frame, got %s", frame.Data)
 	}
 }
+
+func TestComputerViewerStopsWithWorkspaceConnection(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	meta := flowerLiveMemoryTestMeta("viewer")
+	sub, err := svc.SubscribeFlowerLiveStream(t.Context(), &meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	executor := newLiveFrameExecutor(t)
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+	defer runtime.Close()
+	svc.targetToolExecutor = runtime
+	request := ComputerViewerRequest{ObserverID: sub.subscriber.observerID, Revision: 1, ThreadID: "thread", TargetID: "target"}
+	if err := svc.setComputerViewer(t.Context(), &meta, request); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for executor.calls.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if executor.calls.Load() < 3 {
+		t.Fatal("viewer did not capture without tool calls")
+	}
+	// Older requests cannot reopen a viewer after the close command.
+	request.Revision = 3
+	request.ThreadID = ""
+	if err := svc.setComputerViewer(t.Context(), &meta, request); err != nil {
+		t.Fatal(err)
+	}
+	request.Revision = 2
+	request.ThreadID = "thread"
+	if err := svc.setComputerViewer(t.Context(), &meta, request); err == nil {
+		t.Fatal("stale command accepted")
+	}
+	before := executor.calls.Load()
+	time.Sleep(2 * computerLiveFrameInterval)
+	if executor.calls.Load() != before {
+		t.Fatal("capture continued after close")
+	}
+	request.Revision = 4
+	if err := svc.setComputerViewer(t.Context(), &meta, request); err != nil {
+		t.Fatal(err)
+	}
+	sub.Close()
+	runtime.liveWG.Wait()
+	before = executor.calls.Load()
+	time.Sleep(computerLiveFrameInterval)
+	if executor.calls.Load() != before {
+		t.Fatal("capture survived workspace disconnect")
+	}
+}
+
+func TestComputerViewerRejectsAnotherObserverOwner(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	owner := flowerLiveMemoryTestMeta("owner")
+	sub, err := svc.SubscribeFlowerLiveStream(t.Context(), &owner, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	other := owner
+	other.UserPublicID = "other"
+	err = svc.setComputerViewer(t.Context(), &other, ComputerViewerRequest{ObserverID: sub.subscriber.observerID, Revision: 1})
+	if err == nil {
+		t.Fatal("another user changed observer")
+	}
+}

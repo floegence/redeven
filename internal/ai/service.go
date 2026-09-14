@@ -230,13 +230,21 @@ func (s *Service) ResolveTargetToolAttachmentForThread(ctx context.Context, meta
 			continue
 		}
 		for _, ref := range item.Activity.Presentation.TargetRefs {
-			if ref.Kind == "computer_frame" && ref.ResourceRef == resourceRef && strings.Contains(resourceRef, "computer://"+targetID+"/") {
+			if ref.Kind == "computer_frame" && ref.ResourceRef == resourceRef && strings.HasPrefix(resourceRef, "computer://"+targetID+"/") {
 				owned = true
 				break
 			}
 		}
 	}
 	if !owned {
+		s.mu.Lock()
+		resolver, ok := s.targetToolExecutor.(interface {
+			ResolveComputerLiveFrame(context.Context, string, string, string) ([]byte, error)
+		})
+		s.mu.Unlock()
+		if ok {
+			return resolver.ResolveComputerLiveFrame(ctx, threadID, targetID, resourceRef)
+		}
 		return nil, errors.New("computer frame does not belong to thread target")
 	}
 	return s.ResolveTargetToolAttachment(ctx, resourceRef)

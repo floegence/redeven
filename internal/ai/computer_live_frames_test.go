@@ -7,11 +7,20 @@ import (
 	"time"
 )
 
-type liveFrameExecutor struct{ calls atomic.Int32 }
+type liveFrameExecutor struct {
+	calls      atomic.Int32
+	body       []byte
+	attachment TargetToolAttachment
+}
+
+func newLiveFrameExecutor(t *testing.T) *liveFrameExecutor {
+	body, attachment := computerFrameFixture(t)
+	return &liveFrameExecutor{body: body, attachment: attachment}
+}
 
 func (e *liveFrameExecutor) ExecuteTargetTool(context.Context, TargetToolCall) (TargetToolResult, error) {
 	n := e.calls.Add(1)
-	return TargetToolResult{Attachments: []TargetToolAttachment{{ResourceRef: "computer://target/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", MIMEType: "image/png"}}, Result: n}, nil
+	return TargetToolResult{frameBytes: e.body, Attachments: []TargetToolAttachment{e.attachment}, Result: n}, nil
 }
 
 func TestComputerLiveFramesPublishesAndStops(t *testing.T) {
@@ -19,8 +28,8 @@ func TestComputerLiveFramesPublishesAndStops(t *testing.T) {
 	if err := registry.Register(TargetDescriptor{ID: "target", Kind: "browser.managed", Ready: true, State: "ready"}); err != nil {
 		t.Fatal(err)
 	}
-	executor := &liveFrameExecutor{}
-	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor})
+	executor := newLiveFrameExecutor(t)
+	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	var frames atomic.Int32
@@ -42,7 +51,7 @@ func TestComputerLiveFramesPublishesAndStops(t *testing.T) {
 }
 
 func TestComputerLiveFramesOldStopCannotCancelReplacement(t *testing.T) {
-	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": &liveFrameExecutor{}})
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": newLiveFrameExecutor(t)}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
 	stop, err := runtime.StartComputerLiveFrames(t.Context(), "thread", "session", "target", func(FlowerComputerFrame) {})
 	if err != nil {
@@ -63,7 +72,7 @@ func TestComputerLiveFramesOldStopCannotCancelReplacement(t *testing.T) {
 }
 
 func TestComputerLiveFramesRejectClosedRuntime(t *testing.T) {
-	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": &liveFrameExecutor{}})
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": newLiveFrameExecutor(t)}, t.TempDir())
 	if err := runtime.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -73,5 +82,43 @@ func TestComputerLiveFramesRejectClosedRuntime(t *testing.T) {
 	}
 	if err == nil {
 		t.Fatal("closed runtime accepted a sampler")
+	}
+}
+
+func TestComputerLiveFrameRequiresMatchingThreadAndStaysEphemeral(t *testing.T) {
+	executor := newLiveFrameExecutor(t)
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+	defer runtime.Close()
+	published := make(chan FlowerComputerFrame, 1)
+	stop, err := runtime.StartComputerLiveFrames(t.Context(), "owner", "session", "target", func(frame FlowerComputerFrame) {
+		select {
+		case published <- frame:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	var frame FlowerComputerFrame
+	select {
+	case frame = <-published:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no frame")
+	}
+	if _, err := runtime.ResolveComputerLiveFrame(t.Context(), "owner", "target", frame.ResourceRef); err != nil {
+		t.Fatal(err)
+	}
+	for _, ids := range [][2]string{{"other", "target"}, {"owner", "other"}} {
+		if _, err := runtime.ResolveComputerLiveFrame(t.Context(), ids[0], ids[1], frame.ResourceRef); err == nil {
+			t.Fatal("cross-session frame accepted")
+		}
+	}
+	if _, err := runtime.ResolveTargetToolAttachment(t.Context(), frame.ResourceRef); err == nil {
+		t.Fatal("live frame was persisted as an action keyframe")
+	}
+	stop()
+	if _, err := runtime.ResolveComputerLiveFrame(t.Context(), "owner", "target", frame.ResourceRef); err == nil {
+		t.Fatal("stopped session retained media authority")
 	}
 }

@@ -87,7 +87,7 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 			_ = registry.SetCurrent("desktop-main")
 		}
 	}
-	runtime := ai.NewComputerUseRuntime(registry, executors)
+	runtime := ai.NewComputerUseRuntime(registry, executors, filepath.Join(stateDir, "computer", "keyframes"))
 	return runtime, runtime
 }
 
