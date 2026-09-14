@@ -131,6 +131,9 @@ final class Delegate: NSObject, NSApplicationDelegate {
 }
 
 let app = NSApplication.shared
+// The fixture uses fixed pale backgrounds; fix its appearance as well so
+// system dark mode cannot produce white labels on those backgrounds.
+app.appearance = NSAppearance(named: .aqua)
 app.setActivationPolicy(.regular)
 guard CommandLine.arguments.count >= 2 else { exit(2) }
 let delegate = Delegate(path: CommandLine.arguments[1])

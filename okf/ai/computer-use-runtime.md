@@ -36,7 +36,7 @@ Before execution, the interaction safety gate combines deterministic target/acti
 
 Flower publishes target actions on its existing workspace stream as ordinary tool Activity. The activity renderer shows target, action, execution location, approval state, and the latest screenshot attachment. Structured target errors include the target kind, readiness state, and a repair action so the UI can explain setup, permission, connection, and takeover recovery instead of asking the user to guess a target. Live frames are target-scoped ephemeral media and do not create a second lifecycle stream or polling loop.
 
-The floating Stage is a media-only viewer: it displays the latest action screenshot and a close icon, without internal state labels or explanatory text. It opens when an Activity contains a frame reference, not for an empty tool-start payload. Closing only hides it; thread selection resets its presentation state. After the first successful action, Runtime may publish target-scoped live frame metadata at approximately 3 FPS through the existing workspace stream. Frames are latest-only, bounded, ephemeral media; action keyframes remain the durable recovery evidence.
+The floating Stage is a media-only viewer: it displays the latest action screenshot and a close icon, without internal state labels or explanatory text. It opens when an Activity contains a frame reference, not for an empty tool-start payload. Closing only hides it; thread selection resets its presentation state. After the first successful action, Runtime may publish target-scoped live frame metadata at approximately 3 FPS through the existing workspace stream. Each workspace subscriber retains at most one pending media descriptor (maximum 4 KiB), replacing stale media without consuming lifecycle queue capacity. Lifecycle delivery has priority. The sampler stop waits for capture to exit, and an old stop cannot cancel a replacement session. Continuous viewing is not yet qualified: sampling still follows action context, and the thread media endpoint currently authorizes canonical action frames rather than ephemeral samples. Executor image retention, viewer subscriptions, sensitive-page capture suspension, and restart recovery remain required before this is a continuous-view contract.
 
 Screenshot identity crosses Floret v7.11.2's published `ActivityPresentation.target_refs` boundary as `kind: computer_frame`, with a `computer://<target>/<sha256>` opaque `resource_ref` and target display label. Navigable `uri` is not the media contract. The renderer remains `structured`; custom frame fields do not belong to its closed payload. Redeven's public timeline sanitizer preserves only hash-addressed computer frame references under that kind. Both Env App and Desktop Welcome resolve the same reference through the authenticated thread media endpoint into a short-lived Blob URL. Desktop uses its existing authorized Runtime IPC request channel to carry PNG bytes as `Uint8Array`; runtime credentials stay in main. No opaque reference is assigned directly to an image source, and no HTTP image fallback bypasses this boundary.
 
@@ -62,7 +62,7 @@ source paths or a PATH lookup. Desktop validates the closed inventory before
 startup. Missing dependencies fail the build rather than producing an empty
 resource set. Helper startup reports only closed reason codes, never CDP
 credentials or raw Playwright startup exceptions. Native screen capture excludes
-the Desktop window owner's windows to prevent viewer recursion.
+the Desktop window owner's windows to prevent viewer recursion. macOS 14 and later use ScreenCaptureKit application exclusion; macOS 13 uses filtered window composition. A failed filtered capture never falls back to the unrestricted display, and invalid exclusion configuration fails closed.
 
 # Qualification boundary
 
@@ -89,6 +89,18 @@ The default safety gate uses target
 metadata and action arguments; real page/password/OTP detection and a complete
 user takeover flow require separate implementation and qualification. These
 limitations must not be reported as completed platform or safety support.
+
+# Explicit browser connection
+
+The current Chrome connection form is an advanced CDP endpoint entry, not an
+extension-based tab authorization flow. Only a successful readiness handshake
+publishes a replacement executor. Failed connections preserve the existing
+session; successful replacements reap the previous helper. Connect and shutdown
+are serialized, and a closed runtime rejects new connections. Flower retains
+failed input, reports a localized error without raw transport secrets, and shows
+a ready result only for a ready descriptor. Both shipped locale catalogs carry
+the same explicit messages. Disconnect, revocation and ordinary extension setup
+remain required for complete connected-browser qualification.
 
 # Boundaries
 

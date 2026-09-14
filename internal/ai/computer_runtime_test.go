@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,5 +105,46 @@ func TestNativeReadinessTimeoutAndPermissions(t *testing.T) {
 				t.Fatal("failed permission check launched a native session")
 			}
 		})
+	}
+}
+
+func TestComputerRuntimeConnectRequiresReadyAndPreservesExistingConnection(t *testing.T) {
+	runtime, managed := runtimeFixture(t, `{"type":"ready","protocol_version":1}`)
+	first, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9222")
+	if err != nil || !first.Ready {
+		t.Fatalf("first connection: %+v %v", first, err)
+	}
+	original := runtime.executors[first.ID].(*PlaywrightTargetExecutor)
+	if err := os.WriteFile(managed.HelperPath, []byte("printf '%s\\n' '{\"type\":\"ready\",\"protocol_version\":1,\"error\":\"TARGET_CONNECTION_REQUIRED\",\"reason\":\"browser_connection_failed\"}'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9223")
+	var startup *TargetStartupError
+	if !errors.As(err, &startup) || startup.Code != "TARGET_CONNECTION_REQUIRED" || failed.Ready {
+		t.Fatalf("failed connection reported success: %+v %v", failed, err)
+	}
+	if runtime.executors[first.ID] != original || original.closed {
+		t.Fatal("failed replacement discarded the authorized connection")
+	}
+}
+
+func TestComputerRuntimeConnectReapsReplacementAndRejectsAfterClose(t *testing.T) {
+	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":1}`)
+	first, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := runtime.executors[first.ID].(*PlaywrightTargetExecutor)
+	if _, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9223"); err != nil {
+		t.Fatal(err)
+	}
+	if !old.closed || len(old.clients) != 0 {
+		t.Fatal("replacement leaked the old helper")
+	}
+	if err := runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9224"); err == nil {
+		t.Fatal("closed runtime started another browser")
 	}
 }

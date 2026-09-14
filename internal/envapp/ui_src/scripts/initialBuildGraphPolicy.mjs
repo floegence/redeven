@@ -18,6 +18,8 @@ export function findForbiddenInitialAssetNames(assets, forbiddenNames) {
 }
 
 function isForbiddenInitialModule(moduleId) {
+  if (['SubagentDetailWindow.tsx', 'FlowerComputerStage.tsx', 'settings/FlowerSettingsSurface.tsx']
+    .some((panel) => moduleId.endsWith(`/internal/flower_ui/src/${panel}`))) return true;
   if (moduleId.endsWith('/internal/config/model_catalog.generated.json')) return true;
   if (moduleId === '@floegence/floe-webapp-boot'
       || moduleId.startsWith('@floegence/floe-webapp-boot/')) {

@@ -17,28 +17,8 @@ func screenshot() throws -> [String: Any] {
     }
     let display = CGMainDisplayID()
     let bounds = CGDisplayBounds(display)
-    let image: CGImage?
-    if let owner = ProcessInfo.processInfo.environment["REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID"], let excludedPID = Int(owner) {
-        guard let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
-            throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not enumerate visible windows.")
-        }
-        let included = windows.compactMap { window -> NSNumber? in
-            guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.intValue != excludedPID else { return nil }
-            return window[kCGWindowNumber as String] as? NSNumber
-        }
-        // Window composition can legitimately return nil when the fixture has
-        // no individually capturable windows (for example during launch).
-        // Preserve the exclusion policy but fall back to the display image so
-        // the target can recover on the next frame instead of reporting a
-        // permanent unavailable state.
-        image = CGImage(windowListFromArrayScreenBounds: bounds, windowArray: included as CFArray, imageOption: .bestResolution)
-            ?? CGDisplayCreateImage(display)
-    } else {
-        image = CGDisplayCreateImage(display)
-    }
-    guard let image else {
-        throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not capture the display.")
-    }
+    let excludedOwner = try NativeScreenCapture.excludedOwner(environment: ProcessInfo.processInfo.environment)
+    let image = try NativeScreenCapture.capture(displayID: display, excludedOwner: excludedOwner)
     // Model coordinates and mouse input share logical display points, even on
     // Retina displays. Normalize the returned pixels to that same viewport.
     let width = Int(bounds.width), height = Int(bounds.height)

@@ -866,3 +866,37 @@ func TestFlowerLiveStreamPublishesComputerFrameToOwnerOnly(t *testing.T) {
 		t.Fatalf("cross-owner frame delivered: %v", err)
 	}
 }
+
+func TestFlowerLiveStreamSlowViewerKeepsLatestFrameWithoutClosingLifecycle(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	meta := &session.Meta{EndpointID: "env-frame", UserPublicID: "user-frame", CanRead: true}
+	sub, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	_ = nextFlowerLiveStreamFrame(t, sub)
+	for i := uint64(1); i <= 100; i++ {
+		if err := svc.PublishFlowerComputerFrame(meta, FlowerComputerFrame{ThreadID: "thread", SessionID: "session", TargetID: "browser-main", ResourceRef: "computer://browser-main/" + strings.Repeat("a", 64), SHA256: strings.Repeat("a", 64), MIMEType: "image/png", Sequence: i}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc.mu.Lock()
+	closed := sub.subscriber.closed
+	queued := sub.subscriber.queuedBytes
+	svc.mu.Unlock()
+	if closed {
+		t.Fatal("live frames disconnected the workspace lifecycle stream")
+	}
+	if queued != 0 {
+		t.Fatal("ephemeral frames consumed lifecycle queue budget")
+	}
+	frame := nextFlowerLiveStreamFrame(t, sub)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.ComputerFrame == nil || envelope.ComputerFrame.Sequence != 100 {
+		t.Fatalf("expected newest frame, got %s", frame.Data)
+	}
+}

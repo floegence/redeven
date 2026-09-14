@@ -6,11 +6,16 @@ import (
 	"time"
 )
 
+type computerLiveSampler struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
 const computerLiveFrameInterval = 333 * time.Millisecond
 
 // StartComputerLiveFrames starts the single target-scoped live sampler. It
-// keeps no durable state and drops naturally at the publisher boundary; the
-// returned stop function is idempotent and must be called when the viewer or
+// keeps no durable state; the
+// returned stop function waits for capture to finish and must be called when the viewer or
 // takeover session ends.
 func (r *ComputerUseRuntime) StartComputerLiveFrames(ctx context.Context, threadID, sessionID, targetID string, publish func(FlowerComputerFrame)) (func(), error) {
 	if r == nil || publish == nil || threadID == "" || sessionID == "" || targetID == "" {
@@ -18,26 +23,38 @@ func (r *ComputerUseRuntime) StartComputerLiveFrames(ctx context.Context, thread
 	}
 	key := threadID + "\x00" + sessionID + "\x00" + targetID
 	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil, errors.New("computer use runtime is closed")
+	}
+	if err := ctx.Err(); err != nil {
+		r.mu.Unlock()
+		return nil, err
+	}
 	if r.liveFrames == nil {
-		r.liveFrames = make(map[string]context.CancelFunc)
+		r.liveFrames = make(map[string]*computerLiveSampler)
 	}
 	if _, exists := r.liveFrames[key]; exists {
 		r.mu.Unlock()
 		return nil, errors.New("computer live frame session already exists")
 	}
 	liveCtx, cancel := context.WithCancel(ctx)
-	r.liveFrames[key] = cancel
+	sampler := &computerLiveSampler{cancel: cancel, done: make(chan struct{})}
+	r.liveFrames[key] = sampler
+	r.liveWG.Add(1)
 	r.mu.Unlock()
-	stop := func() {
-		r.mu.Lock()
-		if current, ok := r.liveFrames[key]; ok {
-			delete(r.liveFrames, key)
-			current()
-		}
-		r.mu.Unlock()
-	}
+	stop := func() { cancel(); <-sampler.done }
 	go func() {
-		defer stop()
+		defer r.liveWG.Done()
+		defer func() {
+			cancel()
+			r.mu.Lock()
+			if r.liveFrames[key] == sampler {
+				delete(r.liveFrames, key)
+			}
+			r.mu.Unlock()
+			close(sampler.done)
+		}()
 		ticker := time.NewTicker(computerLiveFrameInterval)
 		defer ticker.Stop()
 		capture := func() {

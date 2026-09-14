@@ -156,7 +156,6 @@ import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
-import { SubagentDetailWindow } from './SubagentDetailWindow';
 import {
   createThreadCache,
   threadSnapshotRevision,
@@ -225,6 +224,7 @@ import {
   serializeFlowerReasoningSelection,
 } from './reasoning';
 
+const SubagentDetailWindow = lazy(() => import('./SubagentDetailWindow').then((module) => ({ default: module.SubagentDetailWindow })));
 const FlowerSettingsSurface = lazy(() => import('./settings/FlowerSettingsSurface').then((module) => ({ default: module.FlowerSettingsSurface })));
 const FlowerComputerStage = lazy(() => import('./FlowerComputerStage').then((module) => ({ default: module.FlowerComputerStage })));
 
@@ -9967,6 +9967,9 @@ webSearch: model.web_search,
   const bindSubagentDetailViewport = (node: HTMLDivElement) => {
     subagentDetailScroll.bind(node);
   };
+  // Keep the detail panel mounted after first use so closing preserves its
+  // animation and scroll state without loading it during ordinary chat startup.
+  const subagentDetailMounted = createMemo<boolean>((mounted) => mounted || subagentDetailOpen(), false);
   const subagentDetailDialog = () => (
     <SubagentDetailWindow
       open={subagentDetailOpen()}
@@ -10843,7 +10846,7 @@ webSearch: model.web_search,
           </div>
         </div>
       </div>
-      {subagentDetailDialog()}
+      <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
       <FlowerChatContextPreview
         preview={contextSnapshotPreview()}
         open={contextSnapshotPreview() !== null}

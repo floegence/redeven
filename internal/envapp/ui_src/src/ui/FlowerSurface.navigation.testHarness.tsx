@@ -146,7 +146,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   Button: (props: any) => {
     return (
       <button
-        type="button"
+        type={props.type ?? "button"}
         class={props.class}
         aria-label={props['aria-label']}
         aria-busy={props['aria-busy']}
