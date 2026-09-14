@@ -96,13 +96,17 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 	case line = <-readCh:
 	}
 	var event struct {
-		Type     string         `json:"type"`
-		TargetID string         `json:"target_id"`
-		Error    string         `json:"error"`
-		Payload  map[string]any `json:"payload"`
+		RequestID string         `json:"request_id"`
+		Type      string         `json:"type"`
+		TargetID  string         `json:"target_id"`
+		Error     string         `json:"error"`
+		Payload   map[string]any `json:"payload"`
 	}
 	if err := json.Unmarshal(line, &event); err != nil {
 		return TargetToolResult{}, err
+	}
+	if event.RequestID != requestID || event.TargetID != call.TargetID {
+		return TargetToolResult{}, errors.New("desktop helper response provenance mismatch")
 	}
 	if event.Type == "error" || strings.TrimSpace(event.Error) != "" {
 		return TargetToolResult{}, errors.New(event.Error)

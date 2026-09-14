@@ -4,48 +4,116 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-struct Request: Codable { let protocol_version: Int; let request_id: String; let target_id: String; let tool_name: String; let args: [String: JSONValue] }
-enum JSONValue: Codable { case string(String), number(Double), bool(Bool), object([String: JSONValue]), array([JSONValue]), null
-  init(from decoder: Decoder) throws { let c = try decoder.singleValueContainer(); if let v = try? c.decode(String.self) { self = .string(v) } else if let v = try? c.decode(Double.self) { self = .number(v) } else if let v = try? c.decode(Bool.self) { self = .bool(v) } else if let v = try? c.decode([String: JSONValue].self) { self = .object(v) } else if let v = try? c.decode([JSONValue].self) { self = .array(v) } else { self = .null } }
-  func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); switch self { case .string(let v): try c.encode(v); case .number(let v): try c.encode(v); case .bool(let v): try c.encode(v); case .object(let v): try c.encode(v); case .array(let v): try c.encode(v); case .null: try c.encodeNil() } }
+func emit(_ value: [String: Any]) {
+    guard let data = try? JSONSerialization.data(withJSONObject: value),
+          let line = String(data: data, encoding: .utf8) else { return }
+    print(line)
+    fflush(stdout)
 }
 
-func emit(_ value: [String: Any]) { if let data = try? JSONSerialization.data(withJSONObject: value), let line = String(data: data, encoding: .utf8) { print(line); fflush(stdout) } }
-func number(_ value: JSONValue?) -> CGFloat { if case .number(let n) = value { return CGFloat(n) }; return 0 }
-func string(_ value: JSONValue?) -> String { if case .string(let v) = value { return v }; return "" }
-func screenshotBase64() -> String? {
-  guard let image = CGDisplayCreateImage(CGMainDisplayID()) else { return nil }
-  let data = NSMutableData(); guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
-  CGImageDestinationAddImage(destination, image, nil); guard CGImageDestinationFinalize(destination) else { return nil }; return (data as Data).base64EncodedString()
-}
-
-while let line = readLine() {
-  guard let request = try? JSONDecoder().decode(Request.self, from: Data(line.utf8)) else { continue }
-  emit(["type":"started", "request_id":request.request_id, "target_id":request.target_id])
-  let point = CGPoint(x: number(request.args["x"]), y: number(request.args["y"]))
-  if request.tool_name == "computer.click" || request.tool_name == "computer.double_click" {
-    guard let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left),
-      let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left) else { emit(["type":"error", "request_id":request.request_id, "target_id":request.target_id, "error":"CGEvent unavailable; grant Accessibility permission"]); continue }
-    down.post(tap: CGEventTapLocation.cghidEventTap); up.post(tap: CGEventTapLocation.cghidEventTap)
-    if request.tool_name == "computer.double_click" { down.post(tap: CGEventTapLocation.cghidEventTap); up.post(tap: CGEventTapLocation.cghidEventTap) }
-  } else if request.tool_name == "computer.scroll" {
-    let dy = Int32(number(request.args["delta_y"]))
-    guard let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: dy, wheel2: 0, wheel3: 0) else { emit(["type":"error", "request_id":request.request_id, "target_id":request.target_id, "error":"CGEvent unavailable; grant Accessibility permission"]); continue }
-    event.post(tap: CGEventTapLocation.cghidEventTap)
-  } else if request.tool_name == "computer.type" {
-    let text = string(request.args["text"])
-    for scalar in text.unicodeScalars {
-      var utf16 = Array(String(scalar).utf16)
-      if let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true) { event.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16); event.post(tap: CGEventTapLocation.cghidEventTap) }
-      if let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) { event.post(tap: CGEventTapLocation.cghidEventTap) }
+func screenshot() throws -> [String: Any] {
+    guard CGPreflightScreenCaptureAccess() else {
+        throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow Screen Recording for Redeven Desktop in System Settings.")
     }
-  } else if request.tool_name == "computer.key" {
-    let key = string(request.args["key"]).lowercased()
-    let virtualKey: CGKeyCode? = ["enter":36, "return":36, "escape":53, "esc":53, "tab":48, "space":49, "backspace":51, "delete":51].first(where: { key == $0.key }).map { CGKeyCode($0.value) }
-    guard let virtualKey, let down = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: true), let up = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: false) else { emit(["type":"error", "request_id":request.request_id, "target_id":request.target_id, "error":"unsupported or unavailable key; grant Accessibility permission"]); continue }
-    down.post(tap: CGEventTapLocation.cghidEventTap); up.post(tap: CGEventTapLocation.cghidEventTap)
-  }
-  var payload: [String: Any] = ["execution_location":"macos_desktop", "summary":request.tool_name]
-  if let frame = screenshotBase64() { payload["screenshot_mime"] = "image/png"; payload["screenshot_base64"] = frame }
-  emit(["type":"result", "request_id":request.request_id, "target_id":request.target_id, "payload":payload])
+    let display = CGMainDisplayID()
+    guard let image = CGDisplayCreateImage(display) else {
+        throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not capture the display.")
+    }
+    let bounds = CGDisplayBounds(display)
+    // Model coordinates and mouse input share logical display points, even on
+    // Retina displays. Normalize the returned pixels to that same viewport.
+    let width = Int(bounds.width), height = Int(bounds.height)
+    guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+        throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not allocate the frame.")
+    }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    guard let normalized = context.makeImage() else {
+        throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not normalize the frame.")
+    }
+    let data = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
+        throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not encode the frame.")
+    }
+    CGImageDestinationAddImage(destination, normalized, nil)
+    guard CGImageDestinationFinalize(destination) else {
+        throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not finish encoding the frame.")
+    }
+    return ["screenshot_mime": "image/png", "screenshot_base64": (data as Data).base64EncodedString(),
+            "width": width, "height": height, "device_pixel_ratio": 1]
+}
+
+if CommandLine.arguments.contains("--capabilities") {
+    emit(["protocol_version": 1, "screen_recording": CGPreflightScreenCaptureAccess(),
+          "accessibility": AXIsProcessTrusted(), "execution_location": "macos_desktop"])
+} else {
+    while let line = readLine() {
+        var envelope: [String: Any] = ["type": "error", "request_id": "", "target_id": ""]
+        do {
+            guard let request = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let id = request["request_id"] as? String, !id.isEmpty,
+                  let target = request["target_id"] as? String, !target.isEmpty,
+                  let tool = request["tool_name"] as? String,
+                  let args = request["args"] as? [String: Any] else {
+                throw NativeInput.invalid("Expected a versioned JSONL request.")
+            }
+            envelope["request_id"] = id; envelope["target_id"] = target
+            guard request["protocol_version"] as? Int == 1 else {
+                throw HostFailure(code: "PROTOCOL_VERSION_MISMATCH", message: "Computer host protocol version 1 is required.")
+            }
+            guard target == "desktop-main" || target == "desktop.screen" else {
+                throw HostFailure(code: "TARGET_NOT_ALLOWED", message: "This helper has no binding for the requested target.")
+            }
+            func number(_ key: String, default fallback: Double? = nil) throws -> Double {
+                guard let value = args[key] as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID() else {
+                    if let fallback, args[key] == nil { return fallback }
+                    throw NativeInput.invalid("A numeric \(key) is required.")
+                }
+                guard value.doubleValue.isFinite else { throw NativeInput.invalid("Finite coordinates are required.") }
+                return value.doubleValue
+            }
+            func text(_ key: String) throws -> String {
+                guard let value = args[key] as? String else { throw NativeInput.invalid("A string \(key) is required.") }
+                return value
+            }
+            var events: [CGEvent] = []
+            var wait = 0.0
+            switch tool {
+            case "computer.screenshot": break
+            case "computer.wait":
+                wait = try number("milliseconds", default: 0)
+                guard (0...30_000).contains(wait) else { throw NativeInput.invalid("Wait must be between 0 and 30000 milliseconds.") }
+            case "computer.click", "computer.double_click":
+                let point = try CGPoint(x: number("x"), y: number("y"))
+                let bounds = CGDisplayBounds(CGMainDisplayID())
+                guard CGRect(origin: .zero, size: bounds.size).contains(point) else { throw NativeInput.invalid("Coordinates are outside the display viewport.") }
+                events = try NativeInput.click(at: CGPoint(x: point.x + bounds.minX, y: point.y + bounds.minY), count: tool == "computer.double_click" ? 2 : 1)
+            case "computer.type": events = try NativeInput.text(text("text"))
+            case "computer.key": events = try NativeInput.key(text("key"))
+            case "computer.scroll": events = try NativeInput.scroll(x: number("delta_x", default: 0), y: number("delta_y"))
+            default: throw HostFailure(code: "TARGET_CAPABILITY_UNAVAILABLE", message: "The desktop target does not support this tool.")
+            }
+            guard CGPreflightScreenCaptureAccess() else {
+                throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow Screen Recording for Redeven Desktop in System Settings.")
+            }
+            if !events.isEmpty && !AXIsProcessTrusted() {
+                throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow Accessibility for Redeven Desktop in System Settings.")
+            }
+            emit(["type": "started", "request_id": id, "target_id": target])
+            for event in events { event.post(tap: .cghidEventTap) }
+            if wait > 0 { Thread.sleep(forTimeInterval: wait / 1000) }
+            // Allow posted events to reach the native application before capture.
+            if !events.isEmpty { Thread.sleep(forTimeInterval: 0.1) }
+            var payload = try screenshot()
+            payload["summary"] = tool
+            payload["execution_location"] = "macos_desktop"
+            emit(["type": "result", "request_id": id, "target_id": target, "payload": payload])
+        } catch {
+            let failure = error as? HostFailure ?? HostFailure(code: "INVALID_REQUEST", message: "Unable to decode the computer host request.")
+            envelope["error_code"] = failure.code
+            envelope["error"] = failure.message
+            emit(envelope)
+        }
+    }
 }
