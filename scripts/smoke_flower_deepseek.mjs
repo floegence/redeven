@@ -422,7 +422,13 @@ async function sendPrompt(page, prompt, options = {}) {
   await textarea.waitFor({ state: 'visible', timeout: 20_000 });
   await textarea.fill(prompt);
   const action = surface.locator('[data-flower-primary-action="send"]');
-  await action.waitFor({ state: 'visible', timeout: 20_000 });
+  try {
+    await action.waitFor({ state: 'visible', timeout: 20_000 });
+  } catch (error) {
+    const mode = await surface.locator('[data-flower-bottom-mode]').first().getAttribute('data-flower-bottom-mode').catch(() => 'missing');
+    const primaryActions = await surface.locator('[data-flower-primary-action]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-flower-primary-action'))).catch(() => []);
+    throw new Error(`Flower send action unavailable (url=${page.url()} thread=${await selectedThreadID(page)} status=${await selectedStatus(page)} mode=${mode} actions=${JSON.stringify(primaryActions)} warmup=${await surface.getAttribute('data-flower-warmup')}): ${String(error)}`);
+  }
   const receiptResponse = page.waitForResponse((response) => {
     if (response.request().method() !== 'POST') return false;
     try {
