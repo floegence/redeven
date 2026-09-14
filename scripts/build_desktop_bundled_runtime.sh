@@ -210,6 +210,7 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
 }
 for (const name of actual) {
   const stat = lstatSync(join(process.env.BUNDLE_DIR, name));
+  if (name === "computer" && stat.isDirectory() && !stat.isSymbolicLink()) continue;
   if (stat.isSymbolicLink() || !stat.isFile()) fail(`bundle entry must be a regular file: ${name}`);
 }
 function fail(message) {
