@@ -210,7 +210,6 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
 }
 for (const name of actual) {
   const stat = lstatSync(join(process.env.BUNDLE_DIR, name));
-  if (name === "computer" && stat.isDirectory() && !stat.isSymbolicLink()) continue;
   if (stat.isSymbolicLink() || !stat.isFile()) fail(`bundle entry must be a regular file: ${name}`);
 }
 function fail(message) {
@@ -245,7 +244,6 @@ if (provenance !== "packaged_bundle" && provenance !== "development_bundle") fai
 function descriptor(name, executable) {
   const filePath = join(root, name);
   const stat = lstatSync(filePath);
-  if (name === "computer" && stat.isDirectory() && !stat.isSymbolicLink()) continue;
   if (stat.isSymbolicLink() || !stat.isFile()) fail(`bundle entry must be a regular file: ${name}`);
   if (executable && (stat.mode & 0o111) === 0) fail(`bundle entry must be executable: ${name}`);
   const bytes = readFileSync(filePath);
