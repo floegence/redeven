@@ -402,7 +402,7 @@ async function setPermission(page, permission) {
 
 async function startNewThread(page) {
   const surface = flowerSurface(page);
-  await surface.locator('.flower-new-chat-button').click();
+  await surface.locator('.flower-new-chat-button:visible').first().click();
   await waitFor(async () => await selectedThreadID(page) === '', 20_000, 'new thread selection');
   const textarea = surface.locator('.flower-composer textarea');
   await textarea.waitFor({ state: 'visible', timeout: 20_000 });
