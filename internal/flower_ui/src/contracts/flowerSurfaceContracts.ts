@@ -1145,6 +1145,14 @@ export type FlowerSurfaceRuntimeDescriptor = Readonly<{
 export type FlowerModelCatalogQuery = Readonly<{ provider_id?: string; type: FlowerProviderType; base_url?: string; api_key?: string }>;
 export type FlowerModelCatalogDiscovery = (input: FlowerModelCatalogQuery) => Promise<Readonly<{ models: readonly FlowerProviderModel[] }>>;
 
+export type FlowerTargetDescriptor = Readonly<{
+  id: string;
+  kind: string;
+  display_name: string;
+  state?: string;
+  ready: boolean;
+}>;
+
 export type FlowerSurfaceAdapter = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
   canMutate?: boolean;
@@ -1187,6 +1195,7 @@ export type FlowerSurfaceAdapter = Readonly<{
     sha256: string;
     signal: AbortSignal;
   }>) => Promise<Blob>;
+  connectComputerBrowser?: (cdpURL: string) => Promise<FlowerTargetDescriptor>;
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;
