@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -43,6 +44,7 @@ func (e *XvfbTargetExecutor) Start(ctx context.Context) error {
 		return fmt.Errorf("TARGET_UNAVAILABLE: Xvfb is not installed")
 	}
 	cmd := exec.CommandContext(ctx, path, display, "-screen", "0", screen, "-nolisten", "tcp")
+	cmd.Env = append(os.Environ(), "DISPLAY="+display)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("TARGET_UNAVAILABLE: start Xvfb: %w", err)
 	}
@@ -75,6 +77,7 @@ func (e *XvfbTargetExecutor) Close() error {
 		return nil
 	}
 	_ = e.process.Process.Kill()
+	_ = e.process.Wait()
 	e.process = nil
 	if closer, ok := e.Inner.(interface{ Close() error }); ok {
 		return closer.Close()
