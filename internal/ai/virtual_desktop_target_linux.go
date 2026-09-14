@@ -232,20 +232,13 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	if err != nil {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "window_manager_start_failed"}
 	}
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		body, err := e.command(ctx, e.paths.properties, nil, 4096, "-root", "_NET_SUPPORTING_WM_CHECK")
-		if err == nil && strings.Contains(string(body), "window id # 0x") {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-wm.done:
-			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "window_manager_exited"}
-		case <-ticker.C:
-		}
+	if _, err := e.command(ctx, e.paths.input, nil, 4096, "getdisplaygeometry"); err != nil {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_geometry_failed"}
+	}
+	select {
+	case <-wm.done:
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "window_manager_exited"}
+	default:
 	}
 	if _, _, err := e.capture(ctx, "x11-readiness"); err != nil {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_capture_failed"}
