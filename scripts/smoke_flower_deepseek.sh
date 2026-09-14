@@ -135,7 +135,13 @@ stop_owned() {
       kill -KILL "$pid" 2>/dev/null || true
     fi
   done <<<"$owned_pids"
-  [[ -n "$LAUNCH_PID" ]] && wait "$LAUNCH_PID" 2>/dev/null || true
+  # The Desktop launcher may have exited while descendants remain. Never use
+  # an unbounded wait in cleanup: bounded PID polling preserves the original
+  # failure and guarantees that the qualification process terminates.
+  if [[ -n "$LAUNCH_PID" ]]; then
+    local wait_deadline=$(( $(date +%s) + 2 ))
+    while [[ "$(date +%s)" -lt "$wait_deadline" ]] && kill -0 "$LAUNCH_PID" 2>/dev/null; do sleep 0.1; done
+  fi
 }
 
 cleanup() {
