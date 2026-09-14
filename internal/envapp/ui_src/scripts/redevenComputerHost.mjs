@@ -12,6 +12,18 @@ let page = context.pages()[0] || await context.newPage();
 
 function response(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
 async function screenshot() { return { mime: 'image/png', data: (await page.screenshot({ type: 'png' })).toString('base64') }; }
+async function safetySignals() {
+  return page.evaluate(() => {
+    const text = (document.body?.innerText || '').toLowerCase();
+    const active = document.activeElement;
+    const activeType = active instanceof HTMLInputElement ? active.type.toLowerCase() : '';
+    const secret = activeType === 'password' || activeType === 'tel' && /otp|code|verification/u.test(active.getAttribute('autocomplete') || '');
+    const captcha = /captcha|i am not a robot|verify you are human|challenge/u.test(text);
+    const login = /sign in|log in|登录|登陆/u.test(text) || Boolean(document.querySelector('input[type="password"]'));
+    const injection = /ignore (all )?(previous|prior) instructions|system message|developer message/u.test(text);
+    return { secret, captcha, login, injection, activeType };
+  });
+}
 
 response({ type: 'ready', protocol_version: 1, capabilities: ['observe', 'interaction'], execution_location: 'linux_headless_browser' });
 
@@ -22,6 +34,11 @@ for await (const line of rl) {
   try { req = JSON.parse(line); } catch { response({ error: 'invalid request json' }); continue; }
   try {
     const args = req.args || {};
+    const signals = await safetySignals();
+    if (req.tool_name !== 'computer.screenshot' && req.tool_name !== 'computer.wait' && req.tool_name !== 'browser.navigate' && (signals.secret || signals.captcha || signals.injection || signals.login && req.tool_name === 'computer.type')) {
+      response({ id: req.id, target_id: req.target_id, error: 'TAKEOVER_REQUIRED', safety: signals });
+      continue;
+    }
     let summary = req.tool_name;
     if (req.tool_name === 'browser.navigate') { await page.goto(String(args.url), { waitUntil: 'domcontentloaded' }); summary = `navigated to ${page.url()}`; }
     else if (req.tool_name === 'browser.back') { await page.goBack({ waitUntil: 'domcontentloaded' }); summary = 'navigated back'; }
