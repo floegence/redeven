@@ -7282,16 +7282,6 @@ webSearch: model.web_search,
       applyRuntimeCurrent(result.current);
       return result;
     }));
-    if (previousSessionKey !== PENDING_NEW_THREAD_ID) {
-      updateComposerSessionDraft(previousSessionKey, (draft) => ({
-        ...draft,
-        chatDraft: '',
-        references: [],
-        inputPromptSignature: '',
-        inputDrafts: {},
-        activeInputQuestionID: '',
-      }));
-    }
     for (const result of results) {
       if (result.status === 'fulfilled') {
         focusAfterSubmit = true;

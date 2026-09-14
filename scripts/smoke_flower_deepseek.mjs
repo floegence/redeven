@@ -73,12 +73,14 @@ export function findDeepSeekProvider(config, secrets) {
   const providerID = String(provider?.id ?? '').trim();
   if (!providerID) throw new Error('DeepSeek provider ID is missing');
   const models = Array.isArray(provider.models) ? provider.models : [];
-  if (!models.some((model) => String(model?.model_name ?? '').trim() === SMOKE_MODEL)) {
-    throw new Error(`DeepSeek provider does not configure locked model ${SMOKE_MODEL}`);
-  }
   const apiKey = String(secretAI?.provider_api_keys?.[providerID] ?? '');
   if (!apiKey) throw new Error('DeepSeek provider API key is missing');
-  return { provider: structuredClone(provider), apiKey, currentModelID: `${providerID}/${SMOKE_MODEL}` };
+  const selectedProvider = structuredClone(provider);
+  // Add the experimental model only to the isolated qualification copy.
+  if (!models.some((model) => String(model?.model_name ?? '').trim() === SMOKE_MODEL)) {
+    selectedProvider.models = [...models, { model_name: SMOKE_MODEL }];
+  }
+  return { provider: selectedProvider, apiKey, currentModelID: `${providerID}/${SMOKE_MODEL}` };
 }
 
 function listenProbe(port, host) {
