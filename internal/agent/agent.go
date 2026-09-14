@@ -87,6 +87,7 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 			_ = registry.SetCurrent("desktop-main")
 		}
 	}
+	registerVirtualDesktop(stateDir, registry, executors)
 	runtime := ai.NewComputerUseRuntime(registry, executors, filepath.Join(stateDir, "computer", "keyframes"))
 	return runtime, runtime
 }
