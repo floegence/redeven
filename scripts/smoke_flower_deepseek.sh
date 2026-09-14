@@ -5,7 +5,7 @@ umask 077
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
-SMOKE_ROOT=/tmp/redeven-flower-smoke-01a00852
+SMOKE_ROOT=${REDEVEN_FLOWER_SMOKE_ROOT:-/tmp/redeven-flower-smoke-$$}
 STATE_ROOT="$SMOKE_ROOT/state"
 RUNTIME_STATE_ROOT="$STATE_ROOT/local-environment"
 USER_DATA_ROOT="$SMOKE_ROOT/user-data"
