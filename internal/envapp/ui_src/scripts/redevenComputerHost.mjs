@@ -4,7 +4,10 @@ import { chromium } from 'playwright';
 
 const profileIndex = process.argv.indexOf('--profile');
 const profile = profileIndex >= 0 ? process.argv[profileIndex + 1] : undefined;
-const context = await chromium.launchPersistentContext(profile, { headless: true, viewport: { width: 1280, height: 800 } });
+const cdpIndex = process.argv.indexOf('--cdp-url');
+const cdpURL = cdpIndex >= 0 ? process.argv[cdpIndex + 1] : undefined;
+const browser = cdpURL ? await chromium.connectOverCDP(cdpURL) : undefined;
+const context = browser?.contexts()[0] ?? await chromium.launchPersistentContext(profile, { headless: true, viewport: { width: 1280, height: 800 } });
 let page = context.pages()[0] || await context.newPage();
 
 function response(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
@@ -38,4 +41,4 @@ for await (const line of rl) {
     response({ id: req.id, target_id: req.target_id, execution_location: 'linux_headless_browser', result: { summary, url: page.url(), title: await page.title() }, screenshot: await screenshot() });
   } catch (error) { response({ id: req.id, target_id: req.target_id, error: String(error?.message || error) }); }
 }
-await context.close();
+if (!browser) await context.close();
