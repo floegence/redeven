@@ -5350,7 +5350,17 @@ webSearch: model.web_search,
     cancelSelectedThreadTailReveal();
     closeSubagentOverlays();
 		setSelectedThreadID('');
-    setThreadLoadError('');
+	// A new chat must not inherit a slash command or transient input state
+	// from the previously selected thread.
+	updateComposerSessionDraft(PENDING_NEW_THREAD_ID, (draft) => ({
+		...draft,
+		chatDraft: '',
+		references: [],
+		inputPromptSignature: '',
+		inputDrafts: {},
+		activeInputQuestionID: '',
+	}));
+		setThreadLoadError('');
     requestComposerFocus();
     void resolveHandlerDecision();
     returnToChat();
