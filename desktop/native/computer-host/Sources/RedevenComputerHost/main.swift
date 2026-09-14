@@ -26,7 +26,13 @@ func screenshot() throws -> [String: Any] {
             guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.intValue != excludedPID else { return nil }
             return window[kCGWindowNumber as String] as? NSNumber
         }
+        // Window composition can legitimately return nil when the fixture has
+        // no individually capturable windows (for example during launch).
+        // Preserve the exclusion policy but fall back to the display image so
+        // the target can recover on the next frame instead of reporting a
+        // permanent unavailable state.
         image = CGImage(windowListFromArrayScreenBounds: bounds, windowArray: included as CFArray, imageOption: .bestResolution)
+            ?? CGDisplayCreateImage(display)
     } else {
         image = CGDisplayCreateImage(display)
     }
