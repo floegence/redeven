@@ -404,7 +404,7 @@ async function startNewThread(page) {
   const surface = flowerSurface(page);
   await surface.locator('.flower-new-chat-button:visible').first().click();
   await waitFor(async () => await selectedThreadID(page) === '', 20_000, 'new thread selection');
-  const textarea = surface.locator('.flower-composer textarea');
+  const textarea = surface.locator('.flower-composer textarea:visible').first();
   await textarea.waitFor({ state: 'visible', timeout: 20_000 });
   await surface.locator('[data-flower-primary-action="send"]').waitFor({ state: 'visible', timeout: 60_000 });
   await waitFor(async () => (
@@ -418,7 +418,7 @@ async function startNewThread(page) {
 
 async function sendPrompt(page, prompt, options = {}) {
   const surface = flowerSurface(page);
-  const textarea = surface.locator('.flower-composer textarea');
+  const textarea = surface.locator('.flower-composer textarea:visible').first();
   await textarea.waitFor({ state: 'visible', timeout: 20_000 });
   await textarea.fill(prompt);
   const action = surface.locator('[data-flower-primary-action="send"]');
