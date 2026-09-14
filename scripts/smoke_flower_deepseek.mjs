@@ -450,7 +450,8 @@ async function sendPrompt(page, prompt, options = {}) {
   const receiptBody = await response.json();
   const receipt = assertAcceptedReceipt(response.status(), receiptBody);
   const receiptThreadID = String(receipt.thread_id ?? '').trim();
-  const user = surface.locator('[data-flower-message-role="user"]').filter({ hasText: options.visibleMarker ?? prompt.slice(0, 40) });
+  const userMarker = options.visibleMarker ?? prompt.slice(0, 40);
+  const user = surface.locator('[data-flower-message-role="user"]').filter({ hasText: userMarker });
   if (receiptThreadID) {
     await waitFor(async () => await threadCard(page, receiptThreadID).then(() => true).catch(() => false), 20_000, 'receipt thread rail card');
     await waitFor(async () => {
@@ -459,7 +460,12 @@ async function sendPrompt(page, prompt, options = {}) {
     }, 20_000, 'receipt canonical user item');
     if (!await user.isVisible().catch(() => false)) await selectThread(page, receiptThreadID);
   }
-  await user.waitFor({ state: 'visible', timeout: 20_000 });
+  try { await user.waitFor({ state: 'visible', timeout: 20_000 }); } catch (error) {
+    if (receiptThreadID) {
+      await selectThread(page, receiptThreadID);
+      await surface.locator('[data-flower-message-role="user"]').filter({ hasText: prompt.slice(0, 32) }).first().waitFor({ state: 'visible', timeout: 20_000 });
+    } else throw error;
+  }
   const userVisibleMS = performance.now() - clickedAt;
   const threadID = await waitFor(() => selectedThreadID(page), 20_000, 'selected thread identity');
   const runningMS = await waitFor(async () => {
