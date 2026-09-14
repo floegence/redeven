@@ -124,6 +124,10 @@ var builtinDefinitions = map[string]Definition{
 		Name: "computer.scroll", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("scroll"), labelFields("target_name", "target_id"), callPayloadFields("delta_x", "delta_y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
+	"computer.drag": {
+		Name: "computer.drag", Mutating: true, RequiresApproval: true,
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("drag"), labelFields("target_name", "target_id"), callPayloadFields("from_x", "from_y", "to_x", "to_y", "duration_ms"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
+	},
 	"computer.wait": {
 		Name: "computer.wait", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "readonly", "computer", "computer", "args", "result"), operation("wait"), labelFields("target_name", "target_id"), callPayloadFields("milliseconds"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
