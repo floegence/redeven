@@ -45,6 +45,7 @@ const (
 	FlowerLiveStreamSummaryBatch    FlowerLiveStreamKind = "summary.batch"
 	FlowerLiveStreamThreadBatch     FlowerLiveStreamKind = "thread.batch"
 	FlowerLiveStreamViewerReadState FlowerLiveStreamKind = "viewer.read_state"
+	FlowerLiveStreamComputerFrame   FlowerLiveStreamKind = "computer.frame"
 )
 
 type FlowerLiveStreamRequest struct{}
@@ -61,6 +62,40 @@ type FlowerLiveStreamEnvelope struct {
 	ContextCompactions  []FlowerContextCompaction  `json:"context_compactions,omitempty"`
 	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
 	ReadStatus          *FlowerThreadReadView      `json:"read_status,omitempty"`
+	ComputerFrame       *FlowerComputerFrame       `json:"computer_frame,omitempty"`
+}
+
+type FlowerComputerFrame struct {
+	ThreadID     string `json:"thread_id"`
+	SessionID    string `json:"session_id"`
+	TargetID     string `json:"target_id"`
+	ResourceRef  string `json:"resource_ref"`
+	SHA256       string `json:"sha256"`
+	MIMEType     string `json:"mime_type"`
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	Sequence     uint64 `json:"sequence"`
+	CapturedAtMS int64  `json:"captured_at_ms,omitempty"`
+}
+
+// PublishFlowerComputerFrame sends only the latest target-scoped frame metadata
+// to observers. The frame is ephemeral and never enters the durable timeline.
+func (s *Service) PublishFlowerComputerFrame(meta *session.Meta, frame FlowerComputerFrame) error {
+	if s == nil || meta == nil {
+		return errors.New("invalid computer frame publisher")
+	}
+	if strings.TrimSpace(frame.ThreadID) == "" {
+		return errors.New("computer frame thread is required")
+	}
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamComputerFrame, ThreadID: frame.ThreadID, ComputerFrame: &frame})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, subscriber := range s.flowerLiveSubscribers {
+		if subscriber.endpointID == meta.EndpointID && subscriber.userPublicID == meta.UserPublicID && !subscriber.closed {
+			enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+		}
+	}
+	return nil
 }
 
 type FlowerLiveStreamFrame struct {

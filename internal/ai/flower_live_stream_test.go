@@ -831,3 +831,38 @@ func TestFlowerLiveStreamRejectsMissingReadPermission(t *testing.T) {
 		t.Fatalf("subscribe error=%v, want read permission denied", err)
 	}
 }
+
+func TestFlowerLiveStreamPublishesComputerFrameToOwnerOnly(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	firstMeta := &session.Meta{EndpointID: "env-frame", UserPublicID: "user-frame", CanRead: true}
+	otherMeta := &session.Meta{EndpointID: "env-other", UserPublicID: "user-other", CanRead: true}
+	first, err := svc.SubscribeFlowerLiveStream(context.Background(), firstMeta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := svc.SubscribeFlowerLiveStream(context.Background(), otherMeta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = nextFlowerLiveStreamFrame(t, first)
+	_ = nextFlowerLiveStreamFrame(t, other)
+	if err := svc.PublishFlowerComputerFrame(firstMeta, FlowerComputerFrame{ThreadID: "thread-frame", SessionID: "session-frame", TargetID: "browser-main", ResourceRef: "computer://browser-main/" + strings.Repeat("a", 64), SHA256: strings.Repeat("a", 64), MIMEType: "image/png", Sequence: 1}); err != nil {
+		t.Fatal(err)
+	}
+	frame := nextFlowerLiveStreamFrame(t, first)
+	if frame.Kind != FlowerLiveStreamComputerFrame {
+		t.Fatalf("kind=%s", frame.Kind)
+	}
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.ComputerFrame == nil || envelope.ComputerFrame.ThreadID != "thread-frame" {
+		t.Fatalf("frame=%#v", envelope.ComputerFrame)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := other.Next(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("cross-owner frame delivered: %v", err)
+	}
+}
