@@ -29,7 +29,31 @@ const page = browser.contexts()[0].pages().find((entry) => entry.url() === new U
 assert(page, 'CDP does not belong to this checkout built Desktop');
 await mkdir(output, { recursive: true });
 let completed = 0;
+const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
 const server = http.createServer((request, response) => {
+  const url = new URL(request.url, 'http://fixture');
+  if (url.pathname === '/control-event') {
+    const event = url.searchParams.get('event');
+    if (event === 'double') controls.double = true;
+    if (event === 'enter' && url.searchParams.get('value') === 'Flower') controls.entered = true;
+    if (event === 'scroll') controls.scrolled = true;
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify(controls));
+    return;
+  }
+  if (url.pathname === '/controls' || url.pathname === '/second') {
+    if (url.pathname === '/controls') controls.loads += 1;
+    else controls.second = true;
+    response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    response.end(`<!doctype html><title>Flower action qualification</title>
+      <style>body{font:24px system-ui;margin:48px;min-height:1800px;background:#d6f5e5;color:#17304a}button,input{font:24px system-ui;padding:18px;margin:12px 0}input{display:block}footer{margin-top:1100px}</style>
+      <h1>${url.pathname === '/second' ? 'Second page' : 'Browser actions'}</h1>
+      <button ondblclick="report('double')">Double click me</button>
+      <label>Enter Flower, then press Enter<input onkeydown="if(event.key==='Enter')report('enter',this.value)"></label>
+      <output>${JSON.stringify(controls)}</output><footer>Bottom of page</footer>
+      <script>function report(event,value=''){fetch('/control-event?event='+event+'&value='+encodeURIComponent(value)).then(r=>r.json()).then(r=>document.querySelector('output').textContent=JSON.stringify(r))}addEventListener('scroll',()=>report('scroll'))</script>`);
+    return;
+  }
   if (request.url === '/complete' && request.method === 'POST') {
     completed += 1;
     response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -56,7 +80,7 @@ const proxy = http.createServer(async (request, response) => {
       const body = JSON.parse(raw.toString());
       assert.equal(body.model, model);
       assert((body.tools ?? []).every((tool) => tool.type === 'function'));
-      protocol.push({ model: body.model, toolCount: body.tools?.length ?? 0,
+      protocol.push({ model: body.model, toolCount: body.tools?.length ?? 0, tools: (body.tools ?? []).map((tool) => tool.name),
         imageToolOutput: (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image')) });
       const hasToolCall = (body.input ?? []).some((item) => item.type === 'function_call');
       const hasImage = (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image'));
@@ -84,6 +108,8 @@ const request = (method, url, body) => page.evaluate(async ({ method, url, body 
   return result.data;
 }, { method, url, body });
 const evidence = [];
+const ownedThreads = new Set();
+let threadID;
 try {
   await page.bringToFront();
   await request('PUT', '/_redeven_proxy/api/ai/provider_bundle', {
@@ -102,23 +128,34 @@ try {
   for (const [index, prompt] of [
     `Open ${fixtureURL} in the managed browser, use computer.screenshot to inspect it, then use computer.click to click Complete step once. Take another screenshot and report the completed number. Do not use terminal or HTTP fetch.`,
     'On the current page, use computer.screenshot and computer.click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
+    `Open ${fixtureURL}/controls using browser.navigate. Inspect it with computer.screenshot. Use computer.double_click on Double click me. Click the text input, use computer.type to enter Flower, and computer.key to press Enter. Use computer.scroll to scroll down and computer.wait to wait for the page. Use browser.reload to reload it. Navigate to ${fixtureURL}/second, then use browser.back to return to /controls. Take a final screenshot and report the result. Use only browser and computer tools; do not use terminal or HTTP fetch.`,
   ].entries()) {
     const composer = page.locator('.flower-surface textarea').first();
     await composer.fill(prompt);
     await composer.press('Enter');
+    await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
+    await page.waitForFunction(() => Boolean(document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-id')));
+    threadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
+    ownedThreads.add(threadID);
     console.log(`Turn ${index + 1} submitted through Flower Composer.`);
     await page.waitForFunction(() => {
       const image = document.querySelector('.flower-computer-stage-frame');
       return image?.naturalWidth >= 640 && image?.complete;
     }, null, { timeout: 180_000 });
-    const deadline = Date.now() + 180_000;
-    while (completed < index + 1 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 500));
-    assert.equal(completed, index + 1, 'the actual fixture click did not finish');
+    if (index < 2) {
+      const deadline = Date.now() + 180_000;
+      while (completed < index + 1 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 500));
+      assert.equal(completed, index + 1, 'the actual fixture click did not finish');
+    }
     await page.waitForFunction(() => !document.querySelector('[data-flower-primary-action="stop"], .flower-composer-stop-inline'), null, { timeout: 180_000 });
     await page.waitForFunction(() => {
       const image = document.querySelector('.flower-computer-stage-frame');
       return image?.naturalWidth >= 640 && image.complete;
     });
+    if (index === 2) {
+      assert(controls.double && controls.entered && controls.scrolled && controls.loads >= 3 && controls.second,
+        'the actual double click, text entry, keyboard, scroll, reload, and history fixture did not finish');
+    }
     const frame = await page.evaluate(() => {
       const image = document.querySelector('.flower-computer-stage-frame');
       const stage = document.querySelector('.flower-computer-stage');
@@ -132,7 +169,7 @@ try {
     assert.deepEqual(frame.background, [214, 245, 229], 'Stage did not advance to the completed fixture screenshot');
     const screenshot = path.join(output, `desktop-turn-${index + 1}.png`);
     await page.screenshot({ path: screenshot });
-    evidence.push({ turn: index + 1, fixtureCompleted: completed, frame, screenshot });
+    evidence.push({ turn: index + 1, fixtureCompleted: completed, ...(index === 2 ? { controls: { ...controls } } : {}), frame, screenshot });
     console.log(JSON.stringify(evidence.at(-1)));
   }
   await page.locator('.flower-computer-stage-close').click();
@@ -140,7 +177,7 @@ try {
   await page.locator('.flower-activity-inline-button[aria-expanded="false"]').filter({ hasText: /^screenshot/u }).last().click();
   await page.locator('.flower-activity-computer-block .flower-activity-inline-button').last().click();
   await page.waitForFunction(() => document.querySelector('.flower-computer-stage-frame')?.naturalWidth === 1280);
-  await page.locator('.flower-header-icon-button').last().click();
+  await page.locator('.flower-chat-header-actions > .flower-header-icon-button').last().click();
   const toggle = page.locator('.flower-settings-computer-use-section [role="switch"]');
   await toggle.waitFor();
   assert.equal(await toggle.getAttribute('aria-checked'), 'true');
@@ -149,14 +186,38 @@ try {
     const toggle = document.querySelector('.flower-settings-computer-use-section [role="switch"]');
     return toggle?.getAttribute('aria-checked') === 'false' && !toggle.disabled;
   });
+  await page.locator('.flower-settings-back-button').click();
+  await page.locator('.flower-new-chat-button').click();
+  const disabledRequestStart = protocol.length;
+  const composer = page.locator('.flower-surface textarea').first();
+  await composer.fill('Reply Ready without using tools.');
+  await composer.press('Enter');
+  await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
+  ownedThreads.add(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id'));
+  await page.waitForFunction(() => !document.querySelector('[data-flower-primary-action="stop"], .flower-composer-stop-inline'), null, { timeout: 180_000 });
+  const disabledRequests = protocol.slice(disabledRequestStart);
+  assert(disabledRequests.length > 0, 'disabled-settings turn never reached the provider');
+  assert(disabledRequests.every((entry) => entry.tools.every((tool) => !/^(computer|browser)[_.]/u.test(tool))), 'disabled setting still registered computer/browser tools');
+  assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'new disabled turn displayed a stale Stage');
+  await page.locator('.flower-chat-header-actions > .flower-header-icon-button').last().click();
+  await toggle.waitFor();
   await toggle.click();
   await page.waitForFunction(() => {
     const toggle = document.querySelector('.flower-settings-computer-use-section [role="switch"]');
     return toggle?.getAttribute('aria-checked') === 'true' && !toggle.disabled;
   });
   await page.locator('.flower-settings-back-button').click();
-  const listing = await request('GET', '/_redeven_proxy/api/ai/threads?limit=20');
-  const threadID = listing.threads[0].thread_id;
+  await page.locator('.flower-new-chat-button').click();
+  const enabledRequestStart = protocol.length;
+  await composer.fill(`Open ${fixtureURL} using browser.navigate, inspect it with computer.screenshot, and report the button label. Do not click it or use terminal or HTTP fetch.`);
+  await composer.press('Enter');
+  await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
+  ownedThreads.add(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id'));
+  await page.waitForFunction(() => document.querySelector('.flower-computer-stage-frame')?.naturalWidth === 1280, null, { timeout: 180_000 });
+  await page.waitForFunction(() => !document.querySelector('[data-flower-primary-action="stop"], .flower-composer-stop-inline'), null, { timeout: 180_000 });
+  assert(protocol.slice(enabledRequestStart).some((entry) => entry.imageToolOutput), 're-enabled setting did not restore visual tool execution');
+  assert.equal(completed, 2, 'observation-only turn unexpectedly mutated the fixture');
+  assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = [];
   const collect = (value) => {
@@ -165,16 +226,19 @@ try {
     for (const child of Object.values(value)) if (typeof child === 'object') collect(child);
   };
   collect(detail);
-  assert(activities.some((item) => item.tool === 'browser.navigate') && activities.some((item) => item.tool === 'computer.click'), 'actual thread did not execute browser and computer tools');
+  const expectedTools = ['browser.navigate', 'browser.back', 'browser.reload', 'computer.screenshot', 'computer.click', 'computer.double_click', 'computer.type', 'computer.key', 'computer.scroll', 'computer.wait'];
+  for (const tool of expectedTools) assert(activities.some((item) => item.tool === tool), `actual thread did not execute ${tool}`);
   assert(activities.some((item) => item.targetRefs?.some((ref) => ref.resource_ref?.startsWith('computer://'))), 'public thread lost media provenance');
   assert(protocol.some((entry) => entry.imageToolOutput), 'the actual provider never received a tool-result image');
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ model, fixtureURL, evidence, protocol, threadID, activities, stageReopened: true, settingsToggle: 'on-off-on' }, null, 2));
-  console.log('Desktop computer media qualification passed.');
+  assert.equal(protocolErrors.length, 0, 'provider protocol assertions failed');
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'managed-browser-desktop-ui', model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  console.log('Managed-browser Desktop UI qualification passed; other targets and takeover require separate qualification.');
 } catch (error) {
   await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => undefined);
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ completed, evidence, protocol, protocolErrors, failure: String(error).split('\n')[0] }, null, 2));
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID, completed, controls, evidence, protocol, protocolErrors, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
+  for (const id of ownedThreads) if (id) await request('POST', `/_redeven_proxy/api/ai/threads/${id}/cancel`).catch(() => undefined);
   await request('PUT', '/_redeven_proxy/api/ai/provider_bundle', {
     model_profile: { current_model_id: `${provider.id}/${model}`, providers: [provider] },
     provider_api_key_patches: [], web_search_provider_key_patches: [],

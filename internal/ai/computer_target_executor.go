@@ -29,6 +29,7 @@ type PlaywrightTargetExecutor struct {
 	Timeout    time.Duration
 
 	mu      sync.Mutex
+	closed  bool
 	clients map[string]*playwrightTargetClient
 	mediaMu sync.RWMutex
 	media   map[string][]byte
@@ -60,8 +61,9 @@ type playwrightTargetResponse struct {
 }
 
 type playwrightTargetReady struct {
-	Type  string `json:"type"`
-	Error string `json:"error,omitempty"`
+	Type            string `json:"type"`
+	ProtocolVersion int    `json:"protocol_version"`
+	Error           string `json:"error,omitempty"`
 }
 
 func NewPlaywrightTargetExecutor(nodeBinary, helperPath, profileDir string) *PlaywrightTargetExecutor {
@@ -89,19 +91,33 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 		}
 	}
 	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed {
+		return TargetToolResult{}, errors.New("browser target executor is closed")
+	}
+	if err := ctx.Err(); err != nil {
+		return TargetToolResult{}, err
+	}
 	client, err := e.clientLocked(ctx, targetID)
-	e.mu.Unlock()
 	if err != nil {
 		return TargetToolResult{}, err
 	}
+	// A response reader belongs to exactly one action. Once interrupted, retire
+	// the session before accepting another action so late replies cannot leak
+	// into the next tool result. Never replay an uncertain action automatically.
+	healthy := false
+	defer func() {
+		if !healthy {
+			stopPlaywrightClient(client)
+			delete(e.clients, targetID)
+		}
+	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
 	request := playwrightTargetRequest{ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args}
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return TargetToolResult{}, err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	if _, err := client.stdin.Write(append(payload, '\n')); err != nil {
 		return TargetToolResult{}, err
 	}
@@ -135,7 +151,11 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 	if err := json.Unmarshal(line, &response); err != nil {
 		return TargetToolResult{}, fmt.Errorf("invalid browser helper response: %w", err)
 	}
+	if response.ID != requestID || response.TargetID != targetID {
+		return TargetToolResult{}, errors.New("browser helper response provenance mismatch")
+	}
 	if strings.TrimSpace(response.Error) != "" {
+		healthy = true
 		return TargetToolResult{}, errors.New(response.Error)
 	}
 	result := TargetToolResult{TargetID: targetID, ExecutionLocation: response.Location, Result: response.Result}
@@ -164,6 +184,7 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 			result.Result = payload
 		}
 	}
+	healthy = true
 	return result, nil
 }
 
@@ -197,6 +218,12 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 		return nil, err
 	}
 	client := &playwrightTargetClient{cmd: cmd, stdin: stdin, reader: bufio.NewReader(stdout)}
+	ready := false
+	defer func() {
+		if !ready {
+			stopPlaywrightClient(client)
+		}
+	}()
 	readyCh := make(chan []byte, 1)
 	errCh := make(chan error, 1)
 	go func() {
@@ -215,21 +242,18 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
 		return nil, ctx.Err()
 	case <-timer.C:
-		_ = cmd.Process.Kill()
 		return nil, context.DeadlineExceeded
 	case err := <-errCh:
-		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("browser helper readiness failed: %w", err)
 	case line := <-readyCh:
-		var ready playwrightTargetReady
-		if err := json.Unmarshal(line, &ready); err != nil || ready.Type != "ready" {
-			_ = cmd.Process.Kill()
+		var handshake playwrightTargetReady
+		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 1 || handshake.Error != "" {
 			return nil, errors.New("browser helper did not complete readiness handshake")
 		}
 	}
+	ready = true
 	e.clients[targetID] = client
 	return client, nil
 }
@@ -247,10 +271,26 @@ func (e *PlaywrightTargetExecutor) ResolveTargetToolAttachment(_ context.Context
 func (e *PlaywrightTargetExecutor) Close() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.closed = true
 	for id, client := range e.clients {
-		_ = client.stdin.Close()
-		_ = client.cmd.Process.Kill()
+		stopPlaywrightClient(client)
 		delete(e.clients, id)
 	}
 	return nil
+}
+
+func stopPlaywrightClient(client *playwrightTargetClient) {
+	_ = client.stdin.Close()
+	// Give Playwright a chance to close its Chromium children and profile lock.
+	if err := client.cmd.Process.Signal(os.Interrupt); err != nil {
+		_ = client.cmd.Process.Kill()
+	}
+	done := make(chan struct{})
+	go func() { _ = client.cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		_ = client.cmd.Process.Kill()
+		<-done
+	}
 }
