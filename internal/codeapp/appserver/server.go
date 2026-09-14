@@ -3389,6 +3389,30 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settingsUpdateView{Settings: g.toSettingsView(updated, aiSvc)}})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/connect":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body struct {
+			CDPURL string `json:"cdp_url"`
+		}
+		if err := dec.Decode(&body); err != nil || strings.TrimSpace(body.CDPURL) == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser connection endpoint is required"})
+			return
+		}
+		target, err := aiSvc.ConnectComputerBrowser(r.Context(), body.CDPURL)
+		if err != nil {
+			g.appendAudit(meta, "ai_computer_browser_connect", "failure", map[string]any{"target_kind": target.Kind}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "ai_computer_browser_connect", "success", map[string]any{"target_id": target.ID}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: target})
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/provider_bundle":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {
