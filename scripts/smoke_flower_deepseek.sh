@@ -17,6 +17,7 @@ SOURCE_STATE_ROOT="${REDEVEN_FLOWER_SMOKE_SOURCE_STATE_ROOT:-$HOME/.redeven/loca
 LOCAL_UI_PORT=${REDEVEN_FLOWER_SMOKE_LOCAL_UI_PORT:-43924}
 CDP_PORT=${REDEVEN_FLOWER_SMOKE_CDP_PORT:-43925}
 INSPECTOR_PORT=${REDEVEN_FLOWER_SMOKE_INSPECTOR_PORT:-43926}
+REDEVEN_FLOWER_SMOKE_MODEL=${REDEVEN_FLOWER_SMOKE_MODEL:-deepseek-v4-flash-vision-exp}
 MANIFEST_FILE="$REPORT_ROOT/pid-manifest.json"
 PROVIDER_METADATA_FILE="$REPORT_ROOT/provider.json"
 DESKTOP_LOG="$REPORT_ROOT/desktop.log"
@@ -226,12 +227,12 @@ NODE
 )
 
 commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
-node - "$REPORT_ROOT/run-config.json" "$ROOT_DIR" "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" "$REPORT_ROOT" "$commit" "$RUNTIME_PID" <<'NODE'
+node - "$REPORT_ROOT/run-config.json" "$ROOT_DIR" "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" "$REPORT_ROOT" "$commit" "$RUNTIME_PID" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$REDEVEN_FLOWER_SMOKE_MODEL" <<'NODE'
 const fs = require('node:fs');
-const [file, worktree, stateRoot, userDataRoot, cacheRoot, tempRoot, workspace, reportRoot, commit, runtimePID] = process.argv.slice(2);
+const [file, worktree, stateRoot, userDataRoot, cacheRoot, tempRoot, workspace, reportRoot, commit, runtimePID, localUIPort, cdpPort, inspectorPort, model] = process.argv.slice(2);
 fs.writeFileSync(file, `${JSON.stringify({
-  root: '/tmp/redeven-flower-smoke-01a00852', workspace, model: 'deepseek-v4-flash',
-  localUIPort: 43924, cdpPort: 43925, inspectorPort: 43926,
+  root: '/tmp/redeven-flower-smoke-01a00852', workspace, model,
+  localUIPort: Number(localUIPort), cdpPort: Number(cdpPort), inspectorPort: Number(inspectorPort),
   worktree, stateRoot, userDataRoot, cacheRoot, tempRoot, reportRoot, commit, runtimePID: Number(runtimePID),
   playwrightRoot: `${worktree}/internal/envapp/ui_src/node_modules`,
 }, null, 2)}\n`, { mode: 0o600 });
