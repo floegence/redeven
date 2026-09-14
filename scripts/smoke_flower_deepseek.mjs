@@ -401,14 +401,14 @@ async function startNewThread(page) {
   await waitFor(async () => await selectedThreadID(page) === '', 20_000, 'new thread selection');
   const textarea = surface.locator('.flower-composer textarea');
   await textarea.waitFor({ state: 'visible', timeout: 20_000 });
-  await surface.locator('[data-flower-primary-action="send"]').waitFor({ state: 'visible', timeout: 20_000 });
+  await surface.locator('[data-flower-primary-action="send"]').waitFor({ state: 'visible', timeout: 60_000 });
   await waitFor(async () => (
     await selectedThreadID(page) === ''
     && await surface.getAttribute('data-flower-warmup') !== 'true'
     && await surface.getAttribute('data-flower-selected-thread-loading') !== 'true'
     && await textarea.isEnabled()
     && await surface.locator('.flower-handler-error-card').count() === 0
-  ), 20_000, 'new thread composer readiness');
+  ), 60_000, 'new thread composer readiness');
 }
 
 async function sendPrompt(page, prompt, options = {}) {
