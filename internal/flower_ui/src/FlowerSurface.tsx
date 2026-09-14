@@ -5339,7 +5339,6 @@ webSearch: model.web_search,
   };
 
   const startCompose = () => {
-    const previousSessionKey = currentComposerSessionKey();
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     cancelDeferredThreadSelection();
