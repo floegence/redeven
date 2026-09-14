@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -41,14 +40,29 @@ func (e *XvfbTargetExecutor) Start(ctx context.Context) error {
 	}
 	path, err := exec.LookPath("Xvfb")
 	if err != nil {
-		return fmt.Errorf("TARGET_UNAVAILABLE: Xvfb is not installed")
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_missing"}
 	}
 	cmd := exec.CommandContext(ctx, path, display, "-screen", "0", screen, "-nolisten", "tcp")
 	cmd.Env = append(os.Environ(), "DISPLAY="+display)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("TARGET_UNAVAILABLE: start Xvfb: %w", err)
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_start_failed"}
 	}
 	e.process = cmd
+	return nil
+}
+
+// EnsureTargetReady starts Xvfb and then performs the wrapped adapter
+// handshake. Starting a display alone is not readiness: the inner target must
+// prove that it can capture and accept input.
+func (e *XvfbTargetExecutor) EnsureTargetReady(ctx context.Context, targetID string) error {
+	if err := e.Start(ctx); err != nil {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_unavailable"}
+	}
+	if checker, ok := e.Inner.(targetReadinessChecker); ok {
+		if err := checker.EnsureTargetReady(ctx, targetID); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
