@@ -22,6 +22,35 @@ func TestTargetRegistryResolvesCurrentAlias(t *testing.T) {
 	}
 }
 
+func TestTargetRegistryResolvesLogicalKindsWithoutChangingCurrent(t *testing.T) {
+	registry := NewTargetRegistry()
+	for _, target := range []TargetDescriptor{
+		{ID: "browser-main", Kind: "browser.managed"},
+		{ID: "desktop-main", Kind: "desktop.screen"},
+	} {
+		if err := registry.Register(target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	desktop, err := registry.ResolveTarget(t.Context(), "desktop.screen")
+	if err != nil || desktop.ID != "desktop-main" {
+		t.Fatalf("desktop alias: %+v, %v", desktop, err)
+	}
+	current, err := registry.ResolveTarget(t.Context(), "current")
+	if err != nil || current.ID != "browser-main" {
+		t.Fatalf("another call changed the default: %+v, %v", current, err)
+	}
+	if err := registry.Register(TargetDescriptor{ID: "desktop-other", Kind: "desktop.screen"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.ResolveTarget(t.Context(), "desktop.screen"); err == nil {
+		t.Fatal("ambiguous kind was resolved arbitrarily")
+	}
+	if _, err := registry.ResolveTarget(t.Context(), "browser.connected"); err == nil {
+		t.Fatal("unregistered kind was resolved")
+	}
+}
+
 func TestDefaultInteractionSafetyGateBlocksSecretLikeInput(t *testing.T) {
 	gate := defaultInteractionSafetyGate{}
 	decision, err := gate.AssessInteraction(context.Background(), TargetToolCall{

@@ -26,8 +26,10 @@ type NativeDesktopTargetExecutor struct {
 	Timeout    time.Duration
 
 	mu      sync.Mutex
+	closed  bool
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
+	stdout  io.ReadCloser
 	reader  *bufio.Reader
 	mediaMu sync.RWMutex
 	media   map[string][]byte
@@ -35,6 +37,36 @@ type NativeDesktopTargetExecutor struct {
 
 func NewNativeDesktopTargetExecutor(helperPath string) *NativeDesktopTargetExecutor {
 	return &NativeDesktopTargetExecutor{HelperPath: strings.TrimSpace(helperPath), Timeout: 30 * time.Second, media: map[string][]byte{}}
+}
+
+func (e *NativeDesktopTargetExecutor) EnsureTargetReady(ctx context.Context, _ string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed {
+		return errors.New("desktop target executor is closed")
+	}
+	timeout := e.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	output, err := exec.CommandContext(probeCtx, e.HelperPath, "--capabilities").Output()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var capabilities struct {
+		ProtocolVersion int  `json:"protocol_version"`
+		ScreenRecording bool `json:"screen_recording"`
+		Accessibility   bool `json:"accessibility"`
+	}
+	if err != nil || json.Unmarshal(output, &capabilities) != nil || capabilities.ProtocolVersion != 1 {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "native_handshake_failed"}
+	}
+	if !capabilities.ScreenRecording || !capabilities.Accessibility {
+		return &TargetStartupError{Code: "TARGET_PERMISSION_REQUIRED", Reason: "screen_recording_or_accessibility_missing"}
+	}
+	return e.startLocked()
 }
 
 func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
@@ -49,9 +81,23 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if err := e.startLocked(ctx); err != nil {
+	if e.closed {
+		return TargetToolResult{}, errors.New("desktop target executor is closed")
+	}
+	if err := ctx.Err(); err != nil {
 		return TargetToolResult{}, err
 	}
+	if err := e.startLocked(); err != nil {
+		return TargetToolResult{}, err
+	}
+	// Interrupted exchanges retire the helper before another action is admitted.
+	// Do not replay an action whose external outcome may be unknown.
+	healthy := false
+	defer func() {
+		if !healthy {
+			e.stopLocked()
+		}
+	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
 	payload, err := json.Marshal(map[string]any{"protocol_version": 1, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args})
 	if err != nil {
@@ -66,9 +112,10 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 	}
 	readCh := make(chan []byte, 1)
 	errCh := make(chan error, 1)
+	reader := e.reader
 	go func() {
 		for {
-			line, readErr := e.reader.ReadBytes('\n')
+			line, readErr := reader.ReadBytes('\n')
 			if readErr != nil {
 				errCh <- readErr
 				return
@@ -109,6 +156,7 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 		return TargetToolResult{}, errors.New("desktop helper response provenance mismatch")
 	}
 	if event.Type == "error" || strings.TrimSpace(event.Error) != "" {
+		healthy = true
 		return TargetToolResult{}, errors.New(event.Error)
 	}
 	if event.Type != "result" {
@@ -134,27 +182,32 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 			event.Payload["after_frame"] = ref
 		}
 	}
+	healthy = true
 	return result, nil
 }
 
-func (e *NativeDesktopTargetExecutor) startLocked(ctx context.Context) error {
+func (e *NativeDesktopTargetExecutor) startLocked() error {
 	if e.cmd != nil {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, e.HelperPath, "--protocol-version", "1")
+	// The executor owns this session across tool calls and turns.
+	cmd := exec.Command(e.HelperPath, "--protocol-version", "1")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		_ = stdin.Close()
 		return err
 	}
 	cmd.Stderr = nil
 	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
 		return err
 	}
-	e.cmd, e.stdin, e.reader = cmd, stdin, bufio.NewReader(stdout)
+	e.cmd, e.stdin, e.stdout, e.reader = cmd, stdin, stdout, bufio.NewReader(stdout)
 	return nil
 }
 
@@ -171,12 +224,21 @@ func (e *NativeDesktopTargetExecutor) ResolveTargetToolAttachment(_ context.Cont
 func (e *NativeDesktopTargetExecutor) Close() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.closed = true
+	e.stopLocked()
+	return nil
+}
+
+func (e *NativeDesktopTargetExecutor) stopLocked() {
 	if e.stdin != nil {
 		_ = e.stdin.Close()
 	}
+	if e.stdout != nil {
+		_ = e.stdout.Close()
+	}
 	if e.cmd != nil && e.cmd.Process != nil {
 		_ = e.cmd.Process.Kill()
+		_ = e.cmd.Wait()
 	}
-	e.cmd, e.stdin, e.reader = nil, nil, nil
-	return nil
+	e.cmd, e.stdin, e.stdout, e.reader = nil, nil, nil, nil
 }

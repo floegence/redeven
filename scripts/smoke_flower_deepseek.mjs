@@ -13,7 +13,6 @@ import { pathToFileURL } from 'node:url';
 export const SMOKE_ROOT = '/tmp/redeven-flower-smoke-01a00852';
 export const SMOKE_WORKSPACE = `${SMOKE_ROOT}/workspace`;
 export const SMOKE_MODEL = 'deepseek-v4-flash-vision-exp';
-export const SMOKE_PORTS = Object.freeze({ localUI: 43924, cdp: 43925, inspector: 43926 });
 
 export function assertSmokeConfiguration(config) {
   const expected = {
@@ -27,8 +26,9 @@ export function assertSmokeConfiguration(config) {
     }
   }
   for (const field of ['localUIPort', 'cdpPort', 'inspectorPort']) {
-    if (!Number.isInteger(config?.[field]) || config[field] <= 0) throw new Error(`Flower smoke ${field} must be a positive port`);
+    if (!Number.isInteger(config?.[field]) || config[field] < 1 || config[field] > 65535) throw new Error(`Flower smoke ${field} must be a valid TCP port`);
   }
+  if (new Set([config.localUIPort, config.cdpPort, config.inspectorPort]).size !== 3) throw new Error('Flower smoke ports must be distinct');
   return config;
 }
 
@@ -72,15 +72,13 @@ export function findDeepSeekProvider(config, secrets) {
   const provider = candidates[0];
   const providerID = String(provider?.id ?? '').trim();
   if (!providerID) throw new Error('DeepSeek provider ID is missing');
-  const models = Array.isArray(provider.models) ? provider.models : [];
   const apiKey = String(secretAI?.provider_api_keys?.[providerID] ?? '');
   if (!apiKey) throw new Error('DeepSeek provider API key is missing');
   const selectedProvider = structuredClone(provider);
-  // Add the experimental model only to the isolated qualification copy.
-  if (!models.some((model) => String(model?.model_name ?? '').trim() === SMOKE_MODEL)) {
-    selectedProvider.models = [...models, { model_name: SMOKE_MODEL }];
-    delete selectedProvider.model_selection;
-  }
+  // Use the production catalog, including image and reasoning capabilities.
+  // Never invent a reduced model entry or inherit user capability overrides.
+  delete selectedProvider.models;
+  selectedProvider.model_selection = {};
   return { provider: selectedProvider, apiKey, currentModelID: `${providerID}/${SMOKE_MODEL}` };
 }
 
@@ -450,21 +448,14 @@ async function sendPrompt(page, prompt, options = {}) {
   const receiptBody = await response.json();
   const receipt = assertAcceptedReceipt(response.status(), receiptBody);
   const receiptThreadID = String(receipt.thread_id ?? '').trim();
-  const userMarker = options.visibleMarker ?? prompt.slice(0, 40);
-  const user = surface.locator('[data-flower-message-role="user"]').filter({ hasText: userMarker });
-  if (receiptThreadID) {
-    await waitFor(async () => await threadCard(page, receiptThreadID).then(() => true).catch(() => false), 20_000, 'receipt thread rail card');
-    await waitFor(async () => {
-      const response = await canonicalThread(page, receiptThreadID);
-      return JSON.stringify(response.body ?? '').includes(options.visibleMarker ?? prompt.slice(0, 40));
-    }, 20_000, 'receipt canonical user item');
-    if (!await user.isVisible().catch(() => false)) await selectThread(page, receiptThreadID);
-  }
-  if (!await user.isVisible().catch(() => false) && receiptThreadID) {
-    await selectThread(page, receiptThreadID);
-  } else if (!receiptThreadID) {
-    await user.waitFor({ state: 'visible', timeout: 20_000 });
-  }
+  if (!receiptThreadID || !receipt.turn_id) throw new Error('Flower send receipt omitted canonical thread or turn identity');
+  await waitFor(async () => await selectedThreadID(page) === receiptThreadID, 20_000, 'accepted thread selection');
+  const userID = await waitFor(async () => {
+    const response = await canonicalThread(page, receiptThreadID);
+    const item = currentView(response).items?.find((entry) => entry.kind === 'user' && entry.turn_id === receipt.turn_id);
+    return item?.id;
+  }, 20_000, 'canonical sent user identity');
+  await surface.locator(`[data-flower-message-id="${userID}"][data-flower-message-role="user"]`).waitFor({ state: 'visible', timeout: 20_000 });
   const userVisibleMS = performance.now() - clickedAt;
   const threadID = await waitFor(() => selectedThreadID(page), 20_000, 'selected thread identity');
   const runningMS = await waitFor(async () => {
@@ -476,7 +467,7 @@ async function sendPrompt(page, prompt, options = {}) {
   const runID = String(receipt.run_id ?? startedCanonical.run_id ?? '').trim();
   const turnID = String(receipt.turn_id ?? startedCanonical.turn_id ?? '').trim();
   if (!runID || !turnID) throw new Error('Flower send receipt omitted canonical run or turn identity');
-  return { clickedAt, userVisibleMS, runningMS, threadID, runID, turnID };
+  return { clickedAt, userVisibleMS, runningMS, threadID, runID, turnID, userID };
 }
 
 async function queuePrompt(page, prompt, visibleMarker) {
@@ -852,11 +843,13 @@ async function runScenarios(page, config, telemetry) {
   const remember = async (id, operation) => {
     const started = performance.now();
     telemetry.active_scenario = id;
+    console.log(`Starting ${id}`);
     try {
       const evidence = await operation();
       const duplicates = await assertUIHealth(page);
       const result = { id, pass: true, duration_ms: Number((performance.now() - started).toFixed(1)), duplicate_counts: duplicates, ...evidence };
       results.push(result);
+      console.log(`Passed ${id} (${result.duration_ms}ms)`);
       return result;
     } catch (error) {
       results.push({ id, pass: false, duration_ms: Number((performance.now() - started).toFixed(1)), failure_stage: id, error: String(error) });
@@ -1133,8 +1126,10 @@ async function runScenarios(page, config, telemetry) {
     await textarea.press('End'); await textarea.type(` Read the selected reference with file.read and reply with its marker plus ${token} as plain text. Do not call any other tool after file.read.`);
     const sent = await sendPrompt(page, await textarea.inputValue(), { visibleMarker: token });
     const terminal = await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
-    if (!terminal.canonical.item_ids.some((id) => String(id).startsWith('tool:'))) throw new Error('reference flow did not execute a tool');
-    const chip = surface.locator('[data-flower-message-role="user"] [data-flower-chat-context-chip="true"]').first(); await chip.click();
+    const referenceCurrent = currentView(await canonicalThread(page, sent.threadID));
+    if (!referenceCurrent.items.some((item) => item.activity?.tool_name === 'file.read' && item.activity.status === 'success')) throw new Error('reference flow did not complete file.read');
+    await surface.locator('[data-flower-message-role="assistant"]').filter({ hasText: 'FLOWER_REFERENCE_MARKER_01a00852' }).last().waitFor({ state: 'visible' });
+    const chip = surface.locator(`[data-flower-message-id="${sent.userID}"] [data-flower-chat-context-chip="true"]`).filter({ hasText: 'reference-marker-with-a-deliberately-long-file-name' }); await chip.click();
     const previewSelector = '.file-preview-floating-window, .flower-chat-context-preview-window';
     await page.locator(previewSelector).first().waitFor({ state: 'visible', timeout: 20_000 });
     await checkpoint(page, config, 's12-reference');
@@ -1161,6 +1156,9 @@ async function runScenarios(page, config, telemetry) {
     if (!await keepItem.isVisible()) throw new Error('remaining attachment disappeared before send');
     const token = marker('ATTACHMENT');
     const sent = await sendPrompt(page, `Use attachment.read to read the remaining attachment and reply with its marker plus ${token} as plain text. Do not call any other tool after attachment.read.`, { visibleMarker: token });
+    const sentChips = surface.locator(`[data-flower-message-id="${sent.userID}"] [data-flower-chat-context-chip="true"]`);
+    await sentChips.filter({ hasText: 'attachment-keep' }).waitFor({ state: 'visible' });
+    if (await sentChips.filter({ hasText: 'attachment-remove.txt' }).count()) throw new Error('removed attachment was sent');
     await surface.locator('[data-flower-activity-item-id]').filter({ hasText: /attachment-keep|FLOWER_ATTACHMENT_KEEP/iu }).waitFor({ state: 'visible', timeout: 180_000 });
     const terminal = await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
     return { thread_id: sent.threadID, run_id: sent.runID, canonical: terminal.canonical };
@@ -1169,7 +1167,12 @@ async function runScenarios(page, config, telemetry) {
   await remember('S14', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const tokenA = marker('SWITCH_A'); const a = await sendPrompt(page, `Call terminal.exec once with command "sleep 12; printf ${tokenA}". After it finishes, reply ${tokenA}. Call no other tool.`, { visibleMarker: tokenA });
-    await waitFor(async () => (await canonicalThread(page, a.threadID)).body?.data?.thread?.status === 'success', 180_000, 'switch source terminal');
+    await waitFor(async () => {
+      const response = await canonicalThread(page, a.threadID);
+      const evidence = canonicalEvidence(response);
+      const current = response.body?.data?.current;
+      return evidence.status === 'running' && current?.items?.some((item) => item.kind === 'tool' && item.activity?.tool_name === 'terminal.exec' && item.activity?.status === 'running');
+    }, 180_000, 'switch source executing terminal');
     await startNewThread(page); await setPermission(page, 'approval_required');
     const tokenB = marker('SWITCH_B'); const b = await sendPrompt(page, `Call terminal.exec exactly once with "printf ${tokenB}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: tokenB });
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'recovery companion approval');

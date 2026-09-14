@@ -38,6 +38,22 @@ function suiteSHA256(runtimeSuite: Array<Record<string, unknown>>): string {
   return `sha256:${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}`;
 }
 
+function computerFixture(root: string, platform = 'linux', architecture = 'amd64'): string {
+  const resources = path.join(root,'computer');
+  const names = ['node', 'NODE_LICENSE', 'browser.json', 'redevenComputerHost.mjs', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
+  if (platform === 'darwin') names.push('redeven-computer-host');
+  const files=names.map(name=>{
+    const absolute=path.join(resources,name);
+    fs.mkdirSync(path.dirname(absolute),{recursive:true});
+    const bytes=Buffer.from('fixture');
+    fs.writeFileSync(absolute,bytes,{mode:name==='node'?0o755:0o600});
+    return {path:name,sha256:sha256(bytes),size_bytes:bytes.length,executable:name==='node'};
+  });
+  const bytes=Buffer.from(JSON.stringify({schema_version:1,platform,architecture:architecture==='amd64'?'x64':architecture,node_version:'26.7.0',files}));
+  fs.writeFileSync(path.join(resources,'manifest.json'),bytes);
+  return sha256(bytes);
+}
+
 function bundleFixture(overrides: Record<string, unknown> = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-desktop-bundle-'));
   roots.push(root);
@@ -63,7 +79,8 @@ function bundleFixture(overrides: Record<string, unknown> = {}) {
     executable: name === 'redeven' || name === 'redevplugin-runtime',
   }));
   const manifest = {
-    schema_version: 4,
+    schema_version: 5,
+    computer_manifest_sha256: computerFixture(root, String(overrides.platform ?? 'linux'), String(overrides.architecture ?? 'amd64')),
     version: 'v1.2.3',
     commit: 'abc123',
     platform: 'linux',
@@ -91,7 +108,8 @@ function windowsBundleFixture(attestationOverrides: Record<string, unknown> = {}
     executable: false,
   }];
   fs.writeFileSync(path.join(root, 'desktop-bundle-manifest.json'), `${JSON.stringify({
-    schema_version: 4,
+    schema_version: 5,
+    computer_manifest_sha256: null,
     version: 'v1.2.3',
     commit: 'abc123',
     platform: 'windows',
@@ -286,4 +304,20 @@ describe('Desktop precompiled bundle', () => {
       expectedArchitecture: 'amd64',
     })).rejects.toThrow('attestation');
   });
+});
+
+it.skipIf(process.platform === 'win32')('rejects missing Playwright from an otherwise valid bundle', async()=>{
+ const root=bundleFixture();
+ fs.rmSync(path.join(root,'computer/node_modules/playwright'),{recursive:true});
+ await expect(loadDesktopBundle({root,expectedPlatform:'linux',expectedArchitecture:'amd64'})).rejects.toThrow(/missing files/);
+});
+it.skipIf(process.platform === 'win32')('rejects changed helper bytes before starting a target', async()=>{
+ const root=bundleFixture();
+ fs.writeFileSync(path.join(root,'computer/redevenComputerHost.mjs'),'changed');
+ await expect(loadDesktopBundle({root,expectedPlatform:'linux',expectedArchitecture:'amd64'})).rejects.toThrow(/Computer resource/);
+});
+it.skipIf(process.platform === 'win32')('rejects undeclared external symlink', async()=>{
+ const root=bundleFixture();
+ fs.symlinkSync('/tmp',path.join(root,'computer/escape'));
+ await expect(loadDesktopBundle({root,expectedPlatform:'linux',expectedArchitecture:'amd64'})).rejects.toThrow(/symlink/);
 });

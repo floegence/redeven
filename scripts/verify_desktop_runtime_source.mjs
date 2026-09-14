@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 export function verifyDesktopRuntimeSource(manifestPath, runtimeRoot, version, commit) {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const normalizeVersion = (value) => String(value).replace(/^v/u, '');
-  if (manifest.schema_version !== 4 || manifest.platform !== 'linux' || manifest.architecture !== 'amd64'
+  if (manifest.schema_version !== 5 || manifest.platform !== 'linux' || manifest.architecture !== 'amd64'
     || manifest.provenance !== 'packaged_bundle'
     || manifest.distribution_kind !== 'bundled_host_runtime' || manifest.managed_wsl_runtime !== null
     || normalizeVersion(manifest.version) !== normalizeVersion(version) || manifest.commit !== commit) {

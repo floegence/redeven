@@ -16,10 +16,23 @@ func screenshot() throws -> [String: Any] {
         throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow Screen Recording for Redeven Desktop in System Settings.")
     }
     let display = CGMainDisplayID()
-    guard let image = CGDisplayCreateImage(display) else {
+    let bounds = CGDisplayBounds(display)
+    let image: CGImage?
+    if let owner = ProcessInfo.processInfo.environment["REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID"], let excludedPID = Int(owner) {
+        guard let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
+            throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not enumerate visible windows.")
+        }
+        let included = windows.compactMap { window -> NSNumber? in
+            guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.intValue != excludedPID else { return nil }
+            return window[kCGWindowNumber as String] as? NSNumber
+        }
+        image = CGImage(windowListFromArrayScreenBounds: bounds, windowArray: included as CFArray, imageOption: .bestResolution)
+    } else {
+        image = CGDisplayCreateImage(display)
+    }
+    guard let image else {
         throw HostFailure(code: "FRAME_UNAVAILABLE", message: "macOS could not capture the display.")
     }
-    let bounds = CGDisplayBounds(display)
     // Model coordinates and mouse input share logical display points, even on
     // Retina displays. Normalize the returned pixels to that same viewport.
     let width = Int(bounds.width), height = Int(bounds.height)
@@ -91,7 +104,9 @@ if CommandLine.arguments.contains("--capabilities") {
                 events = try NativeInput.click(at: CGPoint(x: point.x + bounds.minX, y: point.y + bounds.minY), count: tool == "computer.double_click" ? 2 : 1)
             case "computer.type": events = try NativeInput.text(text("text"))
             case "computer.key": events = try NativeInput.key(text("key"))
-            case "computer.scroll": events = try NativeInput.scroll(x: number("delta_x", default: 0), y: number("delta_y"))
+            case "computer.scroll":
+                let naturalScrolling = UserDefaults.standard.object(forKey: "com.apple.swipescrolldirection") as? Bool ?? true
+                events = try NativeInput.scroll(x: number("delta_x", default: 0), y: number("delta_y"), naturalScrolling: naturalScrolling)
             default: throw HostFailure(code: "TARGET_CAPABILITY_UNAVAILABLE", message: "The desktop target does not support this tool.")
             }
             guard CGPreflightScreenCaptureAccess() else {

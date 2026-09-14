@@ -2,14 +2,20 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 )
 
 type recordingPreparedGateway struct {
@@ -150,3 +156,83 @@ func TestAnthropicTextAttachmentDoesNotSilentlyTruncate(t *testing.T) {
 }
 
 var _ ModelGateway = (*recordingPreparedGateway)(nil)
+
+func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T) {
+	data := []byte(strings.Repeat("desktop-frame", 250000))
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+	var sent []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		sent, err = io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"desktop-budget\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"observed\"}]}]}}\n\n")
+	}))
+	defer server.Close()
+	base, err := newProviderAdapter("deepseek", server.URL, "test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolutions, admissions, releases := 0, 0, 0
+	adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-flash-vision-exp", ProviderControls{}, TurnBudgets{}, providerWebSearchModeDisabled,
+		withFloretRequestAdmission(func(ctx context.Context, _ flprovider.Request) (context.Context, func(), error) {
+			admissions++
+			return ctx, func() { releases++ }, nil
+		}))
+	adapter.supportsImageInput = true
+	adapter.attachmentResolver = func(context.Context, flprovider.Attachment) (ContentPart, error) {
+		resolutions++
+		return ContentPart{Type: "image", FileURI: dataURL, MimeType: "image/png"}, nil
+	}
+	request := flprovider.Request{RunID: "run", PromptScopeID: "scope", Messages: []flprovider.Message{
+		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "screen", Name: "computer.screenshot", Args: "{}"}}},
+		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "screen", ToolName: "computer.screenshot", Text: "captured", Attachments: []flprovider.Attachment{{ResourceRef: "computer://desktop-main/" + strings.Repeat("a", 64), MIMEType: "image/png", SizeBytes: int64(len(data))}}}},
+	}}
+	for _, tool := range builtInToolDefinitions() {
+		var schema map[string]any
+		if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
+			t.Fatal(err)
+		}
+		request.Tools = append(request.Tools, fltools.ToolDefinition{Name: tool.Name, Description: tool.Description, InputSchema: schema})
+	}
+	prepared, err := adapter.Prepare(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close()
+	estimate := prepared.TokenEstimate()
+	if estimate.EstimatedInputTokens < 1024 || estimate.EstimatedInputTokens > 200000 || estimate.Source != "deepseek_responses_text_bytes_image_tokens_v2" {
+		t.Fatalf("desktop image did not use upstream visual estimate: %+v", estimate)
+	}
+	if admissions != 0 || resolutions != 1 {
+		t.Fatal("preparation must resolve once without sending or acquiring admission")
+	}
+	dataURL = "data:image/png;base64,AQID"
+	stream, err := prepared.Stream(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var done bool
+	for event := range stream {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+		if event.Type == flprovider.EventDone {
+			done = true
+		}
+	}
+	if !done || resolutions != 1 || admissions != 1 || releases != 1 {
+		t.Fatal("prepared stream changed admission, resolution, or terminal behavior")
+	}
+	if prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(sent)) {
+		t.Fatal("budget fingerprint differs from the transmitted body")
+	}
+	if !strings.Contains(string(sent), base64.StdEncoding.EncodeToString(data)) || !strings.Contains(string(sent), `"type":"input_image"`) {
+		t.Fatal("prepared desktop pixels changed before transmission")
+	}
+	if _, err := prepared.Stream(t.Context()); err == nil {
+		t.Fatal("allowed prepared request replay")
+	}
+}

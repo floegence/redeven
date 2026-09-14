@@ -81,7 +81,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     onCleanup(() => controller.abort());
   });
   return (
-  <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title}>
+  <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title} data-computer-target={targetID()}>
     <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button>
     <div class="flower-computer-stage-frame-wrap">
       <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame">

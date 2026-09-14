@@ -21,7 +21,7 @@ test('Windows staging binds the Linux source version and commit to every extract
     const identity = { schema_version: 1, files: runtimeFiles.map((file) => ({ name: file.path,
       sha256: `sha256:${file.sha256}`, size_bytes: file.size_bytes, executable: file.executable,
     })).sort((a, b) => a.name.localeCompare(b.name)) };
-    const manifest = { schema_version: 4, platform: 'linux', architecture: 'amd64', provenance: 'packaged_bundle',
+    const manifest = { schema_version: 5, platform: 'linux', architecture: 'amd64', provenance: 'packaged_bundle',
       distribution_kind: 'bundled_host_runtime', managed_wsl_runtime: null,
       version: 'v0.12.0-test.1', commit: '0123456789ab', runtime_files: runtimeFiles,
       runtime_files_sha256: `sha256:${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}` };

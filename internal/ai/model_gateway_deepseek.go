@@ -25,18 +25,24 @@ type deepSeekProvider struct {
 }
 
 func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var result ModelGatewayResult
+	prepared, err := p.prepareTurn(ctx, req)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	defer prepared.Close()
+	return prepared.StreamTurn(ctx, onEvent)
+}
+
+func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
 	if req.WebSearchMode != "" && req.WebSearchMode != providerWebSearchModeDisabled {
-		return result, fmt.Errorf("DeepSeek Responses does not support hosted web search: mode %q", req.WebSearchMode)
+		return nil, fmt.Errorf("DeepSeek Responses does not support hosted web search: mode %q", req.WebSearchMode)
 	}
 	if req.ProviderControls.PreviousResponseID != "" {
-		return result, errors.New("DeepSeek Responses requires full history, not previous_response_id")
+		return nil, errors.New("DeepSeek Responses requires full history, not previous_response_id")
 	}
 	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	images := map[string][]byte{}
 	resolveImage := func(ctx context.Context, attachment flprovider.Attachment) ([]byte, error) {
@@ -51,7 +57,7 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	}
 	gateway, err := flprovider.NewDeepSeek(flprovider.DeepSeekOptions{Model: req.Model, BaseURL: p.baseURL, APIKey: p.apiKey, StateCompatibilityKey: "deepseek-responses-v1:" + p.baseURL + ":" + req.Model, HTTPClient: p.client, ResolveAttachment: resolveImage, Temperature: req.ProviderControls.Temperature, TopP: req.ProviderControls.TopP, ResponseFormat: req.ProviderControls.ResponseFormat})
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	request := flprovider.Request{RunID: req.RunID, PromptScopeID: req.PromptScopeID, Reasoning: req.ProviderControls.ReasoningSelection, MaxOutputTokens: int64(req.Budgets.MaxOutputToken)}
 	if request.RunID == "" {
@@ -75,11 +81,11 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			case "image":
 				prefix := "data:" + part.MimeType + ";base64,"
 				if !strings.HasPrefix(part.FileURI, prefix) {
-					return result, errors.New("DeepSeek image requires prepared inline bytes matching its MIME type")
+					return nil, errors.New("DeepSeek image requires prepared inline bytes matching its MIME type")
 				}
 				data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(part.FileURI, prefix))
 				if err != nil || len(data) == 0 {
-					return result, errors.New("DeepSeek image has invalid inline content")
+					return nil, errors.New("DeepSeek image has invalid inline content")
 				}
 				ref := fmt.Sprintf("prepared-image:%x", sha256.Sum256(data))
 				images[ref] = data
@@ -94,11 +100,11 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 				mapped.ToolCalls = append(mapped.ToolCalls, flprovider.ToolCall{ID: part.ToolCallID, Name: providerHistoryToolWireName(contentPartToolName(part), aliases), Args: args})
 			case "tool_result":
 				if mapped.ToolResult != nil {
-					return result, errors.New("DeepSeek message has multiple tool results")
+					return nil, errors.New("DeepSeek message has multiple tool results")
 				}
 				mapped.ToolResult = &flprovider.ToolResult{CallID: part.ToolCallID, ToolName: part.ToolName, Text: part.Text}
 			default:
-				return result, fmt.Errorf("unsupported DeepSeek content part %q", part.Type)
+				return nil, fmt.Errorf("unsupported DeepSeek content part %q", part.Type)
 			}
 		}
 		if mapped.ToolResult != nil {
@@ -112,11 +118,32 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		if len(tool.InputSchema) == 0 {
 			schema = map[string]any{"type": "object", "properties": map[string]any{}}
 		} else if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
-			return result, fmt.Errorf("DeepSeek tool %s schema: %w", tool.Name, err)
+			return nil, fmt.Errorf("DeepSeek tool %s schema: %w", tool.Name, err)
 		}
 		request.Tools = append(request.Tools, fltools.ToolDefinition{Name: aliases.wireName(tool.Name), Description: tool.Description, InputSchema: schema, Strict: p.strictTools})
 	}
-	stream, err := gateway.Stream(ctx, request)
+	preparer, ok := gateway.(flprovider.RequestPreparer)
+	if !ok {
+		return nil, errors.New("DeepSeek transport cannot prepare its request")
+	}
+	prepared, err := preparer.Prepare(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return &deepSeekPreparedTurn{PreparedRequest: prepared, aliases: aliases}, nil
+}
+
+type deepSeekPreparedTurn struct {
+	flprovider.PreparedRequest
+	aliases providerToolAliases
+}
+
+func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var result ModelGatewayResult
+	aliases := p.aliases
+	stream, err := p.PreparedRequest.Stream(ctx)
 	if err != nil {
 		return result, err
 	}

@@ -10,7 +10,13 @@ struct HostFailure: Error {
 // CGEvent sequence without sending input to the user's focused application.
 enum NativeInput {
     static func click(at point: CGPoint, count: Int) throws -> [CGEvent] {
-        var events: [CGEvent] = []
+        // Mouse button event coordinates do not move the system pointer.
+        // Move first so a subsequent wheel event reaches this same viewport.
+        guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                                 mouseCursorPosition: point, mouseButton: .left) else {
+            throw unavailable()
+        }
+        var events: [CGEvent] = [move]
         for index in 1...count {
             for type: CGEventType in [.leftMouseDown, .leftMouseUp] {
                 guard let event = CGEvent(mouseEventSource: nil, mouseType: type,
@@ -24,14 +30,16 @@ enum NativeInput {
         return events
     }
 
-    static func scroll(x: Double, y: Double) throws -> [CGEvent] {
+    static func scroll(x: Double, y: Double, naturalScrolling: Bool) throws -> [CGEvent] {
         guard x.isFinite, y.isFinite, abs(x) <= 100_000, abs(y) <= 100_000 else {
             throw invalid("Scroll deltas must be finite viewport pixels.")
         }
-        // CGEvent positive scroll points up; the public viewport contract uses
-        // positive deltas toward the bottom/right, as Playwright does.
+        // macOS applies the user's natural-scrolling preference to posted
+        // wheel events. Compensate once so positive viewport deltas always
+        // move down/right, matching the browser target.
+        let direction = naturalScrolling ? 1.0 : -1.0
         guard let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
-                                  wheelCount: 2, wheel1: -Int32(y), wheel2: -Int32(x), wheel3: 0) else {
+                                  wheelCount: 2, wheel1: Int32(direction * y), wheel2: Int32(direction * x), wheel3: 0) else {
             throw unavailable()
         }
         return [event]

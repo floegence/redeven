@@ -1216,24 +1216,21 @@ function bundledRuntimeExecutablePath(): string {
   });
 }
 
-function bundledComputerHostHelperPath(): string | undefined {
-  const configured = compact(process.env.REDEVEN_COMPUTER_HOST_HELPER_PATH);
-  if (configured && path.isAbsolute(configured) && existsSync(configured)) {
-    return configured;
-  }
-  const candidates = app.isPackaged
-    ? [path.join(process.resourcesPath, 'computer', 'redevenComputerHost.mjs')]
-    : [path.resolve(app.getAppPath(), '..', 'internal', 'envapp', 'ui_src', 'scripts', 'redevenComputerHost.mjs')];
-  return candidates.find((candidate) => existsSync(candidate));
-}
-
-function bundledNativeComputerHostHelperPath(): string | undefined {
-  const configured = compact(process.env.REDEVEN_COMPUTER_NATIVE_HELPER_PATH);
-  if (configured && path.isAbsolute(configured) && existsSync(configured)) return configured;
-  const candidates = app.isPackaged
-    ? [path.join(process.resourcesPath, 'computer', 'redeven-computer-host')]
-    : [path.resolve(app.getAppPath(), 'native', 'computer-host', '.build', 'release', 'redeven-computer-host')];
-  return candidates.find((candidate) => existsSync(candidate));
+function bundledComputerResources(): Record<string, string> {
+  if (process.platform === 'win32') return {};
+  const root = resolveDesktopBundleRoot({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+    developmentBundleRoot: process.env.REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT,
+  });
+  const resources = path.join(root, 'computer');
+  return {
+    REDEVEN_COMPUTER_HOST_HELPER_PATH: path.join(resources, 'redevenComputerHost.mjs'),
+    REDEVEN_COMPUTER_NODE_PATH: path.join(resources, 'node'),
+    REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID: String(process.pid),
+    ...(process.platform === 'darwin' ? { REDEVEN_COMPUTER_NATIVE_HELPER_PATH: path.join(resources, 'redeven-computer-host') } : {}),
+  };
 }
 
 function resolveDesktopBundleVersion(): string {
@@ -9819,12 +9816,10 @@ async function prepareManagedEnvironmentRuntime(input: Readonly<{
     localUIBind: input.local_ui_bind,
     bootstrap: null,
   });
-  const computerHostHelperPath = bundledComputerHostHelperPath();
-  const nativeComputerHostHelperPath = bundledNativeComputerHostHelperPath();
+
   const runtimeEnv = {
     ...launchPlan.env,
-    ...(computerHostHelperPath ? { REDEVEN_COMPUTER_HOST_HELPER_PATH: computerHostHelperPath } : {}),
-    ...(nativeComputerHostHelperPath ? { REDEVEN_COMPUTER_NATIVE_HELPER_PATH: nativeComputerHostHelperPath } : {}),
+    ...bundledComputerResources(),
   };
   const launch = await startManagedRuntime({
     executablePath: bundledRuntimeExecutablePath(),

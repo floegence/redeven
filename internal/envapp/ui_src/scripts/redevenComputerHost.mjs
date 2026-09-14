@@ -1,14 +1,39 @@
 import readline from 'node:readline';
 import process from 'node:process';
-import { chromium } from 'playwright';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const profileIndex = process.argv.indexOf('--profile');
 const profile = profileIndex >= 0 ? process.argv[profileIndex + 1] : undefined;
 const cdpIndex = process.argv.indexOf('--cdp-url');
 const cdpURL = cdpIndex >= 0 ? process.argv[cdpIndex + 1] : undefined;
-const browser = cdpURL ? await chromium.connectOverCDP(cdpURL) : undefined;
-const context = browser?.contexts()[0] ?? await chromium.launchPersistentContext(profile, { headless: true, viewport: { width: 1280, height: 800 } });
-let page = context.pages()[0] || await context.newPage();
+let browser;
+let context;
+let page;
+try {
+  const { chromium } = await import('playwright');
+  const resources = path.dirname(fileURLToPath(import.meta.url));
+  const browserConfig = path.join(resources, 'browser.json');
+  let executablePath;
+  if (existsSync(browserConfig)) {
+    const configuration = JSON.parse(readFileSync(browserConfig, 'utf8'));
+    executablePath = path.resolve(resources, configuration.executable);
+    if (!executablePath.startsWith(resources + path.sep) || !existsSync(executablePath)) throw new Error('BROWSER_BINARY_MISSING');
+  }
+  browser = cdpURL ? await chromium.connectOverCDP(cdpURL, { timeout: 20000 }) : undefined;
+  context = browser?.contexts()[0] ?? await chromium.launchPersistentContext(profile, { executablePath, headless: true, viewport: { width: 1280, height: 800 } });
+  page = context.pages()[0] || await context.newPage();
+} catch (error) {
+  // Startup diagnostics are closed codes: Playwright exceptions can contain
+  // CDP credentials, process environment, or application page content.
+  const code = cdpURL ? 'TARGET_CONNECTION_REQUIRED' : 'TARGET_SETUP_REQUIRED';
+  const reason = error?.code === 'ERR_MODULE_NOT_FOUND' ? 'browser_dependency_missing' : cdpURL ? 'browser_connection_failed' : 'browser_launch_failed';
+  process.stdout.write(JSON.stringify({ type: 'ready', protocol_version: 1, error: code, reason }) + '\n');
+  if (!browser) await context?.close().catch(() => {});
+  process.exit(1);
+}
+
 
 function response(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
 async function screenshot() { return { mime: 'image/png', data: (await page.screenshot({ type: 'png' })).toString('base64') }; }

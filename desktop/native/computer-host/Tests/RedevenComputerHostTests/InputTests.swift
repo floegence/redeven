@@ -5,8 +5,8 @@ import CoreGraphics
 final class InputTests: XCTestCase {
     func testDoubleClickHasBalancedButtonsAndClickCount() throws {
         let events = try NativeInput.click(at: CGPoint(x: 30, y: 40), count: 2)
-        XCTAssertEqual(events.map(\.type), [.leftMouseDown, .leftMouseUp, .leftMouseDown, .leftMouseUp])
-        XCTAssertEqual(events.map { $0.getIntegerValueField(.mouseEventClickState) }, [1, 1, 2, 2])
+        XCTAssertEqual(events.map(\.type), [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDown, .leftMouseUp])
+        XCTAssertEqual(events.dropFirst().map { $0.getIntegerValueField(.mouseEventClickState) }, [1, 1, 2, 2])
         XCTAssertTrue(events.allSatisfy { $0.location == CGPoint(x: 30, y: 40) })
     }
     func testChordPreservesModifiersAndDistinguishesDelete() throws {
@@ -34,10 +34,13 @@ final class InputTests: XCTestCase {
         XCTAssertEqual(decoded, text)
     }
     func testScrollUsesViewportDirectionAndRejectsOverflow() throws {
-        let event = try NativeInput.scroll(x: 10, y: 600)[0]
+        let event = try NativeInput.scroll(x: 10, y: 600, naturalScrolling: false)[0]
         XCTAssertLessThan(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), 0)
         XCTAssertLessThan(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
-        XCTAssertThrowsError(try NativeInput.scroll(x: .infinity, y: 0))
-        XCTAssertThrowsError(try NativeInput.scroll(x: 0, y: 1e20))
+        let natural = try NativeInput.scroll(x: 10, y: 600, naturalScrolling: true)[0]
+        XCTAssertGreaterThan(natural.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), 0)
+        XCTAssertGreaterThan(natural.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
+        XCTAssertThrowsError(try NativeInput.scroll(x: .infinity, y: 0, naturalScrolling: false))
+        XCTAssertThrowsError(try NativeInput.scroll(x: 0, y: 1e20, naturalScrolling: true))
     }
 }
