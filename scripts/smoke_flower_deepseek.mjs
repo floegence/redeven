@@ -424,7 +424,8 @@ async function sendPrompt(page, prompt, options = {}) {
   const textarea = surface.locator('.flower-composer textarea:visible').first();
   await textarea.waitFor({ state: 'visible', timeout: 20_000 });
   await textarea.fill(prompt);
-  const action = surface.locator('[data-flower-primary-action="send"]');
+  const actionName = options.action ?? (prompt.trim().startsWith('/') ? prompt.trim().slice(1).split(/\s+/u)[0] : 'send');
+  const action = surface.locator(`[data-flower-primary-action="${actionName}"]`);
   try {
     await action.waitFor({ state: 'visible', timeout: 20_000 });
   } catch (error) {
