@@ -87,11 +87,18 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 				desktop.State = "permission_required"
 			}
 			_ = registry.Register(desktop)
+			_ = registry.SetCurrent("desktop-main")
 			return ai.NewNativeDesktopTargetExecutor(nativeHelper), registry
 		}
 		return nil, registry
 	}
 	executor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
+	if connected := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_CONNECTED_CDP_URL")); connected != "" {
+		connectedExecutor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
+		connectedExecutor.CDPURL = connected
+		_ = registry.Register(ai.TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true})
+		return ai.NewMultiTargetExecutor(map[string]ai.TargetToolExecutor{"browser-main": executor, "browser-connected": connectedExecutor}), registry
+	}
 	if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" && runtime.GOOS == "darwin" {
 		ready, permission := nativeComputerHelperReadiness(nativeHelper)
 		state, readyState := "ready", ready

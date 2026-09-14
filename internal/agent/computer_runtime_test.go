@@ -47,6 +47,26 @@ func TestComputerUseRuntimeReportsSetupRequiredWhenHelperIsMissing(t *testing.T)
 	}
 }
 
+func TestComputerUseRuntimeFallsBackToReadyNativeTargetWhenBrowserHelperMissing(t *testing.T) {
+	native := filepath.Join(t.TempDir(), "redeven-computer-host")
+	if err := os.WriteFile(native, []byte("#!/bin/sh\nprintf '{\"screen_recording\":true,\"accessibility\":true}'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REDEVEN_COMPUTER_HOST_HELPER_PATH", filepath.Join(t.TempDir(), "missing-browser"))
+	t.Setenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH", native)
+	executor, resolver := computerUseRuntime(filepath.Join(t.TempDir(), "state"))
+	if executor == nil {
+		t.Fatal("native executor is nil")
+	}
+	target, err := resolver.ResolveTarget(t.Context(), "current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.ID != "desktop-main" || !target.Ready {
+		t.Fatalf("current target = %+v", target)
+	}
+}
+
 func TestComputerUseRuntimeRegistersNativeTargetAlongsideManagedBrowser(t *testing.T) {
 	managed := filepath.Join(t.TempDir(), "redevenComputerHost.mjs")
 	native := filepath.Join(t.TempDir(), "redeven-computer-host")
