@@ -1,3 +1,5 @@
+/* global document, HTMLInputElement */
+
 import readline from 'node:readline';
 import process from 'node:process';
 import { readFileSync, existsSync } from 'node:fs';
