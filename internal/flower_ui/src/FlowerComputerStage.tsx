@@ -65,8 +65,14 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     void props.loadFrame({ thread_id: thread, target_id: target, resource_ref: ref, sha256: match[1], signal: controller.signal }).then(async (blob) => {
       if (controller.signal.aborted) return;
       const nextURL = URL.createObjectURL(blob);
+      // Decode before swapping when the runtime provides Image.decode. Some
+      // embedded/webview environments do not implement it; assigning the
+      // object URL to the real image element still performs normal decoding,
+      // so do not discard an otherwise valid frame in that case.
       const image = new Image(); image.src = nextURL;
-      try { await image.decode(); } catch (error) { URL.revokeObjectURL(nextURL); throw error; }
+      if (typeof image.decode === 'function') {
+        try { await image.decode(); } catch (error) { URL.revokeObjectURL(nextURL); throw error; }
+      }
       if (controller.signal.aborted) { URL.revokeObjectURL(nextURL); return; }
       const previousURL = currentURL;
       currentURL = nextURL; setResolvedURL(nextURL); setFailed(false);
