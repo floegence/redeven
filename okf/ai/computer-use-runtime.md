@@ -20,7 +20,7 @@ once from canonical descriptors without relaxing subsequent prefix checks.
 
 The supported functions are `computer.screenshot`, `computer.click`, `computer.double_click`, `computer.type`, `computer.key`, `computer.scroll`, `computer.wait`, `browser.navigate`, `browser.back`, and `browser.reload`. Coordinates are CSS viewport coordinates; a target adapter converts them to physical coordinates when required. Observation requires readonly capability. Input, navigation, and reload use the existing interaction/mutation permission and approval path; `full_access` skips per-action approval without skipping argument, capability, target, or cancellation checks.
 
-`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped under the Desktop `computer/` resources directory and announces capabilities before requests are accepted. Native desktop and Xvfb adapters remain incomplete production paths; their current limits are listed under Qualification boundary. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
+`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped under the Desktop `computer/` resources directory and announces capabilities before requests are accepted. Native desktop input and screenshot adapters are production-ready only when their helper handshake and macOS permissions succeed; Xvfb still requires an explicit input/capture adapter. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
 
 Each managed-browser response must match both the outstanding request ID and
 target ID. Cancellation, timeout, malformed responses, and transport failures
@@ -57,10 +57,12 @@ before closing its fixture and provider proxy. Its success scope is explicitly
 apps, Xvfb, takeover, or continuous video.
 
 The current production constructor selects the native helper only when the
-managed-browser helper is absent. The native Swift helper fails standalone
-compilation and lacks complete input actions; JSONL fixture success cannot
-establish native application support. The Xvfb executor is a lifecycle wrapper and
-requires an input/capture implementation. The default safety gate uses target
+managed-browser helper is absent. On macOS, both adapters are registered when
+their helpers are ready and the target registry routes each concrete target to
+its own executor. The native Swift helper validates permissions, emits balanced
+mouse/keyboard events, and captures a normalized display frame. The Xvfb
+executor is a lifecycle wrapper and requires an input/capture implementation.
+The default safety gate uses target
 metadata and action arguments; real page/password/OTP detection and a complete
 user takeover flow require separate implementation and qualification. These
 limitations must not be reported as completed platform or safety support.

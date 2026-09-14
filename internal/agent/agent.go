@@ -82,12 +82,15 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 				State: "ready", PermissionState: "unknown", Ready: true,
 			}
 			_ = registry.Register(desktop)
-			_ = registry.SetCurrent("desktop-main")
 			return ai.NewNativeDesktopTargetExecutor(nativeHelper), registry
 		}
 		return nil, registry
 	}
 	executor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
+	if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" && runtime.GOOS == "darwin" {
+		_ = registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "unknown", Ready: true})
+		return ai.NewMultiTargetExecutor(map[string]ai.TargetToolExecutor{"browser-main": executor, "desktop-main": ai.NewNativeDesktopTargetExecutor(nativeHelper)}), registry
+	}
 	return executor, registry
 }
 
@@ -100,6 +103,7 @@ func nativeComputerHelperCandidates(executablePath string) []string {
 	candidates = append(candidates,
 		filepath.Join(executableDir, "redeven-computer-host"),
 		filepath.Join(executableDir, "resources", "computer", "redeven-computer-host"),
+		filepath.Join(executableDir, "..", "computer", "redeven-computer-host"),
 	)
 	return candidates
 }

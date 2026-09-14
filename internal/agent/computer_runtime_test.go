@@ -46,3 +46,27 @@ func TestComputerUseRuntimeReportsSetupRequiredWhenHelperIsMissing(t *testing.T)
 		t.Fatalf("target = %+v", target)
 	}
 }
+
+func TestComputerUseRuntimeRegistersNativeTargetAlongsideManagedBrowser(t *testing.T) {
+	managed := filepath.Join(t.TempDir(), "redevenComputerHost.mjs")
+	native := filepath.Join(t.TempDir(), "redeven-computer-host")
+	if err := os.WriteFile(managed, []byte("// fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(native, []byte("#!/bin/sh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REDEVEN_COMPUTER_HOST_HELPER_PATH", managed)
+	t.Setenv("REDEVEN_COMPUTER_NATIVE_HELPER_PATH", native)
+	executor, resolver := computerUseRuntime(filepath.Join(t.TempDir(), "state"))
+	if _, ok := executor.(*ai.MultiTargetExecutor); !ok {
+		t.Fatalf("executor = %T, want multiplexed target executor", executor)
+	}
+	target, err := resolver.ResolveTarget(t.Context(), "desktop-main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Kind != "desktop.screen" || !target.Ready {
+		t.Fatalf("target = %+v", target)
+	}
+}
