@@ -170,7 +170,18 @@ if (fs.existsSync(resultFile)) {
   fs.writeFileSync(resultFile, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
 }
 NODE
-  echo "Flower smoke evidence: $REPORT_ROOT"
+  if [[ "${REDEVEN_FLOWER_SMOKE_KEEP_EVIDENCE:-0}" == "1" ]]; then
+    echo "Flower smoke evidence: $REPORT_ROOT"
+  else
+    node - "$SMOKE_ROOT" <<'NODE'
+const fs = require('node:fs');
+const root = process.argv[2];
+function writable(path) { try { fs.chmodSync(path, 0o700); } catch {} }
+function walk(path) { let entries; try { entries = fs.readdirSync(path, { withFileTypes: true }); } catch { return; } for (const entry of entries) { const child = `${path}/${entry.name}`; if (entry.isDirectory()) walk(child); writable(child); } }
+walk(root); writable(root); fs.rmSync(root, { recursive: true, force: true });
+NODE
+    echo "Flower smoke temporary state cleaned"
+  fi
   exit "$status"
 }
 trap cleanup EXIT INT TERM
