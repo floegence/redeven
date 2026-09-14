@@ -1046,7 +1046,9 @@ async function runScenarios(page, config, telemetry) {
     await startNewThread(page); await setPermission(page, 'full_access');
     const runToken = marker('PIN_RUNNING');
     const running = await sendPrompt(page, `Call terminal.exec once with command "sleep 12; printf ${runToken}". After it finishes, reply ${runToken}. Call no other tool.`, { visibleMarker: runToken });
-    await surface.locator('[data-flower-activity-item-id]').filter({ hasText: runToken }).waitFor({ state: 'visible', timeout: 180_000 });
+    // The model may stream the terminal marker only after the action completes;
+    // qualify the running lifecycle state instead of requiring a fixed text order.
+    await waitFor(async () => ['running', 'waiting_approval'].includes(await selectedStatus(page)), 180_000, 'pin running state');
     await startNewThread(page); await setPermission(page, 'approval_required');
     const approvalToken = marker('PIN_APPROVAL');
     const waiting = await sendPrompt(page, `Call terminal.exec with "printf ${approvalToken}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: approvalToken });
