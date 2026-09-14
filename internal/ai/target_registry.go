@@ -54,6 +54,25 @@ func (r *TargetRegistry) SetCurrent(targetID string) error {
 	return nil
 }
 
+// Update replaces a target readiness snapshot without changing the current
+// alias. Adapters call this when a helper disconnects or permissions change.
+func (r *TargetRegistry) Update(target TargetDescriptor) error {
+	if r == nil {
+		return errors.New("target registry is unavailable")
+	}
+	target.ID = strings.TrimSpace(target.ID)
+	if target.ID == "" {
+		return errors.New("target id is required")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.targets[target.ID]; !ok {
+		return errors.New("target is not registered")
+	}
+	r.targets[target.ID] = target
+	return nil
+}
+
 func (r *TargetRegistry) ResolveTarget(_ context.Context, alias string) (TargetDescriptor, error) {
 	if r == nil {
 		return TargetDescriptor{}, errors.New("target registry is unavailable")
