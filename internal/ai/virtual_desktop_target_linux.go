@@ -51,10 +51,19 @@ type x11Process struct {
 }
 
 func NewXvfbTargetExecutor(stateDirectory string) *XvfbTargetExecutor {
-	return &XvfbTargetExecutor{directory: filepath.Join(stateDirectory, "computer", "x11"), paths: x11Paths{
+	paths := x11Paths{
 		xvfb: "/usr/bin/Xvfb", windowManager: "/usr/bin/openbox", input: "/usr/bin/xdotool",
 		capture: "/usr/bin/import", auth: "/usr/bin/xauth", properties: "/usr/bin/xprop",
-	}}
+	}
+	// Packaged Linux runtimes may ship these binaries beside the Runtime. An
+	// explicit absolute override keeps that bundle deterministic while avoiding
+	// PATH-dependent discovery in production.
+	for key, destination := range map[string]*string{"X": &paths.xvfb, "WM": &paths.windowManager, "INPUT": &paths.input, "CAPTURE": &paths.capture, "AUTH": &paths.auth, "XPROP": &paths.properties} {
+		if value := strings.TrimSpace(os.Getenv("REDEVEN_X11_" + key)); filepath.IsAbs(value) {
+			*destination = value
+		}
+	}
+	return &XvfbTargetExecutor{directory: filepath.Join(stateDirectory, "computer", "x11"), paths: paths}
 }
 
 func (e *XvfbTargetExecutor) Start(ctx context.Context) error {
