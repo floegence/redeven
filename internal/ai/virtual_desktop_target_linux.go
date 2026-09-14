@@ -1,11 +1,11 @@
 package ai
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -187,40 +187,26 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 		_, err := e.command(ctx, e.paths.auth, input, 4096, "-f", authority, "source", "-")
 		return err
 	}
-	if err := addAuthorization(":0"); err != nil {
-		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_auth_failed"}
-	}
-	reader, writer, err := os.Pipe()
-	if err != nil {
+	var randomDisplay [4]byte
+	if _, err := rand.Read(randomDisplay[:]); err != nil {
 		return err
 	}
-	defer reader.Close()
-	cmd := exec.Command(e.paths.xvfb, "-displayfd", "3", "-screen", "0", "1280x800x24", "-nolisten", "tcp", "-auth", authority)
-	cmd.ExtraFiles = []*os.File{writer}
+	displayNumber := 100 + binary.BigEndian.Uint32(randomDisplay[:])%900
+	e.display = ":" + strconv.FormatUint(uint64(displayNumber), 10)
+	if err := addAuthorization(e.display); err != nil {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_auth_failed"}
+	}
+	cmd := exec.Command(e.paths.xvfb, e.display, "-screen", "0", "1280x800x24", "-nolisten", "tcp", "-auth", authority)
 	process, err := e.startProcess(cmd)
-	_ = writer.Close()
 	if err != nil {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_start_failed"}
 	}
-	line := make(chan string, 1)
-	go func() {
-		value, _ := bufio.NewReader(io.LimitReader(reader, 32)).ReadString('\n')
-		line <- strings.TrimSpace(value)
-	}()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-process.done:
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_exited"}
-	case number := <-line:
-		value, err := strconv.Atoi(number)
-		if err != nil || value < 0 || value > 65535 {
-			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_display_invalid"}
-		}
-		e.display = ":" + number
-	}
-	if err := addAuthorization(e.display); err != nil {
-		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_auth_failed"}
+	default:
 	}
 	e.environment = x11Environment(e.environment, map[string]string{"DISPLAY": e.display})
 	if _, err := e.command(ctx, e.paths.input, nil, 4096, "getdisplaygeometry"); err != nil {
