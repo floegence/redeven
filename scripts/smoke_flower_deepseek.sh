@@ -227,20 +227,22 @@ REDEVEN_AGENT_FORCE_INSTALL=1 \
 LAUNCH_PID=$!
 capture_manifest
 
-deadline=$((SECONDS + 240))
+deadline_epoch=$(( $(date +%s) + 240 ))
+smoke_phase="desktop_cdp_ready"
 until curl -fsS "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; do
-  [[ "$SECONDS" -lt "$deadline" ]] || { echo "Flower smoke Desktop CDP readiness timed out" >&2; exit 1; }
+  [[ "$(date +%s)" -lt "$deadline_epoch" ]] || { printf "{\n  \"code\": \"DESKTOP_CDP_TIMEOUT\",\n  \"phase\": \"%s\",\n  \"launch_pid\": %s\n}\n" "$smoke_phase" "${LAUNCH_PID:-0}" > "$REPORT_ROOT/failure.json"; tail -80 "$DESKTOP_LOG" > "$REPORT_ROOT/desktop-timeout-tail.log" 2>/dev/null || true; echo "Flower smoke Desktop CDP readiness timed out" >&2; exit 1; }
   kill -0 "$LAUNCH_PID" 2>/dev/null || { echo "Flower smoke Desktop exited before CDP readiness" >&2; exit 1; }
   sleep 0.25
 done
 capture_manifest
 
 runtime_report=
-while [[ -z "$runtime_report" && "$SECONDS" -lt "$deadline" ]]; do
+smoke_phase="runtime_startup_report"
+while [[ -z "$runtime_report" && "$(date +%s)" -lt "$deadline_epoch" ]]; do
   runtime_report=$(find "$TEMP_ROOT" -type f -name startup-report.json -print -quit 2>/dev/null || true)
   [[ -n "$runtime_report" ]] || sleep 0.25
 done
-[[ -f "$runtime_report" ]] || { echo "Flower smoke runtime startup report is unavailable" >&2; exit 1; }
+[[ -f "$runtime_report" ]] || { printf "{\n  \"code\": \"RUNTIME_STARTUP_TIMEOUT\",\n  \"phase\": \"%s\",\n  \"launch_pid\": %s\n}\n" "$smoke_phase" "${LAUNCH_PID:-0}" > "$REPORT_ROOT/failure.json"; tail -80 "$DESKTOP_LOG" > "$REPORT_ROOT/desktop-timeout-tail.log" 2>/dev/null || true; echo "Flower smoke runtime startup report is unavailable" >&2; exit 1; }
 RUNTIME_PID=$(node - "$runtime_report" "$RUNTIME_STATE_ROOT" <<'NODE'
 const fs = require('node:fs');
 const [file, stateRoot] = process.argv.slice(2);
