@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Computer and browser use runtime
 description: Route typed computer and browser actions to explicit browser, virtual desktop, or host desktop targets while preserving screenshots, provenance, permissions, and replayable opaque attachments.
 tags: [ai, computer-use, browser-use, targets, attachments]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-14T00:00:00Z
 ---
 # Summary
 
@@ -20,7 +20,15 @@ once from canonical descriptors without relaxing subsequent prefix checks.
 
 The supported functions are `computer.screenshot`, `computer.click`, `computer.double_click`, `computer.type`, `computer.key`, `computer.scroll`, `computer.wait`, `browser.navigate`, `browser.back`, and `browser.reload`. Coordinates are CSS viewport coordinates; a target adapter converts them to physical coordinates when required. Observation requires readonly capability. Input, navigation, and reload use the existing interaction/mutation permission and approval path; `full_access` skips per-action approval without skipping argument, capability, target, or cancellation checks.
 
-`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped under the Desktop `computer/` resources directory and announces capabilities before requests are accepted. `VirtualDesktopTarget` owns an Xvfb display and delegates X11 input and capture through the same typed contract. `DesktopTarget` is hosted by the Electron main process and a versioned JSONL native helper using Accessibility, CGEvent, and screen capture APIs. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
+`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped under the Desktop `computer/` resources directory and announces capabilities before requests are accepted. Native desktop and Xvfb adapters remain incomplete production paths; their current limits are listed under Qualification boundary. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
+
+Each managed-browser response must match both the outstanding request ID and
+target ID. Cancellation, timeout, malformed responses, and transport failures
+retire the session and reap its helper before another action can start. An
+interrupted action is not replayed automatically. A later observation starts
+a fresh browser session with the same profile. Closing the executor reaps its
+helpers and permanently rejects new actions. Readiness requires protocol
+version 1; the presence of a helper file alone is not handshake evidence.
 
 Each successful action returns target ID, target display name, execution location, an action summary, a safety decision, and an after-frame attachment. Attachment descriptors contain an opaque `computer://` resource reference, MIME, byte size, and SHA-256. Provider renderers resolve bytes only at request time; durable state stores descriptor and hash, never base64. A resolver error, unknown reference, changed bytes, or unsupported model capability is an explicit error.
 
@@ -38,6 +46,25 @@ User initiated Stop is a control action, not a transcript message. The service r
 
 DeepSeek Vision Experimental is qualified through typed function tools only. Requests use `deepseek-v4-flash-vision-exp`, include screenshot input and `function_call_output` image parts, and never register the native `computer_use` tool.
 
+# Qualification boundary
+
+The Desktop qualification records the thread selected by the actual Composer,
+not the first entry in a thread listing. It verifies all ten typed actions,
+observable fixture effects, decoded Stage pixels, media provenance, reopening
+the viewer, and the settings switch. Failure cancels the qualification thread
+before closing its fixture and provider proxy. Its success scope is explicitly
+`managed-browser-desktop-ui`; it is not acceptance of connected Chrome, native
+apps, Xvfb, takeover, or continuous video.
+
+The current production constructor selects the native helper only when the
+managed-browser helper is absent. The native Swift helper fails standalone
+compilation and lacks complete input actions; JSONL fixture success cannot
+establish native application support. The Xvfb executor is a lifecycle wrapper and
+requires an input/capture implementation. The default safety gate uses target
+metadata and action arguments; real page/password/OTP detection and a complete
+user takeover flow require separate implementation and qualification. These
+limitations must not be reported as completed platform or safety support.
+
 # Boundaries
 
 The target registry owns logical-to-concrete target resolution for a thread;
@@ -52,6 +79,7 @@ durable screenshot bytes or target-control authority.
 - `redeven:internal/ai/target_tool_policy.go` - typed target routing, capability requirements, and opaque attachment descriptors.
 - `redeven:internal/ai/target_registry.go` - model-safe `current` alias and target readiness snapshots.
 - `redeven:internal/ai/computer_target_executor.go` - headless Playwright JSONL executor and attachment resolver.
+- `redeven:internal/ai/computer_target_executor_test.go` - interrupted-session retirement, response correlation, process reaping, and real browser action effects.
 - `redeven:internal/ai/desktop_target_executor.go` - native Desktop JSONL executor and screenshot attachment resolver.
 - `redeven:internal/ai/virtual_desktop_target.go` - Xvfb lifecycle and unavailable-target failure.
 - `redeven:desktop/src/main/computerHost.ts` - versioned Desktop helper protocol.
