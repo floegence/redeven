@@ -94,5 +94,6 @@ durable screenshot bytes or target-control authority.
 - `redeven:internal/ai/model_gateway_deepseek_test.go` - the production adapter preserves nested tool images through the DeepSeek wire renderer.
 - `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx` - Desktop Welcome media loading through authorized IPC.
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs` - opt-in built Desktop qualification through Composer, real DeepSeek, fixture completion, decoded Stage pixels, and provider image-output evidence.
+- `redeven:scripts/check_macos_computer_host_fixture.sh` - repeatable macOS AppKit window fixture that proves a native helper click changes a real application control and cleans up its process.
 - `redeven:internal/agent/agent.go` - absolute helper discovery, default managed-browser target state, and native helper fallback.
 - `redeven:desktop/electron-builder.config.mjs` - packaged managed-browser helper resource.
