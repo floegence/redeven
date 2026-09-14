@@ -3223,6 +3223,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			if sessionID == "" {
 				sessionID = r.messageID
 			}
+			if sessionID == "" {
+				sessionID = toolID
+			}
 			if stop, startErr := runtime.StartComputerLiveFrames(ctx, r.threadID, sessionID, targetID, r.publishComputerFrame); startErr == nil {
 				r.liveFrameTargets[targetID] = struct{}{}
 				_ = stop
