@@ -7048,7 +7048,7 @@ webSearch: model.web_search,
   const composerPrimaryActionIsCommand = createMemo(() => composerSlashCommand().kind === 'intent');
   const composerPrimaryActionIsStop = createMemo(() => (
     longTextPreparing()
-    || (selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
+    || (Boolean(selectedThreadID()) && selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
   ));
   type ComposerPrimaryAction = 'send' | 'stop' | 'compact' | 'cancel_long_text';
   const composerPrimaryActionKind = createMemo<ComposerPrimaryAction>(() => (
