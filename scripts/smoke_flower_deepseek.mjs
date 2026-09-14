@@ -460,11 +460,10 @@ async function sendPrompt(page, prompt, options = {}) {
     }, 20_000, 'receipt canonical user item');
     if (!await user.isVisible().catch(() => false)) await selectThread(page, receiptThreadID);
   }
-  try { await user.waitFor({ state: 'visible', timeout: 20_000 }); } catch (error) {
-    if (receiptThreadID) {
-      await selectThread(page, receiptThreadID);
-      await surface.locator('[data-flower-message-role="user"]').filter({ hasText: prompt.slice(0, 32) }).first().waitFor({ state: 'visible', timeout: 20_000 });
-    } else throw error;
+  if (!await user.isVisible().catch(() => false) && receiptThreadID) {
+    await selectThread(page, receiptThreadID);
+  } else if (!receiptThreadID) {
+    await user.waitFor({ state: 'visible', timeout: 20_000 });
   }
   const userVisibleMS = performance.now() - clickedAt;
   const threadID = await waitFor(() => selectedThreadID(page), 20_000, 'selected thread identity');
