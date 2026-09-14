@@ -63,7 +63,9 @@ for await (const line of rl) {
   try {
     const args = req.args || {};
     const signals = await safetySignals();
-    if (req.tool_name !== 'computer.screenshot' && req.tool_name !== 'computer.wait' && req.tool_name !== 'browser.navigate' && (signals.secret || signals.captcha || signals.injection || signals.login && req.tool_name === 'computer.type')) {
+    // A focused password/OTP field is never captured for model input. The
+    // user must take over before secrets can be entered or observed.
+    if (signals.secret || signals.captcha || signals.injection || signals.login && req.tool_name === 'computer.type') {
       response({ id: req.id, target_id: req.target_id, error: 'TAKEOVER_REQUIRED', safety: signals });
       continue;
     }
