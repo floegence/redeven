@@ -16,7 +16,7 @@ func isComputerUseToolName(name string) bool {
 }
 
 func builtInComputerToolDefinitions() []ToolDef {
-	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Logical target alias: current (default managed browser), browser.managed, browser.connected, or desktop.screen. Use desktop.screen for native applications and desktop tasks, and keep that target on every related action. Only registered targets with permission can execute."}}
+	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Logical target alias: current (default managed browser), browser.managed, browser.connected, desktop.screen (macOS), or xvfb.desktop (Linux GUI). Use a desktop target for native applications and desktop tasks, and keep that target on every related action. Only registered targets with permission can execute."}}
 	schema := func(properties map[string]any, required []string) json.RawMessage {
 		return toolSchemaRaw(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 	}
