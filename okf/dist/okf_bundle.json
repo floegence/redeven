@@ -2618,7 +2618,7 @@
         "title": "Computer and browser use runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 10661,
+      "body_length": 10707,
       "summary": "Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the thread target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Flower Settings keeps computer/browser use enabled by default but lets users turn it off for future runs. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.",
       "sections": [
         {
@@ -2632,8 +2632,8 @@
           "id": "qualification-boundary",
           "title": "Qualification boundary",
           "level": 1,
-          "body": "The Desktop qualification records the thread selected by the actual Composer,\nnot the first entry in a thread listing. It verifies all ten typed actions,\nobservable fixture effects, decoded Stage pixels, media provenance, reopening\nthe viewer, and the settings switch. Failure cancels the qualification thread\nbefore closing its fixture and provider proxy. Its success scope is explicitly\n`managed-browser-desktop-ui`; it is not acceptance of connected Chrome, native\napps, Xvfb, takeover, or continuous video.\n\nThe current production constructor selects the native helper only when the\nmanaged-browser helper is absent. On macOS, both adapters are registered when\ntheir helpers are ready and the target registry routes each concrete target to\nits own executor. The native Swift helper validates permissions, emits balanced\nmouse/keyboard events, and captures a normalized display frame. The Xvfb\nexecutor is a lifecycle wrapper and requires an input/capture implementation.\nThe default safety gate uses target\nmetadata and action arguments; real page/password/OTP detection and a complete\nuser takeover flow require separate implementation and qualification. These\nlimitations must not be reported as completed platform or safety support.",
-          "char_count": 1239
+          "body": "The Desktop qualification records the thread selected by the actual Composer,\nnot the first entry in a thread listing. It verifies all ten typed actions,\nobservable fixture effects, decoded Stage pixels, media provenance, reopening\nthe viewer, and the settings switch. Failure cancels the qualification thread\nbefore closing its fixture and provider proxy. Its success scope is explicitly\n`managed-browser-desktop-ui`; it is not acceptance of connected Chrome, native\napps, Xvfb, takeover, or continuous video.\n\nThe current production constructor selects the native helper only when the\nmanaged-browser helper is absent. On macOS, both adapters are registered when\ntheir helpers are ready and their permission capability handshake passes; the\ntarget registry routes each concrete target to its own executor. The native\nSwift helper validates permissions, emits balanced\nmouse/keyboard events, and captures a normalized display frame. The Xvfb\nexecutor is a lifecycle wrapper and requires an input/capture implementation.\nThe default safety gate uses target\nmetadata and action arguments; real page/password/OTP detection and a complete\nuser takeover flow require separate implementation and qualification. These\nlimitations must not be reported as completed platform or safety support.",
+          "char_count": 1285
         },
         {
           "id": "boundaries",
@@ -16545,5 +16545,5 @@
       ]
     }
   ],
-  "source_sha256": "4ad922bde2134380835d226d8889c94763b67f79b8ae9aa967800574834d4879"
+  "source_sha256": "c3d49e5fd5a59f46755cb437a48cb8cc9540ae5d15606b5f91d78e2f2724f881"
 }

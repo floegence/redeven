@@ -53,7 +53,7 @@ func TestComputerUseRuntimeRegistersNativeTargetAlongsideManagedBrowser(t *testi
 	if err := os.WriteFile(managed, []byte("// fixture"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(native, []byte("#!/bin/sh"), 0o700); err != nil {
+	if err := os.WriteFile(native, []byte("#!/bin/sh\nprintf '{\"screen_recording\":true,\"accessibility\":true}'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("REDEVEN_COMPUTER_HOST_HELPER_PATH", managed)

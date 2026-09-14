@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -76,10 +77,14 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 	}
 	if helper == "" {
 		if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" {
+			ready, permission := nativeComputerHelperReadiness(nativeHelper)
 			desktop := ai.TargetDescriptor{
 				ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop",
 				Locality: "local", Capabilities: []string{"observe", "interaction"},
-				State: "ready", PermissionState: "unknown", Ready: true,
+				State: "ready", PermissionState: permission, Ready: ready,
+			}
+			if !ready && permission == "permission_required" {
+				desktop.State = "permission_required"
 			}
 			_ = registry.Register(desktop)
 			return ai.NewNativeDesktopTargetExecutor(nativeHelper), registry
@@ -88,10 +93,33 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 	}
 	executor := ai.NewPlaywrightTargetExecutor("node", helper, filepath.Join(stateDir, "computer", "profiles"))
 	if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" && runtime.GOOS == "darwin" {
-		_ = registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "unknown", Ready: true})
+		ready, permission := nativeComputerHelperReadiness(nativeHelper)
+		state, readyState := "ready", ready
+		if !ready && permission == "permission_required" {
+			state, readyState = "permission_required", false
+		}
+		_ = registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: state, PermissionState: permission, Ready: readyState})
 		return ai.NewMultiTargetExecutor(map[string]ai.TargetToolExecutor{"browser-main": executor, "desktop-main": ai.NewNativeDesktopTargetExecutor(nativeHelper)}), registry
 	}
 	return executor, registry
+}
+
+func nativeComputerHelperReadiness(helper string) (bool, string) {
+	output, err := exec.Command(helper, "--capabilities").Output()
+	if err != nil {
+		return false, "helper_unavailable"
+	}
+	var result struct {
+		ScreenRecording bool `json:"screen_recording"`
+		Accessibility   bool `json:"accessibility"`
+	}
+	if json.Unmarshal(bytes.TrimSpace(output), &result) != nil {
+		return false, "helper_unavailable"
+	}
+	if !result.ScreenRecording || !result.Accessibility {
+		return false, "permission_required"
+	}
+	return true, "granted"
 }
 
 func nativeComputerHelperCandidates(executablePath string) []string {
