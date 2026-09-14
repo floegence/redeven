@@ -1161,7 +1161,7 @@ async function runScenarios(page, config, telemetry) {
     if (!await keepItem.isVisible()) throw new Error('remaining attachment disappeared before send');
     const token = marker('ATTACHMENT');
     const sent = await sendPrompt(page, `Use attachment.read to read the remaining attachment and reply with its marker plus ${token} as plain text. Do not call any other tool after attachment.read.`, { visibleMarker: token });
-    const sentContext = surface.locator(`[data-flower-message-id="user:${sent.runID}"] [data-flower-chat-context-chip="true"]`);
+    const sentContext = surface.locator('[data-flower-message-role="user"] [data-flower-chat-context-chip="true"]');
     await waitFor(async () => await sentContext.count() === 1, 30_000, 'one canonical attachment context');
     if (!await sentContext.first().innerText().then((text) => text.includes('attachment-keep'))) {
       throw new Error('sent attachment context does not contain the remaining file');
