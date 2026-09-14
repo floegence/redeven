@@ -3,6 +3,15 @@ import CoreGraphics
 @testable import RedevenComputerHost
 
 final class InputTests: XCTestCase {
+    func testInvalidExclusionNeverBecomesUnrestrictedCapture() throws {
+        let key = "REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID"
+        for value in ["", "not-a-pid", "0", "-1", "2147483648"] {
+            XCTAssertThrowsError(try NativeScreenCapture.excludedOwner(environment: [key: value]))
+        }
+        XCTAssertEqual(try NativeScreenCapture.excludedOwner(environment: [key: "123"]), 123)
+        XCTAssertNil(try NativeScreenCapture.excludedOwner(environment: [:]))
+    }
+
     func testDoubleClickHasBalancedButtonsAndClickCount() throws {
         let events = try NativeInput.click(at: CGPoint(x: 30, y: 40), count: 2)
         XCTAssertEqual(events.map(\.type), [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDown, .leftMouseUp])
@@ -43,7 +52,6 @@ final class InputTests: XCTestCase {
         XCTAssertThrowsError(try NativeInput.scroll(x: .infinity, y: 0, naturalScrolling: false))
         XCTAssertThrowsError(try NativeInput.scroll(x: 0, y: 1e20, naturalScrolling: true))
     }
-}
 
     func testDragProducesBalancedPath() throws {
         let events = try NativeInput.drag(from: CGPoint(x: 10, y: 20), to: CGPoint(x: 110, y: 120), durationMilliseconds: 64)
@@ -52,3 +60,4 @@ final class InputTests: XCTestCase {
         XCTAssertEqual(events.last?.type, .leftMouseUp)
         XCTAssertGreaterThan(events.count, 4)
     }
+}

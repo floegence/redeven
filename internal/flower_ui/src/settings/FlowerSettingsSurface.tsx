@@ -1,7 +1,7 @@
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
-import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
+import type { FlowerModelCatalogDiscovery, FlowerTargetDescriptor } from '../contracts/flowerSurfaceContracts';
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -166,7 +166,7 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   onSaveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
-  onConnectComputerBrowser?: (cdpURL: string) => Promise<unknown>;
+  onConnectComputerBrowser?: (cdpURL: string) => Promise<FlowerTargetDescriptor>;
   onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   saveError?: string;
   savedAt?: number | null;
@@ -181,13 +181,24 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [browserConnectURL, setBrowserConnectURL] = createSignal('');
   const [browserConnectError, setBrowserConnectError] = createSignal('');
   const [browserConnecting, setBrowserConnecting] = createSignal(false);
+  const [connectedBrowser, setConnectedBrowser] = createSignal<FlowerTargetDescriptor | null>(null);
   const connectBrowser = async () => {
     if (!props.onConnectComputerBrowser || browserConnecting()) return;
     const url = trim(browserConnectURL());
     if (!url) { setBrowserConnectError(copy().connectBrowserEmpty); return; }
     setBrowserConnecting(true); setBrowserConnectError('');
-    try { await props.onConnectComputerBrowser(url); setBrowserConnectURL(''); }
-    catch (error) { setBrowserConnectError(error instanceof Error ? error.message : copy().connectBrowserFailed); }
+    try {
+      const target = await props.onConnectComputerBrowser(url);
+      if (!target.ready || target.state !== 'ready') {
+        setBrowserConnectError(copy().connectBrowserFailed);
+        return;
+      }
+      setConnectedBrowser(target);
+      setBrowserConnectURL('');
+    } catch {
+      // Transport failures can include private endpoint or authorization data.
+      setBrowserConnectError(copy().connectBrowserFailed);
+    }
     finally { setBrowserConnecting(false); }
   };
   const [currentModelID, setCurrentModelID] = createSignal('');
@@ -701,10 +712,11 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
           <Show when={props.onConnectComputerBrowser}>
             <section class="flower-settings-section flower-settings-computer-connect-section">
               <FlowerSubSectionHeader title={copy().connectBrowserTitle} />
-              <div class="flex gap-2">
-                <input class="flower-settings-text-input" type="url" value={browserConnectURL()} placeholder={copy().connectBrowserPlaceholder} onInput={(event) => setBrowserConnectURL(event.currentTarget.value)} />
-                <Button size="sm" variant="default" disabled={browserConnecting()} onClick={() => void connectBrowser()}>{browserConnecting() ? copy().connectingBrowser : copy().connectBrowser}</Button>
-              </div>
+              <form class="flex gap-2" onSubmit={(event) => { event.preventDefault(); void connectBrowser(); }}>
+                <input aria-label={copy().connectBrowserTitle} disabled={browserConnecting()} aria-invalid={Boolean(browserConnectError())} class="flower-settings-text-input" type="url" value={browserConnectURL()} placeholder={copy().connectBrowserPlaceholder} onInput={(event) => setBrowserConnectURL(event.currentTarget.value)} />
+                <Button size="sm" variant="default" type="submit" disabled={browserConnecting()}>{browserConnecting() ? copy().connectingBrowser : copy().connectBrowser}</Button>
+              </form>
+              <Show when={connectedBrowser()}>{(target) => <p role="status" class="mt-2 text-xs">{target().display_name} · {copy().ready}</p>}</Show>
               <Show when={browserConnectError()}><p role="alert" class="mt-2 text-xs text-destructive">{browserConnectError()}</p></Show>
             </section>
           </Show>

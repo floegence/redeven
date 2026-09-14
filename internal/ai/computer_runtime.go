@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"sync"
 )
@@ -11,10 +12,13 @@ import (
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
+	connectMu  sync.Mutex
+	closed     bool
 	mu         sync.RWMutex
 	registry   *TargetRegistry
 	executors  map[string]TargetToolExecutor
-	liveFrames map[string]context.CancelFunc
+	liveFrames map[string]*computerLiveSampler
+	liveWG     sync.WaitGroup
 }
 
 // ConnectBrowser registers an explicitly authorized Chrome CDP session. A
@@ -24,28 +28,56 @@ func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) 
 	if r == nil || r.registry == nil {
 		return TargetDescriptor{}, errors.New("computer use runtime is unavailable")
 	}
+	r.connectMu.Lock()
+	defer r.connectMu.Unlock()
+	r.mu.RLock()
+	closed := r.closed
+	r.mu.RUnlock()
+	if closed {
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
+	}
 	cdpURL = strings.TrimSpace(cdpURL)
-	if cdpURL == "" {
-		return TargetDescriptor{}, errors.New("browser connection endpoint is required")
+	endpoint, err := url.Parse(cdpURL)
+	if err != nil || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https" && endpoint.Scheme != "ws" && endpoint.Scheme != "wss") {
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_endpoint_invalid"}
 	}
 	base, err := r.registry.ResolveTarget(ctx, "browser.managed")
 	if err != nil {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "managed_browser_unavailable"}
 	}
+	r.mu.RLock()
 	managed, ok := r.executors[base.ID].(*PlaywrightTargetExecutor)
+	r.mu.RUnlock()
 	if !ok || managed == nil {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_adapter_unavailable"}
 	}
 	connected := NewPlaywrightTargetExecutor(managed.NodeBinary, managed.HelperPath, managed.ProfileDir)
 	connected.CDPURL = cdpURL
 	target := TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "starting", PermissionState: "not_checked"}
-	if err := r.registry.Register(target); err != nil {
-		return TargetDescriptor{}, err
+	// Publish only a verified replacement. A failed connection must not retire
+	// the session the user already authorized.
+	if err := connected.EnsureTargetReady(ctx, target.ID); err != nil {
+		_ = connected.Close()
+		target.State = "connection_required"
+		if ctx.Err() != nil {
+			return target, ctx.Err()
+		}
+		var startup *TargetStartupError
+		if errors.As(err, &startup) {
+			return target, startup
+		}
+		return target, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
 	}
+	target.Ready, target.State, target.PermissionState = true, "ready", "granted"
 	r.mu.Lock()
+	old := r.executors[target.ID]
 	r.executors[target.ID] = connected
+	err = r.registry.Register(target)
 	r.mu.Unlock()
-	return r.PrepareTarget(ctx, target)
+	if closer, ok := old.(interface{ Close() error }); ok {
+		_ = closer.Close()
+	}
+	return target, err
 }
 
 type TargetPreparer interface {
@@ -135,12 +167,15 @@ func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, re
 	return nil, errors.New("target attachment is unavailable")
 }
 func (r *ComputerUseRuntime) Close() error {
+	r.connectMu.Lock()
+	defer r.connectMu.Unlock()
 	r.mu.Lock()
-	for key, cancel := range r.liveFrames {
-		cancel()
-		delete(r.liveFrames, key)
+	r.closed = true
+	for _, sampler := range r.liveFrames {
+		sampler.cancel()
 	}
 	r.mu.Unlock()
+	r.liveWG.Wait()
 	var failures []error
 	r.mu.RLock()
 	executors := make([]TargetToolExecutor, 0, len(r.executors))

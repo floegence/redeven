@@ -40,3 +40,38 @@ func TestComputerLiveFramesPublishesAndStops(t *testing.T) {
 		t.Fatal("sampler continued after stop")
 	}
 }
+
+func TestComputerLiveFramesOldStopCannotCancelReplacement(t *testing.T) {
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": &liveFrameExecutor{}})
+	t.Cleanup(func() { _ = runtime.Close() })
+	stop, err := runtime.StartComputerLiveFrames(t.Context(), "thread", "session", "target", func(FlowerComputerFrame) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	var frames atomic.Int32
+	replacement, err := runtime.StartComputerLiveFrames(t.Context(), "thread", "session", "target", func(FlowerComputerFrame) { frames.Add(1) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replacement()
+	stop()
+	time.Sleep(2 * computerLiveFrameInterval)
+	if frames.Load() < 2 {
+		t.Fatal("stale stop cancelled replacement sampler")
+	}
+}
+
+func TestComputerLiveFramesRejectClosedRuntime(t *testing.T) {
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": &liveFrameExecutor{}})
+	if err := runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stop, err := runtime.StartComputerLiveFrames(t.Context(), "thread", "session", "target", func(FlowerComputerFrame) {})
+	if stop != nil {
+		stop()
+	}
+	if err == nil {
+		t.Fatal("closed runtime accepted a sampler")
+	}
+}

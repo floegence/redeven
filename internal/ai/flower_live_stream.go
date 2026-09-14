@@ -88,11 +88,20 @@ func (s *Service) PublishFlowerComputerFrame(meta *session.Meta, frame FlowerCom
 		return errors.New("computer frame thread is required")
 	}
 	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamComputerFrame, ThreadID: frame.ThreadID, ComputerFrame: &frame})
+	if len(batch.data) > 4096 {
+		return errors.New("computer frame metadata is too large")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, subscriber := range s.flowerLiveSubscribers {
 		if subscriber.endpointID == meta.EndpointID && subscriber.userPublicID == meta.UserPublicID && !subscriber.closed {
-			enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+			// Media is lossy: a slow viewer gets only the newest frame and
+			// never consumes or disconnects the lifecycle queue.
+			select {
+			case <-subscriber.media:
+			default:
+			}
+			subscriber.media <- batch
 		}
 	}
 	return nil
@@ -113,6 +122,7 @@ type flowerLiveSubscriber struct {
 	endpointID   string
 	userPublicID string
 	queue        chan *flowerLiveEncodedBatch
+	media        chan *flowerLiveEncodedBatch
 	queueLimit   int
 	queuedBytes  int
 	initializing bool
@@ -153,6 +163,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	s.flowerLiveSubscriberSeq++
 	subscriber := &flowerLiveSubscriber{
 		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID,
+		media: make(chan *flowerLiveEncodedBatch, 1),
 		queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit), queueLimit: flowerLiveSubscriberBatchLimit, initializing: true,
 	}
 	s.flowerLiveSubscribers[subscriber.id] = subscriber
@@ -507,6 +518,10 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 			"queued_bytes", queuedBytes,
 		)
 	}
+	select {
+	case <-subscriber.media:
+	default:
+	}
 	close(subscriber.queue)
 }
 
@@ -554,19 +569,37 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	consume := func(batch *flowerLiveEncodedBatch, ok bool) (*FlowerLiveStreamFrame, error) {
+		if !ok {
+			return nil, io.EOF
+		}
+		s.service.mu.Lock()
+		s.subscriber.queuedBytes -= len(batch.data)
+		s.service.flowerLiveQueuedBytes -= len(batch.data)
+		s.service.mu.Unlock()
+		return &FlowerLiveStreamFrame{Kind: batch.kind, Data: batch.data}, nil
+	}
+	// Always drain lifecycle work before presenting optional media.
+	select {
+	case batch, ok := <-s.subscriber.queue:
+		return consume(batch, ok)
+	default:
+	}
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case batch, ok := <-s.subscriber.queue:
-		if ok {
-			s.service.mu.Lock()
-			s.subscriber.queuedBytes -= len(batch.data)
-			s.service.flowerLiveQueuedBytes -= len(batch.data)
-			s.service.mu.Unlock()
-			return &FlowerLiveStreamFrame{Kind: batch.kind, Data: batch.data}, nil
+		return consume(batch, ok)
+	case batch := <-s.subscriber.media:
+		s.service.mu.Lock()
+		closed := s.subscriber.closed
+		s.service.mu.Unlock()
+		if closed {
+			return nil, io.EOF
 		}
-		return nil, io.EOF
+		return &FlowerLiveStreamFrame{Kind: batch.kind, Data: batch.data}, nil
 	}
+
 }
 
 func (s *FlowerLiveStreamSubscription) Close() {

@@ -10,6 +10,7 @@ const profileIndex = process.argv.indexOf('--profile');
 const profile = profileIndex >= 0 ? process.argv[profileIndex + 1] : undefined;
 const cdpIndex = process.argv.indexOf('--cdp-url');
 const cdpURL = cdpIndex >= 0 ? process.argv[cdpIndex + 1] : undefined;
+const executionLocation = cdpURL ? 'connected_browser' : `${process.platform}_headless_browser`;
 let browser;
 let context;
 let page;
@@ -52,7 +53,7 @@ async function safetySignals() {
   });
 }
 
-response({ type: 'ready', protocol_version: 1, capabilities: ['observe', 'interaction'], execution_location: 'linux_headless_browser' });
+response({ type: 'ready', protocol_version: 1, capabilities: ['observe', 'interaction'], execution_location: executionLocation });
 
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of rl) {
@@ -83,7 +84,7 @@ for await (const line of rl) {
     else if (req.tool_name === 'computer.scroll') { await page.mouse.wheel(Number(args.delta_x || 0), Number(args.delta_y || 0)); summary = 'scrolled'; }
     else if (req.tool_name === 'computer.wait') { await page.waitForTimeout(Math.min(30000, Math.max(0, Number(args.milliseconds || 0)))); summary = 'waited for page'; }
     else if (req.tool_name !== 'computer.screenshot') throw new Error(`unsupported tool ${req.tool_name}`);
-    response({ id: req.id, target_id: req.target_id, execution_location: 'linux_headless_browser', result: { summary, url: page.url(), title: await page.title() }, screenshot: await screenshot() });
+    response({ id: req.id, target_id: req.target_id, execution_location: executionLocation, result: { summary, url: page.url(), title: await page.title() }, screenshot: await screenshot() });
   } catch (error) { response({ id: req.id, target_id: req.target_id, error: String(error?.message || error) }); }
 }
 if (!browser) await context.close();

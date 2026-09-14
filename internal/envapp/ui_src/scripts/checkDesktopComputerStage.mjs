@@ -226,6 +226,8 @@ try {
       });
       assert(frame.blob && frame.visibleText === '' && frame.role === 'dialog');
       const state = JSON.parse(await readFile(resultFile, 'utf8'));
+      if (index === 0) assert.equal(state.clicks, 2, 'native action count changed after reaching the intermediate success state');
+      else assert(state.complete && state.scrollOffset > 0 && state.wheelEvents > 0, 'native final state regressed before turn completion');
       assert.equal(frame.target, 'desktop-main', 'Stage is showing another target');
       assert.equal(frame.width, state.geometry.displayWidth);
       assert.equal(frame.height, state.geometry.displayHeight);
