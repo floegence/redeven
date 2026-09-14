@@ -67,11 +67,11 @@ func NewXvfbTargetExecutor(stateDirectory string) *XvfbTargetExecutor {
 }
 
 func (e *XvfbTargetExecutor) Start(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	if e.Inner != nil {
 		return e.startCompatibility(ctx)
 	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.ensureLocked(ctx)
 }
 
