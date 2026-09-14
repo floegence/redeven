@@ -1169,7 +1169,7 @@ async function runScenarios(page, config, telemetry) {
   await remember('S14', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const tokenA = marker('SWITCH_A'); const a = await sendPrompt(page, `Call terminal.exec once with command "sleep 12; printf ${tokenA}". After it finishes, reply ${tokenA}. Call no other tool.`, { visibleMarker: tokenA });
-    await surface.locator('[data-flower-activity-item-id]').filter({ hasText: tokenA }).waitFor({ state: 'visible', timeout: 180_000 });
+    await waitFor(async () => (await canonicalThread(page, a.threadID)).body?.data?.thread?.status === 'success', 180_000, 'switch source terminal');
     await startNewThread(page); await setPermission(page, 'approval_required');
     const tokenB = marker('SWITCH_B'); const b = await sendPrompt(page, `Call terminal.exec exactly once with "printf ${tokenB}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: tokenB });
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'recovery companion approval');
