@@ -1127,8 +1127,8 @@ async function runScenarios(page, config, telemetry) {
     const token = marker('REFERENCE');
     await textarea.press('End'); await textarea.type(` Read the selected reference with file.read and reply with its marker plus ${token} as plain text. Do not call any other tool after file.read.`);
     const sent = await sendPrompt(page, await textarea.inputValue(), { visibleMarker: token });
-    await surface.locator('[data-flower-activity-item-id]').filter({ hasText: /reference-marker|FLOWER_REFERENCE/iu }).waitFor({ state: 'visible', timeout: 180_000 });
     const terminal = await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
+    if (!terminal.canonical.item_ids.some((id) => String(id).startsWith('tool:'))) throw new Error('reference flow did not execute a tool');
     const chip = surface.locator('[data-flower-message-role="user"] [data-flower-chat-context-chip="true"]').first(); await chip.click();
     const previewSelector = '.file-preview-floating-window, .flower-chat-context-preview-window';
     await page.locator(previewSelector).first().waitFor({ state: 'visible', timeout: 20_000 });
