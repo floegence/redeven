@@ -26,6 +26,7 @@ type PlaywrightTargetExecutor struct {
 	NodeBinary string
 	HelperPath string
 	ProfileDir string
+	CDPURL     string
 	Timeout    time.Duration
 
 	mu      sync.Mutex
@@ -204,7 +205,11 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	// tool call that created it. Binding the child to that call's context would
 	// terminate the browser immediately after the first action and make every
 	// subsequent action fail with a broken pipe.
-	cmd := exec.Command(e.NodeBinary, e.HelperPath, "--profile", profile)
+	args := []string{e.HelperPath, "--profile", profile}
+	if strings.TrimSpace(e.CDPURL) != "" {
+		args = append(args, "--cdp-url", e.CDPURL)
+	}
+	cmd := exec.Command(e.NodeBinary, args...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
