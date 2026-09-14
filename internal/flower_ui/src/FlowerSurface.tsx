@@ -11758,7 +11758,7 @@ webSearch: model.web_search,
           setWorkingDirectoryPickerOpen(false);
         }}
       />
-      <Show when={computerStageOpen() && Boolean(selectedComputerStage()?.frame) && selectedComputerStage()}>
+      <Show when={computerStageOpen() && selectedComputerStage()}>
         {(stage) => {
           return (
             <FlowerComputerStage
