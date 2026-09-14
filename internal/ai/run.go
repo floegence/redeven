@@ -1356,6 +1356,7 @@ type toolCallOutcome struct {
 }
 
 type targetToolExecution struct {
+	TargetID    string
 	Payload     any
 	Attachments []ToolAttachment
 }
@@ -1632,7 +1633,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if r.publishComputerFrame != nil && len(target.Attachments) > 0 {
 			for _, attachment := range target.Attachments {
 				if strings.HasPrefix(attachment.ResourceRef, "computer://") {
-					r.publishComputerFrame(FlowerComputerFrame{ThreadID: r.threadID, SessionID: r.id, TargetID: targetIDFromToolArgs(args), ResourceRef: attachment.ResourceRef, SHA256: attachment.SHA256, MIMEType: attachment.MIMEType, Sequence: uint64(time.Now().UnixNano()), CapturedAtMS: time.Now().UnixMilli()})
+					r.publishComputerFrame(FlowerComputerFrame{ThreadID: r.threadID, SessionID: r.id, TargetID: target.TargetID, ResourceRef: attachment.ResourceRef, SHA256: attachment.SHA256, MIMEType: attachment.MIMEType, Sequence: uint64(time.Now().UnixNano()), CapturedAtMS: time.Now().UnixMilli()})
 					break
 				}
 			}
@@ -3220,7 +3221,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			SHA256:      strings.TrimSpace(attachment.SHA256),
 		})
 	}
-	return targetToolExecution{Payload: targetToolResultPayload(result, targetID), Attachments: attachments}, nil
+	return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID), Attachments: attachments}, nil
 }
 
 func targetToolResultPayload(result TargetToolResult, requestedTargetID string) any {
