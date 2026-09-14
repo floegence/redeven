@@ -184,6 +184,18 @@ type Service struct {
 	lifecycleCancel          context.CancelFunc
 }
 
+// ConnectComputerBrowser exposes the explicit user-authorized browser bridge
+// without creating a second executor owner in the HTTP layer.
+func (s *Service) ConnectComputerBrowser(ctx context.Context, cdpURL string) (TargetDescriptor, error) {
+	resolver, ok := s.targetResolver.(interface {
+		ConnectBrowser(context.Context, string) (TargetDescriptor, error)
+	})
+	if !ok {
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_unavailable"}
+	}
+	return resolver.ConnectBrowser(ctx, cdpURL)
+}
+
 // ResolveTargetToolAttachment exposes a short-lived target screenshot to the
 // authenticated Flower media boundary. The executor remains the sole owner
 // of the bytes; Service only provides the runtime access boundary.

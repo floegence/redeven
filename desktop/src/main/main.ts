@@ -9951,6 +9951,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/fs/list', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/computer_use', methods: ['PUT'] },
+  { path: '/_redeven_proxy/api/ai/computer/connect', methods: ['POST'] },
   { path: RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
