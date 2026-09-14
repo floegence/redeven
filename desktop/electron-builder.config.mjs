@@ -90,6 +90,7 @@ function loadReleaseArtifactHelpers() {
 const bundledRuntimeArtifact = resolveBundledRuntimeArtifact();
 const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
 const computerHostScript = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'scripts', 'redevenComputerHost.mjs');
+const nativeComputerHostBinary = path.join(repoRoot, 'desktop', 'native', 'computer-host', '.build', 'release', 'redeven-computer-host');
 const computerHostNodeModules = path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'node_modules');
 if (!fs.existsSync(computerHostScript)) {
   throw new Error(`Computer host helper source is missing: ${computerHostScript}`);
@@ -101,6 +102,9 @@ const computerHostDependencyResources = fs.existsSync(path.join(computerHostNode
         ? [{ from: path.join(computerHostNodeModules, 'playwright-core'), to: 'computer/node_modules/playwright-core' }]
         : []),
     ]
+  : [];
+const nativeComputerHostResources = resolveTargetGoos() === 'darwin' && fs.existsSync(nativeComputerHostBinary)
+  ? [{ from: nativeComputerHostBinary, to: 'computer/redeven-computer-host' }]
   : [];
 const bundledReDevPluginResources = resolveTargetGoos() !== 'windows'
   ? [
@@ -210,6 +214,7 @@ export default {
       to: 'computer/redevenComputerHost.mjs',
     },
     ...computerHostDependencyResources,
+    ...nativeComputerHostResources,
     {
       from: path.join(repoRoot, 'LICENSE'),
       to: 'licenses/LICENSE',
