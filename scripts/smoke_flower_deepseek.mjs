@@ -1049,6 +1049,7 @@ async function runScenarios(page, config, telemetry) {
     // The model may stream the terminal marker only after the action completes;
     // qualify the running lifecycle state instead of requiring a fixed text order.
     await waitFor(async () => ['running', 'waiting_approval'].includes(await selectedStatus(page)), 180_000, 'pin running state');
+    await waitForThreadTerminal(page, running.threadID, 180_000, { turnID: running.turnID });
     await startNewThread(page); await setPermission(page, 'approval_required');
     const approvalToken = marker('PIN_APPROVAL');
     const waiting = await sendPrompt(page, `Call terminal.exec with "printf ${approvalToken}" and wait for approval. After the decision, reply only as plain text. Do not call any other tool.`, { visibleMarker: approvalToken });
