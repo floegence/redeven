@@ -20,14 +20,14 @@ export function assertSmokeConfiguration(config) {
     root: SMOKE_ROOT,
     workspace: SMOKE_WORKSPACE,
     model: SMOKE_MODEL,
-    localUIPort: SMOKE_PORTS.localUI,
-    cdpPort: SMOKE_PORTS.cdp,
-    inspectorPort: SMOKE_PORTS.inspector,
   };
   for (const [field, value] of Object.entries(expected)) {
     if (config?.[field] !== value) {
       throw new Error(`Flower smoke ${field} is locked to ${String(value)}`);
     }
+  }
+  for (const field of ['localUIPort', 'cdpPort', 'inspectorPort']) {
+    if (!Number.isInteger(config?.[field]) || config[field] <= 0) throw new Error(`Flower smoke ${field} must be a positive port`);
   }
   return config;
 }
