@@ -255,7 +255,7 @@ NODE
 commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
 node - "$REPORT_ROOT/run-config.json" "$ROOT_DIR" "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" "$REPORT_ROOT" "$commit" "$RUNTIME_PID" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$REDEVEN_FLOWER_SMOKE_MODEL" <<'NODE'
 const fs = require('node:fs');
-const [file, worktree, stateRoot, userDataRoot, cacheRoot, tempRoot, workspace, reportRoot, commit, runtimePID, localUIPort, cdpPort, inspectorPort, model] = process.argv.slice(2);
+const [file, worktree, smokeRoot, stateRoot, userDataRoot, cacheRoot, tempRoot, workspace, reportRoot, commit, runtimePID, localUIPort, cdpPort, inspectorPort, model] = process.argv.slice(2);
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -269,7 +269,7 @@ const bundleManifestSHA256 = digest(bundleManifest);
 if (bundleManifestSHA256 !== manifests[0]) throw new Error('Runtime bundle manifest identity changed');
 fs.writeFileSync(`${reportRoot}/bundle-manifest.json`, bundleManifest, { mode: 0o600 });
 fs.writeFileSync(file, `${JSON.stringify({
-  root: '/tmp/redeven-flower-smoke-01a00852', workspace, model,
+  root: smokeRoot, workspace, model,
   sourceDiffSHA256, untrackedSourceSHA256, bundleManifestSHA256,
   localUIPort: Number(localUIPort), cdpPort: Number(cdpPort), inspectorPort: Number(inspectorPort),
   worktree, stateRoot, userDataRoot, cacheRoot, tempRoot, reportRoot, commit, runtimePID: Number(runtimePID),
