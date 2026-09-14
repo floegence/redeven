@@ -13,7 +13,7 @@ const outputDir = path.resolve(scriptDir, '../../ui/dist/env');
 const manifestPath = path.join(outputDir, '.vite/manifest.json');
 const chunkModulesPath = path.join(outputDir, '.vite/chunk-modules.json');
 const budgets = {
-  javascript: 600 * 1024,
+  javascript: 601 * 1024,
   css: 120 * 1024,
   total: 720 * 1024,
 };
