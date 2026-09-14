@@ -97,6 +97,11 @@ if CommandLine.arguments.contains("--capabilities") {
             case "computer.wait":
                 wait = try number("milliseconds", default: 0)
                 guard (0...30_000).contains(wait) else { throw NativeInput.invalid("Wait must be between 0 and 30000 milliseconds.") }
+            case "computer.drag":
+                let from = CGPoint(x: try number("from_x"), y: try number("from_y"))
+                let to = CGPoint(x: try number("to_x"), y: try number("to_y"))
+                let duration = Int(try number("duration_ms", default: 0))
+                events = try NativeInput.drag(from: from, to: to, durationMilliseconds: duration)
             case "computer.click", "computer.double_click":
                 let point = try CGPoint(x: number("x"), y: number("y"))
                 let bounds = CGDisplayBounds(CGMainDisplayID())

@@ -169,7 +169,7 @@ func toolRequiresTarget(toolName string) bool {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
 	case "file.read", "read_file", "file.edit", "file.write", "apply_patch",
-		"computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.wait",
+		"computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
 		"browser.navigate", "browser.back", "browser.reload":
 		return true
 	}
@@ -178,7 +178,7 @@ func toolRequiresTarget(toolName string) bool {
 
 func isComputerUseTool(toolName string) bool {
 	switch strings.TrimSpace(toolName) {
-	case "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.wait", "browser.navigate", "browser.back", "browser.reload":
+	case "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait", "browser.navigate", "browser.back", "browser.reload":
 		return true
 	default:
 		return false
@@ -193,7 +193,7 @@ func requiredTargetCapabilities(toolName string) []string {
 		return []string{"write"}
 	case "computer.screenshot":
 		return []string{"observe"}
-	case "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.wait",
+	case "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
 		"browser.navigate", "browser.back", "browser.reload":
 		return []string{"interaction"}
 	default:
