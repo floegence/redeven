@@ -79,6 +79,7 @@ export function findDeepSeekProvider(config, secrets) {
   // Add the experimental model only to the isolated qualification copy.
   if (!models.some((model) => String(model?.model_name ?? '').trim() === SMOKE_MODEL)) {
     selectedProvider.models = [...models, { model_name: SMOKE_MODEL }];
+    delete selectedProvider.model_selection;
   }
   return { provider: selectedProvider, apiKey, currentModelID: `${providerID}/${SMOKE_MODEL}` };
 }
