@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 )
 
 // ComputerUseRuntime owns the adapters and the only target readiness path.
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
+	mu        sync.RWMutex
 	registry  *TargetRegistry
 	executors map[string]TargetToolExecutor
 }
@@ -39,7 +41,9 @@ func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) 
 	if err := r.registry.Register(target); err != nil {
 		return TargetDescriptor{}, err
 	}
+	r.mu.Lock()
 	r.executors[target.ID] = connected
+	r.mu.Unlock()
 	return r.PrepareTarget(ctx, target)
 }
 
@@ -62,7 +66,9 @@ func (r *ComputerUseRuntime) ResolveTarget(ctx context.Context, alias string) (T
 	return r.registry.ResolveTarget(ctx, alias)
 }
 func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
+	r.mu.RLock()
 	executor := r.executors[target.ID]
+	r.mu.RUnlock()
 	if executor == nil {
 		return target, nil
 	}
@@ -95,7 +101,9 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 	return target, nil
 }
 func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	r.mu.RLock()
 	executor := r.executors[strings.TrimSpace(call.TargetID)]
+	r.mu.RUnlock()
 	if executor == nil {
 		return TargetToolResult{}, &TargetStartupError{Code: "TARGET_EXECUTOR_UNAVAILABLE", Reason: "target_adapter_missing"}
 	}
@@ -110,7 +118,13 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 	return result, err
 }
 func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, ref string) ([]byte, error) {
+	r.mu.RLock()
+	executors := make([]TargetToolExecutor, 0, len(r.executors))
 	for _, executor := range r.executors {
+		executors = append(executors, executor)
+	}
+	r.mu.RUnlock()
+	for _, executor := range executors {
 		if resolver, ok := executor.(TargetToolAttachmentResolver); ok {
 			if body, err := resolver.ResolveTargetToolAttachment(ctx, ref); err == nil {
 				return body, nil
@@ -121,7 +135,13 @@ func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, re
 }
 func (r *ComputerUseRuntime) Close() error {
 	var failures []error
+	r.mu.RLock()
+	executors := make([]TargetToolExecutor, 0, len(r.executors))
 	for _, executor := range r.executors {
+		executors = append(executors, executor)
+	}
+	r.mu.RUnlock()
+	for _, executor := range executors {
 		if closer, ok := executor.(interface{ Close() error }); ok {
 			failures = append(failures, closer.Close())
 		}
