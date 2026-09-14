@@ -20,7 +20,7 @@ once from canonical descriptors without relaxing subsequent prefix checks.
 
 The supported functions are `computer.screenshot`, `computer.click`, `computer.double_click`, `computer.type`, `computer.key`, `computer.scroll`, `computer.wait`, `browser.navigate`, `browser.back`, and `browser.reload`. Coordinates are CSS viewport coordinates; a target adapter converts them to physical coordinates when required. Observation requires readonly capability. Input, navigation, and reload use the existing interaction/mutation permission and approval path; `full_access` skips per-action approval without skipping argument, capability, target, or cancellation checks.
 
-`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped beside the Runtime under `computer/` and announces capabilities before requests are accepted. Native desktop input and screenshot adapters are usable only when their helper handshake and macOS permissions succeed; Xvfb still requires an explicit input/capture adapter. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
+`BrowserTarget` uses a persistent Playwright context and is valid on a headless Linux server. Its packaged JSONL helper is shipped beside the Runtime under `computer/` and announces capabilities before requests are accepted. Native desktop input and screenshot adapters are usable only when their helper handshake and macOS permissions succeed. Linux `xvfb.desktop` owns a private Xvfb display, Xauthority, window manager, X11 input commands, and root-window PNG capture; readiness requires geometry and decoded-capture probes. No target may silently fall back to the Redeven control surface or to `web_fetch` for an interactive task.
 
 Each managed-browser response must match both the outstanding request ID and
 target ID. Cancellation, timeout, malformed responses, and transport failures
@@ -83,8 +83,7 @@ mouse/keyboard events, moves the pointer before clicking, compensates for the
 system natural-scrolling preference, and captures a normalized display frame.
 The native executor owns the helper across tool-call contexts and reaps it on
 interrupted exchanges or shutdown. Electron supplies packaged resource paths
-and UI; it does not run a second native helper owner. The Xvfb
-executor is a lifecycle wrapper and requires an input/capture implementation.
+and UI; it does not run a second native helper owner. The Xvfb executor is the Linux input/capture implementation and reaps its display process group with the Runtime.
 The default safety gate uses target
 metadata and action arguments; real page/password/OTP detection and a complete
 user takeover flow require separate implementation and qualification. These
@@ -119,7 +118,7 @@ durable screenshot bytes or target-control authority.
 - `redeven:internal/ai/computer_target_executor.go` - headless Playwright JSONL executor and attachment resolver.
 - `redeven:internal/ai/computer_target_executor_test.go` - interrupted-session retirement, response correlation, process reaping, and real browser action effects.
 - `redeven:internal/ai/desktop_target_executor.go` - native Desktop JSONL executor and screenshot attachment resolver.
-- `redeven:internal/ai/virtual_desktop_target.go` - Xvfb lifecycle and unavailable-target failure.
+- `redeven:internal/ai/virtual_desktop_target_linux.go` - private Xvfb lifecycle, X11 actions, and screenshot validation.
 - `redeven:internal/ai/floret_runtime.go` - target attachment expansion at the provider boundary.
 - `redeven:internal/ai/service.go` and `redeven:internal/codeapp/appserver/server.go` - authenticated, hash-checked Flower media resolution boundary for computer frames.
 - `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - Blob URL lifecycle and explicit unavailable-frame rendering.
