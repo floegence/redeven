@@ -166,6 +166,7 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   onSaveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
+  onConnectComputerBrowser?: (cdpURL: string) => Promise<unknown>;
   onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   saveError?: string;
   savedAt?: number | null;
@@ -177,6 +178,18 @@ export type FlowerSettingsSurfaceProps = Readonly<{
 export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings;
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
+  const [browserConnectURL, setBrowserConnectURL] = createSignal('');
+  const [browserConnectError, setBrowserConnectError] = createSignal('');
+  const [browserConnecting, setBrowserConnecting] = createSignal(false);
+  const connectBrowser = async () => {
+    if (!props.onConnectComputerBrowser || browserConnecting()) return;
+    const url = trim(browserConnectURL());
+    if (!url) { setBrowserConnectError(copy().connectBrowserEmpty); return; }
+    setBrowserConnecting(true); setBrowserConnectError('');
+    try { await props.onConnectComputerBrowser(url); setBrowserConnectURL(''); }
+    catch (error) { setBrowserConnectError(error instanceof Error ? error.message : copy().connectBrowserFailed); }
+    finally { setBrowserConnecting(false); }
+  };
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [permissionType, setPermissionType] = createSignal<FlowerPermissionType>('approval_required');
   const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<FlowerPermissionType>('approval_required');
@@ -682,6 +695,17 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               <Show when={computerUseError()}>
                 <p role="alert" class="mt-2 text-xs text-destructive">{computerUseError()}</p>
               </Show>
+            </section>
+          </Show>
+
+          <Show when={props.onConnectComputerBrowser}>
+            <section class="flower-settings-section flower-settings-computer-connect-section">
+              <FlowerSubSectionHeader title={copy().connectBrowserTitle} />
+              <div class="flex gap-2">
+                <input class="flower-settings-text-input" type="url" value={browserConnectURL()} placeholder={copy().connectBrowserPlaceholder} onInput={(event) => setBrowserConnectURL(event.currentTarget.value)} />
+                <Button size="sm" variant="default" disabled={browserConnecting()} onClick={() => void connectBrowser()}>{browserConnecting() ? copy().connectingBrowser : copy().connectBrowser}</Button>
+              </div>
+              <Show when={browserConnectError()}><p role="alert" class="mt-2 text-xs text-destructive">{browserConnectError()}</p></Show>
             </section>
           </Show>
 

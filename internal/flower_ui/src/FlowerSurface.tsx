@@ -11728,6 +11728,7 @@ webSearch: model.web_search,
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}
                 onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
+                onConnectComputerBrowser={props.adapter.connectComputerBrowser}
                 onSaveModelProfile={saveModelProfile}
                 saveError={saveError()}
                 savedAt={savedAt()}

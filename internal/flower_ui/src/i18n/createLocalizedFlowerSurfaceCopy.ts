@@ -563,6 +563,12 @@ function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): Flowe
     defaultPermissionBadge: t(i18n, k('defaultPermissionBadge')),
     computerUseTitle: t(i18n, k('computerUseTitle')),
     computerUseLabel: t(i18n, k('computerUseLabel')),
+    connectBrowserTitle: t(i18n, k('connectBrowserTitle')),
+    connectBrowserPlaceholder: t(i18n, k('connectBrowserPlaceholder')),
+    connectBrowser: t(i18n, k('connectBrowser')),
+    connectingBrowser: t(i18n, k('connectingBrowser')),
+    connectBrowserEmpty: t(i18n, k('connectBrowserEmpty')),
+    connectBrowserFailed: t(i18n, k('connectBrowserFailed')),
     permissionTypes: {
       readonly: {
         label: t(i18n, k('permissionReadonlyLabel')),
