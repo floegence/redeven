@@ -14,6 +14,35 @@ type ComputerUseRuntime struct {
 	executors map[string]TargetToolExecutor
 }
 
+// ConnectBrowser registers an explicitly authorized Chrome CDP session. A
+// running system browser is never treated as connected implicitly; callers
+// must provide the bridge endpoint returned by the user-facing connect flow.
+func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) (TargetDescriptor, error) {
+	if r == nil || r.registry == nil {
+		return TargetDescriptor{}, errors.New("computer use runtime is unavailable")
+	}
+	cdpURL = strings.TrimSpace(cdpURL)
+	if cdpURL == "" {
+		return TargetDescriptor{}, errors.New("browser connection endpoint is required")
+	}
+	base, err := r.registry.ResolveTarget(ctx, "browser.managed")
+	if err != nil {
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "managed_browser_unavailable"}
+	}
+	managed, ok := r.executors[base.ID].(*PlaywrightTargetExecutor)
+	if !ok || managed == nil {
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_adapter_unavailable"}
+	}
+	connected := NewPlaywrightTargetExecutor(managed.NodeBinary, managed.HelperPath, managed.ProfileDir)
+	connected.CDPURL = cdpURL
+	target := TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "starting", PermissionState: "not_checked"}
+	if err := r.registry.Register(target); err != nil {
+		return TargetDescriptor{}, err
+	}
+	r.executors[target.ID] = connected
+	return r.PrepareTarget(ctx, target)
+}
+
 type TargetPreparer interface {
 	PrepareTarget(context.Context, TargetDescriptor) (TargetDescriptor, error)
 }
