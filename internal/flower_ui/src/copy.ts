@@ -112,6 +112,12 @@ export type FlowerSettingsCopy = Readonly<{
   defaultPermissionBadge: string;
   computerUseTitle: string;
 	computerUseLabel: string;
+  connectBrowserTitle: string;
+  connectBrowserPlaceholder: string;
+  connectBrowser: string;
+  connectingBrowser: string;
+  connectBrowserEmpty: string;
+  connectBrowserFailed: string;
   permissionTypes: Readonly<Record<FlowerPermissionType, Readonly<{
     label: string;
     description: string;
@@ -1082,6 +1088,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     defaultPermissionBadge: 'Default',
     computerUseTitle: 'Computer and browser use',
 	computerUseLabel: 'Enable computer use',
+    connectBrowserTitle: 'Connect current Chrome',
+    connectBrowserPlaceholder: 'http://127.0.0.1:9222',
+    connectBrowser: 'Connect',
+    connectingBrowser: 'Connecting…',
+    connectBrowserEmpty: 'Enter a browser connection address.',
+    connectBrowserFailed: 'Could not connect the browser.',
     permissionTypes: {
       readonly: {
         label: 'Read only',
