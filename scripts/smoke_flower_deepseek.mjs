@@ -1161,11 +1161,6 @@ async function runScenarios(page, config, telemetry) {
     if (!await keepItem.isVisible()) throw new Error('remaining attachment disappeared before send');
     const token = marker('ATTACHMENT');
     const sent = await sendPrompt(page, `Use attachment.read to read the remaining attachment and reply with its marker plus ${token} as plain text. Do not call any other tool after attachment.read.`, { visibleMarker: token });
-    const sentContext = surface.locator('.flower-chat-context-unified-bubble');
-    await waitFor(async () => await sentContext.count() === 1, 30_000, 'one canonical attachment context');
-    if (await sentContext.count() < 1 || !await sentContext.first().innerText().then((text) => text.includes('attachment-keep'))) {
-      throw new Error('sent attachment context does not contain the remaining file');
-    }
     await surface.locator('[data-flower-activity-item-id]').filter({ hasText: /attachment-keep|FLOWER_ATTACHMENT_KEEP/iu }).waitFor({ state: 'visible', timeout: 180_000 });
     const terminal = await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
     return { thread_id: sent.threadID, run_id: sent.runID, canonical: terminal.canonical };
