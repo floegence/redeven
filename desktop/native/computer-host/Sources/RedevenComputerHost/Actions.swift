@@ -30,6 +30,17 @@ enum NativeInput {
         return events
     }
 
+
+    static func drag(from: CGPoint, to: CGPoint, durationMilliseconds: Int) throws -> [CGEvent] {
+        guard durationMilliseconds >= 0 && durationMilliseconds <= 5_000 else { throw invalid("Drag duration is out of range.") }
+        guard let move = CGEvent(mouseEventSource:nil, mouseType:.mouseMoved, mouseCursorPosition:from, mouseButton:.left),
+              let down = CGEvent(mouseEventSource:nil, mouseType:.leftMouseDown, mouseCursorPosition:from, mouseButton:.left) else { throw unavailable() }
+        var events:[CGEvent] = [move,down]
+        let steps=max(1, min(120, durationMilliseconds/16))
+        for index in 1...steps { let t=CGFloat(index)/CGFloat(steps); let point=CGPoint(x:from.x+(to.x-from.x)*t,y:from.y+(to.y-from.y)*t); guard let event=CGEvent(mouseEventSource:nil,mouseType:.leftMouseDragged,mouseCursorPosition:point,mouseButton:.left) else {throw unavailable()}; events.append(event) }
+        guard let up=CGEvent(mouseEventSource:nil,mouseType:.leftMouseUp,mouseCursorPosition:to,mouseButton:.left) else {throw unavailable()}; events.append(up); return events
+    }
+
     static func scroll(x: Double, y: Double, naturalScrolling: Bool) throws -> [CGEvent] {
         guard x.isFinite, y.isFinite, abs(x) <= 100_000, abs(y) <= 100_000 else {
             throw invalid("Scroll deltas must be finite viewport pixels.")

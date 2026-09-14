@@ -44,3 +44,11 @@ final class InputTests: XCTestCase {
         XCTAssertThrowsError(try NativeInput.scroll(x: 0, y: 1e20, naturalScrolling: true))
     }
 }
+
+    func testDragProducesBalancedPath() throws {
+        let events = try NativeInput.drag(from: CGPoint(x: 10, y: 20), to: CGPoint(x: 110, y: 120), durationMilliseconds: 64)
+        XCTAssertEqual(events.first?.type, .mouseMoved)
+        XCTAssertEqual(events.dropFirst().first?.type, .leftMouseDown)
+        XCTAssertEqual(events.last?.type, .leftMouseUp)
+        XCTAssertGreaterThan(events.count, 4)
+    }

@@ -77,6 +77,7 @@ for await (const line of rl) {
       const key = keyAliases[rawKey.toLowerCase()] || rawKey;
       await page.keyboard.press(key); summary = `pressed ${key}`;
     }
+    else if (req.tool_name === 'computer.drag') { const x1=Number(args.from_x), y1=Number(args.from_y), x2=Number(args.to_x), y2=Number(args.to_y); await page.mouse.move(x1,y1); await page.mouse.down(); await page.mouse.move(x2,y2,{steps:Math.max(1,Math.round(Number(args.duration_ms||0)/16))}); await page.mouse.up(); summary='dragged'; }
     else if (req.tool_name === 'computer.scroll') { await page.mouse.wheel(Number(args.delta_x || 0), Number(args.delta_y || 0)); summary = 'scrolled'; }
     else if (req.tool_name === 'computer.wait') { await page.waitForTimeout(Math.min(30000, Math.max(0, Number(args.milliseconds || 0)))); summary = 'waited for page'; }
     else if (req.tool_name !== 'computer.screenshot') throw new Error(`unsupported tool ${req.tool_name}`);
