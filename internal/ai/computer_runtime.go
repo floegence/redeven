@@ -11,9 +11,10 @@ import (
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
-	mu        sync.RWMutex
-	registry  *TargetRegistry
-	executors map[string]TargetToolExecutor
+	mu         sync.RWMutex
+	registry   *TargetRegistry
+	executors  map[string]TargetToolExecutor
+	liveFrames map[string]context.CancelFunc
 }
 
 // ConnectBrowser registers an explicitly authorized Chrome CDP session. A
@@ -134,6 +135,12 @@ func (r *ComputerUseRuntime) ResolveTargetToolAttachment(ctx context.Context, re
 	return nil, errors.New("target attachment is unavailable")
 }
 func (r *ComputerUseRuntime) Close() error {
+	r.mu.Lock()
+	for key, cancel := range r.liveFrames {
+		cancel()
+		delete(r.liveFrames, key)
+	}
+	r.mu.Unlock()
 	var failures []error
 	r.mu.RLock()
 	executors := make([]TargetToolExecutor, 0, len(r.executors))
