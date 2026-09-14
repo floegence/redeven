@@ -108,6 +108,7 @@ type run struct {
 	desktopModelSource   *desktopModelSourceClient
 	liveMetrics          *flowerLiveMetrics
 	publishComputerFrame func(FlowerComputerFrame)
+	liveFrameTargets     map[string]struct{}
 
 	id                 string // Floret canonical RunID; empty before durable admission.
 	executionKey       string
@@ -3210,6 +3211,19 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	result.Safety = &decision
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
+	}
+	if runtime, ok := r.targetResolver.(interface {
+		StartComputerLiveFrames(context.Context, string, string, string, func(FlowerComputerFrame)) (func(), error)
+	}); ok && r.publishComputerFrame != nil {
+		if r.liveFrameTargets == nil {
+			r.liveFrameTargets = make(map[string]struct{})
+		}
+		if _, started := r.liveFrameTargets[targetID]; !started {
+			if stop, startErr := runtime.StartComputerLiveFrames(ctx, r.threadID, r.id, targetID, r.publishComputerFrame); startErr == nil {
+				r.liveFrameTargets[targetID] = struct{}{}
+				_ = stop
+			}
+		}
 	}
 	attachments := make([]ToolAttachment, 0, len(result.Attachments))
 	for _, attachment := range result.Attachments {
