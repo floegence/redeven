@@ -170,6 +170,18 @@ cleanup() {
   # Keep only diagnostic evidence. Browser profiles and Runtime stores can
   # contain credentials even after removing the source JSON credential files.
   if [[ "$ports_released" == true ]]; then
+    # Release only leases owned by this smoke root. A prior interrupted run
+    # must not poison the next qualification, while unrelated instances stay untouched.
+    for lease in "$HOME"/.redeven-dev/.port-leases/port-*.owner; do
+      [[ -f "$lease" ]] || continue
+      if grep -q "^$STATE_ROOT$" "$lease" 2>/dev/null; then
+        python3 - "$lease" <<'PYLEASE'
+import os, sys
+try: os.unlink(sys.argv[1])
+except FileNotFoundError: pass
+PYLEASE
+      fi
+    done
     node - "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" <<'NODE'
 const fs = require('node:fs');
 function makeDirectoriesWritable(root) {
