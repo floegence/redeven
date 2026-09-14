@@ -2618,7 +2618,7 @@
         "title": "Computer and browser use runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 10707,
+      "body_length": 10901,
       "summary": "Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the thread target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Flower Settings keeps computer/browser use enabled by default but lets users turn it off for future runs. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.",
       "sections": [
         {
@@ -2713,6 +2713,11 @@
           "id": "redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs:0:opt-in built desktop qualification through composer, real deepseek, fixture completion, decoded stage pixels, and provider image-output evidence.",
           "source": "redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs",
           "description": "opt-in built Desktop qualification through Composer, real DeepSeek, fixture completion, decoded Stage pixels, and provider image-output evidence."
+        },
+        {
+          "id": "redeven:scripts/check_macos_computer_host_fixture.sh:0:repeatable macos appkit window fixture that proves a native helper click changes a real application control and cleans up its process.",
+          "source": "redeven:scripts/check_macos_computer_host_fixture.sh",
+          "description": "repeatable macOS AppKit window fixture that proves a native helper click changes a real application control and cleans up its process."
         },
         {
           "id": "redeven:internal/agent/agent.go:0:absolute helper discovery, default managed-browser target state, and native helper fallback.",
@@ -16545,5 +16550,5 @@
       ]
     }
   ],
-  "source_sha256": "c3d49e5fd5a59f46755cb437a48cb8cc9540ae5d15606b5f91d78e2f2724f881"
+  "source_sha256": "0cfe2cd688b346e3153336f0a02424401ea3a8ce8dc6ba42beba3803723eb35d"
 }
