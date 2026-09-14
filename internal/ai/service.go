@@ -1431,6 +1431,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		ToolTargetPolicy: toolTargetPolicy, CanonicalReferenceAuthority: referenceAuthority,
 		TargetToolExecutor: targetToolExecutor,
 		TargetResolver:     targetResolver, InteractionSafetyGate: interactionSafetyGate,
+		PublishComputerFrame: func(frame FlowerComputerFrame) { _ = s.PublishFlowerComputerFrame(metaRef, frame) },
 	})
 	builder.subagentRuntime = newServiceFloretSubagentRuntime(s, builder)
 	return &threadEffect{

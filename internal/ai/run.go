@@ -85,7 +85,8 @@ type runOptions struct {
 	TargetResolver              TargetResolver
 	InteractionSafetyGate       InteractionSafetyGate
 
-	LiveMetrics *flowerLiveMetrics
+	LiveMetrics          *flowerLiveMetrics
+	PublishComputerFrame func(FlowerComputerFrame)
 }
 
 type run struct {
@@ -101,11 +102,12 @@ type run struct {
 	permissionType FlowerPermissionType
 	muPermission   sync.RWMutex
 
-	sessionMeta         *session.Meta
-	resolveProviderKey  func(providerID string) (string, bool, error)
-	resolveWebSearchKey func(providerID string) (string, bool, error)
-	desktopModelSource  *desktopModelSourceClient
-	liveMetrics         *flowerLiveMetrics
+	sessionMeta          *session.Meta
+	resolveProviderKey   func(providerID string) (string, bool, error)
+	resolveWebSearchKey  func(providerID string) (string, bool, error)
+	desktopModelSource   *desktopModelSourceClient
+	liveMetrics          *flowerLiveMetrics
+	publishComputerFrame func(FlowerComputerFrame)
 
 	id                 string // Floret canonical RunID; empty before durable admission.
 	executionKey       string
@@ -1627,6 +1629,14 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		return outcome, nil
 	}
 	if target, ok := result.(targetToolExecution); ok {
+		if r.publishComputerFrame != nil && len(target.Attachments) > 0 {
+			for _, attachment := range target.Attachments {
+				if strings.HasPrefix(attachment.ResourceRef, "computer://") {
+					r.publishComputerFrame(FlowerComputerFrame{ThreadID: r.threadID, SessionID: r.id, TargetID: targetIDFromToolArgs(args), ResourceRef: attachment.ResourceRef, SHA256: attachment.SHA256, MIMEType: attachment.MIMEType, Sequence: uint64(time.Now().UnixNano()), CapturedAtMS: time.Now().UnixMilli()})
+					break
+				}
+			}
+		}
 		result = target.Payload
 		outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 	}
