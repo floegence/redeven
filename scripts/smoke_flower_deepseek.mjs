@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 
 export const SMOKE_ROOT = '/tmp/redeven-flower-smoke-01a00852';
 export const SMOKE_WORKSPACE = `${SMOKE_ROOT}/workspace`;
-export const SMOKE_MODEL = 'deepseek-v4-flash';
+export const SMOKE_MODEL = 'deepseek-v4-flash-vision-exp';
 export const SMOKE_PORTS = Object.freeze({ localUI: 43924, cdp: 43925, inspector: 43926 });
 
 export function assertSmokeConfiguration(config) {
