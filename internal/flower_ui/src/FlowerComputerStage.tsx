@@ -173,7 +173,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         )}
       </Show>
     </div>
-    </FloatingWindow>}
+    </FloatingWindow>
     </Show>}
   </Show>
   );
