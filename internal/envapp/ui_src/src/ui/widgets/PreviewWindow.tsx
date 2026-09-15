@@ -68,6 +68,7 @@ export interface PreviewWindowProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title?: string;
+  headerActions?: JSX.Element;
   description?: string;
   footer?: JSX.Element;
   children: JSX.Element;
@@ -112,6 +113,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           open={props.open}
           onOpenChange={props.onOpenChange}
           title={props.title}
+          headerActions={props.headerActions}
           footer={props.footer}
           stackId={props.stackId}
           onActivate={props.onActivate}
