@@ -11891,7 +11891,7 @@ webSearch: model.web_search,
           setWorkingDirectoryPickerOpen(false);
         }}
       />
-      <Show when={computerStageOpen() && Boolean(computerStageFrameRef() || computerUserFrame()) && selectedComputerStage()}>
+      <Show when={Boolean(computerStageFrameRef() || computerUserFrame()) && selectedComputerStage()}>
         {(stage) => {
           return (
             <FlowerComputerStage
@@ -11900,6 +11900,8 @@ webSearch: model.web_search,
               onInput={computerUserFrame() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
               frameRef={computerStageFrameRef()}
               threadID={selectedThreadID()}
+              open={computerStageOpen()}
+              onRestore={() => setComputerStageOpen(true)}
               loadFrame={props.adapter.loadComputerFrame}
               copy={{
                 title: copy().settings.computerUseTitle,

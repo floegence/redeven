@@ -2,7 +2,7 @@ import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { Refresh } from '@floegence/floe-webapp-core/icons';
 
-import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerActivityItem, FlowerComputerUserInput } from './contracts/flowerSurfaceContracts';
 
@@ -36,6 +36,8 @@ export type FlowerComputerStageProps = Readonly<{
   threadID?: string;
   loadFrame?: (input: Readonly<{ thread_id: string; target_id: string; resource_ref: string; sha256: string; signal: AbortSignal }>) => Promise<Blob>;
   copy: FlowerComputerStageCopy;
+  open: boolean;
+  onRestore: () => void;
   onClose: () => void;
 }>;
 
@@ -105,7 +107,8 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   });
   return (
   <Show when={threadID() || 'computer-viewer'} keyed>
-    {(viewerThread) => <FloatingWindow open={true} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.copy.title} draggable resizable defaultSize={{ width: 620, height: 420 }} minSize={{ width: 360, height: 240 }} viewportInsets={{ top: 56, right: 12, bottom: 12, left: 12 }} class="flower-computer-stage" data-computer-viewer-thread={viewerThread}>
+    {(viewerThread) => <Show when={props.open} fallback={<SurfaceFloatingPanel class="flower-computer-viewer-minimized"><button type="button" class="flower-computer-stage-ball" aria-label={props.copy.restore} title={props.copy.restore} onClick={props.onRestore}><svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M6.5 8h5" /></svg></button></SurfaceFloatingPanel>}>
+      <FloatingWindow open={true} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.copy.title} draggable resizable defaultSize={{ width: 620, height: 420 }} minSize={{ width: 360, height: 240 }} viewportInsets={{ top: 56, right: 12, bottom: 12, left: 12 }} class="flower-computer-stage" data-computer-viewer-thread={viewerThread}>
     <div class="flower-computer-stage-frame-wrap">
       <Show when={props.onInput}>
         <textarea
@@ -170,7 +173,8 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         )}
       </Show>
     </div>
-  </FloatingWindow>}
+    </FloatingWindow>}
+    </Show>}
   </Show>
   );
 };
