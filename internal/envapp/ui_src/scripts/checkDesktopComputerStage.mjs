@@ -18,6 +18,8 @@ import { qualifyComputerStop } from './computerLifecycleQualification.mjs';
 assert.equal(process.env.REDEVEN_COMPUTER_USE_E2E, '1');
 const cdp = process.env.REDEVEN_DESKTOP_CDP;
 const webtopURL = process.env.REDEVEN_COMPUTER_WEBTOP_URL;
+const scenario = process.env.REDEVEN_COMPUTER_UI_SCENARIO ?? 'complete';
+assert(['complete', 'lifecycle'].includes(scenario), 'unknown UI qualification scenario');
 assert(Boolean(cdp) !== Boolean(webtopURL), 'identify exactly one task-owned Desktop or Linux Webtop');
 if (webtopURL) assert.equal(process.platform, 'linux', 'Webtop qualification must execute inside Linux');
 const output = process.env.REDEVEN_COMPUTER_EVIDENCE_DIR;
@@ -65,9 +67,9 @@ const privateASCIIInput = 'qualification-private-input-'.repeat(3);
 const privateIMEInput = '\u79c1\u5bc6\u8f93\u5165';
 const privateFixtureInput = privateASCIIInput + privateIMEInput;
 let takeoverEvidence;
-let lifecycleEvidence;
+const lifecycleEvidence = [];
 const pendingNavigations = new Set();
-const lifecycleFixture = { navigationStarted: false, recovered: new Set(), releaseNavigation: () => {
+const lifecycleFixture = { navigationStarted: 0, recovered: new Set(), releaseNavigation: () => {
   for (const response of pendingNavigations) response.end('<!doctype html><title>Released</title><h1>Released navigation</h1>');
   pendingNavigations.clear();
 } };
@@ -78,7 +80,7 @@ const liveMarker = '<style>@keyframes live-marker{from{background:#dc3020}to{bac
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
   if (url.pathname === '/slow-navigation') {
-    lifecycleFixture.navigationStarted = true;
+    lifecycleFixture.navigationStarted++;
     response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
     response.flushHeaders();
     pendingNavigations.add(response);
@@ -253,6 +255,13 @@ try {
   }
   await page.locator('.flower-new-chat-button').click();
   await page.evaluate(observeDesktopComputerFrames);
+  if (scenario === 'lifecycle') {
+    await qualifyComputerStop({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress, results: lifecycleEvidence });
+    assert(protocol.some((entry) => entry.imageToolOutput), 'follow-up did not return a real tool image to the provider');
+    assert.deepEqual(protocolErrors, [], 'provider protocol assertions failed');
+    await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'computer-stop-and-follow-up-ui', lifecycleEvidence, model, protocol }, null, 2));
+    console.log('Focused Stop and follow-up UI qualification passed; this does not cover other product scenarios.');
+  } else {
   for (const [index, prompt] of [
     `Open ${fixtureURL} in a browser, click Complete step once, and tell me the completed number shown on the page. Let me watch what you are doing.`,
     'On the current page, use computer.screenshot and computer.click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
@@ -509,7 +518,7 @@ try {
   await page.locator('[data-computer-control-action="return"]').click();
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'model continuation after handback');
   takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, inputVerified: loginInputVerified, nativeIME: true, userPixels, privateInputExcluded: true, continued: true };
-  lifecycleEvidence = await qualifyComputerStop({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress });
+  await qualifyComputerStop({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress, results: lifecycleEvidence });
   assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = [];
@@ -540,6 +549,7 @@ try {
   }
   await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, lifecycleEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} requested UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
+  }
 } catch (error) {
   liveEvidence ??= await page.evaluate(() => window.__stopComputerLiveEvidence?.()).catch(() => undefined);
   if (liveEvidence) await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
@@ -547,7 +557,7 @@ try {
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
   const failedThreadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => null);
   const current = failedThreadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${failedThreadID}`).catch(() => null) : null;
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, lifecycleEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
   if (nativeProcess) { nativeProcess.kill('SIGKILL'); await nativeExit; }

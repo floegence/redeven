@@ -128,6 +128,7 @@ docker exec "$CID" bash -ceu '
 docker exec "$CID" "/opt/node-v${NODE_VERSION}-linux-${ARCH}/bin/node" \
   /source/scripts/check_computer_host_safety.mjs > "$REPORT/browser-safety.log" 2>&1
 docker exec -e DISPLAY=:1 -e REDEVEN_COMPUTER_USE_E2E=1 -e REDEVEN_COMPUTER_X11_E2E=1 \
+  -e "REDEVEN_COMPUTER_UI_SCENARIO=${REDEVEN_COMPUTER_UI_SCENARIO:-complete}" \
   -e REDEVEN_COMPUTER_WEBTOP_URL=https://127.0.0.1:23998 \
   -e REDEVEN_COMPUTER_EVIDENCE_DIR=/qualification/report/computer \
   -e REDEVEN_COMPUTER_CONFIG_ROOT=/config/qualification-state/local-environment \
