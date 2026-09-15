@@ -13,7 +13,10 @@ const outputDir = path.resolve(scriptDir, '../../ui/dist/env');
 const manifestPath = path.join(outputDir, '.vite/manifest.json');
 const chunkModulesPath = path.join(outputDir, '.vite/chunk-modules.json');
 const budgets = {
-  javascript: 601 * 1024,
+  // Floe Webapp 0.52.7 adds 319 gzip bytes to the existing initial graph.
+  // Keep a small bounded margin for that published dependency baseline while
+  // retaining the forbidden-module and total-size guards below.
+  javascript: 602 * 1024,
   css: 120 * 1024,
   total: 720 * 1024,
 };
