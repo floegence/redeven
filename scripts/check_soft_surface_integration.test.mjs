@@ -36,3 +36,13 @@ test('debug settings use the shared Switch with native disabled semantics', () =
   assert.match(source, /import \{ Switch \} from '@floegence\/floe-webapp-core\/ui'/);
   assert.doesNotMatch(source, /function DebugConsoleSwitch|role="switch"/);
 });
+
+test('high-frequency product actions keep stable geometry under the refined material', () => {
+  for (const file of [
+    'internal/envapp/ui_src/src/ui/downloads/DownloadTaskPanel.tsx',
+    'internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx',
+    'internal/envapp/ui_src/src/ui/plugins/pluginPresentation.ts',
+  ]) {
+    assert.doesNotMatch(read(file), /active:scale/, file);
+  }
+});
