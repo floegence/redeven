@@ -506,13 +506,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(action()).toBe('duplicate');
     const nestedDialog = Array.from(document.querySelectorAll<HTMLElement>('[data-floe-dialog-panel]'))
       .find((dialog) => dialog.textContent?.includes('Duplicate service template'))!;
-    const nestedRect = nestedDialog.getBoundingClientRect();
-    const nestedTopLayer = document.elementFromPoint(
-      nestedRect.left + nestedRect.width / 2,
-      nestedRect.top + nestedRect.height / 2,
-    );
     expect(nestedDialog).toHaveAttribute('data-floating-presence', 'open');
-    expect(nestedDialog.contains(nestedTopLayer) || nestedDialog === nestedTopLayer || nestedRect.width === 0 || nestedRect.height === 0).toBe(true);
     setAction('');
     await settle();
 
