@@ -134,22 +134,34 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				w.Header().Set("Content-Type", "text/event-stream")
 				flusher := w.(http.Flusher)
 				if definitions, _ := body["tools"].([]any); len(definitions) == 0 {
-					writeAskUserIntegrationTextResponse(w, flusher, "title", "Sign-in")
+					writeDeepSeekIntegrationNaturalResponse(w, flusher, "title", "Sign-in")
 					return
 				}
-				if requests.Add(1) == 1 {
+				requestNumber := requests.Add(1)
+				if requestNumber == 1 {
 					item := map[string]any{"type": "function_call", "id": "fc_nav", "call_id": "nav-login", "name": "browser_navigate", "arguments": `{"url":"https://example.test/"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
-					writeAskUserIntegrationCompletedResponse(w, flusher, "pause")
+					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "pause", "status": "completed", "output": []any{item}}})
 					return
 				}
-				writeAskUserIntegrationTextResponse(w, flusher, "continued", "Control returned.")
+				if requestNumber == 2 {
+					item := map[string]any{"type": "function_call", "id": "fc_resumed", "call_id": "resumed-observation", "name": "computer_screenshot", "arguments": `{}`}
+					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
+					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
+					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "resumed-observation", "status": "completed", "output": []any{item}}})
+					return
+				}
+				writeDeepSeekIntegrationNaturalResponse(w, flusher, "continued", "Control returned.")
 			}))
 			defer provider.Close()
 			body, attachment := computerFrameFixture(t)
 			executor := &takeoverObservationExecutor{body: body, attachment: attachment}
 			state := t.TempDir()
+			model, ok := config.AIModelCatalogEntry("deepseek", "deepseek-v4-flash-vision-exp")
+			if !ok {
+				t.Fatal("vision model missing from production catalog")
+			}
 			var svc *Service
 			open := func() {
 				registry := NewTargetRegistry()
@@ -160,7 +172,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				t.Cleanup(func() { _ = host.Close() })
 				var err error
 				svc, err = NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
-					Config:                &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+					Config:                &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash-vision-exp", Providers: []config.AIProvider{{ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: provider.URL, Models: []config.AIProviderModel{model}}}},
 					ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil }, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second})
 				if err != nil {
 					t.Fatal(err)
@@ -169,14 +181,14 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 			open()
 			t.Cleanup(func() { _ = svc.Close() })
 			meta := testSendTurnMeta()
-			thread, err := svc.CreateThread(t.Context(), meta, "Takeover", "openai/gpt-5-mini", "", "")
+			thread, err := svc.CreateThread(t.Context(), meta, "Takeover", "deepseek/deepseek-v4-flash-vision-exp", "", "")
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "start", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Open the page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
+			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "start", Model: "deepseek/deepseek-v4-flash-vision-exp", Input: RunInput{Text: "Open the page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
 				t.Fatal(err)
 			}
 			waiting := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.WaitingPrompt != nil })
@@ -244,7 +256,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 			if _, err := svc.InputComputerControl(t.Context(), meta, userInput); err == nil {
 				t.Fatal("resolved interaction retained user control")
 			}
-			if requests.Load() != 2 || executor.effects.Load() != 1 || executor.observations.Load() != 2 {
+			if requests.Load() != 3 || executor.effects.Load() != 1 || executor.observations.Load() != 3 {
 				t.Fatalf("requests=%d effects=%d observations=%d", requests.Load(), executor.effects.Load(), executor.observations.Load())
 			}
 		})

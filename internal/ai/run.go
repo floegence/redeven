@@ -251,6 +251,9 @@ func (r *run) observeFloretCanonicalIdentity(runID, threadID, turnID string) err
 		return nil
 	}
 	r.floretEventIdentity = floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: runID, threadID: threadID, turnID: turnID}
+	if computer, ok := r.targetToolExecutor.(*ComputerUseRuntime); ok {
+		computer.continueComputerControl(threadID, turnID, runID)
+	}
 	if r.threadRuntime == nil {
 		r.id, r.turnID, r.messageID = runID, turnID, turnID
 		r.settlementRunID, r.settlementThreadID, r.settlementTurnID = runID, threadID, turnID

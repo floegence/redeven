@@ -43,6 +43,12 @@ maps product data and preserves admission, cancellation, and event semantics;
 it does not independently estimate the DeepSeek intermediate DTO. Large images,
 tool results, and replay must retain their exact transmitted bytes.
 
+Built Desktop qualification listens read-only to the existing preload workspace
+stream and hashes decoded Stage Blob bytes. It requires matching thread, target
+and image hash across multiple live events, not just tool keyframes. Observation
+stops before private takeover; no image bytes or private input enter this report.
+A missing native or browser live-frame match fails its explicit scope.
+
 # Evidence
 
 - `redeven:internal/ai/computer_live_frames.go` - bounded observer-owned samples.

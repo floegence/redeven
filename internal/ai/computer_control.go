@@ -13,6 +13,7 @@ type computerTargetControl struct {
 	gate     chan struct{}
 	mu       sync.Mutex
 	threadID string
+	turnID   string
 	runID    string
 	user     bool
 }
@@ -65,12 +66,30 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 		return nil, nil, computerTargetFailure(call, "TAKEOVER_REQUIRED")
 	}
 	if (!call.liveFrame || call.controlReturn || call.userInput) && call.ThreadID != "" {
-		control.threadID, control.runID = call.ThreadID, call.RunID
+		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
 		if call.controlReturn || call.userInput {
 			control.user = true
 		}
 	}
 	return control, unlock, nil
+}
+
+// Floret starts a fresh run when canonical input resumes within the same turn.
+// Bind existing resource leases at that canonical boundary, even if the resumed
+// model returns only text. This neither claims a target nor returns user control.
+func (r *ComputerUseRuntime) continueComputerControl(threadID, turnID, runID string) {
+	if threadID == "" || turnID == "" || runID == "" {
+		return
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, control := range r.controls {
+		control.mu.Lock()
+		if control.threadID == threadID && control.turnID == turnID && !control.user {
+			control.runID = runID
+		}
+		control.mu.Unlock()
+	}
 }
 
 func (r *ComputerUseRuntime) releaseComputerControl(threadID, runID string) {
@@ -83,7 +102,7 @@ func (r *ComputerUseRuntime) releaseComputerControl(threadID, runID string) {
 	for _, control := range controls {
 		control.mu.Lock()
 		if control.threadID == threadID && control.runID == runID {
-			control.threadID, control.runID, control.user = "", "", false
+			control.threadID, control.turnID, control.runID, control.user = "", "", "", false
 		}
 		control.mu.Unlock()
 	}
@@ -112,7 +131,7 @@ func (r *ComputerUseRuntime) releasePreviousComputerTarget(call TargetToolCall) 
 	for _, control := range controls {
 		control.mu.Lock()
 		if control.threadID == call.ThreadID && control.runID == call.RunID && !control.user {
-			control.threadID, control.runID = "", ""
+			control.threadID, control.turnID, control.runID = "", "", ""
 		}
 		control.mu.Unlock()
 	}

@@ -92,6 +92,49 @@ func TestComputerControlSerializesAndCancelsBeforeDispatch(t *testing.T) {
 	}
 }
 
+func TestComputerControlContinuationKeepsTurnAndUserBoundaries(t *testing.T) {
+	body, attachment := computerFrameFixture(t)
+	executor := &takeoverObservationExecutor{body: body, attachment: attachment}
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+	t.Cleanup(func() { _ = runtime.Close() })
+	owner := TargetToolCall{ThreadID: "owner", TurnID: "turn", RunID: "waiting", TargetID: "target", ToolName: "browser.navigate"}
+	if _, err := runtime.ExecuteTargetTool(t.Context(), owner); err != nil {
+		t.Fatal(err)
+	}
+	resumed := owner
+	resumed.RunID, resumed.ToolName = "resumed", "computer.screenshot"
+	runtime.continueComputerControl(owner.ThreadID, owner.TurnID, resumed.RunID)
+	if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err == nil {
+		t.Fatal("continuation returned user control without handback")
+	}
+	executor.safe.Store(true)
+	if err := runtime.ReobserveComputerTarget(t.Context(), owner); err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range [][3]string{{"other", "turn", "resumed"}, {"owner", "other-turn", "resumed"}, {"owner", "", "resumed"}} {
+		runtime.continueComputerControl(identity[0], identity[1], identity[2])
+		if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err == nil {
+			t.Fatal("unrelated canonical identity advanced the target lease")
+		}
+	}
+	runtime.continueComputerControl(owner.ThreadID, owner.TurnID, resumed.RunID)
+	if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err != nil {
+		t.Fatal(err)
+	}
+	runtime.releaseComputerControl(owner.ThreadID, owner.RunID)
+	other := resumed
+	other.ThreadID = "other"
+	if _, err := runtime.ExecuteTargetTool(t.Context(), other); err == nil {
+		t.Fatal("old terminal notification released the resumed target")
+	}
+	// A further text-only continuation must also retire its resource on terminal.
+	runtime.continueComputerControl(owner.ThreadID, owner.TurnID, "text-only")
+	runtime.releaseComputerControl(owner.ThreadID, "text-only")
+	if _, err := runtime.ExecuteTargetTool(t.Context(), other); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestComputerLiveCaptureCannotClaimOrReuseReleasedTarget(t *testing.T) {
 	body, attachment := computerFrameFixture(t)
 	executor := &takeoverObservationExecutor{body: body, attachment: attachment}
