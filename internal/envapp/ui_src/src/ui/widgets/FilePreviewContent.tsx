@@ -1,17 +1,15 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Check, Copy, Download, Loader2, Pencil, Save, X } from '@floegence/floe-webapp-core/icons';
-import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import type { FilePreviewDescriptor, FilePreviewSurface } from '../utils/filePreview';
-import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
 import { classifyFilePreviewError } from './filePreviewErrorUtils';
 import { useI18n } from '../i18n';
+import { FilePreviewActions } from './FilePreviewActions';
 
 export interface FilePreviewContentProps {
   /** Surface ownership for the preview shell. Window is reserved for desktop floating hosts. */
@@ -48,65 +46,12 @@ export interface FilePreviewContentProps {
   onRetry?: () => void;
 }
 
-const PREVIEW_HEADER_ICON_BUTTON_CLASS = [
-  'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent',
-  'text-muted-foreground transition-colors duration-150',
-  'hover:border-border/70 hover:bg-accent hover:text-foreground',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-  'disabled:cursor-not-allowed disabled:opacity-40',
-].join(' ');
-
 export function FilePreviewContent(props: FilePreviewContentProps) {
   const i18n = useI18n();
   const resolvedError = () => props.error;
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const showHeader = () => props.showHeader !== false;
-  const showEditorActions = () => (props.descriptor.mode === 'text' || props.descriptor.mode === 'markdown') && Boolean(props.canEdit);
-  const [pathCopied, setPathCopied] = createSignal(false);
-  let copyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let previewContentEl: HTMLDivElement | undefined;
-
-  const clearCopiedState = () => {
-    if (copyResetTimer !== undefined) {
-      globalThis.clearTimeout(copyResetTimer);
-      copyResetTimer = undefined;
-    }
-    setPathCopied(false);
-  };
-
-  createEffect(() => {
-    resolvedPath();
-    clearCopiedState();
-  });
-
-  onCleanup(() => {
-    clearCopiedState();
-  });
-
-  const handleCopyPath = async () => {
-    if (!props.onCopyPath || !resolvedPath()) return;
-    let copied: boolean | void = false;
-    try {
-      copied = await props.onCopyPath();
-    } catch {
-      return;
-    }
-    if (copied === false) return;
-    setPathCopied(true);
-    if (copyResetTimer !== undefined) {
-      globalThis.clearTimeout(copyResetTimer);
-    }
-    copyResetTimer = globalThis.setTimeout(() => {
-      copyResetTimer = undefined;
-      setPathCopied(false);
-    }, 1600);
-  };
-
-  const handleAskFlower = () => {
-    if (!props.onAskFlower || !props.item || props.loading) return;
-    const selectionText = String(props.selectedText ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
-    void props.onAskFlower(selectionText);
-  };
 
   return (
     <div class={cn('redeven-file-preview', props.surface === 'window' && 'redeven-file-preview-surface-window', 'flex h-full min-h-0 flex-col overflow-hidden')}>
@@ -120,88 +65,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
             >
               {resolvedPath() || i18n.t('filePreview.unknownPath')}
             </span>
-            <Show when={props.onCopyPath}>
-              <button
-                type="button"
-                class={`${PREVIEW_HEADER_ICON_BUTTON_CLASS} ${
-                  pathCopied() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                }`}
-                disabled={!resolvedPath()}
-                aria-label={pathCopied() ? i18n.t('filePreview.pathCopied') : i18n.t('filePreview.copyPath')}
-                title={pathCopied() ? i18n.t('filePreview.pathCopied') : i18n.t('filePreview.copyPath')}
-                onClick={() => {
-                  void handleCopyPath();
-                }}
-              >
-                <Show when={pathCopied()} fallback={<Copy class="size-3.5" />}>
-                  <Check class="size-3.5" />
-                </Show>
-              </button>
-            </Show>
           </div>
-
-          <div class="flex shrink-0 items-center justify-end gap-1">
-            <Show when={showEditorActions() && !props.editing}>
-              <button
-                type="button"
-                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label={i18n.t('filePreview.editFile')}
-                title={i18n.t('filePreview.editFile')}
-                onClick={() => props.onStartEdit?.()}
-              >
-                <Pencil class="size-3.5" />
-              </button>
-            </Show>
-
-            <Show when={showEditorActions() && props.editing}>
-              <button
-                type="button"
-                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label={i18n.t('filePreview.discardChanges')}
-                title={i18n.t('filePreview.discardChanges')}
-                disabled={props.saving}
-                onClick={() => props.onDiscard?.()}
-              >
-                <X class="size-3.5" />
-              </button>
-              <button
-                type="button"
-                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label={i18n.t('filePreview.saveFile')}
-                title={i18n.t('filePreview.saveFile')}
-                disabled={!props.dirty || props.saving}
-                onClick={() => props.onSave?.()}
-              >
-                <Show when={props.saving} fallback={<Save class="size-3.5" />}>
-                  <Loader2 class="size-3.5 animate-spin" />
-                </Show>
-              </button>
-            </Show>
-
-            <Show when={props.onAskFlower}>
-              <button
-                type="button"
-                class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label={i18n.t('filePreview.askFlower')}
-                title={i18n.t('filePreview.askFlower')}
-                disabled={!props.item || props.loading}
-                onClick={handleAskFlower}
-              >
-                <FlowerNavigationIcon class="size-5" />
-              </button>
-            </Show>
-
-            <button
-              type="button"
-              class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-              aria-label={i18n.t('filePreview.downloadFile')}
-              title={i18n.t('filePreview.downloadFile')}
-              disabled={!props.item || props.loading}
-              onClick={() => props.onDownload?.()}
-            >
-              <Download class="size-3.5" />
-            </button>
-          </div>
+          <FilePreviewActions {...props} contentElement={previewContentEl} />
         </div>
       </Show>
 

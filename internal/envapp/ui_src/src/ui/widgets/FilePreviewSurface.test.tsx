@@ -41,7 +41,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     FloatingWindow: (props: any) => (
       props.open ? (
         <div data-testid="floating-window" class={props.class}>
-          <div>{props.title}</div>
+          <div data-testid="floating-titlebar">{props.title}{props.headerActions}</div>
           <div>{props.children}</div>
           <div>{props.footer}</div>
         </div>
@@ -58,14 +58,11 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   };
 });
 
-vi.mock('./FilePreviewContent', () => ({
-  FilePreviewContent: (props: any) => (
-    <div ref={(element) => props.contentRef?.(element)} data-surface={props.surface ?? 'main'}>
-      <div>{props.item?.path}</div>
+vi.mock('../file-preview/rendererRegistry', () => ({
+  renderRedevenFilePreviewBody: (props: any) => (
+    <div data-surface={props.surface ?? 'main'}>
       <pre>{props.text}</pre>
       <div>{props.message}</div>
-      <button type="button" aria-label="Ask Flower" onClick={() => props.onAskFlower?.(props.selectedText || 'selected from dom')} />
-      <button type="button" aria-label="Download file" onClick={() => props.onDownload?.()} />
     </div>
   ),
 }));
@@ -77,6 +74,44 @@ afterEach(() => {
 });
 
 describe('FilePreviewSurface', () => {
+  it('places one set of file actions in the desktop titlebar and removes the path row', async () => {
+    const onCopyPath = vi.fn(async () => true);
+    const onStartEdit = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <FilePreviewSurface
+        open
+        onOpenChange={() => undefined}
+        item={{ id: '/workspace/demo.md', name: 'demo.md', path: '/workspace/demo.md', type: 'file' }}
+        descriptor={{ mode: 'markdown' }}
+        text="Document content"
+        canEdit
+        onCopyPath={onCopyPath}
+        onStartEdit={onStartEdit}
+        onAskFlower={() => undefined}
+        onDownload={() => undefined}
+      />
+    ), host);
+    try {
+      const titlebar = host.querySelector('[data-testid="floating-titlebar"]')!;
+      expect(Array.from(titlebar.querySelectorAll('button')).map((button) => button.getAttribute('aria-label')))
+        .toEqual(['Copy path', 'Edit file', 'Ask Flower', 'Download file']);
+      expect(host.querySelector('.redeven-file-preview-toolbar')).toBeNull();
+      expect(host.textContent).not.toContain('/workspace/demo.md');
+      expect(host.querySelectorAll('button[aria-label="Download file"]')).toHaveLength(1);
+      (titlebar.querySelector('button[aria-label="Copy path"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+      expect(onCopyPath).toHaveBeenCalledOnce();
+      expect(titlebar.querySelector('button[aria-label="Path copied"]')).toBeTruthy();
+      (titlebar.querySelector('button[aria-label="Edit file"]') as HTMLButtonElement).click();
+      expect(onStartEdit).toHaveBeenCalledOnce();
+      expect(host.textContent).toContain('Document content');
+    } finally {
+      dispose();
+    }
+  });
+
   it('renders a floating window on desktop and prioritizes the editor selection for Ask Flower', () => {
     const onAskFlower = vi.fn();
     const onDownload = vi.fn();

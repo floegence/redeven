@@ -12,6 +12,7 @@ function read(relPath: string): string {
 describe('file preview wiring', () => {
   it('keeps shared preview content and switches between dialog and floating window by layout', () => {
     const contentSrc = read('./FilePreviewContent.tsx');
+    const actionsSrc = read('./FilePreviewActions.tsx');
     const panelSrc = read('./FilePreviewPanel.tsx');
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
     const pdfPaneSrc = read('./PdfPreviewPane.tsx');
@@ -83,15 +84,15 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain("profile: 'preview_basic'");
     expect(textPaneSrc).toContain("profile: 'editor_full'");
     expect(textPaneSrc).toContain('runtimeOptions={editorRuntimeOptions()}');
-    expect(contentSrc).toContain("i18n.t('filePreview.copyPath')");
-    expect(contentSrc).toContain("i18n.t('filePreview.editFile')");
-    expect(contentSrc).toContain("i18n.t('filePreview.saveFile')");
-    expect(contentSrc).toContain("i18n.t('filePreview.discardChanges')");
-    expect(contentSrc).toContain("i18n.t('filePreview.askFlower')");
-    expect(contentSrc).toContain("import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';");
-    expect(contentSrc).toContain('<FlowerNavigationIcon class="size-5" />');
-    expect(contentSrc).not.toContain('Sparkles');
-    expect(contentSrc).toContain("i18n.t('filePreview.downloadFile')");
+    expect(actionsSrc).toContain("i18n.t('filePreview.copyPath')");
+    expect(actionsSrc).toContain("i18n.t('filePreview.editFile')");
+    expect(actionsSrc).toContain("i18n.t('filePreview.saveFile')");
+    expect(actionsSrc).toContain("i18n.t('filePreview.discardChanges')");
+    expect(actionsSrc).toContain("i18n.t('filePreview.askFlower')");
+    expect(actionsSrc).toContain("import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';");
+    expect(actionsSrc).toContain('<FlowerNavigationIcon class="size-5" />');
+    expect(actionsSrc).not.toContain('Sparkles');
+    expect(actionsSrc).toContain("i18n.t('filePreview.downloadFile')");
     expect(contentSrc).toContain('title={resolvedPath()');
     expect(contentSrc).toContain('min-w-0 flex-1 truncate');
     expect(rendererRegistrySrc).toContain('truncated={props.truncated}');

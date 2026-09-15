@@ -12,6 +12,8 @@ import { useI18n } from '../i18n';
 
 export interface FilePreviewPanelProps {
   surface?: FilePreviewSurface;
+  showHeader?: boolean;
+  contentRef?: (element: HTMLDivElement) => void;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;
@@ -70,6 +72,8 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
         <div class="min-h-0 flex-1 overflow-hidden">
           <FilePreviewContent
             surface={props.surface}
+            showHeader={props.showHeader}
+            contentRef={props.contentRef}
             item={props.item}
             descriptor={props.descriptor}
             text={props.text}
