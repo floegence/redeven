@@ -97,7 +97,14 @@ if CommandLine.arguments.contains("--capabilities") {
             case "computer.key": events = try NativeInput.key(text("key"))
             case "computer.scroll":
                 let naturalScrolling = UserDefaults.standard.object(forKey: "com.apple.swipescrolldirection") as? Bool ?? true
-                events = try NativeInput.scroll(x: number("delta_x", default: 0), y: number("delta_y"), naturalScrolling: naturalScrolling)
+                // AppKit routes wheel events by the current pointer location.
+                // Establish it explicitly before synthetic scrolling; relying
+                // on the previous click is not reliable across NSScrollView
+                // and macOS releases.
+                let wheel = try NativeInput.scroll(x: number("delta_x", default: 0), y: number("delta_y"), naturalScrolling: naturalScrolling)
+                if let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                                      mouseCursorPosition: CGEvent(source: nil)?.location ?? .zero,
+                                      mouseButton: .left) { events = [move] + wheel } else { events = wheel }
             default: throw HostFailure(code: "TARGET_CAPABILITY_UNAVAILABLE", message: "The desktop target does not support this tool.")
             }
             guard CGPreflightScreenCaptureAccess() else {
