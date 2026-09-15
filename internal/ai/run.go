@@ -3186,6 +3186,19 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if !targetAllowedByPolicy(policy, targetID) {
 		return nil, &targetToolPolicyError{code: "target_not_allowed", tool: toolName, target: targetID}
 	}
+	// Browser commands require a browser adapter. A desktop target may be used
+	// to launch an application during an explicit handoff, but it must never be
+	// used to execute browser navigation or history commands. This keeps the
+	// browser/desktop boundary deterministic instead of silently degrading to
+	// screenshot and keyboard automation.
+	if strings.HasPrefix(strings.TrimSpace(toolName), "browser.") && target.Kind != "browser.managed" && target.Kind != "browser.connected" {
+		browserTarget, resolveErr := r.targetResolver.ResolveTarget(ctx, "browser.managed")
+		if resolveErr != nil {
+			return nil, &targetToolPolicyError{code: "target_connection_required", tool: toolName, target: targetID, targetKind: "browser.managed", targetState: "connection_required", repairAction: "start_managed_browser"}
+		}
+		target = browserTarget
+		targetID = strings.TrimSpace(browserTarget.ID)
+	}
 	gate := r.interactionSafetyGate
 	if gate == nil {
 		gate = defaultInteractionSafetyGate{}
