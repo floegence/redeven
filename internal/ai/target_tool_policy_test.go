@@ -53,6 +53,7 @@ func TestComputerUseUsesCurrentTargetWhenModelOmitsTarget(t *testing.T) {
 		targetToolExecutor: executor,
 		targetResolver:     staticTargetResolver{target: TargetDescriptor{ID: "browser-main", DisplayName: "Managed Browser", Ready: true}},
 	}
+	bindTargetTestRun(t, run)
 	result, err := run.execTargetTool(context.Background(), "call-1", "computer.screenshot", map[string]any{})
 	if err != nil {
 		t.Fatal(err)
@@ -133,5 +134,27 @@ func TestTargetReadinessErrorMetadata(t *testing.T) {
 	}
 	if got := targetRepairAction(permission); got != "grant_target_permission" {
 		t.Fatalf("permission repair = %q", got)
+	}
+}
+
+func bindTargetTestRun(t *testing.T, r *run) {
+	t.Helper()
+	if r.threadID == "" {
+		r.threadID = "target-thread"
+	}
+	if err := r.observeFloretCanonicalIdentity("canonical-run-"+r.threadID, r.threadID, "canonical-turn-"+r.threadID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTargetToolRequiresCanonicalIdentityBeforeResolution(t *testing.T) {
+	executor := &recordingTargetExecutor{}
+	r := &run{id: "legacy-run", threadID: "legacy-thread", turnID: "legacy-turn", targetToolExecutor: executor,
+		targetResolver: staticTargetResolver{target: TargetDescriptor{ID: "target", Ready: true}}}
+	if _, err := r.execTargetTool(t.Context(), "call", "computer.screenshot", nil); err == nil {
+		t.Fatal("legacy fields authorized a target action")
+	}
+	if len(executor.calls) != 0 {
+		t.Fatal("missing canonical identity reached target")
 	}
 }

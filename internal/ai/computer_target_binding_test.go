@@ -50,6 +50,8 @@ func TestComputerTargetSwitchPersistsOnlyForExecutingThread(t *testing.T) {
 	runtime, executor, _, _ := computerBindingFixture(t)
 	first := &run{threadID: "thread-first", turnID: "turn-first", id: "run-first", targetResolver: runtime, targetToolExecutor: runtime}
 	second := &run{threadID: "thread-second", targetResolver: runtime, targetToolExecutor: runtime}
+	bindTargetTestRun(t, first)
+	bindTargetTestRun(t, second)
 	for _, step := range []struct {
 		run         *run
 		alias, want string
@@ -63,7 +65,7 @@ func TestComputerTargetSwitchPersistsOnlyForExecutingThread(t *testing.T) {
 			t.Fatal(err)
 		}
 		call := executor.calls[len(executor.calls)-1]
-		if call.ThreadID != step.run.threadID || call.TurnID != step.run.turnID || call.RunID != step.run.id || call.ToolCallID != "call" {
+		if call.ThreadID != step.run.threadID || call.TurnID != "canonical-turn-"+step.run.threadID || call.RunID != "canonical-run-"+step.run.threadID || call.ToolCallID != "call" {
 			t.Fatalf("lost call provenance: %+v", call)
 		}
 		if got := executor.calls[len(executor.calls)-1].TargetID; got != step.want {
@@ -75,6 +77,7 @@ func TestComputerTargetSwitchPersistsOnlyForExecutingThread(t *testing.T) {
 func TestComputerTargetBindingRestoresWithoutRestoringReadiness(t *testing.T) {
 	runtime, _, store, path := computerBindingFixture(t)
 	run := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
+	bindTargetTestRun(t, run)
 	if _, err := run.execTargetTool(t.Context(), "select", "computer.screenshot", map[string]any{"target": "desktop.screen"}); err != nil {
 		t.Fatal(err)
 	}
@@ -109,6 +112,7 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			runtime, executor, store, _ := computerBindingFixture(t)
 			r := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
+			bindTargetTestRun(t, r)
 			if _, err := r.execTargetTool(t.Context(), "initial", "computer.screenshot", nil); err != nil {
 				t.Fatal(err)
 			}

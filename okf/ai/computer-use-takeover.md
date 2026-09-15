@@ -39,6 +39,11 @@ replay and is not persisted as another model tool result.
 # Target control
 
 Runtime serializes each target's actions, observations and control commands.
+Target tool calls resolve thread, turn, and run identity exclusively from the
+Floret canonical invocation, matching the terminal view that releases control.
+Uninitialized legacy run fields cannot authorize an action. Failure diagnostics
+record those same canonical identities.
+
 The current resource lease identifies its thread and run. Another thread cannot
 capture or manipulate a leased target. A safe target switch releases the
 previous target; canonical terminal views release only the matching run's lease.

@@ -31,6 +31,7 @@ assert(page, 'CDP does not belong to this checkout built Desktop');
 await mkdir(output, { recursive: true });
 let completed = 0;
 let loginCompleted = false;
+let loginInputVerified = false;
 const privateFixtureInput = "qualification-private-input";
 let takeoverEvidence;
 const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
@@ -39,12 +40,21 @@ const server = http.createServer((request, response) => {
   if (url.pathname === '/signin') {
     response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
     response.end(`<!doctype html><title>Sign-in fixture</title><style>body{background:#d6e5f5;font:24px system-ui;padding:60px}input,button{display:block;font:24px system-ui;margin:20px;padding:12px}</style>
-      <h1>Sign in to the fixture</h1><form onsubmit="event.preventDefault();fetch('/signin-complete',{method:'POST'}).then(()=>location.href='/signed-in')">
-      <input aria-label="User" autofocus><input aria-label="Password" type="password"><button>Continue</button></form>`);
+      <h1>Sign in to the fixture</h1><form onsubmit="event.preventDefault();fetch('/signin-complete',{method:'POST',body:new URLSearchParams(new FormData(this))}).then(r=>{if(r.ok)location.href='/signed-in'})">
+      <input name="user" aria-label="User" autofocus><input name="password" aria-label="Password" type="password"><button>Continue</button></form>`);
     return;
   }
   if (url.pathname === '/signin-complete' && request.method === 'POST') {
-    loginCompleted = true; response.writeHead(204); response.end(); return;
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => { body += chunk; if (body.length > 1024) request.destroy(); });
+    request.on('end', () => {
+      const fields = new URLSearchParams(body);
+      loginInputVerified = fields.get('user') === 'u' && fields.get('password') === privateFixtureInput;
+      loginCompleted = loginInputVerified;
+      response.writeHead(loginInputVerified ? 204 : 400); response.end();
+    });
+    return;
   }
   if (url.pathname === '/signed-in') {
     response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
@@ -233,14 +243,16 @@ try {
     for (const [index, prompt] of [
       'In the macOS Flower Native Fixture application, inspect the desktop and click Complete native step exactly twice. Take a fresh screenshot to check that Clicks is 2. Use computer tools for the native desktop, not the managed browser or terminal.',
       'Continue in the macOS Flower Native Fixture application. Double click the blue area. Enter Flower in the text field and press Enter. Click inside the Scroll area and scroll down. Wait for the app to settle, then take a fresh screenshot to verify all four indicators are complete. Use only computer tools on the native desktop.',
+      'In the same macOS Flower Native Fixture application, click Complete native step exactly two more times. Take a fresh screenshot after each click and confirm Clicks is 4, with the other indicators still complete. Use only computer tools on the native desktop.',
     ].entries()) {
+      const expectedClicks = index === 2 ? 4 : 2;
       const composer = page.locator('.flower-surface textarea').first();
       await composer.fill(prompt); await composer.press('Enter');
       await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
       console.log(`Native application turn ${index + 1} submitted through Flower Composer.`);
       await waitForProgress(async () => {
         const state = JSON.parse(await readFile(resultFile, 'utf8'));
-        return index === 0 ? state.clicks === 2 : state.complete && state.scrollOffset > 0 && state.wheelEvents > 0;
+        return state.clicks === expectedClicks && (index === 0 || state.complete && state.scrollOffset > 0 && state.wheelEvents > 0);
       }, 'native fixture effects', 180_000, true);
       await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'native turn completion');
       await waitForProgress(stageHasImage, 'native Stage image');
@@ -251,8 +263,8 @@ try {
       });
       assert(frame.blob && frame.visibleText === '' && frame.role === 'dialog');
       const state = JSON.parse(await readFile(resultFile, 'utf8'));
-      if (index === 0) assert.equal(state.clicks, 2, 'native action count changed after reaching the intermediate success state');
-      else assert(state.complete && state.scrollOffset > 0 && state.wheelEvents > 0, 'native final state regressed before turn completion');
+      assert.equal(state.clicks, expectedClicks, 'native action count changed after reaching the intermediate success state');
+      if (index > 0) assert(state.complete && state.scrollOffset > 0 && state.wheelEvents > 0, 'native final state regressed before turn completion');
       assert.equal(frame.target, 'desktop-main', 'Stage is showing another target');
       assert.equal(frame.width, state.geometry.displayWidth);
       assert.equal(frame.height, state.geometry.displayHeight);
@@ -268,6 +280,7 @@ try {
     await rm(nativeDirectory, { recursive: true, force: true });
     nativeDirectory = undefined;
   }
+  console.log('Browser and native task effects verified; checking Stage reopen and settings.');
   await page.locator('.flower-computer-stage-close').click();
   assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'closing Stage must hide the viewer');
   await page.locator('.flower-activity-inline-button[aria-expanded="false"]').filter({ hasText: /^screenshot/u }).last().click();
@@ -313,6 +326,7 @@ try {
   await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'turn completion');
   assert(protocol.slice(enabledRequestStart).some((entry) => entry.imageToolOutput), 're-enabled setting did not restore visual tool execution');
   assert.equal(completed, 2, 'observation-only turn unexpectedly mutated the fixture');
+  console.log('Settings disabled and re-enabled through Flower; starting a separate sign-in thread.');
   await page.locator('.flower-new-chat-button').click();
   await composer.fill(`Open ${fixtureURL}/signin in the managed browser. Pause for me to sign in, then report the heading after I return control. Use only browser and computer tools.`);
   await composer.press('Enter');
@@ -321,6 +335,7 @@ try {
   const takeoverThread = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
   ownedThreads.add(takeoverThread);
   assert.equal(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status'), 'waiting_user');
+  console.log('Canonical computer takeover is visible; entering private fixture input through Stage.');
   await takeControl.click();
   await waitForProgress(stageHasImage, 'user takeover image');
   const userImage = page.locator('.flower-computer-stage-frame');
@@ -348,7 +363,7 @@ try {
   assert.equal(JSON.stringify(pending).includes(privateFixtureInput), false, 'private user input entered thread history');
   await page.locator('[data-computer-control-action="return"]').click();
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'model continuation after handback');
-  takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, userPixels, privateInputExcluded: true, continued: true };
+  takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, inputVerified: loginInputVerified, userPixels, privateInputExcluded: true, continued: true };
   assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = [];

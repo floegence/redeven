@@ -16,7 +16,8 @@ final class FixtureState {
     var actions: [[String: Any]] = []
     var onChange: (() -> Void)?
     init(_ path: String) { resultPath = path }
-    var complete: Bool { clicks == 2 && doubleClicked && entered && scrolled }
+    // Each qualification turn checks its exact requested click count separately.
+    var complete: Bool { clicks >= 2 && doubleClicked && entered && scrolled }
     func record(_ action: String) {
         var entry: [String: Any] = ["action": action, "clicks": clicks,
                                    "timestamp_ms": Date().timeIntervalSince1970 * 1000]
