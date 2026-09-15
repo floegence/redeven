@@ -17,7 +17,10 @@ summary = tk.StringVar()
 def save():
     summary.set(f"Clicks: {state['clicks']}    Double: {state['doubleClicked']}    "
                 f"Entered: {state['entered']}    Scroll: {state['scrollEvents']}")
-    result.write_text(json.dumps(state), encoding="utf-8")
+    # Observers must see one complete snapshot while X11 events keep arriving.
+    pending = result.with_suffix(".pending")
+    pending.write_text(json.dumps(state), encoding="utf-8")
+    pending.replace(result)
 
 
 def click():
