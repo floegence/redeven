@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 import { chromium } from 'playwright';
 import { ensureFlowerSurface, findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
 import { observeDesktopComputerFrames, decodedLiveFramesForTarget } from './desktopComputerLiveEvidence.mjs';
+import { qualifyComputerStop } from './computerLifecycleQualification.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -64,12 +65,32 @@ const privateASCIIInput = 'qualification-private-input-'.repeat(3);
 const privateIMEInput = '\u79c1\u5bc6\u8f93\u5165';
 const privateFixtureInput = privateASCIIInput + privateIMEInput;
 let takeoverEvidence;
+let lifecycleEvidence;
+const pendingNavigations = new Set();
+const lifecycleFixture = { navigationStarted: false, recovered: new Set(), releaseNavigation: () => {
+  for (const response of pendingNavigations) response.end('<!doctype html><title>Released</title><h1>Released navigation</h1>');
+  pendingNavigations.clear();
+} };
 const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
 // A moving pixel fixture distinguishes live sampling from repeated static
 // keyframes without requiring extra model actions or changing control layout.
 const liveMarker = '<style>@keyframes live-marker{from{background:#dc3020}to{background:#205cdd}}#live-marker{position:fixed;right:20px;top:20px;width:24px;height:24px;animation:live-marker .6s linear infinite alternate;pointer-events:none}</style><div id="live-marker" aria-hidden="true"></div>';
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
+  if (url.pathname === '/slow-navigation') {
+    lifecycleFixture.navigationStarted = true;
+    response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    response.flushHeaders();
+    pendingNavigations.add(response);
+    response.once('close', () => pendingNavigations.delete(response));
+    return;
+  }
+  if (url.pathname === '/recovered') {
+    lifecycleFixture.recovered.add(url.searchParams.get('phase'));
+    response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    response.end('<!doctype html><title>Browser recovered</title><style>body{background:#d6f5e5;font:32px system-ui;padding:60px}</style><h1>Browser recovered</h1>');
+    return;
+  }
   if (url.pathname === '/signin') {
     response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
     response.end(`<!doctype html><title>Sign-in fixture</title><style>body{background:#d6e5f5;font:24px system-ui;padding:60px}input,button{display:block;font:24px system-ui;margin:20px;padding:12px}</style>
@@ -481,6 +502,7 @@ try {
   await page.locator('[data-computer-control-action="return"]').click();
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'model continuation after handback');
   takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, inputVerified: loginInputVerified, nativeIME: true, userPixels, privateInputExcluded: true, continued: true };
+  lifecycleEvidence = await qualifyComputerStop({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress });
   assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = [];
@@ -509,7 +531,7 @@ try {
       turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map((frame) => frame.sha256)).size };
     }
   }
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, lifecycleEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} requested UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
 } catch (error) {
   liveEvidence ??= await page.evaluate(() => window.__stopComputerLiveEvidence?.()).catch(() => undefined);
