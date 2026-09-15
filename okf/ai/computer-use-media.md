@@ -98,6 +98,17 @@ the interruption observable without injecting model calls or bypassing the
 production adapter. Each scenario records its own result; an earlier passing
 browser turn cannot substitute for a failed cancellation or follow-up.
 
+The Linux runner additionally checks isolation and recovery through Composer,
+the visible Fork menu and public media APIs. An unrelated thread must receive
+404 for the parent's keyframe and show no stale Stage. A fork must inherit the
+authorized keyframe and support a new visual task. A verified container Runtime
+PID is gracefully restarted against the same state; media hashes, decoded Blob
+pixels and cross-thread rejection must survive, followed by a real browser
+turn. No test reads Floret-owned storage. `REDEVEN_COMPUTER_UI_SCENARIO=recovery`
+runs this focused scope, and the complete Linux suite includes it. Replacement
+Runtime shutdown and container cleanup remain mandatory on failure as well as
+success.
+
 # Evidence
 
 - `redeven:internal/ai/computer_live_frames.go` - bounded observer-owned samples.
