@@ -51,6 +51,13 @@ outline. The [input focus contract](input-focus-boundaries.md) continues to
 require border-color-only focus with stable geometry and decoration. Debug
 Console settings consume the native shared Switch instead of a product knob.
 
+Env App's bottom Activity Bar utilities use 18px monochrome line art: an
+interlocking chain for switching environments and three outlined sliders for
+Runtime Settings. Rounded strokes inherit the Activity Bar foreground token.
+The published buttons retain their full hit area, hover and keyboard-focus
+treatment, localized names, and existing navigation actions; decorative icons
+never own input or Desktop bridge availability.
+
 The Containers Workbench identity uses three rounded isometric modules with
 fixed cyan-blue facets on the standard 48-unit Dock tile. Its rounded base
 derives from the active card token, while neutral highlights use the shared
@@ -94,6 +101,8 @@ component gallery alone is not downstream acceptance evidence.
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Env App material configuration.
 - `redeven:desktop/src/welcome/App.tsx` - Welcome configuration and floating toast boundary.
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Product semantic seam mapping.
+- `redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx` - Theme-inheriting bottom utility artwork.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Runtime Settings and Desktop environment-switch entry points.
 - `redeven:internal/envapp/ui_src/src/ui/icons/ContainersIcon.tsx` - Containers artwork and theme-derived Dock tile.
 - `redeven:internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx` - Shared shallow-depth artwork for Web Services, Composition Mode, and the plugin launcher.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Published mode artwork integration.
