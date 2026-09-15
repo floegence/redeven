@@ -89,44 +89,18 @@ export function ActivityBarSwitchIcon(props: { class?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
-      style={{ width: '1.5rem', height: '1.5rem' }}
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      style={{ width: '18px', height: '18px' }}
       class={props.class}
       aria-hidden="true"
       data-activity-bar-icon="switch-environment"
     >
-      <circle
-        data-activity-bar-icon-part="switch-anchor"
-        cx="4.5"
-        cy="7.5"
-        r="1"
-        fill="currentColor"
-        fill-opacity=".72"
-      />
       <path
-        data-activity-bar-icon-part="switch-route"
-        d="M7.1 7.5h10.3m0 0-2.8-2.8m2.8 2.8-2.8 2.8"
-        stroke="currentColor"
-        stroke-opacity=".86"
-        stroke-width="1.7"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      <circle
-        data-activity-bar-icon-part="switch-anchor"
-        cx="19.5"
-        cy="16.5"
-        r="1"
-        fill="currentColor"
-        fill-opacity=".72"
-      />
-      <path
-        data-activity-bar-icon-part="switch-route"
-        d="M16.9 16.5H6.6m0 0 2.8-2.8m-2.8 2.8 2.8 2.8"
-        stroke="currentColor"
-        stroke-opacity=".86"
-        stroke-width="1.7"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+        d="m10 13 4-4m-5 7-2 2a4.2 4.2 0 0 1-6-6l5-5a4.2 4.2 0 0 1 6 0m0 10a4.2 4.2 0 0 0 6 0l5-5a4.2 4.2 0 0 0-6-6l-2 2"
+        transform="translate(1 1) scale(.91)"
       />
     </svg>
   );
@@ -138,49 +112,19 @@ export function ActivityBarSettingsIcon(props: { class?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
-      style={{ width: '1.5rem', height: '1.5rem' }}
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      style={{ width: '18px', height: '18px' }}
       class={props.class}
       aria-hidden="true"
       data-activity-bar-icon="runtime-settings"
     >
-      <path
-        data-activity-bar-icon-part="settings-rails"
-        d="M7 4.5v3.6m0 3.9v7.5M12 4.5v7.8m0 3.9v3.3M17 4.5v2.2m0 3.9v8.9"
-        stroke="currentColor"
-        stroke-opacity=".5"
-        stroke-width="1.55"
-        stroke-linecap="round"
-      />
-      <rect
-        data-activity-bar-icon-part="settings-control"
-        x="5.35"
-        y="8.1"
-        width="3.3"
-        height="3.9"
-        rx="1.4"
-        fill="currentColor"
-        fill-opacity=".86"
-      />
-      <rect
-        data-activity-bar-icon-part="settings-control"
-        x="10.35"
-        y="12.3"
-        width="3.3"
-        height="3.9"
-        rx="1.4"
-        fill="currentColor"
-        fill-opacity=".86"
-      />
-      <rect
-        data-activity-bar-icon-part="settings-control"
-        x="15.35"
-        y="6.7"
-        width="3.3"
-        height="3.9"
-        rx="1.4"
-        fill="currentColor"
-        fill-opacity=".86"
-      />
+      <path d="M5 3v4m0 4v10M12 3v10m0 4v4M19 3v2m0 4v12" />
+      <rect x="3" y="7" width="4" height="4" rx="1" />
+      <rect x="10" y="13" width="4" height="4" rx="1" />
+      <rect x="17" y="5" width="4" height="4" rx="1" />
     </svg>
   );
 }
