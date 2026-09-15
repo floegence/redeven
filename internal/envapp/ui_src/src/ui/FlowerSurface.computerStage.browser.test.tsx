@@ -122,7 +122,7 @@ describe('Flower computer stage', () => {
       },
       listThreads: vi.fn(async () => [current]),
       loadThread: vi.fn(async () => liveBootstrap(current, 1)),
-    }, { focusThreadRequest: { request_id: 'focus-computer-stage', thread_id: threadID } });
+    }, { focusThreadRequest: { request_id: 'focus-computer-stage', thread_id: threadID }, layout: true });
 
     await waitFor(() => document.querySelector('.flower-computer-stage') !== null);
     await waitFor(() => loadComputerFrame.mock.calls.length === 1);
@@ -241,7 +241,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
       }
     },
     listThreads: vi.fn(async () => [paused]), loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(paused, canonical), current: canonical })),
-  }, { focusThreadRequest: { request_id: 'takeover-focus', thread_id: threadID } });
+  }, { focusThreadRequest: { request_id: 'takeover-focus', thread_id: threadID }, layout: true });
   const controlButton = () => Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Take control');
   await waitFor(() => Boolean(controlButton()));
   expect(surface.querySelector('.flower-composer-continue')).toBeNull();

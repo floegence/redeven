@@ -23,15 +23,8 @@ const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (
 };
 
 const TestProviders: Component<{ children: JSX.Element }> = (props) => {
-  // LayoutProvider reads browser media-query state during initialization. Keep
-  // the node test harness lightweight while supplying the real context to
-  // browser tests that exercise FloatingWindow.
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return props.children;
-  return (
-    <FloeConfigProvider>
-      <LayoutProvider>{props.children}</LayoutProvider>
-    </FloeConfigProvider>
-  );
+  return <FloeConfigProvider><LayoutProvider>{props.children}</LayoutProvider></FloeConfigProvider>;
 };
 import type {
 	FlowerActivityItem,
@@ -972,33 +965,33 @@ const mountFlowerSurface = (
     onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
+    layout?: boolean;
   }> = {},
 ): HTMLDivElement => {
   const runtime = document.createElement('div');
   document.body.appendChild(runtime);
-  disposers.push(render(() => (
-    <TestProviders>
-      <FlowerSurface
-        adapter={surfaceAdapter}
-        notify={(notification) => {
-          notifications.push(notification);
-        }}
-        focusThreadRequest={props.focusThreadRequest}
-        settingsFocusRequest={props.settingsFocusRequest}
-        presentation={props.presentation}
-        companionOpen={props.companionOpen}
-        engaged={props.engaged}
-        transcriptVisible={props.transcriptVisible}
-        companionPresenceOwner={props.companionPresenceOwner}
-        companionCopy={props.companionCopy}
-        companionSummary={props.companionSummary}
-        onCompanionOpenRequest={props.onCompanionOpenRequest}
-        onPresenceChange={props.onPresenceChange}
-        onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
-        onThreadSelectionEvent={props.onThreadSelectionEvent}
-      />
-    </TestProviders>
-  ), runtime));
+  const surface = () => (
+    <FlowerSurface
+      adapter={surfaceAdapter}
+      notify={(notification) => {
+        notifications.push(notification);
+      }}
+      focusThreadRequest={props.focusThreadRequest}
+      settingsFocusRequest={props.settingsFocusRequest}
+      presentation={props.presentation}
+      companionOpen={props.companionOpen}
+      engaged={props.engaged}
+      transcriptVisible={props.transcriptVisible}
+      companionPresenceOwner={props.companionPresenceOwner}
+      companionCopy={props.companionCopy}
+      companionSummary={props.companionSummary}
+      onCompanionOpenRequest={props.onCompanionOpenRequest}
+      onPresenceChange={props.onPresenceChange}
+      onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
+      onThreadSelectionEvent={props.onThreadSelectionEvent}
+    />
+  );
+  disposers.push(render(() => props.layout ? <TestProviders>{surface()}</TestProviders> : surface(), runtime));
   return runtime;
 };
 
@@ -1017,15 +1010,13 @@ export function renderSurfaceWithDraftCoordinator(
   const runtime = document.createElement('div');
   document.body.appendChild(runtime);
   const dispose = render(() => (
-    <TestProviders>
-      <FlowerSurfaceComponent
-        adapter={surfaceAdapter.connectLiveStream
-          ? surfaceAdapter
-          : { ...surfaceAdapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(surfaceAdapter, input) }}
-        draftCoordinator={draftCoordinator}
-        notify={(notification) => notifications.push(notification)}
-      />
-    </TestProviders>
+    <FlowerSurfaceComponent
+      adapter={surfaceAdapter.connectLiveStream
+        ? surfaceAdapter
+        : { ...surfaceAdapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(surfaceAdapter, input) }}
+      draftCoordinator={draftCoordinator}
+      notify={(notification) => notifications.push(notification)}
+    />
   ), runtime);
   let disposed = false;
   const disposeOnce = () => {
@@ -1059,6 +1050,7 @@ export function renderSurfaceWithAdapterProps(
     onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
+    layout?: boolean;
   }>,
 ): HTMLDivElement {
   return mountFlowerSurface(surfaceAdapter, props);
@@ -1077,18 +1069,16 @@ export function renderSurfaceWithCompanionController(
   document.body.appendChild(runtime);
   const [open, setOpen] = createSignal(initialOpen);
   const dispose = render(() => (
-    <TestProviders>
-      <FlowerSurface
-        adapter={surfaceAdapter}
-        notify={(notification) => notifications.push(notification)}
-        presentation="companion"
-        companionOpen={open()}
-        engaged
-        transcriptVisible
-        companionCopy={companionCopy}
-        onCompanionOpenRequest={onCompanionOpenRequest}
-      />
-    </TestProviders>
+    <FlowerSurface
+      adapter={surfaceAdapter}
+      notify={(notification) => notifications.push(notification)}
+      presentation="companion"
+      companionOpen={open()}
+      engaged
+      transcriptVisible
+      companionCopy={companionCopy}
+      onCompanionOpenRequest={onCompanionOpenRequest}
+    />
   ), runtime);
   disposers.push(dispose);
   return {
@@ -1111,21 +1101,19 @@ export function renderSurfaceWithFocusController(
   const [focusThreadRequest, setFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(initialFocusThreadRequest);
   const consumed: string[] = [];
   disposers.push(render(() => (
-    <TestProviders>
-      <FlowerSurface
-        adapter={surfaceAdapter}
-        notify={(notification) => {
-          notifications.push(notification);
-        }}
-        focusThreadRequest={focusThreadRequest()}
-        onFocusThreadRequestConsumed={(requestID) => {
-          consumed.push(requestID);
-          setFocusThreadRequest((current) => (
-            current?.request_id === requestID ? null : current
-          ));
-        }}
-      />
-    </TestProviders>
+    <FlowerSurface
+      adapter={surfaceAdapter}
+      notify={(notification) => {
+        notifications.push(notification);
+      }}
+      focusThreadRequest={focusThreadRequest()}
+      onFocusThreadRequestConsumed={(requestID) => {
+        consumed.push(requestID);
+        setFocusThreadRequest((current) => (
+          current?.request_id === requestID ? null : current
+        ));
+      }}
+    />
   ), runtime));
   return {
     runtime,
