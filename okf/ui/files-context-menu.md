@@ -16,7 +16,9 @@ excluded. Invalid or unavailable explicit boundaries close the menu. Files does
 not raise its global layer or duplicate Workbench coordinate conversion to make
 an obscured action reachable.
 
-# Layout ownership
+# Contract
+
+## Layout ownership
 
 The directory tree and file content share the outer `BrowserWorkspaceShell`
 boundary. Activity, Files floating windows, and Workbench keep their existing
@@ -33,7 +35,7 @@ or safe-area insets. The shared Floe visible-viewport mechanism accounts for the
 browser viewport and screen safe areas. Files measures its root on resize and
 before input triggers so a later open uses current client geometry.
 
-# Input and navigation
+## Input and navigation
 
 Desktop menus open near the pointer. Submenus prefer lateral placement and flip
 when needed. Touch layouts and insufficient lateral space navigate the same
@@ -58,7 +60,7 @@ External pointer/focus/scroll, resize, visual-viewport changes, window blur, and
 hidden or inactive owners dismiss the menu. Size and orientation changes close
 the current menu; the next trigger starts a fresh placement.
 
-# Action boundary
+# Boundaries
 
 Existing context-event target snapshots, multi-selection, permissions, file
 operations, and confirmation owners are unchanged. The menu does not add backend
