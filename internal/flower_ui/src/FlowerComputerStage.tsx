@@ -44,6 +44,19 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   let currentURL = '';
   let currentThread = '';
   let currentTarget = '';
+  let keyboard: HTMLTextAreaElement | undefined;
+  let composing = false;
+  const commitText = () => {
+    if (!keyboard) return;
+    const text = keyboard.value;
+    keyboard.value = '';
+    if (text) props.onInput?.({ action: 'type', text });
+  };
+  createEffect(() => {
+    threadID(); targetID(); void props.onInput;
+    composing = false;
+    if (keyboard) keyboard.value = '';
+  });
   onCleanup(() => { if (currentURL) URL.revokeObjectURL(currentURL); });
   createEffect(() => {
     retry();
@@ -89,6 +102,32 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title} data-computer-target={targetID()}>
     <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button>
     <div class="flower-computer-stage-frame-wrap">
+      <Show when={props.onInput}>
+        <textarea
+          ref={keyboard}
+          class="sr-only"
+          tabIndex={-1}
+          aria-label={props.copy.title}
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck={false}
+          onCompositionStart={() => { composing = true; }}
+          onCompositionEnd={() => { composing = false; commitText(); }}
+          onInput={(event) => { if (!composing && !event.isComposing) commitText(); }}
+          onBlur={() => { composing = false; if (keyboard) keyboard.value = ''; }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (composing || event.isComposing || event.keyCode === 229 || ['Process', 'Dead', 'Unidentified', 'Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return;
+            // Native editing owns text, paste and IME. Only non-text commands
+            // cross the key path; this avoids sending a composition twice.
+            if ((event.key.length === 1 && ((!event.metaKey && !event.ctrlKey && !event.altKey) || event.getModifierState('AltGraph')))
+              || ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'v')
+              || (event.shiftKey && event.key === 'Insert')) return;
+            event.preventDefault();
+            props.onInput?.({ action: 'key', key: [event.metaKey ? 'Meta' : '', event.ctrlKey ? 'Control' : '', event.altKey ? 'Alt' : '', event.shiftKey ? 'Shift' : '', event.key].filter(Boolean).join('+') });
+          }}
+        />
+      </Show>
       <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame">
         <Show when={failed()} fallback={<Refresh class="h-5 w-5 animate-spin" role="status" aria-label={props.copy.noFrame} />}>
           <button type="button" aria-label={props.copy.retry} title={props.copy.retry} onClick={() => setRetry((value) => value + 1)}><Refresh class="h-5 w-5" aria-hidden="true" /></button>
@@ -100,26 +139,19 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
             src={url()}
             alt={props.snapshot.action}
             tabIndex={props.onInput ? 0 : undefined}
+            onFocus={() => keyboard?.focus({ preventScroll: true })}
             style={props.onInput ? { cursor: 'crosshair' } : undefined}
             draggable={false}
             onClick={(event) => {
               if (!props.onInput) return;
               const img = event.currentTarget;
-              img.focus({ preventScroll: true });
+              keyboard?.focus({ preventScroll: true });
               const rect = img.getBoundingClientRect();
               const scale = Math.min(rect.width / img.naturalWidth, rect.height / img.naturalHeight);
               const x = (event.clientX - rect.left - (rect.width - img.naturalWidth * scale) / 2) / scale;
               const y = (event.clientY - rect.top - (rect.height - img.naturalHeight * scale) / 2) / scale;
               if (x >= 0 && y >= 0 && x < img.naturalWidth && y < img.naturalHeight) props.onInput({ action: 'click', x, y });
             }}
-            onKeyDown={(event) => {
-              if (!props.onInput || event.isComposing) return;
-              event.preventDefault(); event.stopPropagation();
-              if (['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return;
-              if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) props.onInput({ action: 'type', text: event.key });
-              else props.onInput({ action: 'key', key: [event.metaKey ? 'Meta' : '', event.ctrlKey ? 'Control' : '', event.altKey ? 'Alt' : '', event.shiftKey ? 'Shift' : '', event.key].filter(Boolean).join('+') });
-            }}
-            onCompositionEnd={(event) => { if (props.onInput && event.data) props.onInput({ action: 'type', text: event.data }); }}
             onWheel={(event) => {
               if (!props.onInput) return;
               event.preventDefault(); event.stopPropagation();

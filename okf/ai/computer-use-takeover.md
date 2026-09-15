@@ -84,9 +84,16 @@ are decoded before replacement and Blob URLs are retired on disposal. Failed
 input does not replay automatically, and queued input is discarded after an
 unknown failure or a changed thread/interaction. Unsent adjacent text input is
 coalesced in order within a bounded batch; keys and pointer actions are barriers.
+An offscreen editable carrier receives native text, paste and IME composition.
+Only committed text reaches private input; composition drafts stay local and
+the carrier is cleared immediately after submission or a control-owner change.
+Non-text keys use the same ordered private queue. The image itself is not a
+text editor and synthetic composition events do not qualify IME support.
 A full command queue reports control failure and discards unsent input instead
 of silently losing characters. Explicit observation is required before further
-input after a failure. Closing the image hides it;
+input after a failure. Closing the image hides it; neither a later Activity nor
+an in-flight private response reopens it. Explicit takeover or the Activity
+viewer action opens it again. Selecting another thread resets viewer visibility;
 ending the turn uses the existing Stop behavior.
 
 # Qualification limits

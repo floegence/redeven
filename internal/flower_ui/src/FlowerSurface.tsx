@@ -5495,7 +5495,6 @@ webSearch: model.web_search,
     setThreadLoadError('');
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
-    lastComputerStageItemID = '';
     setSelectedThreadID(tid);
     scheduleThreadSelectionAfterPaint(tid, claimedSequence);
   };
@@ -5564,7 +5563,7 @@ webSearch: model.web_search,
       if (generation !== computerInputGeneration || thread_id !== selectedThreadID() || selectedInputRequest()?.prompt_id !== interaction_id) return;
       const frame = await control({ ...queued, thread_id, interaction_id });
       if (generation !== computerInputGeneration || thread_id !== selectedThreadID() || selectedInputRequest()?.prompt_id !== interaction_id) return;
-      setComputerUserFrame(frame); setComputerStageOpen(true); setComputerControlError(false);
+      setComputerUserFrame(frame); setComputerControlError(false);
     }).catch(() => {
       if (generation === computerInputGeneration && thread_id === selectedThreadID() && selectedInputRequest()?.prompt_id === interaction_id) {
         computerInputGeneration++; queuedComputerText = undefined; setComputerControlError(true);
@@ -5580,7 +5579,6 @@ webSearch: model.web_search,
     queuedComputerText = undefined;
     setComputerUserFrame(undefined); setComputerControlError(false);
   });
-  let lastComputerStageItemID = '';
   const selectedComputerStage = createMemo<FlowerComputerStageSnapshot | null>(() => {
     const entries = selectedTimelineEntries();
     const candidates: FlowerComputerStageSnapshot[] = [];
@@ -5622,14 +5620,7 @@ webSearch: model.web_search,
   });
   createEffect(() => {
     selectedThreadID();
-    lastComputerStageItemID = '';
     setComputerLiveFrame(undefined);
-    setComputerStageOpen(true);
-  });
-  createEffect(() => {
-    const stage = selectedComputerStage();
-    if (!stage || stage.item.item_id === lastComputerStageItemID) return;
-    lastComputerStageItemID = stage.item.item_id;
     setComputerStageOpen(true);
   });
   const computerViewerKey = createMemo(() => {
@@ -7566,7 +7557,7 @@ webSearch: model.web_search,
             <p>{copy().chat.computerControlHint}</p>
             <Show when={computerControlError()}><p role="alert">{copy().chat.computerControlFailed}</p></Show>
             <div class="flex gap-2">
-              <button type="button" class="flower-input-request-navigation-button" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => inputComputerControl({ action: 'observe' })}>{copy().chat.computerTakeControl}</button>
+              <button type="button" class="flower-input-request-navigation-button" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => { setComputerStageOpen(true); inputComputerControl({ action: 'observe' }); }}>{copy().chat.computerTakeControl}</button>
               <button type="button" class="flower-input-request-navigation-button" data-computer-control-action="return" disabled={computerControlBusy()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];

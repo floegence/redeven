@@ -68,9 +68,14 @@ visible navigation and Composer controls. Runtime sockets and credentials live
 in the container filesystem. The desktop, browser, fixtures, and all input stay
 inside the task-owned container; cleanup removes that container, temporary
 bundles, and credential copies and verifies source secrets and port release.
+Cleanup waits for exact container-ID absence because Docker stop and removal
+acknowledgements can precede automatic deletion. Inventory failure or timeout
+fails the run. The report retains the Runtime, computer bundle, and plugin
+verification descriptor hashes after temporary binaries are removed.
 Its scope includes managed-browser actions, X11 GUI control effects, per-turn
-decoded live frames, settings and login handback. It does not qualify native
-macOS, connected Chrome, IME, or every sensitive-page and approval scenario.
+decoded live frames, hidden-viewer persistence, settings and login handback with
+rapid ASCII and native Chromium IME submission. It does not qualify native
+macOS, connected Chrome, every OS input method, or every sensitive-page and approval scenario.
 
 # Evidence
 
