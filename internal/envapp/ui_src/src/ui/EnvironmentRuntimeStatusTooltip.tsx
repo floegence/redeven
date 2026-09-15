@@ -458,6 +458,8 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
           <EnvironmentSourceIcon source={props.identity.source} />
           <span class="truncate text-[11px] font-medium text-foreground">{props.identity.displayName}</span>
         </span>
+        <span class="sr-only">{props.identity.displayID}</span>
+        <span class="sr-only">{sourceLabel()}</span>
       </button>
     </Tooltip>
   );
