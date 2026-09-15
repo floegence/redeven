@@ -95,6 +95,27 @@ afterEach(() => {
 });
 
 describe('Environment Runtime tooltip browser presentation', () => {
+  it('keeps a quiet environment name and pins its complete details with a keyboard click', async () => {
+    await page.viewport(1280, 800);
+    const runtime = mountAtBottom('Local Environment');
+    try {
+      const trigger = runtime.host.querySelector<HTMLElement>('[data-environment-runtime-trigger]')!;
+      expect(trigger.tagName).toBe('BUTTON');
+      expect(trigger.textContent).not.toContain('env_local');
+      trigger.focus();
+      await userEvent.keyboard('{Enter}');
+      const tooltip = await waitFor(() => document.body.querySelector<HTMLElement>('[role="tooltip"]'));
+      expect(tooltip.textContent).toContain('env_local');
+      expect(tooltip.textContent).toContain('Local');
+      await userEvent.hover(document.body);
+      expect(document.body.querySelector('[role="tooltip"]')).toBe(tooltip);
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => !document.body.querySelector('[role="tooltip"]'));
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it.each(['classic-light', 'classic-dark'] as const)('opens upward without clipping in %s', async (theme) => {
     await page.viewport(1280, 800);
     applyTheme(theme);

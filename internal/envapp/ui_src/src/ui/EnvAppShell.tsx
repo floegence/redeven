@@ -33,7 +33,6 @@ import {
 import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import { PluginsWorkbenchIcon } from './icons/WorkbenchSoftIcons';
 import {
-  BottomBarItem,
   BottomBarCompanion,
   DisplayModePageShell,
   KeepAliveStack,
@@ -4778,6 +4777,7 @@ export function EnvAppShell() {
       mount={activityFlowerOverlayHost()}
       id="redeven-activity-flower-companion"
       label={i18n.t('shell.nav.flower')}
+      expandedWidth={544}
       class="flower-activity-companion"
       contentHostRef={setActivityFlowerCompanionContentHost}
       isOwnedInteraction={activityFlowerInteractionOwned}
@@ -4901,21 +4901,32 @@ export function EnvAppShell() {
           {renderActivityFlowerAnchor()}
 
           <div class="flower-activity-bottom-side flower-activity-bottom-side-end">
-            <StatusIndicator status={status()} label={statusLabel()} />
-            <Tooltip content={canViewAudit() ? i18n.t('shell.status.auditLog') : i18n.t('shell.status.adminRequired')} placement="top" delay={0}>
-              <BottomBarItem
-                onClick={canViewAudit() ? () => setAuditOpen(true) : undefined}
-                class={`flower-activity-secondary-action ${canViewAudit() ? '' : 'opacity-40 pointer-events-none'}`}
-              >
-                {i18n.t('shell.status.auditLog')}
-              </BottomBarItem>
+            <Tooltip content={statusLabel() ?? i18n.t(`shell.framework.${status()}`)} placement="top" delay={180} anchorClass="flower-activity-connection">
+              <StatusIndicator status={status()} label={statusLabel()} />
             </Tooltip>
-            <BottomBarItem
-              onClick={reconnectDisabled() ? undefined : () => void triggerReconnect()}
-              class={`flower-activity-secondary-action ${reconnectDisabled() ? 'opacity-40 pointer-events-none' : 'bg-primary/15'}`}
-            >
-              <span class="text-primary">{reconnectLabel()}</span>
-            </BottomBarItem>
+            <Tooltip content={canViewAudit() ? i18n.t('shell.status.auditLog') : i18n.t('shell.status.adminRequired')} placement="top" delay={0}>
+              <button
+                type="button"
+                aria-label={i18n.t('shell.status.auditLog')}
+                disabled={!canViewAudit()}
+                onClick={() => setAuditOpen(true)}
+                class="flower-activity-secondary-action"
+              >
+                <Activity class="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </Tooltip>
+            <Tooltip content={reconnectLabel()} placement="top" delay={0}>
+              <button
+                type="button"
+                aria-label={reconnectLabel()}
+                disabled={reconnectDisabled()}
+                onClick={() => void triggerReconnect()}
+                class="flower-activity-secondary-action"
+                classList={{ 'text-warning': status() !== 'connected' }}
+              >
+                <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       ) : undefined}

@@ -188,14 +188,15 @@ html.dark .flower-activity-companion:is(
   width: 100%;
   min-width: 0;
   height: 100%;
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 34rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22.5rem) minmax(0, 1fr);
   align-items: center;
   gap: 0.5rem;
+  font-family: var(--font-sans);
   transform: translateY(calc(-1 * var(--flower-visual-viewport-bottom-offset, 0px)));
 }
 
 .flower-activity-bottom-bar-height {
-  height: 2rem;
+  height: 1.75rem;
 }
 
 .flower-activity-mobile-companion-rail {
@@ -234,6 +235,48 @@ html.dark .flower-activity-companion:is(
   justify-content: flex-end;
 }
 
+.flower-activity-connection {
+  min-width: 0;
+}
+
+.flower-activity-connection > span {
+  min-width: 0;
+}
+
+.flower-activity-connection > span > span:first-child {
+  flex-shrink: 0;
+}
+
+.flower-activity-connection > span > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-activity-secondary-action {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.flower-activity-secondary-action:hover:not(:disabled),
+.flower-activity-secondary-action:focus-visible {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.flower-activity-secondary-action:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 .flower-activity-env-runtime-anchor {
   min-width: 0;
 }
@@ -244,13 +287,21 @@ html.dark .flower-activity-companion:is(
   max-width: 100%;
   align-items: center;
   gap: 0.375rem;
+  height: 1.5rem;
+  border: 0;
+  background: transparent;
+  padding: 0 0.375rem;
   border-radius: 0.3rem;
-  cursor: default;
+  cursor: pointer;
   outline: none;
 }
 
 .flower-activity-env-runtime-trigger:focus-visible {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 58%, transparent);
+}
+
+.flower-activity-env-runtime-trigger:hover {
+  background: var(--muted);
 }
 
 .flower-activity-env-identity {
@@ -260,10 +311,16 @@ html.dark .flower-activity-companion:is(
   align-items: center;
   gap: 0.25rem;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 0.25rem;
-  background: color-mix(in srgb, var(--card) 55%, transparent);
-  padding: 0 0.375rem;
+}
+
+.environment-runtime-tooltip-id {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  line-height: 0.875rem;
+  color: var(--muted-foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .environment-runtime-tooltip-layer {
@@ -513,17 +570,15 @@ html.dark .flower-activity-companion:is(
 .flower-activity-companion-anchor {
   width: 100%;
   min-width: 0;
-  height: 1.5rem;
+  height: 1.375rem;
 }
 
 @media (max-width: 767px) {
   .flower-activity-bottom-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 34rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22.5rem) minmax(0, 1fr);
     gap: 0.25rem;
   }
 
-  .flower-activity-env-secondary,
-  .flower-activity-env-type,
   .flower-activity-secondary-action {
     display: none;
   }

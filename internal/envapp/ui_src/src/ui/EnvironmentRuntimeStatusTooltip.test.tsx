@@ -156,7 +156,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     }
   });
 
-  it('warms the cached metrics before hover, reuses the existing runtime snapshot, and stops polling after leave', async () => {
+  it('warms cached metrics, keeps pinned details live, and stops polling after dismissal', async () => {
     const dispose = mount();
     try {
       await flushPromises();
@@ -193,6 +193,8 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
       const anchor = host.querySelector<HTMLElement>('[data-redeven-tooltip-anchor]')!;
       trigger.dispatchEvent(new MouseEvent('mouseleave'));
       anchor.dispatchEvent(new MouseEvent('mouseleave'));
+      expect(document.body.querySelector('[role="tooltip"]')).toBe(tooltip);
+      trigger.click();
       vi.advanceTimersByTime(4_000);
       await flushPromises();
       expect(runtimeHarness.monitor).toHaveBeenCalledTimes(2);
@@ -322,7 +324,7 @@ describe('EnvironmentRuntimeStatusTooltip', () => {
     try {
       const trigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]')!;
       const anchor = host.querySelector<HTMLElement>('[data-redeven-tooltip-anchor]')!;
-      expect(trigger.getAttribute('tabindex')).toBeNull();
+      expect(trigger.getAttribute('tabindex')).toBe('-1');
       expect(anchor.getAttribute('data-redeven-tooltip-disabled')).toBe('true');
 
       trigger.dispatchEvent(new MouseEvent('mouseenter'));
