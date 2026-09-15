@@ -99,6 +99,20 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        composeComputerStageText: async ({ page }, text: string) => {
+          const frame = await frameForSelector(page, '.flower-computer-stage-frame');
+          await frame.locator('.flower-computer-stage-frame').focus();
+          const session = await page.context().newCDPSession(page);
+          try {
+            await session.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
+            const beforeCommit = await frame.locator('.flower-computer-stage').getAttribute('data-input-count');
+            await session.send('Input.insertText', { text });
+            await page.keyboard.type('ab');
+            await page.keyboard.press('Tab');
+            await page.keyboard.insertText('paste');
+            return { beforeCommit };
+          } finally { await session.detach(); }
+        },
         dismissPluginCenterBackdrop: async ({ page }) => {
           const frame = await frameForSelector(page, '[data-test-workbench-background]');
           const target = await frame.locator('[data-test-background]').boundingBox();

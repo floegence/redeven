@@ -59,7 +59,10 @@ await mkdir(output, { recursive: true });
 let completed = 0;
 let loginCompleted = false;
 let loginInputVerified = false;
-const privateFixtureInput = 'qualification-private-input-'.repeat(3);
+const privateASCIIInput = 'qualification-private-input-'.repeat(3);
+// Unicode is intentional: this fixture exercises native IME composition.
+const privateIMEInput = '\u79c1\u5bc6\u8f93\u5165';
+const privateFixtureInput = privateASCIIInput + privateIMEInput;
 let takeoverEvidence;
 const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
 // A moving pixel fixture distinguishes live sampling from repeated static
@@ -137,7 +140,7 @@ const proxy = http.createServer(async (request, response) => {
     if (request.url === '/responses') {
       const body = JSON.parse(raw.toString());
       assert.equal(body.model, model);
-      assert.equal(raw.includes(Buffer.from(privateFixtureInput)), false, 'private user input entered the provider request');
+      for (const value of [privateASCIIInput, privateIMEInput]) assert.equal(raw.includes(Buffer.from(value)), false, 'private user input entered the provider request');
       assert((body.tools ?? []).every((tool) => tool.type === 'function'));
       record = { model: body.model, wireBytes: raw.length, toolCount: body.tools?.length ?? 0, tools: (body.tools ?? []).map((tool) => tool.name),
         imageCount: (body.input ?? []).reduce((count, item) => {
@@ -384,6 +387,12 @@ try {
   await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
   await page.locator('.flower-computer-stage-close').click();
   assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'closing Stage must hide the viewer');
+  const observeComposer = page.locator('.flower-surface textarea').first();
+  await observeComposer.fill('Take one screenshot of the current target and describe whether a window is visible. Use only computer tools.');
+  await observeComposer.press('Enter');
+  await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
+  await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'observation with hidden Stage');
+  assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'a new action reopened the explicitly hidden Stage');
   await page.locator('.flower-activity-inline-button[aria-expanded="false"]').filter({ hasText: /^screenshot/u }).last().click();
   await page.locator('.flower-activity-computer-block .flower-activity-inline-button').last().click();
   await waitForProgress(stageHasImage, 'reopened Stage image');
@@ -452,8 +461,14 @@ try {
   await userKey('Tab');
   // Exercise ordinary fast typing rather than waiting for each screenshot.
   // The fixture validates all characters and ordering before accepting Enter.
-  await userImage.pressSequentially(privateFixtureInput);
+  await userImage.pressSequentially(privateASCIIInput);
   await waitForProgress(async () => await page.locator('[data-computer-control-action="return"]').isEnabled(), 'private typing drained', 15000);
+  const ime = await page.context().newCDPSession(page);
+  try {
+    await ime.send('Input.imeSetComposition', { text: privateIMEInput, selectionStart: privateIMEInput.length, selectionEnd: privateIMEInput.length });
+    await ime.send('Input.insertText', { text: privateIMEInput });
+  } finally { await ime.detach(); }
+  await waitForProgress(async () => await page.locator('[data-computer-control-action="return"]').isEnabled(), 'private IME drained', 15000);
   await userKey('Enter');
   await waitForProgress(() => loginCompleted, 'sign-in fixture completion', 15000);
   const userPixels = await page.evaluate(() => {
@@ -462,10 +477,10 @@ try {
   });
   assert.equal(userPixels.visibleText, '');
   const pending = await request('GET', `/_redeven_proxy/api/ai/threads/${takeoverThread}`);
-  assert.equal(JSON.stringify(pending).includes(privateFixtureInput), false, 'private user input entered thread history');
+  for (const value of [privateASCIIInput, privateIMEInput]) assert.equal(JSON.stringify(pending).includes(value), false, 'private user input entered thread history');
   await page.locator('[data-computer-control-action="return"]').click();
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'model continuation after handback');
-  takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, inputVerified: loginInputVerified, userPixels, privateInputExcluded: true, continued: true };
+  takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, inputVerified: loginInputVerified, nativeIME: true, userPixels, privateInputExcluded: true, continued: true };
   assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = [];
@@ -494,7 +509,7 @@ try {
       turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map((frame) => frame.sha256)).size };
     }
   }
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} requested UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
 } catch (error) {
   liveEvidence ??= await page.evaluate(() => window.__stopComputerLiveEvidence?.()).catch(() => undefined);

@@ -19,11 +19,21 @@ PORT=
 CONFIG_HASH=$(shasum -a 256 "$SOURCE_STATE/config.json" | awk '{print $1}')
 SECRETS_HASH=$(shasum -a 256 "$SOURCE_STATE/secrets.json" | awk '{print $1}')
 cleanup() {
-  local status=$? removed=true unchanged=true clean=true
+  local status=$? removed=true unchanged=true clean=true remaining attempt
   trap - EXIT INT TERM
   if [[ -n "$CID" ]]; then
     docker stop --time 15 "$CID" >/dev/null 2>&1 || true
-    if docker inspect "$CID" >/dev/null 2>&1; then removed=false; status=1; fi
+    # Both stop and rm can return while --rm removal is still in progress.
+    # Verify exact-ID absence with a bounded wait; a failed inventory read is
+    # a cleanup failure, never evidence that the container disappeared.
+    docker rm --force "$CID" >/dev/null 2>&1 || true
+    removed=false
+    for attempt in {1..50}; do
+      if ! remaining=$(docker ps -aq --no-trunc --filter "id=$CID"); then break; fi
+      if [[ -z "$remaining" ]]; then removed=true; break; fi
+      sleep .2
+    done
+    [[ "$removed" == true ]] || status=1
   fi
   node "$SCRIPT_DIR/smoke_flower_deepseek.mjs" scan-source-secret "$SOURCE_STATE" "$REPORT" "$ROOT_DIR" || { clean=false; status=1; }
   [[ "$CONFIG_HASH" == "$(shasum -a 256 "$SOURCE_STATE/config.json" | awk '{print $1}')" && "$SECRETS_HASH" == "$(shasum -a 256 "$SOURCE_STATE/secrets.json" | awk '{print $1}')" ]] || { unchanged=false; status=1; }
@@ -84,6 +94,18 @@ docker exec -e "NODE_VERSION=$NODE_VERSION" -e "NODE_ARCH=$ARCH" "$CID" bash -ce
   certutil -N -d sql:/config/.pki/nssdb --empty-password
   certutil -A -d sql:/config/.pki/nssdb -n Redeven-Qualification-CA -t "C,," -i /config/qualification-state/local-environment/local-ui-tls/device-ca.pem
 ' > "$REPORT/setup.log" 2>&1
+node - "$REPORT/build-hashes.json" "$WORK/bundle" <<'JS'
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const [file, bundle] = process.argv.slice(2);
+const hashes = {};
+for (const relative of ['redeven', 'computer/manifest.json', '.redevplugin-release-artifacts-verified.json']) {
+  const target = path.join(bundle, relative);
+  hashes[relative] = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+}
+fs.writeFileSync(file, JSON.stringify(hashes, null, 2));
+JS
 docker exec -d "$CID" bash -ceu 'exec /qualification/bundle/redeven run --mode local --state-root /config/qualification-state --local-ui-bind 127.0.0.1:23998 --presentation machine > /qualification/report/runtime.log 2>&1'
 docker exec "$CID" bash -ceu '
   for attempt in {1..100}; do

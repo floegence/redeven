@@ -2,6 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { describe, expect, it, vi } from 'vitest';
+import { commands } from 'vitest/browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -13,6 +14,29 @@ const FRAME_REF = `computer://browser-main/${'a'.repeat(64)}`;
 const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 describe('Flower computer stage', () => {
+  it('commits real IME and native text once without exposing drafts or losing key order', async () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const input = vi.fn(() => { host.querySelector('.flower-computer-stage')?.setAttribute('data-input-count', String(input.mock.calls.length)); });
+    const dispose = render(() => <FlowerComputerStage
+      snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
+      userFrame={new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' })}
+      copy={{ title: 'Computer', close: 'Close', noFrame: 'Loading', retry: 'Retry' }} onClose={() => undefined} onInput={input}
+    />, host);
+    try {
+      await waitFor(() => (host.querySelector('img') as HTMLImageElement | null)?.naturalWidth === 1);
+      // Unicode is intentional: use native Chromium composition, not synthetic
+      // CompositionEvents that incorrectly succeed on non-editable images.
+      const text = '\u79c1\u5bc6\u8f93\u5165';
+      const compose = commands as unknown as { composeComputerStageText: (text: string) => Promise<{ beforeCommit: string | null }> };
+      expect((await compose.composeComputerStageText(text)).beforeCommit).toBeNull();
+      expect(input.mock.calls).toEqual([
+        [{ action: 'type', text }], [{ action: 'type', text: 'a' }], [{ action: 'type', text: 'b' }],
+        [{ action: 'key', key: 'Tab' }], [{ action: 'type', text: 'paste' }],
+      ]);
+      expect(host.querySelector('textarea')?.value).toBe('');
+      expect(host.innerText.trim()).toBe('');
+    } finally { dispose(); host.remove(); }
+  });
   it('keeps decoded pixels during status updates and replacement frame loading', async () => {
     const host = document.createElement('div'); document.body.append(host);
     const png = () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' });
@@ -158,6 +182,19 @@ describe('Flower computer stage', () => {
     } });
     await waitFor(() => setComputerViewer.mock.calls.length === 3);
     expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
+    (runtime.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
+    await waitFor(() => setComputerViewer.mock.calls.length === 4);
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 5,
+      items: [...nextRun.items!, { ...observed, id: 'hidden-observation', ordinal: 101, run_id: 'next-run', turn_id: 'next-turn',
+        activity: { ...observed.activity, tool_id: 'hidden-observation', status: 'success', presentation: {
+          label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
+          target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: nextFrame }],
+        } },
+      }],
+    } });
+    await waitFor(() => runtime.querySelector('[data-flower-activity-item-id="hidden-observation"]') !== null);
+    expect(runtime.querySelector('.flower-computer-stage')).toBeNull();
+    expect(setComputerViewer).toHaveBeenCalledTimes(4);
   });
 });
 
@@ -202,8 +239,14 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   expect(surface.querySelector('.flower-computer-stage')).toBeNull();
   controlButton()!.click();
   await waitFor(() => (surface.querySelector('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
-  const img = surface.querySelector('.flower-computer-stage img') as HTMLImageElement;
-  img.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true, cancelable: true }));
+  const keyboard = surface.querySelector('.flower-computer-stage textarea') as HTMLTextAreaElement;
+  const sendKey = (key: string) => {
+    if (key.length === 1) {
+      keyboard.value = key;
+      keyboard.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: key, bubbles: true }));
+    } else keyboard.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  };
+  sendKey('s');
   await waitFor(() => inputComputerControl.mock.calls.length === 2);
   expect(inputComputerControl).toHaveBeenLastCalledWith({ thread_id: threadID, interaction_id: 'tool-input:result-control', action: 'type', text: 's' });
   expect(submitInput).not.toHaveBeenCalled();
@@ -216,25 +259,25 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   expect(surface.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(privateURL);
   expect(inputComputerControl).toHaveBeenCalledTimes(2);
   const rapidText = 'A'.repeat(80);
-  for (const key of rapidText) img.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  for (const key of rapidText) sendKey(key);
   await waitFor(() => !handback.disabled);
   const forwarded = inputComputerControl.mock.calls.slice(2).map(([call]) => call.action === 'type' ? call.text : '').join('');
   expect(forwarded).toBe(rapidText);
   expect(submitInput).not.toHaveBeenCalled();
   const orderedStart = inputComputerControl.mock.calls.length;
   for (const key of ['a', 'b', 'Tab', 'c', 'd', 'Enter']) {
-    img.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    sendKey(key);
   }
   await waitFor(() => !handback.disabled);
   expect(inputComputerControl.mock.calls.slice(orderedStart).map(([call]) => ({ action: call.action, value: call.text ?? call.key }))).toEqual([
     { action: 'type', value: 'ab' }, { action: 'key', value: 'Tab' }, { action: 'type', value: 'cd' }, { action: 'key', value: 'Enter' },
   ]);
   const beforeOverflow = inputComputerControl.mock.calls.length;
-  for (let index = 0; index < 40; index++) img.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  for (let index = 0; index < 40; index++) sendKey('ArrowRight');
   await waitFor(() => !handback.disabled);
   expect(inputComputerControl).toHaveBeenCalledTimes(beforeOverflow);
   expect(surface.querySelector('.flower-input-request [role="alert"]') ?? surface.querySelector('[role="alert"]')).not.toBeNull();
-  img.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }));
+  sendKey('x');
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(inputComputerControl).toHaveBeenCalledTimes(beforeOverflow);
   controlButton()!.click();
