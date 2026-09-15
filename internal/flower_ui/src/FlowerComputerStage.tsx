@@ -125,7 +125,20 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           </svg>
         </button>
       }>
-  <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title} data-computer-target={targetID()}>
+  <section
+    class="flower-computer-stage"
+    role="dialog"
+    aria-label={props.copy.title}
+    data-computer-target={targetID()}
+    style={{ 'touch-action': 'none', 'user-select': 'none' }}
+    onPointerDown={(event) => {
+      const element = event.target as HTMLElement;
+      // Keep controls and the captured computer surface interactive. Every
+      // other part of the floating window is a natural drag surface.
+      if (element.closest('button, input, textarea, select, a, img')) return;
+      (handle.onPointerDown as unknown as ((event: PointerEvent) => void) | undefined)?.(event);
+    }}
+  >
     <div class="flower-computer-stage-controls">
     <button {...handle} ref={grip} type="button" class="flower-computer-stage-drag" aria-label={props.copy.move} title={props.copy.move}><GripVertical class="h-4 w-4" aria-hidden="true" /></button>
     <button type="button" class="flower-computer-stage-minimize" aria-label={props.copy.minimize} title={props.copy.minimize} onClick={minimize}><Minus class="h-4 w-4" aria-hidden="true" /></button>
