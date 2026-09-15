@@ -1,4 +1,4 @@
-/* global window, document */
+/* global window, document, getComputedStyle */
 import assert from 'node:assert/strict';
 import { readFile, readdir, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
@@ -463,6 +463,13 @@ try {
   await composer.press('Enter');
   const takeControl = page.locator('[data-computer-control-action="take"]');
   await takeControl.waitFor({ timeout: 180_000 });
+  assert.equal(await page.locator('.flower-composer-continue').count(), 0, 'takeover displayed an unrelated Continue action');
+  const controlLayout = await page.locator('[data-computer-control-action]').evaluateAll((buttons) => buttons.map((button) => ({
+    fits: button.scrollWidth <= button.clientWidth && button.scrollHeight <= button.clientHeight,
+    cursor: getComputedStyle(button).cursor,
+  })));
+  assert.equal(controlLayout.length, 2);
+  assert(controlLayout.every((button) => button.fits && button.cursor === 'pointer'), 'takeover labels overflowed their controls');
   const takeoverThread = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
   ownedThreads.add(takeoverThread);
   assert.equal(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status'), 'waiting_user');

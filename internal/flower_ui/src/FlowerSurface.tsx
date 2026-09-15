@@ -7556,15 +7556,15 @@ webSearch: model.web_search,
           </>}>
             <p>{copy().chat.computerControlHint}</p>
             <Show when={computerControlError()}><p role="alert">{copy().chat.computerControlFailed}</p></Show>
-            <div class="flex gap-2">
-              <button type="button" class="flower-input-request-navigation-button" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => { setComputerStageOpen(true); inputComputerControl({ action: 'observe' }); }}>{copy().chat.computerTakeControl}</button>
-              <button type="button" class="flower-input-request-navigation-button" data-computer-control-action="return" disabled={computerControlBusy()} onClick={() => {
+            <div class="flower-computer-control-actions">
+              <Button variant="secondary" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => { setComputerStageOpen(true); inputComputerControl({ action: 'observe' }); }}>{copy().chat.computerTakeControl}</Button>
+              <Button variant="primary" data-computer-control-action="return" disabled={computerControlBusy()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
                 if (!question || !choice) return;
                 selectInputChoice(question, choice);
                 void submitInputRequest();
-              }}>{copy().chat.computerReturnControl}</button>
+              }}>{copy().chat.computerReturnControl}</Button>
             </div>
           </Show>
         </section>
@@ -11330,7 +11330,7 @@ webSearch: model.web_search,
                         loading={selectedThreadStopPending()}
                         onClick={() => void stopSelectedThreadFromComposer()}
                       />
-                      <Button
+                      <Show when={!isComputerInput(selectedInputRequest())}><Button
                         variant="primary"
                         icon={ArrowUp}
                         class="flower-composer-continue"
@@ -11338,7 +11338,7 @@ webSearch: model.web_search,
                         onClick={() => void submitChat()}
                       >
                         {chatCopyValue('inputRequestSubmit', 'Continue')}
-                      </Button>
+                      </Button></Show>
                     </div>
                   </Match>
                   <Match when={bottomActionMode() === 'chat'}>

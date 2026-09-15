@@ -77,8 +77,12 @@ screenshots must not enter Activity, model history, logs or the durable media
 store. The endpoint returns PNG bytes with `Cache-Control: no-store`; Desktop
 transports them through its existing private IPC boundary.
 
-Flower presents localized takeover/handback controls in the input card. Explicit
-takeover opens the media-only Stage. Keyboard and pointer actions go to the
+Flower presents localized takeover/handback controls in the input card.
+Takeover and handback use content-sized standard buttons that wrap on narrow
+surfaces. Computer input has one handback action; the generic question Continue
+button is not shown. The ordinary Stop control remains available while waiting
+for the user and preserves the same cancellation contract as active execution.
+Explicit takeover opens the media-only Stage. Keyboard and pointer actions go to the
 private endpoint; only the acknowledgement goes through `submitInput`. Images
 are decoded before replacement and Blob URLs are retired on disposal. Failed
 input does not replay automatically, and queued input is discarded after an
