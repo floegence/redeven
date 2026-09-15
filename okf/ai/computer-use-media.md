@@ -75,7 +75,11 @@ verification descriptor hashes after temporary binaries are removed.
 An optional `REDEVEN_NODE_ARCHIVE` reuses a downloaded Linux archive; it must
 match the current `.node-version`, architecture, and official SHA-256 before
 execution. Network downloads are bounded and unused source-package indexes
-are excluded from this binary-only fixture environment.
+are excluded from this binary-only fixture environment. Setup has a ten-minute
+deadline. An explicit `REDEVEN_COMPUTER_WEBTOP_DEBIAN_MIRROR` may select an HTTPS
+Debian mirror origin; it is recorded in the manifest and retains APT signature
+verification. There is no automatic mirror fallback. Unused Docker and
+NodeSource repositories from the base image do not participate in setup.
 Its scope includes managed-browser actions, X11 GUI control effects, per-turn
 decoded live frames, hidden-viewer persistence, settings and login handback with
 rapid ASCII and native Chromium IME submission. It does not qualify native
