@@ -31,6 +31,7 @@ import {
   ActivityBarTerminalIcon,
 } from './icons/ActivityBarDockIcons';
 import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
+import { PluginsWorkbenchIcon } from './icons/WorkbenchSoftIcons';
 import {
   BottomBarItem,
   BottomBarCompanion,
@@ -4982,7 +4983,7 @@ export function EnvAppShell() {
             dockActions={[{
               id: 'plugins',
               label: i18n.t('uiCopy.plugin.panelTitle'),
-              icon: Grid3x3,
+              icon: PluginsWorkbenchIcon,
               active: pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench',
               onActivate: (trigger) => {
                 const nextOpen = !(pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench');
