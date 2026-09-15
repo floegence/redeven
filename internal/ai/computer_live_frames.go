@@ -29,6 +29,13 @@ func (r *ComputerUseRuntime) StartComputerLiveFrames(ctx context.Context, thread
 	if r == nil || publish == nil || threadID == "" || sessionID == "" || targetID == "" {
 		return nil, errors.New("invalid computer live frame session")
 	}
+	// A keyframe authorizes reading history, not acquiring a shared target.
+	// Recheck the current owner's control on every capture as well as startup.
+	_, release, err := r.acquireComputerControl(ctx, TargetToolCall{liveFrame: true, ThreadID: threadID, TargetID: targetID, ToolName: "computer.screenshot"})
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	key := threadID + "\x00" + sessionID + "\x00" + targetID
 	r.mu.Lock()
 	if r.closed {

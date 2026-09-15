@@ -52,6 +52,10 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 	}
 	control.mu.Lock()
 	defer control.mu.Unlock()
+	if call.liveFrame && !call.controlReturn && !call.userInput && control.threadID == "" {
+		unlock()
+		return nil, nil, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
+	}
 	if control.threadID != "" && (control.threadID != call.ThreadID || ((!call.liveFrame || call.controlReturn || call.userInput) && control.runID != "" && control.runID != call.RunID)) {
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TARGET_NOT_ALLOWED")

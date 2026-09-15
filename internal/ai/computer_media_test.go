@@ -109,7 +109,8 @@ func TestComputerRuntimeDropsUnsafeFramesBeforeStorageOrViewing(t *testing.T) {
 			executor := &unsafeComputerFrameExecutor{result: TargetToolResult{TargetID: "target", frameBytes: body, Attachments: []TargetToolAttachment{attachment}, Safety: &InteractionSafetyDecision{Level: "takeover"}, Result: map[string]any{"action_executed": true}}}
 			runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 			t.Cleanup(func() { _ = runtime.Close() })
-			result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "browser.navigate", liveFrame: live})
+			acquireLiveFrameTestTarget(t, runtime, "owner")
+			result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "browser.navigate", liveFrame: live})
 			if err != nil {
 				t.Fatal(err)
 			}

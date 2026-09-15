@@ -91,3 +91,32 @@ func TestComputerControlSerializesAndCancelsBeforeDispatch(t *testing.T) {
 	default:
 	}
 }
+
+func TestComputerLiveCaptureCannotClaimOrReuseReleasedTarget(t *testing.T) {
+	body, attachment := computerFrameFixture(t)
+	executor := &takeoverObservationExecutor{body: body, attachment: attachment}
+	executor.safe.Store(true)
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+	t.Cleanup(func() { _ = runtime.Close() })
+	owner := TargetToolCall{ThreadID: "owner", RunID: "run", TargetID: "target", ToolName: "computer.screenshot"}
+	live := owner
+	live.liveFrame = true
+	for _, phase := range []string{"before_action", "after_release"} {
+		if phase == "after_release" {
+			if _, err := runtime.ExecuteTargetTool(t.Context(), owner); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := runtime.ExecuteTargetTool(t.Context(), live); err != nil {
+				t.Fatal(err)
+			}
+			runtime.releaseComputerControl(owner.ThreadID, owner.RunID)
+		}
+		before := executor.observations.Load()
+		if _, err := runtime.ExecuteTargetTool(t.Context(), live); err == nil {
+			t.Fatalf("%s: historical viewer acquired unowned target", phase)
+		}
+		if executor.observations.Load() != before {
+			t.Fatal("unauthorized live capture reached adapter")
+		}
+	}
+}

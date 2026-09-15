@@ -913,6 +913,7 @@ func TestComputerViewerStopsWithWorkspaceConnection(t *testing.T) {
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	defer runtime.Close()
 	svc.targetToolExecutor = runtime
+	acquireLiveFrameTestTarget(t, runtime, "thread")
 	request := ComputerViewerRequest{ObserverID: sub.subscriber.observerID, Revision: 1, ThreadID: "thread", TargetID: "target"}
 	if err := svc.setComputerViewer(t.Context(), &meta, request); err != nil {
 		t.Fatal(err)
