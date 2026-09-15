@@ -22,11 +22,17 @@ const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (
   return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
 
-const TestProviders: Component<{ children: JSX.Element }> = (props) => (
-  <FloeConfigProvider>
-    <LayoutProvider>{props.children}</LayoutProvider>
-  </FloeConfigProvider>
-);
+const TestProviders: Component<{ children: JSX.Element }> = (props) => {
+  // LayoutProvider reads browser media-query state during initialization. Keep
+  // the node test harness lightweight while supplying the real context to
+  // browser tests that exercise FloatingWindow.
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return props.children;
+  return (
+    <FloeConfigProvider>
+      <LayoutProvider>{props.children}</LayoutProvider>
+    </FloeConfigProvider>
+  );
+};
 import type {
 	FlowerActivityItem,
 	FlowerActivityTimelineBlock,
