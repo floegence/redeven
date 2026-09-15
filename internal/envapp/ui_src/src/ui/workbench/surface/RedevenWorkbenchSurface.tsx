@@ -27,6 +27,7 @@ import {
   resolveWorkbenchSurfaceTargetRole,
   resolveWorkbenchWheelRouting,
 } from './workbenchInputRouting';
+import { CompositionWorkbenchIcon } from '../../icons/WorkbenchSoftIcons';
 import { ensureWorkbenchTextSelectionSurfaceContract } from './workbenchTextSelectionSurface';
 import {
   REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
@@ -543,6 +544,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         widgetDefinitions={props.widgetDefinitions}
         launcherWidgetTypes={props.filterBarWidgetTypes}
         dockItemActivationMode="focus-cycle"
+        dockModeIcons={{ background: CompositionWorkbenchIcon }}
         textAnnotationDefaults={props.textAnnotationDefaults ?? REDEVEN_TEXT_ANNOTATION_DEFAULTS}
         backgroundLayerDefaults={props.backgroundLayerDefaults ?? REDEVEN_BACKGROUND_LAYER_DEFAULTS}
         interactionAdapter={redevenWorkbenchInteractionAdapter}

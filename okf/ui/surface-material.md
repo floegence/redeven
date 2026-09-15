@@ -3,7 +3,7 @@ type: UI Contract
 title: Shared surface material
 description: Apply Floe's lightweight material to Redeven controls, product boundaries, and floating surfaces without duplicating decoration or input ownership.
 tags: [ui, desktop, flower, themes, performance]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-09-15T00:00:00Z
 ---
 # Summary
 
@@ -58,6 +58,17 @@ lighting token. The source color guard admits only the three authored facet
 colors in SVG paint attributes. The artwork is decorative; the existing Dock
 control owns the localized accessible name and all activation behavior.
 
+Web Services, Composition Mode, and the plugin launcher share a restrained
+blue-gray identity: a network globe, a nearly frontal partitioned artboard,
+and nine application cards. Their 48-unit rounded tiles derive from the active
+card token. Authored light/dark SVG paints follow the shell color scheme, with
+narrow gradients and shallow static shadows instead of thick sides or strong
+highlights. Every rendered instance owns unique gradient and clipping IDs.
+Composition artwork enters the published `WorkbenchSurface.dockModeIcons`
+contract, so the mode trigger and menu share one product icon. The plugin
+launcher keeps its existing action and localized name; artwork owns no input
+or navigation behavior.
+
 # Boundaries
 
 Use restrained static depth and short functional control motion. Do not animate
@@ -84,6 +95,8 @@ component gallery alone is not downstream acceptance evidence.
 - `redeven:desktop/src/welcome/App.tsx` - Welcome configuration and floating toast boundary.
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Product semantic seam mapping.
 - `redeven:internal/envapp/ui_src/src/ui/icons/ContainersIcon.tsx` - Containers artwork and theme-derived Dock tile.
+- `redeven:internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx` - Shared shallow-depth artwork for Web Services, Composition Mode, and the plugin launcher.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Published mode artwork integration.
 - `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Bounded authored-palette exception.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Composer and floating menu roles.
 - `redeven:scripts/check_soft_surface_integration.test.mjs` - Shared ownership guard.
