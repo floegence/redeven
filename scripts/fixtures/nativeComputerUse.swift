@@ -64,6 +64,7 @@ final class Delegate: NSObject, NSApplicationDelegate {
     var status: NSTextField!
     var input: NSTextField!
     var wheelMonitor: Any?
+    var liveTimer: Timer?
     init(path: String) { state = FixtureState(path) }
     func label(_ text: String, _ frame: NSRect) -> NSTextField {
         let view = NSTextField(labelWithString: text)
@@ -79,6 +80,14 @@ final class Delegate: NSObject, NSApplicationDelegate {
         window.level = .floating
         window.backgroundColor = NSColor(calibratedRed: 0.93, green: 0.95, blue: 0.99, alpha: 1)
         let content = window.contentView!
+        let liveMarker = NSView(frame: NSRect(x: 680, y: 500, width: 20, height: 20))
+        liveMarker.wantsLayer = true
+        content.addSubview(liveMarker)
+        var sample = 0
+        liveTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak liveMarker] _ in
+            sample = (sample + 1) % 100
+            liveMarker?.layer?.backgroundColor = NSColor(calibratedHue: Double(sample) / 100, saturation: 0.8, brightness: 0.9, alpha: 1).cgColor
+        }
         content.addSubview(label("Flower Native Fixture", NSRect(x: 25, y: 485, width: 650, height: 35)))
         let button = NSButton(title: "Complete native step", target: self, action: #selector(click))
         button.frame = NSRect(x: 25, y: 415, width: 310, height: 50)
@@ -141,6 +150,7 @@ final class Delegate: NSObject, NSApplicationDelegate {
     }
     @objc func click() { state.clicks += 1; state.record("click"); state.save() }
     @objc func enter() { state.entered = input.stringValue == "Flower"; state.record("enter"); state.save() }
+    func applicationWillTerminate(_ notification: Notification) { liveTimer?.invalidate() }
 }
 
 let app = NSApplication.shared

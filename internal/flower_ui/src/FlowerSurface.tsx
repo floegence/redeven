@@ -5585,6 +5585,7 @@ webSearch: model.web_search,
           if (!detail || detail.kind !== 'computer') continue;
           candidates.push({
             item,
+            runID: block.block.run_id,
             target: detail.target,
             ...(detail.target_id ? { targetID: detail.target_id } : {}),
             action: detail.action,
@@ -5620,6 +5621,7 @@ webSearch: model.web_search,
   const computerViewerKey = createMemo(() => {
     const stage = selectedComputerStage();
     return computerStageOpen() && documentVisible() && computerObserverID() && stage?.frame && stage.targetID
+      && stage.runID && stage.runID === selectedThread()?.active_run_id
       && selectedThread()?.status === 'running'
       ? JSON.stringify([computerObserverID(), selectedThreadID(), stage.targetID]) : '';
   });
