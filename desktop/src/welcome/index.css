@@ -1054,6 +1054,22 @@ html:not(.dark) .redeven-endpoints-section {
     background-color 150ms ease;
 }
 
+.redeven-card-endpoint-row--status {
+  cursor: default;
+}
+
+.redeven-card-endpoint-detail {
+  display: block;
+  margin-top: 0.125rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.6875rem;
+  line-height: 1.2;
+}
+
+.redeven-card-endpoint-row--status:hover {
+  background: transparent;
+}
+
 .redeven-card-endpoint-row:hover {
   background: color-mix(in srgb, var(--muted) 40%, transparent);
 }

@@ -1,6 +1,7 @@
 import { defaultSavedEnvironmentLabel, desktopEnvironmentID } from './desktopPreferences';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { StartupReport } from './startup';
+import type { DesktopSessionTransportKind } from './desktopSessionTransport';
 import type { DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import {
   desktopProviderEnvironmentStateID,
@@ -87,6 +88,8 @@ export type DesktopSessionSummary = Readonly<{
   entry_url?: string;
   startup?: StartupReport;
   runtime_launch_mode?: DesktopSessionRuntimeLaunchMode;
+  /** Main-process transport classification used to keep private bridges out of user endpoints. */
+  transport_kind?: DesktopSessionTransportKind;
 }>;
 
 function matchingOptionalIdentity(left: string | undefined, right: string | undefined): boolean {

@@ -1876,6 +1876,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('delete rendererStartup.local_ui_bridge_url;');
     expect(mainSrc).toContain('delete rendererStartup.local_ui_bridge_token;');
     expect(mainSrc).toContain('entry_url: rendererSafeSessionURL(session)');
+    expect(mainSrc).toContain('transport_kind: session.transport.kind');
     expect(mainSrc).toContain('startup: rendererSafeStartupReport(session.startup)');
     expect(mainSrc).toContain("url.search = '';");
     expect(mainSrc).toContain("url.hash = '';");

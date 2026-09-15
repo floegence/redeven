@@ -2140,13 +2140,16 @@ describe('desktopWelcomeState', () => {
         local_environment: local,
       }),
       openSessions: [
-        testLocalEnvironmentSession(local, 'http://localhost:23998/'),
+        testLocalEnvironmentSession(local, 'http://localhost:23998/', 'open', {}, {
+          transportKind: 'native_local_bridge',
+        }),
       ],
       surface: 'environment_settings',
       selectedEnvironmentID: local.id,
     });
 
     expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
+    expect(snapshot.settings_surface.current_runtime_transport).toBe('desktop_bridge');
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 

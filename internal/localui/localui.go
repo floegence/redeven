@@ -284,7 +284,7 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 		bridgeAuthorized := expectedToken != "" && len(presentedToken) == len(expectedToken) && subtle.ConstantTimeCompare([]byte(presentedToken), []byte(expectedToken)) == 1
 		browserAuthorized := portForwardOrigin && s.desktopBrowserHandoffs.authorize(bridgeAuthority, forwardID, r.Cookies())
 		if !bridgeAuthorized && !browserAuthorized {
-			http.Error(w, "Local UI bridge authorization required", http.StatusUnauthorized)
+			http.Error(w, "Desktop-only Local UI bridge; open this Environment from Desktop", http.StatusUnauthorized)
 			return
 		}
 		if r.Body != nil {

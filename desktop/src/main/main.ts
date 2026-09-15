@@ -3831,6 +3831,12 @@ function rendererSafeStartupReport(startup: StartupReport): StartupReport {
 }
 
 function rendererSafeSessionURL(session: DesktopSessionRecord): string {
+  // Desktop bridge URLs are private transport authorities. They are valid only
+  // inside the authenticated Electron request path and must never be projected
+  // as user-copyable or browser-openable Environment endpoints.
+  if (session.transport.kind === 'native_local_bridge' || session.transport.kind === 'placement_bridge') {
+    return stripSensitiveURLPayload(session.startup.local_ui_url);
+  }
   return stripSensitiveURLPayload(session.display_url) || stripSensitiveURLPayload(session.startup.local_ui_url);
 }
 
@@ -4418,6 +4424,7 @@ function openSessionSummaries(): readonly DesktopSessionSummary[] {
       entry_url: rendererSafeSessionURL(session),
       startup: rendererSafeStartupReport(session.startup),
       runtime_launch_mode: session.runtime_handle?.launch_mode,
+      transport_kind: session.transport.kind,
     }));
 }
 

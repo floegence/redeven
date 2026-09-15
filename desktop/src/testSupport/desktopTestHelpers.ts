@@ -14,6 +14,7 @@ import type {
   DesktopSessionRuntimeLaunchMode,
 } from '../main/sessionRuntime';
 import type { StartupReport } from '../main/startup';
+import type { DesktopSessionTransportKind } from '../main/desktopSessionTransport';
 import {
   projectProviderEnvironmentToLocalRuntimeTarget,
   createDesktopLocalEnvironmentState,
@@ -251,6 +252,7 @@ export function testLocalEnvironmentSession(
   startupOverrides: Partial<StartupReport> = {},
   options: Readonly<{
     runtimeLaunchMode?: DesktopSessionRuntimeLaunchMode;
+    transportKind?: DesktopSessionTransportKind;
   }> = {},
 ): DesktopSessionSummary {
   const target = buildLocalEnvironmentDesktopTarget(environment);
@@ -289,5 +291,6 @@ export function testLocalEnvironmentSession(
       ...startupOverrides,
     },
     runtime_launch_mode: options.runtimeLaunchMode,
+    transport_kind: options.transportKind,
   };
 }
