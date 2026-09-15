@@ -264,12 +264,12 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           </Show>
           <div class="flex shrink-0 flex-wrap justify-end gap-2">
             <Show when={stage() === 'review' && !commitNeedsReconciliation()}>
-              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,transform] duration-150 hover:bg-muted active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={returnToSource}>
+              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,border-color,color] duration-120 hover:bg-muted active:bg-muted/80 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={returnToSource}>
                 {i18n.t('uiCopy.plugin.external.back')}
               </button>
             </Show>
             <Show when={stage() !== 'committing' && !commitNeedsReconciliation()}>
-              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,transform] duration-150 ease-out hover:bg-muted active:scale-[0.98] sm:min-h-9 motion-reduce:transform-none motion-reduce:transition-none" onClick={close}>
+              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,border-color,color] duration-120 ease-out hover:bg-muted active:bg-muted/80 sm:min-h-9 motion-reduce:transition-none" onClick={close}>
                 {stage() === 'complete' ? i18n.t('common.actions.close') : i18n.t('common.actions.cancel')}
               </button>
             </Show>
@@ -1127,7 +1127,7 @@ function InspectionConfirmation(props: {
         data-external-plugin-confirmation
         class={cn(
           PLUGIN_MOBILE_TOUCH_TARGET_CLASS,
-          'group flex cursor-pointer items-start gap-2.5 rounded-md px-1 py-1 transition-[background-color,transform] duration-150 hover:bg-muted/30 active:scale-[0.995] focus-within:ring-2 focus-within:ring-primary/20 motion-reduce:transform-none motion-reduce:transition-none sm:max-w-[30rem]',
+          'group flex cursor-pointer items-start gap-2.5 rounded-md px-1 py-1 transition-[background-color] duration-120 hover:bg-muted/30 focus-within:ring-2 focus-within:ring-primary/20 motion-reduce:transition-none sm:max-w-[30rem]',
           props.checked && 'bg-primary/5',
         )}
       >

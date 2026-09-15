@@ -104,7 +104,7 @@ function DownloadTaskAction(props: {
     <button
       type="button"
       title={props.label}
-      class={`inline-flex size-6 cursor-pointer items-center justify-center rounded-md transition-all duration-100 active:scale-[0.97] ${
+      class={`inline-flex size-6 cursor-pointer items-center justify-center rounded-md transition-[background-color,color,border-color] duration-120 ${
         props.tone === 'danger'
           ? 'text-destructive/70 hover:text-destructive hover:bg-destructive/10 active:bg-destructive/15'
           : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent active:bg-accent/80'
@@ -139,7 +139,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
         <Show when={hasFinished()}>
           <button
             type="button"
-            class="cursor-pointer rounded-md border border-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground/70 transition-all duration-100 hover:border-border/70 hover:bg-accent hover:text-foreground active:scale-[0.97]"
+            class="cursor-pointer rounded-md border border-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground/70 transition-[background-color,color,border-color] duration-120 hover:border-border/70 hover:bg-accent hover:text-foreground active:bg-accent/80"
             onClick={() => props.manager.clearFinished()}
           >
             {i18n.t('uiCopy.downloads.clearFinished')}
