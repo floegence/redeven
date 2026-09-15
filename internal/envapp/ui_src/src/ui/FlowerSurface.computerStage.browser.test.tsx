@@ -325,6 +325,7 @@ for (const projected of [false, true]) {
       }
       document.querySelector<HTMLButtonElement>('.flower-computer-stage-minimize')!.click();
       expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
+      await page.getByRole('button', { name: 'Restore viewer' }).screenshot({ path: `/tmp/redeven-viewer-icon-${projected ? 'projected' : 'normal'}.png` });
       setOwner('next-viewer-thread');
       await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
       expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();

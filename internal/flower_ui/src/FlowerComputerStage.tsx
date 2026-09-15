@@ -3,7 +3,6 @@ import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-j
 import { GripVertical, Minus, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import { SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
-import { FlowerIcon } from './icons/FlowerIcon';
 
 import type { FlowerActivityItem, FlowerComputerUserInput } from './contracts/flowerSurfaceContracts';
 
@@ -119,7 +118,11 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       {(handle) => <Show when={!minimized()} fallback={
         <button {...handle} ref={launcher} type="button" class="flower-computer-stage-ball"
           aria-label={props.copy.restore} title={props.copy.restore} onClick={restore}>
-          <FlowerIcon class="h-6 w-6" />
+          <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2.5" />
+            <path d="M6.5 8h5" />
+            <rect x="11" y="11" width="7" height="6" rx="1" fill="currentColor" fill-opacity="0.16" />
+          </svg>
         </button>
       }>
   <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title} data-computer-target={targetID()}>
