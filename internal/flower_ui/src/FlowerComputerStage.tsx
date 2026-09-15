@@ -105,7 +105,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   });
   return (
   <Show when={threadID() || 'computer-viewer'} keyed>
-    {(viewerThread) => <FloatingWindow open={true} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.copy.title} draggable resizable defaultSize={{ width: 620, height: 420 }} minSize={{ width: 360, height: 240 }} class="flower-computer-stage" data-computer-viewer-thread={viewerThread}>
+    {(viewerThread) => <FloatingWindow open={true} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.copy.title} draggable resizable defaultSize={{ width: 620, height: 420 }} minSize={{ width: 360, height: 240 }} viewportInsets={{ top: 56, right: 12, bottom: 12, left: 12 }} class="flower-computer-stage" data-computer-viewer-thread={viewerThread}>
     <div class="flower-computer-stage-frame-wrap">
       <Show when={props.onInput}>
         <textarea
