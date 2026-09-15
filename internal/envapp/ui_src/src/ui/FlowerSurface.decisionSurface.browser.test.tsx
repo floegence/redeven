@@ -4,6 +4,9 @@ import { userEvent } from 'vitest/browser';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import flowerFeatureStyles from './flower-feature.css?inline';
+import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
+import decisionFixtures from '../../../../flower_ui/src/testdata/decisionCurrentViews.json';
+import type { FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import {
@@ -29,6 +32,94 @@ describe('Flower bottom decision surface', () => {
     featureStyle.textContent = flowerFeatureStyles;
     document.head.append(featureStyle);
     onTestFinished(() => featureStyle.remove());
+  });
+
+  it('renders published runtime fields with compact rows and submits the established option value', async () => {
+    const current = decisionFixtures.ask_rich as FlowerRuntimeCurrentView;
+    const waiting = applyFlowerRuntimeCurrentView(thread({ thread_id: current.thread_id }), current);
+    const submitInput = vi.fn(async (input: { thread_id: string }) => ({ thread_id: input.thread_id, consumed_prompt_id: 'decision-interaction',
+      current: { ...current, view_version: 2, interactions: [], activity: 'idle' as const, last_outcome: 'completed' as const } }));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true),
+      listThreads: vi.fn(async () => [waiting]), loadThread: vi.fn(async () => ({ thread: waiting, current })), submitInput });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fixture"] button')));
+    (runtime.querySelector('[data-thread-id="thread-fixture"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('[role="radio"]').length === 3);
+    const surface = runtime.querySelector('.flower-decision-surface') as HTMLElement;
+    expect(surface.querySelector('.flower-input-request-question-header')?.textContent).toBe('Release channel');
+    expect(surface.querySelector('.flower-input-request-question-text')?.textContent).toBe('Which release channel should Flower use?');
+    expect(surface.textContent).toContain('Use the version tested for production.');
+    expect(surface.textContent).not.toContain('Answer this question to continue.');
+    expect(surface.querySelector('.flower-input-request-description')).toBeNull();
+    expect(surface.hasAttribute('data-floe-input-surface')).toBe(false);
+    (surface.querySelector('[data-flower-input-answer-kind="custom"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(surface.querySelector('textarea')));
+    expect(surface.hasAttribute('data-floe-input-surface')).toBe(true);
+    expect(surface.querySelector('textarea')?.getAttribute('placeholder')).toBe('Describe another channel');
+    await userEvent.click(surface.querySelector('.flower-input-request-choice')!);
+    await waitFor(() => !surface.querySelector('textarea'));
+    expect(surface.hasAttribute('data-floe-input-surface')).toBe(false);
+    (surface.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
+    await waitFor(() => submitInput.mock.calls.length === 1);
+    expect(submitInput.mock.calls[0]?.[0]).toMatchObject({ answers: { channel: { choice_id: 'Stable' } } });
+  });
+
+  it.each(['ask_sparse', 'ask_long', 'ask_zh', 'approval_date', 'approval_date_zh', 'approval_multiline'] as const)(
+    'keeps real %s content and controls inside light, dark, and narrow containers', async (fixtureName) => {
+      const current = decisionFixtures[fixtureName] as FlowerRuntimeCurrentView;
+      const waiting = applyFlowerRuntimeCurrentView(thread({ thread_id: current.thread_id }), current);
+      const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [waiting]),
+        loadThread: vi.fn(async () => ({ thread: waiting, current })) }, { presentation: 'companion', companionOpen: true, engaged: true, transcriptVisible: true });
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fixture"] button')));
+      (runtime.querySelector('[data-thread-id="thread-fixture"] button') as HTMLButtonElement).click();
+      await waitFor(() => Boolean(runtime.querySelector('.flower-decision-surface')));
+      const surface = runtime.querySelector('.flower-decision-surface') as HTMLElement;
+      const originalTheme = document.documentElement.className;
+      onTestFinished(() => { document.documentElement.className = originalTheme; });
+      for (const dark of [false, true]) {
+        document.documentElement.classList.toggle('dark', dark);
+        for (const width of [900, 360]) {
+          runtime.style.width = `${width}px`;
+          await flush();
+          expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+          expect(surface.hasAttribute('data-floe-input-surface')).toBe(false);
+          for (const button of surface.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-actions button, .flower-input-request-actions button')) {
+            const bounds = button.getBoundingClientRect();
+            expect(bounds.left).toBeGreaterThanOrEqual(surface.getBoundingClientRect().left);
+            expect(bounds.right).toBeLessThanOrEqual(surface.getBoundingClientRect().right);
+            expect(Number.parseFloat(getComputedStyle(button).borderRadius)).toBeGreaterThanOrEqual(bounds.height / 2);
+          }
+        }
+      }
+      if (fixtureName.startsWith('ask')) {
+        await waitFor(() => surface.querySelectorAll('.flower-input-request-choice').length === 2);
+        const choices = Array.from(surface.querySelectorAll<HTMLElement>('.flower-input-request-choice'));
+        for (const choice of choices) {
+          expect(getComputedStyle(choice).minHeight).toBe(choice.classList.contains('flower-input-request-choice-described') ? '56px' : '40px');
+        }
+        expect(getComputedStyle(surface.querySelector('.flower-input-request-choice-grid')!).gap).toBe('4px');
+      } else {
+        expect(surface.querySelector('.flower-approval-operation-label')?.textContent).toBe(current.interactions![0].approval!.label);
+        expect(surface.querySelector('.flower-approval-question')).toBeNull();
+        expect(surface.querySelector('.flower-approval-risk')).toBeNull();
+        expect(surface.querySelector('.flower-approval-command-text')?.textContent).toBe(current.interactions![0].approval!.command);
+        const operation = surface.querySelector('.flower-approval-operation')!;
+        expect(getComputedStyle(operation).borderTopWidth).toBe('0px');
+        expect(getComputedStyle(operation).borderBottomWidth).toBe('0px');
+      }
+    },
+  );
+
+  it('does not describe a computer write effect as modifying files', async () => {
+    const current: FlowerRuntimeCurrentView = { ...decisionFixtures.approval_date as FlowerRuntimeCurrentView,
+      interactions: [{ ...decisionFixtures.approval_date.interactions[0], kind: 'approval',
+        approval: { label: 'Click the selected control', effects: ['write'], tool_name: 'computer.click', tool_call_id: 'decision-call' } }] };
+    const waiting = applyFlowerRuntimeCurrentView(thread({ thread_id: current.thread_id }), current);
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [waiting]), loadThread: vi.fn(async () => ({ thread: waiting, current })) });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fixture"] button')));
+    (runtime.querySelector('[data-thread-id="thread-fixture"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-approval-operation-label')));
+    expect(runtime.querySelector('.flower-approval-operation-label')?.textContent).toBe('Click the selected control');
+    expect(runtime.querySelector('.flower-approval-risk')).toBeNull();
   });
 
   const approval = (id: string, overrides: Record<string, unknown> = {}) => ({
@@ -461,7 +552,8 @@ describe('Flower bottom decision surface', () => {
     expect(surface.textContent).toContain('Allow the following action?');
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.textContent).not.toContain('terminal.exec');
-    expect(surface.querySelector('.flower-approval-operation-description')?.textContent).toContain('Validate the release endpoint');
+    expect(surface.querySelector('.flower-approval-operation-label')?.textContent).toContain('Validate the release endpoint');
+    expect(surface.querySelector('.flower-approval-operation-description')).toBeNull();
     expect(surface.querySelector('.flower-approval-risk')?.textContent).not.toContain('Validate the release endpoint');
     expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(2);
     expect(surface.textContent).toContain('2 pending tool approvals');

@@ -547,7 +547,6 @@ export type FlowerSurfaceCopy = Readonly<{
     computerControlHint?: string;
     computerControlFailed?: string;
     inputRequestTitle?: string;
-    inputRequestDescription?: string;
     inputRequestSubmit?: string;
     inputRequestRetry?: string;
     inputRequestAnswerRequired?: string;
@@ -837,7 +836,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalRejectBatchAction: (count) => `Reject all ${count} pending tool approvals`,
     toolApprovalApproveBatch: 'Allow all',
     toolApprovalApproveBatchAction: (count) => `Allow all ${count} pending tool approvals`,
-    toolApprovalOutsideWorkspaceRisk: 'This command may access resources outside the workspace.',
+    toolApprovalOutsideWorkspaceRisk: 'This action may access resources outside the workspace.',
     toolApprovalWritesFilesRisk: 'This action will modify files.',
     toolApprovalWorkingDirectory: 'Working directory',
     toolApprovalCommand: 'Command',
@@ -868,7 +867,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     computerControlHint: "Complete sign-in in the image using your mouse and keyboard. Passwords and codes stay out of the conversation.",
     computerControlFailed: "Control could not be updated. Check the page before trying again.",
     inputRequestTitle: 'Waiting for your reply',
-    inputRequestDescription: 'Answer this question to continue.',
     inputRequestSubmit: 'Continue',
     inputRequestRetry: 'Retry',
     inputRequestAnswerRequired: 'Answer the waiting prompt before continuing.',

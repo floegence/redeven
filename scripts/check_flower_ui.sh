@@ -111,6 +111,7 @@ main() {
       internal/flower_ui/src/transportOutbox.test.ts \
       internal/flower_ui/src/runtimeCurrentView.test.ts \
       internal/flower_ui/src/runtimeCurrentView.stability.test.ts \
+      internal/flower_ui/src/flowerDecisionCurrent.test.ts \
       internal/flower_ui/src/flowerLiveFrameQueue.test.ts \
       internal/flower_ui/src/inputResponse.test.ts \
       internal/flower_ui/src/flowerApprovalPresentation.test.ts \

@@ -1,0 +1,283 @@
+{
+  "approval_date": {
+    "thread_id": "thread-fixture",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 1,
+      "input_count": 0
+    },
+    "turn_id": "turn-fixture",
+    "run_id": "run-fixture",
+    "interactions": [
+      {
+        "id": "decision-interaction",
+        "turn_id": "turn-fixture",
+        "run_id": "run-fixture",
+        "kind": "approval",
+        "tool_call_id": "decision-call",
+        "approval": {
+          "label": "Check the current system time",
+          "command": "date",
+          "effects": [
+            "shell"
+          ],
+          "tool_name": "terminal.exec",
+          "tool_call_id": "decision-call"
+        }
+      }
+    ]
+  },
+  "approval_date_zh": {
+    "thread_id": "thread-fixture",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 1,
+      "input_count": 0
+    },
+    "turn_id": "turn-fixture",
+    "run_id": "run-fixture",
+    "interactions": [
+      {
+        "id": "decision-interaction",
+        "turn_id": "turn-fixture",
+        "run_id": "run-fixture",
+        "kind": "approval",
+        "tool_call_id": "decision-call",
+        "approval": {
+          "label": "执行 date 命令查看当前系统时间",
+          "command": "date",
+          "effects": [
+            "shell"
+          ],
+          "tool_name": "terminal.exec",
+          "tool_call_id": "decision-call"
+        }
+      }
+    ]
+  },
+  "approval_multiline": {
+    "thread_id": "thread-fixture",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 1,
+      "input_count": 0
+    },
+    "turn_id": "turn-fixture",
+    "run_id": "run-fixture",
+    "interactions": [
+      {
+        "id": "decision-interaction",
+        "turn_id": "turn-fixture",
+        "run_id": "run-fixture",
+        "kind": "approval",
+        "tool_call_id": "decision-call",
+        "approval": {
+          "label": "Inspect the system time and working directory",
+          "command": "printf 'Current time:\\n'\ndate\nprintf 'Working directory:\\n'\npwd",
+          "effects": [
+            "shell"
+          ],
+          "tool_name": "terminal.exec",
+          "tool_call_id": "decision-call"
+        }
+      }
+    ]
+  },
+  "ask_long": {
+    "thread_id": "thread-fixture",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 1
+    },
+    "turn_id": "turn-fixture",
+    "run_id": "run-fixture",
+    "interactions": [
+      {
+        "id": "decision-interaction",
+        "turn_id": "turn-fixture",
+        "run_id": "run-fixture",
+        "kind": "input",
+        "input": {
+          "summary": "The current deployment has completed its checks. Before I prepare the next step, which release channel should Flower use for this workspace, considering whether you need the version tested for production or want to evaluate the upcoming features?",
+          "questions": [
+            {
+              "id": "channel",
+              "prompt": "The current deployment has completed its checks. Before I prepare the next step, which release channel should Flower use for this workspace, considering whether you need the version tested for production or want to evaluate the upcoming features?",
+              "kind": "select",
+              "options": [
+                "Stable",
+                "Beta"
+              ],
+              "header": "Choose how to continue",
+              "choices_exhaustive": true,
+              "choices": [
+                {
+                  "choice_id": "stable",
+                  "value": "Stable",
+                  "label": "Stable"
+                },
+                {
+                  "choice_id": "beta",
+                  "value": "Beta",
+                  "label": "Beta"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "ask_rich": {
+    "thread_id": "thread-fixture",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 1
+    },
+    "turn_id": "turn-fixture",
+    "run_id": "run-fixture",
+    "interactions": [
+      {
+        "id": "decision-interaction",
+        "turn_id": "turn-fixture",
+        "run_id": "run-fixture",
+        "kind": "input",
+        "input": {
+          "summary": "Which release channel should Flower use?",
+          "questions": [
+            {
+              "id": "channel",
+              "prompt": "Which release channel should Flower use?",
+              "kind": "select_or_write",
+              "options": [
+                "Stable",
+                "Beta"
+              ],
+              "header": "Release channel",
+              "write_placeholder": "Describe another channel",
+              "choices_exhaustive": false,
+              "choices": [
+                {
+                  "choice_id": "stable",
+                  "value": "Stable",
+                  "label": "Stable",
+                  "description": "Use the version tested for production."
+                },
+                {
+                  "choice_id": "beta",
+                  "value": "Beta",
+                  "label": "Beta",
+                  "description": "Try new features before general release."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "ask_sparse": {
+    "thread_id": "thread-fixture",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 1
+    },
+    "turn_id": "turn-fixture",
+    "run_id": "run-fixture",
+    "interactions": [
+      {
+        "id": "decision-interaction",
+        "turn_id": "turn-fixture",
+        "run_id": "run-fixture",
+        "kind": "input",
+        "input": {
+          "summary": "Which release channel should Flower use?",
+          "questions": [
+            {
+              "id": "channel",
+              "prompt": "Which release channel should Flower use?",
+              "kind": "select",
+              "options": [
+                "Stable",
+                "Beta"
+              ],
+              "header": "Release channel",
+              "choices_exhaustive": true,
+              "choices": [
+                {
+                  "choice_id": "stable",
+                  "value": "Stable",
+                  "label": "Stable"
+                },
+                {
+                  "choice_id": "beta",
+                  "value": "Beta",
+                  "label": "Beta"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "ask_zh": {
+    "thread_id": "thread-fixture",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 1
+    },
+    "turn_id": "turn-fixture",
+    "run_id": "run-fixture",
+    "interactions": [
+      {
+        "id": "decision-interaction",
+        "turn_id": "turn-fixture",
+        "run_id": "run-fixture",
+        "kind": "input",
+        "input": {
+          "summary": "Flower 应使用哪个发布渠道？",
+          "questions": [
+            {
+              "id": "channel",
+              "prompt": "Flower 应使用哪个发布渠道？",
+              "kind": "select_or_write",
+              "options": [
+                "稳定版",
+                "测试版"
+              ],
+              "write_label": "使用其他渠道",
+              "header": "选择发布渠道",
+              "write_placeholder": "描述你希望使用的渠道",
+              "choices_exhaustive": false,
+              "choices": [
+                {
+                  "choice_id": "stable",
+                  "value": "稳定版",
+                  "label": "稳定版",
+                  "description": "使用已完成生产验证的版本。"
+                },
+                {
+                  "choice_id": "beta",
+                  "value": "测试版",
+                  "label": "测试版"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

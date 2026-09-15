@@ -46,7 +46,7 @@ describe('presentFlowerApproval', () => {
     }), copy);
 
     expect(presentation).toMatchObject({
-      operationLabel: 'Edit file',
+      operationLabel: 'Apply patch',
       targets: ['a.ts', 'b.ts'],
     });
   });
@@ -64,7 +64,7 @@ describe('presentFlowerApproval', () => {
     }), copy);
 
     expect(presentation).toMatchObject({
-      operationLabel: 'Run command',
+      operationLabel: 'Run shell command',
       command: 'pnpm test',
       description: 'Run the focused test suite',
       details: ['Working directory: /workspace'],
@@ -79,7 +79,7 @@ describe('presentFlowerApproval', () => {
     }), copy);
 
     expect(presentation).toMatchObject({
-      operationLabel: 'Access network resource',
+      operationLabel: 'Fetch page',
       targets: ['https://example.test/docs'],
     });
     expect(JSON.stringify(presentation)).not.toContain('web_url');

@@ -6524,23 +6524,43 @@ html.dark .flower-component-shell {
 .flower-input-request-choice-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.25rem;
   min-width: 0;
 }
 
 .flower-input-request-choice {
   display: flex;
   min-width: 0;
-  min-height: 3.5rem;
+  min-height: 2.5rem;
   align-items: center;
   gap: 0.65rem;
   border: 0;
   border-radius: 0.375rem;
   background: transparent;
-  padding: 0.7rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
   text-align: left;
   transition: background-color 150ms ease;
+}
+
+.flower-input-request-choice-described {
+  min-height: 3.5rem;
+}
+
+@media (pointer: coarse) {
+  .flower-input-request-choice:not(.flower-input-request-choice-described),
+  .flower-input-request-choice-custom,
+  .flower-composer-continue,
+  .flower-composer-approval-decision {
+    min-height: 2.75rem;
+  }
+
+  .flower-composer-stop,
+  .flower-composer-stop-thread,
+  .flower-input-request-navigation-button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
 }
 
 .flower-input-request-choice > div:last-child {
@@ -7348,9 +7368,15 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-surface .flower-approval-operation {
-  padding: 0.75rem 0;
-  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 52%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 52%, transparent);
+  padding: 0;
+}
+
+.flower-approval-single .flower-approval-operation-label {
+  font-size: 1.0625rem;
+}
+
+.flower-approval-single .flower-approval-operation-icon {
+  display: none;
 }
 
 .flower-approval-surface .flower-approval-risk {
@@ -7546,12 +7572,27 @@ html.dark .flower-component-shell {
   font-weight: 400;
 }
 
-.flower-input-request-surface .flower-input-request-question-text {
-  margin: 0;
+.flower-input-request-surface .flower-input-request-question-header,
+.flower-input-request-surface .flower-input-request-question-text:first-child {
   color: var(--foreground);
   font-size: 1.0625rem;
   font-weight: 500;
   line-height: 1.5;
+}
+
+.flower-input-request-surface .flower-input-request-question-text {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.flower-input-request-surface .flower-input-request-question-header + .flower-input-request-question-text {
+  margin-top: 0.25rem;
+}
+
+.flower-input-request-surface .flower-input-request-question {
+  gap: 0.75rem;
 }
 
 .flower-input-request-surface .flower-input-request-description {
@@ -7560,10 +7601,6 @@ html.dark .flower-component-shell {
   font-size: 0.75rem;
   font-weight: 400;
   line-height: 1.7;
-}
-
-.flower-input-request-surface .flower-input-request-choice-grid {
-  margin-top: 0.5rem;
 }
 
 .flower-input-admission-handoff-meta {

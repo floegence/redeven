@@ -64,10 +64,10 @@ export function presentFlowerApproval(
       ? formatted.slice(0, Math.max(0, formatted.length - firstTarget.length)).trim().replace(/[:：]\s*$/, '')
       : formatted.trim().replace(/[:：]\s*$/, '');
     displayTargets = networkTargets.map((target) => target.label);
-  } else {
-    const label = safeSummaryLabel(action);
-    operationLabel = label ? copy.executeAction(label) : copy.executeRequestedAction;
   }
+  const description = action.summary.description?.trim() || '';
+  const label = safeSummaryLabel(action);
+  operationLabel = (label !== command ? label : '') || description || operationLabel;
 
   return {
     title: copy.title,
@@ -75,6 +75,6 @@ export function presentFlowerApproval(
     targets: displayTargets,
     ...(command ? { command } : {}),
     details: workingDirectories.map((target) => copy.workingDirectory(target.label)),
-    ...(action.summary.description?.trim() ? { description: action.summary.description.trim() } : {}),
+    ...(description && description !== operationLabel ? { description } : {}),
   };
 }

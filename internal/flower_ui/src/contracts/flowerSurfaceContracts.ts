@@ -426,6 +426,7 @@ export type FlowerInputRequestAction = Readonly<{
 
 export type FlowerInputRequestChoice = Readonly<{
   choice_id: string;
+  value?: string;
   label: string;
   description?: string;
   kind: 'select';
@@ -608,6 +609,7 @@ type FlowerApprovalActionBase = Readonly<{
     cwd?: string;
     effects?: readonly string[];
     flags?: readonly string[];
+    risk?: string;
     targets?: readonly FlowerSafeTarget[];
   }>;
 }>;
@@ -681,6 +683,10 @@ export type FlowerRuntimeInteraction = Readonly<{
       prompt: string;
       kind: string;
       options?: readonly string[];
+      header?: string;
+      write_placeholder?: string;
+      choices_exhaustive?: boolean;
+      choices?: readonly Readonly<{ choice_id?: string; value: string; label: string; description?: string }>[];
       write_label?: string;
       secret?: boolean;
     }>[];
