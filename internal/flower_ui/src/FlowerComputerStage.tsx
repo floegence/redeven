@@ -2,7 +2,7 @@ import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { GripVertical, Minus, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
 
-import { SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
+import { FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerActivityItem, FlowerComputerUserInput } from './contracts/flowerSurfaceContracts';
 
@@ -125,28 +125,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           </svg>
         </button>
       }>
-  <section
-    class="flower-computer-stage"
-    role="dialog"
-    aria-label={props.copy.title}
-    data-computer-target={targetID()}
-    style={{ 'touch-action': 'none', 'user-select': 'none' }}
-    onPointerDown={(event) => {
-      const element = event.target as HTMLElement;
-      // Keep controls and the captured computer surface interactive. Every
-      // other part of the floating window is a natural drag surface.
-      if (element.closest('button, input, textarea, select, a, img')) return;
-      (handle.onPointerDown as unknown as ((event: PointerEvent) => void) | undefined)?.(event);
-    }}
-  >
-    <header class="flower-computer-stage-header" data-floe-floating-window-titlebar="true">
-      <button {...handle} ref={grip} type="button" class="flower-computer-stage-drag" aria-label={props.copy.move} title={props.copy.move}><GripVertical class="h-4 w-4" aria-hidden="true" /></button>
-      <span class="flower-computer-stage-title">{props.copy.title}</span>
-      <div class="flower-computer-stage-controls" data-floe-floating-window-header-actions="true">
-        <button type="button" class="flower-computer-stage-minimize" aria-label={props.copy.minimize} title={props.copy.minimize} onClick={minimize}><Minus class="h-4 w-4" aria-hidden="true" /></button>
-        <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button>
-      </div>
-    </header>
+  <FloatingWindow open={true} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.copy.title} draggable resizable={false} class="flower-computer-stage" headerActions={<><button type="button" class="flower-computer-stage-minimize" aria-label={props.copy.minimize} title={props.copy.minimize} onClick={minimize}><Minus class="h-4 w-4" aria-hidden="true" /></button><button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button></>}>
     <div class="flower-computer-stage-frame-wrap">
       <Show when={props.onInput}>
         <textarea
@@ -211,7 +190,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         )}
       </Show>
     </div>
-  </section>
+  </FloatingWindow>
       </Show>}
     </SurfaceFloatingPanel>}
   </Show>
