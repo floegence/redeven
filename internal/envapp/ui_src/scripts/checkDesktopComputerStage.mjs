@@ -10,6 +10,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright';
 import { findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
+import { observeDesktopComputerFrames, decodedLiveFramesForTarget } from './desktopComputerLiveEvidence.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -171,6 +172,7 @@ let nativeDirectory;
 let nativeProcess;
 let nativeExit;
 let nativeEvidence;
+let liveEvidence;
 const nativeRequested = process.env.REDEVEN_COMPUTER_NATIVE_E2E === '1';
 try {
   await page.bringToFront();
@@ -187,6 +189,7 @@ try {
     await page.getByRole('button', { name: /^Flower$/ }).click();
   }
   await page.locator('.flower-new-chat-button').click();
+  await page.evaluate(observeDesktopComputerFrames);
   for (const [index, prompt] of [
     `Open ${fixtureURL} in the managed browser, use computer.screenshot to inspect it, then use computer.click to click Complete step once. Take another screenshot and report the completed number. Do not use terminal or HTTP fetch.`,
     'On the current page, use computer.screenshot and computer.click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
@@ -281,6 +284,8 @@ try {
     nativeDirectory = undefined;
   }
   console.log('Browser and native task effects verified; checking Stage reopen and settings.');
+  liveEvidence = await page.evaluate(() => window.__stopComputerLiveEvidence());
+  await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
   await page.locator('.flower-computer-stage-close').click();
   assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'closing Stage must hide the viewer');
   await page.locator('.flower-activity-inline-button[aria-expanded="false"]').filter({ hasText: /^screenshot/u }).last().click();
@@ -382,9 +387,16 @@ try {
   }
   assert(protocol.some((entry) => entry.imageToolOutput), 'the actual provider never received a tool-result image');
   assert.equal(protocolErrors.length, 0, 'provider protocol assertions failed');
+  for (const target of nativeRequested ? ['browser-main', 'desktop-main'] : ['browser-main']) {
+    const live = decodedLiveFramesForTarget(liveEvidence, target);
+    assert(live.length >= 3 && new Set(live.map((frame) => frame.sha256)).size >= 2,
+      `${target}: continuous workspace frames did not reach decoded Stage pixels`);
+  }
   await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${nativeRequested ? 'Managed-browser and native desktop' : 'Managed-browser'} Desktop UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
 } catch (error) {
+  liveEvidence ??= await page.evaluate(() => window.__stopComputerLiveEvidence?.()).catch(() => undefined);
+  if (liveEvidence) await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
   await page.screenshot({ path: path.join(output, 'failure.png'), mask: [page.locator('.flower-computer-stage')] }).catch(() => undefined);
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
   const failedThreadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => null);

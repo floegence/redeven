@@ -44,7 +44,11 @@ Floret canonical invocation, matching the terminal view that releases control.
 Uninitialized legacy run fields cannot authorize an action. Failure diagnostics
 record those same canonical identities.
 
-The current resource lease identifies its thread and run. Another thread cannot
+The current resource lease identifies its thread, turn and run. Floret input
+continuation creates a new run within that turn. Binding its canonical execution
+identity advances existing non-user leases before provider work, including a
+text-only continuation; it never acquires an unowned target or returns user
+control. Private commands still match the original pending interaction run. Another thread cannot
 capture or manipulate a leased target. A safe target switch releases the
 previous target; canonical terminal views release only the matching run's lease.
 An old terminal notification cannot release a later run's target.
@@ -84,7 +88,7 @@ ending the turn uses the existing Stop behavior.
 # Qualification limits
 
 Service tests cover pause, private input, rejected stale input, handback,
-re-observation, no action replay and restart using production tool registration
+re-observation, a real resumed screenshot tool, no action replay and restart using production tool registration
 and Floret runtime. Browser helper fixtures cover login, OTP, CAPTCHA, injection
 and framed login independently, plus a real user form submission and explicit
 return. Browser UI tests verify decoded user pixels and separation from chat
