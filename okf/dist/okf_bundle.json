@@ -2950,7 +2950,7 @@
         "title": "Computer use safety pauses and user control",
         "type": "Interaction Contract"
       },
-      "body_length": 6415,
+      "body_length": 6708,
       "summary": "Floret owns durable waiting, response validation, cancellation and continuation.\nRedeven owns target control and private user input. A safety observation completes\nits original tool exactly once and requests canonical input; it must not become\nan ordinary tool error that invites model retries. Sensitive images never enter\nmodel attachments or durable keyframe storage. User handback requires a fresh,\nsafe observation of the original target. Missing provenance, permissions or\nobservation capability leaves the interaction unresolved.",
       "sections": [
         {
@@ -2971,8 +2971,8 @@
           "id": "browser-observation-and-private-input",
           "title": "Browser observation and private input",
           "level": 1,
-          "body": "The Playwright helper examines visible password fields, `one-time-code` input\nsemantics, CAPTCHA text and explicit instruction-override signals in each frame.\nAn unreadable frame is unknown. It inspects before input, after an action, and\nafter capture; an unsafe result discards the captured bytes. These deterministic\nsignals are bounded protections, not a claim of complete injection detection or\natomic observation of all dynamic web content.\n\nThe authenticated `POST /_redeven_proxy/api/ai/computer/input` accepts only a\ncurrent computer input interaction and a bounded observe/click/type/key/scroll\ncommand. The adapter reuses the same helper exchange but returns pixels only to\nthe authenticated caller. Request bodies, field values, raw helper errors and\nscreenshots must not enter Activity, model history, logs or the durable media\nstore. The endpoint returns PNG bytes with `Cache-Control: no-store`; Desktop\ntransports them through its existing private IPC boundary.\n\nFlower presents localized takeover/handback controls in the input card. Explicit\ntakeover opens the media-only Stage. Keyboard and pointer actions go to the\nprivate endpoint; only the acknowledgement goes through `submitInput`. Images\nare decoded before replacement and Blob URLs are retired on disposal. Failed\ninput does not replay automatically, and queued input is discarded after an\nunknown failure or a changed thread/interaction. Closing the image hides it;\nending the turn uses the existing Stop behavior.",
-          "char_count": 1491
+          "body": "The Playwright helper examines visible password fields, `one-time-code` input\nsemantics, CAPTCHA text and explicit instruction-override signals in each frame.\nAn unreadable frame is unknown. It inspects before input, after an action, and\nafter capture; an unsafe result discards the captured bytes. These deterministic\nsignals are bounded protections, not a claim of complete injection detection or\natomic observation of all dynamic web content.\n\nThe authenticated `POST /_redeven_proxy/api/ai/computer/input` accepts only a\ncurrent computer input interaction and a bounded observe/click/type/key/scroll\ncommand. The adapter reuses the same helper exchange but returns pixels only to\nthe authenticated caller. Request bodies, field values, raw helper errors and\nscreenshots must not enter Activity, model history, logs or the durable media\nstore. The endpoint returns PNG bytes with `Cache-Control: no-store`; Desktop\ntransports them through its existing private IPC boundary.\n\nFlower presents localized takeover/handback controls in the input card. Explicit\ntakeover opens the media-only Stage. Keyboard and pointer actions go to the\nprivate endpoint; only the acknowledgement goes through `submitInput`. Images\nare decoded before replacement and Blob URLs are retired on disposal. Failed\ninput does not replay automatically, and queued input is discarded after an\nunknown failure or a changed thread/interaction. Unsent adjacent text input is\ncoalesced in order within a bounded batch; keys and pointer actions are barriers.\nA full command queue reports control failure and discards unsent input instead\nof silently losing characters. Explicit observation is required before further\ninput after a failure. Closing the image hides it;\nending the turn uses the existing Stop behavior.",
+          "char_count": 1784
         },
         {
           "id": "qualification-limits",
@@ -16967,5 +16967,5 @@
       ]
     }
   ],
-  "source_sha256": "935a9729259c21638bf10babbaea32fc85785c1a238aeab4cc060aed96ed7d7b"
+  "source_sha256": "918eb2d1f090fe560899b1b93fbd47167e291ce7dbf6378c61799cd12eadb85b"
 }

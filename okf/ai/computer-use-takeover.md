@@ -82,7 +82,11 @@ takeover opens the media-only Stage. Keyboard and pointer actions go to the
 private endpoint; only the acknowledgement goes through `submitInput`. Images
 are decoded before replacement and Blob URLs are retired on disposal. Failed
 input does not replay automatically, and queued input is discarded after an
-unknown failure or a changed thread/interaction. Closing the image hides it;
+unknown failure or a changed thread/interaction. Unsent adjacent text input is
+coalesced in order within a bounded batch; keys and pointer actions are barriers.
+A full command queue reports control failure and discards unsent input instead
+of silently losing characters. Explicit observation is required before further
+input after a failure. Closing the image hides it;
 ending the turn uses the existing Stop behavior.
 
 # Qualification limits

@@ -5538,23 +5538,36 @@ webSearch: model.web_search,
   let computerInputQueue = Promise.resolve();
   let computerInputCount = 0;
   let computerInputGeneration = 0;
+  let queuedComputerText: { action: 'type'; text: string } | undefined;
   const inputComputerControl = (input: Omit<import('./contracts/flowerSurfaceContracts').FlowerComputerUserInput, 'thread_id' | 'interaction_id'>) => {
     const request = selectedInputRequest();
     const thread_id = selectedThreadID();
     const control = props.adapter.inputComputerControl;
-    if (!thread_id || !request || !isComputerInput(request) || !control || computerInputCount >= 32) return;
+    if (!thread_id || !request || !isComputerInput(request) || !control) return;
+    if (computerControlError() && input.action !== 'observe') return;
+    if (input.action === 'type' && queuedComputerText && queuedComputerText.text.length + (input.text?.length ?? 0) <= 4000) {
+      queuedComputerText.text += input.text ?? '';
+      return;
+    }
+    if (computerInputCount >= 32) {
+      computerInputGeneration++; queuedComputerText = undefined; setComputerControlError(true);
+      return;
+    }
+    const queued = input.action === 'type' ? { action: 'type' as const, text: input.text ?? '' } : input;
+    queuedComputerText = queued.action === 'type' ? queued as { action: 'type'; text: string } : undefined;
     const interaction_id = request.prompt_id;
     const generation = computerInputGeneration;
     computerInputCount++;
     setComputerControlBusy(true);
     computerInputQueue = computerInputQueue.then(async () => {
+      if (queuedComputerText === queued) queuedComputerText = undefined;
       if (generation !== computerInputGeneration || thread_id !== selectedThreadID() || selectedInputRequest()?.prompt_id !== interaction_id) return;
-      const frame = await control({ ...input, thread_id, interaction_id });
+      const frame = await control({ ...queued, thread_id, interaction_id });
       if (generation !== computerInputGeneration || thread_id !== selectedThreadID() || selectedInputRequest()?.prompt_id !== interaction_id) return;
       setComputerUserFrame(frame); setComputerStageOpen(true); setComputerControlError(false);
     }).catch(() => {
       if (generation === computerInputGeneration && thread_id === selectedThreadID() && selectedInputRequest()?.prompt_id === interaction_id) {
-        computerInputGeneration++; setComputerControlError(true);
+        computerInputGeneration++; queuedComputerText = undefined; setComputerControlError(true);
       }
     }).finally(() => {
       computerInputCount--; setComputerControlBusy(computerInputCount > 0);
@@ -5564,6 +5577,7 @@ webSearch: model.web_search,
     selectedThreadID();
     void selectedInputRequest()?.prompt_id;
     computerInputGeneration++;
+    queuedComputerText = undefined;
     setComputerUserFrame(undefined); setComputerControlError(false);
   });
   let lastComputerStageItemID = '';

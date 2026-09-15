@@ -4,7 +4,7 @@ import './flower-feature.css';
 import { describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { FlowerComputerStage } from '../../../../flower_ui/src/FlowerComputerStage';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
@@ -180,7 +180,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
     input: { summary: 'External sign-in', questions: [{ id: 'computer_control', prompt: 'Return control', kind: 'select', options: ['Return control to Flower'] }] },
   }] };
   const png = () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' });
-  const inputComputerControl = vi.fn(async () => png());
+  const inputComputerControl = vi.fn(async (_input: FlowerComputerUserInput) => png());
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:result-control', current: { ...canonical, view_version: 3, activity: 'idle' as const, interactions: [], last_outcome: 'completed' as const } }));
   let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), inputComputerControl, submitInput,
@@ -215,6 +215,31 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(surface.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(privateURL);
   expect(inputComputerControl).toHaveBeenCalledTimes(2);
+  const rapidText = 'A'.repeat(80);
+  for (const key of rapidText) img.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  await waitFor(() => !handback.disabled);
+  const forwarded = inputComputerControl.mock.calls.slice(2).map(([call]) => call.action === 'type' ? call.text : '').join('');
+  expect(forwarded).toBe(rapidText);
+  expect(submitInput).not.toHaveBeenCalled();
+  const orderedStart = inputComputerControl.mock.calls.length;
+  for (const key of ['a', 'b', 'Tab', 'c', 'd', 'Enter']) {
+    img.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  }
+  await waitFor(() => !handback.disabled);
+  expect(inputComputerControl.mock.calls.slice(orderedStart).map(([call]) => ({ action: call.action, value: call.text ?? call.key }))).toEqual([
+    { action: 'type', value: 'ab' }, { action: 'key', value: 'Tab' }, { action: 'type', value: 'cd' }, { action: 'key', value: 'Enter' },
+  ]);
+  const beforeOverflow = inputComputerControl.mock.calls.length;
+  for (let index = 0; index < 40; index++) img.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  await waitFor(() => !handback.disabled);
+  expect(inputComputerControl).toHaveBeenCalledTimes(beforeOverflow);
+  expect(surface.querySelector('.flower-input-request [role="alert"]') ?? surface.querySelector('[role="alert"]')).not.toBeNull();
+  img.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(inputComputerControl).toHaveBeenCalledTimes(beforeOverflow);
+  controlButton()!.click();
+  await waitFor(() => !handback.disabled);
+  expect(inputComputerControl).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'observe' }));
   handback.click();
   await waitFor(() => submitInput.mock.calls.length === 1);
   expect(submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));
