@@ -80,9 +80,10 @@ fs.writeFileSync(file, JSON.stringify({ commit, container_id, image, port: Numbe
 JS
 echo "Linux Webtop: http://127.0.0.1:$PORT"
 docker exec -e "NODE_VERSION=$NODE_VERSION" -e "NODE_ARCH=$ARCH" -e "NODE_ARCHIVE_OVERRIDE=$NODE_ARCHIVE_OVERRIDE" "$CID" bash -ceu '
-  sed -i "/^deb-src /d" /etc/apt/sources.list
-  apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=1 update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=1 install -y -qq curl ca-certificates libnss3-tools openbox xdotool imagemagick xauth x11-utils xterm python3-tk
+  sed -i -e "/^deb-src /d" -e "s|http://deb.debian.org/|https://deb.debian.org/|g" -e "s|http://security.debian.org/|https://security.debian.org/|g" /etc/apt/sources.list
+  printf "%s\n" "Acquire::http::Timeout \"30\";" "Acquire::https::Timeout \"30\";" "Acquire::Retries \"1\";" > /etc/apt/apt.conf.d/99-redeven-qualification
+  apt-get update --error-on=any -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates libnss3-tools openbox xdotool imagemagick xauth x11-utils xterm python3-tk
   archive="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz"
   cd /tmp
   if [[ -n "$NODE_ARCHIVE_OVERRIDE" ]]; then cp "$NODE_ARCHIVE_OVERRIDE" "$archive";
