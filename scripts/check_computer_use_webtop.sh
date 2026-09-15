@@ -10,6 +10,8 @@ ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
 SOURCE_STATE=${REDEVEN_COMPUTER_CONFIG_ROOT:-$HOME/.redeven/local-environment}
 PLUGIN_DIR=${REDEVEN_COMPUTER_WEBTOP_PLUGIN_DIRECTORY:?Provide a verified Linux ReDevPlugin runtime artifact directory}
 IMAGE=${REDEVEN_COMPUTER_WEBTOP_IMAGE:-lscr.io/linuxserver/webtop@sha256:9092b349d525f765b0be912db1ec5a8d5aa97b0f1a3b57da27a7f72e69c90825}
+DEBIAN_MIRROR=${REDEVEN_COMPUTER_WEBTOP_DEBIAN_MIRROR:-https://deb.debian.org}
+[[ "$DEBIAN_MIRROR" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?$ ]] || { echo 'Debian mirror must be an HTTPS origin.' >&2; exit 2; }
 [[ "$IMAGE" == *@sha256:* ]] || { echo 'Webtop image must use an immutable digest.' >&2; exit 2; }
 WORK=$(mktemp -d /tmp/redeven-computer-webtop.XXXXXX)
 REPORT="$WORK/report"
@@ -74,13 +76,14 @@ CID=$(docker run --rm -d --label "redeven.qualification=$WORK" --shm-size=2g \
   -p 127.0.0.1::3000 -e TZ=Asia/Shanghai \
   -v "$WORK:/qualification" -v "$ROOT_DIR:/source:ro" "$IMAGE")
 PORT=$(docker port "$CID" 3000/tcp | cut -d: -f2)
-node - "$REPORT/manifest.json" "$COMMIT" "$CID" "$IMAGE" "$PORT" <<'JS'
-const fs = require('node:fs'); const [file, commit, container_id, image, port] = process.argv.slice(2);
-fs.writeFileSync(file, JSON.stringify({ commit, container_id, image, port: Number(port), state: '/config/qualification-state', gowork: 'off', host_input_used: false }, null, 2));
+node - "$REPORT/manifest.json" "$COMMIT" "$CID" "$IMAGE" "$PORT" "$DEBIAN_MIRROR" <<'JS'
+const fs = require('node:fs'); const [file, commit, container_id, image, port, debian_mirror] = process.argv.slice(2);
+fs.writeFileSync(file, JSON.stringify({ commit, container_id, image, debian_mirror, port: Number(port), state: '/config/qualification-state', gowork: 'off', host_input_used: false }, null, 2));
 JS
 echo "Linux Webtop: http://127.0.0.1:$PORT"
-docker exec -e "NODE_VERSION=$NODE_VERSION" -e "NODE_ARCH=$ARCH" -e "NODE_ARCHIVE_OVERRIDE=$NODE_ARCHIVE_OVERRIDE" "$CID" bash -ceu '
-  sed -i -e "/^deb-src /d" -e "s|http://deb.debian.org/|https://deb.debian.org/|g" -e "s|http://security.debian.org/|https://security.debian.org/|g" /etc/apt/sources.list
+docker exec -e "NODE_VERSION=$NODE_VERSION" -e "NODE_ARCH=$ARCH" -e "NODE_ARCHIVE_OVERRIDE=$NODE_ARCHIVE_OVERRIDE" -e "DEBIAN_MIRROR=$DEBIAN_MIRROR" "$CID" timeout --kill-after=15s 600 bash -ceu '
+  sed -i -e "/^deb-src /d" -e "s|http://deb.debian.org/|$DEBIAN_MIRROR/|g" -e "s|http://security.debian.org/|$DEBIAN_MIRROR/|g" /etc/apt/sources.list
+  rm -f /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/nodesource.sources
   printf "%s\n" "Acquire::http::Timeout \"30\";" "Acquire::https::Timeout \"30\";" "Acquire::Retries \"1\";" > /etc/apt/apt.conf.d/99-redeven-qualification
   apt-get update --error-on=any -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates libnss3-tools openbox xdotool imagemagick xauth x11-utils xterm python3-tk
