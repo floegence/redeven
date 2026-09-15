@@ -5110,7 +5110,10 @@ html.dark .flower-component-shell {
   border-radius: inherit;
   background: var(--surface);
 }
-.flower-computer-stage-controls { position: absolute; top: 0.45rem; right: 0.45rem; z-index: 2; display: flex; gap: 0.35rem; padding: 0.3rem; border: 1px solid color-mix(in srgb, var(--border-strong) 70%, transparent); border-radius: 0.65rem; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: 0 0.35rem 1rem color-mix(in srgb, var(--shadow-color, #000) 24%, transparent); backdrop-filter: blur(12px); }
+.flower-computer-stage-header { display: flex; align-items: center; gap: 0.45rem; min-height: 3rem; padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--border-subtle); background: var(--surface); cursor: grab; }
+.flower-computer-stage-header:active { cursor: grabbing; }
+.flower-computer-stage-title { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 0.8rem; font-weight: 650; letter-spacing: 0.01em; text-overflow: ellipsis; white-space: nowrap; }
+.flower-computer-stage-controls { display: flex; flex: 0 0 auto; gap: 0.35rem; padding: 0.2rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; background: var(--surface-muted); }
 .flower-computer-stage-controls > button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: 0.45rem; width: 2.25rem; height: 2.25rem; color: var(--text-strong); background: var(--surface); cursor: pointer; transition: background-color 120ms ease, color 120ms ease, transform 120ms ease; }
 .flower-computer-stage-controls > button:hover { color: var(--text-strong); background: var(--surface-muted); transform: translateY(-1px); }
 .flower-computer-stage-controls > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

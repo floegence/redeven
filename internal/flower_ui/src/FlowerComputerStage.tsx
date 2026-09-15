@@ -139,11 +139,14 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       (handle.onPointerDown as unknown as ((event: PointerEvent) => void) | undefined)?.(event);
     }}
   >
-    <div class="flower-computer-stage-controls">
-    <button {...handle} ref={grip} type="button" class="flower-computer-stage-drag" aria-label={props.copy.move} title={props.copy.move}><GripVertical class="h-4 w-4" aria-hidden="true" /></button>
-    <button type="button" class="flower-computer-stage-minimize" aria-label={props.copy.minimize} title={props.copy.minimize} onClick={minimize}><Minus class="h-4 w-4" aria-hidden="true" /></button>
-    <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button>
-    </div>
+    <header class="flower-computer-stage-header">
+      <button {...handle} ref={grip} type="button" class="flower-computer-stage-drag" aria-label={props.copy.move} title={props.copy.move}><GripVertical class="h-4 w-4" aria-hidden="true" /></button>
+      <span class="flower-computer-stage-title">{props.copy.title}</span>
+      <div class="flower-computer-stage-controls">
+        <button type="button" class="flower-computer-stage-minimize" aria-label={props.copy.minimize} title={props.copy.minimize} onClick={minimize}><Minus class="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button>
+      </div>
+    </header>
     <div class="flower-computer-stage-frame-wrap">
       <Show when={props.onInput}>
         <textarea
