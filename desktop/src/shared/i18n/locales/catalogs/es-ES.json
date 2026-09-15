@@ -348,7 +348,11 @@
       "toolApprovalApproveBatchAction": "Permitir las {count} aprobaciones de herramientas pendientes",
       "restoredInputTitle": "Entrada conservada tras la restauración",
       "restoredInputDescription": "Esta entrada no se ejecutará automáticamente. Cópiala en una tarea nueva para volver a ejecutarla.",
-      "restoredInputCopy": "Copiar entrada"
+      "restoredInputCopy": "Copiar entrada",
+      "computerTakeControl": "Tomar el control",
+      "computerReturnControl": "Devolver el control a Flower",
+      "computerControlHint": "Inicia sesión en la imagen con el ratón y el teclado. Las contraseñas y los códigos no se guardan en la conversación.",
+      "computerControlFailed": "No se pudo actualizar el control. Comprueba la página antes de volver a intentarlo."
     },
     "threadList": {
       "title": "Conversaciones",

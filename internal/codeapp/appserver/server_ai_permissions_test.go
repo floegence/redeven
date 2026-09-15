@@ -132,5 +132,6 @@ func TestServer_AI_Permissions_AllowReadsAndProtectMutations(t *testing.T) {
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/approvals")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/cancel")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/uploads")
+	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/computer/input")
 	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/uploads/upload_test")
 }

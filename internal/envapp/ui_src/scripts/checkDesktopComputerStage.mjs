@@ -30,9 +30,26 @@ const page = browser.contexts()[0].pages().find((entry) => entry.url() === new U
 assert(page, 'CDP does not belong to this checkout built Desktop');
 await mkdir(output, { recursive: true });
 let completed = 0;
+let loginCompleted = false;
+const privateFixtureInput = "qualification-private-input";
+let takeoverEvidence;
 const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
+  if (url.pathname === '/signin') {
+    response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    response.end(`<!doctype html><title>Sign-in fixture</title><style>body{background:#d6e5f5;font:24px system-ui;padding:60px}input,button{display:block;font:24px system-ui;margin:20px;padding:12px}</style>
+      <h1>Sign in to the fixture</h1><form onsubmit="event.preventDefault();fetch('/signin-complete',{method:'POST'}).then(()=>location.href='/signed-in')">
+      <input aria-label="User" autofocus><input aria-label="Password" type="password"><button>Continue</button></form>`);
+    return;
+  }
+  if (url.pathname === '/signin-complete' && request.method === 'POST') {
+    loginCompleted = true; response.writeHead(204); response.end(); return;
+  }
+  if (url.pathname === '/signed-in') {
+    response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    response.end('<!doctype html><title>Signed in</title><style>body{background:#d6f5e5;font:32px system-ui;padding:60px}</style><h1>Sign-in complete</h1>'); return;
+  }
   if (url.pathname === '/control-event') {
     const event = url.searchParams.get('event');
     if (event === 'double') controls.double = true;
@@ -80,6 +97,7 @@ const proxy = http.createServer(async (request, response) => {
     if (request.url === '/responses') {
       const body = JSON.parse(raw.toString());
       assert.equal(body.model, model);
+      assert.equal(raw.includes(Buffer.from(privateFixtureInput)), false, 'private user input entered the provider request');
       assert((body.tools ?? []).every((tool) => tool.type === 'function'));
       record = { model: body.model, wireBytes: raw.length, toolCount: body.tools?.length ?? 0, tools: (body.tools ?? []).map((tool) => tool.name),
         imageCount: (body.input ?? []).reduce((count, item) => {
@@ -295,6 +313,41 @@ try {
   await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'turn completion');
   assert(protocol.slice(enabledRequestStart).some((entry) => entry.imageToolOutput), 're-enabled setting did not restore visual tool execution');
   assert.equal(completed, 2, 'observation-only turn unexpectedly mutated the fixture');
+  await page.locator('.flower-new-chat-button').click();
+  await composer.fill(`Open ${fixtureURL}/signin in the managed browser. Pause for me to sign in, then report the heading after I return control. Use only browser and computer tools.`);
+  await composer.press('Enter');
+  await page.getByRole('button', { name: 'Take control', exact: true }).first().waitFor({ timeout: 180_000 });
+  const takeoverThread = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
+  ownedThreads.add(takeoverThread);
+  assert.equal(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status'), 'waiting_user');
+  await page.getByRole('button', { name: 'Take control', exact: true }).first().click();
+  await waitForProgress(stageHasImage, 'user takeover image');
+  const userImage = page.locator('.flower-computer-stage-frame');
+  await userImage.focus();
+  // Desktop IPC has no renderer HTTP response. Wait for each returned frame
+  // before the next input so an unknown input outcome is never replayed.
+  const userKey = async (key) => {
+    const before = await userImage.getAttribute('src');
+    await userImage.press(key);
+    await waitForProgress(async () => await userImage.getAttribute('src') !== before, 'user key frame', 15000);
+  };
+  await userKey('u');
+  await userKey('Tab');
+  // Paste is not used: the fixture verifies actual per-key input and keeps it
+  // out of model history, activity and persisted evidence.
+  for (const key of privateFixtureInput) await userKey(key);
+  await userKey('Enter');
+  await waitForProgress(() => loginCompleted, 'sign-in fixture completion', 15000);
+  const userPixels = await page.evaluate(() => {
+    const image = document.querySelector('.flower-computer-stage-frame');
+    return { width: image.naturalWidth, height: image.naturalHeight, role: image.closest('[role="dialog"]').getAttribute('role'), visibleText: image.closest('[role="dialog"]').innerText.trim() };
+  });
+  assert.equal(userPixels.visibleText, '');
+  const pending = await request('GET', `/_redeven_proxy/api/ai/threads/${takeoverThread}`);
+  assert.equal(JSON.stringify(pending).includes(privateFixtureInput), false, 'private user input entered thread history');
+  await page.getByRole('button', { name: 'Return to Flower', exact: true }).first().click();
+  await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'model continuation after handback');
+  takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, userPixels, privateInputExcluded: true, continued: true };
   assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = [];
@@ -313,8 +366,8 @@ try {
   }
   assert(protocol.some((entry) => entry.imageToolOutput), 'the actual provider never received a tool-result image');
   assert.equal(protocolErrors.length, 0, 'provider protocol assertions failed');
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
-  console.log(`${nativeRequested ? 'Managed-browser and native desktop' : 'Managed-browser'} Desktop UI qualification passed; other targets and takeover require separate qualification.`);
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  console.log(`${nativeRequested ? 'Managed-browser and native desktop' : 'Managed-browser'} Desktop UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
 } catch (error) {
   await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => undefined);
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;

@@ -357,7 +357,11 @@
       "toolApprovalApproveBatchAction": "Разрешить все ожидающие подтверждения инструментов ({count})",
       "restoredInputTitle": "Ввод, сохранённый после восстановления",
       "restoredInputDescription": "Этот ввод не будет выполнен автоматически. Для повторного выполнения скопируйте его в новую задачу.",
-      "restoredInputCopy": "Скопировать ввод"
+      "restoredInputCopy": "Скопировать ввод",
+      "computerTakeControl": "Взять управление",
+      "computerReturnControl": "Вернуть управление Flower",
+      "computerControlHint": "Войдите в аккаунт на изображении с помощью мыши и клавиатуры. Пароли и коды не сохраняются в беседе.",
+      "computerControlFailed": "Не удалось обновить состояние управления. Проверьте страницу перед повторной попыткой."
     },
     "threadList": {
       "title": "Беседы",

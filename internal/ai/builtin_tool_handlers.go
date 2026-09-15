@@ -100,14 +100,15 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 	if outcome.Success {
 		data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
 		return ToolResult{
-			ToolID:      strings.TrimSpace(call.ID),
-			ToolName:    toolName,
-			Status:      toolResultStatusSuccess,
-			Summary:     toolSuccessSummary(toolName),
-			Details:     "tool execution completed",
-			Data:        data,
-			Truncated:   truncated,
-			Attachments: append([]ToolAttachment(nil), outcome.Attachments...),
+			ToolID:        strings.TrimSpace(call.ID),
+			ToolName:      toolName,
+			Status:        toolResultStatusSuccess,
+			Summary:       toolSuccessSummary(toolName),
+			Details:       "tool execution completed",
+			Data:          data,
+			Truncated:     truncated,
+			Attachments:   append([]ToolAttachment(nil), outcome.Attachments...),
+			inputRequired: outcome.inputRequired,
 		}, nil
 	}
 	if outcome.ToolError != nil {

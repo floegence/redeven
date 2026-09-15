@@ -348,7 +348,11 @@
       "toolApprovalApproveBatchAction": "核准全部 {count} 個待核准工具",
       "restoredInputTitle": "還原後保留的輸入",
       "restoredInputDescription": "此輸入不會自動執行。再次執行前，請將其複製到新任務。",
-      "restoredInputCopy": "複製輸入"
+      "restoredInputCopy": "複製輸入",
+      "computerTakeControl": "接管操作",
+      "computerReturnControl": "交還給 Flower",
+      "computerControlHint": "在畫面中使用滑鼠和鍵盤完成登入。密碼和驗證碼不會進入對話。",
+      "computerControlFailed": "未能更新控制狀態。請檢查頁面後重試。"
     },
     "threadList": {
       "title": "對話",

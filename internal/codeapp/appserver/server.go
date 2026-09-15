@@ -4260,6 +4260,36 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"storage_generation": aiSvc.StorageGeneration()}})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/input":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var request ai.ComputerUserInput
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32768))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid computer control request"})
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid computer control request"})
+			return
+		}
+		// Input may contain passwords. Never echo, audit or log the body or raw
+		// helper errors. These user-only pixels are not model attachments.
+		body, err := aiSvc.InputComputerControl(r.Context(), meta, request)
+		if err != nil {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer control unavailable"})
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/computer/view":
 		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 		if !ok || !g.requireAIService(w, aiSvc) {

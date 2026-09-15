@@ -1154,6 +1154,13 @@ export type FlowerTargetDescriptor = Readonly<{
   ready: boolean;
 }>;
 
+export type FlowerComputerUserInput = Readonly<{
+  thread_id: string;
+  interaction_id: string;
+  action: 'observe' | 'click' | 'type' | 'key' | 'scroll';
+  x?: number; y?: number; text?: string; key?: string; delta_x?: number; delta_y?: number;
+}>;
+
 export type FlowerSurfaceAdapter = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
   canMutate?: boolean;
@@ -1196,6 +1203,7 @@ export type FlowerSurfaceAdapter = Readonly<{
     sha256: string;
     signal: AbortSignal;
   }>) => Promise<Blob>;
+  inputComputerControl?: (input: FlowerComputerUserInput) => Promise<Blob>;
   setComputerViewer?: (input: Readonly<{
     observer_id: string; revision: number; thread_id?: string; target_id?: string; resource_ref?: string;
   }>) => Promise<void>;

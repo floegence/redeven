@@ -348,7 +348,11 @@
       "toolApprovalApproveBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen zulassen",
       "restoredInputTitle": "Nach Wiederherstellung gespeicherte Eingabe",
       "restoredInputDescription": "Diese Eingabe wird nicht automatisch ausgeführt. Kopieren Sie sie zur erneuten Ausführung in eine neue Aufgabe.",
-      "restoredInputCopy": "Eingabe kopieren"
+      "restoredInputCopy": "Eingabe kopieren",
+      "computerTakeControl": "Steuerung übernehmen",
+      "computerReturnControl": "An Flower zurückgeben",
+      "computerControlHint": "Melden Sie sich im Bild mit Maus und Tastatur an. Passwörter und Codes werden nicht im Gespräch gespeichert.",
+      "computerControlFailed": "Die Steuerung konnte nicht aktualisiert werden. Prüfen Sie die Seite, bevor Sie es erneut versuchen."
     },
     "threadList": {
       "title": "Unterhaltungen",

@@ -536,6 +536,10 @@ export type FlowerSurfaceCopy = Readonly<{
       deliveryNeedsReview: string;
     }>;
     readOnlyComposerLabel?: string;
+    computerTakeControl?: string;
+    computerReturnControl?: string;
+    computerControlHint?: string;
+    computerControlFailed?: string;
     inputRequestTitle?: string;
     inputRequestDescription?: string;
     inputRequestSubmit?: string;
@@ -847,6 +851,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       deliveryNeedsReview: 'Delivery status needs review.',
     },
     readOnlyComposerLabel: 'Read only · Managed by parent thread',
+    computerTakeControl: "Take control",
+    computerReturnControl: "Return to Flower",
+    computerControlHint: "Complete sign-in in the image using your mouse and keyboard. Passwords and codes stay out of the conversation.",
+    computerControlFailed: "Control could not be updated. Check the page before trying again.",
     inputRequestTitle: 'Waiting for your reply',
     inputRequestDescription: 'Reply in the composer to continue this conversation.',
     inputRequestSubmit: 'Continue',

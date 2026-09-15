@@ -1343,6 +1343,8 @@ func isMutatingInvocation(toolName string, args map[string]any) bool {
 }
 
 type toolCallOutcome struct {
+	inputRequired *fltools.InputRequest
+
 	cancellationConfirmed bool
 	dispatchErr           error
 	Success               bool
@@ -1356,6 +1358,8 @@ type toolCallOutcome struct {
 }
 
 type targetToolExecution struct {
+	inputRequired *fltools.InputRequest
+
 	TargetID    string
 	Payload     any
 	Attachments []ToolAttachment
@@ -1640,6 +1644,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		result = target.Payload
 		outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
+		outcome.inputRequired = fltools.CloneInputRequest(target.inputRequired)
 	}
 
 	if toolName == "web.search" {
@@ -3213,7 +3218,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	decision, safetyErr := gate.AssessInteraction(ctx, call, target)
 	if safetyErr != nil {
 		if errors.Is(safetyErr, ErrInteractionTakeoverRequired) {
-			return nil, &targetToolPolicyError{code: "interaction_takeover_required", tool: toolName, target: targetID, safety: &decision}
+			return computerTakeoverExecution(call, target, decision), nil
 		}
 		return nil, safetyErr
 	}
@@ -3226,12 +3231,25 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	}
 	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, call)
 	if err != nil {
+		var failure *targetToolPolicyError
+		if errors.As(err, &failure) && failure.code == "interaction_takeover_required" {
+			decision := InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control_required"}}
+			if failure.safety != nil {
+				decision = *failure.safety
+			}
+			return computerTakeoverExecution(call, target, decision), nil
+		}
 		return nil, err
+	}
+	if result.Safety != nil && result.Safety.Level == "takeover" {
+		return computerTakeoverExecution(call, target, *result.Safety, result), nil
 	}
 	if decision.ActionID == "" {
 		decision.ActionID = strings.TrimSpace(toolID)
 	}
-	result.Safety = &decision
+	if result.Safety == nil {
+		result.Safety = &decision
+	}
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
 	}

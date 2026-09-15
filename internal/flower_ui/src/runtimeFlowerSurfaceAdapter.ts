@@ -127,6 +127,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadComputerFrame?: FlowerSurfaceAdapter['loadComputerFrame'];
   connectComputerBrowser?: FlowerSurfaceAdapter['connectComputerBrowser'];
   setComputerViewer?: FlowerSurfaceAdapter['setComputerViewer'];
+  inputComputerControl?: FlowerSurfaceAdapter['inputComputerControl'];
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<unknown>;
@@ -404,6 +405,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.loadStagedAttachmentPreview ? { loadStagedAttachmentPreview: options.loadStagedAttachmentPreview } : {}),
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
     ...(options.loadComputerFrame ? { loadComputerFrame: options.loadComputerFrame } : {}),
+    ...(options.canMutate !== false && options.inputComputerControl ? { inputComputerControl: options.inputComputerControl } : {}),
     ...(options.setComputerViewer ? { setComputerViewer: options.setComputerViewer } : {}),
     ...(options.connectComputerBrowser ? { connectComputerBrowser: options.connectComputerBrowser } : {}),
     resolveStorageGeneration: options.resolveStorageGeneration,

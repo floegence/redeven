@@ -988,3 +988,17 @@ func TestPublicActivityTimelinePreservesTodoItems(t *testing.T) {
 		}
 	}
 }
+
+func TestComputerResultNeverInfersImageAuthorityFromPayload(t *testing.T) {
+	ref := "computer://browser-main/" + strings.Repeat("a", 64)
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "payload-only", ToolName: "computer.screenshot", Status: toolResultStatusSuccess, Data: map[string]any{"after_frame": ref}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Attachments) != 0 {
+		t.Fatal("untyped payload reference became a model image")
+	}
+	if result.Activity != nil && len(result.Activity.TargetRefs) != 0 {
+		t.Fatal("untyped payload reference granted media access")
+	}
+}

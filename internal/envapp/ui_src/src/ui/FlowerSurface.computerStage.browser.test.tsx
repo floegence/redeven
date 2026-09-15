@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { FlowerComputerStage } from '../../../../flower_ui/src/FlowerComputerStage';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -134,4 +135,47 @@ describe('Flower computer stage', () => {
     await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
   });
+});
+
+it('opens user-only pixels for canonical takeover without submitting typing as conversation input', async () => {
+  const threadID = 'takeover-ui';
+  const paused = thread({ thread_id: threadID, title: 'Sign in', status: 'waiting_user', active_run_id: 'run-control', messages: [{
+    id: 'paused-message', turn_id: 'turn-control', run_id: 'run-control', role: 'assistant', content: '', status: 'complete', created_at_ms: 10,
+    blocks: [activityTimeline({ thread_id: threadID, run_id: 'run-control', turn_id: 'turn-control', status: 'success', items: [activityItem({
+      item_id: 'control-item', tool_id: 'control-call', tool_name: 'browser.navigate', renderer: 'structured', status: 'success',
+      target_refs: [{ kind: 'computer_control', label: 'Managed Browser', resource_ref: 'browser-main' }], payload: { operation: 'navigate', status: 'success' },
+    })] })],
+  }] });
+  const base = runtimeCurrentView(paused, 1);
+  const canonical = { ...base, items: base.items?.map((item) => {
+    if (!item.activity) return item;
+    const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity;
+    return { ...item, activity: { ...facts, presentation: { label, description, renderer, payload, chips, target_refs } } };
+  }), interactions: [{
+    id: 'tool-input:result-control', turn_id: 'turn-control', run_id: 'run-control', kind: 'input' as const, tool_call_id: 'control-call',
+    input: { summary: 'External sign-in', questions: [{ id: 'computer_control', prompt: 'Return control', kind: 'select', options: ['Return control to Flower'] }] },
+  }] };
+  const png = () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' });
+  const inputComputerControl = vi.fn(async () => png());
+  const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:result-control', current: { ...canonical, view_version: 2, activity: 'idle' as const, interactions: [], last_outcome: 'completed' as const } }));
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), inputComputerControl, submitInput,
+    listThreads: vi.fn(async () => [paused]), loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(paused, canonical), current: canonical })),
+  }, { focusThreadRequest: { request_id: 'takeover-focus', thread_id: threadID } });
+  const controlButton = () => Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Take control');
+  await waitFor(() => Boolean(controlButton()));
+  expect(surface.querySelector('.flower-computer-stage')).toBeNull();
+  controlButton()!.click();
+  await waitFor(() => (surface.querySelector('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
+  const img = surface.querySelector('.flower-computer-stage img') as HTMLImageElement;
+  img.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true, cancelable: true }));
+  await waitFor(() => inputComputerControl.mock.calls.length === 2);
+  expect(inputComputerControl).toHaveBeenLastCalledWith({ thread_id: threadID, interaction_id: 'tool-input:result-control', action: 'type', text: 's' });
+  expect(submitInput).not.toHaveBeenCalled();
+  expect(surface.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
+  const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Return to Flower')!;
+  await waitFor(() => !handback.disabled);
+  handback.click();
+  await waitFor(() => submitInput.mock.calls.length === 1);
+  expect(submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));
+  await waitFor(() => surface.querySelector('.flower-computer-stage') === null);
 });
