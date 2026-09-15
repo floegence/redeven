@@ -78,6 +78,43 @@ func TestPlaywrightTargetExecutorInterruptedSessionIsReaped(t *testing.T) {
 	}
 }
 
+func TestPlaywrightPrivateSessionUsesCanonicalTurnNotRunOrArguments(t *testing.T) {
+	executor := newPlaywrightProtocolFixture(t)
+	record := filepath.Join(t.TempDir(), "requests.jsonl")
+	source, err := os.ReadFile(executor.HelperPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.Replace(string(source), "while IFS= read -r line; do", "while IFS= read -r line; do\n  printf '%s\\n' \"$line\" >> '"+strings.ReplaceAll(record, "'", "'\\''")+"'", 1)
+	if err := os.WriteFile(executor.HelperPath, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range [][3]string{{"thread", "turn", "first-run"}, {"thread", "turn", "resumed-run"}, {"thread", "next-turn", "next-run"}, {"other-thread", "next-turn", "next-run"}} {
+		_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: identity[0], TurnID: identity[1], RunID: identity[2], TargetID: "fixture", ToolName: "computer.screenshot", Arguments: json.RawMessage(`{"session_id":"model-chosen"}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	body, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sessions []string
+	for _, line := range bytes.Split(bytes.TrimSpace(body), []byte("\n")) {
+		var wire playwrightTargetRequest
+		if err := json.Unmarshal(line, &wire); err != nil {
+			t.Fatal(err)
+		}
+		if len(wire.SessionID) != 64 || wire.SessionID == wire.Args["session_id"] {
+			t.Fatal("private browser session was absent or selected by tool arguments")
+		}
+		sessions = append(sessions, wire.SessionID)
+	}
+	if len(sessions) != 4 || sessions[0] != sessions[1] || sessions[1] == sessions[2] || sessions[2] == sessions[3] {
+		t.Fatalf("private session identity did not follow canonical turns: %v", sessions)
+	}
+}
+
 func TestPlaywrightTargetExecutorRejectsMismatchedResponse(t *testing.T) {
 	executor := newPlaywrightProtocolFixture(t)
 	_, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "computer.double_click"})

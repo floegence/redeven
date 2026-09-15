@@ -49,7 +49,7 @@ try {
       } finally { clearTimeout(timeout); }
     };
     const send = async (id, tool_name, args = {}, control = {}) => {
-      child.stdin.write(`${JSON.stringify({ id, target_id: 'browser-main', tool_name, args, ...control })}\n`);
+      child.stdin.write(`${JSON.stringify({ id, target_id: 'browser-main', session_id: 'first-canonical-turn', tool_name, args, ...control })}\n`);
       const result = await next();
       assert.equal(result.id, id);
       assert.equal(result.target_id, 'browser-main');
@@ -94,6 +94,15 @@ try {
         const continued = await send('continue', 'computer.screenshot');
         assert.equal(continued.error, undefined);
         assert.equal(Boolean(continued.screenshot), true);
+      }
+      // A canceled pending interaction releases only the Runtime lease. The
+      // next admitted turn must start away from the abandoned private page;
+      // same-turn calls above must remain blocked until explicit handback.
+      if (name !== 'login') {
+        const next = await send('new-turn', 'computer.screenshot', {}, { session_id: 'next-canonical-turn' });
+        assert.equal(next.safety?.level, 'routine', 'new turn inherited abandoned private control');
+        assert.equal(next.result.url, 'about:blank', 'new turn exposed the old private page');
+        assert.equal(Boolean(next.screenshot), true);
       }
       completed++;
     } finally {
