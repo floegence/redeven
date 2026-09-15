@@ -90,6 +90,8 @@ export default mergeConfig(viteConfig, defineConfig({
       headless: true,
       provider: playwright({
         launchOptions: {
+          // Keep scrollbar layout observable in headless geometry checks.
+          ignoreDefaultArgs: ['--hide-scrollbars'],
           args: ['--enable-gpu', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
         },
       }),

@@ -1714,7 +1714,8 @@ describe('Workbench Plugin Center dialog continuity', () => {
     expect(canvas()).toEqual(placement);
     await userEvent.keyboard('{Escape}');
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
-    expect(document.activeElement).toBe(host.querySelector('[data-testid="center-entry"]'));
+    // Floe restores focus after the unmount paint, outside the close stack.
+    await expect.poll(() => document.activeElement).toBe(host.querySelector('[data-testid="center-entry"]'));
     await userEvent.click(page.getByTestId('center-entry'));
     await settle();
     const restored = document.querySelector<HTMLElement>('[role="dialog"]')!;
