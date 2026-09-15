@@ -11890,7 +11890,10 @@ webSearch: model.web_search,
                 title: copy().settings.computerUseTitle,
                 // Closing the Stage only hides the panel; it must never read
                 // like the destructive Stop action.
-                close: copy().settings.backToChat,
+                close: copy().chat.computerStageClose,
+                minimize: copy().chat.computerStageMinimize,
+                restore: copy().chat.computerStageRestore,
+                move: copy().chat.computerStageMove,
                 noFrame: copy().chat.toolActivityDetailsPending,
                 retry: copy().chat.handlerRetry,
               }}

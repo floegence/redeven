@@ -1,6 +1,9 @@
 import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
+import { GripVertical, Minus, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
+
+import { SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
+import { FlowerIcon } from './icons/FlowerIcon';
 
 import type { FlowerActivityItem, FlowerComputerUserInput } from './contracts/flowerSurfaceContracts';
 
@@ -19,6 +22,9 @@ export type FlowerComputerStageSnapshot = Readonly<{
 export type FlowerComputerStageCopy = Readonly<{
   title: string;
   close: string;
+  minimize: string;
+  restore: string;
+  move: string;
   noFrame: string;
   retry: string;
 }>;
@@ -35,12 +41,21 @@ export type FlowerComputerStageProps = Readonly<{
 }>;
 
 export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => {
+  const [minimized, setMinimized] = createSignal(false);
+  let launcher: HTMLButtonElement | undefined;
+  let grip: HTMLButtonElement | undefined;
+  const minimize = () => {
+    composing = false;
+    if (keyboard) { keyboard.value = ''; keyboard.blur(); }
+    setMinimized(true); queueMicrotask(() => launcher?.focus({ preventScroll: true })); };
+  const restore = () => { setMinimized(false); queueMicrotask(() => grip?.focus({ preventScroll: true })); };
   const [resolvedURL, setResolvedURL] = createSignal<string>();
   const [failed, setFailed] = createSignal(false);
   const [retry, setRetry] = createSignal(0);
   const frameRef = createMemo(() => props.frameRef || '');
   const targetID = createMemo(() => props.snapshot.targetID || '');
   const threadID = createMemo(() => props.threadID || '');
+  createEffect(() => { threadID(); setMinimized(false); });
   let currentURL = '';
   let currentThread = '';
   let currentTarget = '';
@@ -99,8 +114,20 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     onCleanup(() => controller.abort());
   });
   return (
+  <Show when={threadID() || 'computer-viewer'} keyed>
+    {(viewerThread) => <SurfaceFloatingPanel data-computer-viewer-thread={viewerThread} class={`flower-computer-viewer${minimized() ? ' flower-computer-viewer-minimized' : ''}`}>
+      {(handle) => <Show when={!minimized()} fallback={
+        <button {...handle} ref={launcher} type="button" class="flower-computer-stage-ball"
+          aria-label={props.copy.restore} title={props.copy.restore} onClick={restore}>
+          <FlowerIcon class="h-6 w-6" />
+        </button>
+      }>
   <section class="flower-computer-stage" role="dialog" aria-label={props.copy.title} data-computer-target={targetID()}>
+    <div class="flower-computer-stage-controls">
+    <button {...handle} ref={grip} type="button" class="flower-computer-stage-drag" aria-label={props.copy.move} title={props.copy.move}><GripVertical class="h-4 w-4" aria-hidden="true" /></button>
+    <button type="button" class="flower-computer-stage-minimize" aria-label={props.copy.minimize} title={props.copy.minimize} onClick={minimize}><Minus class="h-4 w-4" aria-hidden="true" /></button>
     <button type="button" class="flower-computer-stage-close" aria-label={props.copy.close} title={props.copy.close} onClick={props.onClose}><XCircle class="h-4 w-4" aria-hidden="true" /></button>
+    </div>
     <div class="flower-computer-stage-frame-wrap">
       <Show when={props.onInput}>
         <textarea
@@ -166,5 +193,8 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       </Show>
     </div>
   </section>
+      </Show>}
+    </SurfaceFloatingPanel>}
+  </Show>
   );
 };

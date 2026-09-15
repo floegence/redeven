@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { describe, expect, it, vi } from 'vitest';
-import { commands } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -16,14 +16,14 @@ const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
 describe('Flower computer stage', () => {
   it('commits real IME and native text once without exposing drafts or losing key order', async () => {
     const host = document.createElement('div'); document.body.append(host);
-    const input = vi.fn(() => { host.querySelector('.flower-computer-stage')?.setAttribute('data-input-count', String(input.mock.calls.length)); });
+    const input = vi.fn(() => { document.querySelector('.flower-computer-stage')?.setAttribute('data-input-count', String(input.mock.calls.length)); });
     const dispose = render(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
       userFrame={new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' })}
-      copy={{ title: 'Computer', close: 'Close', noFrame: 'Loading', retry: 'Retry' }} onClose={() => undefined} onInput={input}
+      copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize viewer', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry' }} onClose={() => undefined} onInput={input}
     />, host);
     try {
-      await waitFor(() => (host.querySelector('img') as HTMLImageElement | null)?.naturalWidth === 1);
+      await waitFor(() => (document.querySelector<HTMLImageElement>('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
       // Unicode is intentional: use native Chromium composition, not synthetic
       // CompositionEvents that incorrectly succeed on non-editable images.
       const text = '\u79c1\u5bc6\u8f93\u5165';
@@ -33,8 +33,8 @@ describe('Flower computer stage', () => {
         [{ action: 'type', text }], [{ action: 'type', text: 'a' }], [{ action: 'type', text: 'b' }],
         [{ action: 'key', key: 'Tab' }], [{ action: 'type', text: 'paste' }],
       ]);
-      expect(host.querySelector('textarea')?.value).toBe('');
-      expect(host.innerText.trim()).toBe('');
+      expect(document.querySelector<HTMLTextAreaElement>('.flower-computer-stage textarea')?.value).toBe('');
+      expect(document.querySelector<HTMLElement>('.flower-computer-stage')!.innerText.trim()).toBe('');
     } finally { dispose(); host.remove(); }
   });
   it('keeps decoded pixels during status updates and replacement frame loading', async () => {
@@ -48,27 +48,27 @@ describe('Flower computer stage', () => {
     const dispose = render(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'frame', status: status() }), status: status(), targetID: 'browser-main', target: 'Managed browser', action: 'Screenshot', location: 'local', safety: '' }}
       threadID={owner()} frameRef={frame()} loadFrame={loadFrame}
-      copy={{ title: 'Computer', close: 'Close', noFrame: 'Loading', retry: 'Retry' }} onClose={() => undefined}
+      copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize viewer', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry' }} onClose={() => undefined}
     />, host);
     try {
       await waitFor(() => loadFrame.mock.calls.length === 1);
       finishFrame(png());
-      await waitFor(() => (host.querySelector('img') as HTMLImageElement | null)?.naturalWidth === 1);
-      const originalURL = host.querySelector('img')!.src;
+      await waitFor(() => (document.querySelector<HTMLImageElement>('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
+      const originalURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
       setStatus('success');
       await new Promise((resolve) => requestAnimationFrame(resolve));
       expect(loadFrame).toHaveBeenCalledTimes(1);
-      expect(host.querySelector('img')!.src).toBe(originalURL);
+      expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src).toBe(originalURL);
       setFrame(`computer://browser-main/${'b'.repeat(64)}`);
       await waitFor(() => loadFrame.mock.calls.length === 2);
-      expect(host.querySelector('img')!.src).toBe(originalURL);
+      expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src).toBe(originalURL);
       finishFrame(png());
-      await waitFor(() => host.querySelector('img')?.src !== originalURL);
-      expect((host.querySelector('img') as HTMLImageElement).naturalWidth).toBe(1);
-      expect(host.innerText.trim()).toBe('');
+      await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src !== originalURL);
+      expect((document.querySelector<HTMLImageElement>('.flower-computer-stage img') as HTMLImageElement).naturalWidth).toBe(1);
+      expect(document.querySelector<HTMLElement>('.flower-computer-stage')!.innerText.trim()).toBe('');
       setOwner('another-thread');
       await waitFor(() => loadFrame.mock.calls.length === 3);
-      expect(host.querySelector('img')).toBeNull();
+      expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')).toBeNull();
     } finally { dispose(); host.remove(); }
   });
 
@@ -116,15 +116,15 @@ describe('Flower computer stage', () => {
       loadThread: vi.fn(async () => liveBootstrap(current, 1)),
     }, { focusThreadRequest: { request_id: 'focus-computer-stage', thread_id: threadID } });
 
-    await waitFor(() => runtime.querySelector('.flower-computer-stage') !== null);
+    await waitFor(() => document.querySelector('.flower-computer-stage') !== null);
     await waitFor(() => loadComputerFrame.mock.calls.length === 1);
-    await waitFor(() => runtime.querySelector('.flower-computer-stage-no-frame button') !== null);
-    (runtime.querySelector('.flower-computer-stage-no-frame button') as HTMLButtonElement).click();
-    await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
-    expect(runtime.querySelector('.flower-computer-stage')?.getAttribute('role')).toBe('dialog');
-    expect(runtime.querySelector('.flower-computer-stage-header')).toBeNull();
-    expect(runtime.querySelector('.flower-computer-stage-footer')).toBeNull();
-    expect(runtime.querySelector('.flower-computer-stage-frame')).not.toBeNull();
+    await waitFor(() => document.querySelector('.flower-computer-stage-no-frame button') !== null);
+    (document.querySelector('.flower-computer-stage-no-frame button') as HTMLButtonElement).click();
+    await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
+    expect(document.querySelector('.flower-computer-stage')?.getAttribute('role')).toBe('dialog');
+    expect(document.querySelector('.flower-computer-stage-header')).toBeNull();
+    expect(document.querySelector('.flower-computer-stage-footer')).toBeNull();
+    expect(document.querySelector('.flower-computer-stage-frame')).not.toBeNull();
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({
       thread_id: threadID, target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64),
     }));
@@ -137,9 +137,9 @@ describe('Flower computer stage', () => {
     expect(loadComputerFrame).toHaveBeenCalledTimes(2);
     deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: frame });
     await waitFor(() => loadComputerFrame.mock.calls.length === 3);
-    await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
+    await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame.resource_ref }));
-    expect(runtime.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
+    expect(document.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
     // Completion retires the ephemeral sampler. A reopened viewer must load
     // the durable keyframe, never the expired last live sample.
     const completedBase = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
@@ -151,14 +151,14 @@ describe('Flower computer stage', () => {
     deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: completed });
     await waitFor(() => loadComputerFrame.mock.calls.length === 4);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
-    (runtime.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-computer-stage') === null);
+    (document.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
+    await waitFor(() => document.querySelector('.flower-computer-stage') === null);
     await waitFor(() => setComputerViewer.mock.calls.length === 2);
     expect(setComputerViewer).toHaveBeenLastCalledWith({ observer_id: 'observer-1', revision: 2 });
     (runtime.querySelector('.flower-activity-inline-button[aria-expanded="false"]') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-activity-computer-block .flower-activity-inline-button') !== null);
     (runtime.querySelector('.flower-activity-computer-block .flower-activity-inline-button') as HTMLButtonElement).click();
-    await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
+    await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
 
     // A new run still displays the historical keyframe, but it cannot start
@@ -182,7 +182,7 @@ describe('Flower computer stage', () => {
     } });
     await waitFor(() => setComputerViewer.mock.calls.length === 3);
     expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
-    (runtime.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
+    (document.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
     await waitFor(() => setComputerViewer.mock.calls.length === 4);
     deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 5,
       items: [...nextRun.items!, { ...observed, id: 'hidden-observation', ordinal: 101, run_id: 'next-run', turn_id: 'next-turn',
@@ -193,7 +193,7 @@ describe('Flower computer stage', () => {
       }],
     } });
     await waitFor(() => runtime.querySelector('[data-flower-activity-item-id="hidden-observation"]') !== null);
-    expect(runtime.querySelector('.flower-computer-stage')).toBeNull();
+    expect(document.querySelector('.flower-computer-stage')).toBeNull();
     expect(setComputerViewer).toHaveBeenCalledTimes(4);
   });
 });
@@ -244,10 +244,10 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
     expect(control.scrollHeight).toBeLessThanOrEqual(control.clientHeight);
     expect(getComputedStyle(control).cursor).toBe('pointer');
   }
-  expect(surface.querySelector('.flower-computer-stage')).toBeNull();
+  expect(document.querySelector('.flower-computer-stage')).toBeNull();
   controlButton()!.click();
-  await waitFor(() => (surface.querySelector('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
-  const keyboard = surface.querySelector('.flower-computer-stage textarea') as HTMLTextAreaElement;
+  await waitFor(() => (document.querySelector<HTMLImageElement>('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
+  const keyboard = document.querySelector('.flower-computer-stage textarea') as HTMLTextAreaElement;
   const sendKey = (key: string) => {
     if (key.length === 1) {
       keyboard.value = key;
@@ -258,13 +258,13 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => inputComputerControl.mock.calls.length === 2);
   expect(inputComputerControl).toHaveBeenLastCalledWith({ thread_id: threadID, interaction_id: 'tool-input:result-control', action: 'type', text: 's' });
   expect(submitInput).not.toHaveBeenCalled();
-  expect(surface.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
+  expect(document.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
   const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Return to Flower')!;
   await waitFor(() => !handback.disabled);
-  const privateURL = surface.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
+  const privateURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
   deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...canonical, view_version: 2 } });
   await new Promise((resolve) => setTimeout(resolve, 100));
-  expect(surface.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(privateURL);
+  expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(privateURL);
   expect(inputComputerControl).toHaveBeenCalledTimes(2);
   const rapidText = 'A'.repeat(80);
   for (const key of rapidText) sendKey(key);
@@ -294,5 +294,42 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   handback.click();
   await waitFor(() => submitInput.mock.calls.length === 1);
   expect(submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));
-  await waitFor(() => surface.querySelector('.flower-computer-stage') === null);
+  await waitFor(() => document.querySelector('.flower-computer-stage') === null);
 });
+
+
+for (const projected of [false, true]) {
+  it(`drags and minimizes the media viewer without sending remote input (projected=${projected})`, async () => {
+    await page.viewport(1440, 1000);
+    const host = document.createElement('div'); document.body.append(host);
+    const onInput = vi.fn(); const onClose = vi.fn();
+    const [owner, setOwner] = createSignal('viewer-thread');
+    const dispose = render(() => <div data-floe-dialog-surface-host={projected ? 'true' : undefined}
+      style={{ position: 'relative', width: '900px', height: '650px', transform: projected ? 'scale(0.7)' : undefined, 'transform-origin': 'top left' }}>
+      <FlowerComputerStage threadID={owner()}
+        snapshot={{ item: activityItem({ item_id: 'viewer' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
+        userFrame={new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), value => value.charCodeAt(0))], { type: 'image/png' })}
+        copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize viewer', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry' }}
+        onInput={onInput} onClose={onClose}
+      />
+    </div>, host);
+    try {
+      await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
+      const command = commands as unknown as { exerciseComputerViewer: () => Promise<{ pixelsDecoded: boolean }> };
+      expect((await command.exerciseComputerViewer()).pixelsDecoded).toBe(true);
+      expect(onInput).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
+      const viewer = document.querySelector<HTMLElement>('.flower-computer-viewer')!;
+      if (projected) {
+        expect(viewer.closest('[data-floe-dialog-surface-host]')).not.toBeNull();
+        expect(getComputedStyle(viewer).position).toBe('absolute');
+      }
+      document.querySelector<HTMLButtonElement>('.flower-computer-stage-minimize')!.click();
+      expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
+      setOwner('next-viewer-thread');
+      await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
+      expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+      document.querySelector<HTMLButtonElement>('.flower-computer-stage-close')!.click();
+      expect(onClose).toHaveBeenCalledTimes(1); expect(onInput).not.toHaveBeenCalled();
+    } finally { dispose(); host.remove(); }
+  });
+}
