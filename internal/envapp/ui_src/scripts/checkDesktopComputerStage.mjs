@@ -1,6 +1,6 @@
 /* global window, document */
 import assert from 'node:assert/strict';
-import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
 import { Readable } from 'node:stream';
@@ -9,14 +9,16 @@ import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright';
-import { findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
+import { ensureFlowerSurface, findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
 import { observeDesktopComputerFrames, decodedLiveFramesForTarget } from './desktopComputerLiveEvidence.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
 assert.equal(process.env.REDEVEN_COMPUTER_USE_E2E, '1');
 const cdp = process.env.REDEVEN_DESKTOP_CDP;
-assert(cdp, 'REDEVEN_DESKTOP_CDP must identify a task-owned dev Desktop');
+const webtopURL = process.env.REDEVEN_COMPUTER_WEBTOP_URL;
+assert(Boolean(cdp) !== Boolean(webtopURL), 'identify exactly one task-owned Desktop or Linux Webtop');
+if (webtopURL) assert.equal(process.platform, 'linux', 'Webtop qualification must execute inside Linux');
 const output = process.env.REDEVEN_COMPUTER_EVIDENCE_DIR;
 assert(output && path.isAbsolute(output), 'an absolute evidence directory is required');
 const source = process.env.REDEVEN_COMPUTER_CONFIG_ROOT;
@@ -26,9 +28,33 @@ const secrets = JSON.parse(await readFile(path.join(source, 'secrets.json'), 'ut
 const { provider, apiKey } = findDeepSeekProvider(config, secrets);
 const model = 'deepseek-v4-flash-vision-exp';
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
-const browser = await chromium.connectOverCDP(cdp);
-const page = browser.contexts()[0].pages().find((entry) => entry.url() === new URL('desktop/dist/welcome/index.html', `file://${root}`).href);
+const browser = cdp ? await chromium.connectOverCDP(cdp) : await chromium.launch({ headless: false });
+const page = webtopURL ? await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  : browser.contexts()[0].pages().find((entry) => entry.url() === new URL('desktop/dist/welcome/index.html', `file://${root}`).href);
 assert(page, 'CDP does not belong to this checkout built Desktop');
+const streamErrors = [];
+if (webtopURL) {
+  try {
+  const session = await page.context().newCDPSession(page);
+  const streams = new Set();
+  const forward = async (id, data) => {
+    if (!data) return;
+    await page.evaluate(({ id, data }) => window.__recordComputerStreamChunk?.({ kind: 'chunk', stream_id: id,
+      chunk: Uint8Array.from(atob(data), (value) => value.charCodeAt(0)) }), { id, data });
+  };
+  await session.send('Network.enable');
+  session.on('Network.responseReceived', (event) => {
+    if (new URL(event.response.url).pathname !== '/_redeven_proxy/api/ai/flower/stream') return;
+    streams.add(event.requestId);
+    void session.send('Network.streamResourceContent', { requestId: event.requestId })
+      .then((result) => forward(event.requestId, result.bufferedData)).catch(() => streamErrors.push('workspace_stream_observation_failed'));
+  });
+  session.on('Network.dataReceived', (event) => {
+    if (streams.has(event.requestId)) void forward(event.requestId, event.data).catch(() => streamErrors.push('workspace_chunk_observation_failed'));
+  });
+  await page.goto(webtopURL);
+  } catch (error) { await browser.close(); throw error; }
+}
 await mkdir(output, { recursive: true });
 let completed = 0;
 let loginCompleted = false;
@@ -143,6 +169,12 @@ const proxy = http.createServer(async (request, response) => {
 proxy.listen(0, '127.0.0.1');
 await once(proxy, 'listening');
 const request = (method, url, body) => page.evaluate(async ({ method, url, body }) => {
+  if (!window.redevenDesktopSettings) {
+    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(`Runtime request failed: ${response.status}`);
+    return result.data;
+  }
   const result = await window.redevenDesktopSettings.requestRuntimeFlower({ method, path: url, ...(body ? { body } : {}) });
   if (!result.ok) throw new Error(`Runtime request failed: ${result.error.code || result.error.status}`);
   return result.data;
@@ -177,6 +209,9 @@ let nativeExit;
 let nativeEvidence;
 let liveEvidence;
 const nativeRequested = process.env.REDEVEN_COMPUTER_NATIVE_E2E === '1';
+const linuxRequested = process.env.REDEVEN_COMPUTER_X11_E2E === '1';
+assert(!linuxRequested || (webtopURL && !nativeRequested), 'X11 qualification requires Linux Webtop');
+let linuxEvidence;
 try {
   await page.bringToFront();
   await request('PUT', '/_redeven_proxy/api/ai/provider_bundle', {
@@ -187,7 +222,8 @@ try {
   await request('PUT', '/_redeven_proxy/api/ai/default_permission', { permission_type: 'full_access' });
   await request('PUT', '/_redeven_proxy/api/ai/computer_use', { enabled: true });
   await page.reload();
-  console.log('Desktop configured; opening Flower through its visible controls.');
+  console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} configured; opening Flower through its visible controls.`);
+  if (webtopURL) await ensureFlowerSurface(page);
   if (!await page.locator('.flower-surface').count()) {
     await page.getByRole('button', { name: /^Flower$/ }).click();
   }
@@ -288,7 +324,62 @@ try {
     await rm(nativeDirectory, { recursive: true, force: true });
     nativeDirectory = undefined;
   }
-  console.log('Browser and native task effects verified; checking Stage reopen and settings.');
+  if (linuxRequested) {
+    const composer = page.locator('.flower-surface textarea').first();
+    await composer.fill('Show me the Linux virtual desktop. Take a screenshot and describe what is currently visible.');
+    await composer.press('Enter');
+    await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
+    await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'Linux desktop preparation');
+    const sessionsRoot = path.join(source, 'computer/x11');
+    const sessions = (await readdir(sessionsRoot)).filter((name) => name.startsWith('session-'));
+    assert.equal(sessions.length, 1, 'expected this Runtime to own exactly one X11 display');
+    const authority = path.join(sessionsRoot, sessions[0], 'Xauthority');
+    // The Xauthority cookie stays in memory and is never included in evidence.
+    const { stdout } = await promisify(execFile)('/usr/bin/xauth', ['-f', authority, 'list']);
+    const display = /:(\d+)\s/u.exec(stdout)?.[1];
+    assert(display, 'Runtime display identity is unavailable');
+    nativeDirectory = await mkdtemp(path.join(output, 'linux-fixture-'));
+    const resultFile = path.join(nativeDirectory, 'result.json');
+    nativeProcess = spawn('/usr/bin/python3', [path.join(root, 'scripts/fixtures/linuxComputerUse.py'), resultFile], {
+      env: { ...process.env, DISPLAY: `:${display}`, XAUTHORITY: authority }, stdio: 'ignore',
+    });
+    nativeExit = once(nativeProcess, 'exit');
+    await waitForProgress(() => readFile(resultFile).then(() => true, () => false), 'Linux fixture readiness', 15000);
+    const turns = [];
+    for (const [index, prompt] of [
+      'In the Flower Linux Fixture application on the Linux virtual desktop, click Complete Linux step exactly twice and verify that Clicks is 2. Let me watch the application as you work.',
+      'Continue in Flower Linux Fixture. Double click the blue area, enter Flower in the text field and press Enter, then scroll down over the yellow area. Take a fresh screenshot to verify all indicators. Use the computer tools on the Linux virtual desktop.',
+    ].entries()) {
+      const startedAt = Date.now();
+      await composer.fill(prompt); await composer.press('Enter');
+      await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
+      console.log(`Linux GUI turn ${index + 1} submitted through Flower Composer.`);
+      await waitForProgress(async () => {
+        const state = JSON.parse(await readFile(resultFile, 'utf8'));
+        return state.clicks === 2 && (index === 0 || (state.doubleClicked && state.entered && state.scrollEvents > 0));
+      }, 'Linux GUI effects', 180000, true);
+      await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'Linux GUI completion');
+      await waitForProgress(stageHasImage, 'Linux GUI Stage image');
+      const frame = await page.evaluate(() => {
+        const img = document.querySelector('.flower-computer-stage-frame');
+        const stage = img.closest('[role="dialog"]');
+        return { target: stage.dataset.computerTarget, width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), visibleText: stage.innerText.trim() };
+      });
+      assert.equal(frame.target, 'xvfb-main');
+      assert(frame.blob && frame.width === 1280 && frame.height === 800 && frame.visibleText === '');
+      const state = JSON.parse(await readFile(resultFile, 'utf8'));
+      assert.equal(state.clicks, 2);
+      if (index > 0) assert(state.doubleClicked && state.entered && state.scrollEvents > 0);
+      const screenshot = path.join(output, `linux-turn-${index + 1}.png`);
+      await page.screenshot({ path: screenshot });
+      turns.push({ startedAt, finishedAt: Date.now(), frame, state, screenshot });
+      console.log(JSON.stringify({ linuxTurn: index + 1, frame, state }));
+    }
+    linuxEvidence = { turns };
+    nativeProcess.kill('SIGTERM'); await nativeExit; nativeProcess = undefined;
+    await rm(nativeDirectory, { recursive: true, force: true }); nativeDirectory = undefined;
+  }
+  console.log('Requested task effects verified; checking Stage reopen and settings.');
   liveEvidence = await page.evaluate(() => window.__stopComputerLiveEvidence());
   await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
   await page.locator('.flower-computer-stage-close').click();
@@ -393,8 +484,9 @@ try {
   }
   assert(protocol.some((entry) => entry.imageToolOutput), 'the actual provider never received a tool-result image');
   assert.equal(protocolErrors.length, 0, 'provider protocol assertions failed');
-  for (const target of nativeRequested ? ['browser-main', 'desktop-main'] : ['browser-main']) {
-    const turns = target === 'browser-main' ? evidence : nativeEvidence.turns;
+  assert.deepEqual(streamErrors, [], 'passive workspace stream observation failed');
+  for (const target of ['browser-main', ...(nativeRequested ? ['desktop-main'] : []), ...(linuxRequested ? ['xvfb-main'] : [])]) {
+    const turns = target === 'browser-main' ? evidence : target === 'xvfb-main' ? linuxEvidence.turns : nativeEvidence.turns;
     for (const [index, turn] of turns.entries()) {
       const live = decodedLiveFramesForTarget({ ...liveEvidence, frames: liveEvidence.frames.filter((frame) => frame.at >= turn.startedAt && frame.at <= turn.finishedAt) }, target);
       assert(live.length >= 3 && new Set(live.map((frame) => frame.sha256)).size >= 2,
@@ -402,8 +494,8 @@ try {
       turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map((frame) => frame.sha256)).size };
     }
   }
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
-  console.log(`${nativeRequested ? 'Managed-browser and native desktop' : 'Managed-browser'} Desktop UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} requested UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
 } catch (error) {
   liveEvidence ??= await page.evaluate(() => window.__stopComputerLiveEvidence?.()).catch(() => undefined);
   if (liveEvidence) await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
