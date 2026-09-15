@@ -3,11 +3,12 @@ import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
-import { DockCpu, DockFolder, DockLayers, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
+import { DockCpu, DockFolder, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
 import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX } from 'solid-js';
 
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
+import { ContainersWorkbenchIcon } from '../icons/ContainersIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
@@ -372,7 +373,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.containers',
     label: 'Containers',
-    icon: DockLayers,
+    icon: ContainersWorkbenchIcon,
     body: ContainersWidget,
     defaultTitle: 'Containers',
     defaultSize: { width: 1120, height: 720 },
