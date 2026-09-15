@@ -308,11 +308,12 @@ try {
     const frame = await page.evaluate(() => {
       const image = document.querySelector('.flower-computer-stage-frame');
       const stage = document.querySelector('.flower-computer-stage');
+      const content = stage.querySelector('[data-floe-floating-window-content="true"]');
       const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 100;
       const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0, 160, 100);
       const bytes = ctx.getImageData(0, 0, 160, 100).data;
       const colors = new Set(); for (let i = 0; i < bytes.length; i += 4) colors.add(`${bytes[i]},${bytes[i+1]},${bytes[i+2]}`);
-      return { width: image.naturalWidth, height: image.naturalHeight, blob: image.src.startsWith('blob:'), colors: colors.size, background: Array.from(bytes.slice(0, 3)), visibleText: stage.innerText.trim(), role: stage.getAttribute('role') };
+      return { width: image.naturalWidth, height: image.naturalHeight, blob: image.src.startsWith('blob:'), colors: colors.size, background: Array.from(bytes.slice(0, 3)), visibleText: content.innerText.trim(), role: stage.closest('[role="dialog"]')?.getAttribute('role') };
     });
     assert(frame.blob && frame.colors > 10 && frame.visibleText === '' && frame.role === 'dialog', 'the media-only Stage did not display actual pixels');
     assert.deepEqual(frame.background, [214, 245, 229], 'Stage did not advance to the completed fixture screenshot');
@@ -351,7 +352,7 @@ try {
       const frame = await page.evaluate(() => {
         const img = document.querySelector('.flower-computer-stage-frame');
         const stage = document.querySelector('.flower-computer-stage');
-        return { target: stage.getAttribute('data-computer-target'), width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), visibleText: stage.innerText.trim(), role: stage.getAttribute('role') };
+        return { target: img.closest('.flower-computer-stage-frame-wrap')?.dataset.computerTarget, width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), visibleText: stage.querySelector('[data-floe-floating-window-content]').innerText.trim(), role: stage.closest('[role="dialog"]')?.getAttribute('role') };
       });
       assert(frame.blob && frame.visibleText === '' && frame.role === 'dialog');
       const state = JSON.parse(await readFile(resultFile, 'utf8'));
@@ -411,7 +412,8 @@ try {
       const frame = await page.evaluate(() => {
         const img = document.querySelector('.flower-computer-stage-frame');
         const stage = img.closest('[role="dialog"]');
-        return { target: stage.dataset.computerTarget, width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), visibleText: stage.innerText.trim() };
+        const content = stage.querySelector('[data-floe-floating-window-content="true"]');
+        return { target: img.closest('.flower-computer-stage-frame-wrap')?.dataset.computerTarget, width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), visibleText: content.innerText.trim() };
       });
       assert.equal(frame.target, 'xvfb-main');
       assert(frame.blob && frame.width === 1280 && frame.height === 800 && frame.visibleText === '');
@@ -431,7 +433,7 @@ try {
   viewerInteraction = await qualifyComputerViewer({ page, output });
   await writeFile(path.join(output, 'viewer-interaction.json'), JSON.stringify(viewerInteraction, null, 2));
   console.log('Viewer interactions passed; checking execution while minimized.');
-  await page.locator('.flower-computer-stage-minimize').click();
+  await page.locator('[data-floe-floating-window-control="close"]').click();
   const minimizedComposer = page.locator('.flower-surface textarea').first();
   await minimizedComposer.fill('Take one screenshot of the current target using computer.screenshot and briefly describe it. Do not use other tools.');
   await minimizedComposer.press('Enter');
@@ -445,8 +447,8 @@ try {
   console.log('Minimized execution passed; checking Stage reopen and settings.');
   liveEvidence = await page.evaluate(() => window.__stopComputerLiveEvidence());
   await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
-  await page.locator('.flower-computer-stage-close').click();
-  assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'closing Stage must hide the viewer');
+  await page.locator('[data-floe-floating-window-control="close"]').click();
+  await page.locator('.flower-computer-stage').waitFor({ state: 'detached' });
   const observeComposer = page.locator('.flower-surface textarea').first();
   await observeComposer.fill('Take one screenshot of the current target and describe whether a window is visible. Use only computer tools.');
   await observeComposer.press('Enter');
@@ -456,6 +458,8 @@ try {
   await page.locator('.flower-activity-inline-button[aria-expanded="false"]').filter({ hasText: /^screenshot/u }).last().click();
   await page.locator('.flower-activity-computer-block .flower-activity-inline-button').last().click();
   await waitForProgress(stageHasImage, 'reopened Stage image');
+  await page.locator('[data-floe-floating-window-control="close"]').click();
+  await page.locator('.flower-computer-stage').waitFor({ state: 'detached' });
   await page.locator('.flower-chat-header-actions > .flower-header-icon-button').last().click();
   const toggle = page.locator('.flower-settings-computer-use-section [role="switch"]');
   await toggle.waitFor();
@@ -540,7 +544,7 @@ try {
   await waitForProgress(() => loginCompleted, 'sign-in fixture completion', 15000);
   const userPixels = await page.evaluate(() => {
     const image = document.querySelector('.flower-computer-stage-frame');
-    return { width: image.naturalWidth, height: image.naturalHeight, role: image.closest('[role="dialog"]').getAttribute('role'), visibleText: image.closest('[role="dialog"]').innerText.trim() };
+    return { width: image.naturalWidth, height: image.naturalHeight, role: image.closest('[role="dialog"]').getAttribute('role'), visibleText: image.closest('[data-floe-floating-window-content]').innerText.trim() };
   });
   assert.equal(userPixels.visibleText, '');
   const pending = await request('GET', `/_redeven_proxy/api/ai/threads/${takeoverThread}`);

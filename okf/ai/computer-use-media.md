@@ -18,7 +18,33 @@ does not prove the user can see a frame.
 
 Each safe completed action returns target ID, target display name, execution location, an action summary, a safety decision, and an after-frame attachment. Attachment descriptors contain an opaque `computer://` resource reference, MIME, byte size, and SHA-256. Provider renderers resolve bytes only at request time; durable state stores descriptor and hash, never base64. A resolver error, unknown reference, changed bytes, or unsupported model capability is an explicit error.
 
-The floating Stage is a media-only viewer: it displays the latest action screenshot and icon-only move, minimize, and close controls, without internal state labels or explanatory text. The published Floe `SurfaceFloatingPanel` owns placement, pointer capture, drag/click separation, keyboard movement, and projected-surface boundaries. Flower does not duplicate viewport conversion or clamping. Minimize replaces the panel with a draggable circular screen-preview launcher; its picture-in-picture glyph identifies the viewing surface rather than the assistant brand. Click or Enter restores the current decoded image, and arrow keys move the focused handle or launcher. Minimizing does not pause the task or relinquish user control; private input elements are removed while collapsed. Ordinary live frames may continue updating the retained current image. Placement remains relative to the available surface as the panel size or viewport changes. Thread selection resets both placement and collapsed state. It opens when an Activity contains a frame reference, not for an empty tool-start payload. Closing only hides it and retires the viewing subscription; subsequent actions cannot undo that choice. Activity can reopen the viewer. A viewer may start only when the frame Activity belongs to the currently active
+The Stage uses the published Floe `FloatingWindow` for its title bar, drag,
+resize, maximize, and close controls. Its body contains decoded pixels only.
+Closing switches to a 56px launcher with the published `MonitorPointer` icon,
+an opaque theme surface, and a localized accessible status. Running, input or
+approval waiting, completion, and failure use distinct status rings. State
+belongs to the run that produced the displayed frame; a later text turn cannot
+recolor historical Computer activity, and a provider failure overrides a
+successful screenshot from that run.
+
+Floe `SurfaceFloatingPanel` owns launcher placement, pointer capture, drag/click
+separation, keyboard movement, edge snapping, and projected-surface boundaries.
+Flower supplies the actual transcript element as the safe boundary, excluding
+the header and dynamic composer. A committed drag snaps to the nearest of four
+edges with a 12px gap and a 180ms transition; reduced motion disables that
+transition. Clicking, Enter, or Space restores the viewer; arrow keys move the
+launcher. Dragging does not activate restoration or send remote input. Hidden
+launchers are absent from pointer interaction and keyboard navigation.
+
+Both components remain mounted across visibility changes, preserving the
+window's position, size, and maximization and the launcher's relative placement.
+Thread selection resets presentation and clears old pixels. The viewer appears
+only after an Activity supplies a frame, and Activity can reopen it after close.
+Closing removes private input controls and retires the viewing subscription,
+without pausing execution, relinquishing user control, or recreating a target.
+Later actions cannot reopen an explicitly hidden viewer.
+
+A viewer may start only when the frame Activity belongs to the currently active
 canonical run. Historical pixels remain visible during preparation but cannot
 start capture; the first current-run frame activates viewing without retries.
 After the first successful action, Runtime may publish target-scoped live frame metadata at approximately 3 FPS through the existing workspace stream. Each workspace subscriber retains at most one pending media descriptor (maximum 4 KiB), replacing stale media without consuming lifecycle queue capacity. Lifecycle delivery has priority. Viewer closure cancels queued capture immediately; an admitted passive capture
@@ -121,6 +147,8 @@ replays a request to turn transport failure into success.
 The media viewer does not authorize target actions, own lifecycle state, or expose private takeover pixels to model history.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerStage.window.browser.test.tsx` - real published Floe window and launcher interaction, geometry retention, status, and safe boundaries.
 
 - `redeven:internal/ai/computer_live_frames.go` - bounded observer-owned samples.
 - `redeven:internal/ai/computer_media.go` - host keyframe storage and validation.

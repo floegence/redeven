@@ -1,14 +1,15 @@
 import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Refresh } from '@floegence/floe-webapp-core/icons';
+import { MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
 
 import { FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
-import type { FlowerActivityItem, FlowerComputerUserInput } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerChatMessage, FlowerComputerUserInput } from './contracts/flowerSurfaceContracts';
 
 export type FlowerComputerStageSnapshot = Readonly<{
   item: FlowerActivityItem;
   runID?: string;
+  messageStatus?: FlowerChatMessage['status'];
   targetID?: string;
   target: string;
   action: string;
@@ -26,7 +27,10 @@ export type FlowerComputerStageCopy = Readonly<{
   move: string;
   noFrame: string;
   retry: string;
+  state: Readonly<Record<FlowerComputerStageSessionState, string>>;
 }>;
+
+export type FlowerComputerStageSessionState = 'running' | 'awaiting_user' | 'completed' | 'failed';
 
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;
@@ -35,9 +39,11 @@ export type FlowerComputerStageProps = Readonly<{
   onInput?: (input: Omit<FlowerComputerUserInput, 'thread_id' | 'interaction_id'>) => void;
   threadID?: string;
   loadFrame?: (input: Readonly<{ thread_id: string; target_id: string; resource_ref: string; sha256: string; signal: AbortSignal }>) => Promise<Blob>;
+  boundary?: HTMLElement;
   copy: FlowerComputerStageCopy;
-  open?: boolean;
-  onRestore?: () => void;
+  open: boolean;
+  sessionState: FlowerComputerStageSessionState;
+  onRestore: () => void;
   onClose: () => void;
 }>;
 
@@ -53,6 +59,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   let currentTarget = '';
   let keyboard: HTMLTextAreaElement | undefined;
   let composing = false;
+  let launcher: HTMLButtonElement | undefined;
   const commitText = () => {
     if (!keyboard) return;
     const text = keyboard.value;
@@ -107,9 +114,14 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   });
   return (
   <Show when={threadID() || 'computer-viewer'} keyed>
-    {(viewerThread) => <Show when={props.open ?? true} fallback={<SurfaceFloatingPanel class="flower-computer-viewer-minimized">{() => <button type="button" class="flower-computer-stage-ball" aria-label={props.copy.restore} title={props.copy.restore} onClick={() => props.onRestore?.()}><svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M6.5 8h5" /></svg></button>}</SurfaceFloatingPanel>}>
-      <FloatingWindow open={true} onOpenChange={(open) => { if (!open) props.onClose(); }} title={props.copy.title} draggable resizable defaultSize={{ width: 620, height: 420 }} minSize={{ width: 360, height: 240 }} viewportInsets={{ top: 56, right: 12, bottom: 12, left: 12 }} class="flower-computer-stage" data-computer-viewer-thread={viewerThread}>
-    <div class="flower-computer-stage-frame-wrap">
+    {(viewerThread) => <>
+      <FloatingWindow open={props.open} onOpenChange={(open) => {
+        if (!open) {
+          props.onClose();
+          queueMicrotask(() => launcher?.focus({ preventScroll: true }));
+        }
+      }} title={props.copy.title} draggable resizable defaultSize={{ width: 620, height: 420 }} minSize={{ width: 360, height: 240 }} viewportInsets={{ top: 56, right: 12, bottom: 12, left: 12 }} class="flower-computer-stage" data-computer-viewer-thread={viewerThread}>
+    <div class="flower-computer-stage-frame-wrap" data-computer-target={targetID()}>
       <Show when={props.onInput}>
         <textarea
           ref={keyboard}
@@ -174,7 +186,31 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       </Show>
     </div>
     </FloatingWindow>
-    </Show>}
+      <SurfaceFloatingPanel
+        boundary={props.boundary}
+        class={`flower-computer-viewer-minimized${props.open ? ' flower-computer-viewer-minimized-hidden' : ''}`}
+        aria-hidden={props.open ? 'true' : undefined}
+        snapToEdge
+        snapInset={12}
+      >
+        {(handle) => (
+          <button
+            {...handle}
+            ref={launcher}
+            type="button"
+            class="flower-computer-stage-ball"
+            data-session-state={props.sessionState}
+            aria-label={props.copy.restore}
+            aria-description={[props.copy.state[props.sessionState], props.copy.move].filter(Boolean).join(". ")}
+            title={[props.copy.restore, props.copy.state[props.sessionState], props.copy.move].filter(Boolean).join(" — ")}
+            tabIndex={props.open ? -1 : 0}
+            onClick={props.onRestore}
+          >
+            <span aria-hidden="true"><MonitorPointer class="flower-computer-stage-ball-icon" size={32} /></span>
+          </button>
+        )}
+      </SurfaceFloatingPanel>
+    </>}
   </Show>
   );
 };

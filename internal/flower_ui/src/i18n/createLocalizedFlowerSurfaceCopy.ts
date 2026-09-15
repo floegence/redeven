@@ -138,6 +138,12 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       handlerStillStarting: t(i18n, k('chat.handlerStillStarting')),
       computerStageMinimize: t(i18n, k('chat.computerStageMinimize')),
       computerStageRestore: t(i18n, k('chat.computerStageRestore')),
+      computerStageStatus: {
+        running: t(i18n, k('chat.computerStageStatus.running')),
+        awaiting_user: t(i18n, k('chat.computerStageStatus.awaiting_user')),
+        completed: t(i18n, k('chat.computerStageStatus.completed')),
+        failed: t(i18n, k('chat.computerStageStatus.failed')),
+      },
       computerStageMove: t(i18n, k('chat.computerStageMove')),
       computerStageClose: t(i18n, k('chat.computerStageClose')),
       handlerRetry: t(i18n, k('chat.handlerRetry')),

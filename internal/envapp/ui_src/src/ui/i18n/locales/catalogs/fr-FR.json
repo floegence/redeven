@@ -4412,6 +4412,12 @@
       "handlerStillStarting": "Flower est encore en cours de démarrage.",
       "computerStageMinimize": "Réduire la vue",
       "computerStageRestore": "Restaurer la vue",
+      "computerStageStatus": {
+        "running": "Tâche sur l’ordinateur en cours",
+        "awaiting_user": "En attente de votre réponse ou autorisation",
+        "completed": "Tâche sur l’ordinateur terminée",
+        "failed": "Échec de la tâche sur l’ordinateur"
+      },
       "computerStageMove": "Déplacer la vue (touches fléchées)",
       "computerStageClose": "Fermer la vue",
       "handlerRetry": "Réessayer",

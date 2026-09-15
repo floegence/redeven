@@ -26,9 +26,9 @@ export async function qualifyComputerRecovery({ page, request, fixtureURL, fixtu
     await page.waitForFunction(() => document.querySelector('.flower-computer-stage-frame')?.naturalWidth >= 640);
     return page.evaluate(async () => {
       const img = document.querySelector('.flower-computer-stage-frame');
-      const stage = img.closest('[role="dialog"]');
+      const content = img.closest('[data-floe-floating-window-content]');
       const hash = await crypto.subtle.digest('SHA-256', await (await fetch(img.src)).arrayBuffer());
-      return { width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), text: stage.innerText.trim(), target: stage.dataset.computerTarget,
+      return { width: img.naturalWidth, height: img.naturalHeight, blob: img.src.startsWith('blob:'), text: content.innerText.trim(), target: img.closest('.flower-computer-stage-frame-wrap')?.dataset.computerTarget,
         sha256: Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, '0')).join('') };
     });
   };

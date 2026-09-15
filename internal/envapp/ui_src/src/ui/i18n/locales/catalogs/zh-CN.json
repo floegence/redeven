@@ -4427,6 +4427,12 @@
       "handlerStillStarting": "Flower 仍在启动。",
       "computerStageMinimize": "最小化画面",
       "computerStageRestore": "恢复画面",
+      "computerStageStatus": {
+        "running": "电脑任务执行中",
+        "awaiting_user": "等待你的输入或批准",
+        "completed": "电脑任务已完成",
+        "failed": "电脑任务失败"
+      },
       "computerStageMove": "移动画面（方向键）",
       "computerStageClose": "关闭画面",
       "handlerRetry": "重试",

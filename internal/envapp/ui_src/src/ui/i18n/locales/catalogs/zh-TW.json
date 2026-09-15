@@ -4427,6 +4427,12 @@
       "handlerStillStarting": "Flower 仍在啟動。",
       "computerStageMinimize": "最小化畫面",
       "computerStageRestore": "還原畫面",
+      "computerStageStatus": {
+        "running": "電腦工作執行中",
+        "awaiting_user": "等待你的輸入或核准",
+        "completed": "電腦工作已完成",
+        "failed": "電腦工作失敗"
+      },
       "computerStageMove": "移動畫面（方向鍵）",
       "computerStageClose": "關閉畫面",
       "handlerRetry": "重試",
