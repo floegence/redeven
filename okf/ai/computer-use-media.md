@@ -109,6 +109,13 @@ runs this focused scope, and the complete Linux suite includes it. Replacement
 Runtime shutdown and container cleanup remain mandatory on failure as well as
 success.
 
+After cleanup the runner writes `acceptance-summary.json`. Scope, frozen commit,
+artifact hashes, real provider/image evidence, required scenario results and
+cleanup must all match before that scope passes. A focused report cannot satisfy
+the complete Linux matrix. Missing evidence, provider rejection, retained
+programs or ports, and private-data exposure fail closed even if earlier UI
+steps succeeded. The summary names the other product scopes it does not qualify.
+
 # Evidence
 
 - `redeven:internal/ai/computer_live_frames.go` - bounded observer-owned samples.
