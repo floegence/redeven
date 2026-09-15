@@ -316,11 +316,12 @@ try {
   await page.locator('.flower-new-chat-button').click();
   await composer.fill(`Open ${fixtureURL}/signin in the managed browser. Pause for me to sign in, then report the heading after I return control. Use only browser and computer tools.`);
   await composer.press('Enter');
-  await page.getByRole('button', { name: 'Take control', exact: true }).first().waitFor({ timeout: 180_000 });
+  const takeControl = page.locator('[data-computer-control-action="take"]');
+  await takeControl.waitFor({ timeout: 180_000 });
   const takeoverThread = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
   ownedThreads.add(takeoverThread);
   assert.equal(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status'), 'waiting_user');
-  await page.getByRole('button', { name: 'Take control', exact: true }).first().click();
+  await takeControl.click();
   await waitForProgress(stageHasImage, 'user takeover image');
   const userImage = page.locator('.flower-computer-stage-frame');
   await userImage.focus();
@@ -345,7 +346,7 @@ try {
   assert.equal(userPixels.visibleText, '');
   const pending = await request('GET', `/_redeven_proxy/api/ai/threads/${takeoverThread}`);
   assert.equal(JSON.stringify(pending).includes(privateFixtureInput), false, 'private user input entered thread history');
-  await page.getByRole('button', { name: 'Return to Flower', exact: true }).first().click();
+  await page.locator('[data-computer-control-action="return"]').click();
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'model continuation after handback');
   takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, userPixels, privateInputExcluded: true, continued: true };
   assert(threadID, 'Composer did not expose the actual selected thread');
@@ -369,10 +370,11 @@ try {
   await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${nativeRequested ? 'Managed-browser and native desktop' : 'Managed-browser'} Desktop UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
 } catch (error) {
-  await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => undefined);
+  await page.screenshot({ path: path.join(output, 'failure.png'), mask: [page.locator('.flower-computer-stage')] }).catch(() => undefined);
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
-  const current = threadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`).catch(() => null) : null;
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID, completed, controls, evidence, nativeEvidence, nativeState, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
+  const failedThreadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => null);
+  const current = failedThreadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${failedThreadID}`).catch(() => null) : null;
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
   if (nativeProcess) { nativeProcess.kill('SIGKILL'); await nativeExit; }
