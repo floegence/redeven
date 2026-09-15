@@ -18,8 +18,6 @@ does not prove the user can see a frame.
 
 Each safe completed action returns target ID, target display name, execution location, an action summary, a safety decision, and an after-frame attachment. Attachment descriptors contain an opaque `computer://` resource reference, MIME, byte size, and SHA-256. Provider renderers resolve bytes only at request time; durable state stores descriptor and hash, never base64. A resolver error, unknown reference, changed bytes, or unsupported model capability is an explicit error.
 
-Flower publishes target actions on its existing workspace stream as ordinary tool Activity. The activity renderer shows target, action, execution location, approval state, and the latest screenshot attachment. Structured target errors include the target kind, readiness state, and a repair action so the UI can explain setup, permission, connection, and takeover recovery instead of asking the user to guess a target. Live frames are target-scoped ephemeral media and do not create a second lifecycle stream or polling loop.
-
 The floating Stage is a media-only viewer: it displays the latest action screenshot and icon-only move, minimize, and close controls, without internal state labels or explanatory text. The published Floe `SurfaceFloatingPanel` owns placement, pointer capture, drag/click separation, keyboard movement, and projected-surface boundaries. Flower does not duplicate viewport conversion or clamping. Minimize replaces the panel with a draggable circular screen-preview launcher; its picture-in-picture glyph identifies the viewing surface rather than the assistant brand. Click or Enter restores the current decoded image, and arrow keys move the focused handle or launcher. Minimizing does not pause the task or relinquish user control; private input elements are removed while collapsed. Ordinary live frames may continue updating the retained current image. Placement remains relative to the available surface as the panel size or viewport changes. Thread selection resets both placement and collapsed state. It opens when an Activity contains a frame reference, not for an empty tool-start payload. Closing only hides it and retires the viewing subscription; subsequent actions cannot undo that choice. Activity can reopen the viewer. A viewer may start only when the frame Activity belongs to the currently active
 canonical run. Historical pixels remain visible during preparation but cannot
 start capture; the first current-run frame activates viewing without retries.
@@ -37,10 +35,6 @@ lease. Private handback may restore control only through the canonical pending
 interaction described by the takeover contract.
 
 Only typed executor attachments create model image references or Activity media capabilities. Arbitrary `computer://` strings in result payloads do not grant image authority. Runtime drops unsafe attachments and releases adapter buffers before storage or ordinary live viewing. Explicit private user viewing follows the [takeover contract](computer-use-takeover.md) and never uses the durable image resolver.
-
-Tool-result images must survive Floret's model request snapshots and the Redeven provider adapter: nested Floret tool attachments are resolved, checked against model capabilities, and mapped back into `ToolResult.Attachments` before the published DeepSeek renderer emits `function_call_output` image parts. A model receiving only a textual screenshot reference does not qualify as visual execution. The Settings switch removes typed computer/browser functions from newly prepared tool registries when disabled.
-
-DeepSeek Vision Experimental is qualified through typed function tools only. Requests use `deepseek-v4-flash-vision-exp`, include screenshot input and `function_call_output` image parts, and never register the native `computer_use` tool.
 
 DeepSeek budget admission and streaming use the same prepared request from
 published Floret v7.12.0. Visual input uses the upstream image token bound;
@@ -121,6 +115,10 @@ it must not crash the harness before thread evidence is captured. Downstream
 user cancellation closes the upstream body without pretending the provider
 failed. HTTP 200 alone does not prove a completed stream, and the proxy never
 replays a request to turn transport failure into success.
+
+# Boundaries
+
+The media viewer does not authorize target actions, own lifecycle state, or expose private takeover pixels to model history.
 
 # Evidence
 
