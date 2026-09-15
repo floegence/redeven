@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { describe, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import {
   adapter,
@@ -90,6 +90,23 @@ describe('Flower production companion appearance', () => {
     const bounds = control.getBoundingClientRect();
     expect(bounds.top).toBeGreaterThanOrEqual(frame.top + 1);
     expect(bounds.bottom).toBeLessThanOrEqual(frame.bottom - 1);
+  });
+
+  it('reopens when the collapsed editor is clicked while it still has focus', async () => {
+    await page.viewport(1280, 800);
+    const control = renderSurfaceWithCompanionController(adapter(true), false, companionCopy, () => control.setOpen(true));
+    const { runtime } = control;
+    mountFrame(runtime);
+    await waitFor(() => Boolean(runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea:not(:disabled)')));
+    const textarea = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    textarea.focus();
+    await waitFor(() => !runtime.querySelector('.flower-surface-companion-collapsed'));
+    control.setOpen(false);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-surface-companion-collapsed')));
+    expect(document.activeElement).toBe(textarea);
+    await userEvent.click(textarea);
+    expect(runtime.querySelector('.flower-surface-companion-collapsed')).toBeNull();
+    expect(runtime.querySelector('.flower-composer textarea')).toBe(textarea);
   });
 
   it('preserves the editor, draft, selection and composition through expansion and collapse', async () => {
