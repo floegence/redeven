@@ -15704,15 +15704,15 @@
         "title": "Shared surface material",
         "type": "UI Contract"
       },
-      "body_length": 4359,
+      "body_length": 5037,
       "summary": "Published Floe Webapp owns shared material and control motion. Redeven selects\n`soft-neumorphic` in Env App and Desktop Welcome, maps product boundaries to the\nreleased surface roles, and keeps business content flat. Native input, local\nportals, widget identity, and hot interaction ownership do not change. A visual\nconflict is resolved by removing the product override at its source; there is\nno copied shadow engine, local dependency overlay, or second theme owner.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Configuration and ownership\n\nBoth first-party renderers set `theme.defaultSurfaceStyle` to\n`soft-neumorphic`. Floe ThemeContext and its existing persistence adapter own\nthe effective material and root attribute. The Desktop main-process source and\nper-mode preset snapshot remain the authority for palette selection. Material\ndoes not introduce IPC, a competing persisted palette, or a remount boundary.\nThe [published dependency contract](../architecture/env-app-upstream-web-dependencies.md)\nowns exact package versions and registry requirements.\n\n## Product presentation\n\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls,\nDialogs, and FloatingWindows use their released component treatment. Product\nneutral panel, control, divider, and settings roles derive quiet seams from\nFloe's public edge and divider tokens; semantic status hues and selected text\nremain explicit. Selected product segments, Desktop library filters, and\nappearance choices change their fill immediately without an additional contour.\nHigh Contrast Light and forced colors retain their explicit boundaries.\n\nDesktop environment cards retain layout, actions, and featured/open status\nfills. They do not add translating card hover, animated shadows, or a second\nouter frame. Dialog decoration belongs to Floe; Desktop only adapts titlebar\nsafe area, dimensions, and content layout. Anchored Desktop overlays, toasts,\nthe Env App appearance picker, scoped WindowModal panels, and Flower command\nand subagent menus declare `data-floe-surface=\"floating\"` on the existing\nvisible boundary. Their product geometry and portal owners remain unchanged.\nLarge backdrop blur and copied window perimeter shadows are removed.\n\nFlower's expanded composer declares one `inset` input boundary. A collapsed\ncompanion stays `flat` and retains its existing ownership of the collapsed\noutline. The [input focus contract](input-focus-boundaries.md) continues to\nrequire border-color-only focus with stable geometry and decoration. Debug\nConsole settings consume the native shared Switch instead of a product knob.",
-          "char_count": 2100
+          "body": "## Configuration and ownership\n\nBoth first-party renderers set `theme.defaultSurfaceStyle` to\n`soft-neumorphic`. Floe ThemeContext and its existing persistence adapter own\nthe effective material and root attribute. The Desktop main-process source and\nper-mode preset snapshot remain the authority for palette selection. Material\ndoes not introduce IPC, a competing persisted palette, or a remount boundary.\nThe [published dependency contract](../architecture/env-app-upstream-web-dependencies.md)\nowns exact package versions and registry requirements.\n\n## Product presentation\n\nOrdinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls,\nDialogs, and FloatingWindows use their released component treatment. Product\nneutral panel, control, divider, and settings roles derive quiet seams from\nFloe's public edge and divider tokens; semantic status hues and selected text\nremain explicit. Selected product segments, Desktop library filters, and\nappearance choices change their fill immediately without an additional contour.\nHigh Contrast Light and forced colors retain their explicit boundaries.\n\nDesktop environment cards retain layout, actions, and featured/open status\nfills. They do not add translating card hover, animated shadows, or a second\nouter frame. Dialog decoration belongs to Floe; Desktop only adapts titlebar\nsafe area, dimensions, and content layout. Anchored Desktop overlays, toasts,\nthe Env App appearance picker, scoped WindowModal panels, and Flower command\nand subagent menus declare `data-floe-surface=\"floating\"` on the existing\nvisible boundary. Their product geometry and portal owners remain unchanged.\nLarge backdrop blur and copied window perimeter shadows are removed.\n\nFlower's expanded composer declares one `inset` input boundary. A collapsed\ncompanion stays `flat` and retains its existing ownership of the collapsed\noutline. The [input focus contract](input-focus-boundaries.md) continues to\nrequire border-color-only focus with stable geometry and decoration. Debug\nConsole settings consume the native shared Switch instead of a product knob.\n\nThe Containers Workbench identity uses three rounded isometric modules with\nfixed cyan-blue facets on the standard 48-unit Dock tile. Its rounded base\nderives from the active card token, while neutral highlights use the shared\nlighting token. The source color guard admits only the three authored facet\ncolors in SVG paint attributes. The artwork is decorative; the existing Dock\ncontrol owns the localized accessible name and all activation behavior.",
+          "char_count": 2553
         },
         {
           "id": "boundaries",
@@ -15744,6 +15744,16 @@
           "id": "redeven:internal/envapp/ui_src/src/styles/redeven.css:0:product semantic seam mapping.",
           "source": "redeven:internal/envapp/ui_src/src/styles/redeven.css",
           "description": "Product semantic seam mapping."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/icons/ContainersIcon.tsx:0:containers artwork and theme-derived dock tile.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/icons/ContainersIcon.tsx",
+          "description": "Containers artwork and theme-derived Dock tile."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs:0:bounded authored-palette exception.",
+          "source": "redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs",
+          "description": "Bounded authored-palette exception."
         },
         {
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:composer and floating menu roles.",
@@ -16753,5 +16763,5 @@
       ]
     }
   ],
-  "source_sha256": "439eb380ee02236d50b2f2df0bce732dd3cedc631bc3be5bd1cfe2bc61a57a17"
+  "source_sha256": "4cff9ea92a57c9d45d89e9b550c9a81fa7d9083d025ce1880bb9931111c39eb9"
 }

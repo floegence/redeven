@@ -198,6 +198,13 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
       && /\bfill=/u.test(lineSource),
   ),
   exception(
+    'internal/envapp/ui_src/src/ui/icons/ContainersIcon.tsx',
+    'brand',
+    'Containers module artwork retains three authored facet colors; the Dock tile mixes its tint with the active card token.',
+    ({ value, lineSource }) => ['#3ca7c2', '#237b9e', '#8bd6e4'].includes(value.toLowerCase())
+      && /(?:stop-color|\bfill)=/u.test(lineSource),
+  ),
+  exception(
     'internal/flower_ui/src/icons/FlowerIcon.tsx',
     'brand',
     'Flower icon artwork retains its authored petal and center palette.',

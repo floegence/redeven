@@ -51,6 +51,13 @@ outline. The [input focus contract](input-focus-boundaries.md) continues to
 require border-color-only focus with stable geometry and decoration. Debug
 Console settings consume the native shared Switch instead of a product knob.
 
+The Containers Workbench identity uses three rounded isometric modules with
+fixed cyan-blue facets on the standard 48-unit Dock tile. Its rounded base
+derives from the active card token, while neutral highlights use the shared
+lighting token. The source color guard admits only the three authored facet
+colors in SVG paint attributes. The artwork is decorative; the existing Dock
+control owns the localized accessible name and all activation behavior.
+
 # Boundaries
 
 Use restrained static depth and short functional control motion. Do not animate
@@ -76,6 +83,8 @@ component gallery alone is not downstream acceptance evidence.
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Env App material configuration.
 - `redeven:desktop/src/welcome/App.tsx` - Welcome configuration and floating toast boundary.
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Product semantic seam mapping.
+- `redeven:internal/envapp/ui_src/src/ui/icons/ContainersIcon.tsx` - Containers artwork and theme-derived Dock tile.
+- `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Bounded authored-palette exception.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Composer and floating menu roles.
 - `redeven:scripts/check_soft_surface_integration.test.mjs` - Shared ownership guard.
 - `redeven:internal/envapp/ui_src/src/styles/softSurfacesVisual.browser.test.tsx` - Real control and scoped overlay checks.
