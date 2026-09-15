@@ -13,7 +13,7 @@ import (
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
 	threadstoreMinimumSchemaVersion = 1
-	threadstoreCurrentSchemaVersion = 6
+	threadstoreCurrentSchemaVersion = 7
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -41,6 +41,7 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 				return migrateThreadstoreV4ToV5(ctx, tx, migrate)
 			}},
 			{FromVersion: 5, ToVersion: 6, Apply: migrateThreadstoreV5ToV6},
+			{FromVersion: 6, ToVersion: 7, Apply: migrateThreadstoreV6ToV7},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -110,6 +111,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		createUploadTablesTx,
 		createUploadStagingScopesTableTx,
 		createFlowerExecutionAuthorityTableTx,
+		addComputerTargetColumnTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {
@@ -451,6 +453,18 @@ DROP TABLE ai_thread_delete_authority;
 		return err
 	}
 	return verifyProductSchemaVersion(tx, 6)
+}
+
+func addComputerTargetColumnTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE ai_thread_settings ADD COLUMN computer_target_id TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+func migrateThreadstoreV6ToV7(tx *sql.Tx) error {
+	if err := addComputerTargetColumnTx(tx); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 7)
 }
 
 func verifyThreadstoreSchema(tx *sql.Tx) error {

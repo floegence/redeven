@@ -83,9 +83,6 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 	if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" && runtime.GOOS == "darwin" {
 		_ = registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "stopped", PermissionState: "not_checked", Ready: false})
 		executors["desktop-main"] = ai.NewNativeDesktopTargetExecutor(nativeHelper)
-		if helper == "" {
-			_ = registry.SetCurrent("desktop-main")
-		}
 	}
 	registerVirtualDesktop(stateDir, registry, executors)
 	runtime := ai.NewComputerUseRuntime(registry, executors, filepath.Join(stateDir, "computer", "keyframes"))

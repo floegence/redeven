@@ -20,7 +20,7 @@ func TestThreadstoreSchemaSpecUsesCurrentLineage(t *testing.T) {
 	}
 }
 
-func TestEverySupportedThreadstoreVersionMigratesToV6(t *testing.T) {
+func TestEverySupportedThreadstoreVersionMigratesToCurrent(t *testing.T) {
 	for version := 1; version < threadstoreCurrentSchemaVersion; version++ {
 		version := version
 		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {

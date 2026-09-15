@@ -141,6 +141,9 @@ type TargetToolAttachmentResolver interface {
 
 type TargetToolCall struct {
 	liveFrame            bool
+	ThreadID             string          `json:"thread_id,omitempty"`
+	TurnID               string          `json:"turn_id,omitempty"`
+	RunID                string          `json:"run_id,omitempty"`
 	ToolCallID           string          `json:"tool_call_id"`
 	TargetID             string          `json:"target_id"`
 	ToolName             string          `json:"tool_name"`

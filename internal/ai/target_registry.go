@@ -7,18 +7,19 @@ import (
 	"sync"
 )
 
-// TargetRegistry is the single in-process owner of target identity exposed to
-// Flower. Executors remain responsible for lifecycle and bytes; this registry
-// only provides safe alias resolution and readiness snapshots.
+var errTargetNotRegistered = errors.New("target is not registered")
+var errTargetAmbiguous = errors.New("target kind has multiple bindings")
+
+// TargetRegistry owns target identities and readiness snapshots. It has no
+// mutable current target or thread bindings; the Computer Use Runtime resolves
+// persisted thread selection through the product store.
 type TargetRegistry struct {
-	mu       sync.RWMutex
-	targets  map[string]TargetDescriptor
-	current  string
-	bindings map[string]string
+	mu      sync.RWMutex
+	targets map[string]TargetDescriptor
 }
 
 func NewTargetRegistry() *TargetRegistry {
-	return &TargetRegistry{targets: make(map[string]TargetDescriptor), bindings: make(map[string]string)}
+	return &TargetRegistry{targets: make(map[string]TargetDescriptor)}
 }
 
 func (r *TargetRegistry) Register(target TargetDescriptor) error {
@@ -34,24 +35,7 @@ func (r *TargetRegistry) Register(target TargetDescriptor) error {
 	}
 	r.mu.Lock()
 	r.targets[target.ID] = target
-	if r.current == "" {
-		r.current = target.ID
-	}
 	r.mu.Unlock()
-	return nil
-}
-
-func (r *TargetRegistry) SetCurrent(targetID string) error {
-	if r == nil {
-		return errors.New("target registry is unavailable")
-	}
-	targetID = strings.TrimSpace(targetID)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.targets[targetID]; !ok {
-		return errors.New("target is not registered")
-	}
-	r.current = targetID
 	return nil
 }
 
@@ -68,41 +52,10 @@ func (r *TargetRegistry) Update(target TargetDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.targets[target.ID]; !ok {
-		return errors.New("target is not registered")
+		return errTargetNotRegistered
 	}
 	r.targets[target.ID] = target
 	return nil
-}
-
-// BindThreadTarget records the logical current target for one thread. A
-// thread binding is independent from the process default and can never select
-// an unregistered target.
-func (r *TargetRegistry) BindThreadTarget(threadID, targetID string) error {
-	threadID, targetID = strings.TrimSpace(threadID), strings.TrimSpace(targetID)
-	if threadID == "" || targetID == "" {
-		return errors.New("thread and target are required")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.targets[targetID]; !ok {
-		return errors.New("target is not registered")
-	}
-	if r.bindings == nil {
-		r.bindings = make(map[string]string)
-	}
-	r.bindings[threadID] = targetID
-	return nil
-}
-
-func (r *TargetRegistry) ResolveTargetForThread(_ context.Context, threadID, alias string) (TargetDescriptor, error) {
-	threadID = strings.TrimSpace(threadID)
-	alias = strings.TrimSpace(alias)
-	r.mu.RLock()
-	if (alias == "" || alias == "current") && threadID != "" {
-		alias = r.bindings[threadID]
-	}
-	r.mu.RUnlock()
-	return r.ResolveTarget(context.Background(), alias)
 }
 
 func (r *TargetRegistry) ResolveTarget(_ context.Context, alias string) (TargetDescriptor, error) {
@@ -113,7 +66,7 @@ func (r *TargetRegistry) ResolveTarget(_ context.Context, alias string) (TargetD
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if alias == "" || alias == "current" {
-		alias = r.current
+		alias = "browser.managed"
 	}
 	target, ok := r.targets[alias]
 	if !ok {
@@ -122,12 +75,12 @@ func (r *TargetRegistry) ResolveTarget(_ context.Context, alias string) (TargetD
 				continue
 			}
 			if ok {
-				return TargetDescriptor{}, errors.New("target kind has multiple bindings")
+				return TargetDescriptor{}, errTargetAmbiguous
 			}
 			target, ok = candidate, true
 		}
 		if !ok {
-			return TargetDescriptor{}, errors.New("target is not registered")
+			return TargetDescriptor{}, errTargetNotRegistered
 		}
 	}
 	return target, nil

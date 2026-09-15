@@ -3150,6 +3150,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		}); ok {
 			resolved, resolveErr := threaded.ResolveTargetForThread(ctx, r.threadID, targetID)
 			if resolveErr != nil {
+				if !errors.Is(resolveErr, errTargetNotRegistered) && !errors.Is(resolveErr, errTargetAmbiguous) {
+					return nil, resolveErr
+				}
 				return nil, &targetToolPolicyError{code: "target_unavailable", tool: toolName, target: targetID}
 			}
 			target = resolved
@@ -3157,6 +3160,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		} else {
 			resolved, resolveErr := r.targetResolver.ResolveTarget(ctx, targetID)
 			if resolveErr != nil {
+				if !errors.Is(resolveErr, errTargetNotRegistered) && !errors.Is(resolveErr, errTargetAmbiguous) {
+					return nil, resolveErr
+				}
 				return nil, &targetToolPolicyError{code: "target_unavailable", tool: toolName, target: targetID}
 			}
 			target = resolved
@@ -3170,7 +3176,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if gate == nil {
 		gate = defaultInteractionSafetyGate{}
 	}
-	call := TargetToolCall{ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
+	call := TargetToolCall{ThreadID: r.threadID, TurnID: r.turnID, RunID: r.id, ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
 	if r.targetToolExecutor == nil {
 		code := "target_executor_unavailable"
 		if r.targetResolver != nil {
@@ -3210,6 +3216,13 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			return nil, &targetToolPolicyError{code: "interaction_takeover_required", tool: toolName, target: targetID, safety: &decision}
 		}
 		return nil, safetyErr
+	}
+	if binder, ok := r.targetToolExecutor.(interface {
+		BindThreadTarget(context.Context, string, string) error
+	}); ok && isComputerUseTool(toolName) {
+		if err := binder.BindThreadTarget(ctx, r.threadID, targetID); err != nil {
+			return nil, err
+		}
 	}
 	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, call)
 	if err != nil {
