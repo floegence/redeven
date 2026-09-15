@@ -14,7 +14,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Published Floret v7.12.1 applies sanitized tool Activity inside the existing
+Published Floret v7.12.2 applies sanitized tool Activity inside the existing
 thread actor using exact thread, turn, run, and tool-call identity. Validated
 calls publish description and command while pending; dispatch alone marks
 running, and results settle without waiting for output or the full turn.
@@ -35,7 +35,11 @@ direct errors and streamed errors. HTTP 413 retains safe transport diagnostics
 and enters Floret's existing bounded context compaction; Redeven must not start
 a new thread, resize screenshots, or replay completed tools to recover. The
 production Service regression uses the model catalog and full tool registry,
-forces accumulated image output to overflow, and verifies exact action counts.
+forces accumulated image output to overflow with both short and long preceding
+observations, and verifies exact action counts. Floret overflow recovery retains
+the latest complete interaction plus protected user anchors, rather than using
+a text-only tail budget to bound image transport. Ordinary compaction policy
+and the single provider retry remain unchanged.
 
 One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced, canceled, or terminal token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
 

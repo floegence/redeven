@@ -24,6 +24,12 @@ The floating Stage is a media-only viewer: it displays the latest action screens
 
 Screenshot identity crosses Floret v7.12.0's published `ActivityPresentation.target_refs` boundary as `kind: computer_frame`, with a `computer://<target>/<sha256>` opaque `resource_ref` and target display label. Navigable `uri` is not the media contract. The renderer remains `structured`; custom frame fields do not belong to its closed payload. Redeven's public timeline sanitizer preserves only hash-addressed computer frame references under that kind. Both Env App and Desktop Welcome resolve the same reference through the authenticated thread media endpoint into a short-lived Blob URL. Desktop uses its existing authorized Runtime IPC request channel to carry PNG bytes as `Uint8Array`; runtime credentials stay in main. No opaque reference is assigned directly to an image source, and no HTTP image fallback bypasses this boundary.
 
+Live capture requires the target's currently active thread lease at sampler
+startup and before every observation. A historical keyframe permits reading
+that image only; it cannot acquire an idle shared target or revive a released
+lease. Private handback may restore control only through the canonical pending
+interaction described by the takeover contract.
+
 Only typed executor attachments create model image references or Activity media capabilities. Arbitrary `computer://` strings in result payloads do not grant image authority. Runtime drops unsafe attachments and releases adapter buffers before storage or ordinary live viewing. Explicit private user viewing follows the [takeover contract](computer-use-takeover.md) and never uses the durable image resolver.
 
 Tool-result images must survive Floret's model request snapshots and the Redeven provider adapter: nested Floret tool attachments are resolved, checked against model capabilities, and mapped back into `ToolResult.Attachments` before the published DeepSeek renderer emits `function_call_output` image parts. A model receiving only a textual screenshot reference does not qualify as visual execution. The Settings switch removes typed computer/browser functions from newly prepared tool registries when disabled.

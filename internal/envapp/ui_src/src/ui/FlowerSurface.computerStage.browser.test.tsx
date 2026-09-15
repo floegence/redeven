@@ -157,8 +157,20 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   }] };
   const png = () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' });
   const inputComputerControl = vi.fn(async () => png());
-  const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:result-control', current: { ...canonical, view_version: 2, activity: 'idle' as const, interactions: [], last_outcome: 'completed' as const } }));
+  const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:result-control', current: { ...canonical, view_version: 3, activity: 'idle' as const, interactions: [], last_outcome: 'completed' as const } }));
+  let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), inputComputerControl, submitInput,
+    connectLiveStream: async function* ({ signal }) {
+      yield { schema_version: 1, kind: 'ready', observer_id: 'takeover-observer', summaries: [paused] };
+      while (!signal.aborted) {
+        const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>((resolve) => {
+          const abort = () => resolve(undefined);
+          deliver = (value) => { signal.removeEventListener('abort', abort); resolve(value); };
+          signal.addEventListener('abort', abort, { once: true });
+        });
+        if (envelope) yield envelope;
+      }
+    },
     listThreads: vi.fn(async () => [paused]), loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(paused, canonical), current: canonical })),
   }, { focusThreadRequest: { request_id: 'takeover-focus', thread_id: threadID } });
   const controlButton = () => Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Take control');
@@ -174,6 +186,11 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   expect(surface.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
   const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Return to Flower')!;
   await waitFor(() => !handback.disabled);
+  const privateURL = surface.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
+  deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...canonical, view_version: 2 } });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(surface.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(privateURL);
+  expect(inputComputerControl).toHaveBeenCalledTimes(2);
   handback.click();
   await waitFor(() => submitInput.mock.calls.length === 1);
   expect(submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));

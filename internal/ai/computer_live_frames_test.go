@@ -30,6 +30,7 @@ func TestComputerLiveFramesPublishesAndStops(t *testing.T) {
 	}
 	executor := newLiveFrameExecutor(t)
 	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+	acquireLiveFrameTestTarget(t, runtime, "thread")
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	var frames atomic.Int32
@@ -53,6 +54,7 @@ func TestComputerLiveFramesPublishesAndStops(t *testing.T) {
 func TestComputerLiveFramesOldStopCannotCancelReplacement(t *testing.T) {
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": newLiveFrameExecutor(t)}, t.TempDir())
 	t.Cleanup(func() { _ = runtime.Close() })
+	acquireLiveFrameTestTarget(t, runtime, "thread")
 	stop, err := runtime.StartComputerLiveFrames(t.Context(), "thread", "session", "target", func(FlowerComputerFrame) {})
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +91,7 @@ func TestComputerLiveFrameRequiresMatchingThreadAndStaysEphemeral(t *testing.T) 
 	executor := newLiveFrameExecutor(t)
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
 	defer runtime.Close()
+	acquireLiveFrameTestTarget(t, runtime, "owner")
 	published := make(chan FlowerComputerFrame, 1)
 	stop, err := runtime.StartComputerLiveFrames(t.Context(), "owner", "session", "target", func(frame FlowerComputerFrame) {
 		select {
@@ -121,4 +124,15 @@ func TestComputerLiveFrameRequiresMatchingThreadAndStaysEphemeral(t *testing.T) 
 	if _, err := runtime.ResolveComputerLiveFrame(t.Context(), "owner", "target", frame.ResourceRef); err == nil {
 		t.Fatal("stopped session retained media authority")
 	}
+}
+
+// Establish the same target lease as an admitted action without storing a
+// keyframe, so ephemeral-storage assertions cannot pass against durable bytes.
+func acquireLiveFrameTestTarget(t *testing.T, runtime *ComputerUseRuntime, threadID string) {
+	t.Helper()
+	_, release, err := runtime.acquireComputerControl(t.Context(), TargetToolCall{ThreadID: threadID, RunID: "run", TargetID: "target", ToolName: "computer.screenshot"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
 }

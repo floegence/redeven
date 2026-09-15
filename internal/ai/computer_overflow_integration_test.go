@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +17,12 @@ import (
 )
 
 func TestComputerDeepSeekImageOverflowContinuesProductionThread(t *testing.T) {
+	for _, longHistory := range []bool{false, true} {
+		t.Run(fmt.Sprintf("long_history=%t", longHistory), func(t *testing.T) { testComputerDeepSeekImageOverflow(t, longHistory) })
+	}
+}
+
+func testComputerDeepSeekImageOverflow(t *testing.T, longHistory bool) {
 	var calls, overflows atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -55,9 +62,14 @@ func TestComputerDeepSeekImageOverflowContinuesProductionThread(t *testing.T) {
 			index := calls.Add(1)
 			id := fmt.Sprintf("navigate-%d", index)
 			item := map[string]any{"type": "function_call", "id": id, "call_id": id, "name": "browser_navigate", "arguments": fmt.Sprintf(`{"url":"https://example.test/step/%d"}`, index)}
+			output := []any{item}
+			if longHistory && index == 1 {
+				observation := map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": strings.Repeat("Earlier observed application state. ", 1500)}}}
+				output = []any{observation, item}
+			}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
-			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "capture", "status": "completed", "output": []any{item}}})
+			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "capture", "status": "completed", "output": output}})
 			return
 		}
 		writeDeepSeekIntegrationNaturalResponse(w, flusher, "done", "Visual task progress retained.")
