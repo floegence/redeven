@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 export async function qualifyComputerStop({ page, request, fixtureURL, fixture, ownedThreads, waitForProgress }) {
   const results = [];
   const composer = page.locator('.flower-composer textarea').first();
-  const stop = page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first();
+  const stop = page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline, .flower-input-request-actions .flower-composer-stop').first();
   const submit = async (text) => {
     await composer.fill(text);
     await composer.press('Enter');

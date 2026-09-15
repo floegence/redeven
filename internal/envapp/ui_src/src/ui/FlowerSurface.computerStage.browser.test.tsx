@@ -236,6 +236,14 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   }, { focusThreadRequest: { request_id: 'takeover-focus', thread_id: threadID } });
   const controlButton = () => Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Take control');
   await waitFor(() => Boolean(controlButton()));
+  expect(surface.querySelector('.flower-composer-continue')).toBeNull();
+  const controls = Array.from(surface.querySelectorAll<HTMLButtonElement>('[data-computer-control-action]'));
+  expect(controls).toHaveLength(2);
+  for (const control of controls) {
+    expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth);
+    expect(control.scrollHeight).toBeLessThanOrEqual(control.clientHeight);
+    expect(getComputedStyle(control).cursor).toBe('pointer');
+  }
   expect(surface.querySelector('.flower-computer-stage')).toBeNull();
   controlButton()!.click();
   await waitFor(() => (surface.querySelector('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
