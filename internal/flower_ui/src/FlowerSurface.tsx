@@ -7550,8 +7550,8 @@ webSearch: model.web_search,
             <p>{copy().chat.computerControlHint}</p>
             <Show when={computerControlError()}><p role="alert">{copy().chat.computerControlFailed}</p></Show>
             <div class="flex gap-2">
-              <button type="button" class="flower-input-request-navigation-button" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => inputComputerControl({ action: 'observe' })}>{copy().chat.computerTakeControl}</button>
-              <button type="button" class="flower-input-request-navigation-button" disabled={computerControlBusy()} onClick={() => {
+              <button type="button" class="flower-input-request-navigation-button" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => inputComputerControl({ action: 'observe' })}>{copy().chat.computerTakeControl}</button>
+              <button type="button" class="flower-input-request-navigation-button" data-computer-control-action="return" disabled={computerControlBusy()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
                 if (!question || !choice) return;
