@@ -1523,6 +1523,7 @@
   },
   "files": {
     "title": "Archivos",
+    "contextMenuBack": "Volver",
     "sidebarToggle": "Alternar barra lateral del navegador",
     "sidebar": "Barra lateral",
     "up": "Arriba",

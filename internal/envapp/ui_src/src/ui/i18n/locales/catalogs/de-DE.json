@@ -1523,6 +1523,7 @@
   },
   "files": {
     "title": "Dateien",
+    "contextMenuBack": "Zurück",
     "sidebarToggle": "Browser-Seitenleiste umschalten",
     "sidebar": "Seitenleiste",
     "up": "Nach oben",

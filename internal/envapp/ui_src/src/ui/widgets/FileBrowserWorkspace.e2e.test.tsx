@@ -282,6 +282,14 @@ function triggerResizeObservers() {
 }
 
 beforeEach(() => {
+  const measure = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if (this.hasAttribute('data-browser-workspace')) {
+      const surface = this.closest('[data-testid="surface-host"]');
+      return surface?.getBoundingClientRect() ?? new DOMRect(0, 0, 1000, 560);
+    }
+    return measure.call(this);
+  });
   mockMatchMedia(false);
   resizeObserverState.observers.length = 0;
 
@@ -1624,6 +1632,11 @@ describe('FileBrowserWorkspace interactions', () => {
       const surfaceHost = host.querySelector(`[${FLOE_DIALOG_SURFACE_HOST_ATTR}="true"]`) as HTMLElement | null;
       expect(folderButton).toBeTruthy();
       expect(surfaceHost).toBeTruthy();
+
+      Object.defineProperty(surfaceHost, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => new DOMRect(0, 0, 1000, 560),
+      });
 
       folderButton!.dispatchEvent(new PointerEvent('pointerdown', {
         bubbles: true,

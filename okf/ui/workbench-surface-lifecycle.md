@@ -41,6 +41,11 @@ focus cannot close a menu immediately. Callers own only target snapshots,
 actions, and product-specific focus restoration and must not install parallel
 document listeners.
 
+[Files context menus](files-context-menu.md) use the published Floe file-menu
+owner with an explicit whole-workspace boundary. Workbench keeps its shared
+projected mount and selected-widget wheel guard; Files adds no coordinate
+conversion or global layer override.
+
 Dock companion panels use `WorkbenchDockPopoverSurface`, which anchors to the
 exact Dock trigger, mounts in the same Workbench surface, and shares the Dock
 material variables across every preset and color mode. Product panels may

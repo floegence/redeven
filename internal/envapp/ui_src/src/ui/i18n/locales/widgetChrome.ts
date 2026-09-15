@@ -3,6 +3,7 @@ import { defineDictionary, type DeepWidenMessages } from '../dictionaryTypes';
 export const enUSWidgetChrome = defineDictionary({
   files: {
     title: 'Files',
+    contextMenuBack: 'Back',
     sidebarToggle: 'Toggle browser sidebar',
     sidebar: 'Sidebar',
     up: 'Up',

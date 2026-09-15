@@ -5144,6 +5144,11 @@ export function EnvAppShell() {
         workbenchFilePreviewActivationSeq,
         workbenchFilePreviewActivation,
         consumeWorkbenchFilePreviewActivation,
+        activityContentBottomLimit: () => {
+          if (viewMode() !== 'activity' || !layout.isMobile() || !canUseFlower()) return undefined;
+          const top = Number.parseFloat(activityFlowerMobileRailStyle().top ?? '');
+          return Number.isFinite(top) ? top : undefined;
+        },
         filesSidebarOpen: filesMobileSidebarOpen,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,
         toggleFilesSidebar: toggleFilesMobileSidebar,

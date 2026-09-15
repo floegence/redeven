@@ -15,7 +15,7 @@ import {
   type ContextMenuItem,
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
-import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
+import { Button, SegmentedControl, type SurfaceFloatingBoundary } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserPathControl, type FileBrowserPathControlMode } from './FileBrowserPathControl';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
@@ -87,6 +87,8 @@ export interface FileBrowserWorkspaceProps {
   onRevealRequestConsumed?: (requestId: string) => void;
   pathEditRequestKey?: number;
   toolbarEndActions?: JSX.Element;
+  /** Client-coordinate limit supplied by shell overlays, when present. */
+  contextMenuBottomLimit?: number;
   contextMenuCallbacks?: ContextMenuCallbacks;
   overrideContextMenuItems?: ContextMenuItem[];
   resolveOverrideContextMenuItems?: (event: ContextMenuEvent | null) => ContextMenuItem[] | undefined;
@@ -281,6 +283,35 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
     }
     return props.resolveOverrideContextMenuItems(browser.contextMenu() ?? null);
   });
+  const [menuBoundaryElement, setMenuBoundaryElement] = createSignal<HTMLDivElement>();
+  const [menuBoundaryRect, setMenuBoundaryRect] = createSignal<DOMRectReadOnly | null>(null, {
+    equals: (left, right) => left?.left === right?.left && left?.top === right?.top && left?.right === right?.right && left?.bottom === right?.bottom,
+  });
+  onMount(() => {
+    const element = menuBoundaryElement();
+    if (!element) return;
+    const measure = () => setMenuBoundaryRect(element.getBoundingClientRect());
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    // Refresh client geometry before any pointer or keyboard menu trigger.
+    // Position-only changes do not notify ResizeObserver.
+    const triggers = ['pointerdown', 'contextmenu', 'keydown'] as const;
+    triggers.forEach((event) => element.addEventListener(event, measure, true));
+    onCleanup(() => {
+      observer.disconnect();
+      triggers.forEach((event) => element.removeEventListener(event, measure, true));
+    });
+  });
+  const menuBoundary = createMemo<SurfaceFloatingBoundary>(() => {
+    const element = menuBoundaryElement();
+    const bottomLimit = props.contextMenuBottomLimit;
+    if (bottomLimit === undefined) return element ?? null;
+    const rect = menuBoundaryRect();
+    if (!element?.isConnected || !rect) return null;
+    const bottom = Math.max(rect.top, Math.min(rect.bottom, bottomLimit));
+    return { left: rect.left, top: rect.top, right: rect.right, bottom, width: rect.width, height: bottom - rect.top };
+  });
   let contentScrollEl: HTMLDivElement | null = null;
   let treeScrollEl: HTMLDivElement | null = null;
   let workspaceRootEl: HTMLDivElement | null = null;
@@ -422,6 +453,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 
   return (
     <BrowserWorkspaceShell
+      rootRef={setMenuBoundaryElement}
       title={i18n.t('files.title')}
       width={props.width}
       open={props.open}
@@ -525,7 +557,13 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             </Show>
           </div>
           <FileWorkspaceStatusBar />
-          <FileContextMenu callbacks={props.contextMenuCallbacks} overrideItems={resolvedOverrideContextMenuItems()} />
+          <FileContextMenu
+            boundary={menuBoundary()}
+            backLabel={i18n.t('files.contextMenuBack')}
+            scrollViewportProps={{ ...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS, 'aria-label': i18n.t('files.title') }}
+            callbacks={props.contextMenuCallbacks}
+            overrideItems={resolvedOverrideContextMenuItems()}
+          />
           <Show when={dragEnabled()}>
             <FileBrowserDragPreview />
           </Show>
@@ -607,6 +645,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
               )
             : undefined}
           toolbarEndActions={props.toolbarEndActions}
+          contextMenuBottomLimit={props.contextMenuBottomLimit}
           contextMenuCallbacks={displayContextMenuCallbacks()}
           overrideContextMenuItems={displayOverrideContextMenuItems()}
           resolveOverrideContextMenuItems={props.resolveOverrideContextMenuItems ? resolveDisplayOverrideContextMenuItems : undefined}

@@ -1523,6 +1523,7 @@
   },
   "files": {
     "title": "文件",
+    "contextMenuBack": "返回",
     "sidebarToggle": "切换文件侧边栏",
     "sidebar": "侧边栏",
     "up": "上一级",
