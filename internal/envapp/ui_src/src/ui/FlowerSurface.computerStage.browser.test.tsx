@@ -6,7 +6,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { FlowerComputerStage } from '../../../../flower_ui/src/FlowerComputerStage';
-import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const FRAME_REF = `computer://browser-main/${'a'.repeat(64)}`;
 const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
@@ -114,9 +114,24 @@ describe('Flower computer stage', () => {
     await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame.resource_ref }));
     expect(runtime.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
+    // Completion retires the ephemeral sampler. A reopened viewer must load
+    // the durable keyframe, never the expired last live sample.
+    const completed = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...completed, items: completed.items?.map((item) => {
+      if (!item.activity) return item;
+      const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity;
+      return { ...item, activity: { ...facts, status: 'success', presentation: { label, description, renderer, payload, chips, target_refs } } };
+    }) } });
+    await waitFor(() => loadComputerFrame.mock.calls.length === 4);
+    expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
     (runtime.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-computer-stage') === null);
     await waitFor(() => setComputerViewer.mock.calls.length === 2);
     expect(setComputerViewer).toHaveBeenLastCalledWith({ observer_id: 'observer-1', revision: 2 });
+    (runtime.querySelector('.flower-activity-inline-button[aria-expanded="false"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-activity-computer-block .flower-activity-inline-button') !== null);
+    (runtime.querySelector('.flower-activity-computer-block .flower-activity-inline-button') as HTMLButtonElement).click();
+    await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
+    expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
   });
 });

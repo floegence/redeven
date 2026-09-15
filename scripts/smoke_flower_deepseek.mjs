@@ -10,9 +10,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
-// The harness supplies an isolated root for each run.  Keep a deterministic
-// default for local invocations, but never force a previous run's state.
-export const SMOKE_ROOT = process.env.REDEVEN_FLOWER_SMOKE_ROOT ?? '/tmp/redeven-flower-smoke-01a00852';
+// The shell exports one canonical root for all child commands in a run.
+export const SMOKE_ROOT = process.env.REDEVEN_FLOWER_SMOKE_ROOT ?? `/tmp/redeven-flower-smoke-${process.pid}`;
 export const SMOKE_WORKSPACE = `${SMOKE_ROOT}/workspace`;
 export const SMOKE_MODEL = 'deepseek-v4-flash-vision-exp';
 

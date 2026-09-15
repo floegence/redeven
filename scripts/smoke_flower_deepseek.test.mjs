@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
@@ -6,6 +8,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  SMOKE_ROOT,
   assertPortsFree,
   assertEnvGeometry,
   assertAcceptedReceipt,
@@ -24,8 +27,8 @@ import {
 } from './smoke_flower_deepseek.mjs';
 
 const expectedConfiguration = {
-  root: '/tmp/redeven-flower-smoke-01a00852',
-  workspace: '/tmp/redeven-flower-smoke-01a00852/workspace',
+  root: SMOKE_ROOT,
+  workspace: `${SMOKE_ROOT}/workspace`,
   model: 'deepseek-v4-flash-vision-exp',
   localUIPort: 43924,
   cdpPort: 43925,
@@ -56,6 +59,58 @@ test('Desktop launch and cleanup record the actual allocated ports', async () =>
   assert.doesNotMatch(runner, /4392[456]/u);
   assert.match(runner, /owned_pids=\$\(node .* owned-pids/u);
   assert.doesNotMatch(runner, /\$\{owned\[@\]\}/u);
+});
+
+test('shell launch metadata preserves bundle, paths, ports, and model without argument drift', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'redeven-smoke-metadata-'));
+  try {
+    const stateRoot = path.join(root, 'state');
+    const reportRoot = path.join(root, 'report');
+    const manifest = Buffer.from('{"qualification_fixture":true}\n');
+    const hash = createHash('sha256').update(manifest).digest('hex');
+    const bundleRoot = path.join(stateRoot, 'desktop/bundles', hash);
+    await mkdir(bundleRoot, { recursive: true });
+    await mkdir(reportRoot);
+    await writeFile(path.join(bundleRoot, 'desktop-bundle-manifest.json'), manifest);
+    const runner = await readFile(new URL('./smoke_flower_deepseek.sh', import.meta.url), 'utf8');
+    const block = runner.match(/node - "\$REPORT_ROOT\/run-config\.json"[^]*?\nNODE\n/u)?.[0];
+    assert(block, 'production metadata writer must be exercised');
+    const env = {
+      ...process.env, ROOT_DIR: path.resolve(import.meta.dirname, '..'), SMOKE_ROOT: root,
+      STATE_ROOT: stateRoot, USER_DATA_ROOT: path.join(root, 'user-data'),
+      CACHE_ROOT: path.join(root, 'cache'), TEMP_ROOT: path.join(root, 'temp'),
+      WORKSPACE_ROOT: path.join(root, 'workspace'), REPORT_ROOT: reportRoot,
+      commit: 'fixture-commit', RUNTIME_PID: '12345', LOCAL_UI_PORT: '45110',
+      CDP_PORT: '45111', INSPECTOR_PORT: '45112', REDEVEN_FLOWER_SMOKE_MODEL: expectedConfiguration.model,
+    };
+    execFileSync('bash', ['-eu', '-c', block], { env, stdio: 'pipe' });
+    const config = JSON.parse(await readFile(path.join(reportRoot, 'run-config.json'), 'utf8'));
+    assert.equal(config.root, root);
+    assert.equal(config.stateRoot, stateRoot);
+    assert.equal(config.userDataRoot, env.USER_DATA_ROOT);
+    assert.equal(config.workspace, env.WORKSPACE_ROOT);
+    assert.equal(config.model, expectedConfiguration.model);
+    assert.equal(config.runtimePID, 12345);
+    assert.deepEqual([config.localUIPort, config.cdpPort, config.inspectorPort], [45110, 45111, 45112]);
+    assert.equal(config.bundleManifestSHA256, hash);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('shell exports one canonical root for provider setup, launch, evidence, and cleanup', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'redeven-smoke-root-'));
+  try {
+    const runner = await readFile(new URL('./smoke_flower_deepseek.sh', import.meta.url), 'utf8');
+    const block = runner.match(/^SMOKE_ROOT=\$\{REDEVEN_FLOWER_SMOKE_ROOT[^]*?\nREPORT_ROOT=.*$/mu)?.[0];
+    assert(block);
+    const candidate = path.join(root, 'absent', '..', 'run');
+    const output = execFileSync('bash', ['-eu', '-c', `${block}\nnode -e 'console.log(process.env.REDEVEN_FLOWER_SMOKE_ROOT)'`], {
+      env: { ...process.env, REDEVEN_FLOWER_SMOKE_ROOT: candidate }, encoding: 'utf8',
+    }).trim();
+    const canonical = execFileSync('python3', ['-c', 'import os,sys; print(os.path.realpath(sys.argv[1]))', candidate], { encoding: 'utf8' }).trim();
+    assert.equal(output, canonical);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('provider selection requires an exact DeepSeek provider key and forces the Vision model', () => {
@@ -330,13 +385,13 @@ test('port conflicts fail without killing the listener', async (t) => {
 
 test('cleanup selects only manifest PIDs with exact task provenance', () => {
   const manifest = {
-    worktree: '/work/redeven-smoke', stateRoot: '/tmp/redeven-flower-smoke-01a00852/state',
+    worktree: '/work/redeven-smoke', stateRoot: `${SMOKE_ROOT}/state`,
     pids: [101, 102, 103],
   };
   const observed = [
-    { pid: 101, cwd: '/work/redeven-smoke/desktop', command: '/work/redeven-smoke/desktop/node_modules/electron --user-data-dir=/tmp/redeven-flower-smoke-01a00852/user-data' },
+    { pid: 101, cwd: '/work/redeven-smoke/desktop', command: `/work/redeven-smoke/desktop/node_modules/electron --user-data-dir=${SMOKE_ROOT}/user-data` },
     { pid: 102, cwd: '/work/other/desktop', command: '/work/other/redeven run --state-root /tmp/other' },
-    { pid: 103, cwd: '/work/redeven-smoke/desktop', command: '/work/redeven-smoke/desktop/.bundle/redeven run --state-root /tmp/redeven-flower-smoke-01a00852/state' },
+    { pid: 103, cwd: '/work/redeven-smoke/desktop', command: `/work/redeven-smoke/desktop/.bundle/redeven run --state-root ${SMOKE_ROOT}/state` },
     { pid: 43824, cwd: '/work/redeven', command: 'redeven run --local-ui-bind localhost:43824' },
   ];
   assert.deepEqual(ownedManifestPIDs(manifest, observed), [101, 103]);
@@ -345,12 +400,12 @@ test('cleanup selects only manifest PIDs with exact task provenance', () => {
 test('cleanup treats macOS /tmp and /private/tmp as the same owned root', async () => {
   const privateTmp = await import('node:fs').then(({ realpathSync }) => realpathSync('/tmp'));
   const manifest = {
-    worktree: '/work/redeven-smoke', stateRoot: '/tmp/redeven-flower-smoke-01a00852/state', pids: [201],
+    worktree: '/work/redeven-smoke', stateRoot: `${SMOKE_ROOT}/state`, pids: [201],
   };
   const observed = [{
     pid: 201,
     cwd: '/work/redeven-smoke/desktop',
-    command: `/work/redeven-smoke/desktop/.bundle/redeven run --state-root ${privateTmp}/redeven-flower-smoke-01a00852/state`,
+    command: `/work/redeven-smoke/desktop/.bundle/redeven run --state-root ${privateTmp}/${path.basename(SMOKE_ROOT)}/state`,
   }];
   assert.deepEqual(ownedManifestPIDs(manifest, observed), [201]);
 });

@@ -13,13 +13,25 @@ final class FixtureState {
     var wheelEvents = 0
     var wheelDelta = 0.0
     var geometry: [String: Double] = [:]
+    var actions: [[String: Any]] = []
     var onChange: (() -> Void)?
     init(_ path: String) { resultPath = path }
     var complete: Bool { clicks == 2 && doubleClicked && entered && scrolled }
+    func record(_ action: String) {
+        var entry: [String: Any] = ["action": action, "clicks": clicks,
+                                   "timestamp_ms": Date().timeIntervalSince1970 * 1000]
+        if let event = NSApp.currentEvent {
+            entry["event_type"] = event.type.rawValue
+            entry["window_x"] = event.locationInWindow.x
+            entry["window_y"] = event.locationInWindow.y
+        }
+        actions.append(entry)
+        if actions.count > 64 { actions.removeFirst(actions.count - 64) }
+    }
     func save() {
         let result: [String: Any] = ["clicks": clicks, "doubleClicked": doubleClicked,
             "entered": entered, "scrolled": scrolled, "scrollOffset": scrollOffset,
-            "wheelEvents": wheelEvents, "wheelDelta": wheelDelta, "complete": complete, "geometry": geometry]
+            "wheelEvents": wheelEvents, "wheelDelta": wheelDelta, "complete": complete, "geometry": geometry, "actions": actions]
         if let bytes = try? JSONSerialization.data(withJSONObject: result) {
             try? bytes.write(to: URL(fileURLWithPath: resultPath), options: .atomic)
         }
@@ -37,7 +49,7 @@ final class DoubleClickArea: NSView {
     }
     required init?(coder: NSCoder) { fatalError("Not used by the fixture") }
     override func mouseDown(with event: NSEvent) {
-        if event.clickCount == 2 { state.doubleClicked = true; state.save() }
+        if event.clickCount == 2 { state.doubleClicked = true; state.record("double_click"); state.save() }
     }
 }
 
@@ -126,8 +138,8 @@ final class Delegate: NSObject, NSApplicationDelegate {
             CGWarpMouseCursorPosition(CGPoint(x: frame.minX + 30, y: screen.frame.maxY - frame.maxY + 50))
         }
     }
-    @objc func click() { state.clicks += 1; state.save() }
-    @objc func enter() { state.entered = input.stringValue == "Flower"; state.save() }
+    @objc func click() { state.clicks += 1; state.record("click"); state.save() }
+    @objc func enter() { state.entered = input.stringValue == "Flower"; state.record("enter"); state.save() }
 }
 
 let app = NSApplication.shared

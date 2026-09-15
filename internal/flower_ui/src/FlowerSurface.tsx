@@ -4432,7 +4432,7 @@ webSearch: model.web_search,
     if (envelope.kind === 'computer.frame') {
       const frame = envelope.computer_frame;
       if (envelope.thread_id !== selectedThreadID() || !frame || frame.session_id !== computerObserverID()
-        || frame.target_id !== selectedComputerStage()?.targetID || !computerStageOpen()) return;
+        || frame.target_id !== selectedComputerStage()?.targetID || !computerViewerKey()) return;
       const previous = computerLiveFrame()?.computer_frame;
       if (previous?.session_id === frame.session_id && previous.sequence >= frame.sequence) return;
       setComputerLiveFrame(envelope);
@@ -5588,6 +5588,9 @@ webSearch: model.web_search,
   });
   createEffect(() => {
     const key = computerViewerKey();
+    // A viewer owns ephemeral samples only while its capture session exists.
+    // Completion, hiding, target changes, and reconnects restore the keyframe.
+    setComputerLiveFrame(undefined);
     const update = props.adapter.setComputerViewer;
     if (!key || !update) return;
     const [observer_id, thread_id, target_id] = JSON.parse(key) as string[];
@@ -5604,7 +5607,8 @@ webSearch: model.web_search,
   const computerStageFrameRef = createMemo(() => {
     const stage = selectedComputerStage();
     const live = computerLiveFrame();
-    return live?.thread_id === selectedThreadID() && live.computer_frame?.target_id === stage?.targetID
+    return computerViewerKey() && live?.thread_id === selectedThreadID()
+      && live.computer_frame?.session_id === computerObserverID() && live.computer_frame?.target_id === stage?.targetID
       ? live.computer_frame?.resource_ref : stage?.frame;
   });
   createEffect(() => {
