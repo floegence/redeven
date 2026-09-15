@@ -28,11 +28,6 @@ import (
 // and capture commands. Its children outlive individual tool calls, but never
 // the Runtime. BrowserTarget remains an independent, headless adapter.
 type XvfbTargetExecutor struct {
-	// Inner/Display/Screen are retained only for package-level compatibility
-	// fixtures. Production construction always uses NewXvfbTargetExecutor.
-	Display          string
-	Screen           string
-	Inner            TargetToolExecutor
 	directory        string
 	mu               sync.Mutex
 	closed           bool
@@ -40,7 +35,6 @@ type XvfbTargetExecutor struct {
 	display          string
 	environment      []string
 	processes        []*x11Process
-	process          *exec.Cmd // retained for package compatibility fixtures
 	paths            x11Paths
 }
 
@@ -66,52 +60,10 @@ func NewXvfbTargetExecutor(stateDirectory string) *XvfbTargetExecutor {
 	return &XvfbTargetExecutor{directory: filepath.Join(stateDirectory, "computer", "x11"), paths: paths}
 }
 
-func (e *XvfbTargetExecutor) Start(ctx context.Context) error {
-	if e.Inner != nil {
-		return e.startCompatibility(ctx)
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.ensureLocked(ctx)
-}
-
 func (e *XvfbTargetExecutor) EnsureTargetReady(ctx context.Context, _ string) error {
-	if e.Inner != nil {
-		return e.startCompatibility(ctx)
-	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.ensureLocked(ctx)
-}
-
-func (e *XvfbTargetExecutor) startCompatibility(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.processes != nil {
-		return nil
-	}
-	path, err := exec.LookPath("Xvfb")
-	if err != nil {
-		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_missing"}
-	}
-	display := e.Display
-	if display == "" {
-		display = ":99"
-	}
-	screen := e.Screen
-	if screen == "" {
-		screen = "1280x800x24"
-	}
-	cmd := exec.Command(path, display, "-screen", "0", screen, "-nolisten", "tcp")
-	cmd.Env = append(os.Environ(), "DISPLAY="+display)
-	process, err := e.startProcess(cmd)
-	if err != nil {
-		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_start_failed"}
-	}
-	e.display = display
-	e.process = process.cmd
-	e.processes = []*x11Process{process}
-	return nil
 }
 
 func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
@@ -120,9 +72,6 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	}
 	if e.closed {
 		return &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "x11_closed"}
-	}
-	if len(e.processes) == 1 && e.Inner != nil {
-		return nil
 	}
 	if len(e.processes) == 2 {
 		alive := true
@@ -307,12 +256,6 @@ func (e *XvfbTargetExecutor) capture(ctx context.Context, targetID string) ([]by
 }
 
 func (e *XvfbTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
-	if e.Inner != nil {
-		if err := e.EnsureTargetReady(ctx, call.TargetID); err != nil {
-			return TargetToolResult{}, err
-		}
-		return e.Inner.ExecuteTargetTool(ctx, call)
-	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if !computerFrameResourcePattern.MatchString("computer://" + call.TargetID + "/" + strings.Repeat("0", 64)) {
@@ -365,7 +308,6 @@ func (e *XvfbTargetExecutor) stopLocked() error {
 		<-process.done
 	}
 	e.processes = nil
-	e.process = nil
 	e.display, e.environment = "", nil
 	if e.sessionDirectory == "" {
 		return nil

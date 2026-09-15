@@ -97,7 +97,7 @@ mouse/keyboard events, moves the pointer before clicking, compensates for the
 system natural-scrolling preference, and captures a normalized display frame.
 The native executor owns the helper across tool-call contexts and reaps it on
 interrupted exchanges or shutdown. Electron supplies packaged resource paths
-and UI; it does not run a second native helper owner. The Xvfb executor is the Linux input/capture implementation and reaps its display process group with the Runtime.
+and UI; it does not run a second native helper owner. The Xvfb executor is the Linux input/capture implementation and reaps its display process group with the Runtime. It has no non-Linux forwarding wrapper or PATH-based fixture executor. Its opt-in Linux test drives an actual xterm window, verifies the entered text, and checks child reaping and session-authority removal; this is adapter evidence rather than acceptance of remote Flower viewing.
 The default safety gate uses target
 metadata and action arguments; real page/password/OTP detection and a complete
 user takeover flow require separate implementation and qualification. These
