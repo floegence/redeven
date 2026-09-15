@@ -105,14 +105,17 @@ func (e *takeoverObservationExecutor) ExecuteComputerUserInput(context.Context, 
 
 func (e *takeoverObservationExecutor) EnsureTargetReady(context.Context, string) error { return nil }
 func (e *takeoverObservationExecutor) ExecuteTargetTool(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
-	if call.ToolName == "browser.navigate" {
+	actionExecuted := false
+	switch call.ToolName {
+	case "browser.navigate":
 		e.effects.Add(1)
-	} else if call.ToolName == "computer.screenshot" {
+		actionExecuted = true
+	case "computer.screenshot":
 		e.observations.Add(1)
-	} else {
+	default:
 		return TargetToolResult{}, errors.New("unexpected action")
 	}
-	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: "fixture", Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"login"}}, Result: map[string]any{"action_executed": call.ToolName == "browser.navigate"}}
+	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: "fixture", Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"login"}}, Result: map[string]any{"action_executed": actionExecuted}}
 	if e.safe.Load() {
 		result.Safety = &InteractionSafetyDecision{Level: "routine", SafeToCapture: true, SafeToSendToModel: true}
 		result.Attachments = []TargetToolAttachment{e.attachment}

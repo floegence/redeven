@@ -87,7 +87,7 @@ func TestComputerTargetMigrationFailureRollsBackColumnAndVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	actual, err := inspectReviewedSchemaTx(tx)
 	if err != nil {
 		t.Fatal(err)
