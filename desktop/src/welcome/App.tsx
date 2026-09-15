@@ -1492,6 +1492,7 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     'SSH HOST': 'environmentFacts.sshHost',
     'FORWARDED URL': 'environmentFacts.forwardedUrl',
     DETAIL: 'environmentFacts.detail',
+    STATUS: 'environmentFacts.status',
   });
 }
 
@@ -1569,6 +1570,12 @@ function localizedFactValue(i18n: DesktopI18n, label: string, value: string): st
       'Local environment': 'environmentFacts.localEnvironment',
       'Provider environment': 'environmentFacts.providerEnvironment',
       'Redeven Cloud environment': 'environmentFacts.providerEnvironment',
+    });
+  }
+  if (label === 'STATUS') {
+    return localizedStringByValue(i18n, value, {
+      'Desktop only': 'environmentFacts.desktopOnly',
+      'Not running': 'environmentFacts.notRunning',
     });
   }
   if (value === '' && label !== 'CONTAINER') {
@@ -1729,7 +1736,14 @@ function localizedEnvironmentFact(
     endpoints: fact.endpoints?.map((endpoint) => ({
       ...endpoint,
       label: localizedFactLabel(i18n, endpoint.label),
-      copy_label: localizedCopyLabel(i18n, endpoint.copy_label),
+      ...(endpoint.detail
+        ? {
+            detail: localizedStringByValue(i18n, endpoint.detail, {
+              'Private Desktop bridge; browser access is unavailable': 'environmentFacts.desktopBridgeEndpointDetail',
+            }),
+          }
+        : {}),
+      ...(endpoint.copy_label ? { copy_label: localizedCopyLabel(i18n, endpoint.copy_label) } : {}),
     })),
   };
 }
@@ -8522,11 +8536,13 @@ function EndpointsPopover(props: Readonly<{
               <div class="redeven-endpoints-popover-list">
                 <For each={props.endpoints}>
                   {(endpoint) => (
-                    <EndpointCopyRow
-                      endpoint={endpoint}
-                      selected={endpoint.value === selectedEndpoint()?.value}
-                      selectEndpointForQRCode={props.selectEndpointForQRCode}
-                    />
+                    endpoint.kind === 'status'
+                      ? <EndpointStatusRow endpoint={endpoint} />
+                      : <EndpointCopyRow
+                          endpoint={endpoint}
+                          selected={endpoint.value === selectedEndpoint()?.value}
+                          selectEndpointForQRCode={props.selectEndpointForQRCode}
+                        />
                   )}
                 </For>
               </div>
@@ -8575,6 +8591,22 @@ function EndpointCopyRow(props: Readonly<{
   );
 }
 
+function EndpointStatusRow(props: Readonly<{
+  endpoint: EnvironmentCardEndpointModel;
+}>) {
+  return (
+    <div class="redeven-card-endpoint-row redeven-card-endpoint-row--status" role="status">
+      <span class="redeven-card-endpoint-label">{props.endpoint.label}</span>
+      <span class="min-w-0">
+        <span class="redeven-card-endpoint-value">{props.endpoint.value}</span>
+        <Show when={props.endpoint.detail}>
+          <span class="redeven-card-endpoint-detail">{props.endpoint.detail}</span>
+        </Show>
+      </span>
+    </div>
+  );
+}
+
 function EndpointQRCodePanel(props: Readonly<{
   i18n: DesktopI18n;
   endpoint: EnvironmentCardEndpointModel;
@@ -8585,7 +8617,7 @@ function EndpointQRCodePanel(props: Readonly<{
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
   const handleCopy = () => {
-    void props.copyEnvironmentValue(props.endpoint.value, props.endpoint.copy_label);
+    void props.copyEnvironmentValue(props.endpoint.value, props.endpoint.copy_label ?? 'Copy endpoint');
     setCopied(true);
     clearTimeout(resetTimer);
     resetTimer = setTimeout(() => setCopied(false), 1500);
@@ -13573,6 +13605,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   const [applyTiming, setApplyTiming] = createSignal<DesktopSettingsApplyTiming>('next_start');
   const accessModelOptions = createMemo(() => ({
     current_runtime_url: props.snapshot.current_runtime_url,
+    current_runtime_transport: props.snapshot.current_runtime_transport,
     local_ui_password_configured: props.baselineSnapshot.local_ui_password_configured,
     runtime_password_required: props.baselineSnapshot.runtime_password_required,
     mode_override: accessModeOverride(),
@@ -13587,6 +13620,18 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   const settingsSaveLabel = createMemo(() => props.i18n.t('settings.saveEnvironmentSettings', {
     label: settingsEnvironmentLabel(),
   }));
+  const currentAccessLabel = createMemo(() => {
+    switch (accessModel().current_runtime_transport) {
+      case 'external_url':
+        return accessModel().current_runtime_url
+          ? `${props.i18n.t('settings.browserURL')}: ${accessModel().current_runtime_url}`
+          : props.i18n.t('settings.notRunning');
+      case 'desktop_bridge':
+        return props.i18n.t('settings.desktopBridgeAccess');
+      default:
+        return props.i18n.t('settings.notRunning');
+    }
+  });
   const visibilityGroupID = createUniqueId();
   const localUIPasswordCanClear = createMemo(() => (
     props.baselineSnapshot.local_ui_password_configured
@@ -13735,6 +13780,14 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               <span class="redeven-settings-runtime-status mt-1 block truncate text-xs font-semibold text-foreground">
                 {props.runtimeStatusLabel}
               </span>
+              <span class="mt-1 block truncate text-[10px] text-muted-foreground" title={currentAccessLabel()}>
+                {currentAccessLabel()}
+              </span>
+              <Show when={accessModel().current_runtime_transport === 'desktop_bridge'}>
+                <span class="mt-1 block max-w-[28rem] text-[10px] leading-4 text-muted-foreground">
+                  {props.i18n.t('settings.desktopBridgeAccessHelp')}
+                </span>
+              </Show>
             </span>
           </div>
 

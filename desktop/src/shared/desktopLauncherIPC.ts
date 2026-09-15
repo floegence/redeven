@@ -68,6 +68,7 @@ export type DesktopLauncherProgressSurface = 'open' | 'runtime_lifecycle' | 'rei
 export type DesktopEnvironmentEntryKind = 'local_environment' | 'wsl_environment' | 'provider_environment' | 'gateway_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | 'Gateway' | 'Resolve' | '';
 export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'gateway' | 'saved';
+export type DesktopLocalEnvironmentTransport = 'external_url' | 'desktop_bridge' | 'not_running';
 export type DesktopEnvironmentOpenAction = 'open' | 'opening' | 'focus';
 export type DesktopLauncherCloseAction = 'quit' | 'close_launcher';
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
@@ -366,6 +367,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   secondary_text: string;
   local_environment_kind?: 'local' | 'controlplane';
   local_environment_ui_bind?: string;
+  local_environment_transport?: DesktopLocalEnvironmentTransport;
   local_environment_ui_password_configured?: boolean;
   local_environment_runtime_state?: DesktopLocalRuntimeState;
   local_environment_runtime_url?: string;

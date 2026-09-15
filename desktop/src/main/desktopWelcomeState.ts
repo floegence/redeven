@@ -12,6 +12,7 @@ import type { GatewayDesktopTarget } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type {
   DesktopEnvironmentEntry,
+  DesktopLocalEnvironmentTransport,
   DesktopLauncherSurface,
   DesktopLocalCloseBehavior,
   DesktopLocalRuntimeState,
@@ -155,6 +156,23 @@ function runtimeStartedAtUnixMS(
     }
   }
   return undefined;
+}
+
+function localEnvironmentTransport(
+  session: DesktopSessionSummary | null,
+  runtimeURL: string,
+  runtimeState: DesktopLocalRuntimeState,
+): DesktopLocalEnvironmentTransport {
+  if (session?.transport_kind === 'native_local_bridge' || session?.transport_kind === 'placement_bridge') {
+    return 'desktop_bridge';
+  }
+  if (compact(session?.startup?.local_ui_url) !== '' || compact(runtimeURL) !== '') {
+    return 'external_url';
+  }
+  if (session?.lifecycle === 'open' || session?.lifecycle === 'opening' || runtimeState === 'running') {
+    return 'desktop_bridge';
+  }
+  return 'not_running';
 }
 
 function normalizeRuntimeURLForComparison(value: unknown): string {
@@ -1242,6 +1260,7 @@ function buildLocalEnvironmentEntry(
     presence,
     localRuntimeFallbackHealth,
   );
+  const transport = localEnvironmentTransport(localSession, resolvedLocalRuntimeURL, resolvedLocalRuntimeState);
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const effectiveHostAccess = presence?.host_access ?? { kind: 'local_host' as const };
   const effectivePlacement = presence?.placement ?? {
@@ -1297,6 +1316,7 @@ function buildLocalEnvironmentEntry(
       : [access.local_ui_bind, remoteEnvironmentURL || providerIdentitySummary].filter(Boolean).join(' · '),
     local_environment_kind: kind,
     local_environment_ui_bind: access.local_ui_bind,
+    local_environment_transport: transport,
     local_environment_ui_password_configured: access.local_ui_password_configured,
     local_environment_runtime_state: resolvedLocalRuntimeState,
     local_environment_runtime_url: resolvedLocalRuntimeURL || undefined,
@@ -1975,6 +1995,11 @@ export function buildDesktopWelcomeSnapshot(
           ?? providerSession?.startup?.local_ui_url
           ?? compact(providerRoute.providerEnvironment?.environment_url)
           ?? compact(selectedProviderEnvironment.remote_catalog_entry?.environment_url),
+        current_runtime_transport: (providerSession
+          ? ((providerSession.transport_kind === 'native_local_bridge' || providerSession.transport_kind === 'placement_bridge')
+            ? 'desktop_bridge'
+            : (compact(providerSession.entry_url ?? providerSession.startup?.local_ui_url) !== '' ? 'external_url' : 'desktop_bridge'))
+          : 'not_running') as DesktopLocalEnvironmentTransport,
         local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
         runtime_password_required: providerSession?.startup?.password_required === true,
         auto_runtime_probe_configurable: false,
@@ -1999,6 +2024,11 @@ export function buildDesktopWelcomeSnapshot(
         ?? managedSession?.startup?.local_ui_url
         ?? localEnvironmentEntry?.local_environment_runtime_url
         ?? '',
+      current_runtime_transport: (managedSession
+        ? ((managedSession.transport_kind === 'native_local_bridge' || managedSession.transport_kind === 'placement_bridge')
+          ? 'desktop_bridge'
+          : (compact(managedSession.entry_url ?? managedSession.startup?.local_ui_url) !== '' ? 'external_url' : 'desktop_bridge'))
+        : localEnvironmentEntry?.local_environment_transport ?? 'not_running') as DesktopLocalEnvironmentTransport,
       local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
       runtime_password_required: managedSession?.startup?.password_required === true,
       auto_runtime_probe_configurable: false,

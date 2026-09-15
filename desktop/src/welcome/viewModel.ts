@@ -90,8 +90,10 @@ export type EnvironmentCardFactModel = Readonly<{
 }>;
 
 export type EnvironmentCardEndpointModel = Readonly<{
+  kind?: 'url' | 'status';
   label: string;
   value: string;
+  detail?: string;
   monospace: boolean;
   copy_label: string;
 }>;
@@ -853,15 +855,45 @@ export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
   if (environment.kind === 'local_environment') {
-    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind);
-    return localEndpoint !== ''
-      ? [{
+    const transport = environment.local_environment_transport
+      ?? (compact(environment.local_ui_url) !== '' ? 'external_url' : 'not_running');
+    const localEndpoint = transport === 'external_url'
+      ? compact(environment.local_ui_url)
+      : '';
+    if (localEndpoint !== '') {
+      return [{
         label: looksLikeAbsoluteURL(localEndpoint) ? 'URL' : 'LOCAL',
         value: localEndpoint,
         monospace: shouldUseMonospaceEndpoint(localEndpoint),
         copy_label: 'Copy local endpoint',
-      }]
-      : [];
+      }];
+    }
+    if (transport === 'desktop_bridge') {
+      return [{
+        kind: 'status',
+        label: 'STATUS',
+        value: 'Desktop only',
+        detail: 'Private Desktop bridge; browser access is unavailable',
+        monospace: false,
+        copy_label: '',
+      }];
+    }
+    if (transport === 'not_running') {
+      return [{
+        kind: 'status',
+        label: 'STATUS',
+        value: 'Not running',
+        monospace: false,
+        copy_label: '',
+      }];
+    }
+    return [{
+      kind: 'status',
+      label: 'STATUS',
+      value: 'Not running',
+      monospace: false,
+      copy_label: '',
+    }];
   }
 
   if (environment.kind === 'provider_environment') {
@@ -2274,8 +2306,12 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   const displayState = buildEnvironmentDisplayStateModel(environment);
   if (environment.kind === 'local_environment') {
-    const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind);
-    const targetPrimary = localEndpoint || environment.secondary_text || 'Local environment';
+    const transport = environment.local_environment_transport
+      ?? (compact(environment.local_ui_url) !== '' ? 'external_url' : 'not_running');
+    const localEndpoint = transport === 'external_url'
+      ? compact(environment.local_ui_url)
+      : '';
+    const targetPrimary = localEndpoint || 'This device';
     return {
       kind_label: environmentKindLabel(environment),
       status_label: displayState.status_label,

@@ -56,6 +56,7 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   next_start_address_display: string;
   next_start_address_kind: DesktopNextStartAddressKind;
   current_runtime_url: string;
+  current_runtime_transport?: 'external_url' | 'desktop_bridge' | 'not_running';
   password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   local_ui_password_configured: boolean;

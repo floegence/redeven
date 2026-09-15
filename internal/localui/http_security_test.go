@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,6 +166,9 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 			s.HandlerForDesktopBridge().ServeHTTP(res, req)
 			if res.Code != http.StatusUnauthorized {
 				t.Fatalf("bridge authorization status = %d, want %d", res.Code, http.StatusUnauthorized)
+			}
+			if got := strings.TrimSpace(res.Body.String()); got != "Desktop-only Local UI bridge; open this Environment from Desktop" {
+				t.Fatalf("bridge authorization body = %q", got)
 			}
 		})
 	}

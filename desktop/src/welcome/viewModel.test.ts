@@ -1274,6 +1274,46 @@ describe('buildEnvironmentCardModel', () => {
     ]);
   });
 
+  it('shows a private Desktop bridge as a non-copyable status endpoint', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+      openSessions: [testLocalEnvironmentSession(local, 'http://localhost:23998/', 'open', {}, {
+        transportKind: 'native_local_bridge',
+      })],
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(entry?.local_environment_transport).toBe('desktop_bridge');
+    expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([{
+      kind: 'status',
+      label: 'STATUS',
+      value: 'Desktop only',
+      detail: 'Private Desktop bridge; browser access is unavailable',
+      monospace: false,
+      copy_label: '',
+    }]);
+  });
+
+  it('keeps a real HTTPS Local UI URL as a copyable endpoint', () => {
+    const local = testLocalEnvironment({
+      currentRuntime: {
+        local_ui_url: 'https://localhost:23998/',
+        effective_run_mode: 'desktop',
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+    });
+    const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    expect(entry?.local_environment_transport).toBe('external_url');
+    expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([{
+      label: 'URL',
+      value: 'https://localhost:23998/',
+      monospace: true,
+      copy_label: 'Copy local endpoint',
+    }]);
+  });
+
   it('keeps runtime version in the stable card fact slot during maintenance states', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
@@ -1446,7 +1486,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { label: 'LOCAL', value: 'localhost:23998', monospace: true, copy_label: 'Copy local endpoint' },
+          { kind: 'status', label: 'STATUS', value: 'Not running', monospace: false, copy_label: '' },
         ],
       }),
       placeholderFact('VERSION', 'UNKNOWN'),
@@ -1513,7 +1553,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual(expect.arrayContaining([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { label: 'LOCAL', value: 'localhost:23998', monospace: true, copy_label: 'Copy local endpoint' },
+          { kind: 'status', label: 'STATUS', value: 'Not running', monospace: false, copy_label: '' },
         ],
       }),
       expect.objectContaining({

@@ -56,10 +56,12 @@ export type DesktopAccessDraftModel = Readonly<{
   password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   current_runtime_url: string;
+  current_runtime_transport: 'external_url' | 'desktop_bridge' | 'not_running';
 }>;
 
 export type DesktopAccessModelOptions = Readonly<{
   current_runtime_url?: string;
+  current_runtime_transport?: DesktopAccessDraftModel['current_runtime_transport'];
   local_ui_password_configured?: boolean;
   runtime_password_required?: boolean;
   mode_override?: DesktopAccessMode | null;
@@ -310,6 +312,8 @@ export function deriveDesktopAccessDraftModel(
     password_state_id: password.id,
     password_state_tone: password.tone,
     current_runtime_url: trimString(options.current_runtime_url),
+    current_runtime_transport: options.current_runtime_transport
+      ?? (trimString(options.current_runtime_url) !== '' ? 'external_url' : 'not_running'),
   };
 }
 
