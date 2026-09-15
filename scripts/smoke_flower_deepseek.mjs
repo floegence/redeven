@@ -293,7 +293,7 @@ function isEnvPage(page) {
   }
 }
 
-async function ensureFlowerSurface(page) {
+export async function ensureFlowerSurface(page) {
   const surface = flowerSurface(page);
   if (await surface.isVisible().catch(() => false)) return;
   if (!isEnvPage(page)) throw new Error(`Flower surface unavailable on unexpected page ${page.url()}`);

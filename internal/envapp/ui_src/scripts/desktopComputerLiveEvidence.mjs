@@ -9,7 +9,7 @@ export function observeDesktopComputerFrames() {
   const streams = new Map();
   const pending = new Set();
   let stopped = false;
-  const unsubscribe = window.redevenDesktopSettings.subscribeRuntimeFlowerStream((event) => {
+  const receive = (event) => {
     if (stopped || event.kind !== 'chunk') return;
     let stream = streams.get(event.stream_id);
     if (!stream) { stream = { decoder: new TextDecoder(), buffer: '' }; streams.set(event.stream_id, stream); }
@@ -24,7 +24,11 @@ export function observeDesktopComputerFrames() {
       const frame = envelope.computer_frame;
       frames.push({ target: frame.target_id, thread: envelope.thread_id, sequence: frame.sequence, sha256: frame.sha256, at: Date.now() });
     }
-  });
+  };
+  // Browser qualification feeds CDP's passive copy of the existing HTTP
+  // stream here. Neither path creates or replaces the product transport.
+  window.__recordComputerStreamChunk = receive;
+  const unsubscribe = window.redevenDesktopSettings?.subscribeRuntimeFlowerStream(receive) ?? (() => undefined);
   const load = (event) => {
     const image = event.target;
     if (stopped || !image.matches?.('.flower-computer-stage-frame') || !image.complete || image.naturalWidth === 0 || !image.src.startsWith('blob:')) return;
@@ -47,6 +51,7 @@ export function observeDesktopComputerFrames() {
     document.removeEventListener('visibilitychange', changed);
     await Promise.allSettled([...pending]);
     delete window.__stopComputerLiveEvidence;
+    delete window.__recordComputerStreamChunk;
     return { frames, decoded, visibility, streamCount: streams.size };
   };
 }

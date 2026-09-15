@@ -50,12 +50,27 @@ it does not independently estimate the DeepSeek intermediate DTO. Large images,
 tool results, and replay must retain their exact transmitted bytes.
 
 Built Desktop qualification listens read-only to the existing preload workspace
-stream and hashes decoded Stage Blob bytes. It requires matching thread, target
+stream; Linux Webtop uses CDP's passive copy of the existing HTTP workspace
+stream. Both run the same Composer scenarios and hash decoded Stage Blob bytes.
+They require matching thread, target
 and image hash across multiple live events in each turn, not just tool keyframes
 or a successful first turn. Animated fixture markers prove pixels continue to
 change without requiring additional model actions. Observation
 stops before private takeover; no image bytes or private input enter this report.
 A missing native or browser live-frame match fails its explicit scope.
+
+`scripts/check_computer_use_webtop.sh` is an opt-in Linux browser and X11 UI
+qualification entrypoint. It requires the local DeepSeek configuration and an
+explicit verified Linux plugin runtime artifact directory. It builds with
+`GOWORK=off`, stages the production browser bundle in Debian Webtop, imports
+the isolated Runtime CA into the container browser, and drives Flower through
+visible navigation and Composer controls. Runtime sockets and credentials live
+in the container filesystem. The desktop, browser, fixtures, and all input stay
+inside the task-owned container; cleanup removes that container, temporary
+bundles, and credential copies and verifies source secrets and port release.
+Its scope includes managed-browser actions, X11 GUI control effects, per-turn
+decoded live frames, settings and login handback. It does not qualify native
+macOS, connected Chrome, IME, or every sensitive-page and approval scenario.
 
 # Evidence
 
@@ -63,4 +78,5 @@ A missing native or browser live-frame match fails its explicit scope.
 - `redeven:internal/ai/computer_media.go` - host keyframe storage and validation.
 - `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - decoded Blob URL viewing.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - live-to-durable transition and reopening.
+- `redeven:scripts/check_computer_use_webtop.sh` - container-only real Linux Flower qualification and cleanup.
 - `redeven:internal/ai/floret_provider_prepared_test.go` - visual budgeting and prepared request identity.
