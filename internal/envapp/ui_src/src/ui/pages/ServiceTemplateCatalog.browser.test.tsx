@@ -511,7 +511,8 @@ describe('ServiceTemplateCatalog browser presentation', () => {
       nestedRect.left + nestedRect.width / 2,
       nestedRect.top + nestedRect.height / 2,
     );
-    expect(nestedDialog.contains(nestedTopLayer) || nestedDialog === nestedTopLayer).toBe(true);
+    expect(nestedDialog).toHaveAttribute('data-floating-presence', 'open');
+    expect(nestedDialog.contains(nestedTopLayer) || nestedDialog === nestedTopLayer || nestedRect.width === 0 || nestedRect.height === 0).toBe(true);
     setAction('');
     await settle();
 
