@@ -369,6 +369,9 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 		if resource := activityMapString(ref, "resource_ref"); kind == "computer_frame" && computerFrameResourcePattern.MatchString(resource) {
 			next["resource_ref"] = resource
 		}
+		if resource := activityMapString(ref, "resource_ref"); kind == "computer_control" && resource != "" && len(resource) <= 128 && !strings.ContainsAny(resource, "/\\: \t\n\r") {
+			next["resource_ref"] = resource
+		}
 		if line, ok := activityPublicLineNumber(ref["line"]); ok {
 			next["line"] = line
 		}

@@ -70,7 +70,7 @@ func (r *ComputerUseRuntime) StartComputerLiveFrames(ctx context.Context, thread
 		ticker := time.NewTicker(computerLiveFrameInterval)
 		defer ticker.Stop()
 		capture := func() {
-			result, err := r.ExecuteTargetTool(liveCtx, TargetToolCall{liveFrame: true, TargetID: targetID, ToolName: "computer.screenshot", Arguments: []byte(`{"target":"` + targetID + `"}`)})
+			result, err := r.ExecuteTargetTool(liveCtx, TargetToolCall{liveFrame: true, ThreadID: threadID, TargetID: targetID, ToolName: "computer.screenshot", Arguments: []byte(`{"target":"` + targetID + `"}`)})
 			if err != nil || len(result.Attachments) == 0 {
 				return
 			}

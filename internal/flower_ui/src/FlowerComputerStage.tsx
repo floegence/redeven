@@ -2,7 +2,7 @@ import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
 
-import type { FlowerActivityItem } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerComputerUserInput } from './contracts/flowerSurfaceContracts';
 
 export type FlowerComputerStageSnapshot = Readonly<{
   item: FlowerActivityItem;
@@ -25,6 +25,8 @@ export type FlowerComputerStageCopy = Readonly<{
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;
   frameRef?: string;
+  userFrame?: Blob;
+  onInput?: (input: Omit<FlowerComputerUserInput, 'thread_id' | 'interaction_id'>) => void;
   threadID?: string;
   loadFrame?: (input: Readonly<{ thread_id: string; target_id: string; resource_ref: string; sha256: string; signal: AbortSignal }>) => Promise<Blob>;
   copy: FlowerComputerStageCopy;
@@ -45,6 +47,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   createEffect(() => {
     retry();
     const ref = frameRef();
+    const userFrame = props.userFrame;
     const target = targetID();
     const thread = threadID();
     if (thread !== currentThread || target !== currentTarget) {
@@ -53,16 +56,17 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       if (currentURL) URL.revokeObjectURL(currentURL);
       currentURL = '';
     }
-    if (!ref || !target || !thread || !props.loadFrame) {
+    if (!userFrame && (!ref || !target || !thread || !props.loadFrame)) {
       setResolvedURL(undefined);
       setFailed(true);
       return;
     }
     const match = /^computer:\/\/[^/]+\/([a-f0-9]{64})$/u.exec(ref);
-    if (!match) { setResolvedURL(undefined); setFailed(true); return; }
+    if (!userFrame && !match) { setResolvedURL(undefined); setFailed(true); return; }
     const controller = new AbortController();
     setFailed(false);
-    void props.loadFrame({ thread_id: thread, target_id: target, resource_ref: ref, sha256: match[1], signal: controller.signal }).then(async (blob) => {
+    const loading = userFrame ? Promise.resolve(userFrame) : props.loadFrame!({ thread_id: thread, target_id: target, resource_ref: ref, sha256: match![1], signal: controller.signal });
+    void loading.then(async (blob) => {
       if (controller.signal.aborted) return;
       const nextURL = URL.createObjectURL(blob);
       // Decode before swapping when the runtime provides Image.decode. Some
@@ -94,6 +98,32 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
             class="flower-computer-stage-frame"
             src={url()}
             alt={props.snapshot.action}
+            tabIndex={props.onInput ? 0 : undefined}
+            style={props.onInput ? { cursor: 'crosshair' } : undefined}
+            draggable={false}
+            onClick={(event) => {
+              if (!props.onInput) return;
+              const img = event.currentTarget;
+              img.focus({ preventScroll: true });
+              const rect = img.getBoundingClientRect();
+              const scale = Math.min(rect.width / img.naturalWidth, rect.height / img.naturalHeight);
+              const x = (event.clientX - rect.left - (rect.width - img.naturalWidth * scale) / 2) / scale;
+              const y = (event.clientY - rect.top - (rect.height - img.naturalHeight * scale) / 2) / scale;
+              if (x >= 0 && y >= 0 && x < img.naturalWidth && y < img.naturalHeight) props.onInput({ action: 'click', x, y });
+            }}
+            onKeyDown={(event) => {
+              if (!props.onInput || event.isComposing) return;
+              event.preventDefault(); event.stopPropagation();
+              if (['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return;
+              if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) props.onInput({ action: 'type', text: event.key });
+              else props.onInput({ action: 'key', key: [event.metaKey ? 'Meta' : '', event.ctrlKey ? 'Control' : '', event.altKey ? 'Alt' : '', event.shiftKey ? 'Shift' : '', event.key].filter(Boolean).join('+') });
+            }}
+            onCompositionEnd={(event) => { if (props.onInput && event.data) props.onInput({ action: 'type', text: event.data }); }}
+            onWheel={(event) => {
+              if (!props.onInput) return;
+              event.preventDefault(); event.stopPropagation();
+              props.onInput({ action: 'scroll', delta_x: event.deltaX, delta_y: event.deltaY });
+            }}
             onError={() => {
               setResolvedURL(undefined);
               setFailed(true);

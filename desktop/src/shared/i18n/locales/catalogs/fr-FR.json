@@ -348,7 +348,11 @@
       "toolApprovalApproveBatchAction": "Autoriser les {count} approbations d’outils en attente",
       "restoredInputTitle": "Entrée conservée après restauration",
       "restoredInputDescription": "Cette entrée ne sera pas exécutée automatiquement. Copiez-la dans une nouvelle tâche pour la relancer.",
-      "restoredInputCopy": "Copier l’entrée"
+      "restoredInputCopy": "Copier l’entrée",
+      "computerTakeControl": "Prendre le contrôle",
+      "computerReturnControl": "Rendre le contrôle à Flower",
+      "computerControlHint": "Connectez-vous dans l’image avec la souris et le clavier. Les mots de passe et les codes ne sont pas enregistrés dans la conversation.",
+      "computerControlFailed": "Impossible de mettre à jour le contrôle. Vérifiez la page avant de réessayer."
     },
     "threadList": {
       "title": "Discussions",

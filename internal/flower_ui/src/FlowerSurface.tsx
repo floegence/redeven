@@ -5529,6 +5529,43 @@ webSearch: model.web_search,
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
   const [computerStageOpen, setComputerStageOpen] = createSignal(true);
+  const [computerUserFrame, setComputerUserFrame] = createSignal<Blob>();
+  const [computerControlBusy, setComputerControlBusy] = createSignal(false);
+  const [computerControlError, setComputerControlError] = createSignal(false);
+  const isComputerInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
+    && (request.tool_name.startsWith('computer.') || request.tool_name.startsWith('browser.'))
+    && request.questions.some((question) => question.id === 'computer_control'));
+  let computerInputQueue = Promise.resolve();
+  let computerInputCount = 0;
+  let computerInputGeneration = 0;
+  const inputComputerControl = (input: Omit<import('./contracts/flowerSurfaceContracts').FlowerComputerUserInput, 'thread_id' | 'interaction_id'>) => {
+    const request = selectedInputRequest();
+    const thread_id = selectedThreadID();
+    const control = props.adapter.inputComputerControl;
+    if (!thread_id || !request || !isComputerInput(request) || !control || computerInputCount >= 32) return;
+    const interaction_id = request.prompt_id;
+    const generation = computerInputGeneration;
+    computerInputCount++;
+    setComputerControlBusy(true);
+    computerInputQueue = computerInputQueue.then(async () => {
+      if (generation !== computerInputGeneration || thread_id !== selectedThreadID() || selectedInputRequest()?.prompt_id !== interaction_id) return;
+      const frame = await control({ ...input, thread_id, interaction_id });
+      if (generation !== computerInputGeneration || thread_id !== selectedThreadID() || selectedInputRequest()?.prompt_id !== interaction_id) return;
+      setComputerUserFrame(frame); setComputerStageOpen(true); setComputerControlError(false);
+    }).catch(() => {
+      if (generation === computerInputGeneration && thread_id === selectedThreadID() && selectedInputRequest()?.prompt_id === interaction_id) {
+        computerInputGeneration++; setComputerControlError(true);
+      }
+    }).finally(() => {
+      computerInputCount--; setComputerControlBusy(computerInputCount > 0);
+    });
+  };
+  createEffect(() => {
+    selectedThreadID();
+    void selectedInputRequest()?.prompt_id;
+    computerInputGeneration++;
+    setComputerUserFrame(undefined); setComputerControlError(false);
+  });
   let lastComputerStageItemID = '';
   const selectedComputerStage = createMemo<FlowerComputerStageSnapshot | null>(() => {
     const entries = selectedTimelineEntries();
@@ -7359,6 +7396,7 @@ webSearch: model.web_search,
           data-flower-input-request-prompt
           aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
         >
+          <Show when={isComputerInput(inputRequest())} fallback={<>
           <Show when={!composerSurface}>
             <div class="flower-input-request-heading">
               <Clock class="flower-input-request-icon h-4 w-4" aria-hidden="true" />
@@ -7507,6 +7545,20 @@ webSearch: model.web_search,
                 <ChevronRight class="h-4 w-4" aria-hidden="true" />
               </button>
             </nav>
+          </Show>
+          </>}>
+            <p>{copy().chat.computerControlHint}</p>
+            <Show when={computerControlError()}><p role="alert">{copy().chat.computerControlFailed}</p></Show>
+            <div class="flex gap-2">
+              <button type="button" class="flower-input-request-navigation-button" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => inputComputerControl({ action: 'observe' })}>{copy().chat.computerTakeControl}</button>
+              <button type="button" class="flower-input-request-navigation-button" disabled={computerControlBusy()} onClick={() => {
+                const question = inputRequest().questions.find((question) => question.id === 'computer_control');
+                const choice = question?.choices?.[0];
+                if (!question || !choice) return;
+                selectInputChoice(question, choice);
+                void submitInputRequest();
+              }}>{copy().chat.computerReturnControl}</button>
+            </div>
           </Show>
         </section>
       )}
@@ -11817,11 +11869,13 @@ webSearch: model.web_search,
           setWorkingDirectoryPickerOpen(false);
         }}
       />
-      <Show when={computerStageOpen() && selectedComputerStage()}>
+      <Show when={computerStageOpen() && Boolean(computerStageFrameRef() || computerUserFrame()) && selectedComputerStage()}>
         {(stage) => {
           return (
             <FlowerComputerStage
               snapshot={stage()}
+              userFrame={computerUserFrame()}
+              onInput={computerUserFrame() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
               frameRef={computerStageFrameRef()}
               threadID={selectedThreadID()}
               loadFrame={props.adapter.loadComputerFrame}

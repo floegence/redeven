@@ -348,7 +348,11 @@
       "toolApprovalApproveBatchAction": "대기 중인 도구 승인 {count}개 모두 허용",
       "restoredInputTitle": "복원 후 보존된 입력",
       "restoredInputDescription": "이 입력은 자동으로 실행되지 않습니다. 다시 실행하려면 새 작업에 복사하세요.",
-      "restoredInputCopy": "입력 복사"
+      "restoredInputCopy": "입력 복사",
+      "computerTakeControl": "직접 제어",
+      "computerReturnControl": "Flower에 제어 반환",
+      "computerControlHint": "화면에서 마우스와 키보드로 로그인하세요. 비밀번호와 인증 코드는 대화에 저장되지 않습니다.",
+      "computerControlFailed": "제어 상태를 업데이트하지 못했습니다. 페이지를 확인한 후 다시 시도하세요."
     },
     "threadList": {
       "title": "대화",

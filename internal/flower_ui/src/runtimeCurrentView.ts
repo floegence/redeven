@@ -349,7 +349,7 @@ function runtimeInputRequest(
     prompt_id: trim(interaction.id),
     message_id: identity.turnID,
     tool_id: trim(interaction.id),
-    tool_name: 'ask_user',
+    tool_name: trim(view.items?.find((item) => item.turn_id === interaction.turn_id && item.run_id === interaction.run_id && item.activity?.tool_id === interaction.tool_call_id)?.activity?.tool_name) || 'ask_user',
     required_from_user: questions.map((question) => trim(question.id)).filter(Boolean),
     questions: questions.map((question) => {
       const options = (question.options ?? []).map(trim).filter(Boolean);

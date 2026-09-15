@@ -757,49 +757,18 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		return fltools.Result{}, err
 	}
 	attachments := floretToolAttachments(result.Attachments)
-	// Keep the media contract intact even when an executor encoded the frame
-	// provenance in its structured payload but omitted the parallel attachment
-	// slice. Without this recovery the provider receives only computer:// text
-	// and vision models repeatedly request screenshots forever.
-	if len(attachments) == 0 {
-		if ref := computerFrameRef(structured); ref != "" {
-			attachments = []fltools.ArtifactRef{{ID: ref, SafeLabel: "screenshot", Kind: "image", MIME: "image/png"}}
-		}
-	}
 	return fltools.Result{
-		CallID:      strings.TrimSpace(result.ToolID),
-		Name:        strings.TrimSpace(result.ToolName),
-		Text:        string(text),
-		Structured:  structured,
-		Metadata:    metadata,
-		Activity:    activity,
-		Attachments: attachments,
-		IsError:     isError,
-		DispatchErr: dispatchErr,
+		CallID:        strings.TrimSpace(result.ToolID),
+		Name:          strings.TrimSpace(result.ToolName),
+		Text:          string(text),
+		Structured:    structured,
+		Metadata:      metadata,
+		Activity:      activity,
+		Attachments:   attachments,
+		InputRequired: fltools.CloneInputRequest(result.inputRequired),
+		IsError:       isError,
+		DispatchErr:   dispatchErr,
 	}, nil
-}
-
-func computerFrameRef(value any) string {
-	switch item := value.(type) {
-	case map[string]any:
-		for key, child := range item {
-			if key == "after_frame" || key == "screenshot" || key == "frame_ref" {
-				if ref := strings.TrimSpace(anyToString(child)); strings.HasPrefix(ref, "computer://") {
-					return ref
-				}
-			}
-			if ref := computerFrameRef(child); ref != "" {
-				return ref
-			}
-		}
-	case []any:
-		for _, child := range item {
-			if ref := computerFrameRef(child); ref != "" {
-				return ref
-			}
-		}
-	}
-	return ""
 }
 
 func floretToolAttachments(items []ToolAttachment) []fltools.ArtifactRef {
@@ -1266,11 +1235,21 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
 	if strings.HasPrefix(toolName, "computer.") || strings.HasPrefix(toolName, "browser.") {
-		if ref := strings.TrimSpace(anyToString(payload["after_frame"])); computerFrameResourcePattern.MatchString(ref) {
-			activity.TargetRefs = []fltools.ActivityTargetRef{{
-				Kind: "computer_frame", ResourceRef: ref,
-				Label: firstNonEmptyString(anyToString(payload["target_name"]), anyToString(payload["target_id"]), "Computer"),
-			}}
+		if result.inputRequired != nil {
+			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
+				Kind: "computer_control", ResourceRef: strings.TrimSpace(anyToString(rawPayload["target_id"])),
+				Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), "Computer"),
+			})
+		}
+		// Only typed executor attachments grant media authority. A ref appearing
+		// in arbitrary result text or payload is not an attachment capability.
+		for _, attachment := range result.Attachments {
+			if attachment.MIMEType == "image/png" && computerFrameResourcePattern.MatchString(attachment.ResourceRef) {
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
+					Kind: "computer_frame", ResourceRef: attachment.ResourceRef,
+					Label: firstNonEmptyString(anyToString(payload["target_name"]), anyToString(payload["target_id"]), "Computer"),
+				})
+			}
 		}
 	}
 	return contractSafeActivityPresentationForTool(toolName, activity), nil

@@ -355,9 +355,16 @@ func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUse
 			})
 			containsSecret = containsSecret || source.Secret
 		}
+		toolName := "ask_user"
+		for _, item := range current.Items {
+			if item.TurnID == interaction.TurnID && item.RunID == interaction.RunID && item.Activity != nil && item.Activity.ToolID == interaction.ToolCallID {
+				toolName = item.Activity.ToolName
+				break
+			}
+		}
 		return &RequestUserInputPrompt{
 			PromptID: interaction.ID, MessageID: interaction.TurnID.String(), ToolID: interaction.ToolCallID,
-			ToolName: "ask_user", Questions: questions, PublicSummary: interaction.Input.Summary, ContainsSecret: containsSecret,
+			ToolName: toolName, Questions: questions, PublicSummary: interaction.Input.Summary, ContainsSecret: containsSecret,
 		}
 	}
 	return nil

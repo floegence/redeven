@@ -21,6 +21,7 @@ type ComputerUseRuntime struct {
 	executors  map[string]TargetToolExecutor
 	liveFrames map[string]*computerLiveSampler
 	liveWG     sync.WaitGroup
+	controls   map[string]*computerTargetControl
 }
 
 // ConnectBrowser registers an explicitly authorized Chrome CDP session. A
@@ -188,7 +189,20 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 	if executor == nil {
 		return TargetToolResult{}, &TargetStartupError{Code: "TARGET_EXECUTOR_UNAVAILABLE", Reason: "target_adapter_missing"}
 	}
+	control, unlock, err := r.acquireComputerControl(ctx, call)
+	if err != nil {
+		return TargetToolResult{}, err
+	}
+	defer unlock()
+	r.releasePreviousComputerTarget(call)
 	result, err := executor.ExecuteTargetTool(ctx, call)
+	if takeoverResult(result, err) {
+		control.mu.Lock()
+		if control.threadID == call.ThreadID && (call.liveFrame || control.runID == call.RunID) {
+			control.user = true
+		}
+		control.mu.Unlock()
+	}
 	if err != nil {
 		if target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID); resolveErr == nil {
 			var failure *targetToolPolicyError
@@ -204,6 +218,14 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 			}
 		}
 	}
+	if result.Safety != nil && (!result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel) {
+		for _, attachment := range result.Attachments {
+			if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
+				release.releaseTargetFrame(attachment.ResourceRef)
+			}
+		}
+		result.Attachments, result.frameBytes = nil, nil
+	}
 	if err == nil && len(result.Attachments) > 0 {
 		for _, attachment := range result.Attachments {
 			if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
@@ -215,6 +237,24 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 				}
 			}
 		}
+	}
+	if call.controlReturn && err == nil {
+		if result.TargetID != call.TargetID || result.Safety == nil {
+			return TargetToolResult{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "control_observation_unavailable"}
+		}
+		if result.Safety.Level != "routine" || !result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel {
+			return TargetToolResult{}, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+		}
+		if len(result.Attachments) != 1 || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil {
+			return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+		}
+		control.mu.Lock()
+		if control.threadID != call.ThreadID || control.runID != call.RunID {
+			control.mu.Unlock()
+			return TargetToolResult{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
+		}
+		control.user = false
+		control.mu.Unlock()
 	}
 	return result, err
 }

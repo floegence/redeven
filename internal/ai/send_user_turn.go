@@ -425,12 +425,14 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
 	}
 	interactionID := ""
+	var pendingInteraction flruntime.ThreadInteraction
 	for _, interaction := range view.Interactions {
 		if interaction.Kind != flruntime.ThreadInteractionInput || interaction.Resolved {
 			continue
 		}
 		if strings.TrimSpace(interaction.ID) == promptID || strings.TrimSpace(interaction.ToolCallID) == promptID {
 			interactionID = strings.TrimSpace(interaction.ID)
+			pendingInteraction = interaction
 			break
 		}
 	}
@@ -451,6 +453,9 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 			value = strings.TrimSpace(answer.Text)
 		}
 		answers[questionID] = value
+	}
+	if err := s.reobserveComputerControlReturn(ctx, view, pendingInteraction, answers); err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	result, err := typed.Respond(ctx, flruntime.RespondInput{
 		ThreadID: identity.ThreadID(threadID), InteractionID: interactionID,

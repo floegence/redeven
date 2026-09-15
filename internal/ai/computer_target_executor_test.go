@@ -221,3 +221,32 @@ func TestTargetToolResultPayloadCarriesAttachmentFrame(t *testing.T) {
 		t.Fatalf("payload frame=%#v", payload)
 	}
 }
+
+func TestPlaywrightSafetyResponseDropsImageBeforeDecoding(t *testing.T) {
+	executor := newPlaywrightProtocolFixture(t)
+	// Deliberately invalid image text proves the safety boundary runs before
+	// decode, storage, and model attachment construction, without logging bytes.
+	helper := `printf '{"type":"ready","protocol_version":1}\n'
+while IFS= read -r line; do
+ id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+ target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
+ printf '{"id":"%s","target_id":"%s","result":{"action_executed":true},"safety":{"level":"takeover","reason_codes":["login"],"safe_to_capture":false,"safe_to_send_to_model":false},"screenshot":{"mime":"image/png","data":"invalid"}}\n' "$id" "$target"
+done
+`
+	if err := os.WriteFile(executor.HelperPath, []byte(helper), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "fixture", ToolName: "browser.navigate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Safety == nil || result.Safety.Level != "takeover" || result.Result.(map[string]any)["action_executed"] != true {
+		t.Fatal("safety or effect outcome lost")
+	}
+	if len(result.Attachments) != 0 || len(result.frameBytes) != 0 || len(executor.media) != 0 {
+		t.Fatal("unsafe image retained")
+	}
+	if len(executor.clients) != 1 {
+		t.Fatal("safety pause retired healthy helper")
+	}
+}

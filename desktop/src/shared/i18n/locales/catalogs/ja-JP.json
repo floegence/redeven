@@ -348,7 +348,11 @@
       "toolApprovalApproveBatchAction": "保留中のツール承認 {count} 件をすべて許可",
       "restoredInputTitle": "復元後に保持された入力",
       "restoredInputDescription": "この入力は自動実行されません。再実行するには新しいタスクにコピーしてください。",
-      "restoredInputCopy": "入力をコピー"
+      "restoredInputCopy": "入力をコピー",
+      "computerTakeControl": "操作を引き継ぐ",
+      "computerReturnControl": "Flower に操作を戻す",
+      "computerControlHint": "画像上でマウスとキーボードを使ってログインしてください。パスワードや認証コードは会話に保存されません。",
+      "computerControlFailed": "操作状態を更新できませんでした。ページを確認してから再試行してください。"
     },
     "threadList": {
       "title": "会話",

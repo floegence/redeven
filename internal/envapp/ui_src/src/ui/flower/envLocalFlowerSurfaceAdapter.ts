@@ -917,6 +917,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
     loadComputerFrame: loadEnvComputerFrame,
+    inputComputerControl: async (input) => {
+      const init = await prepareLocalApiRequestInit({ method: 'POST', body: JSON.stringify(input) });
+      const response = await fetch('/_redeven_proxy/api/ai/computer/input', init);
+      if (!response.ok) throw new Error('Computer control unavailable.');
+      const frame = await response.blob();
+      if (frame.type !== 'image/png') throw new Error('Computer control returned invalid media.');
+      return frame;
+    },
     setComputerViewer: async (input) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/computer/view', { method: 'PUT', body: JSON.stringify(input) }); },
     resolveStorageGeneration: async () => {
       const result = await fetchLocalApiJSON<{ storage_generation: string }>('/_redeven_proxy/api/ai/storage-generation', { method: 'GET' });

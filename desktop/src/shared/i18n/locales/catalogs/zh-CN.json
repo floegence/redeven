@@ -348,7 +348,11 @@
       "toolApprovalApproveBatchAction": "允许全部 {count} 个待批准工具",
       "restoredInputTitle": "恢复后保留的输入",
       "restoredInputDescription": "此输入不会自动运行。再次运行前，请将其复制到新任务。",
-      "restoredInputCopy": "复制输入"
+      "restoredInputCopy": "复制输入",
+      "computerTakeControl": "接管操作",
+      "computerReturnControl": "交还给 Flower",
+      "computerControlHint": "在画面中使用鼠标和键盘完成登录。密码和验证码不会进入对话。",
+      "computerControlFailed": "未能更新控制状态。请检查页面后重试。"
     },
     "threadList": {
       "title": "对话",

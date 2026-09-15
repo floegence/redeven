@@ -9953,6 +9953,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/computer_use', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/computer/connect', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/computer/view', methods: ['PUT'] },
+  { path: '/_redeven_proxy/api/ai/computer/input', methods: ['POST'] },
   { path: RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
@@ -10370,7 +10371,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (error) {
     return { ok: false, error, failureKind: 'response' };
   }
-  if (RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path) && response.status === 200) {
+  if ((RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path) || path === '/_redeven_proxy/api/ai/computer/input') && response.status === 200) {
     return { ok: true, data: runtimeFlowerComputerFrame(response) };
   }
   const invalidJSONError = runtimeFlowerInvalidJSONError(response, parsed);

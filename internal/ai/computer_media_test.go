@@ -91,3 +91,40 @@ func TestComputerRuntimePersistsOnlyActionKeyframes(t *testing.T) {
 		t.Fatalf("runtime recovery: %v", err)
 	}
 }
+
+// A faulty adapter must not leak a sensitive image through storage or live viewing.
+type unsafeComputerFrameExecutor struct {
+	result   TargetToolResult
+	released bool
+}
+
+func (e *unsafeComputerFrameExecutor) ExecuteTargetTool(context.Context, TargetToolCall) (TargetToolResult, error) {
+	return e.result, nil
+}
+func (e *unsafeComputerFrameExecutor) releaseTargetFrame(string) { e.released = true }
+func TestComputerRuntimeDropsUnsafeFramesBeforeStorageOrViewing(t *testing.T) {
+	for _, live := range []bool{false, true} {
+		t.Run(fmt.Sprintf("live=%t", live), func(t *testing.T) {
+			body, attachment := computerFrameFixture(t)
+			executor := &unsafeComputerFrameExecutor{result: TargetToolResult{TargetID: "target", frameBytes: body, Attachments: []TargetToolAttachment{attachment}, Safety: &InteractionSafetyDecision{Level: "takeover"}, Result: map[string]any{"action_executed": true}}}
+			runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+			t.Cleanup(func() { _ = runtime.Close() })
+			result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "browser.navigate", liveFrame: live})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Attachments) != 0 || len(result.frameBytes) != 0 {
+				t.Fatal("unsafe frame escaped runtime")
+			}
+			if !executor.released {
+				t.Fatal("unsafe adapter frame retained")
+			}
+			if _, err := runtime.ResolveTargetToolAttachment(t.Context(), attachment.ResourceRef); err == nil {
+				t.Fatal("unsafe frame persisted")
+			}
+			if result.Result.(map[string]any)["action_executed"] != true {
+				t.Fatal("lost completed navigation outcome")
+			}
+		})
+	}
+}

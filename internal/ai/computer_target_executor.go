@@ -43,18 +43,21 @@ type playwrightTargetClient struct {
 }
 
 type playwrightTargetRequest struct {
-	ID       string         `json:"id"`
-	TargetID string         `json:"target_id"`
-	ToolName string         `json:"tool_name"`
-	Args     map[string]any `json:"args"`
+	UserControl   bool           `json:"user_control,omitempty"`
+	ReturnControl bool           `json:"return_control,omitempty"`
+	ID            string         `json:"id"`
+	TargetID      string         `json:"target_id"`
+	ToolName      string         `json:"tool_name"`
+	Args          map[string]any `json:"args"`
 }
 
 type playwrightTargetResponse struct {
-	ID         string         `json:"id"`
-	TargetID   string         `json:"target_id"`
-	Location   string         `json:"execution_location"`
-	Result     map[string]any `json:"result"`
-	Error      string         `json:"error,omitempty"`
+	Safety     *InteractionSafetyDecision `json:"safety,omitempty"`
+	ID         string                     `json:"id"`
+	TargetID   string                     `json:"target_id"`
+	Location   string                     `json:"execution_location"`
+	Result     map[string]any             `json:"result"`
+	Error      string                     `json:"error,omitempty"`
 	Screenshot *struct {
 		MIME string `json:"mime"`
 		Data string `json:"data"`
@@ -86,6 +89,17 @@ func (e *PlaywrightTargetExecutor) EnsureTargetReady(ctx context.Context, target
 }
 
 func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	return e.executeTargetTool(ctx, call, false)
+}
+
+// User input uses the same serialized browser exchange, but its frames and
+// inputs never enter model attachments, activity, or the executor media cache.
+func (e *PlaywrightTargetExecutor) ExecuteComputerUserInput(ctx context.Context, call TargetToolCall) ([]byte, error) {
+	result, err := e.executeTargetTool(ctx, call, true)
+	return result.frameBytes, err
+}
+
+func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call TargetToolCall, userControl bool) (TargetToolResult, error) {
 	if e == nil || strings.TrimSpace(e.HelperPath) == "" {
 		return TargetToolResult{}, errors.New("browser target helper is unavailable")
 	}
@@ -125,7 +139,7 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	request := playwrightTargetRequest{ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args}
+	request := playwrightTargetRequest{ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return TargetToolResult{}, err
@@ -170,9 +184,13 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 		healthy = true
 		return TargetToolResult{}, computerTargetFailure(call, response.Error)
 	}
-	result := TargetToolResult{TargetID: targetID, ExecutionLocation: response.Location, Result: response.Result}
+	result := TargetToolResult{TargetID: targetID, ExecutionLocation: response.Location, Result: response.Result, Safety: response.Safety}
 	if response.Result != nil {
 		result.ActionSummary = strings.TrimSpace(anyToString(response.Result["summary"]))
+	}
+	if !userControl && result.Safety != nil && (!result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel) {
+		healthy = true
+		return result, nil
 	}
 	if response.Screenshot != nil && strings.TrimSpace(response.Screenshot.Data) != "" {
 		body, err := base64.StdEncoding.DecodeString(response.Screenshot.Data)
@@ -181,9 +199,13 @@ func (e *PlaywrightTargetExecutor) ExecuteTargetTool(ctx context.Context, call T
 		}
 		sum := sha256.Sum256(body)
 		ref := "computer://" + targetID + "/" + hex.EncodeToString(sum[:])
+		result.frameBytes = body
+		if userControl {
+			healthy = true
+			return result, nil
+		}
 		e.mediaMu.Lock()
 		e.media[ref] = append([]byte(nil), body...)
-		result.frameBytes = body
 		e.mediaMu.Unlock()
 		mime := strings.TrimSpace(response.Screenshot.MIME)
 		if mime == "" {

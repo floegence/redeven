@@ -14,13 +14,21 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Published Floret v7.11.2 applies sanitized tool Activity inside the existing
+Published Floret v7.12.0 applies sanitized tool Activity inside the existing
 thread actor using exact thread, turn, run, and tool-call identity. Validated
 calls publish description and command while pending; dispatch alone marks
 running, and results settle without waiting for output or the full turn.
 Canonical loading cannot overwrite newer live tool facts during execution.
 Redeven consumes the same current view for HTTP and workspace subscriptions;
 it does not cache raw tool arguments or own another tool lifecycle.
+
+A completed tool may request non-secret input through published
+`tools.Result.InputRequired`. Floret settles the batch and persists the input
+interaction before another provider request. Redeven uses this for Computer Use
+safety pauses; [the takeover contract](computer-use-takeover.md) owns host control
+and re-observation requirements. Restart preserves the same wait and never
+replays its completed tool. Version 12 appends the upstream-owned migration for
+this contract; Redeven does not inspect or migrate Floret storage.
 
 One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced, canceled, or terminal token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
 
@@ -40,7 +48,7 @@ Restart hydration restores accepted input, queue items, unresolved interactions,
 logical retry input, and canonical outputs, then resumes provider-safe work
 from the last canonical boundary. Before the Host becomes available, every
 legacy dispatching, retrying, or unknown effect is closed in one terminal failed
-Turn. Floret owns the permanent domain migration lineage from v2 through v9.
+Turn. Floret owns the permanent domain migration lineage from v2 through v12.
 Version 6 stores the manifest, root index, threads, entries, artifacts, and
 supporting records separately, so one child admission writes only affected
 records. Version 7 restores RunID, converges unknown effects, and drops

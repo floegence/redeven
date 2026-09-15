@@ -6,6 +6,7 @@ import (
 
 	flidentity "github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
+	fltools "github.com/floegence/floret/v7/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -106,6 +107,8 @@ type ToolCall struct {
 }
 
 type ToolResult struct {
+	inputRequired *fltools.InputRequest
+
 	ToolID                string             `json:"tool_id,omitempty"`
 	ToolName              string             `json:"tool_name,omitempty"`
 	Status                string             `json:"status"`

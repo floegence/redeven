@@ -513,6 +513,11 @@ func (s *Service) startFlowerRuntimeViewPump() {
 			if threadID == "" || s.threadsDB == nil {
 				continue
 			}
+			if current.Activity == flruntime.ThreadActivityIdle {
+				if computer, ok := s.targetToolExecutor.(*ComputerUseRuntime); ok {
+					computer.releaseComputerControl(threadID, string(current.RunID))
+				}
+			}
 			s.reconcileAIWorkloadLeases(threadID, current)
 			lookupCtx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
 			endpointID, parentThreadID, lookupErr := s.resolveFlowerRuntimeRoute(lookupCtx, threadID)

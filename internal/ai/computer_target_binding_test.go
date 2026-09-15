@@ -129,8 +129,14 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 				ctx, cancel = context.WithCancel(ctx)
 				cancel()
 			}
-			if _, err := r.execTargetTool(ctx, "rejected", "computer.click", map[string]any{"target": "desktop.screen", "x": 10, "y": 10}); err == nil {
-				t.Fatal("rejected target action executed")
+			result, err := r.execTargetTool(ctx, "rejected", "computer.click", map[string]any{"target": "desktop.screen", "x": 10, "y": 10})
+			if reason == "takeover" {
+				paused, ok := result.(targetToolExecution)
+				if err != nil || !ok || paused.inputRequired == nil {
+					t.Fatalf("takeover did not request canonical input: %v", err)
+				}
+			} else if err == nil {
+				t.Fatal("rejected target action did not fail")
 			}
 			if len(executor.calls) != 1 {
 				t.Fatalf("rejection executed %d actions", len(executor.calls))
