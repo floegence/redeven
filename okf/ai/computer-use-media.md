@@ -72,6 +72,10 @@ Cleanup waits for exact container-ID absence because Docker stop and removal
 acknowledgements can precede automatic deletion. Inventory failure or timeout
 fails the run. The report retains the Runtime, computer bundle, and plugin
 verification descriptor hashes after temporary binaries are removed.
+An optional `REDEVEN_NODE_ARCHIVE` reuses a downloaded Linux archive; it must
+match the current `.node-version`, architecture, and official SHA-256 before
+execution. Network downloads are bounded and unused source-package indexes
+are excluded from this binary-only fixture environment.
 Its scope includes managed-browser actions, X11 GUI control effects, per-turn
 decoded live frames, hidden-viewer persistence, settings and login handback with
 rapid ASCII and native Chromium IME submission. It does not qualify native

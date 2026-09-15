@@ -65,6 +65,11 @@ COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
 GOWORK=off GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 go -C "$ROOT_DIR" build -ldflags "-X main.Version=v0.0.0-dev -X main.Commit=$COMMIT" -o "$WORK/bundle/redeven" ./cmd/redeven
 REDEVEN_FLOWER_SMOKE_ROOT=/qualification node "$SCRIPT_DIR/smoke_flower_deepseek.mjs" prepare-provider "$SOURCE_STATE" "$WORK/seed" "$REPORT/provider.json"
 NODE_VERSION=$(cat "$ROOT_DIR/.node-version")
+NODE_ARCHIVE_OVERRIDE=
+if [[ -n "${REDEVEN_NODE_ARCHIVE:-}" ]]; then
+  cp "$REDEVEN_NODE_ARCHIVE" "$WORK/workspace/node-archive.tar.gz"
+  NODE_ARCHIVE_OVERRIDE=/qualification/workspace/node-archive.tar.gz
+fi
 CID=$(docker run --rm -d --label "redeven.qualification=$WORK" --shm-size=2g \
   -p 127.0.0.1::3000 -e TZ=Asia/Shanghai \
   -v "$WORK:/qualification" -v "$ROOT_DIR:/source:ro" "$IMAGE")
@@ -74,13 +79,15 @@ const fs = require('node:fs'); const [file, commit, container_id, image, port] =
 fs.writeFileSync(file, JSON.stringify({ commit, container_id, image, port: Number(port), state: '/config/qualification-state', gowork: 'off', host_input_used: false }, null, 2));
 JS
 echo "Linux Webtop: http://127.0.0.1:$PORT"
-docker exec -e "NODE_VERSION=$NODE_VERSION" -e "NODE_ARCH=$ARCH" "$CID" bash -ceu '
-  apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates libnss3-tools openbox xdotool imagemagick xauth x11-utils xterm python3-tk
+docker exec -e "NODE_VERSION=$NODE_VERSION" -e "NODE_ARCH=$ARCH" -e "NODE_ARCHIVE_OVERRIDE=$NODE_ARCHIVE_OVERRIDE" "$CID" bash -ceu '
+  sed -i "/^deb-src /d" /etc/apt/sources.list
+  apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=1 update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=1 install -y -qq curl ca-certificates libnss3-tools openbox xdotool imagemagick xauth x11-utils xterm python3-tk
   archive="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz"
   cd /tmp
-  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/$archive" -o "$archive"
-  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" -o node-sums
+  if [[ -n "$NODE_ARCHIVE_OVERRIDE" ]]; then cp "$NODE_ARCHIVE_OVERRIDE" "$archive";
+  else curl -fsSL --connect-timeout 15 --max-time 180 "https://nodejs.org/dist/v${NODE_VERSION}/$archive" -o "$archive"; fi
+  curl -fsSL --connect-timeout 15 --max-time 60 "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" -o node-sums
   grep " $archive\$" node-sums | sha256sum -c -
   tar -xzf "$archive" -C /opt
   export PATH="/opt/node-v${NODE_VERSION}-linux-${NODE_ARCH}/bin:$PATH"
