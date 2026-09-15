@@ -49,6 +49,7 @@ export default function FlowerInputChoices(props: Readonly<{
             description={choice().description}
             class={cn(
               'flower-input-request-choice',
+              !!choice().description?.trim() && 'flower-input-request-choice-described',
               props.selectedChoiceID === choice().choice_id && 'flower-input-request-choice-selected',
             )}
             aria-checked={props.selectedChoiceID === choice().choice_id}

@@ -13,7 +13,7 @@ function readFile(filePath: string): string {
 }
 
 function cssRule(css: string, selector: string): string {
-  const start = css.indexOf(`${selector} {`);
+  const start = css.indexOf(`\n${selector} {`);
   expect(start).toBeGreaterThanOrEqual(0);
   const end = css.indexOf('\n}', start);
   expect(end).toBeGreaterThan(start);

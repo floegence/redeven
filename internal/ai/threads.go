@@ -339,10 +339,18 @@ func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUse
 		containsSecret := false
 		for _, source := range interaction.Input.Questions {
 			choices := make([]RequestUserInputChoice, 0, len(source.Options))
-			for _, option := range source.Options {
-				option = strings.TrimSpace(option)
-				if option != "" {
-					choices = append(choices, RequestUserInputChoice{ChoiceID: option, Label: option, Kind: "choice"})
+			if len(source.Choices) > 0 {
+				for _, choice := range source.Choices {
+					// This existing DTO encodes the submitted value as ChoiceID.
+					// Original display identity remains available on Current.
+					choices = append(choices, RequestUserInputChoice{ChoiceID: choice.Value, Label: choice.Label, Description: choice.Description, Kind: "choice"})
+				}
+			} else {
+				for _, option := range source.Options {
+					option = strings.TrimSpace(option)
+					if option != "" {
+						choices = append(choices, RequestUserInputChoice{ChoiceID: option, Label: option, Kind: "choice"})
+					}
 				}
 			}
 			mode := strings.TrimSpace(source.Kind)
@@ -350,8 +358,8 @@ func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUse
 				mode = "write"
 			}
 			questions = append(questions, RequestUserInputQuestion{
-				ID: source.ID, Header: source.Prompt, Question: source.Prompt, IsSecret: source.Secret,
-				ResponseMode: mode, WriteLabel: source.WriteLabel, Choices: choices,
+				ID: source.ID, Header: source.Header, Question: source.Prompt, IsSecret: source.Secret,
+				ResponseMode: mode, WriteLabel: source.WriteLabel, WritePlaceholder: source.WritePlaceholder, ChoicesExhaustive: source.ChoicesExhaustive, Choices: choices,
 			})
 			containsSecret = containsSecret || source.Secret
 		}

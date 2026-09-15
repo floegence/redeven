@@ -14,13 +14,22 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Published Floret v7.12.2 applies sanitized tool Activity inside the existing
+Published Floret v7.13.0 applies sanitized tool Activity inside the existing
 thread actor using exact thread, turn, run, and tool-call identity. Validated
 calls publish description and command while pending; dispatch alone marks
 running, and results settle without waiting for output or the full turn.
 Canonical loading cannot overwrite newer live tool facts during execution.
 Redeven consumes the same current view for HTTP and workspace subscriptions;
 it does not cache raw tool arguments or own another tool lifecycle.
+
+Ask User presentation preserves optional headers, placeholders, declared choice
+exhaustiveness, and rich choices across live views, summaries, restart, and
+history. Each rich choice retains its original identifier and established answer
+value. Redeven maps the explicit mode and submits that value; old string-only
+options remain valid. The existing control-signal projection owns these facts,
+without new tables or host journal access. [Decision presentation](../ui/flower-approval-context.md)
+owns layout and semantic copy. Prompt guidance requests concise, non-duplicated
+content in the user's language and descriptions only for real choice differences.
 
 A completed tool may request non-secret input through published
 `tools.Result.InputRequired`. Floret settles the batch and persists the input

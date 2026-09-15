@@ -942,6 +942,7 @@ function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
             const choice = recordValue(choiceValue) ?? {};
             return {
               choice_id: trim(choice.choice_id),
+              ...(typeof choice.value === 'string' ? { value: choice.value } : {}),
               label: trim(choice.label),
               ...(trim(choice.description) ? { description: trim(choice.description) } : {}),
               kind: 'select' as const,
@@ -958,7 +959,7 @@ function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
           }).filter((choice) => choice.choice_id && choice.label),
         } : {}),
       };
-    }).filter((question) => question.id && question.header && question.question),
+    }).filter((question) => question.id && question.question),
     ...(trim(record.public_summary) ? { public_summary: trim(record.public_summary) } : {}),
     ...(record.contains_secret !== undefined ? { contains_secret: Boolean(record.contains_secret) } : {}),
   };

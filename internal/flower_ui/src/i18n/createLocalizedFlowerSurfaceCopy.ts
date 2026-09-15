@@ -282,7 +282,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       computerControlHint: t(i18n, k('chat.computerControlHint')),
       computerControlFailed: t(i18n, k('chat.computerControlFailed')),
       inputRequestTitle: t(i18n, k('chat.inputRequestTitle')),
-      inputRequestDescription: t(i18n, k('chat.inputRequestDescription')),
       inputRequestSubmit: t(i18n, k('chat.inputRequestSubmit')),
       inputRequestRetry: t(i18n, k('chat.inputRequestRetry')),
       inputRequestAnswerRequired: t(i18n, k('chat.inputRequestAnswerRequired')),

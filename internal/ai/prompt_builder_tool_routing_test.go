@@ -201,6 +201,9 @@ func TestBuildLayeredSystemPromptRequiresAskUserForBlockingQuestions(t *testing.
 	assertPromptContains(t, prompt, "Do not end the Turn with a prose question")
 	assertPromptContains(t, prompt, "A natural stop is valid only when the Turn does not require another user answer")
 	assertPromptNotContains(t, prompt, "prefer ask_user over freeform markdown option lists")
+	assertPromptContains(t, prompt, "in the user's conversation language")
+	assertPromptContains(t, prompt, "short topic header and a direct, complete question")
+	assertPromptContains(t, prompt, "only to explain a real difference or consequence")
 }
 
 func TestBuildLayeredSystemPrompt_ExcludesMutableTurnFacts(t *testing.T) {

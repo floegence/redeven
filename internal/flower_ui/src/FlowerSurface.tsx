@@ -6121,7 +6121,6 @@ webSearch: model.web_search,
   const chatCopyValue = (
     key: 'inputRequestTitle'
       | 'readOnlyComposerLabel'
-      | 'inputRequestDescription'
       | 'inputRequestSubmit'
       | 'inputRequestRetry'
       | 'inputRequestAnswerRequired'
@@ -7212,16 +7211,17 @@ webSearch: model.web_search,
   const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
     const draft = questionDraft(question.id);
     const choiceID = trimString(draft.choice_id);
+    const choiceValue = question.choices?.find((choice) => choice.choice_id === choiceID)?.value ?? choiceID;
     const text = trimString(draft.text);
     const mode = questionMode(question);
 
     if (mode === 'write') return text ? { text } : null;
-    if (mode === 'select') return choiceID ? { choice_id: choiceID } : null;
+    if (mode === 'select') return choiceID ? { choice_id: choiceValue } : null;
     if (mode === 'select_or_write' && draft.answer_kind === 'custom' && text) {
       return { text };
     }
     if (mode === 'select_or_write' && draft.answer_kind === 'choice' && choiceID) {
-      return { choice_id: choiceID };
+      return { choice_id: choiceValue };
     }
     return null;
   };
@@ -7414,9 +7414,6 @@ webSearch: model.web_search,
             </span>
             <div class="flower-input-request-heading-copy">
               <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
-              <Show when={!composerSurface}>
-                <div class="flower-input-request-heading-description">{chatCopyValue('inputRequestDescription', 'Answer this question to continue.')}</div>
-              </Show>
             </div>
           </div>
           <div class="flower-input-request-questions">
@@ -7429,7 +7426,7 @@ webSearch: model.web_search,
                 const showCustomChoice = () => questionMode(question()) === 'select_or_write';
                 const summary = () => trimString(inputRequest().public_summary);
                 const questionText = () => trimString(question().question);
-                const showSummary = () => summary().length > 0 && summary() !== questionText() && question().id === inputRequest().questions[0]?.id;
+                const showSummary = () => summary().length > 0 && summary() !== questionText() && summary() !== trimString(question().header) && question().id === inputRequest().questions[0]?.id;
                 return (
                   <div
                     class={cn(
@@ -7438,13 +7435,11 @@ webSearch: model.web_search,
                     )}
                   >
                     <div class="flower-input-request-question-copy">
-                      <Show when={!composerSurface && question().header !== question().question}>
+                      <Show when={trimString(question().header) && question().header !== question().question}>
                         <div class="flower-input-request-question-header">{question().header}</div>
                       </Show>
                       <div class="flower-input-request-question-text">{question().question}</div>
-                      <Show when={showSummary()} fallback={<Show when={composerSurface}>
-                        <div class="flower-input-request-description">{chatCopyValue('inputRequestDescription', 'Answer this question to continue.')}</div>
-                      </Show>}>
+                      <Show when={showSummary()}>
                         <div class="flower-input-request-description">{summary()}</div>
                       </Show>
                     </div>
@@ -7535,77 +7530,6 @@ webSearch: model.web_search,
     );
   };
 
-  const approvalEffectLabel = (raw: string): string => {
-    const value = trimString(raw).toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
-    switch (value) {
-      case 'read':
-      case 'reads':
-      case 'file_read':
-      case 'read_file':
-      case 'read_files':
-      case 'filesystem_read':
-        return 'Reads files';
-      case 'write':
-      case 'writes':
-      case 'file_write':
-      case 'write_file':
-      case 'filesystem_write':
-      case 'mutation':
-      case 'mutating':
-        return 'Writes files';
-      case 'network':
-      case 'network_read':
-      case 'open_world':
-      case 'web':
-        return 'Uses network';
-      case 'shell':
-      case 'terminal':
-      case 'command':
-      case 'process':
-        return 'Runs shell';
-      default:
-        return '';
-    }
-  };
-
-  const approvalFlagLabel = (raw: string): string => {
-    const value = trimString(raw).toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
-    switch (value) {
-      case 'destructive':
-        return 'May delete or overwrite';
-      case 'open_world':
-        return 'May reach outside the workspace';
-      case 'read_only':
-        return 'Read only';
-      default:
-        return '';
-    }
-  };
-
-  const approvalVisibleEffects = (action: FlowerApprovalAction): readonly string[] => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const raw of action.summary.effects ?? []) {
-      const label = approvalEffectLabel(raw);
-      if (!label || seen.has(label)) continue;
-      seen.add(label);
-      out.push(label);
-    }
-    return out;
-  };
-
-  const approvalVisibleFlags = (action: FlowerApprovalAction): readonly string[] => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const raw of action.summary.flags ?? []) {
-      const label = approvalFlagLabel(raw);
-      if (!label || seen.has(label)) continue;
-      seen.add(label);
-      out.push(label);
-    }
-    return out;
-  };
-
   const approvalActionCard = (
     actionID: string,
     action: Accessor<FlowerApprovalAction>,
@@ -7634,13 +7558,11 @@ webSearch: model.web_search,
     ));
     const subtaskLabel = createMemo(() => scopedThreadID() ? copy().chat.toolApprovalSubtaskSuffix(scopedThreadID()) : '');
     const commandText = createMemo(() => trimString(presentation().command));
-    const visibleEffects = createMemo(() => approvalVisibleEffects(action()));
-    const visibleFlags = createMemo(() => approvalVisibleFlags(action()));
     const commandCopyKey = `approval:${actionID}:command`;
     const commandCopied = () => copiedApprovalAction() === commandCopyKey;
     const operationKind = createMemo<'file' | 'terminal' | 'network' | 'other'>(() => {
       const toolName = trimString(action().tool_name).toLowerCase();
-      if (toolName === 'apply_patch' || toolName.includes('file.write') || toolName.includes('file.edit')) return 'file';
+      if (['apply_patch', 'file.write', 'file.edit'].includes(toolName)) return 'file';
       if (toolName.includes('terminal') || commandText()) return 'terminal';
       if (toolName.includes('network') || toolName.includes('http') || toolName.includes('web')) return 'network';
       return 'other';
@@ -7665,9 +7587,11 @@ webSearch: model.web_search,
     const statusCopy = createMemo(() => submitting() ? '' : !canDecide() ? unavailableCopy() : '');
     const describedBy = createMemo(() => statusCopy() ? statusID : '');
     const riskNote = () => {
+      const declaredRisk = trimString(action().summary.risk);
+      if (declaredRisk) return declaredRisk;
       const notes: string[] = [];
-      if (visibleFlags().includes('May reach outside the workspace')) notes.push(copy().chat.toolApprovalOutsideWorkspaceRisk);
-      if (visibleEffects().includes('Writes files')) notes.push(copy().chat.toolApprovalWritesFilesRisk);
+      if (action().summary.flags?.includes('open_world')) notes.push(copy().chat.toolApprovalOutsideWorkspaceRisk);
+      if (operationKind() === 'file' && action().summary.effects?.includes('write')) notes.push(copy().chat.toolApprovalWritesFilesRisk);
       return notes.length > 0 ? notes.join(' ') : '';
     };
     return (
@@ -7699,6 +7623,9 @@ webSearch: model.web_search,
                 </button>
               </Show>
             </div>
+          </Show>
+          <Show when={singleComposer}>
+            <div class="flower-approval-eyebrow">{copy().chat.toolApprovalRequired}</div>
           </Show>
           <div class="flower-approval-operation" data-flower-approval-operation-kind={operationKind()}>
             <span class="flower-approval-operation-icon" aria-hidden="true">{operationIcon()}</span>
@@ -11080,7 +11007,7 @@ webSearch: model.web_search,
                 {queuedTurnsDock()}
               </Show>
               <div
-                data-floe-input-surface={companionCollapsed() ? undefined : ''}
+                data-floe-input-surface={!companionCollapsed() && (bottomActionMode() === 'chat' || (bottomActionMode() === 'input_request' && activeInputQuestionUsesTextEditor())) ? '' : undefined}
                 data-floe-surface={companionCollapsed() ? 'flat' : 'inset'}
                 class={cn(
                   'flower-composer p-3',
@@ -11090,7 +11017,7 @@ webSearch: model.web_search,
                 data-flower-bottom-mode={bottomActionMode()}
                 data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
                 data-flower-attachment-drag={attachmentDragActive() ? 'true' : undefined}
-                data-flower-text-entry={!selectedComposerApprovalDisplayAction() && !composerTextareaDisabled() ? 'true' : undefined}
+                data-flower-text-entry={(bottomActionMode() === 'chat' || (bottomActionMode() === 'input_request' && activeInputQuestionUsesTextEditor())) && !composerTextareaDisabled() ? 'true' : undefined}
                 onPointerDown={focusComposerFromBlankArea}
                 onDragEnter={(event) => {
                   if (!event.dataTransfer?.types.includes('Files')) return;
@@ -11275,15 +11202,6 @@ webSearch: model.web_search,
                             </div>
                           </>
                         }>
-                          <div class="flower-approval-queue-header flower-approval-single-header">
-                            <div class="flower-approval-queue-heading">
-                              <span class="flower-decision-state-dot" aria-hidden="true" />
-                              <div>
-                                <div class="flower-approval-eyebrow">{copy().chat.toolApprovalRequired}</div>
-                                <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
-                              </div>
-                            </div>
-                          </div>
                           <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={selectedComposerApprovalActions()} identity={(action) => JSON.stringify([selectedThreadID(), action.turn_id, action.run_id, action.action_id])}>
                             {(approval) => approvalActionCard(approval().action_id, approval, { surface: 'composer', layout: 'single' })}
                           </FlowerKeyedList>

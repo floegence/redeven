@@ -315,6 +315,7 @@ function runtimeApprovalActions(
         label: trim(approval.label) || trim(approval.tool_name),
         ...(trim(approval.description) ? { description: trim(approval.description) } : {}),
         ...(trim(approval.command) ? { command: trim(approval.command) } : {}),
+        ...(trim(approval.risk) ? { risk: trim(approval.risk) } : {}),
         ...(approval.effects?.length ? { effects: [...approval.effects] } : {}),
         ...(approval.targets?.length ? {
           targets: approval.targets.map(approvalTarget).filter((target) => target !== null),
@@ -338,13 +339,10 @@ function runtimeInputRequest(
   }
   const questions = rawQuestions as NonNullable<FlowerRuntimeInteraction['input']>['questions'];
   for (const question of questions) {
-    if (!trim(question.id) || !trim(question.prompt) || !trim(question.kind)) {
+    if (!trim(question.id) || !trim(question.prompt) || !['select', 'write', 'select_or_write'].includes(question.kind)) {
       throw new Error('Flower contract error: typed current input question requires id, prompt, and kind.');
     }
   }
-  const reasonCode = questions
-    .map((question) => trim(question.kind))
-    .find(Boolean);
   return {
     prompt_id: trim(interaction.id),
     message_id: identity.turnID,
@@ -355,22 +353,22 @@ function runtimeInputRequest(
       const options = (question.options ?? []).map(trim).filter(Boolean);
       return {
         id: trim(question.id),
-        header: trim(question.prompt),
+        header: trim(question.header),
         question: trim(question.prompt),
         is_secret: question.secret === true,
-        response_mode: options.length > 0
-          ? (trim(question.write_label) ? 'select_or_write' as const : 'select' as const)
-          : 'write' as const,
-        choices_exhaustive: options.length > 0 && !trim(question.write_label),
+        response_mode: question.kind as 'select' | 'write' | 'select_or_write',
+        ...(question.choices_exhaustive !== undefined ? { choices_exhaustive: question.choices_exhaustive } : {}),
         ...(trim(question.write_label) ? { write_label: trim(question.write_label) } : {}),
-        choices: options.map((option) => ({
-          choice_id: option,
-          label: option,
+        ...(trim(question.write_placeholder) ? { write_placeholder: trim(question.write_placeholder) } : {}),
+        choices: question.choices?.length ? question.choices.map((choice) => ({
+          choice_id: trim(choice.choice_id) || choice.value,
+          value: choice.value,
+          label: choice.label,
+          ...(trim(choice.description) ? { description: trim(choice.description) } : {}),
           kind: 'select' as const,
-        })),
+        })) : options.map((option) => ({ choice_id: option, label: option, kind: 'select' as const })),
       };
     }),
-    ...(reasonCode ? { reason_code: reasonCode } : {}),
     public_summary: trim(interaction.input.summary),
     contains_secret: questions.some((question) => question.secret === true),
   };
