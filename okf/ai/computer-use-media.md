@@ -115,6 +115,12 @@ cleanup must all match before that scope passes. A focused report cannot satisfy
 the complete Linux matrix. Missing evidence, provider rejection, retained
 programs or ports, and private-data exposure fail closed even if earlier UI
 steps succeeded. The summary names the other product scopes it does not qualify.
+The observing proxy drains response streams through an awaited pipeline. An
+upstream disconnect propagates to Flower and records a sanitized interruption;
+it must not crash the harness before thread evidence is captured. Downstream
+user cancellation closes the upstream body without pretending the provider
+failed. HTTP 200 alone does not prove a completed stream, and the proxy never
+replays a request to turn transport failure into success.
 
 # Evidence
 
