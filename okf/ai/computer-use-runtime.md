@@ -108,8 +108,12 @@ limitations must not be reported as completed platform or safety support.
 The current Chrome connection form is an advanced CDP endpoint entry, not an
 extension-based tab authorization flow. Only a successful readiness handshake
 publishes a replacement executor. Failed connections preserve the existing
-session; successful replacements reap the previous helper. Connect and shutdown
-are serialized, and a closed runtime rejects new connections. Flower retains
+session; successful replacements reap the previous helper. Replacement shares
+the target gate with readiness and actions and rejects `TARGET_NOT_READY` with
+`target_in_use` while an action, handshake, or canonical thread lease owns the
+target, including private user control. A queued action resolves its adapter
+after acquiring that gate. Connect and shutdown are serialized, and a closed
+runtime rejects new connections and readiness attempts. Flower retains
 failed input, reports a localized error without raw transport secrets, and shows
 a ready result only for a ready descriptor. Both shipped locale catalogs carry
 the same explicit messages. Disconnect, revocation and ordinary extension setup

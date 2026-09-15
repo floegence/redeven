@@ -148,3 +148,107 @@ func TestComputerRuntimeConnectReapsReplacementAndRejectsAfterClose(t *testing.T
 		t.Fatal("closed runtime started another browser")
 	}
 }
+
+func TestComputerRuntimeConnectCannotReplaceLeasedBrowser(t *testing.T) {
+	for _, private := range []bool{false, true} {
+		runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":1}`)
+		first, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9222")
+		if err != nil {
+			t.Fatal(err)
+		}
+		original := runtime.executors[first.ID].(*PlaywrightTargetExecutor)
+		owner := TargetToolCall{TargetID: first.ID, ThreadID: "owner", TurnID: "turn", RunID: "run"}
+		control, unlock, err := runtime.acquireComputerControl(t.Context(), owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		control.mu.Lock()
+		control.user = private
+		control.mu.Unlock()
+		unlock()
+		_, err = runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9223")
+		var startup *TargetStartupError
+		if !errors.As(err, &startup) || startup.Code != "TARGET_NOT_READY" || startup.Reason != "target_in_use" {
+			t.Fatalf("private=%v: replacement must reject leased target: %v", private, err)
+		}
+		if runtime.executors[first.ID] != original || original.closed {
+			t.Fatal("connection changed the running turn's browser")
+		}
+		runtime.releaseComputerControl(owner.ThreadID, owner.RunID)
+		if _, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9223"); err != nil {
+			t.Fatalf("released target could not reconnect: %v", err)
+		}
+	}
+}
+
+func TestComputerRuntimeConnectCannotReplaceAnInFlightTarget(t *testing.T) {
+	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":1}`)
+	first, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := runtime.executors[first.ID]
+	control := runtime.controlForTarget(first.ID)
+	control.gate <- struct{}{}
+	defer func() { <-control.gate }()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	_, err = runtime.ConnectBrowser(ctx, "http://127.0.0.1:9223")
+	var startup *TargetStartupError
+	if !errors.As(err, &startup) || startup.Reason != "target_in_use" {
+		t.Fatalf("in-flight target replacement was not rejected: %v", err)
+	}
+	if runtime.executors[first.ID] != original {
+		t.Fatal("in-flight executor was replaced")
+	}
+}
+
+type blockedReadinessExecutor struct {
+	serialComputerExecutor
+}
+
+func (e *blockedReadinessExecutor) EnsureTargetReady(ctx context.Context, _ string) error {
+	_, err := e.ExecuteTargetTool(ctx, TargetToolCall{})
+	return err
+}
+
+func TestComputerRuntimeReadinessExcludesReplacement(t *testing.T) {
+	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":1}`)
+	target := TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", State: "starting"}
+	if err := runtime.registry.Register(target); err != nil {
+		t.Fatal(err)
+	}
+	executor := &blockedReadinessExecutor{serialComputerExecutor{entered: make(chan struct{}, 1), leave: make(chan struct{})}}
+	runtime.executors[target.ID] = executor
+	prepared := make(chan error, 1)
+	go func() {
+		_, err := runtime.PrepareTarget(t.Context(), target)
+		prepared <- err
+	}()
+	<-executor.entered
+	_, err := runtime.ConnectBrowser(t.Context(), "http://127.0.0.1:9222")
+	close(executor.leave)
+	if prepareErr := <-prepared; prepareErr != nil {
+		t.Fatal(prepareErr)
+	}
+	var startup *TargetStartupError
+	if !errors.As(err, &startup) || startup.Reason != "target_in_use" {
+		t.Fatalf("readiness allowed concurrent replacement: %v", err)
+	}
+	if runtime.executors[target.ID] != executor {
+		t.Fatal("readiness published a retired adapter's state")
+	}
+}
+
+func TestComputerRuntimeClosedReadinessCannotRestartHelper(t *testing.T) {
+	runtime, executor := runtimeFixture(t, `{"type":"ready","protocol_version":1}`)
+	target, _ := runtime.ResolveTarget(t.Context(), "current")
+	if err := runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runtime.PrepareTarget(t.Context(), target)
+	var startup *TargetStartupError
+	if !errors.As(err, &startup) || startup.Reason != "runtime_closed" || len(executor.clients) != 0 {
+		t.Fatalf("closed readiness: %v", err)
+	}
+}

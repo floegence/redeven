@@ -55,6 +55,24 @@ func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) 
 	if !ok || managed == nil {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_adapter_unavailable"}
 	}
+	// Replacing an adapter changes the resource behind every bound thread. Use
+	// the same gate as actions and readiness, and refuse an active turn's lease
+	// even between actions or while the user has private control.
+	control := r.controlForTarget("browser-connected")
+	select {
+	case <-ctx.Done():
+		return TargetDescriptor{}, ctx.Err()
+	case control.gate <- struct{}{}:
+		defer func() { <-control.gate }()
+	default:
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "target_in_use"}
+	}
+	control.mu.Lock()
+	inUse := control.threadID != "" || control.user
+	control.mu.Unlock()
+	if inUse {
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "target_in_use"}
+	}
 	connected := NewPlaywrightTargetExecutor(managed.NodeBinary, managed.HelperPath, managed.ProfileDir)
 	connected.CDPURL = cdpURL
 	target := TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "starting", PermissionState: "not_checked"}
@@ -75,9 +93,15 @@ func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) 
 	target.Ready, target.State, target.PermissionState = true, "ready", "granted"
 	r.mu.Lock()
 	old := r.executors[target.ID]
-	r.executors[target.ID] = connected
 	err = r.registry.Register(target)
+	if err == nil {
+		r.executors[target.ID] = connected
+	}
 	r.mu.Unlock()
+	if err != nil {
+		_ = connected.Close()
+		return TargetDescriptor{}, err
+	}
 	if closer, ok := old.(interface{ Close() error }); ok {
 		_ = closer.Close()
 	}
@@ -149,9 +173,20 @@ func (r *ComputerUseRuntime) BindThreadTarget(ctx context.Context, threadID, tar
 	return bindings.SetComputerTarget(ctx, threadID, targetID)
 }
 func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
+	control := r.controlForTarget(target.ID)
+	select {
+	case <-ctx.Done():
+		return target, ctx.Err()
+	case control.gate <- struct{}{}:
+	}
+	defer func() { <-control.gate }()
 	r.mu.RLock()
 	executor := r.executors[target.ID]
+	closed := r.closed
 	r.mu.RUnlock()
+	if closed {
+		return target, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
+	}
 	if executor == nil {
 		return target, nil
 	}
@@ -178,23 +213,30 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 			}
 		}
 	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return target, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
+	}
 	if updateErr := r.registry.Update(target); updateErr != nil {
 		return target, updateErr
 	}
 	return target, nil
 }
 func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	control, unlock, err := r.acquireComputerControl(ctx, call)
+	if err != nil {
+		return TargetToolResult{}, err
+	}
+	defer unlock()
+	// Look up only after acquiring the gate: a queued action must use the
+	// admitted adapter, not one retired while it was waiting for control.
 	r.mu.RLock()
 	executor := r.executors[strings.TrimSpace(call.TargetID)]
 	r.mu.RUnlock()
 	if executor == nil {
 		return TargetToolResult{}, &TargetStartupError{Code: "TARGET_EXECUTOR_UNAVAILABLE", Reason: "target_adapter_missing"}
 	}
-	control, unlock, err := r.acquireComputerControl(ctx, call)
-	if err != nil {
-		return TargetToolResult{}, err
-	}
-	defer unlock()
 	r.releasePreviousComputerTarget(call)
 	captureCtx := ctx
 	if call.liveFrame && call.ToolName == "computer.screenshot" && !call.userInput && !call.controlReturn {
