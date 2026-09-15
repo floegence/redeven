@@ -61,7 +61,11 @@ func TestFlowerDecisionCurrentFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer host.Shutdown(context.Background())
+			defer func() {
+				if err := host.Shutdown(context.Background()); err != nil {
+					t.Errorf("shutdown fixture host: %v", err)
+				}
+			}()
 			service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
 			if err != nil {
 				t.Fatal(err)
