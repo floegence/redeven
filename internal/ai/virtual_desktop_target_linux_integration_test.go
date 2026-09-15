@@ -65,10 +65,22 @@ func TestXvfbTargetExecutorRealDisplay(t *testing.T) {
 	if err != nil || string(entered) != "Flower X11 complete" {
 		t.Fatalf("GUI input did not reach the fixture: %q, %v", entered, err)
 	}
+	processes := append([]*x11Process(nil), e.processes...)
+	sessionDirectory := e.sessionDirectory
 	if err := e.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(state + "/computer/x11"); err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
+	for _, process := range processes {
+		select {
+		case <-process.done:
+		default:
+			t.Fatal("X11 child was not reaped")
+		}
+	}
+	if _, err := os.Stat(sessionDirectory); !os.IsNotExist(err) {
+		t.Fatalf("X11 session and authority file retained: %v", err)
+	}
+	if err := e.EnsureTargetReady(ctx, "xvfb-main"); err == nil {
+		t.Fatal("closed executor restarted a display")
 	}
 }
