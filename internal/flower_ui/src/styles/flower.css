@@ -5129,7 +5129,7 @@ html.dark .flower-component-shell {
     0 0.65rem 1.75rem color-mix(in srgb, var(--redeven-shadow-color) 82%, transparent),
     0 0.2rem 0.55rem color-mix(in srgb, var(--redeven-shadow-color) 72%, transparent),
     0 0 0 0.2rem color-mix(in srgb, var(--flower-computer-stage-state) 28%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--foreground) 24%, transparent);
   cursor: grab;
   -webkit-tap-highlight-color: transparent;
   transition: border-color 160ms ease-out, background 160ms ease-out, box-shadow 160ms ease-out, transform 120ms ease-out;
@@ -5153,7 +5153,7 @@ html.dark .flower-component-shell {
     0 0.8rem 2rem color-mix(in srgb, var(--redeven-shadow-color) 88%, transparent),
     0 0.25rem 0.7rem color-mix(in srgb, var(--redeven-shadow-color) 76%, transparent),
     0 0 0 0.22rem color-mix(in srgb, var(--flower-computer-stage-state) 38%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 28%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--foreground) 28%, transparent);
   transform: translateY(-1px);
 }
 
