@@ -4847,8 +4847,9 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => getEnvironmentMock.mock.calls.length > 0 && (host.textContent?.includes('Acme Desktop') ?? false), 40);
 
       expect(host.textContent).toContain('Acme Desktop');
-      expect(host.textContent).toContain('env_provider');
-      expect(host.textContent).toContain('Provider');
+      const identityTrigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]');
+      expect(identityTrigger?.getAttribute('aria-label')).toContain('env_provider');
+      expect(identityTrigger?.getAttribute('aria-label')).toContain('Provider');
       expect(window.sessionStorage.getItem('redeven_env_public_id')).toBe('env_provider');
       expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'local', envId: 'env_local' });
       expect(getEnvironmentMock).not.toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_provider' });
@@ -4893,8 +4894,9 @@ describe('EnvAppShell environment entry affordances', () => {
         await flushUntil(() => getEnvironmentMock.mock.calls.length > 0 && (host.textContent?.includes(testCase.label) ?? false), 40);
 
         expect(host.textContent).toContain(testCase.label);
-        expect(host.textContent).toContain(testCase.localEnvironmentID);
-        expect(host.textContent).toContain(testCase.expectedType);
+        const identityTrigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]');
+        expect(identityTrigger?.getAttribute('aria-label')).toContain(testCase.localEnvironmentID);
+        expect(identityTrigger?.getAttribute('aria-label')).toContain(testCase.expectedType);
         expect(host.textContent).not.toContain('Provider');
         expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'local', envId: 'env_local' });
         expect(getEnvironmentMock).not.toHaveBeenCalledWith({ source: 'controlplane', envId: testCase.localEnvironmentID });

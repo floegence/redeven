@@ -452,14 +452,12 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
         class="flower-activity-env-runtime-trigger"
         data-environment-runtime-trigger
         tabindex={props.mobile ? -1 : undefined}
-        aria-label={props.mobile ? undefined : i18n.t('shell.runtimeStatus.triggerLabel', { environment: props.identity.displayName })}
+        aria-label={props.mobile ? undefined : `${i18n.t('shell.runtimeStatus.triggerLabel', { environment: props.identity.displayName })}: ${props.identity.displayID || i18n.t('shell.status.missingEnvId')} · ${sourceLabel()}`}
       >
         <span class="flower-activity-env-identity">
           <EnvironmentSourceIcon source={props.identity.source} />
           <span class="truncate text-[11px] font-medium text-foreground">{props.identity.displayName}</span>
         </span>
-        <span class="sr-only">{props.identity.displayID}</span>
-        <span class="sr-only">{sourceLabel()}</span>
       </button>
     </Tooltip>
   );
