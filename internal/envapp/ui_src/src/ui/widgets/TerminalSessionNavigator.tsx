@@ -946,7 +946,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                           </span>
                         </Show>
                         <div
-                          class="relative flex min-h-11 items-center gap-1 rounded-lg border border-transparent bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
+                          class="relative flex min-h-11 items-center gap-1 rounded-lg bg-[color-mix(in_srgb,var(--primary)_7%,var(--sidebar))] px-1.5 text-sidebar-foreground transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--primary)_10%,var(--sidebar))]"
                           data-terminal-group-header={navigationGroup().id}
                           data-terminal-group-drop-target={dropIntent()?.groupId === navigationGroup().id ? dropIntent()?.position : undefined}
                           data-terminal-group-draggable={!navigationGroup().isDefault && !navigationGroup().pending ? 'true' : 'false'}
@@ -1006,7 +1006,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         >
                           <Show when={navigationGroup().expanded && navigationGroup().itemIds.length > 0}>
                             <span
-                              class="pointer-events-none absolute bottom-[-5px] left-[18px] top-1/2 w-px bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))]"
+                              class="pointer-events-none absolute bottom-[-4px] left-[18px] top-1/2 w-px bg-[color-mix(in_srgb,var(--primary)_27%,var(--sidebar-border))]"
                               data-terminal-tree-trunk={navigationGroup().id}
                               aria-hidden="true"
                             />
