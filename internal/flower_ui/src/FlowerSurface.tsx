@@ -7404,12 +7404,15 @@ webSearch: model.web_search,
           aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
         >
           <Show when={isComputerInput(inputRequest())} fallback={<>
-          <Show when={!composerSurface}>
-            <div class="flower-input-request-heading">
-              <Clock class="flower-input-request-icon h-4 w-4" aria-hidden="true" />
+          <div class="flower-input-request-heading">
+            <span class="flower-input-request-heading-icon" aria-hidden="true">
+              <Clock class="flower-input-request-icon h-4 w-4" />
+            </span>
+            <div class="flower-input-request-heading-copy">
               <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
+              <div class="flower-input-request-heading-description">{chatCopyValue('inputRequestDescription', 'Reply in the composer to continue this conversation.')}</div>
             </div>
-          </Show>
+          </div>
           <div class="flower-input-request-questions">
             <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={visibleQuestions(inputRequest())} identity={(question) => JSON.stringify([selectedThreadID(), inputRequest().prompt_id, inputRequest().tool_id, question.id])}>
               {(question) => {
@@ -11260,7 +11263,13 @@ webSearch: model.web_search,
                         <Show when={selectedComposerApprovalActions().length === 1} fallback={
                           <>
                             <div class="flower-approval-queue-header">
-                              <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
+                              <div class="flower-approval-queue-heading">
+                                <span class="flower-approval-queue-icon" aria-hidden="true"><Shield class="h-4 w-4" /></span>
+                                <div>
+                                  <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
+                                  <div class="flower-approval-queue-description">{copy().chat.toolApprovalComposerDescription}</div>
+                                </div>
+                              </div>
                               <span class="flower-approval-queue-progress" aria-live="polite">
                                 {copy().chat.toolApprovalPendingCount(selectedComposerApprovalActions().length)}
                               </span>
@@ -11299,7 +11308,13 @@ webSearch: model.web_search,
                           </>
                         }>
                           <div class="flower-approval-queue-header flower-approval-single-header">
-                            <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
+                            <div class="flower-approval-queue-heading">
+                              <span class="flower-approval-queue-icon" aria-hidden="true"><Shield class="h-4 w-4" /></span>
+                              <div>
+                                <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
+                                <div class="flower-approval-queue-description">{copy().chat.toolApprovalComposerDescription}</div>
+                              </div>
+                            </div>
                           </div>
                           <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={selectedComposerApprovalActions()} identity={(action) => JSON.stringify([selectedThreadID(), action.turn_id, action.run_id, action.action_id])}>
                             {(approval) => approvalActionCard(approval().action_id, approval, { surface: 'composer', layout: 'single' })}
