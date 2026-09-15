@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Computer and browser use runtime
 description: Route typed computer and browser actions to explicit browser, virtual desktop, or host desktop targets while preserving screenshots, provenance, permissions, and replayable opaque attachments.
 tags: [ai, computer-use, browser-use, targets, attachments]
-timestamp: 2026-09-14T00:00:00Z
+timestamp: 2026-09-15T00:00:00Z
 ---
 # Summary
 
@@ -63,6 +63,20 @@ startup. Missing dependencies fail the build rather than producing an empty
 resource set. Helper startup reports only closed reason codes, never CDP
 credentials or raw Playwright startup exceptions. Native screen capture excludes
 the Desktop window owner's windows to prevent viewer recursion. macOS 14 and later use ScreenCaptureKit application exclusion; macOS 13 uses filtered window composition. A failed filtered capture never falls back to the unrestricted display, and invalid exclusion configuration fails closed.
+
+Node archive acquisition belongs to the Redeven builder. Each build retrieves
+the official version-specific checksums and verifies the archive before use.
+Verified archives are published atomically under
+`${XDG_CACHE_HOME:-$HOME/.cache}/redeven/node-archives`, keyed by checksum and
+archive name. This build cache is never a runtime dependency. A corrupt cache
+entry is removed and downloaded again; failed or mismatched downloads never
+become cache entries. Archive transfers have a 30-second connection timeout and
+fail when the rate stays below 1 KiB/s for 60 seconds, with no total deadline
+for a progressing transfer. Transient transport failures resume the current
+build's temporary archive, with at most three attempts; HTTP rejection and
+checksum mismatches fail without retry. `REDEVEN_NODE_ARCHIVE` may select a
+complete local official archive, but it must pass the same official checksum
+verification and is never silently replaced by a download.
 
 # Qualification boundary
 
@@ -133,3 +147,4 @@ durable screenshot bytes or target-control authority.
 - `redeven:desktop/electron-builder.config.mjs` - shared immutable computer resources for the packaged shell.
 - `redeven:internal/ai/computer_runtime.go` - single adapter lifecycle and readiness owner.
 - `redeven:scripts/stage_computer_resources.test.mjs` - relocated resource bundle with empty browser cache and no source/PATH dependency.
+- `redeven:scripts/resolve_node_archive.test.mjs` - progressing downloads, verified cache reuse, failure cleanup, and explicit archive verification.

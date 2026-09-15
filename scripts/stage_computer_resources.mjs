@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveNodeArchive } from './resolve_node_archive.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -37,13 +38,7 @@ export function stageComputerResources(destination, platform = process.platform,
   const downloadRoot = path.join(destination, '.node-download');
   mkdirSync(downloadRoot);
   try {
-    const base = `https://nodejs.org/dist/v${expectedNode}`;
-    const checksums = execFileSync('curl', ['--fail', '--silent', '--show-error', '--location', '--max-time', '60', `${base}/SHASUMS256.txt`], { encoding: 'utf8' });
-    const digest = checksums.split('\n').map(line => line.trim().split(/\s+/u)).find(parts => parts[1] === archiveName)?.[0];
-    if (!/^[a-f0-9]{64}$/u.test(digest ?? '')) throw new Error('Official Node archive checksum is missing.');
-    const archive = process.env.REDEVEN_NODE_ARCHIVE || path.join(downloadRoot, archiveName);
-    if (!process.env.REDEVEN_NODE_ARCHIVE) execFileSync('curl', ['--fail', '--silent', '--show-error', '--location', '--max-time', '180', '--output', archive, `${base}/${archiveName}`]);
-    if (createHash('sha256').update(readFileSync(archive)).digest('hex') !== digest) throw new Error('Official Node archive checksum mismatch.');
+    const archive = resolveNodeArchive({ version: expectedNode, platform, arch });
     const prefix = archiveName.slice(0, -7);
     execFileSync('tar', ['-xzf', archive, '-C', downloadRoot, `${prefix}/bin/node`, `${prefix}/LICENSE`]);
     copy(path.join(downloadRoot, prefix, 'bin/node'), 'node');
@@ -97,5 +92,10 @@ export function stageComputerResources(destination, platform = process.platform,
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  stageComputerResources(path.resolve(process.argv[2]), process.argv[3], process.argv[4]);
+  try {
+    stageComputerResources(path.resolve(process.argv[2]), process.argv[3], process.argv[4]);
+  } catch (error) {
+    console.error(`[ERROR] Computer resource staging failed: ${error.message}`);
+    process.exitCode = 1;
+  }
 }
