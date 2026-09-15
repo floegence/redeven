@@ -22,6 +22,16 @@ func (r staticTargetResolver) ResolveTarget(_ context.Context, alias string) (Ta
 	return r.target, nil
 }
 
+type mappedTargetResolver map[string]TargetDescriptor
+
+func (r mappedTargetResolver) ResolveTarget(_ context.Context, alias string) (TargetDescriptor, error) {
+	target, ok := r[alias]
+	if !ok {
+		return TargetDescriptor{}, errTargetNotRegistered
+	}
+	return target, nil
+}
+
 func TestComputerUseToolsAreTargetScopedAndRoute(t *testing.T) {
 	for _, name := range []string{"computer.screenshot", "computer.click", "computer.type", "browser.navigate", "browser.reload"} {
 		if !toolRequiresTarget(name) || !isComputerUseTool(name) {
@@ -67,6 +77,26 @@ func TestComputerUseUsesCurrentTargetWhenModelOmitsTarget(t *testing.T) {
 	}
 	if payload.Payload.(map[string]any)["target_name"] != "Managed Browser" {
 		t.Fatalf("payload = %#v", payload.Payload)
+	}
+}
+
+func TestBrowserToolsNeverExecuteAgainstDesktopTarget(t *testing.T) {
+	executor := &recordingTargetExecutor{}
+	run := &run{
+		toolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
+		targetToolExecutor: executor,
+		targetResolver: mappedTargetResolver{
+			"desktop-main":    {ID: "desktop-main", Kind: "desktop.screen", Ready: true},
+			"browser-main":    {ID: "browser-main", Kind: "browser.managed", DisplayName: "Managed Browser", Ready: true},
+			"browser.managed": {ID: "browser-main", Kind: "browser.managed", DisplayName: "Managed Browser", Ready: true},
+		},
+	}
+	bindTargetTestRun(t, run)
+	if _, err := run.execTargetTool(context.Background(), "call-browser", "browser.navigate", map[string]any{"target": "desktop-main", "url": "https://example.test"}); err != nil {
+		t.Fatalf("browser route failed: %T %v", err, err)
+	}
+	if len(executor.calls) != 1 || executor.calls[0].TargetID != "browser-main" {
+		t.Fatalf("browser call target = %#v, want browser-main", executor.calls)
 	}
 }
 
