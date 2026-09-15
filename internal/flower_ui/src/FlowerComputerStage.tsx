@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js';
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { GripVertical, Minus, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
+import { Minus, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import { FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
