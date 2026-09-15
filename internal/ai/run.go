@@ -1570,9 +1570,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			"error", sanitizeLogText(toolErr.Message, 256),
 		)
 		if r.log != nil {
+			runID, threadID, turnID := r.floretCanonicalIdentity()
 			r.log.Warn("ai tool call failed",
-				"run_id", r.id,
-				"thread_id", r.threadID,
+				"run_id", runID,
+				"thread_id", threadID,
+				"turn_id", turnID,
 				"channel_id", r.channelID,
 				"endpoint_id", r.endpointID,
 				"tool_id", toolID,
@@ -3133,6 +3135,10 @@ func (r *run) shouldRouteTargetTool(toolName string) bool {
 }
 
 func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string, args map[string]any) (any, error) {
+	runID, threadID, turnID := r.floretCanonicalIdentity()
+	if runID == "" || threadID == "" || turnID == "" || strings.TrimSpace(toolID) == "" {
+		return nil, errors.New("target tool canonical execution identity is unavailable")
+	}
 	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
 	targetID := targetIDFromToolArgs(args)
 	if strings.TrimSpace(targetID) == "" {
@@ -3153,7 +3159,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		if threaded, ok := r.targetResolver.(interface {
 			ResolveTargetForThread(context.Context, string, string) (TargetDescriptor, error)
 		}); ok {
-			resolved, resolveErr := threaded.ResolveTargetForThread(ctx, r.threadID, targetID)
+			resolved, resolveErr := threaded.ResolveTargetForThread(ctx, threadID, targetID)
 			if resolveErr != nil {
 				if !errors.Is(resolveErr, errTargetNotRegistered) && !errors.Is(resolveErr, errTargetAmbiguous) {
 					return nil, resolveErr
@@ -3181,7 +3187,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if gate == nil {
 		gate = defaultInteractionSafetyGate{}
 	}
-	call := TargetToolCall{ThreadID: r.threadID, TurnID: r.turnID, RunID: r.id, ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
+	call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
 	if r.targetToolExecutor == nil {
 		code := "target_executor_unavailable"
 		if r.targetResolver != nil {
@@ -3225,7 +3231,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if binder, ok := r.targetToolExecutor.(interface {
 		BindThreadTarget(context.Context, string, string) error
 	}); ok && isComputerUseTool(toolName) {
-		if err := binder.BindThreadTarget(ctx, r.threadID, targetID); err != nil {
+		if err := binder.BindThreadTarget(ctx, threadID, targetID); err != nil {
 			return nil, err
 		}
 	}
