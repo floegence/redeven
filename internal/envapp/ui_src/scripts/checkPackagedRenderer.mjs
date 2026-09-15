@@ -871,6 +871,18 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       })}`);
     }
 
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
+    ));
+    if (!await composer.evaluate((element) => element === globalThis.document.activeElement)) {
+      throw new Error('Escape must retain focus in the built Flower composer');
+    }
+    await composer.click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'expanded'
+    ));
+
     await page.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
     await page.waitForFunction(() => (
       globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'

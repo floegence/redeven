@@ -10799,6 +10799,9 @@ webSearch: model.web_search,
             if (companionCollapsed()) props.onCompanionOpenRequest?.();
           }}
           onBlur={() => setComposerFocused(false)}
+          onClick={() => {
+            if (companionCollapsed()) props.onCompanionOpenRequest?.();
+          }}
           onInput={handleComposerTextInput}
           onSelect={(event) => syncComposerSelection(event.currentTarget)}
           onKeyUp={(event) => syncComposerSelection(event.currentTarget)}
