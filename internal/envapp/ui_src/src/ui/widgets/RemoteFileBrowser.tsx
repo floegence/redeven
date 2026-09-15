@@ -5859,6 +5859,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       }}
                       onOpen={openFileItem}
                       onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
+                      contextMenuBottomLimit={ctx.activityContentBottomLimit?.()}
                       contextMenuCallbacks={ctxMenu}
                       resolveOverrideContextMenuItems={resolveOverrideContextMenuItems}
                     />

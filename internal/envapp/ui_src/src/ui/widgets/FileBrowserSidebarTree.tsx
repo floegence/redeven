@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
-import { FileItemIcon, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { FileItemIcon, createLongPressContextMenuHandlers, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { ConfirmDialog } from '../primitives/EnvAppModal';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
@@ -60,6 +60,7 @@ interface FileBrowserSidebarTreeRowProps {
 
 function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
   const browser = useFileBrowser();
+  const longPress = createLongPressContextMenuHandlers(browser, props.item, { selectOnOpen: false, source: 'tree' });
   const drag = useFileBrowserDrag();
   const i18n = useI18n();
   const childFolders = createMemo(() => getFolderChildren(props.item));
@@ -92,6 +93,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
   };
 
   const handleNavigate = (event: MouseEvent) => {
+    if (longPress.consumeClickSuppression(event)) return;
     const row = event.currentTarget;
     if (row instanceof HTMLButtonElement) {
       props.onNavigateClickAnchor(props.item.path, row, event);
@@ -173,6 +175,10 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
           title={props.item.path}
           onClick={handleNavigate}
           onContextMenu={handleContextMenu}
+          onPointerDown={longPress.onPointerDown}
+          onPointerMove={longPress.onPointerMove}
+          onPointerUp={longPress.onPointerUp}
+          onPointerCancel={longPress.onPointerCancel}
         >
           <span class={cn('flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground', isCurrent() && 'text-sidebar-accent-foreground')}>
             <Show when={hasChildren() && isExpanded()} fallback={<FileItemIcon item={props.item} class="h-3.5 w-3.5" />}>

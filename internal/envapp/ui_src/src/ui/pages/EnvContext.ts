@@ -110,6 +110,8 @@ export type EnvContextValue = {
   workbenchFilePreviewActivationSeq: () => number;
   workbenchFilePreviewActivation: () => EnvWorkbenchFilePreviewActivationRequest | null;
   consumeWorkbenchFilePreviewActivation: (requestId: string) => void;
+  /** Client-coordinate limit above the visible Activity companion rail. */
+  activityContentBottomLimit?: () => number | undefined;
   filesSidebarOpen: () => boolean;
   setFilesSidebarOpen: (open: boolean) => void;
   toggleFilesSidebar: () => void;

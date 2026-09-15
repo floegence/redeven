@@ -90,6 +90,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin package review](ui/plugin-package-review.md) - Review exact update and external-package evidence before mutation.
 - [Plugin layout continuity](ui/plugin-layout-continuity.md) - Preserve plugin placements through updates, recovery, and independent display modes.
 - [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.
+- [Files context menus](ui/files-context-menu.md) - Keep file actions inside the whole Files workspace and above mobile Flower chrome with shared touch, keyboard, and scroll handling.
 - [Plugin Center interaction](ui/plugin-center-interaction.md) - Browse, filter, and manage plugins with retained drawer state and correct modal input.
 - [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.

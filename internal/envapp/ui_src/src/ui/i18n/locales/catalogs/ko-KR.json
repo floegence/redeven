@@ -1523,6 +1523,7 @@
   },
   "files": {
     "title": "파일",
+    "contextMenuBack": "뒤로",
     "sidebarToggle": "브라우저 사이드바 전환",
     "sidebar": "사이드바",
     "up": "위로",

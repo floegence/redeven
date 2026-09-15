@@ -18,6 +18,7 @@ export interface BrowserWorkspaceShellProps {
   resizable?: boolean;
   onResize?: (delta: number) => void;
   onClose?: () => void;
+  rootRef?: (el: HTMLDivElement) => void;
   bodyRef?: (el: HTMLDivElement) => void;
   modeSwitcher: JSX.Element;
   navigation?: JSX.Element;
@@ -33,7 +34,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
   const isMobile = () => layout.isMobile();
 
   return (
-    <div class={cn('relative flex h-full min-h-0 overflow-hidden bg-background', props.class)}>
+    <div ref={props.rootRef} data-browser-workspace class={cn('relative flex h-full min-h-0 overflow-hidden bg-background', props.class)}>
       {/* Mobile backdrop — rendered independently so it is never affected by
           SidebarPane's own overlay logic.  z-20 sits between the content (z-auto)
           and the sidebar (z-30). */}

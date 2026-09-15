@@ -1523,6 +1523,7 @@
   },
   "files": {
     "title": "Fichiers",
+    "contextMenuBack": "Retour",
     "sidebarToggle": "Basculer la barre latérale du navigateur",
     "sidebar": "Barre latérale",
     "up": "Haut",

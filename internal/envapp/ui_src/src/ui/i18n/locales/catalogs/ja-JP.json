@@ -1523,6 +1523,7 @@
   },
   "files": {
     "title": "ファイル",
+    "contextMenuBack": "戻る",
     "sidebarToggle": "ブラウザのサイドバーを切り替え",
     "sidebar": "サイドバー",
     "up": "上へ",

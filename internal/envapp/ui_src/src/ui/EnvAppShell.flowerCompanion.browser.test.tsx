@@ -8,11 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { FileBrowserWorkspace } from './widgets/FileBrowserWorkspace';
 
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
 const FileBrowserSurfaceContextMock = createContext({} as any);
 let floeRegistryComponents = (): any[] => [];
+let testFilesMenu = false;
 
 const filePreviewOpenPreviewMock = vi.fn(async () => undefined);
 const filePreviewClosePreviewMock = vi.fn();
@@ -177,8 +179,17 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
     return (
       <div
         data-testid="activity-body-content"
-        style={{ position: 'relative', height: '1200px', padding: '12px' }}
+        style={{ position: 'relative', height: testFilesMenu ? '100%' : '1200px', padding: testFilesMenu ? '0' : '12px' }}
       >
+        <Show when={testFilesMenu}>
+          <FileBrowserWorkspace
+            mode="files" onModeChange={() => {}} currentPath="/" initialPath="/"
+            files={[{ id: 'alpha', name: 'alpha.txt', path: '/alpha.txt', type: 'file' }]}
+            instanceId="shell-bounded-files" resetKey={0} width={200} open={false}
+            contextMenuBottomLimit={env.activityContentBottomLimit?.()}
+            overrideContextMenuItems={Array.from({ length: 9 }, (_, index) => ({ id: `action-${index}`, label: `Action ${index}`, type: 'custom' as const }))}
+          />
+        </Show>
         {props.activeId?.() === 'ai'
           ? (
               <div style={{ position: 'absolute', inset: '0', height: 'calc(100vh - 48px)' }}>
@@ -852,7 +863,8 @@ vi.mock('./maintenance/createAgentVersionModel', () => ({
     refetchCurrentVersion: vi.fn(async () => undefined),
   }),
 }));
-vi.mock('./utils/askFlowerPath', () => ({
+vi.mock('./utils/askFlowerPath', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./utils/askFlowerPath')>(),
   basenameFromAbsolutePath: (value: string) => {
     const normalized = String(value ?? '').trim().replace(/\/+$/, '');
     if (!normalized || normalized === '/') return 'File';
@@ -1104,6 +1116,7 @@ afterEach(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  testFilesMenu = false;
   debugConsoleEnabled = false;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
   protocolConnectionConfig = null;
@@ -1159,6 +1172,40 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell Activity Flower browser integration', () => {
+  it('bounds Files menus above the actual mobile Flower rail and refreshes after keyboard viewport changes', async () => {
+    await page.viewport(390, 844);
+    testFilesMenu = true;
+    const original = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    const viewport = Object.assign(new EventTarget(), { width: 390, height: 844, offsetLeft: 0, offsetTop: 0, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    try {
+      const fixture = await mountProductionMobileShell();
+      const trigger = fixture.host.querySelector<HTMLElement>('button[title="alpha.txt"]')!;
+      const open = async () => {
+        const root = fixture.host.querySelector<HTMLElement>('[data-browser-workspace]')!.getBoundingClientRect();
+        const point = { bubbles: true, cancelable: true, button: 2, clientX: root.right - 12, clientY: root.bottom - 12 };
+        trigger.dispatchEvent(new PointerEvent('pointerdown', { ...point, pointerType: 'mouse' }));
+        trigger.dispatchEvent(new MouseEvent('contextmenu', point));
+        await new Promise((resolve) => setTimeout(resolve, 160));
+        const menu = document.querySelector<HTMLElement>('[data-floe-context-menu][role="menu"]')!;
+        expect(menu).toBeTruthy();
+        expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(fixture.mobileRail.getBoundingClientRect().top - 7);
+        return menu;
+      };
+      await open();
+      viewport.height = 520;
+      viewport.offsetTop = 40;
+      viewport.dispatchEvent(new Event('resize'));
+      await flushAsync();
+      expect(document.querySelector('[data-floe-context-menu][role="menu"]')).toBeNull();
+      const menu = await open();
+      expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(viewport.offsetTop + 7);
+    } finally {
+      if (original) Object.defineProperty(window, 'visualViewport', original);
+      else Reflect.deleteProperty(window, 'visualViewport');
+    }
+  });
+
   it.each([
     { width: 390, height: 844 },
     { width: 639, height: 800 },
