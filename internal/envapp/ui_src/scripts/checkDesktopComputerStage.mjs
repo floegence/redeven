@@ -33,7 +33,7 @@ await mkdir(output, { recursive: true });
 let completed = 0;
 let loginCompleted = false;
 let loginInputVerified = false;
-const privateFixtureInput = "qualification-private-input";
+const privateFixtureInput = 'qualification-private-input-'.repeat(3);
 let takeoverEvidence;
 const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
 // A moving pixel fixture distinguishes live sampling from repeated static
@@ -194,7 +194,7 @@ try {
   await page.locator('.flower-new-chat-button').click();
   await page.evaluate(observeDesktopComputerFrames);
   for (const [index, prompt] of [
-    `Open ${fixtureURL} in the managed browser, use computer.screenshot to inspect it, then use computer.click to click Complete step once. Take another screenshot and report the completed number. Do not use terminal or HTTP fetch.`,
+    `Open ${fixtureURL} in a browser, click Complete step once, and tell me the completed number shown on the page. Let me watch what you are doing.`,
     'On the current page, use computer.screenshot and computer.click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
     `Open ${fixtureURL}/controls using browser.navigate. Inspect it with computer.screenshot. Use computer.double_click on Double click me. Click the text input, use computer.type to enter Flower, and computer.key to press Enter. Use computer.scroll to scroll down and computer.wait to wait for the page. Use browser.reload to reload it. Navigate to ${fixtureURL}/second, then use browser.back to return to /controls. Take a final screenshot and report the result. Use only browser and computer tools; do not use terminal or HTTP fetch.`,
   ].entries()) {
@@ -248,7 +248,7 @@ try {
     await waitForProgress(() => readFile(resultFile).then(() => true, () => false), 'native fixture readiness', 15_000);
     const nativeTurns = [];
     for (const [index, prompt] of [
-      'In the macOS Flower Native Fixture application, inspect the desktop and click Complete native step exactly twice. Take a fresh screenshot to check that Clicks is 2. Use computer tools for the native desktop, not the managed browser or terminal.',
+      'In the macOS Flower Native Fixture application, click Complete native step exactly twice and confirm that Clicks is 2. Let me watch the application as you work.',
       'Continue in the macOS Flower Native Fixture application. Double click the blue area. Enter Flower in the text field and press Enter. Click inside the Scroll area and scroll down. Wait for the app to settle, then take a fresh screenshot to verify all four indicators are complete. Use only computer tools on the native desktop.',
       'In the same macOS Flower Native Fixture application, click Complete native step exactly two more times. Take a fresh screenshot after each click and confirm Clicks is 4, with the other indicators still complete. Use only computer tools on the native desktop.',
     ].entries()) {
@@ -359,9 +359,10 @@ try {
   };
   await userKey('u');
   await userKey('Tab');
-  // Paste is not used: the fixture verifies actual per-key input and keeps it
-  // out of model history, activity and persisted evidence.
-  for (const key of privateFixtureInput) await userKey(key);
+  // Exercise ordinary fast typing rather than waiting for each screenshot.
+  // The fixture validates all characters and ordering before accepting Enter.
+  await userImage.pressSequentially(privateFixtureInput);
+  await waitForProgress(async () => await page.locator('[data-computer-control-action="return"]').isEnabled(), 'private typing drained', 15000);
   await userKey('Enter');
   await waitForProgress(() => loginCompleted, 'sign-in fixture completion', 15000);
   const userPixels = await page.evaluate(() => {
