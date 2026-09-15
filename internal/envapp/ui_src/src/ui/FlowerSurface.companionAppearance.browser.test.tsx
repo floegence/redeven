@@ -2,6 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 import { describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import {
   adapter,
@@ -25,7 +26,7 @@ const companionCopy = {
 function mountFrame(runtime: HTMLElement): void {
   runtime.className = 'flower-activity-companion floe-bottom-bar-companion';
   runtime.dataset.companionPhase = 'collapsed';
-  Object.assign(runtime.style, { left: '12px', top: '100px', width: '544px', height: '24px' });
+  Object.assign(runtime.style, { left: '12px', top: '100px', width: '360px', height: '22px' });
 }
 
 function expectSingleOutline(runtime: HTMLElement): void {
@@ -44,6 +45,7 @@ function expectSingleOutline(runtime: HTMLElement): void {
 
 describe('Flower production companion appearance', () => {
   it.each(['idle', 'selected', 'running', 'approval'] as const)('keeps one outline with the real %s content', async (state) => {
+    await page.viewport(1280, 800);
     const selected = thread({
       messages: [],
       status: state === 'approval' ? 'waiting_approval' : 'idle',
@@ -83,6 +85,11 @@ describe('Flower production companion appearance', () => {
       await waitFor(() => runtime.querySelector('.flower-companion-thread-trigger')?.textContent?.includes(selected.title) ?? false);
     }
     expectSingleOutline(runtime);
+    const control = runtime.querySelector<HTMLElement>(selector)!;
+    const frame = runtime.getBoundingClientRect();
+    const bounds = control.getBoundingClientRect();
+    expect(bounds.top).toBeGreaterThanOrEqual(frame.top + 1);
+    expect(bounds.bottom).toBeLessThanOrEqual(frame.bottom - 1);
   });
 
   it('preserves the editor, draft, selection and composition through expansion and collapse', async () => {

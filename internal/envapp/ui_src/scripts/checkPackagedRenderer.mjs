@@ -799,7 +799,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     }
 
     const collapsedBox = await companion.boundingBox();
-    if (!collapsedBox || collapsedBox.width <= 0 || collapsedBox.height <= 0) {
+    if (!collapsedBox || collapsedBox.width > 360 || collapsedBox.width <= 0 || collapsedBox.height !== 22) {
       throw new Error(`built Flower collapsed companion has invalid geometry: ${JSON.stringify(collapsedBox)}`);
     }
     const collapsedComposerBox = await composer.boundingBox();
@@ -814,7 +814,23 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       };
     });
 
-    await composer.click();
+    const motionSamples = await page.evaluate(async () => {
+      const frame = globalThis.document.querySelector('#redeven-activity-flower-companion');
+      const input = globalThis.document.querySelector('.flower-composer textarea');
+      const samples = [];
+      input.focus();
+      const started = performance.now();
+      while (performance.now() - started < 450) {
+        await new Promise(globalThis.requestAnimationFrame);
+        const rect = frame.getBoundingClientRect();
+        samples.push({ width: rect.width, height: rect.height, bottom: rect.bottom });
+      }
+      return samples;
+    });
+    if (!motionSamples.some((sample) => sample.width > collapsedBox.width + 2 && sample.width < 542)
+      || motionSamples.some((sample) => Math.abs(sample.bottom - collapsedBox.y - collapsedBox.height) > 0.1)) {
+      throw new Error('built Flower must widen continuously from its compact field with a fixed bottom edge');
+    }
     await page.waitForFunction(() => (
       globalThis.document
         .querySelector('#redeven-activity-flower-product')

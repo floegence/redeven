@@ -90,12 +90,6 @@ function sourceAccentClass(source: EnvSessionSource): string {
   return 'text-accent';
 }
 
-function sourceBadgeClass(source: EnvSessionSource): string {
-  if (source === 'local_runtime') return 'bg-primary/10 text-primary';
-  if (source === 'ssh_environment') return 'bg-info/10 text-info';
-  return 'bg-accent/10 text-accent';
-}
-
 function statusClass(status: EnvironmentRuntimeConnectionStatus): string {
   switch (status) {
     case 'connected': return 'environment-runtime-status-connected';
@@ -379,6 +373,7 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
       <div class="environment-runtime-tooltip-header">
         <div class="min-w-0">
           <div class="environment-runtime-tooltip-name" title={props.identity.displayName}>{props.identity.displayName}</div>
+          <div class="environment-runtime-tooltip-id">{props.identity.displayID || i18n.t('shell.status.missingEnvId')}</div>
           <div class="environment-runtime-tooltip-context">
             <span>{sourceLabel()}</span>
             <span aria-hidden="true">·</span>
@@ -446,30 +441,24 @@ export function EnvironmentRuntimeStatusTooltip(props: EnvironmentRuntimeStatusT
       placement="top"
       delay={180}
       disabled={props.mobile}
-      dismissOnTriggerClick={false}
+      clickToToggle
       viewportMargin={environmentTooltipViewportMargin}
       onOpenChange={setTooltipOpen}
       anchorClass="flower-activity-env-runtime-anchor"
       class="environment-runtime-tooltip-layer"
     >
-      <div
+      <button
+        type="button"
         class="flower-activity-env-runtime-trigger"
         data-environment-runtime-trigger
-        tabindex={props.mobile ? undefined : 0}
+        tabindex={props.mobile ? -1 : undefined}
         aria-label={props.mobile ? undefined : i18n.t('shell.runtimeStatus.triggerLabel', { environment: props.identity.displayName })}
       >
-        <div class="flower-activity-env-identity">
+        <span class="flower-activity-env-identity">
           <EnvironmentSourceIcon source={props.identity.source} />
           <span class="truncate text-[11px] font-medium text-foreground">{props.identity.displayName}</span>
-          <span class="flower-activity-env-secondary w-px h-3.5 bg-border shrink-0" />
-          <span class="flower-activity-env-secondary truncate text-[11px] text-muted-foreground">
-            {props.identity.displayID || i18n.t('shell.status.missingEnvId')}
-          </span>
-        </div>
-        <span class={`flower-activity-env-type text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-tight shrink-0 whitespace-nowrap ${sourceBadgeClass(props.identity.source)}`}>
-          {sourceLabel()}
         </span>
-      </div>
+      </button>
     </Tooltip>
   );
 }

@@ -1425,6 +1425,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
 
     await userEvent.click(fixture.input);
     await flushAsync();
+    await vi.waitFor(() => expect(fixture.panel.dataset.companionPhase).toBe('expanded'));
 
     const panelRect = elementRect(fixture.panel);
     expect(fixture.product.dataset.presentation).toBe('expanded');
@@ -1435,11 +1436,33 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(panelRect.height).toBeLessThanOrEqual(544);
     expect(panelRect.left).toBeGreaterThanOrEqual(12);
     expect(panelRect.right).toBeLessThanOrEqual(width - 12);
-    expect(panelRect.width).toBeCloseTo(quickRect.width, 0);
+    expect(panelRect.width).toBeCloseTo(Math.min(544, width - 24), 0);
     expect(panelRect.width).toBeLessThanOrEqual(544);
     expect(fixture.body.clientHeight).toBe(bodyBefore.clientHeight);
     expect(fixture.body.scrollHeight).toBe(bodyBefore.scrollHeight);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  });
+
+  it('grows the compact desktop field into a wider drawer along the same bottom edge', async () => {
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    const collapsed = elementRect(fixture.panel);
+    expect(elementRect(fixture.bottomBar).height).toBe(28);
+    expect(collapsed.height).toBe(22);
+    expect(collapsed.width).toBeLessThanOrEqual(360);
+    const samples: Array<{ width: number; height: number; bottom: number }> = [];
+    fixture.textarea.focus();
+    for (let frame = 0; frame < 30; frame += 1) {
+      await settleFrames(1);
+      const rect = elementRect(fixture.panel);
+      samples.push({ width: rect.width, height: rect.height, bottom: rect.bottom });
+    }
+    expect(samples.some((rect) => rect.width > collapsed.width + 2 && rect.width < 542)).toBe(true);
+    expect(samples.every((rect) => Math.abs(rect.bottom - collapsed.bottom) < 0.1)).toBe(true);
+    await vi.waitFor(() => expect(fixture.panel.dataset.companionPhase).toBe('expanded'));
+    expect(elementRect(fixture.panel).width).toBeCloseTo(544, 0);
+    expect(fixture.panel.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
+    expect(document.activeElement).toBe(fixture.textarea);
   });
 
   it('keeps one EnvAIPage DOM node through collapsed, expanded, and Activity Bar full-page placement', async () => {

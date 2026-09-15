@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adapter,
   renderSurfaceWithAdapter,
+  renderSurfaceWithAdapterProps,
   settingsSnapshot,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -16,6 +17,33 @@ afterEach(() => {
 });
 
 describe('Flower setup browser presentation', () => {
+  it('keeps both setup destinations readable inside the expanded companion', async () => {
+    await page.viewport(1440, 900);
+    const runtime = renderSurfaceWithAdapterProps({
+      ...adapter(false),
+      loadSettings: async () => ({
+        defaults: { permission_type: 'approval_required' },
+        model_profile: null,
+        provider_secrets: [],
+      }),
+      modelSourceRecovery: {
+        describe: () => '',
+        localSettings: { label: 'Configure in Desktop Flower settings', run: async () => undefined },
+        remoteSettings: { label: 'Configure in this remote environment’s Flower settings', run: async () => undefined },
+        runtimeSettings: { label: 'Runtime settings', run: async () => undefined },
+        connectionCenter: { label: 'Connection center', run: async () => undefined },
+      },
+    }, { presentation: 'companion', companionOpen: true, engaged: true, transcriptVisible: true });
+    Object.assign(runtime.style, { width: '544px', height: '544px' });
+    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-inline [data-model-source-action]')));
+    const status = runtime.querySelector<HTMLElement>('.flower-setup-inline')!;
+    const message = status.querySelector<HTMLElement>('.flower-model-source-status-message')!;
+    expect(message.getBoundingClientRect().width).toBeGreaterThan(200);
+    for (const action of status.querySelectorAll<HTMLElement>('[data-model-source-action]')) {
+      expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(status.getBoundingClientRect().right + 1);
+    }
+  });
+
   it('shows server search reasons in the model menu without blocking ordinary model selection', async () => {
     await page.viewport(1000, 760);
     const snapshot = settingsSnapshot();
