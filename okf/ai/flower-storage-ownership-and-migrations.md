@@ -16,16 +16,19 @@ timestamp: 2026-09-08T00:00:00Z
 
 ## Storage owners
 
-Redeven consumes published Floret v7.9.2 with `GOWORK=off`. Floret owns journal,
+Redeven consumes published Floret v7.11.2 with `GOWORK=off`. Floret owns journal,
 queue, interactions, context lineage, execution identity and recovery. Redeven
 uses public `InspectSQLite`, `BackupSQLite`, deferred `runtime.Open`, typed
 queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor
 repairs Floret tables.
 
-Product kind `ai_threadstore_product_v1` retains its entire contiguous v1-to-v6
-migration chain. Fresh version 6 has exactly seven tables: schema metadata,
+Product kind `ai_threadstore_product_v1` retains its entire contiguous v1-to-v7
+migration chain. Fresh version 7 has exactly seven tables: schema metadata,
 thread settings, execution authority, uploads, upload attempts, upload
-references and staging scopes. Historical rows and shapes are accepted only by
+references and staging scopes. Version 7 adds a default-empty computer target
+selection to thread settings; it preserves all existing records and does not
+persist target readiness or control authority. The [target selection contract](computer-use-target-selection.md)
+owns its execution boundary. Historical rows and shapes are accepted only by
 the exact migration edge that owns them. The read-state owner retains its
 supported v0-to-v4 lineage and moves the former path using a complete SQLite
 snapshot before removing the source. Existing compatibility does not expand to

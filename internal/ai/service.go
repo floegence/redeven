@@ -430,6 +430,11 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		lifecycleCtx:                    lifecycleCtx,
 		lifecycleCancel:                 lifecycleCancel,
 	}
+	if computer, ok := opts.TargetToolExecutor.(*ComputerUseRuntime); ok {
+		computer.mu.Lock()
+		computer.bindings = ts
+		computer.mu.Unlock()
+	}
 	if svc.flowerReadStateCleaner == nil {
 		svc.flowerReadStateCleaner = reads
 	}

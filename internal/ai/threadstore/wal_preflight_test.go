@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -64,7 +65,7 @@ func TestOpenRejectsUnsupportedWALStateWithoutMutation(t *testing.T) {
 		{
 			name: "future version",
 			mutate: func(t *testing.T, db *sql.DB) {
-				if _, err := db.Exec(`PRAGMA user_version = 7`); err != nil {
+				if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", threadstoreCurrentSchemaVersion+1)); err != nil {
 					t.Fatal(err)
 				}
 			},

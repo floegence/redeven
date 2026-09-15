@@ -16,6 +16,7 @@ type ComputerUseRuntime struct {
 	closed     bool
 	mu         sync.RWMutex
 	registry   *TargetRegistry
+	bindings   ComputerTargetBindingStore
 	media      computerMediaStore
 	executors  map[string]TargetToolExecutor
 	liveFrames map[string]*computerLiveSampler
@@ -99,20 +100,51 @@ func NewComputerUseRuntime(registry *TargetRegistry, executors map[string]Target
 func (r *ComputerUseRuntime) ResolveTarget(ctx context.Context, alias string) (TargetDescriptor, error) {
 	return r.registry.ResolveTarget(ctx, alias)
 }
+
+// ComputerTargetBindingStore persists product target selection, never thread
+// lifecycle or control authority. The Service installs its migrated product store
+// before accepting turns. There is no process-local shadow binding.
+type ComputerTargetBindingStore interface {
+	GetComputerTarget(context.Context, string) (string, error)
+	SetComputerTarget(context.Context, string, string) error
+}
+
+func (r *ComputerUseRuntime) targetBindings() ComputerTargetBindingStore {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.bindings
+}
+
 func (r *ComputerUseRuntime) ResolveTargetForThread(ctx context.Context, threadID, alias string) (TargetDescriptor, error) {
-	target, err := r.registry.ResolveTargetForThread(ctx, threadID, alias)
-	if err != nil {
-		return TargetDescriptor{}, err
-	}
-	if strings.TrimSpace(threadID) != "" && (strings.TrimSpace(alias) == "" || strings.TrimSpace(alias) == "current") {
-		if err := r.registry.BindThreadTarget(threadID, target.ID); err != nil {
+	alias = strings.TrimSpace(alias)
+	if strings.TrimSpace(threadID) != "" && (alias == "" || alias == "current") {
+		bindings := r.targetBindings()
+		if bindings == nil {
+			return TargetDescriptor{}, errors.New("computer target binding store is unavailable")
+		}
+		bound, err := bindings.GetComputerTarget(ctx, threadID)
+		if err != nil {
 			return TargetDescriptor{}, err
 		}
+		if bound != "" {
+			alias = bound
+		}
 	}
-	return target, nil
+	return r.registry.ResolveTarget(ctx, alias)
 }
-func (r *ComputerUseRuntime) BindThreadTarget(threadID, targetID string) error {
-	return r.registry.BindThreadTarget(threadID, targetID)
+
+// BindThreadTarget runs after policy, readiness and safety checks, before an
+// effect. Storage failure must not discard the result of an already executed
+// action or invite its replay. A failed effect retains the selected target.
+func (r *ComputerUseRuntime) BindThreadTarget(ctx context.Context, threadID, targetID string) error {
+	bindings := r.targetBindings()
+	if bindings == nil {
+		return errors.New("computer target binding store is unavailable")
+	}
+	if _, err := r.registry.ResolveTarget(ctx, targetID); err != nil {
+		return err
+	}
+	return bindings.SetComputerTarget(ctx, threadID, targetID)
 }
 func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
 	r.mu.RLock()

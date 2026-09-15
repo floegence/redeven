@@ -46,7 +46,7 @@ func TestComputerUseRuntimeReportsSetupRequiredWhenHelperIsMissing(t *testing.T)
 	}
 }
 
-func TestComputerUseRuntimeFallsBackToReadyNativeTargetWhenBrowserHelperMissing(t *testing.T) {
+func TestComputerUseRuntimeDoesNotReplaceMissingBrowserWithNativeDesktop(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("native desktop registration is macOS-only")
 	}
@@ -69,7 +69,7 @@ func TestComputerUseRuntimeFallsBackToReadyNativeTargetWhenBrowserHelperMissing(
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = executor.(*ai.ComputerUseRuntime).Close() })
-	if target.ID != "desktop-main" || !target.Ready {
+	if target.ID != "browser-main" || target.Ready || target.State != "setup_required" {
 		t.Fatalf("current target = %+v", target)
 	}
 }
