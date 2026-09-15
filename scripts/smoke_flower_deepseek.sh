@@ -6,6 +6,8 @@ umask 077
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 SMOKE_ROOT=${REDEVEN_FLOWER_SMOKE_ROOT:-/tmp/redeven-flower-smoke-$$}
+SMOKE_ROOT=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SMOKE_ROOT")
+export REDEVEN_FLOWER_SMOKE_ROOT="$SMOKE_ROOT"
 STATE_ROOT="$SMOKE_ROOT/state"
 RUNTIME_STATE_ROOT="$STATE_ROOT/local-environment"
 USER_DATA_ROOT="$SMOKE_ROOT/user-data"
@@ -273,7 +275,7 @@ NODE
 )
 
 commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
-node - "$REPORT_ROOT/run-config.json" "$ROOT_DIR" "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" "$REPORT_ROOT" "$commit" "$RUNTIME_PID" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$REDEVEN_FLOWER_SMOKE_MODEL" <<'NODE'
+node - "$REPORT_ROOT/run-config.json" "$ROOT_DIR" "$SMOKE_ROOT" "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$WORKSPACE_ROOT" "$REPORT_ROOT" "$commit" "$RUNTIME_PID" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$REDEVEN_FLOWER_SMOKE_MODEL" <<'NODE'
 const fs = require('node:fs');
 const [file, worktree, smokeRoot, stateRoot, userDataRoot, cacheRoot, tempRoot, workspace, reportRoot, commit, runtimePID, localUIPort, cdpPort, inspectorPort, model] = process.argv.slice(2);
 const { execFileSync } = require('node:child_process');

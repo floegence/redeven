@@ -209,8 +209,19 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	default:
 	}
 	e.environment = x11Environment(e.environment, map[string]string{"DISPLAY": e.display})
-	if _, err := e.command(ctx, e.paths.input, nil, 4096, "getdisplaygeometry"); err != nil {
-		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_connection_failed"}
+	// Starting Xvfb does not mean its authenticated socket is accepting clients.
+	// Observe readiness within the startup deadline; never retry a user action.
+	for {
+		if _, err := e.command(ctx, e.paths.input, nil, 4096, "getdisplaygeometry"); err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_connection_failed"}
+		case <-process.done:
+			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "xvfb_exited"}
+		case <-time.After(25 * time.Millisecond):
+		}
 	}
 	// Skip user autostart scripts: only this Runtime's explicit GUI clients may
 	// be launched on its display. Openbox itself is an owned process group.

@@ -86,7 +86,13 @@ const proxy = http.createServer(async (request, response) => {
           const content = item.type === 'function_call_output' ? item.output : item.content;
           return count + (Array.isArray(content) ? content.filter((part) => part.type === 'input_image').length : 0);
         }, 0),
-        imageToolOutput: (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image')) };
+        imageToolOutput: (body.input ?? []).some((item) => item.type === 'function_call_output' && Array.isArray(item.output) && item.output.some((part) => part.type === 'input_image')),
+        // Record only numeric pointer geometry from this qualification. Never
+        // retain text input, URLs, raw provider bodies, or image transport data.
+        pointerCalls: (body.input ?? []).filter((item) => item.type === 'function_call' && /^computer[_.](click|double_click|scroll|drag)$/u.test(item.name ?? '')).map((item) => {
+          const args = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : item.arguments;
+          return { id: item.call_id, tool: item.name, coordinates: Object.fromEntries(Object.entries(args ?? {}).filter(([key, value]) => /^(x|y|from_x|from_y|to_x|to_y|delta_x|delta_y)$/u.test(key) && typeof value === 'number')) };
+        }) };
       protocol.push(record);
 
     }
@@ -109,7 +115,7 @@ const request = (method, url, body) => page.evaluate(async ({ method, url, body 
   if (!result.ok) throw new Error(`Runtime request failed: ${result.error.code || result.error.status}`);
   return result.data;
 }, { method, url, body });
-async function waitForProgress(predicate, label, timeout = 180_000) {
+async function waitForProgress(predicate, label, timeout = 180_000, requireActiveTurn = false) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const status = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status');
@@ -120,6 +126,7 @@ async function waitForProgress(predicate, label, timeout = 180_000) {
       throw new Error(`${label}: thread ${id} ${status} (${root.thread?.run_error_code ?? 'unknown'})`);
     }
     if (await predicate()) return;
+    if (requireActiveTurn && status === 'success') throw new Error(`${label}: model turn completed without the required fixture outcome`);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`${label} timed out`);
@@ -216,7 +223,7 @@ try {
       await waitForProgress(async () => {
         const state = JSON.parse(await readFile(resultFile, 'utf8'));
         return index === 0 ? state.clicks === 2 : state.complete && state.scrollOffset > 0 && state.wheelEvents > 0;
-      }, 'native fixture effects');
+      }, 'native fixture effects', 180_000, true);
       await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'native turn completion');
       await waitForProgress(stageHasImage, 'native Stage image');
       const frame = await page.evaluate(() => {
