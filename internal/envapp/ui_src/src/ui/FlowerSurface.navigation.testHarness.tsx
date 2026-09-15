@@ -152,12 +152,20 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>();
   return {
   createFloatingPresence: actual.createFloatingPresence,
+  RadioGroup: actual.RadioGroup,
+  RadioOption: actual.RadioOption,
   Button: (props: any) => {
+    if (props.class?.includes('flower-composer-approval-decision')) return <Dynamic component={actual.Button} {...props} />;
     return (
       <button
         type={props.type ?? "button"}
         class={props.class}
         aria-label={props['aria-label']}
+        aria-describedby={props['aria-describedby']}
+        aria-checked={props['aria-checked']}
+        role={props.role}
+        data-flower-input-answer-kind={props['data-flower-input-answer-kind']}
+        onKeyDown={props.onKeyDown}
         aria-busy={props['aria-busy']}
         title={props.title}
         disabled={props.disabled}

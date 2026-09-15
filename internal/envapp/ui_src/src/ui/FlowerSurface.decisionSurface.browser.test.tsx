@@ -1,6 +1,7 @@
 import '../index.css';
+import { userEvent } from 'vitest/browser';
 
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import flowerFeatureStyles from './flower-feature.css?inline';
 
@@ -23,6 +24,13 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('Flower bottom decision surface', () => {
+  beforeEach(() => {
+    const featureStyle = document.createElement('style');
+    featureStyle.textContent = flowerFeatureStyles;
+    document.head.append(featureStyle);
+    onTestFinished(() => featureStyle.remove());
+  });
+
   const approval = (id: string, overrides: Record<string, unknown> = {}) => ({
     action_id: id,
     origin: 'main_tool' as const,
@@ -109,6 +117,11 @@ describe('Flower bottom decision surface', () => {
     expect(surface.querySelector('.flower-decision-surface')).toBeNull();
     const radios = Array.from(surface.querySelectorAll<HTMLElement>('[role="radio"]'));
     expect(radios).toHaveLength(4);
+    const choices = Array.from(surface.querySelectorAll<HTMLElement>('.flower-input-request-choice:not(.flower-input-request-choice-custom)'));
+    const firstChoice = choices[0]!.getBoundingClientRect();
+    const secondChoice = choices[1]!.getBoundingClientRect();
+    expect(secondChoice.top).toBeGreaterThanOrEqual(firstChoice.bottom);
+    expect(getComputedStyle(choices[0]!).borderTopWidth).toBe('0px');
     expect(surface.querySelector('[role="radiogroup"]')).not.toBeNull();
     expect(radios.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false', 'false']);
     const other = surface.querySelector('[data-flower-input-answer-kind="custom"]') as HTMLButtonElement;
@@ -116,6 +129,11 @@ describe('Flower bottom decision surface', () => {
     expect(other.querySelector('.flower-input-request-choice-custom-icon')).not.toBeNull();
     expect(surface.querySelector('[data-flower-input-custom-answer]')).toBeNull();
     expect(surface.querySelector('.flower-composer-continue')?.textContent?.trim()).toBe('Continue');
+    radios[0]!.focus();
+    radios[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(radios[1]);
+    expect(radios[1]!.getAttribute('aria-checked')).toBe('true');
+
   });
 
   it('keeps fixed and custom answers mutually exclusive while preserving the custom draft', async () => {
@@ -175,9 +193,8 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => !(runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).disabled);
 
     const hiking = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
-      .find((radio) => radio.textContent?.includes('Nature and hiking'))!;
-    hiking.focus();
-    hiking.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      .find((radio) => radio.closest('label')?.textContent?.includes('Nature and hiking'))!;
+    await userEvent.click(hiking.closest('label')!);
     await waitFor(() => hiking.getAttribute('aria-checked') === 'true');
     expect(runtime.querySelector('[data-flower-input-custom-answer]')).toBeNull();
     other.click();
@@ -191,10 +208,6 @@ describe('Flower bottom decision surface', () => {
   });
 
   it('prioritizes input over approval, then advances to approval before chat', async () => {
-    const featureStyle = document.createElement('style');
-    featureStyle.textContent = flowerFeatureStyles;
-    document.head.append(featureStyle);
-    onTestFinished(() => featureStyle.remove());
 
     const request = inputRequest({ prompt_id: 'prompt-input-before-approval' });
     const action = approval('approval-after-input');
@@ -271,7 +284,9 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="approval"] .flower-composer-approval-decision:not([disabled])') === document.activeElement);
     const focusedDecision = document.activeElement as HTMLButtonElement;
     const focusedDecisionStyle = getComputedStyle(focusedDecision);
-    expect(focusedDecisionStyle.boxShadow).toBe('none');
+    expect(parseFloat(focusedDecisionStyle.borderRadius)).toBeGreaterThanOrEqual(focusedDecision.getBoundingClientRect().height / 2);
+    const decisions = Array.from(approvalSurface.querySelectorAll<HTMLElement>('.flower-composer-approval-decision'));
+    expect(decisions[1]!.getBoundingClientRect().left - decisions[0]!.getBoundingClientRect().right).toBeGreaterThanOrEqual(7);
     expect(focusedDecisionStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     focusedDecision.click();
     await waitFor(() => submitApproval.mock.calls.length === 1);
@@ -459,7 +474,7 @@ describe('Flower bottom decision surface', () => {
     const observedModes: string[] = [];
     const observer = new MutationObserver(() => {
       const mode = runtime.querySelector<HTMLElement>('[data-flower-bottom-mode]')?.dataset.flowerBottomMode;
-      if (mode) observedModes.push(mode);
+      if (mode && observedModes.at(-1) !== mode) observedModes.push(mode);
     });
     observer.observe(runtime, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-flower-bottom-mode'] });
     const firstRowAllow = Array.from(rows[0]!.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
@@ -824,7 +839,7 @@ describe('Flower bottom decision surface', () => {
       version: 1,
       requested_at_ms: 20_000,
       can_approve: true,
-      summary: { label: summary, command },
+      summary: { label: summary, command, targets: [{ kind: 'working_directory' as const, label: '/workspace/redeven' }] },
     };
     const approvalThread = thread({
       thread_id: 'thread-duplicate-command',
@@ -844,6 +859,13 @@ describe('Flower bottom decision surface', () => {
     const surface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.querySelector('.flower-approval-command-text')?.textContent).toBe(command);
+    const details = surface.querySelector<HTMLDetailsElement>('.flower-approval-details')!;
+    expect(details.open).toBe(false);
+    details.querySelector('summary')!.click();
+    expect(details.open).toBe(true);
+    expect(details.textContent).toContain('/workspace/redeven');
+    expect(surface.querySelector('.flower-approval-command-text')?.closest('details')).toBeNull();
+
   });
 
   it('stops from the approval surface without submitting a decision and restores chat focus', async () => {
@@ -894,9 +916,9 @@ describe('Flower bottom decision surface', () => {
     const stop = runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
     const actions = capsule.parentElement as HTMLElement;
     expect(actions.classList.contains('flower-composer-approval-actions')).toBe(true);
-    expect(capsule.nextElementSibling).toBe(stop);
+    expect(stop.nextElementSibling).toBe(capsule);
     expect(capsule.querySelectorAll(':scope > button.flower-composer-approval-decision')).toHaveLength(2);
-    expect(capsule.querySelectorAll(':scope > .flower-approval-decision-divider')).toHaveLength(1);
+    expect(capsule.querySelectorAll(':scope > .flower-approval-decision-divider')).toHaveLength(0);
     stop.focus();
     stop.click();
     stop.click();

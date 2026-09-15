@@ -243,6 +243,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       toolApprovalExecuteRequestedAction: t(i18n, k('chat.toolApprovalExecuteRequestedAction')),
       toolApprovalWorkingDirectoryDetail: (target) => t(i18n, k('chat.toolApprovalWorkingDirectoryDetail'), { target }),
       toolApprovalComposerDescription: t(i18n, k('chat.toolApprovalComposerDescription')),
+      toolApprovalDetails: t(i18n, k('chat.toolApprovalDetails')),
+      toolApprovalScope: t(i18n, k('chat.toolApprovalScope')),
       toolApprovalQueueCount: (count) => t(i18n, k('chat.toolApprovalQueueCount'), { count }),
       toolApprovalPendingCount: (count) => i18n.tn(k('chat.toolApprovalPendingCount'), count, { count }),
       toolApprovalRejectBatch: t(i18n, k('chat.toolApprovalRejectBatch')),

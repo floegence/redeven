@@ -508,6 +508,8 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalExecuteRequestedAction: string;
     toolApprovalWorkingDirectoryDetail: (target: string) => string;
     toolApprovalComposerDescription: string;
+    toolApprovalDetails: string;
+    toolApprovalScope: string;
     toolApprovalQueueCount: (count: number) => string;
     toolApprovalPendingCount: (count: number) => string;
     toolApprovalRejectBatch: string;
@@ -827,6 +829,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalExecuteRequestedAction: 'Execute requested action',
     toolApprovalWorkingDirectoryDetail: (target) => 'Working directory: ' + target,
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
+    toolApprovalDetails: 'View action details',
+    toolApprovalScope: 'Approval applies only to the listed actions.',
     toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
     toolApprovalPendingCount: (count) => `${count} pending tool approval${count === 1 ? '' : 's'}`,
     toolApprovalRejectBatch: 'Reject all',
@@ -864,7 +868,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     computerControlHint: "Complete sign-in in the image using your mouse and keyboard. Passwords and codes stay out of the conversation.",
     computerControlFailed: "Control could not be updated. Check the page before trying again.",
     inputRequestTitle: 'Waiting for your reply',
-    inputRequestDescription: 'Reply in the composer to continue this conversation.',
+    inputRequestDescription: 'Answer this question to continue.',
     inputRequestSubmit: 'Continue',
     inputRequestRetry: 'Retry',
     inputRequestAnswerRequired: 'Answer the waiting prompt before continuing.',

@@ -64,39 +64,29 @@ describe('Flower approval command presentation', () => {
     expect(surface).not.toContain('This command accesses the network.');
   });
 
-  it('uses one continuous decision capsule for row and batch approvals', () => {
+  it('uses independent Floe buttons for row and batch decisions', () => {
     const css = readFile(stylesPath);
     const surface = readFile(surfacePath);
-    const capsuleRule = cssRule(css, '.flower-approval-decision-group');
-    const decisionRule = cssRule(css, '.flower-approval-decision-group .flower-composer-approval-decision');
-    const decisionFocusRule = cssRule(css, '.flower-approval-decision-group .flower-composer-approval-decision:focus-visible');
-    const singleActionsRule = cssRule(css, '.flower-approval-single .flower-approval-actions');
+    const actionsRule = cssRule(css, '.flower-approval-decision-group');
+    const decisionRule = cssRule(css, '.flower-composer-approval-decision');
 
-    expect(surface).toContain('const FlowerApprovalDecisionCapsule: Component<FlowerApprovalDecisionCapsuleProps>');
-    expect(surface).toContain('<FlowerApprovalDecisionCapsule');
-    expect(surface.match(/^\s+<FlowerApprovalDecisionCapsule/gmu)).toHaveLength(2);
-    expect(surface).toContain('<span class="flower-approval-decision-divider"');
-    expect(surface).not.toContain('flower-approval-action-pill');
-    expect(capsuleRule).toContain('border: 1px solid');
-    expect(capsuleRule).toContain('border-radius: 9999px');
-    expect(capsuleRule).toContain('overflow: hidden');
-    expect(decisionRule).toContain('border: 0');
-    expect(decisionRule).toContain('border-radius: 0');
-    expect(decisionFocusRule).toContain('outline: none');
-    expect(decisionFocusRule).toContain('box-shadow: none !important');
-    expect(decisionFocusRule).not.toContain('inset');
-    expect(singleActionsRule).toContain('justify-content: flex-end');
-    expect(singleActionsRule).not.toContain('border-top');
-    expect(css).not.toContain('.flower-approval-single .flower-composer-stop-thread {');
-    expect(css).not.toContain('.flower-approval-action-pill');
+    expect(surface).toContain('const FlowerApprovalDecisionActions: Component<FlowerApprovalDecisionActionsProps>');
+    expect(surface.match(/^\s+<FlowerApprovalDecisionActions/gmu)).toHaveLength(2);
+    expect(surface).not.toContain('flower-approval-decision-divider');
+    expect(actionsRule).toContain('gap: 0.5rem');
+    expect(actionsRule).not.toContain('overflow: hidden');
+    expect(decisionRule).toContain('border-radius: 9999px');
+    expect(decisionRule).toContain('min-height: 2.25rem');
+    expect(css).not.toContain('.flower-composer-approval-decision:focus-visible');
   });
 
-  it('keeps ordinary tool descriptions inline and reserves the risk row for actual risk', () => {
+  it('keeps complete operation descriptions readable and reserves the risk row for actual risk', () => {
     const css = readFile(stylesPath);
     const surface = readFile(surfacePath);
 
     expect(surface).toContain('class="flower-approval-operation-description"');
     expect(surface).not.toContain('presentation().risk');
-    expect(cssRule(css, '.flower-approval-operation-description')).toContain('text-overflow: ellipsis');
+    expect(cssRule(css, '.flower-approval-operation-description')).toContain('overflow-wrap: anywhere');
+    expect(surface).toContain('<details class="flower-approval-details">');
   });
 });

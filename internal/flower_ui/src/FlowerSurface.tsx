@@ -9,7 +9,7 @@ import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, cr
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, RadioGroup, RadioOption, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
 import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAction, type FlowerDirectoryMenuAvailability } from './FlowerDirectoryMenuItems';
@@ -451,7 +451,7 @@ const FlowerStopIcon: Component<{ class?: string }> = (props) => (
   </svg>
 );
 
-type FlowerApprovalDecisionCapsuleProps = Readonly<{
+type FlowerApprovalDecisionActionsProps = Readonly<{
   label: string;
   rejectLabel: string;
   approveLabel: string;
@@ -463,34 +463,35 @@ type FlowerApprovalDecisionCapsuleProps = Readonly<{
   onApprove: () => void;
 }>;
 
-const FlowerApprovalDecisionCapsule: Component<FlowerApprovalDecisionCapsuleProps> = (props) => (
+const FlowerApprovalDecisionActions: Component<FlowerApprovalDecisionActionsProps> = (props) => (
   <div
     class="flower-approval-decision-group"
     role="group"
     aria-label={props.label}
     data-flower-approval-decision-group="true"
   >
-    <button
-      type="button"
-      class="flower-composer-approval-decision flower-approval-decision-reject"
+    <Button
+      variant="outline"
+      size="sm"
+      class="flower-composer-approval-decision flower-approval-decision-reject rounded-full"
       disabled={props.disabled}
       aria-label={props.rejectAriaLabel}
       aria-describedby={props.describedBy || undefined}
       onClick={props.onReject}
     >
       {props.rejectLabel}
-    </button>
-    <span class="flower-approval-decision-divider" aria-hidden="true" />
-    <button
-      type="button"
-      class="flower-composer-approval-decision flower-approval-decision-approve"
+    </Button>
+    <Button
+      variant="primary"
+      size="sm"
+      class="flower-composer-approval-decision flower-approval-decision-approve rounded-full"
       disabled={props.disabled}
       aria-label={props.approveAriaLabel}
       aria-describedby={props.describedBy || undefined}
       onClick={props.onApprove}
     >
       {props.approveLabel}
-    </button>
+    </Button>
   </div>
 );
 
@@ -1087,7 +1088,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               .find((candidate) => candidate.dataset.flowerApprovalActionId === handoff.approvalActionID)
             : undefined;
           const target = actionTarget?.querySelector<HTMLElement>('.flower-composer-approval-decision:not([disabled])')
-            ?? surface?.querySelector<HTMLElement>('.flower-composer-approval-decision:not([disabled]), .flower-composer-stop-thread:not([disabled])');
+            ?? surface?.querySelector<HTMLElement>('.flower-composer-approval-decision:not([disabled])')
+            ?? surface?.querySelector<HTMLElement>('.flower-composer-stop-thread:not([disabled])');
           target?.focus({ preventScroll: true });
           return;
         }
@@ -6759,7 +6761,7 @@ webSearch: model.web_search,
     if (event.button !== 0 || event.defaultPrevented) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('textarea, input, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
+    if (target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
     const field = composerRef;
     if (
       !(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)
@@ -7410,7 +7412,9 @@ webSearch: model.web_search,
             </span>
             <div class="flower-input-request-heading-copy">
               <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
-              <div class="flower-input-request-heading-description">{chatCopyValue('inputRequestDescription', 'Reply in the composer to continue this conversation.')}</div>
+              <Show when={!composerSurface}>
+                <div class="flower-input-request-heading-description">{chatCopyValue('inputRequestDescription', 'Answer this question to continue.')}</div>
+              </Show>
             </div>
           </div>
           <div class="flower-input-request-questions">
@@ -7432,21 +7436,30 @@ webSearch: model.web_search,
                     )}
                   >
                     <div class="flower-input-request-question-copy">
-                      <div class="flower-input-request-question-header">{question().header}</div>
-                      <Show when={showSummary()}>
-                        <div class="flower-input-request-description">{summary()}</div>
+                      <Show when={!composerSurface && question().header !== question().question}>
+                        <div class="flower-input-request-question-header">{question().header}</div>
                       </Show>
                       <div class="flower-input-request-question-text">{question().question}</div>
+                      <Show when={showSummary()} fallback={<Show when={composerSurface}>
+                        <div class="flower-input-request-description">{chatCopyValue('inputRequestDescription', 'Answer this question to continue.')}</div>
+                      </Show>}>
+                        <div class="flower-input-request-description">{summary()}</div>
+                      </Show>
                     </div>
                     <Show when={(question().choices?.length ?? 0) > 0 || showCustomChoice()}>
-                      <div
+                      <RadioGroup
                         class="flower-input-request-choice-grid"
-                        role="radiogroup"
+                        value={selectedChoiceID()}
+                        onChange={(choiceID) => {
+                          const choice = question().choices?.find((candidate) => candidate.choice_id === choiceID);
+                          if (choice) selectInputChoice(question(), choice);
+                        }}
+                        disabled={selectedThreadReadOnly()}
                         aria-label={question().question}
                         onKeyDown={(event) => {
                           if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                          const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'));
-                          const currentIndex = radios.indexOf(document.activeElement as HTMLButtonElement);
+                          const radios = Array.from(event.currentTarget.querySelectorAll<HTMLInputElement | HTMLButtonElement>('[role="radio"]:not(:disabled)'));
+                          const currentIndex = radios.indexOf(document.activeElement as HTMLInputElement | HTMLButtonElement);
                           if (radios.length === 0) return;
                           event.preventDefault();
                           const offset = event.key === 'ArrowDown' ? 1 : -1;
@@ -7457,35 +7470,28 @@ webSearch: model.web_search,
                       >
                         <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={question().choices ?? []} identity={(choice) => choice.choice_id}>
                           {(choice) => (
-                            <button
-                              type="button"
+                            <RadioOption
+                              value={choice().choice_id}
                               role="radio"
+                              label={choice().label}
+                              description={choice().description}
                               class={cn(
                                 'flower-input-request-choice',
                                 selectedChoiceID() === choice().choice_id && 'flower-input-request-choice-selected',
                               )}
                               aria-checked={selectedChoiceID() === choice().choice_id}
                               data-flower-input-answer-kind="choice"
-                              onClick={() => selectInputChoice(question(), choice())}
-                              onKeyDown={(event) => {
-                                if (event.key !== ' ') return;
-                                event.preventDefault();
-                                selectInputChoice(question(), choice());
-                              }}
-                            >
-                              <span class="flower-input-request-choice-label">{choice().label}</span>
-                              <Show when={choice().description}>
-                                {(description) => <span class="flower-input-request-choice-description">{description()}</span>}
-                              </Show>
-                            </button>
+                            />
                           )}
                         </FlowerKeyedList>
                         <Show when={showCustomChoice()}>
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             role="radio"
+                            disabled={selectedThreadReadOnly()}
                             class={cn(
-                              'flower-input-request-choice flower-input-request-choice-custom',
+                              'flower-input-request-choice-custom rounded-full',
                               customSelected() && 'flower-input-request-choice-selected',
                             )}
                             aria-checked={customSelected()}
@@ -7501,9 +7507,9 @@ webSearch: model.web_search,
                             <span class="flower-input-request-choice-label">
                               {trimString(question().write_label) || chatCopyValue('inputRequestOther', 'None of the above / Other')}
                             </span>
-                          </button>
+                          </Button>
                         </Show>
-                      </div>
+                      </RadioGroup>
                     </Show>
                   </div>
                 );
@@ -7749,7 +7755,7 @@ webSearch: model.web_search,
                 <Show when={presentation().description}>
                   {(description) => (
                     <span class="flower-approval-operation-description" title={description()}>
-                      <span aria-hidden="true">·</span> {description()}
+                      <Show when={!composerSurface}><span aria-hidden="true">·</span> </Show>{description()}
                     </span>
                   )}
                 </Show>
@@ -7769,14 +7775,17 @@ webSearch: model.web_search,
             )}
           </Show>
           <Show when={presentation().details.length > 0}>
-            <div class="flower-approval-targets">
-              <For each={presentation().details}>
-                {(detail) => <span class="flower-approval-target">{detail}</span>}
-              </For>
-            </div>
+            <details class="flower-approval-details">
+              <summary>{copy().chat.toolApprovalDetails}</summary>
+              <div class="flower-approval-targets">
+                <For each={presentation().details}>
+                  {(detail) => <span class="flower-approval-target">{detail}</span>}
+                </For>
+              </div>
+            </details>
           </Show>
           <Show when={riskNote()}>
-            {(note) => <p class="flower-approval-risk">{note()}</p>}
+            {(note) => <p class="flower-approval-risk"><AlertCircle class="h-3.5 w-3.5" aria-hidden="true" /><span>{note()}</span></p>}
           </Show>
           <Show when={statusCopy()}>
             {(message) => <p id={statusID} class="flower-approval-status">{message()}</p>}
@@ -7789,12 +7798,27 @@ webSearch: model.web_search,
           class={cn('flower-approval-actions', composerSurface && 'flower-composer-approval-actions')}
           data-flower-approval-actions-row={composerSurface ? 'true' : undefined}
         >
+            <Show when={singleComposer}>
+              <span class="flower-approval-scope">{copy().chat.toolApprovalScope}</span>
+              <Button
+                variant="secondary"
+                icon={FlowerStopIcon}
+                size="icon"
+                class="flower-composer-stop-thread rounded-full"
+                aria-label={selectedThreadStopLabel()}
+                title={selectedThreadStopLabel()}
+                disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
+                loading={selectedThreadStopPending()}
+                onClick={() => void stopSelectedThreadFromComposer()}
+              />
+            </Show>
             <Show when={canDecide() || composerSurface} fallback={<div class="flower-approval-unavailable">{unavailableCopy()}</div>}>
               <Show when={composerSurface} fallback={
                 <>
                   <Button
                     variant="outline"
                     size="sm"
+                    class="flower-composer-continue rounded-full"
                     disabled={disabled()}
                     aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
                     aria-describedby={describedBy() || undefined}
@@ -7805,6 +7829,7 @@ webSearch: model.web_search,
                   <Button
                     variant="primary"
                     size="sm"
+                    class="flower-composer-continue rounded-full"
                     disabled={disabled()}
                     aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
                     aria-describedby={describedBy() || undefined}
@@ -7814,7 +7839,7 @@ webSearch: model.web_search,
                   </Button>
                 </>
               }>
-                <FlowerApprovalDecisionCapsule
+                <FlowerApprovalDecisionActions
                   label={actionLabel()}
                   rejectLabel={copy().chat.toolApprovalReject}
                   approveLabel={copy().chat.toolApprovalApprove}
@@ -7824,19 +7849,6 @@ webSearch: model.web_search,
                   disabled={disabled()}
                   onReject={() => void submitApprovalAction(action(), false)}
                   onApprove={() => void submitApprovalAction(action(), true)}
-                />
-              </Show>
-              <Show when={singleComposer}>
-                <Button
-                  variant="secondary"
-                  icon={FlowerStopIcon}
-                  size="icon"
-                  class="flower-composer-stop-thread rounded-full"
-                  aria-label={selectedThreadStopLabel()}
-                  title={selectedThreadStopLabel()}
-                  disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
-                  loading={selectedThreadStopPending()}
-                  onClick={() => void stopSelectedThreadFromComposer()}
                 />
               </Show>
             </Show>
@@ -11264,10 +11276,10 @@ webSearch: model.web_search,
                           <>
                             <div class="flower-approval-queue-header">
                               <div class="flower-approval-queue-heading">
-                                <span class="flower-approval-queue-icon" aria-hidden="true"><Shield class="h-4 w-4" /></span>
+                                <span class="flower-decision-state-dot" aria-hidden="true" />
                                 <div>
+                                  <div class="flower-approval-eyebrow">{copy().chat.toolApprovalRequired}</div>
                                   <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
-                                  <div class="flower-approval-queue-description">{copy().chat.toolApprovalComposerDescription}</div>
                                 </div>
                               </div>
                               <span class="flower-approval-queue-progress" aria-live="polite">
@@ -11283,7 +11295,7 @@ webSearch: model.web_search,
                               <span class="flower-approval-queue-progress" aria-live="polite">
                                 {copy().chat.toolApprovalPendingCount(selectedComposerApprovalActions().length)}
                               </span>
-                              <FlowerApprovalDecisionCapsule
+                              <FlowerApprovalDecisionActions
                                 label={copy().chat.toolApprovalPendingCount(selectedApprovalBatchActions().length)}
                                 rejectLabel={copy().chat.toolApprovalRejectBatch}
                                 approveLabel={copy().chat.toolApprovalApproveBatch}
@@ -11309,10 +11321,10 @@ webSearch: model.web_search,
                         }>
                           <div class="flower-approval-queue-header flower-approval-single-header">
                             <div class="flower-approval-queue-heading">
-                              <span class="flower-approval-queue-icon" aria-hidden="true"><Shield class="h-4 w-4" /></span>
+                              <span class="flower-decision-state-dot" aria-hidden="true" />
                               <div>
+                                <div class="flower-approval-eyebrow">{copy().chat.toolApprovalRequired}</div>
                                 <div class="flower-approval-question">{copy().chat.toolApprovalComposerTitle}</div>
-                                <div class="flower-approval-queue-description">{copy().chat.toolApprovalComposerDescription}</div>
                               </div>
                             </div>
                           </div>
@@ -11348,7 +11360,7 @@ webSearch: model.web_search,
                       <Show when={!isComputerInput(selectedInputRequest())}><Button
                         variant="primary"
                         icon={ArrowUp}
-                        class="flower-composer-continue"
+                        class="flower-composer-continue rounded-full"
                         disabled={selectedThreadReadOnly() || !inputRequestReadyToSubmit()}
                         onClick={() => void submitChat()}
                       >
