@@ -85,6 +85,12 @@ The gate builds the embedded UI assets from the exact main source before those
 browser steps; an ignored or previously generated `internal/envapp/ui/dist`
 tree is never accepted as carrier input.
 
+Headless UI tests keep browser scrollbars enabled so geometry assertions observe
+real scrollbar layout. Fixtures requiring space-consuming scrollbars explicitly
+reset the standard scrollbar properties before setting a custom width; system
+overlay preferences and theme colors must not disable that coverage. Dialog
+focus checks await the upstream restoration after the unmount paint.
+
 The Desktop gate protects real Electron preload coverage from local process
 collisions. Every preload run uses a temporary real working directory and
 separate utility/session user-data directories, then verifies both paths inside
@@ -364,5 +370,8 @@ not become a fallback, shim, or local artifact path.
 - `redeven:.github/workflows/release.yml:1` - Makes least-privilege four-target runtime and installer proof mandatory.
 - `redeven:.github/workflows/codeql.yml:1` - Runs daily changed-main security analysis outside ordinary push and pull-request CI.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1` - Verifies the production Plugin entry and built renderer.
+- `redeven:internal/envapp/ui_src/vitest.browser.config.ts:1` - Keeps scrollbars observable in headless UI tests.
+- `redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx:1` - Checks stable dialog geometry with space-consuming scrollbars.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1` - Checks retained management state and deferred focus restoration.
 - `redeven:scripts/check_readme_localizations.mjs:1` - Enforces public README localization structure, terminology, literals, and synchronization hashes.
 - `redeven:scripts/okf/check_source_integrity.sh:1` - Validates the maintained OKF corpus.

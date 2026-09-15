@@ -74,8 +74,9 @@ describe('GitHub source review in the browser', () => {
       window.redevenDesktopTemplateSources = { acquire: vi.fn(), cancel: vi.fn() };
       const scrollbarStyle = document.createElement('style');
       // Exercise a space-consuming scrollbar even on systems using overlay scrollbars.
+      // Reset the standard properties so they do not override the custom scrollbar.
       scrollbarStyle.textContent =
-        '[data-floe-dialog-panel] > div { scrollbar-width: auto; } [data-floe-dialog-panel] > div::-webkit-scrollbar { width: 14px; }';
+        '[data-floe-dialog-panel] > div { scrollbar-width: auto; scrollbar-color: auto; } [data-floe-dialog-panel] > div::-webkit-scrollbar { width: 14px; }';
       document.body.append(scrollbarStyle);
       const host = document.createElement('div');
       if (scoped) {
