@@ -85,9 +85,15 @@ decoded live frames, hidden-viewer persistence, settings and login handback with
 rapid ASCII and native Chromium IME submission. It does not qualify native
 macOS, connected Chrome, every OS input method, or every sensitive-page and approval scenario.
 The shared UI runner also stops canonical takeover and an outstanding browser
-navigation through Flower's Stop button. It requires the cancellation fact,
-no appended Stop message or error card, an editable composer, and a successful
-visual browser follow-up in the same thread. The held navigation fixture makes
+navigation through Flower's Stop button. Ordinary cancellation requires no
+appended Stop message or error card. Dispatched navigation instead requires
+`floret_effect_outcome_unknown`, a visible safety warning and no replay action;
+the fixture must receive exactly one navigation. Both retain the cancellation
+fact, restore the composer and allow an explicit visual follow-up in the same
+thread. `REDEVEN_COMPUTER_UI_SCENARIO=lifecycle` runs only this focused UI scope
+and records it separately; it cannot qualify the complete browser/X11 matrix.
+The Linux fixture publishes its observable JSON state atomically so readers
+never accept or skip a partial write. The held navigation fixture makes
 the interruption observable without injecting model calls or bypassing the
 production adapter. Each scenario records its own result; an earlier passing
 browser turn cannot substitute for a failed cancellation or follow-up.
