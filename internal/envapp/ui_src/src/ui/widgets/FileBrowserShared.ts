@@ -205,22 +205,17 @@ export function updateItemInTree(tree: FileItem[], oldPath: string, updates: Par
   return nextTree;
 }
 
-export function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem, rootPath = '/'): FileItem[] {
+export function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem): FileItem[] {
   const targetParent = normalizePath(parentPath);
   const targetItemPath = normalizePath(item.path);
-  const normalizedRoot = normalizePath(rootPath);
-
-  if (targetParent === normalizedRoot) {
-    if (tree.some((entry) => normalizePath(entry.path) === targetItemPath)) return tree;
-    return sortFileItems([...tree, item]);
-  }
 
   const visit = (items: FileItem[]): [FileItem[], boolean] => {
     let changed = false;
     const next = items.map((entry) => {
       if (entry.type !== 'folder') return entry;
       if (normalizePath(entry.path) === targetParent) {
-        const children = entry.children ?? [];
+        if (!Array.isArray(entry.children)) return entry;
+        const children = entry.children;
         if (children.some((child) => normalizePath(child.path) === targetItemPath)) return entry;
         changed = true;
         return { ...entry, children: sortFileItems([...children, item]) };
@@ -238,13 +233,8 @@ export function insertItemToTree(tree: FileItem[], parentPath: string, item: Fil
   return nextTree;
 }
 
-export function canInsertIntoTree(tree: FileItem[], parentPath: string, rootPath = '/'): boolean {
+export function canInsertIntoTree(tree: FileItem[], parentPath: string): boolean {
   const targetParent = normalizePath(parentPath);
-  const normalizedRoot = normalizePath(rootPath);
-
-  if (targetParent === normalizedRoot) {
-    return true;
-  }
 
   const visit = (items: FileItem[]): boolean => {
     for (const entry of items) {

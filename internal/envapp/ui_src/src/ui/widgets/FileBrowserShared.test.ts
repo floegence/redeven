@@ -22,21 +22,20 @@ describe('FileBrowserShared scoped root helpers', () => {
     ]);
   });
 
-  it('inserts new items at the scoped root instead of requiring a synthetic slash root node', () => {
-    const tree: FileItem[] = [
-      { id: '/Users/tester/src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
-    ];
+  it.each(['/', '/Users/tester'])('inserts created entries inside the loaded root node %s', (rootPath) => {
+    const tree = withChildrenAtRoot([], rootPath, [], rootPath);
+    const newPath = buildChildPath(rootPath, 'README.md');
     const newItem: FileItem = {
-      id: '/Users/tester/README.md',
+      id: newPath,
       name: 'README.md',
       type: 'file',
-      path: '/Users/tester/README.md',
+      path: newPath,
     };
 
-    expect(insertItemToTree(tree, '/Users/tester', newItem, '/Users/tester')).toEqual([
-      { id: '/Users/tester/src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
-      { id: '/Users/tester/README.md', name: 'README.md', type: 'file', path: '/Users/tester/README.md' },
-    ]);
+    const updated = insertItemToTree(tree, rootPath, newItem);
+    expect(updated).toStrictEqual([{ ...tree[0], children: [newItem] }]);
+    expect(tree[0]?.children).toStrictEqual([]);
+    expect(insertItemToTree(updated, rootPath, newItem)).toBe(updated);
   });
 
   it('validates entry names as single path segments', () => {
@@ -52,7 +51,7 @@ describe('FileBrowserShared scoped root helpers', () => {
   });
 
   it('only inserts into the visible tree when the destination directory is already loaded', () => {
-    const tree: FileItem[] = [
+    const children: FileItem[] = [
       {
         id: '/Users/tester/src',
         name: 'src',
@@ -68,9 +67,14 @@ describe('FileBrowserShared scoped root helpers', () => {
       },
     ];
 
-    expect(canInsertIntoTree(tree, '/Users/tester', '/Users/tester')).toBe(true);
-    expect(canInsertIntoTree(tree, '/Users/tester/src', '/Users/tester')).toBe(false);
-    expect(canInsertIntoTree(tree, '/Users/tester/docs', '/Users/tester')).toBe(true);
+    const tree = withChildrenAtRoot([], '/Users/tester', children, '/Users/tester');
+    expect(canInsertIntoTree([], '/Users/tester')).toBe(false);
+    expect(canInsertIntoTree(tree, '/Users/tester')).toBe(true);
+    expect(canInsertIntoTree(tree, '/Users/tester/src')).toBe(false);
+    expect(canInsertIntoTree(tree, '/Users/tester/docs')).toBe(true);
+    const item: FileItem = { id: '/Users/tester/src/test', path: '/Users/tester/src/test', name: 'test', type: 'file' };
+    expect(insertItemToTree(tree, '/Users/tester/src', item)).toBe(tree);
+    expect(insertItemToTree(tree, '/Users/tester/missing', item)).toBe(tree);
   });
 
   it('maps symlink entries into FileItem.link metadata while keeping folder/file interaction types intact', () => {

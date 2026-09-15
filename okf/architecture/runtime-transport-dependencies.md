@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime transport dependencies
 description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-15T00:00:00Z
 quality_exception: Cross-domain published dependency contract spanning transport, terminal, and session security.
 ---
 # Summary
@@ -42,6 +42,8 @@ use the same native build contract. Terminal-go's no-tag engine is retained only
 as a fail-closed boundary test and is never a shippable Runtime fallback.
 
 Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The Runtime consumes Flowersec Go v5.1.0 and browser surfaces consume Flowersec Core v5.1.0 through published packages only. The agent delegates retry and connection lifecycle to Flowersec's controllers, structured diagnostics, wait, and connect APIs. It does not parse error text, run a parallel retry loop, or reuse a spent artifact. Explicit external Local UI validates the configured device CA and exact-SAN leaf, serves every public page over HTTPS, and maps each validated HTTPS authority to an independent runtime-assigned WSS listener at `/flowersec/v3/direct`; each actual browser or client must trust the exported public CA. Desktop-private Local UI instead uses the independently versioned `flowersec-private-loopback/1` profile through its dedicated Go and browser APIs. That profile is restricted to same-origin numeric-loopback `ws:`, is admitted only after the Redeven bridge token, and is rejected by ordinary public Go, TypeScript, Rust, and Swift `flowersec/3` decoders. It does not change the public Transport v3 TLS `ca` or `pin` wire contract and is not available to Provider, Gateway, Node, Rust, Swift, tunnel, QUIC, WebTransport, or public URL clients.
+
+[Product RPC request encoding](product-rpc-request-encoding.md) owns JSON construction at the Redeven codec boundary.
 
 Each Env App product tree mounts exactly one `ProtocolProvider`. Its `ConnectionController` is the only owner allowed to replace the current Flowersec session. RPC, terminals, file reads, and other real-time capabilities reuse that session and open separate `ByteStream` instances; terminal traffic remains only `terminal/live_v1`. Switching a Flower thread, Activity or Workbench mode, terminal view, or file consumer cannot reconnect Flowersec. When the session terminates, old streams are not replayed, and no capability may introduce polling, HTTP, RPC, or a second session as fallback. Redeven does not extend Flowersec's Go, TypeScript, Rust, or Swift public Stream APIs.
 

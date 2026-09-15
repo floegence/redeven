@@ -43,7 +43,7 @@ import type {
 export function toWireFsListRequest(req: FsListRequest): wire_fs_list_req {
   return {
     path: req.path,
-    show_hidden: typeof req.showHidden === 'boolean' ? req.showHidden : undefined,
+    ...(typeof req.showHidden === 'boolean' ? { show_hidden: req.showHidden } : {}),
   };
 }
 
@@ -82,7 +82,7 @@ export function fromWireFsListResponse(resp: wire_fs_list_resp): FsListResponse 
 export function toWireFsReadFileRequest(req: FsReadFileRequest): wire_fs_read_file_req {
   return {
     path: req.path,
-    encoding: req.encoding,
+    ...(req.encoding === undefined ? {} : { encoding: req.encoding }),
   };
 }
 
@@ -97,8 +97,8 @@ export function toWireFsWriteFileRequest(req: FsWriteFileRequest): wire_fs_write
   return {
     path: req.path,
     content: req.content,
-    encoding: req.encoding,
-    create_dirs: typeof req.createDirs === 'boolean' ? req.createDirs : undefined,
+    ...(req.encoding === undefined ? {} : { encoding: req.encoding }),
+    ...(typeof req.createDirs === 'boolean' ? { create_dirs: req.createDirs } : {}),
   };
 }
 
@@ -109,7 +109,7 @@ export function fromWireFsWriteFileResponse(resp: wire_fs_write_file_resp): FsWr
 export function toWireFsMkdirRequest(req: FsMkdirRequest): wire_fs_mkdir_req {
   return {
     path: req.path,
-    create_parents: typeof req.createParents === 'boolean' ? req.createParents : undefined,
+    ...(typeof req.createParents === 'boolean' ? { create_parents: req.createParents } : {}),
   };
 }
 
@@ -120,7 +120,7 @@ export function fromWireFsMkdirResponse(resp: wire_fs_mkdir_resp): FsMkdirRespon
 export function toWireFsDeleteRequest(req: FsDeleteRequest): wire_fs_delete_req {
   return {
     path: req.path,
-    recursive: typeof req.recursive === 'boolean' ? req.recursive : undefined,
+    ...(typeof req.recursive === 'boolean' ? { recursive: req.recursive } : {}),
   };
 }
 
@@ -146,7 +146,7 @@ export function toWireFsCopyRequest(req: FsCopyRequest): wire_fs_copy_req {
   return {
     source_path: req.sourcePath,
     dest_path: req.destPath,
-    overwrite: typeof req.overwrite === 'boolean' ? req.overwrite : undefined,
+    ...(typeof req.overwrite === 'boolean' ? { overwrite: req.overwrite } : {}),
   };
 }
 
