@@ -129,6 +129,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Globe: Icon,
     GripVertical: Icon,
     MoreHorizontal: Icon,
+    MonitorPointer: Icon,
     Paperclip: Icon,
     Pencil: Icon,
     Pin: Icon,
@@ -218,10 +219,11 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
             <button
               type="button"
               aria-label="Close"
+              data-floe-floating-window-control="close"
               onClick={() => props.onOpenChange?.(false)}
             />
           </div>
-          <div class="flex-1 overflow-auto p-3">{props.children}</div>
+          <div class="flex-1 overflow-auto p-3" data-floe-floating-window-content="true">{props.children}</div>
           <Show when={props.footer}>{props.footer}</Show>
         </div>
       </Show>
@@ -287,6 +289,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     />
   ),
   ProcessingIndicator: (props: any) => <span class={props.class}>{props.children}</span>,
+  SurfaceFloatingPanel: actual.SurfaceFloatingPanel,
   Select: (props: any) => (
     <select
       class={props.class}

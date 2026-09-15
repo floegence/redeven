@@ -32,7 +32,7 @@ export function observeDesktopComputerFrames() {
   const load = (event) => {
     const image = event.target;
     if (stopped || !image.matches?.('.flower-computer-stage-frame') || !image.complete || image.naturalWidth === 0 || !image.src.startsWith('blob:')) return;
-    const sample = { target: image.closest('.flower-computer-stage')?.dataset.computerTarget,
+    const sample = { target: image.closest('.flower-computer-stage-frame-wrap')?.dataset.computerTarget,
       thread: document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-id'),
       width: image.naturalWidth, height: image.naturalHeight, at: Date.now() };
     const work = fetch(image.src).then((response) => response.arrayBuffer())

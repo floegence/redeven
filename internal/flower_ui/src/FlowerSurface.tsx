@@ -49,7 +49,7 @@ import {
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerThinkingOrb } from './FlowerThinkingOrb';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
-import type { FlowerComputerStageSnapshot } from './FlowerComputerStage';
+import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
@@ -5532,6 +5532,7 @@ webSearch: model.web_search,
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
   const [computerStageOpen, setComputerStageOpen] = createSignal(true);
+  const [computerStageBoundary, setComputerStageBoundary] = createSignal<HTMLElement>();
   const [computerUserFrame, setComputerUserFrame] = createSignal<Blob>();
   const [computerControlBusy, setComputerControlBusy] = createSignal(false);
   const [computerControlError, setComputerControlError] = createSignal(false);
@@ -5602,6 +5603,7 @@ webSearch: model.web_search,
           candidates.push({
             item,
             runID: block.block.run_id,
+            ...(entry.type === 'message' ? { messageStatus: entry.message.status } : {}),
             target: detail.target,
             ...(detail.target_id ? { targetID: detail.target_id } : {}),
             action: detail.action,
@@ -5621,6 +5623,33 @@ webSearch: model.web_search,
     return candidates.find((candidate) => Boolean(candidate.frame))
       ?? candidates[0]
       ?? null;
+  });
+  const computerStageSessionState = createMemo<FlowerComputerStageSessionState>(() => {
+    const stage = selectedComputerStage();
+    if (stage?.runID && stage.runID === selectedThread()?.active_run_id) {
+      switch (selectedThreadLiveStatus()) {
+        case 'running': return 'running';
+        case 'waiting_user':
+        case 'waiting_approval': return 'awaiting_user';
+        case 'failed': return 'failed';
+        case 'success':
+        case 'canceled': return 'completed';
+        default: break;
+      }
+    }
+    switch (stage?.messageStatus) {
+      case 'error': return 'failed';
+      case 'canceled': return 'completed';
+      default: break;
+    }
+    switch (stage?.status) {
+      case 'waiting': return 'awaiting_user';
+      case 'success':
+      case 'canceled': return 'completed';
+      case 'error':
+      case 'declined': return 'failed';
+      default: return 'running';
+    }
   });
   createEffect(() => {
     selectedThreadID();
@@ -10866,6 +10895,7 @@ webSearch: model.web_search,
       <div class="flower-chat-main flower-chat-main">
         <div
           ref={(node) => {
+            setComputerStageBoundary(node);
             transcriptScroll.bind(node);
           }}
           class="flower-chat-transcript flower-chat-transcript"
@@ -11784,9 +11814,11 @@ webSearch: model.web_search,
               snapshot={stage()}
               userFrame={computerUserFrame()}
               onInput={computerUserFrame() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
+              boundary={computerStageBoundary()}
               frameRef={computerStageFrameRef()}
               threadID={selectedThreadID()}
               open={computerStageOpen()}
+              sessionState={computerStageSessionState()}
               onRestore={() => setComputerStageOpen(true)}
               loadFrame={props.adapter.loadComputerFrame}
               copy={{
@@ -11796,6 +11828,7 @@ webSearch: model.web_search,
                 close: copy().chat.computerStageClose,
                 minimize: copy().chat.computerStageMinimize,
                 restore: copy().chat.computerStageRestore,
+                state: copy().chat.computerStageStatus,
                 move: copy().chat.computerStageMove,
                 noFrame: copy().chat.toolActivityDetailsPending,
                 retry: copy().chat.handlerRetry,

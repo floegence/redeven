@@ -375,6 +375,7 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerStillStarting: string;
     computerStageMinimize: string;
     computerStageRestore: string;
+    computerStageStatus: Readonly<Record<'running' | 'awaiting_user' | 'completed' | 'failed', string>>;
     computerStageMove: string;
     computerStageClose: string;
     handlerRetry: string;
@@ -681,6 +682,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerStillStarting: 'Flower is still starting.',
     computerStageMinimize: "Minimize viewer",
     computerStageRestore: "Restore viewer",
+    computerStageStatus: {
+      "running": "Computer running",
+      "awaiting_user": "Waiting for your input or approval",
+      "completed": "Computer task completed",
+      "failed": "Computer task failed"
+    },
     computerStageMove: "Move viewer (arrow keys)",
     computerStageClose: "Close viewer",
     handlerRetry: 'Retry',

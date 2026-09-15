@@ -169,6 +169,12 @@
       "handlerStillStarting": "Flower가 아직 시작 중입니다.",
       "computerStageMinimize": "뷰어 최소화",
       "computerStageRestore": "뷰어 복원",
+      "computerStageStatus": {
+        "running": "컴퓨터 작업 실행 중",
+        "awaiting_user": "입력 또는 승인 대기 중",
+        "completed": "컴퓨터 작업 완료",
+        "failed": "컴퓨터 작업 실패"
+      },
       "computerStageMove": "뷰어 이동 (방향키)",
       "computerStageClose": "뷰어 닫기",
       "handlerRetry": "다시 시도",

@@ -169,6 +169,12 @@
       "handlerStillStarting": "O Flower ainda está iniciando.",
       "computerStageMinimize": "Minimizar visualização",
       "computerStageRestore": "Restaurar visualização",
+      "computerStageStatus": {
+        "running": "Tarefa no computador em andamento",
+        "awaiting_user": "Aguardando sua resposta ou aprovação",
+        "completed": "Tarefa no computador concluída",
+        "failed": "Falha na tarefa no computador"
+      },
       "computerStageMove": "Mover visualização (teclas de seta)",
       "computerStageClose": "Fechar visualização",
       "handlerRetry": "Tentar novamente",

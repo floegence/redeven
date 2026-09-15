@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
-import { qualifyComputerViewer } from './scripts/computerViewerInteraction.mjs';
+import { qualifyComputerLauncherTouch, qualifyComputerViewer } from './scripts/computerViewerInteraction.mjs';
 
 const configuredBrowserPort = Number.parseInt(process.env.REDEVEN_VITEST_BROWSER_PORT ?? '', 10);
 
@@ -101,6 +101,10 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        exerciseComputerLauncherTouch: async ({ page }) => {
+          const frame = await frameForSelector(page, '.flower-computer-stage');
+          return qualifyComputerLauncherTouch({ page, root: frame });
+        },
         exerciseComputerViewer: async ({ page }) => {
           const frame = await frameForSelector(page, '.flower-computer-stage');
           return qualifyComputerViewer({ page, root: frame });

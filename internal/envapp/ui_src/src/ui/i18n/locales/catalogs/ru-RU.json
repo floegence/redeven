@@ -4515,6 +4515,12 @@
       "handlerStillStarting": "Flower все еще запускается.",
       "computerStageMinimize": "Свернуть просмотр",
       "computerStageRestore": "Развернуть просмотр",
+      "computerStageStatus": {
+        "running": "Задача на компьютере выполняется",
+        "awaiting_user": "Ожидание вашего ввода или разрешения",
+        "completed": "Задача на компьютере завершена",
+        "failed": "Ошибка задачи на компьютере"
+      },
       "computerStageMove": "Переместить просмотр (клавиши со стрелками)",
       "computerStageClose": "Закрыть просмотр",
       "handlerRetry": "Повторить",

@@ -132,6 +132,12 @@ export const flowerSurfaceEnUS = {
     handlerStillStarting: 'Flower is still starting.',
     computerStageMinimize: "Minimize viewer",
     computerStageRestore: "Restore viewer",
+    computerStageStatus: {
+      "running": "Computer running",
+      "awaiting_user": "Waiting for your input or approval",
+      "completed": "Computer task completed",
+      "failed": "Computer task failed"
+    },
     computerStageMove: "Move viewer (arrow keys)",
     computerStageClose: "Close viewer",
     handlerRetry: 'Retry',
