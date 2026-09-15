@@ -19,6 +19,7 @@ export function summarizeWebtopQualification({ scenario, exitCode, manifest, has
   require(cleanup?.secret_leak_found === false && cleanup?.host_input_used === false, 'privacy_boundary_unverified');
   const protocol = evidence?.protocol ?? [];
   require(protocol.length > 0 && protocol.every((entry) => entry.model === 'deepseek-v4-flash-vision-exp' && entry.httpStatus >= 200 && entry.httpStatus < 300), 'provider_qualification_failed');
+  require(protocol.every((entry) => entry.streamStatus === 'complete' || entry.streamStatus === 'canceled'), 'provider_stream_unverified');
   require(protocol.some((entry) => entry.imageToolOutput), 'tool_result_image_unverified');
   if (scenario !== 'recovery') {
     const lifecycle = evidence?.lifecycleEvidence ?? [];
@@ -40,7 +41,7 @@ export function summarizeWebtopQualification({ scenario, exitCode, manifest, has
     scope: scopes[scenario] ?? 'unknown', passed: failures.length === 0, failures: [...new Set(failures)],
     commit: manifest?.commit, model: evidence?.model, provider_requests: protocol.length,
     cleanup_verified: Boolean(cleanup) && !failures.some((reason) => reason.startsWith('cleanup_') || reason === 'privacy_boundary_unverified'),
-    does_not_qualify: ['macos-native-desktop', 'connected-chrome-extension', 'flower-control-plane', 'all-sensitive-pages-and-external-effect-approvals'],
+    does_not_qualify: ['macos-native-desktop', 'connected-chrome-extension', 'flower-control-plane', 'long-action-continuous-video', 'all-sensitive-pages-and-external-effect-approvals'],
   };
 }
 

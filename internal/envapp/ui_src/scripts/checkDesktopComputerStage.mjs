@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFile, readdir, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
-import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
@@ -14,6 +13,7 @@ import { observeDesktopComputerFrames, decodedLiveFramesForTarget } from './desk
 import { qualifyComputerStop } from './computerLifecycleQualification.mjs';
 import { qualifyComputerRecovery } from './computerRecoveryQualification.mjs';
 import { webtopRuntimeQualification } from './webtopRuntimeQualification.mjs';
+import { forwardQualificationResponse } from '../../../../scripts/qualification_response_stream.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -160,11 +160,11 @@ const fixtureURL = `http://127.0.0.1:${server.address().port}`;
 const protocol = [];
 const protocolErrors = [];
 const proxy = http.createServer(async (request, response) => {
+  let record;
   try {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const raw = Buffer.concat(chunks);
-    let record;
     if (request.url === '/responses') {
       const body = JSON.parse(raw.toString());
       assert.equal(body.model, model);
@@ -190,11 +190,13 @@ const proxy = http.createServer(async (request, response) => {
       ...(raw.length ? { body: raw } : {}),
     });
     if (record) record.httpStatus = upstream.status;
-    response.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') ?? 'application/json' });
-    Readable.fromWeb(upstream.body).pipe(response);
+    const streamStatus = await forwardQualificationResponse(upstream, response);
+    if (record) record.streamStatus = streamStatus;
   } catch (error) {
+    if (record) record.streamStatus = 'interrupted';
     protocolErrors.push(error instanceof assert.AssertionError ? error.message : 'Qualification proxy transport failed');
-    response.writeHead(502); response.end('Qualification proxy failed.');
+    if (response.headersSent || response.destroyed) response.destroy();
+    else { response.writeHead(502); response.end('Qualification proxy failed.'); }
   }
 });
 proxy.listen(0, '127.0.0.1');
