@@ -37,3 +37,13 @@ for (const [name, change] of [
   const value = result(); change(value);
   assert.equal(summarizeWebtopQualification(value).passed, false);
 });
+
+
+test('complete matrix cannot pass without real floating viewer interaction evidence', () => {
+  const value = result(); value.scenario = 'complete';
+  value.evidence.scope = 'linux-webtop-browser-and-x11-ui';
+  const failures = summarizeWebtopQualification(value).failures;
+  assert(failures.includes('viewer_interaction_unverified'));
+  value.evidence.viewerInteraction = { continuedWhileMinimized: true, pixelsDecoded: true, visibleText: '', draggedBall: { x: 50 }, restored: { x: 50 } };
+  assert(!summarizeWebtopQualification(value).failures.includes('viewer_interaction_unverified'));
+});

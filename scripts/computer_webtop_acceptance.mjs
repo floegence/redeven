@@ -35,6 +35,7 @@ export function summarizeWebtopQualification({ scenario, exitCode, manifest, has
     require(turns.length === 5 && turns.every((turn) => turn.frame?.blob && turn.frame?.visibleText === '' && turn.live?.decodedFrames >= 3 && turn.live?.distinctImages >= 2), 'decoded_live_pixels_unverified');
     require(evidence?.settingsToggle === 'on-off-on' && evidence?.disabledToolsAbsent && evidence?.reenabledVisualExecution, 'settings_unverified');
     require(evidence?.takeoverEvidence?.inputVerified && evidence?.takeoverEvidence?.nativeIME && evidence?.takeoverEvidence?.privateInputExcluded && evidence?.takeoverEvidence?.continued, 'private_takeover_unverified');
+    require(evidence?.viewerInteraction?.continuedWhileMinimized === true && evidence?.viewerInteraction?.pixelsDecoded === true && evidence?.viewerInteraction?.visibleText === '' && evidence?.viewerInteraction?.draggedBall && evidence?.viewerInteraction?.restored, 'viewer_interaction_unverified');
     require(evidence?.stageCloseHonoredAcrossTurn && evidence?.stageReopened, 'viewer_visibility_unverified');
   }
   return {

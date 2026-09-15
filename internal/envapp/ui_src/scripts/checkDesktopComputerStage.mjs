@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import { chromium } from 'playwright';
 import { ensureFlowerSurface, findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
 import { observeDesktopComputerFrames, decodedLiveFramesForTarget } from './desktopComputerLiveEvidence.mjs';
+import { qualifyComputerViewer } from './computerViewerInteraction.mjs';
 import { qualifyComputerStop } from './computerLifecycleQualification.mjs';
 import { qualifyComputerRecovery } from './computerRecoveryQualification.mjs';
 import { webtopRuntimeQualification } from './webtopRuntimeQualification.mjs';
@@ -70,6 +71,7 @@ const privateASCIIInput = 'qualification-private-input-'.repeat(3);
 const privateIMEInput = '\u79c1\u5bc6\u8f93\u5165';
 const privateFixtureInput = privateASCIIInput + privateIMEInput;
 let takeoverEvidence;
+let viewerInteraction;
 const lifecycleEvidence = [];
 const recoveryEvidence = [];
 const webtopRuntime = webtopURL ? webtopRuntimeQualification() : undefined;
@@ -425,7 +427,22 @@ try {
     nativeProcess.kill('SIGTERM'); await nativeExit; nativeProcess = undefined;
     await rm(nativeDirectory, { recursive: true, force: true }); nativeDirectory = undefined;
   }
-  console.log('Requested task effects verified; checking Stage reopen and settings.');
+  console.log('Requested task effects verified; checking viewer drag, minimize and restore.');
+  viewerInteraction = await qualifyComputerViewer({ page, output });
+  await writeFile(path.join(output, 'viewer-interaction.json'), JSON.stringify(viewerInteraction, null, 2));
+  console.log('Viewer interactions passed; checking execution while minimized.');
+  await page.locator('.flower-computer-stage-minimize').click();
+  const minimizedComposer = page.locator('.flower-surface textarea').first();
+  await minimizedComposer.fill('Take one screenshot of the current target using computer.screenshot and briefly describe it. Do not use other tools.');
+  await minimizedComposer.press('Enter');
+  await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
+  await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'screenshot while minimized');
+  assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'an action restored the minimized viewer');
+  await page.locator('.flower-computer-stage-ball').click();
+  await waitForProgress(stageHasImage, 'latest image after restoring the ball');
+  viewerInteraction.continuedWhileMinimized = true;
+  await writeFile(path.join(output, 'viewer-interaction.json'), JSON.stringify(viewerInteraction, null, 2));
+  console.log('Minimized execution passed; checking Stage reopen and settings.');
   liveEvidence = await page.evaluate(() => window.__stopComputerLiveEvidence());
   await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
   await page.locator('.flower-computer-stage-close').click();
@@ -561,7 +578,7 @@ try {
       turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map((frame) => frame.sha256)).size };
     }
   }
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, lifecycleEvidence, recoveryEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, viewerInteraction, lifecycleEvidence, recoveryEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} requested UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
   }
 } catch (error) {
@@ -571,7 +588,7 @@ try {
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
   const failedThreadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => null);
   const current = failedThreadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${failedThreadID}`).catch(() => null) : null;
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, lifecycleEvidence, recoveryEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, viewerInteraction, lifecycleEvidence, recoveryEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
   if (nativeProcess) { nativeProcess.kill('SIGKILL'); await nativeExit; }

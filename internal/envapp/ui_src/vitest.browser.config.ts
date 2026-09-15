@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
+import { qualifyComputerViewer } from './scripts/computerViewerInteraction.mjs';
 
 const configuredBrowserPort = Number.parseInt(process.env.REDEVEN_VITEST_BROWSER_PORT ?? '', 10);
 
@@ -89,6 +90,7 @@ export default mergeConfig(viteConfig, defineConfig({
       enabled: true,
       headless: true,
       provider: playwright({
+        connectOptions: process.env.REDEVEN_VITEST_BROWSER_WS ? { wsEndpoint: process.env.REDEVEN_VITEST_BROWSER_WS, exposeNetwork: '<loopback>' } : undefined,
         launchOptions: {
           // Keep scrollbar layout observable in headless geometry checks.
           ignoreDefaultArgs: ['--hide-scrollbars'],
@@ -99,6 +101,10 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        exerciseComputerViewer: async ({ page }) => {
+          const frame = await frameForSelector(page, '.flower-computer-stage');
+          return qualifyComputerViewer({ page, root: frame });
+        },
         composeComputerStageText: async ({ page }, text: string) => {
           const frame = await frameForSelector(page, '.flower-computer-stage-frame');
           await frame.locator('.flower-computer-stage-frame').focus();

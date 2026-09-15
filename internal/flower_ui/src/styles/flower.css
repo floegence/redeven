@@ -5092,24 +5092,33 @@ html.dark .flower-component-shell {
   font-size: 0.8rem;
 }
 
-.flower-computer-stage {
-  position: fixed;
-  right: 1.25rem;
-  bottom: 1.25rem;
+.flower-computer-viewer {
   z-index: 80;
-  display: flex;
   width: min(42vw, 38rem);
-  min-width: 19rem;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  box-shadow: 0 1.25rem 3rem var(--redeven-shadow-color), 0 0.25rem 0.75rem var(--redeven-shadow-color);
+}
+.flower-computer-stage {
+  position: relative;
+  display: flex;
+  width: 100%;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
+  border-radius: inherit;
   background: var(--surface);
-  box-shadow: 0 1.25rem 3rem var(--redeven-shadow-color), 0 0.25rem 0.75rem var(--redeven-shadow-color);
 }
-
-.flower-computer-stage-close { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 1; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); border-radius: 0.4rem; width: 1.75rem; height: 1.75rem; color: var(--text-muted); background: var(--surface); cursor: pointer; }
-.flower-computer-stage-close:hover { color: var(--text-strong); background: var(--surface-muted); }
+.flower-computer-stage-controls { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 1; display: flex; gap: 0.25rem; }
+.flower-computer-stage-controls > button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); border-radius: 0.4rem; width: 2rem; height: 2rem; color: var(--text-muted); background: var(--surface); cursor: pointer; }
+.flower-computer-stage-controls > button:hover { color: var(--text-strong); background: var(--surface-muted); }
+.flower-computer-stage-controls > .flower-computer-stage-drag { cursor: grab; }
+.flower-computer-stage-controls > .flower-computer-stage-drag:active { cursor: grabbing; }
+.flower-computer-viewer-minimized { width: 3.25rem; height: 3.25rem; border-radius: 50%; }
+.flower-computer-stage-ball { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border: 1px solid var(--border-subtle); border-radius: inherit; background: var(--surface); color: var(--text-strong); cursor: pointer; }
+.flower-computer-stage-ball:hover { background: var(--surface-muted); }
+.flower-computer-stage-ball:active { cursor: grabbing; }
 .flower-computer-stage-frame-wrap { display: flex; min-height: 11rem; align-items: center; justify-content: center; background: var(--surface-muted); }
 .flower-computer-stage-frame { display: block; width: 100%; max-height: min(52vh, 24rem); object-fit: contain; }
 .flower-computer-stage-no-frame { padding: 3rem 1rem; color: var(--text-muted); font-size: 0.8rem; text-align: center; }
@@ -5117,7 +5126,7 @@ html.dark .flower-component-shell {
 .flower-computer-control-actions > button { flex: 0 0 auto; }
 
 @media (max-width: 42rem) {
-  .flower-computer-stage { right: 0.75rem; bottom: 0.75rem; width: calc(100vw - 1.5rem); min-width: 0; }
+  .flower-computer-viewer:not(.flower-computer-viewer-minimized) { width: calc(100vw - 1.5rem); }
 }
 
 .flower-settings-toggle-card {
