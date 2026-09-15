@@ -1105,7 +1105,7 @@
               "workbench"
             ],
             "summary": "Published Floe Webapp owns file-menu placement, visible-viewport intersection,\nmeasurement, scrolling, submenu navigation, gesture handling, and dismissal.\nRedeven supplies the complete Files workspace boundary, product actions, and\nlocalized labels. Menus stay at least 8 CSS px inside the usable intersection of\nFiles, the owning surface, and the visible viewport, with mobile Flower chrome\nexcluded. Invalid or unavailable explicit boundaries close the menu. Files does\nnot raise its global layer or duplicate Workbench coordinate conversion to make\nan obscured action reachable.",
-            "section_count": 3
+            "section_count": 2
           },
           {
             "concept_id": "ui.plugin-center-interaction",
@@ -12711,26 +12711,19 @@
         "title": "Files context menus",
         "type": "UI Contract"
       },
-      "body_length": 4581,
+      "body_length": 4590,
       "summary": "Published Floe Webapp owns file-menu placement, visible-viewport intersection,\nmeasurement, scrolling, submenu navigation, gesture handling, and dismissal.\nRedeven supplies the complete Files workspace boundary, product actions, and\nlocalized labels. Menus stay at least 8 CSS px inside the usable intersection of\nFiles, the owning surface, and the visible viewport, with mobile Flower chrome\nexcluded. Invalid or unavailable explicit boundaries close the menu. Files does\nnot raise its global layer or duplicate Workbench coordinate conversion to make\nan obscured action reachable.",
       "sections": [
         {
-          "id": "layout-ownership",
-          "title": "Layout ownership",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
-          "body": "The directory tree and file content share the outer `BrowserWorkspaceShell`\nboundary. Activity, Files floating windows, and Workbench keep their existing\nshared portal ownership. The upstream layer measures actual menu content before\nshowing it, moves it left or up when necessary, and constrains width and height.\nLong labels wrap; oversized menus scroll internally with their action order,\ngroups, and destructive styling intact.\n\n[Flower Activity companion](flower-activity-companion.md) owns the mobile rail\nplacement. Shell exposes the client-coordinate top of its existing rail layout\nthrough `EnvContext.activityContentBottomLimit`. Files clips its boundary to that\nlimit; it does not recalculate rail position, navigation height, keyboard height,\nor safe-area insets. The shared Floe visible-viewport mechanism accounts for the\nbrowser viewport and screen safe areas. Files measures its root on resize and\nbefore input triggers so a later open uses current client geometry.",
-          "char_count": 981
+          "body": "## Layout ownership\n\nThe directory tree and file content share the outer `BrowserWorkspaceShell`\nboundary. Activity, Files floating windows, and Workbench keep their existing\nshared portal ownership. The upstream layer measures actual menu content before\nshowing it, moves it left or up when necessary, and constrains width and height.\nLong labels wrap; oversized menus scroll internally with their action order,\ngroups, and destructive styling intact.\n\n[Flower Activity companion](flower-activity-companion.md) owns the mobile rail\nplacement. Shell exposes the client-coordinate top of its existing rail layout\nthrough `EnvContext.activityContentBottomLimit`. Files clips its boundary to that\nlimit; it does not recalculate rail position, navigation height, keyboard height,\nor safe-area insets. The shared Floe visible-viewport mechanism accounts for the\nbrowser viewport and screen safe areas. Files measures its root on resize and\nbefore input triggers so a later open uses current client geometry.\n\n## Input and navigation\n\nDesktop menus open near the pointer. Submenus prefer lateral placement and flip\nwhen needed. Touch layouts and insufficient lateral space navigate the same\nmenu tree inside one panel with a localized Back action. Touch menu items and\nBack are at least 44 CSS px high. Input capability and the configured mobile\nlayout query remain upstream decisions.\n\nFile rows, tiles, and the directory tree use the same upstream long-press\nhandlers. Movement, cancellation, and additional pointers cancel a pending long\npress. The release click after a long press cannot navigate the tree or execute\na menu item. The menu is above the mobile tree drawer and scrim, and menu actions\ndo not close the drawer through click propagation.\n\nMenu-local scroll remains open. The actual constrained menu viewport receives\nthe exported Redeven local-scroll props. [Workbench input ownership](workbench-input-ownership.md)\ncontinues to decide whether a selected widget owns scrolling; unselected widgets\ncannot acquire wheel ownership by displaying a menu.\n\nArrow keys, Home/End, Enter, Escape, and Tab retain shared menu semantics. Escape\nin a submenu returns to its parent; root Escape and Tab restore trigger focus.\nExternal pointer/focus/scroll, resize, visual-viewport changes, window blur, and\nhidden or inactive owners dismiss the menu. Size and orientation changes close\nthe current menu; the next trigger starts a fresh placement.",
+          "char_count": 2442
         },
         {
-          "id": "input-and-navigation",
-          "title": "Input and navigation",
-          "level": 1,
-          "body": "Desktop menus open near the pointer. Submenus prefer lateral placement and flip\nwhen needed. Touch layouts and insufficient lateral space navigate the same\nmenu tree inside one panel with a localized Back action. Touch menu items and\nBack are at least 44 CSS px high. Input capability and the configured mobile\nlayout query remain upstream decisions.\n\nFile rows, tiles, and the directory tree use the same upstream long-press\nhandlers. Movement, cancellation, and additional pointers cancel a pending long\npress. The release click after a long press cannot navigate the tree or execute\na menu item. The menu is above the mobile tree drawer and scrim, and menu actions\ndo not close the drawer through click propagation.\n\nMenu-local scroll remains open. The actual constrained menu viewport receives\nthe exported Redeven local-scroll props. [Workbench input ownership](workbench-input-ownership.md)\ncontinues to decide whether a selected widget owns scrolling; unselected widgets\ncannot acquire wheel ownership by displaying a menu.\n\nArrow keys, Home/End, Enter, Escape, and Tab retain shared menu semantics. Escape\nin a submenu returns to its parent; root Escape and Tab restore trigger focus.\nExternal pointer/focus/scroll, resize, visual-viewport changes, window blur, and\nhidden or inactive owners dismiss the menu. Size and orientation changes close\nthe current menu; the next trigger starts a fresh placement.",
-          "char_count": 1413
-        },
-        {
-          "id": "action-boundary",
-          "title": "Action boundary",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
           "body": "Existing context-event target snapshots, multi-selection, permissions, file\noperations, and confirmation owners are unchanged. The menu does not add backend\nAPIs, perform mutations outside the existing callbacks, or replace deletion\nconfirmation. [Workbench surface lifecycle](workbench-surface-lifecycle.md) owns\nthe common projected host and local interaction contract.",
           "char_count": 371
@@ -16760,5 +16753,5 @@
       ]
     }
   ],
-  "source_sha256": "588e7c5caa839a6da0c98e79262d3ee3fcad50feea7aae1993af5c7c5c66d587"
+  "source_sha256": "439eb380ee02236d50b2f2df0bce732dd3cedc631bc3be5bd1cfe2bc61a57a17"
 }
