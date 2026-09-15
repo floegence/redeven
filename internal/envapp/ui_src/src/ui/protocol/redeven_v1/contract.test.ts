@@ -9,6 +9,25 @@ import {
 
 afterEach(() => resetDebugConsoleCaptureForTests());
 
+describe('Redeven v1 file writes', () => {
+  it('sends a new empty file as JSON and decodes the runtime success response', async () => {
+    const call = vi.fn(async (
+      typeId: number,
+      payload: unknown,
+      decodeResponse: (payload: unknown) => unknown,
+    ) => {
+      expect(typeId).toBe(1003);
+      expect(payload).toStrictEqual({ path: '/workspace/test', content: '', create_dirs: false });
+      return decodeResponse({ success: true });
+    });
+    const rpc = createRedevenV1Rpc({ call, onNotify: vi.fn() } as any);
+
+    await expect(rpc.fs.writeFile({ path: '/workspace/test', content: '', createDirs: false }))
+      .resolves.toStrictEqual({ success: true });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('Redeven v1 terminal notifications', () => {
   it('keeps every RPC type ID globally unique', () => {
     const typeIds = Object.values(redevenV1TypeIds).flatMap((group) => Object.values(group));

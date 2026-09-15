@@ -4322,12 +4322,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const applyLocalMove = (item: FileItem, destDir: string) => {
     const from = normalizePath(item.path);
     const to = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
-    const scopedRootPath = normalizePath(matchFilesystemRoot(from, filesystemRoots())?.pathAbs || defaultRootPath() || getParentDir(from));
     const movedItem = rewriteSubtreePaths(item, from, to);
 
     setFiles((prev) => {
       const removed = removeItemsFromTree(prev, new Set([from]));
-      return insertItemToTree(removed, destDir, movedItem, scopedRootPath);
+      return insertItemToTree(removed, destDir, movedItem);
     });
 
     const srcDir = getParentDir(from);
@@ -4453,15 +4452,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const insertCreatedItemIntoState = (parentDirPath: string, item: FileItem) => {
     const parentDir = normalizePath(parentDirPath);
-    const scopedRootPath = normalizePath(matchFilesystemRoot(parentDir, filesystemRoots())?.pathAbs || defaultRootPath() || parentDir);
     directoryCache.mutate(parentDir, (items) => (
       items.some((entry) => normalizePath(entry.path) === normalizePath(item.path))
         ? items
         : sortFileItems([...items, item])
     ));
 
-    if (canInsertIntoTree(files(), parentDir, scopedRootPath)) {
-      setFiles((prev) => insertItemToTree(prev, parentDir, item, scopedRootPath));
+    if (canInsertIntoTree(files(), parentDir)) {
+      setFiles((prev) => insertItemToTree(prev, parentDir, item));
     }
   };
 
@@ -4583,7 +4581,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       : baseName;
     const newName = `${nameWithoutExt} (copy)${ext}`;
     const destPath = buildChildPath(parentDir, newName);
-    const scopedRootPath = normalizePath(matchFilesystemRoot(parentDir, filesystemRoots())?.pathAbs || defaultRootPath() || parentDir);
 
     try {
       await createWorkspaceEffectRpc(requireProtocolSession(), rpc).fs.copy({ sourcePath: item.path, destPath });
@@ -4594,7 +4591,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         path: destPath,
         extension: item.type === 'file' ? extNoDot(newName) : undefined,
       };
-      setFiles((prev) => insertItemToTree(prev, parentDir, newItem, scopedRootPath));
+      setFiles((prev) => insertItemToTree(prev, parentDir, newItem));
       directoryCache.mutate(parentDir, (items) => (
         items.some((entry) => normalizePath(entry.path) === normalizePath(destPath))
           ? items

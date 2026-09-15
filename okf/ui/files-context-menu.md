@@ -62,6 +62,17 @@ the current menu; the next trigger starts a fresh placement.
 
 # Boundaries
 
+## Mutation results
+
+Successful creation closes the name dialog, inserts the entry into the loaded
+parent directory, and reveals the new entry. Creation, duplication, and moves
+use the same concrete directory-node tree as loaded snapshots: scoped roots,
+including `/`, contain entries in their children rather than as sibling nodes.
+Insertion requires a loaded parent and does not duplicate an existing path.
+Users do not need to refresh a loaded root to see a successful creation or copy.
+
+## Menu ownership
+
 Existing context-event target snapshots, multi-selection, permissions, file
 operations, and confirmation owners are unchanged. The menu does not add backend
 APIs, perform mutations outside the existing callbacks, or replace deletion
@@ -69,6 +80,8 @@ confirmation. [Workbench surface lifecycle](workbench-surface-lifecycle.md) owns
 the common projected host and local interaction contract.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserShared.test.ts` - Verifies root-node insertion, duplicate suppression, and loaded-parent requirements against the snapshot tree shape.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Supplies the complete workspace boundary and local-scroll props to published FileContextMenu.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Derives the Activity content bottom limit from the existing mobile Flower rail style.
