@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ComputerUseRuntime owns the adapters and the only target readiness path.
@@ -195,7 +196,16 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 	}
 	defer unlock()
 	r.releasePreviousComputerTarget(call)
-	result, err := executor.ExecuteTargetTool(ctx, call)
+	captureCtx := ctx
+	if call.liveFrame && call.ToolName == "computer.screenshot" && !call.userInput && !call.controlReturn {
+		// Hiding a viewer must not interrupt JSONL and retire a healthy browser.
+		// Cancel lock acquisition normally, then drain only the admitted passive
+		// capture within a deadline. The sampler discards it after viewer close.
+		var cancel context.CancelFunc
+		captureCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+	}
+	result, err := executor.ExecuteTargetTool(captureCtx, call)
 	if takeoverResult(result, err) {
 		control.mu.Lock()
 		if control.threadID == call.ThreadID && (call.liveFrame || control.runID == call.RunID) {

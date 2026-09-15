@@ -6,6 +6,7 @@ import type { FlowerActivityItem, FlowerComputerUserInput } from './contracts/fl
 
 export type FlowerComputerStageSnapshot = Readonly<{
   item: FlowerActivityItem;
+  runID?: string;
   targetID?: string;
   target: string;
   action: string;

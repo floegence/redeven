@@ -18,7 +18,7 @@
     "check:wire-schemas": "node scripts/generateRedevenWireSchemas.mjs --check",
     "preview": "vite preview --host 0.0.0.0 --port 8096",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test ../../../scripts/check_soft_surface_integration.test.mjs && node --test scripts/inputFocusSources.node-test.mjs scripts/checkThemeColorSources.node-test.mjs scripts/initialBuildGraphPolicy.node-test.mjs scripts/redevpluginRuntimeFixture.node-test.mjs scripts/terminalAgentIconIntegrity.node-test.mjs scripts/terminalCarrierRunnerPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && node scripts/checkThemeColorSources.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
+    "test": "node --test ../../../scripts/check_soft_surface_integration.test.mjs && node --test scripts/desktopComputerLiveEvidence.node-test.mjs scripts/inputFocusSources.node-test.mjs scripts/checkThemeColorSources.node-test.mjs scripts/initialBuildGraphPolicy.node-test.mjs scripts/redevpluginRuntimeFixture.node-test.mjs scripts/terminalAgentIconIntegrity.node-test.mjs scripts/terminalCarrierRunnerPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && node scripts/checkThemeColorSources.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
     "test:browser": "node scripts/runVitestBrowser.mjs",
     "test:browser:headed": "node scripts/runVitestBrowser.mjs --browser.headless=false",
     "test:built-dist-shell": "node scripts/checkPackagedRenderer.mjs",

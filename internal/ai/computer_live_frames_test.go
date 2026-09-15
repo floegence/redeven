@@ -13,6 +13,49 @@ type liveFrameExecutor struct {
 	attachment TargetToolAttachment
 }
 
+type drainingLiveFrameExecutor struct {
+	*liveFrameExecutor
+	entered chan struct{}
+	finish  chan struct{}
+}
+
+func (e *drainingLiveFrameExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	close(e.entered)
+	select {
+	case <-ctx.Done():
+		return TargetToolResult{}, ctx.Err()
+	case <-e.finish:
+		return e.liveFrameExecutor.ExecuteTargetTool(ctx, call)
+	}
+}
+
+func TestComputerViewerCloseDrainsCaptureWithoutCancelingTargetSession(t *testing.T) {
+	executor := &drainingLiveFrameExecutor{liveFrameExecutor: newLiveFrameExecutor(t), entered: make(chan struct{}), finish: make(chan struct{})}
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+	t.Cleanup(func() { _ = runtime.Close() })
+	acquireLiveFrameTestTarget(t, runtime, "thread")
+	var published atomic.Int32
+	stop, err := runtime.StartComputerLiveFrames(t.Context(), "thread", "viewer", "target", func(FlowerComputerFrame) { published.Add(1) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		close(executor.finish)
+		stop()
+		if published.Load() != 0 {
+			t.Error("a closed viewer published a late frame")
+		}
+	}()
+	<-executor.entered
+	stopped := make(chan struct{})
+	go func() { stop(); close(stopped) }()
+	select {
+	case <-stopped:
+		t.Fatal("closing the viewer canceled the helper's in-flight capture")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func newLiveFrameExecutor(t *testing.T) *liveFrameExecutor {
 	body, attachment := computerFrameFixture(t)
 	return &liveFrameExecutor{body: body, attachment: attachment}

@@ -54,6 +54,7 @@ describe('Flower computer stage', () => {
       thread_id: threadID,
       title: 'Open test page',
       status: 'running',
+      active_run_id: 'computer-run',
       messages: [{
         id: 'computer-message', turn_id: 'computer-turn', run_id: 'computer-run', role: 'assistant', content: '', status: 'streaming', created_at_ms: 10,
         blocks: [activityTimeline({
@@ -117,12 +118,13 @@ describe('Flower computer stage', () => {
     expect(runtime.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
     // Completion retires the ephemeral sampler. A reopened viewer must load
     // the durable keyframe, never the expired last live sample.
-    const completed = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
-    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...completed, items: completed.items?.map((item) => {
+    const completedBase = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
+    const completed = { ...completedBase, items: completedBase.items?.map((item) => {
       if (!item.activity) return item;
       const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity;
       return { ...item, activity: { ...facts, status: 'success', presentation: { label, description, renderer, payload, chips, target_refs } } };
-    }) } });
+    }) };
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: completed });
     await waitFor(() => loadComputerFrame.mock.calls.length === 4);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
     (runtime.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
@@ -134,6 +136,28 @@ describe('Flower computer stage', () => {
     (runtime.querySelector('.flower-activity-computer-block .flower-activity-inline-button') as HTMLButtonElement).click();
     await waitFor(() => (runtime.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
+
+    // A new run still displays the historical keyframe, but it cannot start
+    // capturing a shared target until this run has actually observed it.
+    const nextRun = { ...completed, view_version: 3, activity: 'active' as const, last_outcome: undefined,
+      run_id: 'next-run', turn_id: 'next-turn', run_progress: { phase: 'preparing' as const } };
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: nextRun });
+    await waitFor(() => runtime.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-status') === 'running');
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(setComputerViewer).toHaveBeenCalledTimes(2);
+
+    const nextFrame = `computer://browser-main/${'c'.repeat(64)}`;
+    const observed = completed.items!.find((item) => item.activity)!;
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 4,
+      items: [...nextRun.items!, { ...observed, id: 'next-observation', ordinal: 100, run_id: 'next-run', turn_id: 'next-turn',
+        activity: { ...observed.activity, tool_id: 'next-observation', status: 'success', presentation: {
+          label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
+          target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: nextFrame }],
+        } },
+      }],
+    } });
+    await waitFor(() => setComputerViewer.mock.calls.length === 3);
+    expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
   });
 });
 

@@ -36,6 +36,9 @@ let loginInputVerified = false;
 const privateFixtureInput = "qualification-private-input";
 let takeoverEvidence;
 const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
+// A moving pixel fixture distinguishes live sampling from repeated static
+// keyframes without requiring extra model actions or changing control layout.
+const liveMarker = '<style>@keyframes live-marker{from{background:#dc3020}to{background:#205cdd}}#live-marker{position:fixed;right:20px;top:20px;width:24px;height:24px;animation:live-marker .6s linear infinite alternate;pointer-events:none}</style><div id="live-marker" aria-hidden="true"></div>';
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
   if (url.pathname === '/signin') {
@@ -76,7 +79,7 @@ const server = http.createServer((request, response) => {
     response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
     response.end(`<!doctype html><title>Flower action qualification</title>
       <style>body{font:24px system-ui;margin:48px;min-height:1800px;background:#d6f5e5;color:#17304a}button,input{font:24px system-ui;padding:18px;margin:12px 0}input{display:block}footer{margin-top:1100px}</style>
-      <h1>${url.pathname === '/second' ? 'Second page' : 'Browser actions'}</h1>
+      ${liveMarker}<h1>${url.pathname === '/second' ? 'Second page' : 'Browser actions'}</h1>
       <button ondblclick="report('double')">Double click me</button>
       <label>Enter Flower, then press Enter<input onkeydown="if(event.key==='Enter')report('enter',this.value)"></label>
       <output>${JSON.stringify(controls)}</output><footer>Bottom of page</footer>
@@ -92,7 +95,7 @@ const server = http.createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': 'text/html' });
   response.end(`<!doctype html><title>Flower visual qualification</title>
     <style>body{font:24px system-ui;background:#ecf3fb;color:#17304a;padding:60px}button{font:24px system-ui;background:#126846;color:white;padding:24px 40px;border:0}output{display:block;margin-top:28px}</style>
-    <h1>Visual task</h1><button onclick="fetch('/complete',{method:'POST'}).then(r=>r.json()).then(r=>{document.querySelector('output').textContent='Completed '+r.completed;document.body.style.background='#d6f5e5'})">Complete step</button><output>Ready</output>`);
+    ${liveMarker}<h1>Visual task</h1><button onclick="fetch('/complete',{method:'POST'}).then(r=>r.json()).then(r=>{document.querySelector('output').textContent='Completed '+r.completed;document.body.style.background='#d6f5e5'})">Complete step</button><output>Ready</output>`);
 });
 server.listen(0, '127.0.0.1');
 await once(server, 'listening');
@@ -195,6 +198,7 @@ try {
     'On the current page, use computer.screenshot and computer.click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
     `Open ${fixtureURL}/controls using browser.navigate. Inspect it with computer.screenshot. Use computer.double_click on Double click me. Click the text input, use computer.type to enter Flower, and computer.key to press Enter. Use computer.scroll to scroll down and computer.wait to wait for the page. Use browser.reload to reload it. Navigate to ${fixtureURL}/second, then use browser.back to return to /controls. Take a final screenshot and report the result. Use only browser and computer tools; do not use terminal or HTTP fetch.`,
   ].entries()) {
+    const startedAt = Date.now();
     const composer = page.locator('.flower-surface textarea').first();
     await composer.fill(prompt);
     await composer.press('Enter');
@@ -230,7 +234,7 @@ try {
     assert.deepEqual(frame.background, [214, 245, 229], 'Stage did not advance to the completed fixture screenshot');
     const screenshot = path.join(output, `desktop-turn-${index + 1}.png`);
     await page.screenshot({ path: screenshot });
-    evidence.push({ turn: index + 1, fixtureCompleted: completed, ...(index === 2 ? { controls: { ...controls } } : {}), frame, screenshot });
+    evidence.push({ turn: index + 1, startedAt, finishedAt: Date.now(), fixtureCompleted: completed, ...(index === 2 ? { controls: { ...controls } } : {}), frame, screenshot });
     console.log(JSON.stringify(evidence.at(-1)));
   }
   if (nativeRequested) {
@@ -248,6 +252,7 @@ try {
       'Continue in the macOS Flower Native Fixture application. Double click the blue area. Enter Flower in the text field and press Enter. Click inside the Scroll area and scroll down. Wait for the app to settle, then take a fresh screenshot to verify all four indicators are complete. Use only computer tools on the native desktop.',
       'In the same macOS Flower Native Fixture application, click Complete native step exactly two more times. Take a fresh screenshot after each click and confirm Clicks is 4, with the other indicators still complete. Use only computer tools on the native desktop.',
     ].entries()) {
+      const startedAt = Date.now();
       const expectedClicks = index === 2 ? 4 : 2;
       const composer = page.locator('.flower-surface textarea').first();
       await composer.fill(prompt); await composer.press('Enter');
@@ -273,7 +278,7 @@ try {
       assert.equal(frame.height, state.geometry.displayHeight);
       const screenshot = path.join(output, `native-turn-${index + 1}.png`);
       await page.screenshot({ path: screenshot });
-      nativeTurns.push({ frame, state, screenshot });
+      nativeTurns.push({ startedAt, finishedAt: Date.now(), frame, state, screenshot });
       console.log(JSON.stringify({ nativeTurn: index + 1, frame, state }));
     }
     nativeEvidence = { turns: nativeTurns };
@@ -388,9 +393,13 @@ try {
   assert(protocol.some((entry) => entry.imageToolOutput), 'the actual provider never received a tool-result image');
   assert.equal(protocolErrors.length, 0, 'provider protocol assertions failed');
   for (const target of nativeRequested ? ['browser-main', 'desktop-main'] : ['browser-main']) {
-    const live = decodedLiveFramesForTarget(liveEvidence, target);
-    assert(live.length >= 3 && new Set(live.map((frame) => frame.sha256)).size >= 2,
-      `${target}: continuous workspace frames did not reach decoded Stage pixels`);
+    const turns = target === 'browser-main' ? evidence : nativeEvidence.turns;
+    for (const [index, turn] of turns.entries()) {
+      const live = decodedLiveFramesForTarget({ ...liveEvidence, frames: liveEvidence.frames.filter((frame) => frame.at >= turn.startedAt && frame.at <= turn.finishedAt) }, target);
+      assert(live.length >= 3 && new Set(live.map((frame) => frame.sha256)).size >= 2,
+        `${target} turn ${index + 1}: continuous workspace frames did not reach decoded Stage pixels`);
+      turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map((frame) => frame.sha256)).size };
+    }
   }
   await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, takeoverEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${nativeRequested ? 'Managed-browser and native desktop' : 'Managed-browser'} Desktop UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
@@ -401,7 +410,7 @@ try {
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
   const failedThreadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => null);
   const current = failedThreadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${failedThreadID}`).catch(() => null) : null;
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
   if (nativeProcess) { nativeProcess.kill('SIGKILL'); await nativeExit; }
