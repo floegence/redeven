@@ -174,7 +174,7 @@ describe('Flower computer stage', () => {
     const observed = completed.items!.find((item) => item.activity)!;
     deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 4,
       items: [...nextRun.items!, { ...observed, id: 'next-observation', ordinal: 100, run_id: 'next-run', turn_id: 'next-turn',
-        activity: { ...observed.activity, tool_id: 'next-observation', status: 'success', presentation: {
+        activity: { ...observed.activity, item_id: 'next-observation', tool_id: 'next-observation', status: 'success', presentation: {
           label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
           target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: nextFrame }],
         } },
@@ -186,7 +186,7 @@ describe('Flower computer stage', () => {
     await waitFor(() => setComputerViewer.mock.calls.length === 4);
     deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 5,
       items: [...nextRun.items!, { ...observed, id: 'hidden-observation', ordinal: 101, run_id: 'next-run', turn_id: 'next-turn',
-        activity: { ...observed.activity, tool_id: 'hidden-observation', status: 'success', presentation: {
+        activity: { ...observed.activity, item_id: 'hidden-observation', tool_id: 'hidden-observation', status: 'success', presentation: {
           label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
           target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: nextFrame }],
         } },
