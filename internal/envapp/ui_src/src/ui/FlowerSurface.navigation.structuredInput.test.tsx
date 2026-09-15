@@ -91,6 +91,7 @@ describe('FlowerSurface navigation structured input', () => {
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.getAttribute('aria-label')).toBe('Waiting for your reply');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Choose the deployment target before Flower continues.');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Where should Flower deploy this change?');
+    await waitFor(() => Boolean(runtime.querySelector('[role="radiogroup"]')));
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Production');
     expect(runtime.querySelectorAll('[data-flower-input-request-prompt]')).toHaveLength(1);

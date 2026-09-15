@@ -131,7 +131,7 @@ test('rejects forbidden semantic asset names before Vite content hashes', () => 
 });
 
 test('keeps optional Flower panels out of the initial load', () => {
-  for (const panel of ['SubagentDetailWindow.tsx', 'FlowerComputerStage.tsx', 'settings/FlowerSettingsSurface.tsx']) {
+  for (const panel of ['FlowerInputChoices.tsx', 'SubagentDetailWindow.tsx', 'FlowerComputerStage.tsx', 'settings/FlowerSettingsSurface.tsx']) {
     const moduleID = `/workspace/redeven/internal/flower_ui/src/${panel}`;
     const chunks = { chunks: { 'assets/index.js': chunk(['src/index.ts']), 'assets/panel.js': chunk([moduleID]) } };
     const manifest = { 'index.html': entry('assets/index.js', { dynamicImports: ['panel.ts'] }), 'panel.ts': { file: 'assets/panel.js' } };

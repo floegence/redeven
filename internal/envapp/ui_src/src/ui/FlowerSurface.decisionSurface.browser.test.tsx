@@ -115,6 +115,7 @@ describe('Flower bottom decision surface', () => {
     expect(surface.querySelector('.flower-composer-draft-presence')).toBeNull();
     expect(surface.classList.contains('flower-decision-surface')).toBe(true);
     expect(surface.querySelector('.flower-decision-surface')).toBeNull();
+    await waitFor(() => surface.querySelectorAll('[role="radio"]').length === 4);
     const radios = Array.from(surface.querySelectorAll<HTMLElement>('[role="radio"]'));
     expect(radios).toHaveLength(4);
     const choices = Array.from(surface.querySelectorAll<HTMLElement>('.flower-input-request-choice:not(.flower-input-request-choice-custom)'));

@@ -9,7 +9,7 @@ import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, cr
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog, RadioGroup, RadioOption, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
 import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAction, type FlowerDirectoryMenuAvailability } from './FlowerDirectoryMenuItems';
@@ -224,6 +224,7 @@ import {
   serializeFlowerReasoningSelection,
 } from './reasoning';
 
+const FlowerInputChoices = lazy(() => import('./FlowerInputChoices'));
 const SubagentDetailWindow = lazy(() => import('./SubagentDetailWindow').then((module) => ({ default: module.SubagentDetailWindow })));
 const FlowerSettingsSurface = lazy(() => import('./settings/FlowerSettingsSurface').then((module) => ({ default: module.FlowerSettingsSurface })));
 const FlowerComputerStage = lazy(() => import('./FlowerComputerStage').then((module) => ({ default: module.FlowerComputerStage })));
@@ -1075,7 +1076,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const scheduleBottomActionFocus = (handoff: BottomActionFocusHandoff) => {
     if (!handoff.owned) return;
-    queueMicrotask(() => {
+    queueMicrotask(async () => {
+      if (bottomActionMode() === 'input_request') await FlowerInputChoices.preload();
       requestTranscriptAnimationFrame(() => {
         if (!selectedThreadDetailMatches(handoff.threadID) || !bottomActionFocusStillOwned(handoff)) return;
         const mode = bottomActionMode();
@@ -7447,69 +7449,20 @@ webSearch: model.web_search,
                       </Show>
                     </div>
                     <Show when={(question().choices?.length ?? 0) > 0 || showCustomChoice()}>
-                      <RadioGroup
-                        class="flower-input-request-choice-grid"
-                        value={selectedChoiceID()}
-                        onChange={(choiceID) => {
-                          const choice = question().choices?.find((candidate) => candidate.choice_id === choiceID);
-                          if (choice) selectInputChoice(question(), choice);
-                        }}
-                        disabled={selectedThreadReadOnly()}
-                        aria-label={question().question}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                          const radios = Array.from(event.currentTarget.querySelectorAll<HTMLInputElement | HTMLButtonElement>('[role="radio"]:not(:disabled)'));
-                          const currentIndex = radios.indexOf(document.activeElement as HTMLInputElement | HTMLButtonElement);
-                          if (radios.length === 0) return;
-                          event.preventDefault();
-                          const offset = event.key === 'ArrowDown' ? 1 : -1;
-                          const next = radios[(currentIndex + offset + radios.length) % radios.length];
-                          next?.focus();
-                          next?.click();
-                        }}
-                      >
-                        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={question().choices ?? []} identity={(choice) => choice.choice_id}>
-                          {(choice) => (
-                            <RadioOption
-                              value={choice().choice_id}
-                              role="radio"
-                              label={choice().label}
-                              description={choice().description}
-                              class={cn(
-                                'flower-input-request-choice',
-                                selectedChoiceID() === choice().choice_id && 'flower-input-request-choice-selected',
-                              )}
-                              aria-checked={selectedChoiceID() === choice().choice_id}
-                              data-flower-input-answer-kind="choice"
-                            />
-                          )}
-                        </FlowerKeyedList>
-                        <Show when={showCustomChoice()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            role="radio"
-                            disabled={selectedThreadReadOnly()}
-                            class={cn(
-                              'flower-input-request-choice-custom rounded-full',
-                              customSelected() && 'flower-input-request-choice-selected',
-                            )}
-                            aria-checked={customSelected()}
-                            data-flower-input-answer-kind="custom"
-                            onClick={() => selectInputCustomAnswer(question())}
-                            onKeyDown={(event) => {
-                              if (event.key !== ' ') return;
-                              event.preventDefault();
-                              selectInputCustomAnswer(question());
-                            }}
-                          >
-                            <Pencil class="flower-input-request-choice-custom-icon h-4 w-4" aria-hidden="true" />
-                            <span class="flower-input-request-choice-label">
-                              {trimString(question().write_label) || chatCopyValue('inputRequestOther', 'None of the above / Other')}
-                            </span>
-                          </Button>
-                        </Show>
-                      </RadioGroup>
+                      <Suspense fallback={<div class="h-20 animate-pulse rounded-md bg-muted/40" aria-hidden="true" />}>
+                        <FlowerInputChoices
+                          threadID={selectedThreadID()}
+                          question={question()}
+                          selectedChoiceID={selectedChoiceID()}
+                          customSelected={customSelected()}
+                          showCustomChoice={showCustomChoice()}
+                          customLabel={trimString(question().write_label) || chatCopyValue('inputRequestOther', 'None of the above / Other')}
+                          disabled={selectedThreadReadOnly()}
+                          onSelectChoice={(choice) => selectInputChoice(question(), choice)}
+                          onSelectCustom={() => selectInputCustomAnswer(question())}
+                          focusFallback={focusComposerIfConnected}
+                        />
+                      </Suspense>
                     </Show>
                   </div>
                 );
