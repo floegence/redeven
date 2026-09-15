@@ -3,7 +3,9 @@ import './flower-feature.css';
 
 import { describe, expect, it, vi } from 'vitest';
 import { commands, page } from 'vitest/browser';
+import type { JSX } from 'solid-js';
 import { createSignal } from 'solid-js';
+import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import type { FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
@@ -13,11 +15,15 @@ import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWi
 const FRAME_REF = `computer://browser-main/${'a'.repeat(64)}`;
 const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
+function renderWithFloeLayout(factory: () => JSX.Element, host: HTMLElement): () => void {
+  return render(() => <FloeConfigProvider><LayoutProvider>{factory()}</LayoutProvider></FloeConfigProvider>, host);
+}
+
 describe('Flower computer stage', () => {
   it('commits real IME and native text once without exposing drafts or losing key order', async () => {
     const host = document.createElement('div'); document.body.append(host);
     const input = vi.fn(() => { document.querySelector('.flower-computer-stage')?.setAttribute('data-input-count', String(input.mock.calls.length)); });
-    const dispose = render(() => <FlowerComputerStage
+    const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
       userFrame={new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' })}
       copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize viewer', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry' }} onClose={() => undefined} onInput={input}
@@ -34,7 +40,9 @@ describe('Flower computer stage', () => {
         [{ action: 'key', key: 'Tab' }], [{ action: 'type', text: 'paste' }],
       ]);
       expect(document.querySelector<HTMLTextAreaElement>('.flower-computer-stage textarea')?.value).toBe('');
-      expect(document.querySelector<HTMLElement>('.flower-computer-stage')!.innerText.trim()).toBe('');
+      const stageText = document.querySelector<HTMLElement>('.flower-computer-stage')!.innerText;
+      expect(stageText).toContain('Computer');
+      expect(stageText).not.toContain(text);
     } finally { dispose(); host.remove(); }
   });
   it('keeps decoded pixels during status updates and replacement frame loading', async () => {
@@ -45,7 +53,7 @@ describe('Flower computer stage', () => {
     const [status, setStatus] = createSignal<'running' | 'success'>('running');
     const [frame, setFrame] = createSignal(FRAME_REF);
     const [owner, setOwner] = createSignal('thread');
-    const dispose = render(() => <FlowerComputerStage
+    const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'frame', status: status() }), status: status(), targetID: 'browser-main', target: 'Managed browser', action: 'Screenshot', location: 'local', safety: '' }}
       threadID={owner()} frameRef={frame()} loadFrame={loadFrame}
       copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize viewer', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry' }} onClose={() => undefined}
@@ -65,7 +73,7 @@ describe('Flower computer stage', () => {
       finishFrame(png());
       await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src !== originalURL);
       expect((document.querySelector<HTMLImageElement>('.flower-computer-stage img') as HTMLImageElement).naturalWidth).toBe(1);
-      expect(document.querySelector<HTMLElement>('.flower-computer-stage')!.innerText.trim()).toBe('');
+      expect(document.querySelector<HTMLElement>('.flower-computer-stage')!.innerText).toContain('Computer');
       setOwner('another-thread');
       await waitFor(() => loadFrame.mock.calls.length === 3);
       expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')).toBeNull();
@@ -121,9 +129,9 @@ describe('Flower computer stage', () => {
     await waitFor(() => document.querySelector('.flower-computer-stage-no-frame button') !== null);
     (document.querySelector('.flower-computer-stage-no-frame button') as HTMLButtonElement).click();
     await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
-    expect(document.querySelector('.flower-computer-stage')?.getAttribute('role')).toBe('dialog');
-    expect(document.querySelector('.flower-computer-stage-header')).toBeNull();
-    expect(document.querySelector('.flower-computer-stage-footer')).toBeNull();
+    expect(document.querySelector('.flower-computer-stage')?.closest('[role="dialog"]')).not.toBeNull();
+    expect(document.querySelector('[data-floe-floating-window-titlebar]')).not.toBeNull();
+    expect(document.querySelector('[data-floe-floating-window-footer]')).toBeNull();
     expect(document.querySelector('.flower-computer-stage-frame')).not.toBeNull();
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({
       thread_id: threadID, target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64),
@@ -139,7 +147,7 @@ describe('Flower computer stage', () => {
     await waitFor(() => loadComputerFrame.mock.calls.length === 3);
     await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame.resource_ref }));
-    expect(document.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
+    expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer and browser use');
     // Completion retires the ephemeral sampler. A reopened viewer must load
     // the durable keyframe, never the expired last live sample.
     const completedBase = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
@@ -151,7 +159,7 @@ describe('Flower computer stage', () => {
     deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: completed });
     await waitFor(() => loadComputerFrame.mock.calls.length === 4);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
-    (document.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
+    (document.querySelector('[data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
     await waitFor(() => setComputerViewer.mock.calls.length === 2);
     expect(setComputerViewer).toHaveBeenLastCalledWith({ observer_id: 'observer-1', revision: 2 });
@@ -182,7 +190,7 @@ describe('Flower computer stage', () => {
     } });
     await waitFor(() => setComputerViewer.mock.calls.length === 3);
     expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
-    (document.querySelector('.flower-computer-stage-close') as HTMLButtonElement).click();
+    (document.querySelector('[data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
     await waitFor(() => setComputerViewer.mock.calls.length === 4);
     deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 5,
       items: [...nextRun.items!, { ...observed, id: 'hidden-observation', ordinal: 101, run_id: 'next-run', turn_id: 'next-turn',
@@ -258,7 +266,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => inputComputerControl.mock.calls.length === 2);
   expect(inputComputerControl).toHaveBeenLastCalledWith({ thread_id: threadID, interaction_id: 'tool-input:result-control', action: 'type', text: 's' });
   expect(submitInput).not.toHaveBeenCalled();
-  expect(document.querySelector('.flower-computer-stage')?.textContent?.trim()).toBe('');
+  expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer and browser use');
   const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Return to Flower')!;
   await waitFor(() => !handback.disabled);
   const privateURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
@@ -299,12 +307,12 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
 
 
 for (const projected of [false, true]) {
-  it(`drags and minimizes the media viewer without sending remote input (projected=${projected})`, async () => {
+  it(`renders the native media viewer without sending remote input (projected=${projected})`, async () => {
     await page.viewport(1440, 1000);
     const host = document.createElement('div'); document.body.append(host);
     const onInput = vi.fn(); const onClose = vi.fn();
     const [owner, setOwner] = createSignal('viewer-thread');
-    const dispose = render(() => <div data-floe-dialog-surface-host={projected ? 'true' : undefined}
+    const dispose = renderWithFloeLayout(() => <div data-floe-dialog-surface-host={projected ? 'true' : undefined}
       style={{ position: 'relative', width: '900px', height: '650px', transform: projected ? 'scale(0.7)' : undefined, 'transform-origin': 'top left' }}>
       <FlowerComputerStage threadID={owner()}
         snapshot={{ item: activityItem({ item_id: 'viewer' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
@@ -315,21 +323,14 @@ for (const projected of [false, true]) {
     </div>, host);
     try {
       await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
-      const command = commands as unknown as { exerciseComputerViewer: () => Promise<{ pixelsDecoded: boolean }> };
-      expect((await command.exerciseComputerViewer()).pixelsDecoded).toBe(true);
       expect(onInput).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
-      const viewer = document.querySelector<HTMLElement>('.flower-computer-viewer')!;
-      if (projected) {
-        expect(viewer.closest('[data-floe-dialog-surface-host]')).not.toBeNull();
-        expect(getComputedStyle(viewer).position).toBe('absolute');
-      }
-      document.querySelector<HTMLButtonElement>('.flower-computer-stage-minimize')!.click();
-      expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
-      await page.getByRole('button', { name: 'Restore viewer' }).screenshot({ path: `/tmp/redeven-viewer-icon-${projected ? 'projected' : 'normal'}.png` });
+      const viewer = document.querySelector<HTMLElement>('.flower-computer-stage')!;
+      expect(viewer.closest('[data-floe-dialog-surface-host]')).not.toBeNull();
+      expect(getComputedStyle(viewer).position).toBe('relative');
+      expect(document.querySelector('.flower-computer-stage textarea')).not.toBeNull();
       setOwner('next-viewer-thread');
       await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
-      expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
-      document.querySelector<HTMLButtonElement>('.flower-computer-stage-close')!.click();
+      document.querySelector<HTMLButtonElement>('.flower-computer-stage [aria-label="Close"]')!.click();
       expect(onClose).toHaveBeenCalledTimes(1); expect(onInput).not.toHaveBeenCalled();
     } finally { dispose(); host.remove(); }
   });
