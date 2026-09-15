@@ -16,6 +16,7 @@ for (const scenario of ['auto-remove-pending', 'retained-container', 'daemon-una
       for (const dir of ['bin', 'report', 'state', 'bundle', 'seed', 'workspace']) await mkdir(path.join(root, dir));
       for (const name of ['config.json', 'secrets.json']) await writeFile(path.join(root, 'state', name), '{}');
       await writeFile(path.join(root, 'bin', 'smoke_flower_deepseek.mjs'), '// Secret scanning is covered by the smoke helper tests.\n');
+      await writeFile(path.join(root, 'bin', 'computer_webtop_acceptance.mjs'), '// Acceptance is covered by computer_webtop_acceptance.test.mjs.\n');
       await writeFile(path.join(root, 'bin', 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o700 });
       await writeFile(path.join(root, 'bin', 'docker'), `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$WORK/docker-calls"
@@ -34,7 +35,7 @@ esac
       const result = spawnSync('bash', ['-c', `${cleanup}\n(exit "$TEST_STATUS")\ncleanup`], {
         encoding: 'utf8', env: { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, CASE: scenario,
           WORK: root, REPORT: `${root}/report`, SOURCE_STATE: `${root}/state`, ROOT_DIR: root,
-          SCRIPT_DIR: `${root}/bin`, CID: 'task-owned-exact-id', PORT: '', CONFIG_HASH: hash, SECRETS_HASH: hash,
+          SCRIPT_DIR: `${root}/bin`, SCENARIO: 'lifecycle', CID: 'task-owned-exact-id', PORT: '', CONFIG_HASH: hash, SECRETS_HASH: hash,
           TEST_STATUS: scenario === 'qualification-failed' ? '7' : '0' },
       });
       const evidence = JSON.parse(await readFile(`${root}/report/cleanup.json`, 'utf8'));

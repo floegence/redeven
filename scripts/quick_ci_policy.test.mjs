@@ -35,7 +35,7 @@ const allowedQuickGateCommands = new Set([
   'echo "[INFO] checking bounded cloud policy and committed knowledge artifacts"',
   "node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs scripts/check_go_version_consistency.test.mjs scripts/floeterm_native_build_contract.test.mjs scripts/node_toolchain_contract.test.mjs",
   "node --test scripts/check_floeterm_dependency_consistency.test.mjs",
-  "node --test scripts/computer_webtop_cleanup.test.mjs",
+  "node --test scripts/computer_webtop_cleanup.test.mjs scripts/computer_webtop_acceptance.test.mjs",
   "node scripts/check_floeterm_dependency_consistency.mjs",
   "./scripts/ui_package_common_node_test.sh",
   "node scripts/check_go_version_consistency.mjs",

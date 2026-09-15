@@ -11,6 +11,8 @@ SOURCE_STATE=${REDEVEN_COMPUTER_CONFIG_ROOT:-$HOME/.redeven/local-environment}
 PLUGIN_DIR=${REDEVEN_COMPUTER_WEBTOP_PLUGIN_DIRECTORY:?Provide a verified Linux ReDevPlugin runtime artifact directory}
 IMAGE=${REDEVEN_COMPUTER_WEBTOP_IMAGE:-lscr.io/linuxserver/webtop@sha256:9092b349d525f765b0be912db1ec5a8d5aa97b0f1a3b57da27a7f72e69c90825}
 DEBIAN_MIRROR=${REDEVEN_COMPUTER_WEBTOP_DEBIAN_MIRROR:-https://deb.debian.org}
+SCENARIO=${REDEVEN_COMPUTER_UI_SCENARIO:-complete}
+[[ "$SCENARIO" == complete || "$SCENARIO" == lifecycle || "$SCENARIO" == recovery ]] || { echo 'Unknown Computer Use UI qualification scenario.' >&2; exit 2; }
 [[ "$DEBIAN_MIRROR" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?$ ]] || { echo 'Debian mirror must be an HTTPS origin.' >&2; exit 2; }
 [[ "$IMAGE" == *@sha256:* ]] || { echo 'Webtop image must use an immutable digest.' >&2; exit 2; }
 WORK=$(mktemp -d /tmp/redeven-computer-webtop.XXXXXX)
@@ -50,6 +52,9 @@ if (!port) finish(true);
 else { const server = net.createServer(); server.on('error', () => finish(false)); server.listen(Number(port), '127.0.0.1', () => server.close(() => finish(true))); }
 JS
   then status=1; fi
+  if ! node "$SCRIPT_DIR/computer_webtop_acceptance.mjs" "$REPORT" "$SCENARIO" "$status"; then
+    [[ "$status" -ne 0 ]] || status=1
+  fi
   echo "Linux Webtop evidence: $REPORT"
   exit "$status"
 }
@@ -128,7 +133,7 @@ docker exec "$CID" bash -ceu '
 docker exec "$CID" "/opt/node-v${NODE_VERSION}-linux-${ARCH}/bin/node" \
   /source/scripts/check_computer_host_safety.mjs > "$REPORT/browser-safety.log" 2>&1
 docker exec -e DISPLAY=:1 -e REDEVEN_COMPUTER_USE_E2E=1 -e REDEVEN_COMPUTER_X11_E2E=1 \
-  -e "REDEVEN_COMPUTER_UI_SCENARIO=${REDEVEN_COMPUTER_UI_SCENARIO:-complete}" \
+  -e "REDEVEN_COMPUTER_UI_SCENARIO=$SCENARIO" \
   -e REDEVEN_COMPUTER_WEBTOP_URL=https://127.0.0.1:23998 \
   -e REDEVEN_COMPUTER_EVIDENCE_DIR=/qualification/report/computer \
   -e REDEVEN_COMPUTER_CONFIG_ROOT=/config/qualification-state/local-environment \
