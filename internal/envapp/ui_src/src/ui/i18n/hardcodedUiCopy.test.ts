@@ -157,7 +157,6 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/widgets/TerminalSettingsDialog.tsx', kind: 'text', text: '&gt;', reason: 'Literal terminal prompt symbol inside the terminal color preview.' },
   { file: 'src/ui/widgets/TerminalSettingsDialog.tsx', kind: 'text', text: 'pnpm dev', reason: 'Literal package-manager command inside the terminal color preview.' },
   { file: 'src/ui/widgets/TerminalSettingsDialog.tsx', kind: 'text', text: '200 12ms', reason: 'Literal HTTP status and latency sample inside the terminal color preview.' },
-  { file: 'src/ui/workbench/redevenWorkbenchWidgets.tsx', kind: 'text', text: 'HTTP', reason: 'Standard protocol acronym.' },
 ];
 
 function normalizeText(value: string): string {
