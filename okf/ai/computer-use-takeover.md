@@ -100,6 +100,15 @@ an in-flight private response reopens it. Explicit takeover or the Activity
 viewer action opens it again. Selecting another thread resets viewer visibility;
 ending the turn uses the existing Stop behavior.
 
+The Runtime's canonical target lease is the authority for admitting another
+turn. Browser requests carry a host-derived thread/turn session hash, stable
+across handback runs and independent of model arguments. When a newly admitted
+turn follows abandoned private control, the managed helper replaces its private
+page with a blank page before observation or navigation. It retains the browser
+profile but does not expose or act on the abandoned page. Same-turn control
+continues to require explicit handback. Connected browser tabs are user-owned
+and are never closed or replaced by this managed-page recovery.
+
 # Qualification limits
 
 Service tests cover pause, private input, rejected stale input, handback,

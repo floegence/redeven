@@ -43,6 +43,7 @@ type playwrightTargetClient struct {
 }
 
 type playwrightTargetRequest struct {
+	SessionID     string         `json:"session_id,omitempty"`
 	UserControl   bool           `json:"user_control,omitempty"`
 	ReturnControl bool           `json:"return_control,omitempty"`
 	ID            string         `json:"id"`
@@ -140,6 +141,12 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
 	request := playwrightTargetRequest{ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
+	if call.ThreadID != "" && call.TurnID != "" {
+		// Canonical turn identity survives input continuation runs. Model args
+		// cannot select a private browser session or end another turn's takeover.
+		session := sha256.Sum256([]byte(call.ThreadID + "\x00" + call.TurnID))
+		request.SessionID = hex.EncodeToString(session[:])
+	}
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return TargetToolResult{}, err

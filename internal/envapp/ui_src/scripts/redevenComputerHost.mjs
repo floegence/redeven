@@ -15,6 +15,7 @@ let browser;
 let context;
 let page;
 let userInControl = false;
+let controlSession = '';
 try {
   const { chromium } = await import('playwright');
   const resources = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +81,18 @@ for await (const line of rl) {
   try { req = JSON.parse(line); } catch { response({ error: 'invalid request json' }); continue; }
   try {
     const args = req.args || {};
+
+    // The Runtime has already admitted this canonical turn to the target's
+    // exclusive lease. A new turn must not inherit an abandoned private page.
+    // Keep connected user tabs untouched; only the managed context owns pages.
+    const session = typeof req.session_id === 'string' ? req.session_id : '';
+    if (session && controlSession && session !== controlSession && userInControl && !cdpURL) {
+      const nextPage = await context.newPage();
+      await page.close({ runBeforeUnload: false });
+      page = nextPage;
+      userInControl = false;
+    }
+    if (session) controlSession = session;
 
     const userInput = req.user_control === true;
     if (userInput) {
