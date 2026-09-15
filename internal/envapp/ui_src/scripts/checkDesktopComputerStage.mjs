@@ -12,6 +12,8 @@ import { chromium } from 'playwright';
 import { ensureFlowerSurface, findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
 import { observeDesktopComputerFrames, decodedLiveFramesForTarget } from './desktopComputerLiveEvidence.mjs';
 import { qualifyComputerStop } from './computerLifecycleQualification.mjs';
+import { qualifyComputerRecovery } from './computerRecoveryQualification.mjs';
+import { webtopRuntimeQualification } from './webtopRuntimeQualification.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -19,7 +21,8 @@ assert.equal(process.env.REDEVEN_COMPUTER_USE_E2E, '1');
 const cdp = process.env.REDEVEN_DESKTOP_CDP;
 const webtopURL = process.env.REDEVEN_COMPUTER_WEBTOP_URL;
 const scenario = process.env.REDEVEN_COMPUTER_UI_SCENARIO ?? 'complete';
-assert(['complete', 'lifecycle'].includes(scenario), 'unknown UI qualification scenario');
+assert(['complete', 'lifecycle', 'recovery'].includes(scenario), 'unknown UI qualification scenario');
+assert(scenario !== 'recovery' || webtopURL, 'recovery qualification requires the isolated Linux container');
 assert(Boolean(cdp) !== Boolean(webtopURL), 'identify exactly one task-owned Desktop or Linux Webtop');
 if (webtopURL) assert.equal(process.platform, 'linux', 'Webtop qualification must execute inside Linux');
 const output = process.env.REDEVEN_COMPUTER_EVIDENCE_DIR;
@@ -68,6 +71,8 @@ const privateIMEInput = '\u79c1\u5bc6\u8f93\u5165';
 const privateFixtureInput = privateASCIIInput + privateIMEInput;
 let takeoverEvidence;
 const lifecycleEvidence = [];
+const recoveryEvidence = [];
+const webtopRuntime = webtopURL ? webtopRuntimeQualification() : undefined;
 const pendingNavigations = new Set();
 const lifecycleFixture = { navigationStarted: 0, recovered: new Set(), releaseNavigation: () => {
   for (const response of pendingNavigations) response.end('<!doctype html><title>Released</title><h1>Released navigation</h1>');
@@ -261,6 +266,12 @@ try {
     assert.deepEqual(protocolErrors, [], 'provider protocol assertions failed');
     await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'computer-stop-and-follow-up-ui', lifecycleEvidence, model, protocol }, null, 2));
     console.log('Focused Stop and follow-up UI qualification passed; this does not cover other product scenarios.');
+  } else if (scenario === 'recovery') {
+    await qualifyComputerRecovery({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress, restart: webtopRuntime.restart, output, results: recoveryEvidence });
+    assert(protocol.some((entry) => entry.imageToolOutput));
+    assert.deepEqual(protocolErrors, [], 'provider protocol assertions failed');
+    await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'computer-isolation-fork-restart-ui', recoveryEvidence, model, protocol }, null, 2));
+    console.log('Focused recovery UI qualification passed; this does not cover other product scenarios.');
   } else {
   for (const [index, prompt] of [
     `Open ${fixtureURL} in a browser, click Complete step once, and tell me the completed number shown on the page. Let me watch what you are doing.`,
@@ -519,6 +530,7 @@ try {
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'model continuation after handback');
   takeoverEvidence = { threadID: takeoverThread, fixtureComplete: loginCompleted, inputVerified: loginInputVerified, nativeIME: true, userPixels, privateInputExcluded: true, continued: true };
   await qualifyComputerStop({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress, results: lifecycleEvidence });
+  if (webtopRuntime) await qualifyComputerRecovery({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress, restart: webtopRuntime.restart, output, results: recoveryEvidence });
   assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
   const activities = [];
@@ -547,7 +559,7 @@ try {
       turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map((frame) => frame.sha256)).size };
     }
   }
-  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, lifecycleEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, lifecycleEvidence, recoveryEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} requested UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
   }
 } catch (error) {
@@ -557,7 +569,7 @@ try {
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
   const failedThreadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => null);
   const current = failedThreadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${failedThreadID}`).catch(() => null) : null;
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, lifecycleEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, lifecycleEvidence, recoveryEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
   if (nativeProcess) { nativeProcess.kill('SIGKILL'); await nativeExit; }
@@ -570,4 +582,5 @@ try {
   server.closeAllConnections(); server.close();
   proxy.closeAllConnections(); proxy.close();
   await browser.close();
+  await webtopRuntime?.close();
 }
