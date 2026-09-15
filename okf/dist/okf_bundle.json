@@ -2772,7 +2772,7 @@
         "title": "Computer and browser use runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 11902,
+      "body_length": 12206,
       "summary": "Redeven exposes computer and browser use as typed functions. Calls use logical `current`; the service resolves it through the target registry and keeps the concrete ID in provenance. A managed browser is the default and uses absolute packaged paths or explicit configuration. Helpers must complete a readiness handshake before targets become ready. Flower Settings keeps computer/browser use enabled by default but lets users turn it off for future runs. Durable Floret state stores text and opaque attachment descriptors, while screenshot bytes stay behind the host resolver. Setup, permission, connection, executor, readiness, and policy failures remain distinct fail-closed states with repair metadata.",
       "sections": [
         {
@@ -2793,8 +2793,8 @@
           "id": "explicit-browser-connection",
           "title": "Explicit browser connection",
           "level": 1,
-          "body": "The current Chrome connection form is an advanced CDP endpoint entry, not an\nextension-based tab authorization flow. Only a successful readiness handshake\npublishes a replacement executor. Failed connections preserve the existing\nsession; successful replacements reap the previous helper. Connect and shutdown\nare serialized, and a closed runtime rejects new connections. Flower retains\nfailed input, reports a localized error without raw transport secrets, and shows\na ready result only for a ready descriptor. Both shipped locale catalogs carry\nthe same explicit messages. Disconnect, revocation and ordinary extension setup\nremain required for complete connected-browser qualification.",
-          "char_count": 688
+          "body": "The current Chrome connection form is an advanced CDP endpoint entry, not an\nextension-based tab authorization flow. Only a successful readiness handshake\npublishes a replacement executor. Failed connections preserve the existing\nsession; successful replacements reap the previous helper. Replacement shares\nthe target gate with readiness and actions and rejects `TARGET_NOT_READY` with\n`target_in_use` while an action, handshake, or canonical thread lease owns the\ntarget, including private user control. A queued action resolves its adapter\nafter acquiring that gate. Connect and shutdown are serialized, and a closed\nruntime rejects new connections and readiness attempts. Flower retains\nfailed input, reports a localized error without raw transport secrets, and shows\na ready result only for a ready descriptor. Both shipped locale catalogs carry\nthe same explicit messages. Disconnect, revocation and ordinary extension setup\nremain required for complete connected-browser qualification.",
+          "char_count": 992
         },
         {
           "id": "boundaries",
@@ -16972,5 +16972,5 @@
       ]
     }
   ],
-  "source_sha256": "c83916313d15ac5f606a1cbcf60d09599cf132d21f32adcc3c251c567e685e14"
+  "source_sha256": "5b0f0205b0b08a8b2040721894648ef2013d4ffd982b53933b8dd639f191d7a6"
 }
