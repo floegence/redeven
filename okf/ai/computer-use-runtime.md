@@ -4,6 +4,8 @@ title: Computer and browser use runtime
 description: Route typed computer and browser actions to explicit browser, virtual desktop, or host desktop targets while preserving screenshots, provenance, permissions, and replayable opaque attachments.
 tags: [ai, computer-use, browser-use, targets, attachments]
 timestamp: 2026-09-15T00:00:00Z
+quality_exception: >-
+  This contract keeps the runtime action, media, safety, and qualification boundaries together because they share one typed execution lifecycle and must be reviewed as a single authority.
 ---
 # Summary
 

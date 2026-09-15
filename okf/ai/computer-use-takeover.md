@@ -15,7 +15,9 @@ model attachments or durable keyframe storage. User handback requires a fresh,
 safe observation of the original target. Missing provenance, permissions or
 observation capability leaves the interaction unresolved.
 
-# Canonical pause and return
+# Contract
+
+## Canonical pause and return
 
 Published Floret v7.12.0 `tools.Result.InputRequired` pauses the provider after the
 completed tool batch. Redeven maps a takeover decision into a non-secret select
@@ -36,7 +38,7 @@ page or invalid image prevents continuation. Successful handback resumes the
 provider using Floret's canonical history. The host observation itself is not a
 replay and is not persisted as another model tool result.
 
-# Target control
+## Target control
 
 Runtime serializes each target's actions, observations and control commands.
 Target tool calls resolve thread, turn, and run identity exclusively from the
@@ -60,7 +62,7 @@ own external resources, not a second Floret lifecycle or recovery journal.
 After restart, an authorized pending interaction reestablishes user control from
 canonical provenance before accepting a private command.
 
-# Browser observation and private input
+## Browser observation and private input
 
 The Playwright helper examines visible password fields, `one-time-code` input
 semantics, CAPTCHA text and explicit instruction-override signals in each frame.
@@ -109,7 +111,7 @@ profile but does not expose or act on the abandoned page. Same-turn control
 continues to require explicit handback. Connected browser tabs are user-owned
 and are never closed or replaced by this managed-page recovery.
 
-# Qualification limits
+# Boundaries
 
 Service tests cover pause, private input, rejected stale input, handback,
 re-observation, a real resumed screenshot tool, no action replay and restart using production tool registration

@@ -14,7 +14,9 @@ first. Selection cannot authorize an action, imply readiness or grant control
 of a shared desktop. Policy, readiness, safety and cancellation checks remain
 mandatory; unavailable stored targets fail rather than selecting another target.
 
-# Resolution and execution
+# Contract
+
+## Resolution and execution
 
 A model may omit `target`, use `current`, or request an authorized logical kind.
 Resolution is read-only. For `current`, the Runtime reads that canonical thread's
@@ -36,7 +38,7 @@ handshake. Resolving one thread does not mutate any other thread or a global
 `current`. Store errors retain their own failure boundary rather than becoming
 target-unavailable errors.
 
-# Persistence and fork
+## Persistence and fork
 
 The migrated product store is the only selection store; no in-memory binding
 mirror exists. The Service attaches that store before admitting turns. Schema
@@ -50,7 +52,7 @@ Forked history may contain parent keyframes; it does not grant control of the
 parent target. Deleting product settings removes selection. Setting a target for
 an unknown or deleted thread fails and never recreates that thread.
 
-# Qualification limits
+# Boundaries
 
 Focused tests cover switching, thread isolation, rejected actions, storage failure,
 restart, fork and deletion. Shared-target control ownership, takeover and remote
