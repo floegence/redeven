@@ -69,7 +69,8 @@ describe('Flower restrained selection and focus treatments', () => {
 
     expect(surface).toContain(': selectedThreadTitle()}');
     expect(surface).toContain('data-flower-companion-empty-selection={companionCollapsedEmptySelection() ? \'true\' : undefined}');
-    expect(titleRule).toContain('height: 1.5rem');
+    expect(titleRule).toContain('height: 100%');
+    expect(titleRule).toContain('min-height: 0');
     expect(titleRule).toContain('font-size: 0.6875rem');
     expect(titleRule).toContain('font-weight: 500');
     expect(titleRule).toContain('color: color-mix');
