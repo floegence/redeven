@@ -27,9 +27,7 @@ measurement listeners are released when the launcher closes or the owner unmount
 The shared launcher adds a 12 CSS pixel viewport margin, reduced to 8 below a
 640 CSS pixel viewport width. The host boundary and margin feed one published
 `viewportInsets` geometry path for anchored opening, centered opening, dragging,
-edge resizing, and viewport changes. Host insets are not duplicated inside an
-alternate drag controller. The launcher is a Shell-level floating window even
-when its request originates in a projected Workbench widget.
+edge resizing, and viewport changes.
 
 ## Controls and constrained space
 
@@ -49,6 +47,15 @@ continue to follow the [Flower command contract](flower-turn-launcher.md) and
 The Activity/Workbench mode switcher participates in the launcher's existing
 related-surface boundary. Clicking a mode tab changes the host without dismissing
 the draft as an outside click. Other outside-click dismissal remains unchanged.
+
+# Boundaries
+
+Redeven supplies the Ask Flower placement policy and host measurements; published
+Floe owns dragging, resizing, clamping, and maximize controls. Host insets must not
+be duplicated in an alternate drag controller. The launcher remains a Shell-level
+floating window even when its request originates in a projected Workbench widget;
+its interaction must not move the underlying canvas. These constraints apply to
+the contextual launcher, not the main Flower surface or other floating windows.
 
 # Evidence
 
