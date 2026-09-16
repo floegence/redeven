@@ -15,7 +15,7 @@ const PRODUCT_SOURCE_ROOTS = [
   'internal/flower_ui/src',
 ];
 const PRODUCT_SOURCE_EXTENSIONS = new Set(['.css', '.ts', '.tsx']);
-const TEST_SOURCE_PATTERN = /(?:^|\/)(?:__tests__|test)(?:\/|$)|\.(?:browser\.)?(?:test|spec|e2e)\.(?:ts|tsx|css)$/u;
+const TEST_SOURCE_PATTERN = /(?:^|\/)(?:__tests__|test)(?:\/|$)|\.(?:browser\.)?(?:test(?:-support)?|spec|e2e)\.(?:ts|tsx|css)$/u;
 const RAW_COLOR_PATTERN = /#[\da-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab|lab|lch)\([^)]*\)/giu;
 const NAMED_COLOR_PATTERN = /(?<![\w-])(?:white|black)(?![\w-])/giu;
 const FIXED_TAILWIND_PATTERN = /\b(?:bg|text|border|ring|fill|stroke|shadow|from|via|to)-(?:black|white|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-\d{2,3})?(?:\/\[[^\]]+\]|\/\d+)?(?![\w/[\]])/gu;

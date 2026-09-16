@@ -1083,6 +1083,14 @@ ORDER BY seq ASC`,
 }
 
 func snapshotTx(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
+	stickyNotes, err := loadStickyNotesTx(ctx, tx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return snapshotWithStickyNotesTx(ctx, tx, stickyNotes)
+}
+
+func snapshotWithStickyNotesTx(ctx context.Context, tx *sql.Tx, stickyNotes []StickyNote) (Snapshot, error) {
 	var snapshot Snapshot
 	if err := tx.QueryRowContext(
 		ctx,
@@ -1125,10 +1133,6 @@ ORDER BY z_index ASC, created_at_unix_ms ASC, widget_id ASC`,
 		return Snapshot{}, err
 	}
 
-	stickyNotes, err := loadStickyNotesTx(ctx, tx)
-	if err != nil {
-		return Snapshot{}, err
-	}
 	snapshot.StickyNotes = stickyNotes
 
 	annotations, err := loadTextAnnotationsTx(ctx, tx)
@@ -1237,12 +1241,13 @@ func scanWidgetStateRow(scanner interface {
 }
 
 func loadStickyNotesTx(ctx context.Context, tx *sql.Tx) ([]StickyNote, error) {
-	rows, err := tx.QueryContext(
-		ctx,
-		`SELECT id, kind, body, color, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms
+	return queryStickyNotesTx(ctx, tx, `SELECT id, kind, body, color, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms, material
 FROM workbench_layout_sticky_notes
-ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`,
-	)
+ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`)
+}
+
+func queryStickyNotesTx(ctx context.Context, tx *sql.Tx, query string) ([]StickyNote, error) {
+	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -1263,6 +1268,7 @@ ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`,
 			&note.ZIndex,
 			&note.CreatedAtUnixMs,
 			&note.UpdatedAtUnixMs,
+			&note.Material,
 		); err != nil {
 			return nil, err
 		}
@@ -1495,8 +1501,9 @@ func replaceStickyNotesTx(ctx context.Context, tx *sql.Tx, notes []StickyNote) e
   height,
   z_index,
   created_at_unix_ms,
-  updated_at_unix_ms
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  updated_at_unix_ms,
+  material
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			note.ID,
 			note.Kind,
 			note.Body,
@@ -1508,6 +1515,7 @@ func replaceStickyNotesTx(ctx context.Context, tx *sql.Tx, notes []StickyNote) e
 			note.ZIndex,
 			note.CreatedAtUnixMs,
 			note.UpdatedAtUnixMs,
+			note.Material,
 		); err != nil {
 			return err
 		}

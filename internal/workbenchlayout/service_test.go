@@ -1519,7 +1519,7 @@ func TestService_RejectsFutureVersionWithoutChangingCodexLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql.Open() error = %v", err)
 	}
-	if _, err := raw.Exec(`PRAGMA user_version = 5`); err != nil {
+	if _, err := raw.Exec(`PRAGMA user_version = 6`); err != nil {
 		_ = raw.Close()
 		t.Fatalf("set future version: %v", err)
 	}
@@ -1547,7 +1547,7 @@ func TestService_RejectsFutureVersionWithoutChangingCodexLayout(t *testing.T) {
 	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if widgetRows != 1 || version != 5 {
+	if widgetRows != 1 || version != 6 {
 		t.Fatalf("future database changed: widgets=%d version=%d", widgetRows, version)
 	}
 }

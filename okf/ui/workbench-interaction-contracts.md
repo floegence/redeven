@@ -15,6 +15,7 @@ Workbench interaction is governed by explicit ownership contracts rather than wi
 
 This concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:
 
+- [Workbench composition surfaces and editing](workbench-composition.md)
 - [Workbench input ownership](workbench-input-ownership.md)
 - [Workbench terminal interaction](workbench-terminal-interaction.md)
 

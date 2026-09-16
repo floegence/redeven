@@ -90,6 +90,7 @@ test('recursively discovers Desktop, Env App Git, and Flower production sources 
     'desktop/src/welcome/NestedWelcome.test.tsx': 'export const fixture = "text-red-500";',
     'internal/envapp/ui_src/src/ui/widgets/git/NestedGit.tsx': 'export const value = "text-violet-500";',
     'internal/envapp/ui_src/src/ui/widgets/git/NestedGit.test.tsx': 'export const fixture = "text-red-500";',
+    'internal/envapp/ui_src/src/styles/selectionContrast.test-support.ts': 'export const readColor = (node) => rgba(getComputedStyle(node).color);',
     'internal/flower_ui/src/chat/NestedFlower.css': '.flower { color: #123456; }',
     'internal/flower_ui/src/chat/NestedFlower.browser.test.tsx': 'export const fixture = "bg-blue-500";',
   }, (repositoryRoot) => {

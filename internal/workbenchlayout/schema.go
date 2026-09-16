@@ -13,7 +13,7 @@ import (
 
 const (
 	schemaKind           = "workbench_layout_runtime"
-	currentSchemaVersion = 4
+	currentSchemaVersion = 5
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -26,6 +26,7 @@ func schemaSpec() sqliteutil.Spec {
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateToV5},
 		},
 		Verify: verifySchema,
 	}
@@ -229,7 +230,13 @@ func migrateToV4(tx *sql.Tx) error {
 	if !changed {
 		return nil
 	}
-	current, err := snapshotTx(context.Background(), tx)
+	// This migration reads the frozen v3 note shape, before v5 adds material.
+	stickyNotes, err := queryStickyNotesTx(context.Background(), tx, `SELECT id, kind, body, color, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms, 'tint'
+FROM workbench_layout_sticky_notes ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`)
+	if err != nil {
+		return err
+	}
+	current, err := snapshotWithStickyNotesTx(context.Background(), tx, stickyNotes)
 	if err != nil {
 		return err
 	}
@@ -254,6 +261,16 @@ func migrateToV4(tx *sql.Tx) error {
 	}
 	_, err = tx.Exec(`UPDATE workbench_layout_events SET payload_json = ? WHERE seq = ?`, string(payload), seq)
 	return err
+}
+
+func migrateToV5(tx *sql.Tx) error {
+	if err := verifyWorkbenchSchema(tx, 4); err != nil {
+		return fmt.Errorf("verify workbench layout v4 schema: %w", err)
+	}
+	if _, err := tx.Exec(`ALTER TABLE workbench_layout_sticky_notes ADD COLUMN material TEXT NOT NULL DEFAULT 'tint'`); err != nil {
+		return err
+	}
+	return verifyWorkbenchSchema(tx, 5)
 }
 
 func scrubLayoutEventPayload(raw []byte) ([]byte, bool, error) {
@@ -330,6 +347,9 @@ func verifyWorkbenchSchema(tx *sql.Tx, version int) error {
 			"idx_workbench_layout_sticky_notes_order",
 		)
 	}
+	if version >= 5 {
+		expectedColumns["workbench_layout_sticky_notes"] = append(expectedColumns["workbench_layout_sticky_notes"], "material")
+	}
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
@@ -349,6 +369,16 @@ func verifyWorkbenchSchema(tx *sql.Tx, version int) error {
 		}
 		if !slices.Equal(columns, expected) {
 			return fmt.Errorf("workbench layout v%d column mismatch for %s: got %v, want %v", version, tableName, columns, expected)
+		}
+	}
+	if version >= 5 {
+		var validMaterial bool
+		if err := tx.QueryRow(`SELECT type = 'TEXT' AND "notnull" = 1 AND dflt_value = ? AND pk = 0 AND hidden = 0
+FROM pragma_table_xinfo('workbench_layout_sticky_notes') WHERE name = 'material'`, "'tint'").Scan(&validMaterial); err != nil {
+			return fmt.Errorf("verify sticky material column: %w", err)
+		}
+		if !validMaterial {
+			return fmt.Errorf("workbench layout v%d sticky material column definition mismatch", version)
 		}
 	}
 	indexes, err := sqliteutil.ListUserIndexesTx(tx)

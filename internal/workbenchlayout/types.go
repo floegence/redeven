@@ -35,22 +35,23 @@ const (
 	TerminalMinFontSize = 10
 	TerminalMaxFontSize = 20
 
-	StickyNoteKind         = "sticky_note"
-	TextAnnotationKind     = "text"
-	DefaultStickyNoteBody  = "Untitled note"
-	DefaultStickyNoteColor = "amber"
+	StickyNoteKind            = "sticky_note"
+	TextAnnotationKind        = "text"
+	DefaultStickyNoteBody     = ""
+	DefaultStickyNoteMaterial = "tint"
+	DefaultStickyNoteColor    = "amber"
 
-	DefaultAnnotationText       = "Text"
+	DefaultAnnotationText       = ""
 	DefaultAnnotationFontFamily = `ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
 	DefaultAnnotationFontWeight = 800
 	DefaultAnnotationFontSize   = 45
 	DefaultAnnotationColor      = "#6b7280"
 	DefaultAnnotationAlign      = "left"
 
-	DefaultBackgroundLayerName     = "Canvas region"
+	DefaultBackgroundLayerName     = ""
 	DefaultBackgroundLayerFill     = "#9da8a1"
 	DefaultBackgroundLayerOpacity  = 0.72
-	DefaultBackgroundLayerMaterial = "dotted"
+	DefaultBackgroundLayerMaterial = "solid"
 )
 
 type Snapshot struct {
@@ -95,6 +96,7 @@ type StickyNote struct {
 	Kind            string  `json:"kind"`
 	Body            string  `json:"body"`
 	Color           string  `json:"color"`
+	Material        string  `json:"material"`
 	X               float64 `json:"x"`
 	Y               float64 `json:"y"`
 	Width           float64 `json:"width"`
@@ -531,6 +533,7 @@ func normalizeStickyNote(note StickyNote, nowUnixMs int64) (StickyNote, error) {
 		ID:              id,
 		Kind:            StickyNoteKind,
 		Body:            normalizeBoundedText(note.Body, DefaultStickyNoteBody, 20_000),
+		Material:        normalizeEnum(note.Material, stickyNoteMaterials(), DefaultStickyNoteMaterial),
 		Color:           normalizeEnum(note.Color, stickyNoteColors(), DefaultStickyNoteColor),
 		X:               note.X,
 		Y:               note.Y,
@@ -1065,13 +1068,18 @@ func normalizeAnnotationFont(fontFamily string, fontWeight int) (string, int) {
 	}
 }
 
+func stickyNoteMaterials() map[string]struct{} {
+	return map[string]struct{}{"tint": {}, "tab": {}, "ruled": {}}
+}
+
 func stickyNoteColors() map[string]struct{} {
 	return map[string]struct{}{
-		"sage":  {},
-		"amber": {},
-		"azure": {},
-		"coral": {},
-		"rose":  {},
+		"sage":     {},
+		"amber":    {},
+		"azure":    {},
+		"coral":    {},
+		"rose":     {},
+		"graphite": {},
 	}
 }
 
@@ -1108,6 +1116,7 @@ func backgroundLayerFills() map[string]struct{} {
 func backgroundLayerMaterials() map[string]struct{} {
 	return map[string]struct{}{
 		"solid":   {},
+		"frame":   {},
 		"dotted":  {},
 		"grid":    {},
 		"hatched": {},

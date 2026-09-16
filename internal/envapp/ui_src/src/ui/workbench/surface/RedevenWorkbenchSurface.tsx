@@ -1,7 +1,10 @@
-import { createEffect, onCleanup } from 'solid-js';
+import { createEffect, createMemo, onCleanup } from 'solid-js';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import {
   WorkbenchSurface,
+  workbenchCompositionMessages,
+  type WorkbenchCompositionMessageKey,
+  type WorkbenchCompositionMessages,
   WORKBENCH_REGION_FILL_OPTIONS,
   WORKBENCH_TEXT_FONT_OPTIONS,
   type WorkbenchBackgroundLayerDefaults,
@@ -27,6 +30,7 @@ import {
   resolveWorkbenchSurfaceTargetRole,
   resolveWorkbenchWheelRouting,
 } from './workbenchInputRouting';
+import { useI18n } from '../../i18n';
 import { CompositionWorkbenchIcon } from '../../icons/WorkbenchSoftIcons';
 import { ensureWorkbenchTextSelectionSurfaceContract } from './workbenchTextSelectionSurface';
 import {
@@ -56,7 +60,7 @@ const REDEVEN_TEXT_ANNOTATION_DEFAULTS: WorkbenchTextAnnotationDefaults = {
 };
 const REDEVEN_BACKGROUND_LAYER_DEFAULTS: WorkbenchBackgroundLayerDefaults = {
   fill: WORKBENCH_REGION_FILL_OPTIONS[1],
-  opacity: 0.42,
+  opacity: 0.72,
   material: 'solid',
 };
 const WORKBENCH_WIDGET_VIEWPORT_CONTROL_SELECTOR = [
@@ -285,6 +289,11 @@ function installProjectedLayerScrollGuard(host: HTMLElement): () => void {
 }
 
 export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
+  const i18n = useI18n();
+  const compositionMessages = createMemo(() => Object.fromEntries(
+    (Object.keys(workbenchCompositionMessages) as WorkbenchCompositionMessageKey[])
+      .map((key) => [key, i18n.t(`workbench.composition.${key}`)]),
+  ) as WorkbenchCompositionMessages);
   let hostRef: HTMLDivElement | undefined;
   let viewportInteractionActive = false;
   let viewportInteractionHolds = 0;
@@ -536,6 +545,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   return (
     <div ref={hostRef} class="h-full min-h-0">
       <WorkbenchSurface
+        compositionMessages={compositionMessages()}
         state={props.state}
         setState={props.setState}
         lockShortcut={props.lockShortcut}
