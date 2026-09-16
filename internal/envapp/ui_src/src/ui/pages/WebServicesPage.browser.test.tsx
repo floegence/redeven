@@ -253,6 +253,28 @@ describe('Web Services product interaction', () => {
     expect((page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('replaces a failed recovery with the next reviewed success and restores opening', async () => {
+    const row = await executeRecovery('immediate', 'failed');
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Failed');
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    const original = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/operations')) {
+        records = [base];
+        return { operation_id: 'next-recovery', service_id: base.service_id, action: 'recover', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 };
+      }
+      return original(url, options);
+    });
+    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Recover service', exact: true }));
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
+    await expect.poll(() => row.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
+    await expect.poll(() => row.querySelector('[data-testid="managed-operation-disclosure"]'), { timeout: 4_000 }).toBeNull();
+    await userEvent.click(row.querySelector<HTMLButtonElement>('.web-service-open button')!);
+    await expect.poll(() => api.open.mock.calls.length).toBe(1);
+  });
+
   it('releases a disconnected recovery stream so the service can be reviewed again', async () => {
     const row = await executeRecovery('stream-error');
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"] [role="alert"]')).toBeTruthy();
