@@ -104,8 +104,8 @@ func defaultCatalogEnvironmentLabel(layout StateLayout) string {
 	return "Local Environment"
 }
 
-// ReadEnvironmentCatalogAccess preserves a missing legacy protocol as an
-// unconfirmed choice. Reading never rewrites user configuration.
+// ReadEnvironmentCatalogAccess defaults a missing protocol to HTTP while
+// preserving explicit choices. Reading never rewrites user configuration.
 func ReadEnvironmentCatalogAccess(layout StateLayout) (*EnvironmentCatalogAccess, error) {
 	root, err := catalogRootForLayout(layout)
 	if err != nil {
@@ -116,10 +116,11 @@ func ReadEnvironmentCatalogAccess(layout StateLayout) (*EnvironmentCatalogAccess
 		return nil, err
 	}
 	access := record.LocalHosting.Access
-	if access.LocalUIProtocol != "" {
-		if err := ValidateLocalUIProtocol(access.LocalUIProtocol); err != nil {
-			return nil, err
-		}
+	if access.LocalUIProtocol == "" {
+		access.LocalUIProtocol = LocalUIProtocolHTTP
+	}
+	if err := ValidateLocalUIProtocol(access.LocalUIProtocol); err != nil {
+		return nil, err
 	}
 	return &EnvironmentCatalogAccess{
 		LocalUIBind:               access.LocalUIBind,

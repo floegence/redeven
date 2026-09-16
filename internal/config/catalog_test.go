@@ -28,20 +28,30 @@ func TestReadEnvironmentCatalogAccessPreservesProtocolChoice(t *testing.T) {
 		}
 	}
 	path := filepath.Join(layout.StateRoot, "catalog", "local-environment.json")
-	legacy := []byte(`{"schema_version":1,"record_kind":"local_environment","local_hosting":{"access":{"local_ui_bind":"localhost:23998"}}}`)
+	legacy := []byte(`{"schema_version":1,"record_kind":"local_environment","local_hosting":{"access":{"local_ui_bind":"localhost:23998","local_ui_password_configured":true}}}`)
 	if err := os.WriteFile(path, legacy, 0600); err != nil {
 		t.Fatal(err)
 	}
 	access, err := ReadEnvironmentCatalogAccess(layout)
-	if err != nil || access == nil || access.LocalUIProtocol != "" {
-		t.Fatalf("legacy protocol must remain unconfirmed: %#v, %v", access, err)
+	if err != nil || access == nil || access.LocalUIProtocol != LocalUIProtocolHTTP {
+		t.Fatalf("missing protocol must default to HTTP: %#v, %v", access, err)
+	}
+	if access.LocalUIBind != "localhost:23998" || !access.LocalUIPasswordConfigured {
+		t.Fatalf("protocol default changed saved address or password protection: %#v", access)
 	}
 	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, &EnvironmentCatalogAccess{LocalUIProtocol: ""}); err == nil {
-		t.Fatal("persisted an unconfirmed protocol")
+		t.Fatal("persisted an empty protocol instead of an explicit choice")
 	}
 	after, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(after, legacy) {
-		t.Fatal("unconfirmed access modified the catalog")
+		t.Fatal("reading the protocol default modified the catalog")
+	}
+	invalid := bytes.Replace(legacy, []byte(`"local_ui_bind"`), []byte(`"local_ui_protocol":"ftp","local_ui_bind"`), 1)
+	if err := os.WriteFile(path, invalid, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadEnvironmentCatalogAccess(layout); err == nil {
+		t.Fatal("accepted an unknown protocol")
 	}
 }
 

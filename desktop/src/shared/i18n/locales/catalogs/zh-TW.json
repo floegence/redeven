@@ -887,7 +887,7 @@
     "httpsLabel": "HTTPS · 建議",
     "httpNotice": "HTTP 不會保護頁面及登入資訊的網路傳輸。",
     "httpsHelp": "HTTPS 會加密連線。每部連線裝置都必須信任此執行階段的憑證。",
-    "protocolRequired": "請選擇 HTTP 或 HTTPS，確認此既有環境的連線安全性設定。",
+    "protocolRequired": "請選擇 HTTP 或 HTTPS 連線協定。",
     "advancedNetwork": "進階網路設定",
     "listenAddressHelp": "監聽位址用於選擇伺服器介面，並非允許存取的用戶端位址清單。",
     "pendingChanges": "尚未套用的變更",

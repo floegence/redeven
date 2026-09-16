@@ -887,7 +887,7 @@
     "httpsLabel": "HTTPS · 推奨",
     "httpNotice": "HTTP では、ページやログイン情報の通信は保護されません。",
     "httpsHelp": "HTTPS は通信を暗号化します。接続する各デバイスで、このランタイムの証明書を信頼する必要があります。",
-    "protocolRequired": "HTTP または HTTPS を選択し、この既存の環境の接続セキュリティを確定してください。",
+    "protocolRequired": "接続に HTTP または HTTPS を選択してください。",
     "advancedNetwork": "ネットワークの詳細設定",
     "listenAddressHelp": "リッスンアドレスはサーバーのインターフェースを選択する設定です。許可するクライアントのアドレス一覧ではありません。",
     "pendingChanges": "未適用の変更があります",

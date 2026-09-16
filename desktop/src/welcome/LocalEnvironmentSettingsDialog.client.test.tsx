@@ -127,11 +127,15 @@ describe('Runtime connection settings', () => {
     expect(test.open).toHaveBeenCalledWith('https://localhost:23998/');
   });
 
-  it('keeps password and scope independent and requires legacy protocol confirmation', async () => {
+  it('uses HTTP without certificate setup for an existing configuration with no protocol', async () => {
     const test = await mount({ protocol: 'legacy' });
-    expect(document.body.textContent).toContain('Choose HTTP or HTTPS');
-    expect(button('Save for next restart').disabled).toBe(true);
-    button('HTTP').click();
+    expect(document.body.textContent).not.toContain('Choose HTTP or HTTPS');
+    expect(test.certificate).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('HTTP does not protect');
+    expect(button('HTTP').getAttribute('aria-checked')).toBe('true');
+    test.setDraft((current) => ({ ...current, local_ui_bind: 'localhost:24000' }));
+    await settle();
+    expect(button('Save for next restart').disabled).toBe(false);
     button('Network-reachable devices').click();
     await settle();
     expect(test.draft().local_ui_password_mode).toBe('keep');

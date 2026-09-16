@@ -124,8 +124,9 @@ describe('runtimeControlClient', () => {
     expect(JSON.parse(server.bodies[1]!)).toEqual({local_ui_bind: saved.local_ui_bind, local_ui_protocol: 'http', local_ui_password_mode: 'replace', local_ui_password: 'new-secret'});
   });
 
-  it('preserves unconfirmed legacy protocols and rejects unknown protocols', () => {
-    expect(parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false}).local_ui_protocol).toBeUndefined();
+  it('defaults missing protocols to HTTP, preserves HTTPS, and rejects unknown protocols', () => {
+    expect(parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false}).local_ui_protocol).toBe('http');
+    expect(parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false, local_ui_protocol: 'https'}).local_ui_protocol).toBe('https');
     expect(() => parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false, local_ui_protocol: 'ftp'})).toThrow();
   });
   it('resolves runtime-control API routes relative to a service root with a path prefix', async () => {

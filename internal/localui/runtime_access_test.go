@@ -172,3 +172,54 @@ func TestRuntimeAccessRequiresPrivateManagementAuthority(t *testing.T) {
 		t.Fatalf("saved access = %+v, %v", access, err)
 	}
 }
+
+func TestRuntimeAccessKeepImportsOnlyAMissingPasswordVerifier(t *testing.T) {
+	layout, err := config.LocalEnvironmentStateLayout(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.WriteEnvironmentCatalogRecord(layout, nil, &config.EnvironmentCatalogAccess{
+		LocalUIBind: "localhost:23998", LocalUIProtocol: "http", LocalUIPasswordConfigured: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	input := RuntimeAccessUpdate{Bind: "localhost:24000", Protocol: "http", PasswordMode: "keep"}
+	if _, err := SaveRuntimeAccess(layout, input); err == nil {
+		t.Fatal("keep silently cleared a missing password verifier")
+	}
+	input.Password = "retained-desktop-password"
+	blockedCatalog := filepath.Join(layout.StateRoot, "catalog", "local-environment.json.tmp")
+	if err := os.Mkdir(blockedCatalog, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveRuntimeAccess(layout, input); err == nil {
+		t.Fatal("expected catalog write failure")
+	}
+	if hash, err := accessgate.ReadPasswordHash(layout.StateDir); err != nil || len(hash) != 0 {
+		t.Fatalf("failed save retained an imported verifier: %v", err)
+	}
+	if err := os.Remove(blockedCatalog); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveRuntimeAccess(layout, input); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := accessgate.ReadPasswordHash(layout.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate, err := accessgate.NewWithPasswordHash(hash)
+	if err != nil || !gate.VerifyPassword(input.Password) {
+		t.Fatal("retained password was not imported")
+	}
+	// A different manager may have updated the server password. Keeping it must
+	// never replace the verifier with this Desktop's stale retained password.
+	input.Password = "stale-desktop-password"
+	if _, err := SaveRuntimeAccess(layout, input); err != nil {
+		t.Fatal(err)
+	}
+	after, err := accessgate.ReadPasswordHash(layout.StateDir)
+	if err != nil || !bytes.Equal(hash, after) {
+		t.Fatalf("keep replaced the server-owned verifier: %v", err)
+	}
+}
