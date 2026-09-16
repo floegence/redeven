@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { AlertCircle, Check, Lock } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { desktopCertificateIdentity, type DesktopCertificateOperation, type DesktopCertificateReport, type DesktopCertificateRequest } from '../shared/desktopCertificate';
@@ -45,7 +45,9 @@ export function LocalCertificateSettings(props: Readonly<{
     }
   }
 
-  createEffect(on(() => props.environmentID, (id) => {
+  // Snapshot objects change during health updates; only a new target resets certificate state.
+  const environmentID = createMemo(() => props.environmentID);
+  createEffect(on(environmentID, (id) => {
     revision += 1;
     setReport(undefined);
     setOperation(undefined);

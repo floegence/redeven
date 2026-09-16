@@ -31,6 +31,8 @@ Welcome and settings display only Runtime-reported public URLs as copyable, shar
 
 Narrow settings windows keep the current URL on its own full-width row, with copy and share actions below it. Translated action labels must not compress the address into a narrow column; the footer remains visible while configuration content scrolls.
 
+Background snapshots update current connection information without resetting the open settings interaction: expanded sections, scroll position, input focus, selection, and unsaved edits remain intact. Certificate state and pending operations belong to the actual Environment ID, not the snapshot object. Only a target change or reopening the certificate section initializes a new check; explicit refresh remains available. Responses from a previous target or closed section are ignored.
+
 Missing saved protocol settings use HTTP on load and startup, including existing Environment catalogs. The connection security control selects HTTP without a confirmation or certificate prompt. Explicit HTTPS remains unchanged. When saving a stopped Environment, Desktop supplies any retained password with `keep` to the Runtime authority. Runtime may establish a missing verifier, but never replaces an existing server password unless the user explicitly chooses replacement.
 
 HTTPS settings show certificate validity and this client's system trust separately. The explicit local "Create and trust on this device" action lets the main process inspect, create only a missing certificate, request current-user trust, and verify the result. Retrying reuses a valid identity; cancellation and installation failure keep it usable. Certificate IPC binds an explicit registered management target, and obsolete UI results cannot update another Environment. The epoch 18 legacy `failed + ready + untrusted` status means an intact identity awaiting client trust. Remote server trust never establishes client trust. Certificate changes apply immediately and survive canceling the settings draft. HTTPS restart is disabled during checks and mutations, and the main process rechecks the saved HTTPS identity before stopping the running Runtime; untrusted valid identities remain allowed. Saving next-start settings does not require an immediately usable certificate.
@@ -65,6 +67,7 @@ Runtime-control is a local Desktop coordination capability, not a general networ
 
 - `redeven:desktop/src/main/desktopCertificate.test.ts` - Exercises explicit setup, preserved identity after trust failure, verification, and HTTPS restart admission.
 - `redeven:desktop/src/welcome/LocalCertificateSettings.client.test.tsx` - Covers legacy trust status, actionable retries, duplicate actions, and stale environment responses.
+- `redeven:desktop/src/welcome/LocalEnvironmentSettingsDialog.client.test.tsx` - Verifies live snapshot updates preserve expanded sections, scroll, focused input selection, and drafts without restarting certificate checks.
 - `redeven:desktop/src/main/desktopPreferences.test.ts` - Loads existing catalogs without a protocol into HTTP startup while preserving the saved port, password, and explicit HTTPS choice.
 - `redeven:cmd/redeven/main.go:299` - Local Desktop startup is rejected for remote-only mode.
 - `redeven:desktop/src/main/localUIURL.ts:44` - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.
