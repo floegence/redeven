@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	flowersecGoModule        = "github.com/floegence/flowersec/flowersec-go/v5"
-	flowersecGoVersion       = "v5.1.0"
-	flowersecCorePackage     = "@floegence/flowersec-core"
-	flowersecCoreVersion     = "5.1.0"
-	floeWebappVersion        = "0.52.11"
-	desktopFloeWebappVersion = "0.52.11"
+	flowersecGoModule       = "github.com/floegence/flowersec/flowersec-go/v5"
+	flowersecGoVersion      = "v5.1.0"
+	flowersecCorePackage    = "@floegence/flowersec-core"
+	flowersecCoreVersion    = "5.2.0"
+	codeAppFlowersecVersion = "5.1.0"
+	floeWebappVersion       = "0.53.1"
 )
 
 var flowersecNPMPackages = []string{
@@ -133,8 +133,13 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 	}
 	assertNoLocalGoModuleReference(t, "go.sum", goSum, flowersecGoModule, "flowersec")
 	assertOnlyCurrentFlowersecGoImports(t, root)
-	assertNoticeDependency(t, notices, flowersecGoModule, flowersecGoVersion, "https://pkg.go.dev/"+flowersecGoModule+"@"+flowersecGoVersion)
-	assertNoticeDependency(t, notices, flowersecCorePackage, flowersecCoreVersion, "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/"+flowersecCoreVersion)
+	assertNoticeDependencies(t, notices, flowersecGoModule, map[string]string{
+		flowersecGoVersion: "https://pkg.go.dev/" + flowersecGoModule + "@" + flowersecGoVersion,
+	})
+	assertNoticeDependencies(t, notices, flowersecCorePackage, map[string]string{
+		flowersecCoreVersion:    "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + flowersecCoreVersion,
+		codeAppFlowersecVersion: "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/" + codeAppFlowersecVersion,
+	})
 }
 
 func TestFlowersecGoImportPolicyRejectsRetiredModulePaths(t *testing.T) {
@@ -393,37 +398,37 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.52.11\"",
-			"\"@floegence/floe-webapp-core\": \"0.52.11\"",
+			"\"@floegence/floe-webapp-boot\": \"0.53.1\"",
+			"\"@floegence/floe-webapp-core\": \"0.53.1\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-boot-0.52.11.tgz",
-			"floe-webapp-core-0.52.11.tgz",
+			"floe-webapp-boot-0.53.1.tgz",
+			"floe-webapp-core-0.53.1.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.52.11",
-			"@floegence/floe-webapp-core@0.52.11",
+			"@floegence/floe-webapp-boot@0.53.1",
+			"@floegence/floe-webapp-core@0.53.1",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.52.11\"",
-			"\"@floegence/floe-webapp-core\": \"0.52.11\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.52.11\"",
+			"\"@floegence/floe-webapp-boot\": \"0.53.1\"",
+			"\"@floegence/floe-webapp-core\": \"0.53.1\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.53.1\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.19.1\"",
-			"\"@floegence/flowersec-core\": \"5.1.0\"",
+			"\"@floegence/flowersec-core\": \"5.2.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.52.11.tgz",
-			"floe-webapp-core-0.52.11.tgz",
-			"floe-webapp-protocol-0.52.11.tgz",
+			"floe-webapp-boot-0.53.1.tgz",
+			"floe-webapp-core-0.53.1.tgz",
+			"floe-webapp-protocol-0.53.1.tgz",
 			"floeterm-terminal-web-0.19.1.tgz",
-			"flowersec-core-5.1.0.tgz",
+			"flowersec-core-5.2.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.52.11",
-			"@floegence/floe-webapp-core@0.52.11",
-			"@floegence/floe-webapp-protocol@0.52.11",
+			"@floegence/floe-webapp-boot@0.53.1",
+			"@floegence/floe-webapp-core@0.53.1",
+			"@floegence/floe-webapp-protocol@0.53.1",
 			"@floegence/floeterm-terminal-web@0.19.1",
-			"@floegence/flowersec-core@5.1.0",
+			"@floegence/flowersec-core@5.2.0",
 		},
 		"internal/codeapp/ui_src/package.json": {
 			"\"@floegence/flowersec-core\": \"5.1.0\"",
@@ -432,24 +437,24 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"flowersec-core-5.1.0.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.52.11",
-			"@floegence/floe-webapp-core | 0.52.11",
-			"@floegence/floe-webapp-boot | 0.52.11",
-			"@floegence/floe-webapp-core | 0.52.11",
-			"@floegence/floe-webapp-protocol | 0.52.11",
+			"@floegence/floe-webapp-boot | 0.53.1",
+			"@floegence/floe-webapp-core | 0.53.1",
+			"@floegence/floe-webapp-boot | 0.53.1",
+			"@floegence/floe-webapp-core | 0.53.1",
+			"@floegence/floe-webapp-protocol | 0.53.1",
 			"@floegence/floeterm-terminal-web | 0.19.1",
-			"@floegence/flowersec-core | 5.1.0",
+			"@floegence/flowersec-core | 5.2.0",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.19.1",
 			"Flowersec Go v5.1.0",
-			"Flowersec Core v5.1.0",
+			"Flowersec Core v5.2.0",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.19.1",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v0.52.11",
-			"Flowersec Core v5.1.0",
+			"Floe Webapp Boot, Core, and Protocol v0.53.1",
+			"Flowersec Core v5.2.0",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -483,11 +488,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"internal/envapp/ui_src/pnpm-lock.yaml":    {"@floegence/floe-webapp-boot", "@floegence/floe-webapp-core", "@floegence/floe-webapp-protocol"},
 	} {
 		for _, packageName := range packages {
-			version := floeWebappVersion
-			if strings.HasPrefix(file, "desktop/") {
-				version = desktopFloeWebappVersion
-			}
-			assertOnlyCurrentNPMDependency(t, root, file, packageName, version)
+			assertOnlyCurrentNPMDependency(t, root, file, packageName, floeWebappVersion)
 		}
 	}
 
@@ -659,7 +660,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"github.com/floegence/floret/v7 v7.13.0",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go and Core v5.1.0 plus Floe Webapp v0.52.11 for both the Desktop shell and Env App",
+			"published Flowersec Go v5.1.0, Flowersec Core v5.2.0 for Desktop and Env App, Core v5.1.0 for Code App, and Floe Webapp v0.53.1",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
@@ -1628,12 +1629,16 @@ func classifyFlowersecGoImport(importPath string) (flowersec bool, current bool)
 
 func assertOnlyCurrentFlowersecNPMDependency(t *testing.T, root string, file string) {
 	t.Helper()
+	version := flowersecCoreVersion
+	if strings.HasPrefix(file, "internal/codeapp/") {
+		version = codeAppFlowersecVersion
+	}
 	packages := flowersecNPMPackages
 	if filepath.Base(file) == "package.json" {
 		packages = []string{flowersecCorePackage}
 	}
 	for _, packageName := range packages {
-		assertOnlyCurrentNPMDependency(t, root, file, packageName, flowersecCoreVersion)
+		assertOnlyCurrentNPMDependency(t, root, file, packageName, version)
 	}
 }
 
@@ -1730,7 +1735,7 @@ func assertExactNPMReference(t *testing.T, file string, key string, packageVersi
 	}
 }
 
-func assertNoticeDependency(t *testing.T, notices string, dependency string, version string, source string) {
+func assertNoticeDependencies(t *testing.T, notices string, dependency string, expected map[string]string) {
 	t.Helper()
 
 	var rows [][]string
@@ -1744,14 +1749,20 @@ func assertNoticeDependency(t *testing.T, notices string, dependency string, ver
 		}
 		rows = append(rows, columns)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("THIRD_PARTY_NOTICES.md %s rows=%d, want one", dependency, len(rows))
+	if len(rows) != len(expected) {
+		t.Fatalf("THIRD_PARTY_NOTICES.md %s rows=%d, want %d", dependency, len(rows), len(expected))
 	}
-	if got := strings.TrimSpace(rows[0][2]); got != version {
-		t.Fatalf("THIRD_PARTY_NOTICES.md %s version=%q, want %s", dependency, got, version)
-	}
-	if got := strings.TrimSpace(rows[0][5]); got != source {
-		t.Fatalf("THIRD_PARTY_NOTICES.md %s source=%q, want %s", dependency, got, source)
+	seen := make(map[string]bool, len(expected))
+	for _, row := range rows {
+		version := strings.TrimSpace(row[2])
+		source, known := expected[version]
+		if !known || seen[version] {
+			t.Fatalf("THIRD_PARTY_NOTICES.md %s has unexpected or duplicate version %q", dependency, version)
+		}
+		seen[version] = true
+		if got := strings.TrimSpace(row[5]); got != source {
+			t.Fatalf("THIRD_PARTY_NOTICES.md %s %s source=%q, want %s", dependency, version, got, source)
+		}
 	}
 }
 
