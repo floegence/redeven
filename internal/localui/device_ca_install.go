@@ -22,8 +22,16 @@ var (
 // trust. Linux distributions expose incompatible user trust stores, so Linux
 // returns a manual-install result instead of guessing or invoking sudo.
 func InstallLocalUIDeviceCAForCurrentUser(stateDir string) error {
-	if _, err := loadLocalUIDeviceCA(stateDir); err != nil {
+	return withDeviceIdentityLock(stateDir, false, func() error { return installLocalUIDeviceCAUnlocked(stateDir) })
+}
+
+func installLocalUIDeviceCAUnlocked(stateDir string) error {
+	ca, err := loadLocalUIDeviceCAUnlocked(stateDir)
+	if err != nil {
 		return err
+	}
+	if ca.serverCertificate != nil {
+		return ErrLocalUIDeviceCAManual
 	}
 	certificatePath := localUIDeviceCACertificatePath(stateDir)
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)

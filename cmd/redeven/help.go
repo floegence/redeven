@@ -115,11 +115,22 @@ or elevates privileges for trust material.
 Usage:
   redeven local-authority rotate-key --state-root <path>
   redeven local-authority device-ca generate --state-root <path>
-  redeven local-authority device-ca status --state-root <path>
+  redeven local-authority device-ca status --state-root <path> [--bind <host:port>]
   redeven local-authority device-ca export --state-root <path> --output <new-path>
   redeven local-authority device-ca install --state-root <path> --scope user
+  redeven local-authority device-ca import --state-root <path> --confirm < certificate.json
+  redeven local-authority device-ca regenerate --state-root <path> --confirm
+  redeven local-authority device-ca remove --state-root <path> --confirm
   redeven local-authority access get --state-root <path>
   redeven local-authority access set --state-root <path> < access-settings.json
+
+Certificates:
+  import reads certificate_pem (leaf first, then chain) and private_key_pem from JSON stdin.
+  Use PEM files and one matching unencrypted key, at most 1 MiB each. A Redeven
+  self-signed device CA can also be restored. Imported server certificates must
+  cover every configured host. They are never installed as trusted roots.
+  import, regenerate, and remove require --confirm. Changes affect the next HTTPS
+  start; active connections and existing OS trust entries are not removed.
 
 Access settings:
   get prints saved bind, protocol, and password presence, never a password or verifier.

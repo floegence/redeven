@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
@@ -123,5 +125,43 @@ func TestDeviceCAErrorCodesDoNotCallOperationFailuresInvalidCertificates(t *test
 		if got := deviceCAErrorCode(test.err); got != test.code {
 			t.Fatalf("%v: %s", test.err, got)
 		}
+	}
+}
+
+func TestDeviceCAExplicitReplacementAndRemoval(t *testing.T) {
+	root := t.TempDir()
+	for _, operation := range []string{"generate", "regenerate", "remove", "generate"} {
+		var stdout, stderr bytes.Buffer
+		if code := runCLI([]string{"local-authority", "device-ca", operation, "--state-root", root, "--confirm"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+			t.Fatalf("%s: code=%d stderr=%s", operation, code, stderr.String())
+		}
+	}
+}
+
+func TestDeviceCAImportFailurePreservesCurrentIdentityAndSecrets(t *testing.T) {
+	root := t.TempDir()
+	if code, _, stderr := runCLITest(t, "local-authority", "device-ca", "generate", "--state-root", root); code != 0 {
+		t.Fatal(stderr)
+	}
+	for _, operation := range []string{"import", "remove", "regenerate"} {
+		code, _, stderr := runCLITest(t, "local-authority", "device-ca", operation, "--state-root", root)
+		if code != 2 || !strings.Contains(stderr, "confirmation_required") {
+			t.Fatalf("unconfirmed %s: %d %s", operation, code, stderr)
+		}
+	}
+	layout, _ := config.LocalEnvironmentStateLayout(root)
+	original, _ := localui.InspectLocalUIDeviceCA(layout.StateDir)
+	var stdout, stderr bytes.Buffer
+	input := `{"certificate_pem":"invalid-certificate-input","private_key_pem":"secret-private-material"}`
+	code := runCLI([]string{"local-authority", "device-ca", "import", "--state-root", root, "--confirm"}, strings.NewReader(input), &stdout, &stderr)
+	var report localAuthorityReport
+	if err := json.Unmarshal(stderr.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if code != 1 || stdout.Len() != 0 || report.Identity != "ready" || report.Fingerprint != original.Fingerprint || !report.CertificateManagement {
+		t.Fatalf("failed import: %d %+v", code, report)
+	}
+	if strings.Contains(stderr.String(), "secret-private-material") {
+		t.Fatal("private input leaked in report")
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
@@ -19,19 +19,22 @@ import (
 const localAuthorityReportSchemaVersion = "redeven.local_authority_maintenance.v1"
 
 type localAuthorityReport struct {
-	SchemaVersion   string `json:"schema_version"`
-	Operation       string `json:"operation"`
-	Status          string `json:"status"`
-	Code            string `json:"code"`
-	Message         string `json:"message,omitempty"`
-	PreviousVersion int    `json:"previous_version,omitempty"`
-	CurrentVersion  int    `json:"current_version,omitempty"`
-	RetainedKeys    int    `json:"retained_keys,omitempty"`
-	Identity        string `json:"identity,omitempty"`
-	Trust           string `json:"trust,omitempty"`
-	NotAfter        string `json:"not_after,omitempty"`
-	CertificatePath string `json:"certificate_path,omitempty"`
-	OutputPath      string `json:"output_path,omitempty"`
+	SchemaVersion         string `json:"schema_version"`
+	Operation             string `json:"operation"`
+	Status                string `json:"status"`
+	Code                  string `json:"code"`
+	Message               string `json:"message,omitempty"`
+	PreviousVersion       int    `json:"previous_version,omitempty"`
+	CurrentVersion        int    `json:"current_version,omitempty"`
+	RetainedKeys          int    `json:"retained_keys,omitempty"`
+	Identity              string `json:"identity,omitempty"`
+	Trust                 string `json:"trust,omitempty"`
+	NotAfter              string `json:"not_after,omitempty"`
+	CertificatePath       string `json:"certificate_path,omitempty"`
+	OutputPath            string `json:"output_path,omitempty"`
+	CertificateKind       string `json:"certificate_kind,omitempty"`
+	Fingerprint           string `json:"fingerprint,omitempty"`
+	CertificateManagement bool   `json:"certificate_management,omitempty"`
 }
 
 func (c *cli) localAuthorityCmd(args []string) int {
@@ -130,14 +133,16 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 		return 0
 	}
 	operation := strings.TrimSpace(strings.ToLower(args[0]))
-	if operation != "generate" && operation != "status" && operation != "export" && operation != "install" {
-		writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca", Status: "failed", Code: "invalid_operation", Message: "device-ca requires generate, status, export, or install"})
+	if operation != "generate" && operation != "status" && operation != "export" && operation != "install" && operation != "import" && operation != "regenerate" && operation != "remove" {
+		writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca", Status: "failed", Code: "invalid_operation", Message: "device-ca requires generate, status, export, install, import, regenerate, or remove"})
 		return 2
 	}
 	fs := newCLIFlagSet("local-authority device-ca " + operation)
 	stateRoot := fs.String("state-root", "", "Exact Redeven state root")
 	outputPath := fs.String("output", "", "New public CA certificate export path")
 	scope := fs.String("scope", "user", "Trust scope; only user is supported")
+	bind := fs.String("bind", "", "Verify certificate coverage for the next HTTPS bind")
+	confirm := fs.Bool("confirm", false, "Confirm certificate replacement or removal")
 	if err := parseCommandFlags(fs, args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeText(c.stdout, localAuthorityHelpText())
@@ -148,6 +153,10 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 	}
 	if strings.TrimSpace(*stateRoot) == "" {
 		writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-" + operation, Status: "failed", Code: "state_root_required", Message: "--state-root is required"})
+		return 2
+	}
+	if operation != "status" && *bind != "" {
+		writeLocalAuthorityReport(c.stderr, localAuthorityReport{Status: "failed", Code: "invalid_arguments", Message: "--bind is valid only for device-ca status"})
 		return 2
 	}
 	if operation != "export" && strings.TrimSpace(*outputPath) != "" {
@@ -168,6 +177,49 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 		return 2
 	}
 
+	if operation == "import" || operation == "regenerate" || operation == "remove" {
+		if !*confirm {
+			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-" + operation, Status: "failed", Code: "confirmation_required", Message: "--confirm is required; certificate changes affect the next HTTPS start and may require new client trust"})
+			return 2
+		}
+		var status localui.DeviceCAStatus
+		var mutationErr error
+		switch operation {
+		case "import":
+			var input localui.CertificateImport
+			body, readErr := io.ReadAll(io.LimitReader(c.stdin, 3*1024*1024+1))
+			if readErr != nil || len(body) > 3*1024*1024 {
+				writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-import", Status: "failed", Code: "invalid_arguments", Message: "Certificate import input must not exceed 3 MiB"})
+				return 2
+			}
+			decoder := json.NewDecoder(bytes.NewReader(body))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&input); err != nil || decoder.Decode(new(any)) != io.EOF {
+				writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-import", Status: "failed", Code: "invalid_arguments", Message: "Import requires one JSON object with certificate_pem and private_key_pem on stdin"})
+				return 2
+			}
+			status, mutationErr = localui.ImportLocalUICertificate(layout.StateDir, input)
+		case "regenerate":
+			status, mutationErr = localui.RegenerateLocalUIDeviceCA(layout.StateDir)
+		case "remove":
+			status, mutationErr = localui.RemoveLocalUICertificate(layout.StateDir)
+		}
+		if mutationErr != nil {
+			current, _ := localui.InspectLocalUIDeviceCA(layout.StateDir)
+			report := deviceCAReport(operation, current)
+			report.Status = "failed"
+			report.Code = "local_ui_certificate_" + operation + "_failed"
+			report.Message = mutationErr.Error()
+			writeLocalAuthorityReport(c.stderr, report)
+			return 1
+		}
+		report := deviceCAReport(operation, status)
+		report.Status = "updated"
+		report.Code = "local_ui_certificate_" + operation + "_complete"
+		writeLocalAuthorityReport(c.stdout, report)
+		return 0
+	}
+
 	switch operation {
 	case "status":
 		status, statusErr := localui.InspectLocalUIDeviceCA(layout.StateDir)
@@ -178,6 +230,15 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 			report.Message = statusErr.Error()
 			writeLocalAuthorityReport(c.stderr, report)
 			return 1
+		}
+		if *bind != "" {
+			if err := localui.ValidateLocalUICertificateForBind(layout.StateDir, *bind); err != nil {
+				report.Status = "failed"
+				report.Code = "local_ui_certificate_bind_invalid"
+				report.Message = err.Error()
+				writeLocalAuthorityReport(c.stderr, report)
+				return 1
+			}
 		}
 		if status.Trust == "manual_required" {
 			report.Status = "manual_required"
@@ -220,16 +281,6 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: deviceCAErrorCode(err), Message: "Local UI device CA generation did not complete."})
 			return 1
 		}
-		lock, err := lockfile.Acquire(filepath.Join(layout.StateDir, "device-ca.lock"))
-		if err != nil {
-			code := deviceCAErrorCode(err)
-			if errors.Is(err, lockfile.ErrAlreadyLocked) {
-				code = "local_ui_device_ca_busy"
-			}
-			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: code, Message: "Certificate creation could not acquire its operation lock. Retry after checking access and pending operations."})
-			return 1
-		}
-		defer func() { _ = lock.Release() }()
 		status, err := localui.GenerateLocalUIDeviceCA(layout.StateDir)
 		if err != nil {
 			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: deviceCAErrorCode(err), Message: err.Error()})
@@ -245,18 +296,23 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 
 func deviceCAReport(operation string, status localui.DeviceCAStatus) localAuthorityReport {
 	return localAuthorityReport{
-		Operation:       "device-ca-" + operation,
-		Status:          "ready",
-		Code:            "local_ui_device_ca_ready",
-		Identity:        status.Identity,
-		Trust:           status.Trust,
-		NotAfter:        status.NotAfter,
-		CertificatePath: status.CertPath,
+		Operation:             "device-ca-" + operation,
+		Status:                "ready",
+		Code:                  "local_ui_device_ca_ready",
+		Identity:              status.Identity,
+		Trust:                 status.Trust,
+		NotAfter:              status.NotAfter,
+		CertificatePath:       status.CertPath,
+		CertificateKind:       status.Kind,
+		Fingerprint:           status.Fingerprint,
+		CertificateManagement: true,
 	}
 }
 
 func deviceCAErrorCode(err error) string {
 	switch {
+	case errors.Is(err, lockfile.ErrAlreadyLocked):
+		return "local_ui_device_ca_busy"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "local_ui_device_ca_timeout"
 	case errors.Is(err, os.ErrPermission):

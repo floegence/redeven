@@ -26,17 +26,18 @@ import (
 const runtimeControlProtocolVersion = "redeven-runtime-control-v2"
 
 type runtimeControlServer struct {
-	log                logger
-	agent              *agent.Agent
-	appServer          *appserver.Server
-	afterChange        func()
-	token              string
-	ln                 net.Listener
-	srv                *http.Server
-	accessLayout       *config.StateLayout
-	accessCurrent      config.EnvironmentCatalogAccess
-	accessPasswordHash []byte
-	accessMu           sync.Mutex
+	log                          logger
+	agent                        *agent.Agent
+	appServer                    *appserver.Server
+	afterChange                  func()
+	token                        string
+	ln                           net.Listener
+	srv                          *http.Server
+	accessLayout                 *config.StateLayout
+	accessCurrent                config.EnvironmentCatalogAccess
+	accessPasswordHash           []byte
+	accessCertificateFingerprint string
+	accessMu                     sync.Mutex
 }
 
 type logger interface {
