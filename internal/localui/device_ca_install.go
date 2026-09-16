@@ -52,9 +52,11 @@ func InstallLocalUIDeviceCAForCurrentUser(stateDir string) error {
 }
 
 func deviceCATrustInstallError(platform string, output []byte, err error) error {
-	// Match stable platform error codes rather than translated OS messages.
+	// Prefer platform codes. macOS security also emits this specific cancellation
+	// diagnostic without an OSStatus number when the authorization sheet is closed.
 	text := strings.ToLower(string(output))
-	if (platform == "darwin" && strings.Contains(text, "(-128)")) ||
+	if (platform == "darwin" && (strings.Contains(text, "(-128)") || strings.Contains(text, "(-60006)") ||
+		strings.Contains(text, "sectrustsettingssettrustsettings: the authorization was canceled by the user."))) ||
 		(platform == "windows" && strings.Contains(text, "0x800704c7")) {
 		return ErrLocalUIDeviceCAInstallCanceled
 	}

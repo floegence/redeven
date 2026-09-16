@@ -13588,22 +13588,21 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
         </section>
 
         <section class="space-y-3 border-t border-border/60 pt-5">
-          <SettingsSectionHeader label={props.i18n.t('settings.connectionSecurity')} />
-          <SegmentedControl size="sm" value={props.draft.local_ui_protocol ?? 'http'}
-            options={[
-              { value: 'http', label: props.i18n.t('settings.httpLabel') },
-              { value: 'https', label: props.i18n.t('settings.httpsLabel') },
-            ]}
-            onChange={(value) => props.updateDraftField('local_ui_protocol', value)} />
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <SettingsSectionHeader label={props.i18n.t('settings.connectionSecurity')} />
+            <SegmentedControl size="sm" aria-label={props.i18n.t('settings.connectionSecurity')} value={props.draft.local_ui_protocol ?? 'http'}
+              options={[
+                { value: 'http', label: props.i18n.t('settings.httpLabel') },
+                { value: 'https', label: props.i18n.t('settings.httpsLabel') },
+              ]}
+              onChange={(value) => props.updateDraftField('local_ui_protocol', value)} />
+          </div>
           <Show when={validation().protocol_error_key}>
             <p role="alert" class="text-xs text-destructive">{props.i18n.t('settings.protocolRequired')}</p>
           </Show>
           <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
           <Show when={props.open && props.draft.local_ui_protocol === 'https' && props.certificate}>
-            <LocalCertificateSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} />
-          </Show>
-          <Show when={props.draft.local_ui_protocol === 'https' && remote()}>
-            <p class="text-xs text-muted-foreground">{props.i18n.t('settings.remoteCertificateHelp')}</p>
+            <LocalCertificateSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} copyText={props.copyEnvironmentValue} />
           </Show>
         </section>
 

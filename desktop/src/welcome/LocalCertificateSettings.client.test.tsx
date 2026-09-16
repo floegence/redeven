@@ -10,7 +10,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const ready: DesktopCertificateReport = { status: 'ready', code: 'local_ui_device_ca_untrusted', identity: 'ready', trust: 'untrusted', can_install: true, certificate_path: '/runtime/device-ca.pem' };
 const missing: DesktopCertificateReport = { status: 'failed', code: 'local_ui_device_ca_missing', identity: 'missing', can_install: true };
 function button(label: string) {
-  const found = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === label);
+  const found = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === label || el.getAttribute('aria-label') === label);
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
@@ -20,10 +20,11 @@ function mount(manage: (request: DesktopCertificateRequest) => Promise<DesktopCe
   const setEnvironmentID = (id: string) => setSnapshot({ environment_id: id });
   const refreshSnapshot = () => setSnapshot((previous) => ({ ...previous }));
   const onReadiness = vi.fn();
+  const copyText = vi.fn<(value: string, label: string) => Promise<void>>().mockResolvedValue(undefined);
   const dispose = render(() => <LocalCertificateSettings environmentID={snapshot().environment_id} i18n={createDesktopI18n('en-US')}
-    manage={manage} remote={remote} onReadiness={onReadiness} />, host);
+    manage={manage} remote={remote} onReadiness={onReadiness} copyText={copyText} />, host);
   disposers.push(dispose);
-  return { setEnvironmentID, refreshSnapshot, onReadiness, dispose };
+  return { setEnvironmentID, refreshSnapshot, onReadiness, copyText, dispose };
 }
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); });
 
@@ -52,6 +53,8 @@ describe('HTTPS certificate configuration', () => {
     expect(document.body.textContent).toContain('authorization was canceled');
     expect(document.body.textContent).not.toContain('Invalid certificate');
     expect(button('Trust on this device').disabled).toBe(false);
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('authorization was canceled');
     expect(test.onReadiness).toHaveBeenLastCalledWith(true);
   });
   it('prevents duplicate actions and cannot enable restart before the action completes', async () => {
@@ -64,7 +67,7 @@ describe('HTTPS certificate configuration', () => {
     expect(test.onReadiness).toHaveBeenLastCalledWith(false);
     expect(manage).toHaveBeenCalledTimes(2);
     finish({ ...ready, trust: 'trusted' }); await settle();
-    expect(document.body.textContent).toContain('Certificate trusted');
+    expect(document.body.textContent).toContain('Trusted');
     expect(test.onReadiness).toHaveBeenLastCalledWith(true);
   });
   it('keeps a pending trust operation attached to its target during background snapshots', async () => {
@@ -85,7 +88,7 @@ describe('HTTPS certificate configuration', () => {
       expect(details.open).toBe(true);
     }
     finish({ ...ready, trust: 'trusted' }); await settle();
-    expect(document.body.textContent).toContain('Certificate trusted');
+    expect(document.body.textContent).toContain('Trusted');
     expect(test.onReadiness).toHaveBeenLastCalledWith(true);
     expect(document.querySelector('details')).toBe(details);
     expect(details.open).toBe(true);
@@ -95,11 +98,38 @@ describe('HTTPS certificate configuration', () => {
     mount(manage); await settle();
     const details = document.querySelector('details')!;
     details.open = true;
-    button('Refresh').click(); await settle();
+    button('Refresh certificate status').click(); await settle();
     expect(manage).toHaveBeenCalledTimes(2);
-    expect(document.body.textContent).toContain('Certificate trusted');
+    expect(document.body.textContent).toContain('Trusted');
     expect(document.querySelector('details')).toBe(details);
     expect(details.open).toBe(true);
+  });
+  it('keeps diagnostic output in collapsed details and copies only public certificate metadata', async () => {
+    const test = mount(async ({ operation }) => operation === 'status' ? ready : ({ ...ready, status: 'failed', code: 'local_ui_device_ca_install_failed',
+      message: 'System trust installation failed: permission denied', not_after: '2031-09-16T12:00:00Z', failure_stage: 'install' }));
+    await settle();
+    button('Trust on this device').click(); await settle();
+    expect(document.body.textContent).toContain('Ready');
+    expect(test.onReadiness).toHaveBeenLastCalledWith(true);
+    expect(button('Trust on this device').disabled).toBe(false);
+    const details = document.querySelector('details')!;
+    expect(details.open).toBe(false);
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Could not add system trust');
+    expect(document.querySelector('[role="alert"]')?.textContent).not.toContain('permission denied');
+    expect(details.textContent).toContain('permission denied');
+    button('Copy certificate details').click(); await settle();
+    expect(test.copyText).toHaveBeenCalledWith(expect.stringContaining('/runtime/device-ca.pem'), 'Certificate details');
+    expect(test.copyText.mock.calls[0]?.[0]).toContain('permission denied');
+  });
+  it('offers selectable diagnostics when copying fails without affecting certificate readiness', async () => {
+    const test = mount(async () => ready); await settle();
+    test.copyText.mockRejectedValueOnce(new Error('Clipboard unavailable'));
+    button('Copy certificate details').click(); await settle();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Select the text');
+    expect(button('Copy certificate details').disabled).toBe(false);
+    expect(test.onReadiness).toHaveBeenLastCalledWith(true);
+    button('Copy certificate details').click(); await settle();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
   });
   it('ignores old environment results and results after closing', async () => {
     let finish!: (report: DesktopCertificateReport) => void;
@@ -120,19 +150,19 @@ describe('HTTPS certificate configuration', () => {
     expect(document.body.textContent).toContain('Unable to check');
     expect(document.body.textContent).not.toContain('Invalid certificate');
     expect(test.onReadiness).toHaveBeenLastCalledWith(false);
-    button('Refresh').click(); await settle();
+    button('Refresh certificate status').click(); await settle();
     expect(test.onReadiness).toHaveBeenLastCalledWith(true);
   });
   it.each(['expired', 'invalid', 'not_yet_valid'])('blocks readiness for %s without offering automatic replacement', async (identity) => {
     const test = mount(async () => ({ status: 'failed', code: `local_ui_device_ca_${identity}`, identity, can_install: true }));
     await settle();
     expect(test.onReadiness).toHaveBeenLastCalledWith(false);
-    expect([...document.querySelectorAll('button')].map((el) => el.textContent?.trim())).toEqual(['Refresh']);
+    expect([...document.querySelectorAll('button')].map((el) => el.getAttribute('aria-label') ?? el.textContent?.trim())).toEqual(['Refresh certificate status']);
   });
   it('never presents server trust as local client trust or installs it on unsupported platforms', async () => {
     mount(async () => ({ ...ready, trust: 'trusted', can_install: false }), true); await settle();
     expect(document.body.textContent).not.toContain('System trust on this device');
-    expect(document.body.textContent).not.toContain('Certificate trusted');
-    expect([...document.querySelectorAll('button')].map((el) => el.textContent?.trim())).toEqual(['Refresh']);
+    expect(document.body.textContent).not.toContain('Trusted');
+    expect([...document.querySelectorAll('button')].map((el) => el.getAttribute('aria-label') ?? el.textContent?.trim())).toEqual(['Refresh certificate status', 'Copy certificate details']);
   });
 });
