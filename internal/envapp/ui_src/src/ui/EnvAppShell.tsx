@@ -60,15 +60,15 @@ import {
   type EnvWorkbenchSurfaceActivationRequest,
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
-import {
-  type FlowerFileOpenRequest,
-  type FlowerCompanionPresenceProjection,
-  type FlowerThreadFocusRequest,
-  type FlowerTurnLauncherAnchor,
-  type FlowerTurnLauncherIntent,
-  type FlowerTurnLauncherSubmitInput,
-  createFlowerComposerDraftCoordinator,
+import type {
+  FlowerFileOpenRequest,
+  FlowerCompanionPresenceProjection,
+  FlowerThreadFocusRequest,
+  FlowerTurnLauncherAnchor,
+  FlowerTurnLauncherIntent,
+  FlowerTurnLauncherSubmitInput,
 } from '../../../../flower_ui/src';
+import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerWorkingDirectoryNavigation } from './flower/workingDirectoryNavigation';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
@@ -2267,8 +2267,8 @@ export function EnvAppShell() {
 
   const collapseActivityFlowerCompanion = (restoreFocus = true) => {
     if (activityFlowerPlacement() === 'full_page') return;
-    if (restoreFocus) setActivityFlowerComposerFocusRequest((request) => request + 1);
     setActivityFlowerPresentation('collapsed');
+    if (restoreFocus) setActivityFlowerComposerFocusRequest((request) => request + 1);
   };
 
   const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
@@ -3218,8 +3218,7 @@ export function EnvAppShell() {
 
   const activityFlowerCompanionDetailVisible = createMemo(() => (
     activityFlowerPlacement() === 'expanded'
-    || activityFlowerCompanionPhase() === 'expanding'
-    || activityFlowerCompanionPhase() === 'collapsing'
+    || activityFlowerCompanionPhase() !== 'collapsed'
   ));
   const activityFlowerInteractionOwned = (event: PointerEvent | KeyboardEvent) => (
     event.target instanceof Element && Boolean(event.target.closest(FLOWER_RELATED_SURFACE_SELECTOR))
