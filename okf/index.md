@@ -100,6 +100,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md) - Select runtime-authorized absolute paths with shared navigation and independent product forms.
 - [Flower working directory navigation](ui/flower-working-directory-navigation.md) - Open a conversation directory in Files or a new Terminal through consistent Activity and Workbench menus.
 - [Flower Activity companion](ui/flower-activity-companion.md) - Expand a compact bottom-bar field into the same retained Flower surface and preserve placement, composer identity, focus, and read ownership.
+- [Ask Flower window boundaries](ui/ask-flower-window.md) - Keep contextual launchers below headers and preserve manual resizing without maximization.
 - [Flower companion presence](ui/flower-companion-presence.md) - Present live work, pending actions, and new completion feedback without displacing drafts or creating a second observation stream.
 - [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.
 - [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
