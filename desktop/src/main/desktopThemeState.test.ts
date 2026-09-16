@@ -52,7 +52,7 @@ function createStore(
 }
 
 describe('DesktopThemeState', () => {
-  it('migrates the existing source-only state to Classic presets without changing appearance', () => {
+  it('migrates the existing source-only state to the published Classic presets', () => {
     const store = createStore('dark');
     const nativeTheme = new FakeNativeTheme();
     nativeTheme.shouldUseDarkColors = false;
@@ -71,8 +71,8 @@ describe('DesktopThemeState', () => {
       },
       activeShellTheme: 'classic-dark',
       window: {
-        backgroundColor: '#0e121b',
-        symbolColor: '#f9fafb',
+        backgroundColor: '#202223',
+        symbolColor: '#e5e6e2',
       },
       semantic: desktopSemanticPaletteForShellTheme('classic-dark'),
     });
@@ -167,7 +167,7 @@ describe('DesktopThemeState', () => {
     expect(snapshot.source).toBe('light');
     expect(snapshot.shellThemes.dark).toBe('ember');
     expect(snapshot.activeShellTheme).toBe('classic-light');
-    expect(snapshot.window.backgroundColor).toBe('#f4f1ed');
+    expect(snapshot.window.backgroundColor).toBe('#f8f7f2');
   });
 
   it('switches active preset and native colors when the OS changes under system mode', () => {

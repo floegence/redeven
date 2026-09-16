@@ -883,6 +883,8 @@
       "changeFailed": "Die Darstellung konnte nicht aktualisiert werden. Versuchen Sie es erneut.",
       "presets": {
         "classic-light": "Klassisch hell",
+        "porcelain-light": "Porzellan Hell",
+        "porcelain-dark": "Porzellan Dunkel",
         "paper": "Papier",
         "mist": "Nebel",
         "meadow": "Wiese",

@@ -69,6 +69,32 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('keeps empty presentation at its reading position and follows actual content', () => {
+    const raf = createRafHarness();
+    let hasContent = false;
+    const controller = createFlowerScrollTailController({
+      canFollowLatest: () => hasContent,
+      reducedMotionPreferred: () => true,
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+    });
+    const metrics = createViewport(900);
+    metrics.setScrollTop(0);
+    controller.bind(metrics.viewport);
+    controller.measureAfterLayout();
+    controller.scheduleTailScroll({ force: true });
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(0);
+    metrics.setScrollTop(120);
+    controller.scrollToBottom();
+    expect(metrics.scrollTop()).toBe(120);
+    hasContent = true;
+    controller.scheduleTailScroll();
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(800);
+    controller.dispose();
+  });
+
   it('shares one geometry pass across 300 layout and tail notifications and stops when idle', () => {
     const { controller, raf } = createController();
     const metrics = createViewport();

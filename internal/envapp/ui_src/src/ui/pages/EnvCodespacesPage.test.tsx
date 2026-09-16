@@ -1034,7 +1034,7 @@ describe('EnvCodespacesPage', () => {
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
   });
 
-  it('shows a shimmer busy state while starting a stopped codespace', async () => {
+  it('shows a local busy state while starting a stopped codespace', async () => {
     let resolveStart!: (value: any) => void;
     localApiMocks.fetchLocalApiJSON.mockImplementation((url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
@@ -1078,7 +1078,7 @@ describe('EnvCodespacesPage', () => {
     const busyStartButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Starting...')) as HTMLButtonElement | undefined;
     expect(busyStartButton).toBeTruthy();
     expect(busyStartButton?.getAttribute('aria-busy')).toBe('true');
-    expect(busyStartButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeTruthy();
+    expect(busyStartButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeNull();
 
     resolveStart({
       code_space_id: 'space-1',
@@ -1321,7 +1321,7 @@ describe('EnvCodespacesPage', () => {
     const busyOpenButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Opening...')) as HTMLButtonElement | undefined;
     expect(busyOpenButton).toBeTruthy();
     expect(busyOpenButton?.getAttribute('aria-busy')).toBe('true');
-    expect(busyOpenButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeTruthy();
+    expect(busyOpenButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeNull();
 
     resolveStart({
       code_space_id: 'space-1',

@@ -61,7 +61,7 @@ export function FlowerContextCompactionDivider(props: {
           <FlowerContextCompactionRunningIcon />
         </Show>
         <span class="flower-compaction-divider-copy">
-          <span class="flower-compaction-divider-label flower-compaction-divider-label-shimmer" data-text={label()}>{label()}</span>
+          <span class="flower-compaction-divider-label">{label()}</span>
         </span>
         <Show when={tooltipOpen() && hasDetail()}>
           <span

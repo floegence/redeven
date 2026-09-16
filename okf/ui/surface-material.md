@@ -30,9 +30,10 @@ owns exact package versions and registry requirements.
 
 Ordinary shared Buttons, Cards, Radio, Checkbox, Switch, Tabs, progress controls,
 Dialogs, and FloatingWindows use their released component treatment. Product
-neutral panel, control, divider, and settings roles derive quiet seams from
-Floe's public edge and divider tokens; semantic status hues and selected text
-remain explicit. Selected product segments, Desktop library filters, and
+neutral panel and divider roles mix 11.5% and 8.5% foreground into their
+opaque owning surface. Control boundaries use the independent input role and
+focus uses the ring role; input fill mixes background and card equally.
+Semantic status hues and selected text remain explicit. Selected product segments, Desktop library filters, and
 appearance choices change their fill immediately without an additional contour.
 High Contrast Light and forced colors retain their explicit boundaries.
 
@@ -50,6 +51,12 @@ companion stays `flat` and retains its existing ownership of the collapsed
 outline. The [input focus contract](input-focus-boundaries.md) continues to
 require border-color-only focus with stable geometry and decoration. Debug
 Console settings consume the native shared Switch instead of a product knob.
+
+Flower's empty-state suggestions use the available panel width to choose one
+or two columns. A narrow Workbench widget retains readable text even when the
+outer browser viewport is wide; this changes neither widget geometry nor
+navigation state. Empty welcome content keeps its reading position; automatic
+tail following requires messages, live progress, or pending submissions.
 
 Env App's bottom Activity Bar utilities use 18px monochrome line art: an
 interlocking chain for switching environments and three outlined sliders for
@@ -78,7 +85,14 @@ or navigation behavior.
 
 # Boundaries
 
-Use restrained static depth and short functional control motion. Do not animate
+Use restrained static depth and short functional control motion. Ordinary hover
+feedback takes 120ms, content changes 180ms, floating entry 220ms with at most
+6px travel, and floating exit 160ms. Theme colors update immediately. The
+existing 90/100/140ms selection-control motion and reversible 360ms Flower
+companion geometry keep their component owners. Reduced motion enters the
+final state while preserving status and completion feedback. Brand icons,
+ordinary status text, cards, and action buttons have no breathing, sweep, or
+colored halo. Only genuine progress may animate a small local symbol. Do not animate
 container shadows, add pointer-following decoration, or promote entire reading
 subtrees into compositor layers. Dense prose, files, terminal output, and editor
 content remain flat; material is never injected into third-party frames or
@@ -91,7 +105,7 @@ contracts remain authoritative.
 The source guard checks the production opt-in, removed decoration overrides,
 and shared Switch boundary. Browser coverage exercises the published package
 with real product styles, light/dark controls and dialogs, unchanged draft
-selection and focus geometry, and the 24-preset settings hierarchy in both
+selection and focus geometry, and the 26-preset settings hierarchy in both
 materials. Relevant Flower, terminal, and Workbench tests validate existing
 interaction ownership. Screenshots supplement computed behavior; the upstream
 component gallery alone is not downstream acceptance evidence.
@@ -100,7 +114,7 @@ component gallery alone is not downstream acceptance evidence.
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Env App material configuration.
 - `redeven:desktop/src/welcome/App.tsx` - Welcome configuration and floating toast boundary.
-- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Product semantic seam mapping.
+- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Opaque product surfaces and independent control boundary mapping.
 - `redeven:internal/envapp/ui_src/src/ui/icons/ActivityBarDockIcons.tsx` - Theme-inheriting bottom utility artwork.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Runtime Settings and Desktop environment-switch entry points.
 - `redeven:internal/envapp/ui_src/src/ui/icons/ContainersIcon.tsx` - Containers artwork and theme-derived Dock tile.

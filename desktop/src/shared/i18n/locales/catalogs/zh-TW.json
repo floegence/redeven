@@ -883,6 +883,8 @@
       "changeFailed": "無法更新外觀，請再試一次。",
       "presets": {
         "classic-light": "經典淺色",
+        "porcelain-light": "暖瓷淺色",
+        "porcelain-dark": "暖瓷深色",
         "paper": "紙張",
         "mist": "薄霧",
         "meadow": "草地",

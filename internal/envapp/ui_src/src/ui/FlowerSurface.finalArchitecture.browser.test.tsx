@@ -55,29 +55,6 @@ function controlledWorkspaceStream(initial: readonly FlowerLiveStreamEnvelope[])
   };
 }
 
-function resolveInheritedColor(host: HTMLElement, value: string): string {
-  const probe = document.createElement('span');
-  probe.style.color = value;
-  host.appendChild(probe);
-  const color = getComputedStyle(probe).color;
-  probe.remove();
-  return color;
-}
-
-function srgbChannels(color: string): readonly number[] {
-  const channels = color.match(/-?\d*\.?\d+/g)?.slice(0, 3).map(Number) ?? [];
-  if (channels.length !== 3) {
-    throw new Error(`Expected an sRGB color, received ${color}`);
-  }
-  return color.startsWith('rgb') ? channels.map((channel) => channel / 255) : channels;
-}
-
-function maxSrgbChannelDistance(first: string, second: string): number {
-  const firstChannels = srgbChannels(first);
-  const secondChannels = srgbChannels(second);
-  return Math.max(...firstChannels.map((channel, index) => Math.abs(channel - secondChannels[index])));
-}
-
 function completedTerminalThread() {
   const threadID = 'thread-ca1c0220d0484c81cf2a5644d83439b5';
   const runID = 'turn-terminal';
@@ -368,15 +345,9 @@ describe('Flower final thread cache and workspace transport', () => {
     const rowTitle = subagentRow.querySelector('.flower-subagent-dropdown-name') as HTMLElement;
     expect(rowOrb).not.toBeNull();
     expect(rowOrb?.classList.contains('flower-subagent-thinking-orb')).toBe(true);
-    expect(getComputedStyle(rowTitle).animationName).toBe('flower-activity-title-sweep');
-    rowTitle.style.setProperty('--foreground', '#f4f7fb');
-    rowTitle.style.setProperty('--primary', '#f4f7fb');
-    rowTitle.style.setProperty('--flower-subagents-panel', '#28313d');
-    rowTitle.style.setProperty('--flower-subagents-active', '#6bb7ff');
-    expect(maxSrgbChannelDistance(
-      resolveInheritedColor(rowTitle, 'var(--flower-subagent-running-text-base)'),
-      resolveInheritedColor(rowTitle, 'var(--flower-subagent-running-text-highlight)'),
-    )).toBeGreaterThan(0.12);
+    expect(getComputedStyle(rowTitle).animationName).toBe('none');
+    expect(getComputedStyle(rowTitle).backgroundImage).toBe('none');
+    expect(getComputedStyle(rowTitle).webkitTextFillColor).not.toBe('rgba(0, 0, 0, 0)');
     subagentRow.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
 
@@ -392,15 +363,9 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(detailSignal.querySelector('svg')).toBeNull();
     expect(getComputedStyle(detailSignal).borderRadius).toBe('9999px');
     expect(statusText.textContent).toBe('Running');
-    expect(getComputedStyle(statusText).animationName).toBe('flower-activity-title-sweep');
-    statusText.style.setProperty('--primary', '#f4f7fb');
-    statusText.style.setProperty('--flower-subagent-window-text', '#f4f7fb');
-    statusText.style.setProperty('--flower-subagent-window-surface-band', '#28313d');
-    statusText.style.setProperty('--flower-subagent-window-accent', '#6bb7ff');
-    expect(maxSrgbChannelDistance(
-      resolveInheritedColor(statusText, 'var(--flower-subagent-running-text-base)'),
-      resolveInheritedColor(statusText, 'var(--flower-subagent-running-text-highlight)'),
-    )).toBeGreaterThan(0.12);
+    expect(getComputedStyle(statusText).animationName).toBe('none');
+    expect(getComputedStyle(statusText).backgroundImage).toBe('none');
+    expect(getComputedStyle(statusText).webkitTextFillColor).not.toBe('rgba(0, 0, 0, 0)');
 
     const presenceStates: string[] = [];
     const presenceObserver = new MutationObserver(() => {
@@ -443,7 +408,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const runningToolButton = runningToolRow.querySelector('.flower-activity-inline-button') as HTMLElement;
     const runningToolTitle = runningToolRow.querySelector('.flower-activity-inline-title') as HTMLElement;
     expect(getComputedStyle(runningToolButton).boxShadow).toBe('none');
-    expect(getComputedStyle(runningToolTitle, '::after').animationName).toBe('flower-activity-title-sweep');
+    expect(getComputedStyle(runningToolTitle, '::after').animationName).toBe('none');
 
     const parentViewport = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
     const childViewport = detail.querySelector('.flower-subagent-detail-transcript') as HTMLDivElement;
@@ -1479,8 +1444,8 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(completeOrb.dataset.running).toBe('false');
     expect(runningOrb.width).toBeGreaterThanOrEqual(20);
     expect(completeOrb.width).toBeGreaterThanOrEqual(20);
-    expect(window.getComputedStyle(runningTitle, '::after').animationName).toBe('flower-activity-title-sweep');
-    expect(window.getComputedStyle(runningTitle, '::after').pointerEvents).toBe('none');
+    expect(window.getComputedStyle(runningTitle, '::after').animationName).toBe('none');
+    expect(window.getComputedStyle(runningTitle, '::after').content).toBe('none');
     expect(window.getComputedStyle(completeTitle, '::after').animationName).toBe('none');
     expect(window.getComputedStyle(errorTitle, '::after').animationName).toBe('none');
     expect(window.getComputedStyle(runningTarget).textOverflow).toBe('ellipsis');

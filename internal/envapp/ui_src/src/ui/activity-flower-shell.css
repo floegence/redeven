@@ -34,50 +34,11 @@
 
 .flower-activity-companion {
   --floe-bottom-bar-companion-collapsed-radius: 0.3125rem;
-  --floe-bottom-bar-companion-expanded-radius: 0.5rem;
-  --flower-companion-surface: color-mix(
-    in srgb,
-    var(--redeven-surface-main) 95%,
-    var(--redeven-surface-shadow-source) 5%
-  );
-  --flower-companion-surface-soft: color-mix(
-    in srgb,
-    var(--redeven-surface-panel-soft) 52%,
-    var(--flower-companion-surface) 48%
-  );
-  --flower-companion-surface-elevated: color-mix(
-    in srgb,
-    var(--redeven-surface-panel-elevated) 44%,
-    var(--flower-companion-surface) 56%
-  );
-  --flower-companion-border: color-mix(
-    in srgb,
-    var(--redeven-surface-panel-border) 68%,
-    transparent
-  );
-}
-
-html.dark .flower-activity-companion {
-  --flower-companion-surface: color-mix(
-    in srgb,
-    var(--redeven-surface-main) 72%,
-    var(--redeven-surface-shadow-source) 28%
-  );
-  --flower-companion-surface-soft: color-mix(
-    in srgb,
-    var(--redeven-surface-panel-soft) 30%,
-    var(--flower-companion-surface) 70%
-  );
-  --flower-companion-surface-elevated: color-mix(
-    in srgb,
-    var(--redeven-surface-panel-elevated) 28%,
-    var(--flower-companion-surface) 72%
-  );
-  --flower-companion-border: color-mix(
-    in srgb,
-    var(--redeven-surface-panel-border) 76%,
-    transparent
-  );
+  --floe-bottom-bar-companion-expanded-radius: 0.75rem;
+  --flower-companion-surface: var(--popover);
+  --flower-companion-surface-soft: var(--muted);
+  --flower-companion-surface-elevated: var(--redeven-surface-control);
+  --flower-companion-border: var(--redeven-stroke-overlay);
 }
 
 .flower-activity-companion.floe-bottom-bar-companion[data-companion-phase='expanding'],
@@ -106,7 +67,7 @@ html.dark .flower-activity-companion {
   [data-companion-phase='expanded'],
   [data-companion-phase='collapsing']
 ) .flower-chat-header {
-  border-bottom: 1px solid color-mix(in srgb, var(--flower-companion-border) 58%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--foreground) 8.5%, var(--flower-companion-surface));
   background: var(--flower-companion-surface);
 }
 
@@ -132,30 +93,12 @@ html.dark .flower-activity-companion {
   [data-companion-phase='expanded'],
   [data-companion-phase='collapsing']
 ) .flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer {
-  border-color: color-mix(in srgb, var(--flower-companion-border) 82%, transparent);
+  border-color: var(--input);
   background: var(--flower-companion-surface-elevated);
-  box-shadow: 0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
+  box-shadow: none;
   backdrop-filter: none;
 }
 
-html.dark .flower-activity-companion:is(
-  [data-companion-phase='expanding'],
-  [data-companion-phase='expanded'],
-  [data-companion-phase='collapsing']
-) .flower-empty-state .redeven-flower-soft-aura-lg .redeven-flower-soft-aura-glow {
-  animation: none;
-  filter: blur(7px);
-  opacity: 0.28;
-}
-
-html.dark .flower-activity-companion:is(
-  [data-companion-phase='expanding'],
-  [data-companion-phase='expanded'],
-  [data-companion-phase='collapsing']
-) .flower-empty-state .redeven-flower-icon-breathe {
-  animation: none;
-  transform: none;
-}
 
 .flower-activity-companion-icon-button {
   display: inline-flex;

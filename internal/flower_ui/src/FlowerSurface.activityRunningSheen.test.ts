@@ -19,7 +19,7 @@ function cssRule(css: string, selector: string): string {
   return css.slice(start, end + 2);
 }
 
-describe('Flower activity running sheen', () => {
+describe('Flower activity status presentation', () => {
   it('styles expanded terminal activity as a compact read-only terminal panel', () => {
     const css = flowerStyles();
     const panelRule = cssRule(css, '.flower-activity-terminal-panel');
@@ -69,7 +69,7 @@ describe('Flower activity running sheen', () => {
     expect(iconRule).toContain('height: 1.25rem');
   });
 
-  it('keeps the running sweep inside the title without restoring a row overlay', () => {
+  it('keeps running titles readable with progress confined to the local loader', () => {
     const css = flowerStyles();
     const activityInlineRule = cssRule(css, '.flower-activity-inline');
     const buttonRule = cssRule(css, '.flower-activity-inline-button');
@@ -81,7 +81,6 @@ describe('Flower activity running sheen', () => {
     const detailRule = cssRule(css, '.flower-activity-inline-detail');
     const durationRule = cssRule(css, '.flower-activity-inline-duration');
     const runningTitleRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title');
-    const runningTitleSweepRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title::after');
     const runningButtonRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-button');
     const successButtonRule = cssRule(css, '.flower-activity-inline-row-success .flower-activity-inline-button');
     const failedIconRule = cssRule(css, '.flower-activity-inline-row-error .flower-activity-inline-icon');
@@ -117,22 +116,13 @@ describe('Flower activity running sheen', () => {
     expect(durationRule).toContain('font-weight: 620');
     expect(runningTitleRule).toContain('font-weight: 600');
     expect(runningTitleRule).not.toContain('text-shadow');
-    expect(runningTitleSweepRule).toContain('position: absolute');
-    expect(runningTitleSweepRule).toContain('inset: 0');
-    expect(runningTitleSweepRule).toContain('background-size: 250% 100%');
-    expect(runningTitleSweepRule).toContain('color-mix(in srgb, var(--flower-chat-surface) 60%, transparent)');
-    expect(runningTitleSweepRule).toContain('pointer-events: none');
-    expect(runningTitleSweepRule).toContain('animation: flower-activity-title-sweep 2.6s ease-out infinite');
-    expect(runningTitleSweepRule).not.toContain('left:');
-    expect(css).toContain('@keyframes flower-activity-title-sweep');
-    expect(css).toContain('90%,\n  100% {\n    background-position: 0 0;\n  }');
+    expect(css).not.toContain('flower-activity-title-sweep');
+    expect(css).not.toContain('.flower-activity-inline-title::after');
     expect(css).not.toContain('.flower-activity-inline-row-success .flower-activity-inline-title::after');
     expect(css).not.toContain('.flower-activity-inline-row-error .flower-activity-inline-title::after');
     expect(css).not.toContain('.flower-activity-inline-row-canceled .flower-activity-inline-title::after');
     expect(css).not.toContain('.flower-activity-inline-row-pending .flower-activity-inline-title::after');
     expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-title::after');
-    expect(css).toContain(".flower-activity-inline-row-running .flower-activity-inline-title::after {\n    content: none !important;");
-    expect(css).toContain("@media (forced-colors: active) {\n  .flower-activity-inline-row-running .flower-activity-inline-title::after {\n    content: none;");
     expect(runningButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-strong)');
     expect(successButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-complete)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-error: var(--redeven-status-error-foreground)');
@@ -197,7 +187,6 @@ describe('Flower activity running sheen', () => {
     const dropdownRule = cssRule(css, '.flower-subagents-dropdown');
     const dropdownRowRule = cssRule(css, '.flower-subagent-dropdown-row');
     const dropdownRowHoverRule = cssRule(css, '.flower-subagent-dropdown-row:hover');
-    const dropdownRunningNameRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name');
     const dropdownRunningStatusRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-status-label');
     const runningTextRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,\n.flower-subagent-status-label-running .flower-subagent-status-text');
     const thinkingOrbRule = cssRule(css, '.flower-subagent-thinking-orb');
@@ -206,7 +195,6 @@ describe('Flower activity running sheen', () => {
     const detailOverviewRule = cssRule(css, '.flower-subagent-detail-overview');
     const detailSignalRule = cssRule(css, '.flower-subagent-detail-signal');
     const runningStatusRule = cssRule(css, '.flower-subagent-status-label-running');
-    const runningStatusToneRule = cssRule(css, '.flower-subagent-status-label-running .flower-subagent-status-text');
     const detailScrollRule = cssRule(css, '.flower-subagent-detail-scroll-to-latest');
 
     expect(shellRule).toContain('isolation: isolate');
@@ -221,19 +209,14 @@ describe('Flower activity running sheen', () => {
     expect(dropdownRule).not.toContain('box-shadow:');
     expect(dropdownRule).not.toContain('backdrop-filter:');
     expect(dropdownRule).toContain('border-radius: 0.5rem');
-    expect(dropdownRule).toContain('animation: flower-subagents-dropdown-enter 120ms');
+    expect(dropdownRule).toContain('animation: flower-subagents-dropdown-enter 220ms');
     expect(dropdownRowRule).toContain('min-height: 3.875rem');
     expect(dropdownRowHoverRule).not.toContain('transform:');
-    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-base: color-mix(in srgb, var(--foreground) 68%, var(--flower-subagents-panel) 32%)');
-    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-highlight: color-mix(in srgb, var(--flower-subagents-active) 52%, var(--foreground) 48%)');
-    expect(dropdownRunningNameRule).toContain('--flower-subagent-running-text-peak: var(--foreground)');
     expect(dropdownRunningStatusRule).toContain('color: var(--primary)');
-    expect(runningTextRule).toContain('background-clip: text');
-    expect(runningTextRule).toContain('var(--flower-subagent-running-text-highlight) 44%');
-    expect(runningTextRule).toContain('var(--flower-subagent-running-text-peak) 50%');
-    expect(runningTextRule).toContain('var(--flower-subagent-running-text-highlight) 56%');
-    expect(runningTextRule).toContain('animation: flower-activity-title-sweep 2.6s ease-out infinite');
     expect(css).not.toContain('flower-running-text-shimmer');
+    expect(runningTextRule).toContain('color: var(--foreground)');
+    expect(runningTextRule).not.toContain('animation:');
+    expect(runningTextRule).not.toContain('background-clip:');
     expect(css).toContain(".flower-subagents-dropdown-metric[data-tone='completed']");
     expect(css).toContain('.flower-subagents-dropdown-group-header');
     expect(css).not.toContain('.flower-subagent-status-indicator-running');
@@ -255,9 +238,6 @@ describe('Flower activity running sheen', () => {
     expect(detailOverviewRule).toContain('background: var(--flower-subagent-window-surface-band)');
     expect(detailSignalRule).toContain('border-radius: 9999px');
     expect(runningStatusRule).toContain('color: var(--primary)');
-    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-base: color-mix(in srgb, var(--primary) 68%, var(--flower-subagent-window-surface-band) 32%)');
-    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-highlight: color-mix(in srgb, var(--flower-subagent-window-accent) 52%, var(--flower-subagent-window-text) 48%)');
-    expect(runningStatusToneRule).toContain('--flower-subagent-running-text-peak: var(--flower-subagent-window-text)');
     expect(detailScrollRule).toContain('position: sticky');
     expect(css).not.toContain('.flower-subagent-detail-bottom-dock');
     expect(css).not.toContain('.flower-subagent-detail-bottom-track');

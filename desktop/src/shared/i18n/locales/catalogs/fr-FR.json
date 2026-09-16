@@ -883,6 +883,8 @@
       "changeFailed": "Impossible de modifier l’apparence. Réessayez.",
       "presets": {
         "classic-light": "Classique clair",
+        "porcelain-light": "Porcelaine claire",
+        "porcelain-dark": "Porcelaine sombre",
         "paper": "Papier",
         "mist": "Brume",
         "meadow": "Prairie",

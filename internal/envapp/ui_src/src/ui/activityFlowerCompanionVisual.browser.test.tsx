@@ -4,6 +4,10 @@ import './flower-feature.css';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { commands, page } from 'vitest/browser';
+import { render } from 'solid-js/web';
+import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
+
+const disposers: Array<() => void> = [];
 
 const mediaCommands = commands as unknown as {
   emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
@@ -22,9 +26,7 @@ function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collap
         <header class="flower-chat-header">Flower</header>
         <main class="flower-chat-main">
           <div class="flower-empty-state">
-            <span class="redeven-flower-soft-aura redeven-flower-soft-aura-lg redeven-flower-icon-breathe">
-              <span class="redeven-flower-soft-aura-glow"></span>
-            </span>
+            <span data-flower-icon-host></span>
             <span class="companion-muted-copy">Secondary Flower status</span>
           </div>
         </main>
@@ -35,6 +37,7 @@ function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collap
     </div>
   `;
   document.body.appendChild(companion);
+  disposers.push(render(() => <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg" />, companion.querySelector('[data-flower-icon-host]')!));
   const composer = companion.querySelector('.flower-composer');
   if (!(composer instanceof HTMLDivElement)) throw new Error('Flower composer fixture did not mount.');
   return { companion, composer };
@@ -86,6 +89,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  disposers.splice(0).forEach((dispose) => dispose());
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.removeAttribute('data-floe-shell-theme');
@@ -115,7 +119,8 @@ describe('Flower bottom companion computed visual contract', () => {
         expectUnframedComposer(composer);
       } else {
         expect(composerStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-        expect(composerStyle.boxShadow).not.toBe('none');
+        expect(composerStyle.boxShadow).toBe('none');
+        expect(composerStyle.borderTopWidth).toBe('1px');
       }
       return {
         background: frameStyle.backgroundColor,
@@ -193,30 +198,23 @@ describe('Flower bottom companion computed visual contract', () => {
     expect(fullPageBackground).not.toBe(getComputedStyle(companion).backgroundColor);
   });
 
-  it.each(['classic-dark', 'abyss', 'nord'])('creates a clearly deeper calm surface in %s', (theme) => {
+  it.each(['classic-dark', 'porcelain-dark', 'abyss', 'nord'])('uses one opaque shared popover surface without decorative glow in %s', (theme) => {
     applyTheme(theme, 'dark');
     const { companion, composer } = mountCompanion('expanded');
     const mainSurfaceProbe = document.createElement('div');
-    mainSurfaceProbe.style.background = 'var(--redeven-surface-main)';
+    mainSurfaceProbe.style.background = 'var(--popover)';
     document.body.appendChild(mainSurfaceProbe);
-    const aura = companion.querySelector('.redeven-flower-soft-aura-glow');
-    const breathe = companion.querySelector('.redeven-flower-icon-breathe');
-    if (!(aura instanceof HTMLElement) || !(breathe instanceof HTMLElement)) {
-      throw new Error('Flower aura fixture did not mount.');
-    }
+    const icon = companion.querySelector('.redeven-flower-soft-aura')!;
 
     const drawerStyle = getComputedStyle(companion);
     const composerStyle = getComputedStyle(composer);
     const mainSurface = getComputedStyle(mainSurfaceProbe).backgroundColor;
-    const drawerLuminance = relativeLuminance(drawerStyle.backgroundColor);
-    const mainLuminance = relativeLuminance(mainSurface);
-
-    expect(drawerLuminance).toBeLessThan(mainLuminance * 0.82);
-    expect(relativeLuminance(composerStyle.backgroundColor)).toBeGreaterThan(drawerLuminance);
-    expect(getComputedStyle(aura).opacity).toBe('0.28');
-    expect(getComputedStyle(aura).filter).toContain('blur(7px)');
-    expect(getComputedStyle(aura).animationName).toBe('none');
-    expect(getComputedStyle(breathe).animationName).toBe('none');
+    expect(colorChannels(drawerStyle.backgroundColor)).toEqual(colorChannels(mainSurface));
+    expect(drawerStyle.backdropFilter).toBe('none');
+    expect(composerStyle.borderTopWidth).toBe('1px');
+    expect(companion.querySelector('.redeven-flower-soft-aura-glow')).toBeNull();
+    expect(getComputedStyle(icon).filter).toBe('none');
+    expect(getComputedStyle(icon).animationName).toBe('none');
   });
 
   it('keeps the classic light surface restrained', () => {

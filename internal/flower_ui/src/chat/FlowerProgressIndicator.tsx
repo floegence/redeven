@@ -29,7 +29,7 @@ export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = 
           <span class="flower-model-status-flower" aria-hidden="true">
             <FlowerIcon class="flower-model-status-flower-icon" />
           </span>
-          <span class="flower-model-status-text" data-text={label()}>
+          <span class="flower-model-status-text">
             {label()}
             <span class="flower-model-status-dots" aria-hidden="true">...</span>
           </span>

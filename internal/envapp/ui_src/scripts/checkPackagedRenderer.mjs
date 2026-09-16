@@ -413,7 +413,7 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer, assetDirectory = distDir } = {}) {
   if (accessReady && (!tls?.certificate || !tls?.privateKey)) {
     throw new Error('connected built Env App dist server requires an explicit TLS identity');
   }
@@ -505,6 +505,16 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (accessReady && requestURL.pathname === '/_redeven_proxy/api/ai/threads') {
         jsonResponse(response, { threads: [] });
+        return;
+      }
+      if (accessReady && [
+        '/_redeven_proxy/api/ai/flower/stream',
+        '/_redeven_proxy/api/workbench/layout/events',
+      ].includes(requestURL.pathname)) {
+        response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+        response.write(': connected\n\n');
+        const heartbeat = setInterval(() => response.write(': keepalive\n\n'), 10_000);
+        request.on('close', () => clearInterval(heartbeat));
         return;
       }
       if (accessReady && requestURL.pathname === '/_redeven_proxy/api/ai/readiness') {
@@ -700,7 +710,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         response.end('invalid path');
         return;
       }
-      const filePath = path.join(distDir, normalizedRelativePath);
+      const filePath = path.join(assetDirectory, normalizedRelativePath);
       const fileHandle = await open(filePath, 'r');
       let data;
       try {

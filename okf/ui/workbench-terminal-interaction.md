@@ -60,6 +60,17 @@ The exact-main performance gate measures twenty semantic Presentation paints, in
 
 Redeven may adapt Flowersec streams, product permissions, local-path capability, responsive placement, notifications, and Desktop URL/file actions. It must not recreate terminal parsing, key encoding, history ownership, attachment arbitration, canonical geometry, semantic frame encoding, cursor state, graphics state, or renderer internals. Local sibling dependencies, raw-byte fallbacks, hidden renderers, automatic reattach on ordinary resize, error swallowing, and sequence rollback are prohibited.
 
+## Activity presentation
+
+The existing canonical active/running/idle state and the persisted activity
+indicator preference remain authoritative. Workbench terminal headers show a
+local activity icon for active output and a small progress icon for a running
+process, with translated accessible status text. Idle and disabled indicators
+are absent. The terminal perimeter has no animated outline, breathing shadow,
+or output-frequency-derived state. Reduced motion stops the local progress
+rotation. Opaque widget bodies and neutral static shadows do not change during
+activation, dragging, or resizing.
+
 # Evidence
 
 - `redeven:internal/terminal/manager.go` - Registers terminal-go live, semantic history, clear, catalog, and lifecycle boundaries.

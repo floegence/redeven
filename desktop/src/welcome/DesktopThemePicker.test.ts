@@ -59,6 +59,7 @@ const LIGHT_PRESET_NAMES = [
   'solarized-light',
   'github-light',
   'hc-light',
+  'porcelain-light',
 ] as const;
 
 const DARK_PRESET_NAMES = [
@@ -75,6 +76,7 @@ const DARK_PRESET_NAMES = [
   'abyss',
   'studio',
   'graphite',
+  'porcelain-dark',
 ] as const;
 
 const LOCALIZED_PRESET_NAMES = new Set<string>([
@@ -91,7 +93,7 @@ function readWelcomeStyles(): string {
 }
 
 describe('DesktopThemePicker', () => {
-  it('keeps the 11 light and 13 dark Floe 0.40 presets in their published order', () => {
+  it('keeps the 12 light and 14 dark presets in their published order', () => {
     const lightPresets = builtInShellThemePresets.filter((preset) => preset.mode === 'light');
     const darkPresets = builtInShellThemePresets.filter((preset) => preset.mode === 'dark');
 
@@ -99,7 +101,7 @@ describe('DesktopThemePicker', () => {
     expect(darkPresets.map((preset) => preset.name)).toEqual(DARK_PRESET_NAMES);
     expect(lightPresets[0]?.name).toBe('classic-light');
     expect(darkPresets[0]?.name).toBe('classic-dark');
-    expect([...lightPresets, ...darkPresets]).toHaveLength(24);
+    expect([...lightPresets, ...darkPresets]).toHaveLength(26);
   });
 
   it('provides localized labels with an upstream display-name fallback and complete Monaco-aware previews', () => {

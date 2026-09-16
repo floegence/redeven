@@ -931,7 +931,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     host.style.width = '600px';
     await settle();
     expect(details.getBoundingClientRect().right).toBeLessThanOrEqual(640);
-    expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toContain('managed-operation-text-shimmer');
+    expect(getComputedStyle(progress.querySelector('.managed-operation-shimmer-text')!).animationName).toBe('none');
 
     setOperation((current) => ({ ...current, state: 'succeeded', stage: 'completed', progress_current: 7, progress_detail: undefined }));
     await settle();

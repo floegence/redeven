@@ -9,12 +9,12 @@ import {
 
 describe('desktop shell theme contract', () => {
   it('keeps the published unique presets for each mode', () => {
-    expect(DESKTOP_SHELL_THEME_PRESETS.light).toHaveLength(11);
-    expect(DESKTOP_SHELL_THEME_PRESETS.dark).toHaveLength(13);
+    expect(DESKTOP_SHELL_THEME_PRESETS.light).toHaveLength(12);
+    expect(DESKTOP_SHELL_THEME_PRESETS.dark).toHaveLength(14);
     expect(new Set([
       ...DESKTOP_SHELL_THEME_PRESETS.light,
       ...DESKTOP_SHELL_THEME_PRESETS.dark,
-    ]).size).toBe(24);
+    ]).size).toBe(26);
   });
 
   it('normalizes persisted selections per mode and version', () => {
