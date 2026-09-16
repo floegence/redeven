@@ -46,7 +46,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
       </Show>
 
       <SidebarPane
-        title={props.title ?? i18n.t('files.title')}
+        title={<span class="text-muted-foreground">{props.title ?? i18n.t('files.title')}</span>}
         headerActions={
           <>
             <Show when={isMobile() && props.onClose}>

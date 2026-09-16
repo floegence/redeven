@@ -117,7 +117,7 @@ async function createBuiltDistTLS() {
   };
 }
 
-async function startFlowersecSmokePeer({ tls, allowedOrigin, onEvent }) {
+async function startFlowersecSmokePeer({ tls, allowedOrigin, onEvent, gitReady = false }) {
   if (!tls?.certificatePath || !tls?.privateKeyPath) {
     throw new Error('Flowersec smoke peer requires an explicit TLS identity');
   }
@@ -126,6 +126,7 @@ async function startFlowersecSmokePeer({ tls, allowedOrigin, onEvent }) {
     '--certificate', tls.certificatePath,
     '--private-key', tls.privateKeyPath,
     '--allowed-origin', allowedOrigin,
+    ...(gitReady ? ['--visual-git'] : []),
   ], {
     cwd: flowersecSmokePeerDir,
     env: { ...process.env, GOWORK: 'off' },
@@ -413,7 +414,7 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer, assetDirectory = distDir } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, gitReady = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer, assetDirectory = distDir } = {}) {
   if (accessReady && (!tls?.certificate || !tls?.privateKey)) {
     throw new Error('connected built Env App dist server requires an explicit TLS identity');
   }
@@ -746,6 +747,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   if (accessReady) {
     flowersecPeer = await flowersecPeerFactory({
       tls,
+      gitReady,
       allowedOrigin: new URL(baseURL).origin,
       onEvent: (event) => lifecycleEvents.push(event),
     });

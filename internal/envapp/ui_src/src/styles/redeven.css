@@ -276,7 +276,7 @@
   --redeven-settings-choice-selected-border: color-mix(in srgb, var(--foreground) 18%, var(--redeven-settings-inset-bg));
   --redeven-settings-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-inset-bg));
   --git-table-gridline: var(--redeven-stroke-divider);
-  --git-browser-selection-source: var(--selection-bg, var(--ring));
+  --git-browser-selection-source: var(--ring);
   --git-browser-selection-accent: var(--ring);
   --git-browser-hover-bg: color-mix(in srgb, var(--foreground) 5%, var(--redeven-surface-panel));
   --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 10%, var(--redeven-surface-panel));
@@ -382,7 +382,18 @@
 }
 
 :root.dark[data-floe-shell-theme='studio'] {
+  --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 16%, var(--redeven-surface-panel));
   --redeven-runtime-monitor-download-line: color-mix(in srgb, var(--redeven-categorical-graph-2) 75%, var(--foreground) 25%);
+}
+
+:root[data-floe-shell-theme='solarized-light'] {
+  --git-browser-selection-fg: color-mix(in srgb, var(--foreground) 92%, var(--redeven-surface-shadow-source));
+}
+
+@media (forced-colors: none) {
+  :root[data-floe-shell-theme='solarized-light'] .redeven-git-browser {
+    --tag-soft-ink-base: color-mix(in srgb, var(--foreground) 92%, var(--redeven-surface-shadow-source));
+  }
 }
 
 :root.dark[data-floe-shell-theme='nord'] {
@@ -396,6 +407,8 @@
 
 :root[data-floe-shell-theme='classic-light'],
 :root[data-floe-shell-theme='porcelain-light'] {
+  /* Muted interaction hues need more fill separation from neutral hover. */
+  --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 18%, var(--redeven-surface-panel));
   /* Graphical series remain separate from the shell's action palette. */
   --redeven-categorical-graph-2: color-mix(in srgb, var(--chart-4) 65%, var(--foreground) 35%);
   --redeven-categorical-graph-5: color-mix(in srgb, var(--chart-5) 65%, var(--foreground) 35%);
@@ -414,10 +427,6 @@
   --git-title-dot-warning: color-mix(in srgb, var(--warning) 75%, transparent);
   --git-title-dot-danger: color-mix(in srgb, var(--error) 75%, transparent);
   --git-title-dot-violet: color-mix(in srgb, var(--color-violet-500) 75%, transparent);
-  --git-browser-selection-source: var(--color-blue-600);
-  --git-browser-selection-accent: var(--color-blue-600);
-  --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 10%, var(--redeven-surface-panel));
-  --git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 35%, var(--redeven-stroke-divider));
 }
 
 :root {
@@ -723,6 +732,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 }
 
 .git-browser-segmented-tab.redeven-surface-segmented__item--active {
+  color: var(--git-browser-selection-fg) !important;
   border-color: color-mix(in srgb, var(--git-browser-selection-source) 22%, var(--redeven-stroke-divider)) !important;
   background: color-mix(in srgb, var(--git-browser-selection-source) 9%, var(--redeven-surface-control)) !important;
 }
@@ -778,6 +788,10 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 
 .browser-mode-switch :where(button) {
   min-width: 0;
+}
+
+.browser-mode-switch button[aria-checked='true'] {
+  color: var(--git-browser-selection-fg);
 }
 
 @media (max-width: 639px) {
@@ -1072,7 +1086,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   gap: 1rem;
   padding-inline: 0.875rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
-  color: color-mix(in srgb, var(--muted-foreground) 72%, var(--foreground) 10%);
+  color: var(--muted-foreground);
   font-size: 0.625rem;
   font-weight: 600;
   line-height: 1;

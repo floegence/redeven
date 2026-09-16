@@ -51,7 +51,11 @@ widths through Floe's offset tokens, so footer actions remain inside the viewpor
 even during intermediate frames. Shared presence still owns exit disposal.
 
 Desktop environment cards retain layout, actions, and featured/open status
-fills. They do not add translating card hover, animated shadows, or a second
+fills. Their existing perimeter remains opaque through the shared Card material
+cascade. Light themes use a neutral foreground blend against the page to keep
+each card distinct, including open cards and warmer canvases. This one outline
+replaces the inset highlight; the shared raised-shadow override suppresses extra
+relief. They do not add translating card hover, animated shadows, or a second
 outer frame. Dialog decoration belongs to Floe; Desktop only adapts titlebar
 safe area, dimensions, and content layout. Anchored Desktop overlays, toasts,
 the Env App appearance picker, scoped WindowModal panels, and Flower command
@@ -138,3 +142,4 @@ component gallery alone is not downstream acceptance evidence.
 - `redeven:scripts/check_soft_surface_integration.test.mjs` - Shared ownership guard.
 - `redeven:internal/envapp/ui_src/src/styles/softSurfacesVisual.browser.test.tsx` - Real control and scoped overlay checks.
 - `redeven:internal/envapp/ui_src/src/styles/settingsThemeHierarchyVisual.browser.test.tsx` - Full preset hierarchy coverage.
+- `redeven:desktop/scripts/check-welcome-cards.mjs` - Checks actual published Cards with Welcome CSS across every theme and material, including open and new states.

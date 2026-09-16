@@ -7,15 +7,21 @@ import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { GitWorkbenchSidebar } from '../ui/widgets/GitWorkbenchSidebar';
+import { GitHistoryModeSwitch } from '../ui/widgets/GitHistoryModeSwitch';
+import { GitMetaPill } from '../ui/widgets/GitWorkbenchPrimitives';
 
 type Rgb = readonly [number, number, number];
 
-function colorChannels(value: string): Rgb {
+function colorChannels(value: string, backdrop?: string): Rgb {
   const canvas = document.createElement('canvas');
   canvas.width = 1;
   canvas.height = 1;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas color context is unavailable.');
+  if (backdrop) {
+    context.fillStyle = backdrop;
+    context.fillRect(0, 0, 1, 1);
+  }
   context.fillStyle = value;
   context.fillRect(0, 0, 1, 1);
   const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
@@ -29,9 +35,9 @@ function relativeLuminance(color: Rgb): number {
   return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
 }
 
-function contrastRatio(first: string, second: string): number {
+function contrastRatio(first: string, second: string, backdrop?: string): number {
   const firstLuminance = relativeLuminance(colorChannels(first));
-  const secondLuminance = relativeLuminance(colorChannels(second));
+  const secondLuminance = relativeLuminance(colorChannels(second, backdrop));
   return (Math.max(firstLuminance, secondLuminance) + 0.05)
     / (Math.min(firstLuminance, secondLuminance) + 0.05);
 }
@@ -102,12 +108,14 @@ afterEach(() => {
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.removeAttribute('data-floe-shell-theme');
+  document.documentElement.removeAttribute('data-floe-surface-style');
   document.documentElement.removeAttribute('style');
 });
 
 describe('Git browser rendered selection contract', () => {
-  it('keeps selected, hovered, focused, and current states distinct in every built-in theme', async () => {
-    expect(builtInShellThemePresets).toHaveLength(26);
+  it.each(['standard', 'soft-neumorphic'])('keeps selected, hovered, focused, and current states distinct in every built-in theme with %s', async (material) => {
+    expect.soft(builtInShellThemePresets).toHaveLength(26);
+    document.documentElement.dataset.floeSurfaceStyle = material;
 
     for (const preset of builtInShellThemePresets) {
       document.body.replaceChildren();
@@ -115,9 +123,23 @@ describe('Git browser rendered selection contract', () => {
       applyTheme(preset);
 
       const panel = mountPanel();
+      panel.className = 'redeven-git-browser';
+      const sharedControls = document.createElement('div');
+      panel.appendChild(sharedControls);
+      const disposeControls = render(() => <>
+        <GitHistoryModeSwitch mode="git" onChange={() => {}} />
+        <GitMetaPill tone="neutral">main</GitMetaPill>
+        <GitMetaPill tone="success">Current</GitMetaPill>
+      </>, sharedControls);
       const hovered = probe(panel, 'git-browser-interactive');
       const selected = probe(panel, 'git-browser-interactive git-browser-selection-row');
       selected.setAttribute('aria-selected', 'true');
+      const secondary = document.createElement('span');
+      secondary.className = 'git-browser-selection-secondary';
+      secondary.textContent = 'Upstream origin/main · Linked worktree';
+      selected.appendChild(secondary);
+      const tableHeader = probe(panel, 'git-branch-status-empty-table__header', 'Path');
+      const selectedTab = probe(panel, 'git-browser-segmented-tab redeven-surface-segmented__item--active', 'Workspace');
       const focus = probe(panel, 'git-browser-interactive');
       const current = probe(panel, 'git-browser-current-chip', 'Current');
       const currentOnSelected = document.createElement('span');
@@ -137,23 +159,32 @@ describe('Git browser rendered selection contract', () => {
       const panelBackground = panelStyle.backgroundColor;
       const selectionSource = resolvedThemeColor('--git-browser-selection-source');
       const selectionAccent = resolvedThemeColor('--git-browser-selection-accent');
-      const themeSelection = resolvedThemeColor('--selection-bg');
       const themeRing = resolvedThemeColor('--ring');
 
-      expect(contrastRatio(selectedStyle.color, selectedStyle.backgroundColor), `${preset.name} selected text`).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(selectedStyle.borderLeftColor, panelBackground), `${preset.name} selection indicator`).toBeGreaterThanOrEqual(3);
-      expect(focusStyle.outlineStyle, `${preset.name} focus outline style`).toBe('solid');
-      expect(contrastRatio(focusStyle.outlineColor, panelBackground), `${preset.name} focus ring`).toBeGreaterThanOrEqual(3);
-      expect(deltaEOK(selectedStyle.backgroundColor, panelBackground), `${preset.name} selected/idle`).toBeGreaterThanOrEqual(0.025);
-      expect(deltaEOK(selectedStyle.backgroundColor, hoverStyle.backgroundColor), `${preset.name} selected/hover`).toBeGreaterThanOrEqual(0.015);
-      expect(contrastRatio(currentStyle.color, currentStyle.backgroundColor), `${preset.name} current chip`).toBeGreaterThanOrEqual(4.5);
-      expect(currentOnSelectedStyle.color, `${preset.name} current selected color`).toBe(currentStyle.color);
-      expect(currentOnSelectedStyle.backgroundColor, `${preset.name} current selected background`).toBe(currentStyle.backgroundColor);
-      expect(currentOnSelectedStyle.borderColor, `${preset.name} current selected border`).toBe(currentStyle.borderColor);
-      if (preset.name !== 'classic-light' && preset.name !== 'porcelain-light') {
-        expect(deltaEOK(selectionSource, themeSelection), `${preset.name} native selection source`).toBeLessThanOrEqual(0.004);
-        expect(deltaEOK(selectionAccent, themeRing), `${preset.name} native focus accent`).toBeLessThanOrEqual(0.04);
+      const modeButton = sharedControls.querySelector<HTMLElement>('[aria-checked="true"]')!;
+      const modeThumb = sharedControls.querySelector<HTMLElement>('.browser-mode-switch__thumb')!;
+      expect.soft(contrastRatio(getComputedStyle(modeButton).color, getComputedStyle(modeThumb).backgroundColor), `${preset.name} selected browser mode`).toBeGreaterThanOrEqual(4.5);
+      for (const tag of sharedControls.querySelectorAll<HTMLElement>('.floe-tag')) {
+        const style = getComputedStyle(tag);
+        expect.soft(contrastRatio(style.color, style.backgroundColor, panelBackground), `${preset.name} repository fact ${tag.textContent}`).toBeGreaterThanOrEqual(4.5);
       }
+
+      expect.soft(contrastRatio(selectedStyle.color, selectedStyle.backgroundColor), `${preset.name} selected text`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(contrastRatio(getComputedStyle(secondary).color, selectedStyle.backgroundColor), `${preset.name} selected branch metadata`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(contrastRatio(getComputedStyle(tableHeader).color, panelBackground), `${preset.name} table header`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(contrastRatio(getComputedStyle(selectedTab).color, getComputedStyle(selectedTab).backgroundColor), `${preset.name} selected workspace tab`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(contrastRatio(selectedStyle.borderLeftColor, panelBackground), `${preset.name} selection indicator`).toBeGreaterThanOrEqual(3);
+      expect.soft(focusStyle.outlineStyle, `${preset.name} focus outline style`).toBe('solid');
+      expect.soft(contrastRatio(focusStyle.outlineColor, panelBackground), `${preset.name} focus ring`).toBeGreaterThanOrEqual(3);
+      expect.soft(deltaEOK(selectedStyle.backgroundColor, panelBackground), `${preset.name} selected/idle`).toBeGreaterThanOrEqual(0.025);
+      expect.soft(deltaEOK(selectedStyle.backgroundColor, hoverStyle.backgroundColor), `${preset.name} selected/hover`).toBeGreaterThanOrEqual(0.015);
+      expect.soft(contrastRatio(currentStyle.color, currentStyle.backgroundColor), `${preset.name} current chip`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(currentOnSelectedStyle.color, `${preset.name} current selected color`).toBe(currentStyle.color);
+      expect.soft(currentOnSelectedStyle.backgroundColor, `${preset.name} current selected background`).toBe(currentStyle.backgroundColor);
+      expect.soft(currentOnSelectedStyle.borderColor, `${preset.name} current selected border`).toBe(currentStyle.borderColor);
+      expect.soft(deltaEOK(selectionSource, themeRing), `${preset.name} theme interaction source`).toBeLessThanOrEqual(0.004);
+      expect.soft(deltaEOK(selectionAccent, themeRing), `${preset.name} native focus accent`).toBeLessThanOrEqual(0.04);
+      disposeControls();
     }
   });
 
@@ -161,6 +192,8 @@ describe('Git browser rendered selection contract', () => {
     const themeNames = [
       'classic-dark',
       'classic-light',
+      'porcelain-light',
+      'porcelain-dark',
       'citrus',
       'meadow',
       'lilac',
