@@ -46,8 +46,8 @@ describe('browser workspace layout wiring', () => {
     expect(src).not.toContain('sidebarHeaderActions={');
 
     expect(cssSrc).toContain('.browser-mode-transition-panel');
-    expect(cssSrc).toContain('.browser-mode-switch__thumb');
-    expect(cssSrc).toContain('transform: translateX(100%);');
+    expect(cssSrc).toContain('.browser-mode-switch {');
+    expect(cssSrc).not.toContain('.browser-mode-switch__thumb');
     expect(cssSrc).not.toContain('transform: translateX(4px);');
     expect(cssSrc).not.toContain('transform: translateX(-4px);');
     expect(cssSrc).not.toContain(".browser-mode-transition-panel[data-browser-mode-panel='files'][data-state='inactive']");
@@ -126,12 +126,13 @@ describe('browser workspace layout wiring', () => {
     expect(modeSrc).toContain("import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
     expect(modeSrc).toContain('data-browser-mode-switch=""');
     expect(modeSrc).toContain('data-mode={props.mode}');
-    const selectionFace = modeSrc.match(/<span\b[^>]*class="browser-mode-switch__thumb"[^>]*\/>/)?.[0];
-    expect(selectionFace).toContain('aria-hidden="true"');
-    expect(selectionFace).toContain('data-floe-surface="flat"');
+    expect(modeSrc).toContain("aria-checked={props.mode === 'files'}");
+    expect(modeSrc).toContain("aria-checked={props.mode === 'git'}");
+    expect(modeSrc).not.toContain('browser-mode-switch__thumb');
     expect(modeSrc).toContain("onPointerEnter={previewGitMode}");
     expect(modeSrc).toContain("onFocus={previewGitMode}");
-    expect(modeSrc).toContain("redevenSegmentedItemClass(false)");
+    expect(modeSrc).toContain("redevenSegmentedItemClass(props.mode === 'files')");
+    expect(modeSrc).toContain("redevenSegmentedItemClass(props.mode === 'git')");
     expect(modeSrc).not.toContain('>Browse<');
     expect(modeSrc).not.toContain('>Inspect<');
 

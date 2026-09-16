@@ -26,11 +26,11 @@ function cssBlock(source: string, selector: string): string {
 }
 
 describe('browser mode transition css', () => {
-  it('keeps Files/Git shell chrome synchronous while only the mode thumb animates', () => {
+  it('keeps Files/Git shell chrome and selected faces synchronous', () => {
     const css = readStyles();
     const inactivePanel = cssBlock(css, '.browser-mode-transition-panel');
     const activePanel = cssBlock(css, ".browser-mode-transition-panel[data-state='active']");
-    const thumb = cssBlock(css, '.browser-mode-switch__thumb');
+    const selection = cssBlock(css, '.redeven-surface-segmented__item {');
 
     expect(inactivePanel).toContain('opacity: 0;');
     expect(inactivePanel).toContain('visibility: hidden;');
@@ -38,6 +38,7 @@ describe('browser mode transition css', () => {
     expect(activePanel).toContain('opacity: 1;');
     expect(activePanel).toContain('visibility: visible;');
     expect(activePanel).not.toContain('transition:');
-    expect(thumb).toContain('transform 180ms');
+    expect(selection).toContain('transition: none;');
+    expect(css).not.toContain('.browser-mode-switch__thumb');
   });
 });

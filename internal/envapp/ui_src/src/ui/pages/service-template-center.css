@@ -28,7 +28,7 @@
     background: var(--primary);
     box-shadow: none;
     transition: none;
-}
+  }
 
   .service-template-switcher__count,
   .service-template-group__count {
@@ -38,7 +38,7 @@
   .service-template-switcher__item[aria-selected='true'] .service-template-switcher__count {
     color: inherit;
     background: transparent;
-}
+  }
 
   .service-template-catalog__layout {
     display: grid;
@@ -309,7 +309,7 @@
     background: var(--primary);
     box-shadow: none;
     transition: none;
-}
+  }
 
   .service-template-editor__advanced {
     border-top: 1px solid color-mix(in srgb, var(--redeven-stroke-divider) 72%, transparent);

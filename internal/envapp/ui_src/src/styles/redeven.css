@@ -749,7 +749,6 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   .git-browser-current-chip {
     border-color: CanvasText;
   }
-
 }
 
 .browser-mode-switch {
@@ -4484,10 +4483,6 @@ html.dark .git-content-skeleton__block {
     background: none;
   }
 
-  .browser-mode-switch__thumb {
-    transition: none !important;
-  }
-
 }
 
 .workbench-surface[data-workbench-theme='default'] {
@@ -5644,5 +5639,4 @@ html.dark .git-content-skeleton__block {
   :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) .redeven-surface-segmented__item {
     transition: none;
   }
-
 }
