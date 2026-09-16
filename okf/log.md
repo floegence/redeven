@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-09-16 — Refined Computer viewer and launcher
+
+Adopt published Floe Webapp 0.52.13 for resilient launcher dragging, shared landing
+previews, gentle motion, preferred window geometry and compact content boundaries.
+Flower uses a neutral 40px entry, textual run status, source-aware focus return and
+fit/actual-size viewing. See [Computer media](ai/computer-use-media.md) and
+[published web dependencies](architecture/env-app-upstream-web-dependencies.md).
+
+
 ## 2026-09-10 — Correct DeepSeek web search support
 
 - Correct the earlier native-search assumption: the official Responses compatibility table ignores built-in search tools. Mark all shipped DeepSeek models unsupported, reject hosted declarations before dispatch, and keep Responses transport, local page fetching, images, and historical receipt replay.

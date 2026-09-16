@@ -3,7 +3,7 @@ type: Media Contract
 title: Computer use media and visual requests
 description: Resolve authenticated keyframes and bounded live samples into decoded Flower pixels without persisting image bytes in model history.
 tags: [ai, computer-use, media, attachments]
-timestamp: 2026-09-15T00:00:00Z
+timestamp: 2026-09-16T00:00:00Z
 ---
 # Summary
 
@@ -20,26 +20,41 @@ Each safe completed action returns target ID, target display name, execution loc
 
 The Stage uses the published Floe `FloatingWindow` for its title bar, drag,
 resize, maximize, and close controls. Its body contains decoded pixels only.
-Closing switches to a 56px launcher with the published `MonitorPointer` icon,
-an opaque theme surface, and a localized accessible status. Running, input or
-approval waiting, completion, and failure use distinct status rings. State
-belongs to the run that produced the displayed frame; a later text turn cannot
-recolor historical Computer activity, and a provider failure overrides a
-successful screenshot from that run.
+Closing switches to a neutral 40px launcher with the published 20px
+`MonitorPointer` icon, an opaque theme surface, thin border, and a restrained
+black shadow. It has no glow, status ring or internal dot. Coarse pointers gain
+an invisible 48px hit area. Running, waiting, completion and failure appear as
+localized text in the header and viewer; waiting and failure use muted semantic
+colors. State belongs to the run that produced the displayed frame; a later text
+turn cannot change historical Computer status, and a provider failure overrides
+a successful screenshot from that run.
 
 Floe `SurfaceFloatingPanel` owns launcher placement, pointer capture, drag/click
 separation, keyboard movement, edge snapping, and projected-surface boundaries.
 Flower supplies the actual transcript element as the safe boundary, excluding
 the header and dynamic composer. A committed drag snaps to the nearest of four
-edges with a 12px gap and a 180ms transition; reduced motion disables that
-transition. Clicking, Enter, or Space restores the viewer; arrow keys move the
+edges with a 12px gap and a distance-sensitive 210–360ms gentle transition;
+reduced motion completes immediately. The gray landing marker and release share
+the same nearest-edge rule; only exact distance ties use the current gesture's
+latest direction. Release coordinates are applied even without a final move;
+lost capture retains document tracking. Browser cancellation, blur and missed
+release settle at the last held point, while explicit Esc restores the starting
+placement. Animation interruption freezes the visible position. Clicking, Enter, or Space restores the viewer; arrow keys move the
 launcher. Dragging does not activate restoration or send remote input. Hidden
 launchers are absent from pointer interaction and keyboard navigation.
 
 Both components remain mounted across visibility changes, preserving the
 window's position, size, and maximization and the launcher's relative placement.
+Floe keeps preferred geometry separate from viewport constraints, so composer
+growth and narrowing do not permanently reduce the saved window size. Below a
+560px content boundary the viewer fills the safe region and hides desktop drag,
+resize and maximize controls. Narrow transcripts reserve a launcher gutter.
 Thread selection resets presentation and clears old pixels. The viewer appears
-only after an Activity supplies a frame, and Activity can reopen it after close.
+only after an Activity supplies a frame. Activity, the header Computer entry,
+and the launcher can restore it; close returns focus to the restoring entry.
+The viewer offers fit-to-window and scrollable actual-size pixels outside user
+takeover. Takeover retains its existing image coordinate, native IME, paste and
+remote scroll semantics and keeps fit mode.
 Closing removes private input controls and retires the viewing subscription,
 without pausing execution, relinquishing user control, or recreating a target.
 Later actions cannot reopen an explicitly hidden viewer.

@@ -8,13 +8,13 @@ export async function qualifyComputerLauncherTouch({ page, root = page }) {
     await root.locator('[data-floe-floating-window-control="close"]').click();
     await stage.waitFor({ state: 'detached' });
     await page.setViewportSize({ width: 390, height: 740 });
-    await session.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 740, deviceScaleFactor: 2, mobile: false });
+    await session.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 740, deviceScaleFactor: 3, mobile: false });
     await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const ball = root.locator('.flower-computer-stage-ball');
     await ball.waitFor({ state: 'visible' });
     await page.waitForTimeout(100);
-    assert.equal(await ball.evaluate(element => element.ownerDocument.defaultView.devicePixelRatio), 2);
+    assert.equal(await ball.evaluate(element => element.ownerDocument.defaultView.devicePixelRatio), 3);
     const before = await ball.boundingBox(); assert(before);
     const start = { x: before.x + before.width / 2, y: before.y + before.height / 2 };
     await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
@@ -27,7 +27,7 @@ export async function qualifyComputerLauncherTouch({ page, root = page }) {
     assert(after.x >= 0 && after.y >= 0 && after.x + after.width <= 391 && after.y + after.height <= 741, 'launcher must remain visible on a narrow high-DPI screen');
     await ball.press('Enter');
     await stage.waitFor();
-    return { deviceScaleFactor: 2, touch: true, width: 390 };
+    return { deviceScaleFactor: 3, touch: true, width: 390 };
   } finally {
     await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
     await session.send('Emulation.clearDeviceMetricsOverride');
@@ -57,10 +57,13 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
     await page.mouse.move(x, y); await page.mouse.down();
     await page.mouse.move(x + dx * scaleX, y + dy * scaleY, { steps: 12 }); await page.mouse.up();
   };
-  await drag(grip, -60, -40);
+  const contentBoundary = await boxOf(root.locator('.flower-chat-transcript'));
+  const moveX = -Math.min(60, Math.max(0, initial.x - contentBoundary.x - 12));
+  const moveY = -Math.min(40, Math.max(0, initial.y - contentBoundary.y - 12));
+  await drag(grip, moveX, moveY);
   const moved = await boxOf(viewer);
   assert(moved);
-  assert(Math.abs(moved.x - initial.x + 60) < 2 && Math.abs(moved.y - initial.y + 40) < 2, `viewer must follow pointer in client coordinates: ${JSON.stringify({ initial, moved })}`);
+  assert(Math.abs(moved.x - initial.x - moveX) < 2 && Math.abs(moved.y - initial.y - moveY) < 2, `viewer must follow pointer in client coordinates: ${JSON.stringify({ initial, moved })}`);
 
   const resize = viewer.locator('[data-floe-floating-window-resize-handle="se"]');
   await drag(resize, -80, -60);
@@ -99,15 +102,15 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
   await settleBall();
   const collapsed = await boxOf(ball);
   const logicalSize = await ball.evaluate(element => ({ width: element.ownerDocument.defaultView.getComputedStyle(element).width, height: element.ownerDocument.defaultView.getComputedStyle(element).height }));
-  assert(collapsed && logicalSize.width === '56px' && logicalSize.height === '56px' && Math.abs(collapsed.width - collapsed.height) < 1,
-    `launcher must expose a 56px circular hit target before projection: ${JSON.stringify({ collapsed, logicalSize })}`);
+  assert(collapsed && logicalSize.width === '40px' && logicalSize.height === '40px' && Math.abs(collapsed.width - collapsed.height) < 1,
+    `launcher must expose a 40px circular visual before projection: ${JSON.stringify({ collapsed, logicalSize })}`);
   assert.equal(await ball.locator('.flower-computer-stage-ball-icon').count(), 1, 'launcher requires the dedicated Computer Use icon');
   const visual = await ball.evaluate((element) => {
     const style = element.ownerDocument.defaultView.getComputedStyle(element);
-    return { cursor: style.cursor, state: element.dataset.sessionState, ring: style.getPropertyValue('--flower-computer-stage-state').trim(), shadow: style.boxShadow };
+    return { cursor: style.cursor, state: element.dataset.sessionState, border: style.borderColor, background: style.backgroundColor, shadow: style.boxShadow };
   });
   assert.equal(visual.cursor, 'grab');
-  assert(visual.state && visual.ring && visual.shadow !== 'none', `launcher state ring must be visible: ${JSON.stringify(visual)}`);
+  assert(visual.state && visual.shadow !== 'none' && !visual.shadow.includes('inset'), `launcher uses a neutral raised surface: ${JSON.stringify(visual)}`);
   if (output) await page.screenshot({ path: `${output}/viewer-minimized.png` });
 
   const boundary = await boxOf(root.locator('.flower-chat-transcript'));
@@ -140,17 +143,12 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
   }
 
   const beforeCancel = await boxOf(ball);
-  await ball.evaluate(element => {
-    element.addEventListener('pointerdown', () => {
-      element.addEventListener('pointermove', event => {
-        element.dispatchEvent(new element.ownerDocument.defaultView.PointerEvent('pointercancel', {
-          bubbles: true, pointerId: event.pointerId, pointerType: event.pointerType,
-          clientX: event.clientX, clientY: event.clientY,
-        }));
-      }, { once: true });
-    }, { once: true });
-  });
-  await drag(ball, 70, 40);
+  const cancelPoint = await ball.boundingBox();
+  await page.mouse.move(cancelPoint.x + cancelPoint.width / 2, cancelPoint.y + cancelPoint.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(cancelPoint.x + 70, cancelPoint.y + 40);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
   await waitForBall(box => Math.abs(box.x - beforeCancel.x) < 2 && Math.abs(box.y - beforeCancel.y) < 2);
   assert.equal(await stage.count(), 0, 'cancelled dragging must preserve placement without opening');
 
@@ -159,7 +157,7 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
     const style = element.ownerDocument.defaultView.getComputedStyle(element);
     return { border: style.borderWidth, shadow: style.boxShadow, transition: style.transitionDuration };
   });
-  assert.equal(accessibleStyle.border, '2px');
+  assert.equal(accessibleStyle.border, '1px');
   assert.equal(accessibleStyle.shadow, 'none');
   assert(!accessibleStyle.transition.split(',').some(value => Number.parseFloat(value) > 0.001), 'reduced motion must disable decorative movement');
   await page.emulateMedia({ forcedColors: 'none', reducedMotion: 'no-preference' });
@@ -191,7 +189,7 @@ export async function qualifyComputerViewer({ page, root = page, output }) {
   await stage.waitFor();
   await viewer.locator('[data-floe-floating-window-control="maximize"]').click();
   const maximized = await boxOf(viewer);
-  assert(maximized && maximized.y >= 56 && maximized.width > resized.width, 'maximized window must respect the app header');
+  assert(maximized && maximized.y >= contentBoundary.y + 10 && maximized.width > resized.width, 'maximized window must respect the app header');
   await viewer.locator('[data-floe-floating-window-control="close"]').click();
   await stage.waitFor({ state: 'detached' });
   await ball.press('Enter');

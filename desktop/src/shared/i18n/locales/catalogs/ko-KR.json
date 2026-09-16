@@ -167,7 +167,11 @@
       "handlerBlockedTitle": "Flower 확인이 필요합니다",
       "handlerStartFailedTitle": "Flower를 시작할 수 없습니다",
       "handlerStillStarting": "Flower가 아직 시작 중입니다.",
-      "computerStageMinimize": "뷰어 최소화",
+      "computerStageTitle": "컴퓨터",
+      "computerStageMaximize": "뷰어 최대화",
+      "computerStageRestoreSize": "뷰어 크기 복원",
+      "computerStageZoomIn": "실제 크기",
+      "computerStageZoomOut": "창에 맞추기",
       "computerStageRestore": "뷰어 복원",
       "computerStageStatus": {
         "running": "컴퓨터 작업 실행 중",

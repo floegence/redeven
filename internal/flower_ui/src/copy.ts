@@ -373,7 +373,11 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerBlockedTitle: string;
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
-    computerStageMinimize: string;
+    computerStageTitle: string;
+    computerStageMaximize: string;
+    computerStageRestoreSize: string;
+    computerStageZoomIn: string;
+    computerStageZoomOut: string;
     computerStageRestore: string;
     computerStageStatus: Readonly<Record<'running' | 'awaiting_user' | 'completed' | 'failed', string>>;
     computerStageMove: string;
@@ -679,7 +683,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',
-    computerStageMinimize: "Minimize viewer",
+    computerStageTitle: "Computer",
+    computerStageMaximize: "Maximize viewer",
+    computerStageRestoreSize: "Restore viewer size",
+    computerStageZoomIn: "Actual size",
+    computerStageZoomOut: "Fit to window",
     computerStageRestore: "Restore viewer",
     computerStageStatus: {
       "running": "Computer running",

@@ -167,7 +167,11 @@
       "handlerBlockedTitle": "Flower に確認が必要です",
       "handlerStartFailedTitle": "Flower を起動できませんでした",
       "handlerStillStarting": "Flower はまだ起動中です。",
-      "computerStageMinimize": "ビューアーを最小化",
+      "computerStageTitle": "コンピューター",
+      "computerStageMaximize": "ビューアーを最大化",
+      "computerStageRestoreSize": "ビューアーのサイズを元に戻す",
+      "computerStageZoomIn": "実際のサイズ",
+      "computerStageZoomOut": "ウィンドウに合わせる",
       "computerStageRestore": "ビューアーを元に戻す",
       "computerStageStatus": {
         "running": "コンピューターのタスクを実行中",

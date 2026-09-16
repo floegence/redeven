@@ -130,7 +130,11 @@ export const flowerSurfaceEnUS = {
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',
-    computerStageMinimize: "Minimize viewer",
+    computerStageTitle: "Computer",
+    computerStageMaximize: "Maximize viewer",
+    computerStageRestoreSize: "Restore viewer size",
+    computerStageZoomIn: "Actual size",
+    computerStageZoomOut: "Fit to window",
     computerStageRestore: "Restore viewer",
     computerStageStatus: {
       "running": "Computer running",

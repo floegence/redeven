@@ -22,7 +22,10 @@ export type FlowerComputerStageSnapshot = Readonly<{
 export type FlowerComputerStageCopy = Readonly<{
   title: string;
   close: string;
-  minimize: string;
+  maximize: string;
+  restoreSize: string;
+  zoomIn: string;
+  zoomOut: string;
   restore: string;
   move: string;
   noFrame: string;
@@ -43,13 +46,16 @@ export type FlowerComputerStageProps = Readonly<{
   copy: FlowerComputerStageCopy;
   open: boolean;
   sessionState: FlowerComputerStageSessionState;
-  onRestore: () => void;
+  restoreFocus?: HTMLElement;
+  onRestore: (source: HTMLButtonElement) => void;
   onClose: () => void;
 }>;
 
 export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) => {
   const [resolvedURL, setResolvedURL] = createSignal<string>();
   const [failed, setFailed] = createSignal(false);
+  const [actualSize, setActualSize] = createSignal(false);
+  let frameWrap: HTMLDivElement | undefined;
   const [retry, setRetry] = createSignal(0);
   const frameRef = createMemo(() => props.frameRef || '');
   const targetID = createMemo(() => props.snapshot.targetID || '');
@@ -68,8 +74,15 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   };
   createEffect(() => {
     threadID(); targetID(); void props.onInput;
+    setActualSize(false);
     composing = false;
     if (keyboard) keyboard.value = '';
+  });
+  createEffect(() => {
+    if (!props.open || !props.restoreFocus) return;
+    const frame = requestAnimationFrame(() => frameWrap?.closest('[data-floe-geometry-surface]')
+      ?.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')?.focus({ preventScroll: true }));
+    onCleanup(() => cancelAnimationFrame(frame));
   });
   onCleanup(() => { if (currentURL) URL.revokeObjectURL(currentURL); });
   createEffect(() => {
@@ -118,10 +131,20 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       <FloatingWindow open={props.open} onOpenChange={(open) => {
         if (!open) {
           props.onClose();
-          queueMicrotask(() => launcher?.focus({ preventScroll: true }));
+          queueMicrotask(() => {
+            const source = props.restoreFocus;
+            const visible = source?.isConnected && source.getClientRects().length && !source.closest('[inert], [hidden], [aria-hidden="true"]');
+            (visible ? source : launcher)?.focus({ preventScroll: true });
+          });
         }
-      }} title={props.copy.title} draggable resizable defaultSize={{ width: 620, height: 420 }} minSize={{ width: 360, height: 240 }} viewportInsets={{ top: 56, right: 12, bottom: 12, left: 12 }} class="flower-computer-stage" data-computer-viewer-thread={viewerThread}>
-    <div class="flower-computer-stage-frame-wrap" data-computer-target={targetID()}>
+      }} title={props.copy.title} draggable resizable defaultSize={{ width: 600, height: 425 }} minSize={{ width: 280, height: 200 }}
+        boundary={props.boundary} compactBelow={560} viewportInsets={{ top: 12, right: 12, bottom: 12, left: 12 }}
+        labels={{ close: props.copy.close, maximize: props.copy.maximize, restore: props.copy.restoreSize }}
+        headerActions={<span class="flower-computer-state" data-session-state={props.sessionState}>{props.copy.state[props.sessionState]}</span>}
+        footer={<Show when={!props.onInput && resolvedURL()}><button type="button" class="flower-computer-zoom" aria-pressed={actualSize()}
+          onClick={() => setActualSize(value => !value)}>{actualSize() ? props.copy.zoomOut : props.copy.zoomIn}</button></Show>}
+        class="flower-computer-stage">
+    <div ref={frameWrap} class="flower-computer-stage-frame-wrap" data-zoomed={actualSize() ? 'true' : undefined} data-computer-viewer-thread={viewerThread} data-computer-target={targetID()}>
       <Show when={props.onInput}>
         <textarea
           ref={keyboard}
@@ -191,6 +214,8 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         class={`flower-computer-viewer-minimized${props.open ? ' flower-computer-viewer-minimized-hidden' : ''}`}
         aria-hidden={props.open ? 'true' : undefined}
         snapToEdge
+        snapPreview
+        snapMotion="gentle"
         snapInset={12}
       >
         {(handle) => (
@@ -204,9 +229,10 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
             aria-description={[props.copy.state[props.sessionState], props.copy.move].filter(Boolean).join(". ")}
             title={[props.copy.restore, props.copy.state[props.sessionState], props.copy.move].filter(Boolean).join(" — ")}
             tabIndex={props.open ? -1 : 0}
-            onClick={props.onRestore}
+            aria-expanded={props.open}
+            onClick={(event) => props.onRestore(event.currentTarget)}
           >
-            <span aria-hidden="true"><MonitorPointer class="flower-computer-stage-ball-icon" size={32} /></span>
+            <span aria-hidden="true"><MonitorPointer class="flower-computer-stage-ball-icon" size={20} /></span>
           </button>
         )}
       </SurfaceFloatingPanel>

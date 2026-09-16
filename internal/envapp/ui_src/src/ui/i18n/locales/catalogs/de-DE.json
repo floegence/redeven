@@ -4410,7 +4410,11 @@
       "handlerBlockedTitle": "Flower braucht Aufmerksamkeit",
       "handlerStartFailedTitle": "Flower konnte nicht starten",
       "handlerStillStarting": "Flower wird noch gestartet.",
-      "computerStageMinimize": "Ansicht minimieren",
+      "computerStageTitle": "Computer",
+      "computerStageMaximize": "Ansicht maximieren",
+      "computerStageRestoreSize": "Ansichtsgröße wiederherstellen",
+      "computerStageZoomIn": "Originalgröße",
+      "computerStageZoomOut": "An Fenster anpassen",
       "computerStageRestore": "Ansicht wiederherstellen",
       "computerStageStatus": {
         "running": "Computeraufgabe wird ausgeführt",

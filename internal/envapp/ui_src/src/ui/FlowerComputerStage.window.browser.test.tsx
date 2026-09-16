@@ -33,7 +33,7 @@ for (const projected of [false, true]) {
         <FlowerComputerStage threadID={owner()} boundary={boundary()} open={open()} sessionState={state()}
           snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'running', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'running', targetID: 'browser-main', target: 'Browser', action: 'Browse', location: 'local', safety: '' }}
           userFrame={blob} onInput={input} onClose={() => setOpen(false)} onRestore={() => setOpen(true)}
-          copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', retry: 'Retry', state: states }} />
+          copy={{ title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', retry: 'Retry', state: states }} />
       </div>
     </LayoutProvider></FloeConfigProvider>, host);
     try {
@@ -58,9 +58,11 @@ for (const projected of [false, true]) {
         setState(next);
         await waitFor(() => launcher.dataset.sessionState === next);
         expect(launcher.getAttribute('aria-description')).toContain(states[next]);
-        colors.add(getComputedStyle(launcher).getPropertyValue('--flower-computer-stage-state'));
+        colors.add([getComputedStyle(launcher).backgroundColor, getComputedStyle(launcher).borderColor, getComputedStyle(launcher).color].join('|'));
       }
-      expect(colors.size).toBe(4);
+      expect(colors.size).toBe(1);
+      expect(getComputedStyle(launcher).width).toBe('40px');
+      expect(getComputedStyle(launcher.querySelector('svg')!).width).toBe('20px');
       for (const dark of [false, true]) {
         document.documentElement.classList.toggle('dark', dark);
         expect(getComputedStyle(launcher).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
@@ -82,3 +84,50 @@ for (const projected of [false, true]) {
     }
   });
 }
+
+it('returns focus to each restore entry and offers actual-size viewing without changing takeover input', async () => {
+  await page.viewport(1200, 900);
+  const host = document.createElement('div'); document.body.append(host);
+  const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 600;
+  canvas.getContext('2d')!.fillRect(0, 0, 960, 600);
+  const blob = await new Promise<Blob>(resolve => canvas.toBlob(value => resolve(value!)));
+  const [open, setOpen] = createSignal(false);
+  const [source, setSource] = createSignal<HTMLElement>();
+  const [takeover, setTakeover] = createSignal(false);
+  const [boundary, setBoundary] = createSignal<HTMLElement>();
+  const input = vi.fn();
+  const restore = (element: HTMLElement) => { setSource(element); setOpen(true); };
+  const dispose = render(() => <FloeConfigProvider><LayoutProvider>
+    <button type="button" data-testid="header-entry" onClick={event => restore(event.currentTarget)}>Computer</button>
+    <button type="button" data-testid="activity-entry" onClick={event => restore(event.currentTarget)}>Activity</button>
+    <div ref={setBoundary} style={{ width: '800px', height: '600px' }} />
+    <FlowerComputerStage threadID="focus-thread" boundary={boundary()} open={open()} sessionState="failed"
+      restoreFocus={source()} onRestore={restore} onClose={() => setOpen(false)} userFrame={blob} onInput={takeover() ? input : undefined}
+      snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Browser', action: 'Browse', location: 'local', safety: '' }}
+      copy={{ title: 'Computer', close: 'Close viewer', maximize: 'Maximize viewer', restoreSize: 'Restore viewer size', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: states }} />
+  </LayoutProvider></FloeConfigProvider>, host);
+  try {
+    for (const selector of ['[data-testid="header-entry"]', '[data-testid="activity-entry"]', '.flower-computer-stage-ball']) {
+      const entry = document.querySelector<HTMLButtonElement>(selector)!;
+      entry.click();
+      await waitFor(() => document.activeElement?.getAttribute('data-floe-floating-window-control') === 'close');
+      const img = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!;
+      await waitFor(() => img.naturalWidth === 960);
+      expect(document.querySelector('.flower-computer-stage .flower-computer-state')?.textContent).toBe(states.failed);
+      const zoom = document.querySelector<HTMLButtonElement>('.flower-computer-zoom')!;
+      zoom.click();
+      expect(zoom.getAttribute('aria-pressed')).toBe('true');
+      await waitFor(() => Math.abs(img.getBoundingClientRect().width - 960) < 0.1);
+      zoom.click();
+      expect(img.getBoundingClientRect().width).toBeLessThan(960);
+      document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
+      await waitFor(() => document.activeElement === entry);
+      await waitFor(() => !document.querySelector('.flower-computer-stage'));
+    }
+    setTakeover(true);
+    document.querySelector<HTMLButtonElement>('[data-testid="activity-entry"]')!.click();
+    await waitFor(() => Boolean(document.querySelector('.flower-computer-stage img')));
+    expect(document.querySelector('.flower-computer-zoom')).toBeNull();
+    expect(input).not.toHaveBeenCalled();
+  } finally { dispose(); host.remove(); }
+});
