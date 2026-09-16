@@ -81,7 +81,8 @@ try {
         ]) {
           const user = await send(`user-${index}`, tool, args, { user_control: true });
           assert.equal(user.error, undefined);
-          assert.equal(Boolean(user.screenshot), true, 'user view must contain pixels');
+          assert.equal(Boolean(user.screenshot), tool === 'computer.screenshot', 'only observation returns private pixels; input acknowledges without capture');
+          if (tool !== 'computer.screenshot') assert.equal(user.acknowledged, true);
           assert.equal(user.result, undefined, 'user input must not become a tool result');
         }
         assert.equal(completions, 1, 'user did not finish the form');
