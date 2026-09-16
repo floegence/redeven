@@ -3,7 +3,7 @@ import { isDesktopCertificateOperation, parseDesktopCertificateReport, parseDesk
 
 describe('Desktop certificate boundary', () => {
   it('accepts only the explicit maintenance operations', () => {
-    for (const operation of ['status', 'generate', 'install', 'setup']) expect(isDesktopCertificateOperation(operation)).toBe(true);
+    for (const operation of ['status', 'generate', 'install', 'setup', 'import', 'regenerate', 'remove']) expect(isDesktopCertificateOperation(operation)).toBe(true);
     for (const operation of ['export', 'delete', '', null, { operation: 'install' }]) expect(isDesktopCertificateOperation(operation)).toBe(false);
   });
 
@@ -38,3 +38,10 @@ describe('Desktop certificate boundary', () => {
     }
   });
 });
+
+ it('requires explicit replacement confirmation and strips renderer file paths and PEM', () => {
+   for (const operation of ['import', 'regenerate', 'remove']) {
+     expect(() => parseDesktopCertificateRequest({ environment_id: 'local', operation })).toThrow('confirmation');
+     expect(parseDesktopCertificateRequest({ environment_id: 'local', operation, confirmed: true, private_key_pem: 'secret', certificate_path: '/untrusted' })).toEqual({ environment_id: 'local', operation, confirmed: true });
+   }
+ });

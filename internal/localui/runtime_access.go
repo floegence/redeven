@@ -123,6 +123,11 @@ func (s *runtimeControlServer) handleRuntimeAccess(w http.ResponseWriter, r *htt
 		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_ACCESS_INVALID", err.Error())
 		return
 	}
+	certificateChanged := false
+	if s.accessCurrent.LocalUIProtocol == config.LocalUIProtocolHTTPS {
+		identity, identityErr := loadLocalUIDeviceCA(s.accessLayout.StateDir)
+		certificateChanged = identityErr != nil || deviceIdentityServingFingerprint(identity) != s.accessCertificateFingerprint
+	}
 	var startedAt int64
 	if s.agent != nil {
 		startedAt = s.agent.ProcessStartedAtUnixMS()
@@ -131,5 +136,5 @@ func (s *runtimeControlServer) handleRuntimeAccess(w http.ResponseWriter, r *htt
 		*config.EnvironmentCatalogAccess
 		RestartRequired        bool  `json:"restart_required"`
 		RuntimeStartedAtUnixMS int64 `json:"runtime_started_at_unix_ms"`
-	}{access, access != nil && (*access != s.accessCurrent || !bytes.Equal(hash, s.accessPasswordHash)), startedAt}})
+	}{access, certificateChanged || access != nil && (*access != s.accessCurrent || !bytes.Equal(hash, s.accessPasswordHash)), startedAt}})
 }

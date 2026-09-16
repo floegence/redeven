@@ -1,6 +1,6 @@
 export const DESKTOP_CERTIFICATE_CHANNEL = 'redeven-desktop:local-certificate';
-export type DesktopCertificateOperation = 'status' | 'generate' | 'install' | 'setup';
-export type DesktopCertificateRequest = Readonly<{ environment_id: string; operation: DesktopCertificateOperation }>;
+export type DesktopCertificateOperation = 'status' | 'generate' | 'install' | 'setup' | 'import' | 'regenerate' | 'remove';
+export type DesktopCertificateRequest = Readonly<{ environment_id: string; operation: DesktopCertificateOperation; confirmed?: true }>;
 export type DesktopCertificateIdentity = 'ready' | 'missing' | 'expired' | 'not_yet_valid' | 'invalid' | 'unknown';
 export type DesktopCertificateReport = Readonly<{
   status: string;
@@ -11,11 +11,18 @@ export type DesktopCertificateReport = Readonly<{
   not_after?: string;
   certificate_path?: string;
   can_install?: boolean;
-  failure_stage?: 'status' | 'generate' | 'install' | 'verify';
+  can_manage?: boolean;
+  certificate_kind?: string;
+  fingerprint?: string;
+  failure_stage?: 'status' | 'generate' | 'install' | 'verify' | 'import' | 'regenerate' | 'remove';
 }>;
 
 export function isDesktopCertificateOperation(value: unknown): value is DesktopCertificateOperation {
-  return value === 'status' || value === 'generate' || value === 'install' || value === 'setup';
+  return value === 'status' || value === 'generate' || value === 'install' || value === 'setup' || isCertificateReplacement(value);
+}
+
+export function isCertificateReplacement(value: unknown): value is 'import' | 'regenerate' | 'remove' {
+  return value === 'import' || value === 'regenerate' || value === 'remove';
 }
 
 export function parseDesktopCertificateRequest(value: unknown): DesktopCertificateRequest {
@@ -23,7 +30,9 @@ export function parseDesktopCertificateRequest(value: unknown): DesktopCertifica
   const request = value as Record<string, unknown>;
   if (typeof request.environment_id !== 'string' || !request.environment_id.trim()
     || !isDesktopCertificateOperation(request.operation)) throw new Error('Invalid certificate request.');
-  return { environment_id: request.environment_id.trim(), operation: request.operation };
+  if (isCertificateReplacement(request.operation) && request.confirmed !== true) throw new Error('Certificate replacement or removal requires confirmation.');
+  return { environment_id: request.environment_id.trim(), operation: request.operation,
+    ...(isCertificateReplacement(request.operation) ? { confirmed: true } : {}) };
 }
 
 export function desktopCertificateIdentity(report: DesktopCertificateReport | undefined): DesktopCertificateIdentity {
@@ -54,6 +63,7 @@ export function parseDesktopCertificateReport(value: unknown): DesktopCertificat
   return {
     status: legacyUntrusted ? 'ready' : report.status, code: report.code, message: text('message'),
     identity: text('identity'), trust: text('trust'), not_after: text('not_after'),
-    certificate_path: text('certificate_path'),
+    certificate_path: text('certificate_path'), certificate_kind: text('certificate_kind'), fingerprint: text('fingerprint'),
+    can_manage: report.certificate_management === true,
   };
 }

@@ -11,13 +11,9 @@ Runtime owns a public client endpoint independently of the Desktop that starts i
 
 # Contract
 
-## Device CA lifecycle
+## HTTPS certificate ownership
 
-The user explicitly creates the device CA with `redeven local-authority device-ca generate` and may inspect it with `status`. On macOS and Windows, `install --scope user` safely installs the public certificate for the current user. On Linux, `install --scope user` returns `manual_required`; the user exports only the public certificate with `export` and manually imports it into the trust store used by the actual browser or client. Redeven never generates a CA during Runtime startup, never exposes its private key, never writes a system-wide trust store, never invokes `sudo`, and never silently elevates privileges.
-
-Certificate identity, client trust, and maintenance operation outcomes are separate facts. A valid but untrusted CA is a successful status query with `identity: ready` and `trust: untrusted`, not an invalid certificate. Expired, not-yet-valid, incomplete, and malformed identities remain distinct from permission, timeout, installation, and inspection failures. Generation never replaces an existing identity. A failed trust installation preserves the certificate; success must be followed by a fresh trust check. User cancellation remains distinct from installation failure, including macOS authorization-sheet cancellation diagnostics that omit the numeric OSStatus. System trust applies only to the inspected OS user and does not prove trust in another device or a browser with a separate store.
-
-The CA key and certificate live under the Local Environment state directory with private directory and key permissions. Runtime startup validates the CA identity, key match, CA constraints, validity, file type, and permissions. Each start then creates and validates an in-memory P-256 leaf certificate containing only the exact configured DNS and IP SANs; the leaf is not persisted. Missing, invalid, or expired CA identity and leaf creation failure prevent HTTPS/WSS startup. Runtime neither verifies nor establishes trust in a browser-specific or client-specific trust store. A client that does not trust the CA fails its TLS connection closed.
+[Local UI certificates](local-ui-certificates.md) owns creation, import, replacement, removal, validation, and client trust. HTTPS startup requires a valid saved identity covering the exact listener hosts. It never creates or repairs certificate material, installs trust, or falls back to HTTP. Certificate replacement affects the next start; the running TLS identity and sessions remain intact.
 
 ## Listener and origin boundary
 
@@ -41,7 +37,7 @@ Runtime retains only a bcrypt password verifier in its private `local-ui-passwor
 
 Authenticated private runtime-control `GET/PUT /v2/runtime/access` reads or saves next-start settings while Runtime is running. A URL login cannot call this interface. When Runtime is stopped, the same registered SSH/WSL/container management channel invokes `local-authority access get|set --state-root`; set reads a closed JSON object from stdin and requires the Runtime state lock. Both paths validate the same bind, protocol, and password contract. A rejected CLI save returns a nonzero exit status with the failure on stderr and no success payload on stdout. The live listener and existing sessions remain unchanged until an explicit restart. This is not a concurrent lifecycle-management coordination service.
 
-Access reports include whether saved configuration or the password verifier differs from the running instance, bound to its process start identity. Reopening settings retains this pending state; a replacement Runtime cannot inherit a stale pending flag. Native Desktop saves through the same server authority before updating its client preferences. An ordinary catalog write failure restores the previous verifier and returns an error; this rollback does not claim crash-atomicity across the two files.
+Access reports include whether saved configuration, the password verifier, or the HTTPS certificate fingerprint differs from the running instance, bound to its process start identity. Reopening settings retains this pending state; a replacement Runtime cannot inherit a stale pending flag. Native Desktop saves through the same server authority before updating its client preferences. An ordinary catalog write failure restores the previous verifier and returns an error; this rollback does not claim crash-atomicity across the two files.
 
 A `keep` settings operation may supply a retained password solely to establish a missing verifier for an existing installation. An existing verifier remains byte-for-byte unchanged, even when the supplied Desktop credential is stale. A password-protected catalog with no verifier or retained credential fails closed instead of silently clearing authentication. Failed catalog saves roll back verifier initialization as well as replacement and clearing.
 
@@ -52,9 +48,6 @@ Installing trust in each HTTPS client is an explicit user action outside Runtime
 # Evidence
 
 - `redeven:internal/config/catalog_test.go` - Preserves saved addresses, password protection, and explicit HTTPS while defaulting a missing protocol to HTTP without rewriting catalog bytes.
-- `redeven:internal/localui/device_ca.go` - Creates and validates the durable device CA and ephemeral exact-SAN leaf.
-- `redeven:internal/localui/device_ca_install.go` - Installs current-user trust on macOS and Windows and returns manual-required guidance on Linux without elevation.
-- `redeven:cmd/redeven/local_authority.go` - Exposes generate, status, export, and install commands.
 - `redeven:internal/localui/network_server.go` - Composes public HTTP/WS or HTTPS/WSS on one listener.
 - `redeven:internal/localui/http_security.go` - Derives exact actual public authorities.
 - `redeven:internal/localui/localui.go` - Issues one-shot v3 artifacts and binds accepted sessions.

@@ -705,6 +705,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		return err
 	}
 	runtimeControl.accessLayout = &accessLayout
+	runtimeControl.accessCertificateFingerprint = deviceIdentityServingFingerprint(s.deviceCA)
 	runtimeControl.accessCurrent = config.EnvironmentCatalogAccess{
 		LocalUIBind: s.bind.ListenLabel(), LocalUIProtocol: s.protocol, LocalUIPasswordConfigured: s.accessEnabled(),
 	}

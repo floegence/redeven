@@ -1,4 +1,4 @@
-import { manageDesktopCertificate, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart } from './desktopCertificate';
+import { certificateCommandArguments, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
 import { DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest, parseDesktopCertificateReport, type DesktopCertificateRequest, type DesktopCertificateReport } from '../shared/desktopCertificate';
 import { DesktopTemplateSources } from './templateSources';
 import { TEMPLATE_SOURCE_ACQUIRE_CHANNEL, TEMPLATE_SOURCE_CANCEL_CHANNEL } from '../shared/desktopTemplateSources';
@@ -5065,7 +5065,7 @@ const runtimeAccessSettingsByTargetID = new Map<string, RuntimeAccessSettings>()
 
 const certificateOperations = new Map<string, Promise<DesktopCertificateReport>>();
 
-async function manageEnvironmentCertificate(request: DesktopCertificateRequest): Promise<DesktopCertificateReport> {
+async function manageEnvironmentCertificate(request: DesktopCertificateRequest, parent?: BrowserWindow, bind?: string): Promise<DesktopCertificateReport> {
   const preferences = await loadDesktopPreferencesCached();
   const managed = preferences.saved_runtime_targets.some((target) => target.id === request.environment_id);
   if (!managed && (request.environment_id !== preferences.local_environment.id || !desktopPlatformCapabilities.native_host_runtime)) {
@@ -5075,14 +5075,45 @@ async function manageEnvironmentCertificate(request: DesktopCertificateRequest):
     throw new Error('Server certificate trust must be configured on each client.');
   }
   const pending = certificateOperations.get(request.environment_id);
-  if (pending) return pending;
-  const operation = managed
-    ? performDesktopCertificateOperation(async (command) => parseDesktopCertificateReport(
-      await runManagedRuntimeAuthority(request.environment_id, ['device-ca', command])), request.operation, false)
-    : manageDesktopCertificate(bundledRuntimeExecutablePath(), localEnvironmentStateRoot(), request.operation);
+  if (pending) {
+    if (request.operation !== 'status') return pending;
+    await pending;
+  }
+  const operation = performDesktopCertificateOperation(async (command) => {
+    let input: CertificateImport | undefined;
+    if (command === 'import') {
+      if (!parent || parent.isDestroyed()) throw new Error('Certificate import requires an open settings window.');
+      const i18n = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale);
+      input = await selectDesktopCertificateImport(async (kind) => {
+        if (parent.isDestroyed()) return undefined;
+        const result = await dialog.showOpenDialog(parent, {
+          title: i18n.t(kind === 'certificate' ? 'settings.certificateSelectFile' : 'settings.certificateSelectKey'),
+          properties: ['openFile'], filters: [{ name: 'PEM', extensions: kind === 'certificate' ? ['pem', 'crt', 'cer'] : ['pem', 'key'] }],
+        });
+        return result.canceled ? undefined : result.filePaths[0];
+      });
+      if (!input || parent.isDestroyed()) return { status: 'canceled', code: 'local_ui_certificate_selection_canceled' };
+    }
+    const run = async (verifyBind?: string) => managed
+      ? parseDesktopCertificateReport(await runManagedRuntimeAuthority(request.environment_id, certificateCommandArguments(command, verifyBind), input))
+      : runDesktopCertificateCommand(bundledRuntimeExecutablePath(), localEnvironmentStateRoot(), command, input, verifyBind);
+    const report = await run();
+    // Older epoch 18 runtimes support only generated CAs and have no --bind flag.
+    // Explicit server imports and bind verification ship as one advertised capability.
+    return command === 'status' && bind && report.can_manage ? run(bind) : report;
+  }, request.operation, !managed && (process.platform === 'darwin' || process.platform === 'win32'));
   if (request.operation === 'status') return operation;
   certificateOperations.set(request.environment_id, operation);
-  try { return await operation; }
+  try {
+    const result = await operation;
+    // The Runtime owns whether saved certificate material differs from its active TLS identity.
+    try {
+      const startup = managed ? (await managedAccessSettingsRecord(request.environment_id))?.startup : await nativeAccessSettingsStartup();
+      if (startup?.runtime_control) runtimeAccessSettingsByTargetID.set(request.environment_id, await getRuntimeAccessSettings(startup.runtime_control));
+      broadcastDesktopWelcomeSnapshots();
+    } catch { /* A stopped or unreachable Runtime refreshes its state on the next settings open. */ }
+    return result;
+  }
   finally { if (certificateOperations.get(request.environment_id) === operation) certificateOperations.delete(request.environment_id); }
 }
 
@@ -5125,6 +5156,18 @@ async function runManagedRuntimeAuthority(environmentID: string, command: readon
       ? containerRuntimeExecCommand({ engine: target.placement.container_engine, container_id: target.placement.container_id, argv }) : argv,
     { stdinData: input === undefined ? undefined : Buffer.from(JSON.stringify(input)), timeout_ms: 30_000 });
     return JSON.parse(result.stdout);
+  } catch (error) {
+    if (command[0] === 'device-ca' && isDesktopOperationFailureError(error)) {
+      const stderr = error.presentation.diagnostics?.find((item) => item.channel === 'stderr')?.text;
+      if (stderr) {
+        try {
+          const report: unknown = JSON.parse(stderr);
+          parseDesktopCertificateReport(report);
+          return report;
+        } catch { /* Preserve transport failures when no structured maintenance report was returned. */ }
+      }
+    }
+    throw error;
   } finally { await executor.release(); }
 }
 
@@ -15252,7 +15295,7 @@ async function executeDirectManagedEnvironmentLifecycle(
         ? localEnvironmentAccess(preferences.local_environment)
         : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(input.environment_id, ['access', 'get']));
       await requireHTTPSCertificateBeforeRestart(access?.local_ui_protocol,
-        (operation) => manageEnvironmentCertificate({ environment_id: input.environment_id, operation }));
+        (operation) => manageEnvironmentCertificate({ environment_id: input.environment_id, operation }, undefined, access?.local_ui_bind));
     }
     const closeOwnedSessions = async (): Promise<void> => {
       if (input.operation === 'start') {
@@ -18183,7 +18226,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
       throw new Error('Certificate management requires the Desktop settings window.');
     }
-    return manageEnvironmentCertificate(parseDesktopCertificateRequest(request));
+    return manageEnvironmentCertificate(parseDesktopCertificateRequest(request), BrowserWindow.fromWebContents(event.sender) ?? undefined);
   });
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {
     try {

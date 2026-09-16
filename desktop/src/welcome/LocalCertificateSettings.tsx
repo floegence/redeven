@@ -1,7 +1,7 @@
-import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
-import { AlertCircle, Check, ChevronDown, Copy, FileText, Info, Lock, Refresh, ShieldCheck } from '@floegence/floe-webapp-core/icons';
+import { Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from 'solid-js';
+import { AlertCircle, Check, ChevronDown, Copy, FileText, Info, Lock, Refresh, ShieldCheck, Trash, Upload } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { desktopCertificateIdentity, type DesktopCertificateOperation, type DesktopCertificateReport, type DesktopCertificateRequest } from '../shared/desktopCertificate';
+import { desktopCertificateIdentity, isCertificateReplacement, type DesktopCertificateOperation, type DesktopCertificateReport, type DesktopCertificateRequest } from '../shared/desktopCertificate';
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
 
 export function LocalCertificateSettings(props: Readonly<{
@@ -17,7 +17,20 @@ export function LocalCertificateSettings(props: Readonly<{
   const [queryFailed, setQueryFailed] = createSignal(false);
   const [copying, setCopying] = createSignal(false);
   const [copyFailed, setCopyFailed] = createSignal(false);
+  const [managing, setManaging] = createSignal(false);
+  const [confirmation, setConfirmation] = createSignal<'import' | 'regenerate' | 'remove'>();
+  const managementID = createUniqueId();
+  let manageButton: HTMLButtonElement | undefined;
+  let cancelButton: HTMLButtonElement | undefined;
   let revision = 0;
+  function choose(action: 'import' | 'regenerate' | 'remove'): void {
+    setConfirmation(action);
+    queueMicrotask(() => cancelButton?.focus());
+  }
+  function cancelConfirmation(): void {
+    setConfirmation(undefined);
+    manageButton?.focus();
+  }
   onCleanup(() => { revision += 1; });
   const identity = () => queryFailed() ? 'unknown' : desktopCertificateIdentity(report());
   const invalid = () => ['invalid', 'expired', 'not_yet_valid'].includes(identity());
@@ -31,9 +44,11 @@ export function LocalCertificateSettings(props: Readonly<{
     setQueryFailed(false);
     props.onReadiness(false);
     try {
-      const result = await props.manage({ environment_id: environmentID, operation: action });
+      const result = await props.manage({ environment_id: environmentID, operation: action, ...(isCertificateReplacement(action) ? { confirmed: true } : {}) });
       if (revision !== requestRevision || props.environmentID !== environmentID) return;
       setReport(result);
+      setConfirmation(undefined);
+      if (isCertificateReplacement(action)) queueMicrotask(() => manageButton?.focus({ preventScroll: true }));
       setQueryFailed(result.status === 'failed' && (action === 'status' || result.failure_stage === 'status' || result.failure_stage === 'verify')
         && !['local_ui_device_ca_untrusted', 'local_ui_device_ca_missing', 'local_ui_device_ca_invalid', 'local_ui_device_ca_expired', 'local_ui_device_ca_not_yet_valid'].includes(result.code));
     } catch {
@@ -53,6 +68,8 @@ export function LocalCertificateSettings(props: Readonly<{
   createEffect(on(environmentID, (id) => {
     revision += 1;
     setCopyFailed(false);
+    setManaging(false);
+    setConfirmation(undefined);
     setReport(undefined);
     setOperation(undefined);
     setQueryFailed(false);
@@ -77,13 +94,16 @@ export function LocalCertificateSettings(props: Readonly<{
       case 'local_ui_device_ca_install_canceled': return 'settings.certificateCanceled';
       case 'local_ui_device_ca_install_failed': return 'settings.certificateInstallFailed';
       case 'local_ui_device_ca_trust_not_confirmed': return 'settings.certificateTrustNotConfirmed';
+      case 'local_ui_certificate_upgrade_required': return 'settings.certificateUpgradeRequired';
       case 'local_ui_device_ca_busy': return 'settings.certificateBusy';
       default: return 'settings.certificateOperationFailed';
     }
   };
-  const canInstall = () => !props.remote && report()?.can_install === true;
+  const canInstall = () => !props.remote && report()?.can_install === true && report()?.certificate_kind !== 'server';
   const canceled = () => report()?.code === 'local_ui_device_ca_install_canceled';
-  const showFailure = () => !operation() && (queryFailed() || failed() && !invalid() && identity() !== 'missing');
+  const showFailure = () => !operation() && (queryFailed() || failed() && (isCertificateReplacement(report()?.failure_stage) || !invalid() && identity() !== 'missing'));
+  const actionKey = (action: 'import' | 'regenerate' | 'remove'): DesktopTranslationKey => action === 'import' ? 'settings.certificateImport' : action === 'regenerate' ? 'settings.certificateRegenerate' : 'settings.certificateRemove';
+  const confirmationKey = (): DesktopTranslationKey => confirmation() === 'import' ? 'settings.certificateImportHelp' : confirmation() === 'regenerate' ? 'settings.certificateRegenerateHelp' : 'settings.certificateRemoveHelp';
   const validUntil = () => report()?.not_after
     ? props.i18n.t('settings.certificateValidUntil', { date: new Date(report()!.not_after!).toLocaleDateString(props.i18n.locale) })
     : '';
@@ -96,6 +116,7 @@ export function LocalCertificateSettings(props: Readonly<{
     try {
       await props.copyText([
         report()?.certificate_path,
+        report()?.fingerprint,
         validUntil(),
         failed() ? report()?.code : '',
         failed() ? report()?.message : '',
@@ -132,6 +153,13 @@ export function LocalCertificateSettings(props: Readonly<{
             </div>
             <Show when={identity() === 'ready' && validUntil()}><p class="mt-1 text-xs text-muted-foreground">{validUntil()}</p></Show>
           </div>
+          <Show when={report()?.can_manage}>
+            <Button ref={manageButton} size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal" disabled={Boolean(operation())}
+              aria-expanded={managing()} aria-controls={managementID}
+              onClick={() => { setManaging(!managing()); setConfirmation(undefined); }}>
+              {props.i18n.t('settings.certificateManage')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          </Show>
           <Show when={identity() === 'missing'}>
             <Button size="sm" class="h-auto min-h-8 whitespace-normal text-left" disabled={Boolean(operation())}
               loading={operation() === 'setup' || operation() === 'generate'} onClick={() => void perform(canInstall() ? 'setup' : 'generate')}>
@@ -139,6 +167,39 @@ export function LocalCertificateSettings(props: Readonly<{
             </Button>
           </Show>
         </div>
+
+        <Show when={managing()}>
+          <div id={managementID} class="space-y-3 rounded-md bg-background/70 p-3" onKeyDown={(event) => {
+            if (event.key === 'Escape' && !operation()) { event.preventDefault(); event.stopPropagation(); cancelConfirmation(); setManaging(false); }
+          }}>
+            <Show when={!confirmation()} fallback={
+              <div class="space-y-3">
+                <div class="space-y-1.5">
+                  <p class="text-xs font-semibold">{props.i18n.t(actionKey(confirmation()!))}</p>
+                  <p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t(confirmationKey())}</p>
+                </div>
+                <div class="flex flex-wrap justify-end gap-2">
+                  <Button ref={cancelButton} size="sm" variant="ghost" disabled={Boolean(operation())} onClick={cancelConfirmation}>{props.i18n.t('common.cancel')}</Button>
+                  <Button size="sm" variant={confirmation() === 'remove' ? 'destructive' : 'default'} class="h-auto min-h-8 whitespace-normal"
+                    disabled={Boolean(operation())} loading={isCertificateReplacement(operation())} onClick={() => void perform(confirmation()!)}>
+                    {props.i18n.t(confirmation() === 'import' ? 'settings.certificateChooseFiles' : actionKey(confirmation()!))}
+                  </Button>
+                </div>
+              </div>
+            }>
+              <div class="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => choose('import')}><Upload class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.certificateImport')}</Button>
+                <Button size="sm" variant="outline" onClick={() => choose('regenerate')}><Refresh class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.certificateRegenerate')}</Button>
+                <Show when={identity() !== 'missing'}><Button size="sm" variant="ghost" class="text-destructive hover:text-destructive" onClick={() => choose('remove')}><Trash class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.certificateRemove')}</Button></Show>
+              </div>
+              <p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t('settings.certificateManageHelp')}</p>
+            </Show>
+          </div>
+        </Show>
+        <Show when={report()?.status === 'updated' && !operation()}>
+          <p role="status" class="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><Check class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{props.i18n.t(identity() === 'missing' ? 'settings.certificateRemoved' : 'settings.certificateChanged')}</p>
+        </Show>
+        <Show when={report() && report()?.can_manage === false && !operation()}><p class="text-xs text-muted-foreground">{props.i18n.t('settings.certificateUpgradeRequired')}</p></Show>
 
         <Show when={!props.remote && identity() === 'ready'}>
           <div class="flex flex-wrap items-start gap-3 border-t border-border/50 pt-3">
@@ -151,7 +212,7 @@ export function LocalCertificateSettings(props: Readonly<{
                   {props.i18n.t(report()?.trust === 'trusted' ? 'settings.certificateTrusted' : 'settings.certificateUntrusted')}
                 </span>
               </div>
-              <p class="max-w-prose text-xs leading-relaxed text-muted-foreground">{props.i18n.t(canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
+              <p class="max-w-prose text-xs leading-relaxed text-muted-foreground">{props.i18n.t(report()?.certificate_kind === 'server' ? 'settings.certificateServerTrustHelp' : canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
             </div>
             <Show when={canInstall() && report()?.trust !== 'trusted'}>
               <Button size="sm" class="h-auto min-h-8 whitespace-normal text-left" disabled={Boolean(operation())}
@@ -163,7 +224,7 @@ export function LocalCertificateSettings(props: Readonly<{
         </Show>
         <Show when={props.remote}><p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t('settings.remoteCertificateHelp')}</p></Show>
         <Show when={identity() === 'missing' && !props.remote}>
-          <p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t(canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
+          <p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t(report()?.certificate_kind === 'server' ? 'settings.certificateServerTrustHelp' : canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
         </Show>
 
         <Show when={operation() && operation() !== 'status'}>
@@ -199,6 +260,9 @@ export function LocalCertificateSettings(props: Readonly<{
                 <p class="font-medium text-muted-foreground">{props.i18n.t('settings.certificateFile')}</p>
                 <p class="select-text break-all rounded-md bg-background/70 px-3 py-2 font-mono text-[11px] leading-relaxed">{report()?.certificate_path}</p>
               </div>
+            </Show>
+            <Show when={report()?.fingerprint}>
+              <div class="space-y-1.5"><p class="font-medium text-muted-foreground">{props.i18n.t('settings.certificateFingerprint')}</p><p class="select-text break-all font-mono text-[11px] leading-relaxed text-muted-foreground">{report()?.fingerprint}</p></div>
             </Show>
             <Show when={failed()}>
               <div class="space-y-1.5">

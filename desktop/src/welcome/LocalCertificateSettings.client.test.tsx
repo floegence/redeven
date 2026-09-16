@@ -7,8 +7,8 @@ import type { DesktopCertificateReport, DesktopCertificateRequest } from '../sha
 
 const disposers: Array<() => void> = [];
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-const ready: DesktopCertificateReport = { status: 'ready', code: 'local_ui_device_ca_untrusted', identity: 'ready', trust: 'untrusted', can_install: true, certificate_path: '/runtime/device-ca.pem' };
-const missing: DesktopCertificateReport = { status: 'failed', code: 'local_ui_device_ca_missing', identity: 'missing', can_install: true };
+const ready: DesktopCertificateReport = { status: 'ready', code: 'local_ui_device_ca_untrusted', identity: 'ready', trust: 'untrusted', can_manage: true, can_install: true, certificate_path: '/runtime/device-ca.pem' };
+const missing: DesktopCertificateReport = { status: 'failed', code: 'local_ui_device_ca_missing', identity: 'missing', can_manage: true, can_install: true };
 function button(label: string) {
   const found = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === label || el.getAttribute('aria-label') === label);
   if (!found) throw new Error(`Missing button: ${label}`);
@@ -163,6 +163,49 @@ describe('HTTPS certificate configuration', () => {
     mount(async () => ({ ...ready, trust: 'trusted', can_install: false }), true); await settle();
     expect(document.body.textContent).not.toContain('System trust on this device');
     expect(document.body.textContent).not.toContain('Trusted');
-    expect([...document.querySelectorAll('button')].map((el) => el.getAttribute('aria-label') ?? el.textContent?.trim())).toEqual(['Refresh certificate status', 'Copy certificate details']);
+    expect([...document.querySelectorAll('button')].map((el) => el.getAttribute('aria-label') ?? el.textContent?.trim())).toEqual(['Refresh certificate status', 'Manage certificate', 'Copy certificate details']);
+  });
+});
+
+
+describe('explicit certificate management', () => {
+  it.each(['regenerate', 'remove'] as const)('requires confirmation for %s and preserves the environment target', async (operation) => {
+    const manage = vi.fn(async (request: DesktopCertificateRequest) => request.operation === 'status' ? ready : ({ ...(operation === 'remove' ? missing : ready), status: 'updated', code: `local_ui_certificate_${operation}_complete` }));
+    const test = mount(manage); await settle();
+    button('Manage certificate').click();
+    button(operation === 'remove' ? 'Remove certificate' : 'Regenerate certificate').click();
+    expect(manage).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain(operation === 'remove' ? 'Existing system trust entries remain' : 'Clients will need to trust');
+    button('Cancel').click(); expect(manage).toHaveBeenCalledTimes(1);
+    button(operation === 'remove' ? 'Remove certificate' : 'Regenerate certificate').click();
+    button(operation === 'remove' ? 'Remove certificate' : 'Regenerate certificate').click(); await settle();
+    expect(manage).toHaveBeenLastCalledWith({ environment_id: 'local', operation, confirmed: true });
+    expect(test.onReadiness).toHaveBeenLastCalledWith(operation !== 'remove');
+    expect(document.querySelector('[role="status"]')?.textContent).toContain(operation === 'remove' ? 'Certificate removed' : 'Certificate saved');
+  });
+  it('imports through the privileged picker and keeps the current certificate after cancellation', async () => {
+    const manage = vi.fn(async ({ operation }: DesktopCertificateRequest) => operation === 'status' ? ready : { ...ready, status: 'canceled', code: 'local_ui_certificate_selection_canceled' });
+    const test = mount(manage); await settle(); button('Manage certificate').click(); button('Import certificate…').click();
+    expect(document.body.textContent).toContain('matching unencrypted private key');
+    button('Choose PEM files…').click(); await settle();
+    expect(manage).toHaveBeenLastCalledWith({ environment_id: 'local', operation: 'import', confirmed: true });
+    expect(document.querySelector('[role="alert"]')).toBeNull(); expect(test.onReadiness).toHaveBeenLastCalledWith(true);
+  });
+  it('does not label imported server certificates as installable roots', async () => {
+    mount(async () => ({ ...ready, certificate_kind: 'server' })); await settle();
+    expect(document.body.textContent).toContain('issuing CA');
+    expect([...document.querySelectorAll('button')].some((el) => el.textContent?.includes('Trust on this device'))).toBe(false);
+  });
+  it('clears a pending replacement confirmation when switching environments', async () => {
+    const manage=vi.fn(async () => ready); const test=mount(manage); await settle();
+    button('Manage certificate').click(); button('Remove certificate').click();
+    test.setEnvironmentID('server'); await settle();
+    expect(document.body.textContent).not.toContain('Existing system trust entries remain');
+    expect(manage.mock.calls).toHaveLength(2);
+  });
+  it('offers explicit recovery for a damaged identity and displays failed imports even when missing', async () => {
+    const manage=vi.fn(async ({ operation }: DesktopCertificateRequest) => operation==='status' ? { ...missing, identity:'invalid', code:'local_ui_device_ca_invalid' } : { ...missing, status:'failed', code:'local_ui_certificate_import_failed', failure_stage:'import' as const });
+    mount(manage); await settle(); button('Manage certificate').click();button('Import certificate…').click();button('Choose PEM files…').click();await settle();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('could not complete');
   });
 });

@@ -223,3 +223,47 @@ func TestRuntimeAccessKeepImportsOnlyAMissingPasswordVerifier(t *testing.T) {
 		t.Fatalf("keep replaced the server-owned verifier: %v", err)
 	}
 }
+
+func TestRuntimeAccessPendingTracksCertificateUntilRestart(t *testing.T) {
+	layout, err := config.LocalEnvironmentStateLayout(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied, err := SaveRuntimeAccess(layout, RuntimeAccessUpdate{Bind: "localhost:23998", Protocol: "https", PasswordMode: "clear"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, err := GenerateLocalUIDeviceCA(layout.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &runtimeControlServer{token: "management-secret", accessLayout: &layout, accessCurrent: *applied, accessCertificateFingerprint: initial.Fingerprint}
+	check := func(want bool) {
+		t.Helper()
+		r := httptest.NewRequest("GET", "http://127.0.0.1:3000/v2/runtime/access", nil)
+		r.RemoteAddr = "127.0.0.1:1234"
+		r.Header.Set("Authorization", "Bearer management-secret")
+		w := httptest.NewRecorder()
+		s.routes().ServeHTTP(w, r)
+		var response struct {
+			Data struct {
+				Restart bool `json:"restart_required"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || w.Code != 200 || response.Data.Restart != want {
+			t.Fatalf("pending %v: %s", want, w.Body)
+		}
+	}
+	check(false)
+	next, err := RegenerateLocalUIDeviceCA(layout.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(true)
+	s.accessCertificateFingerprint = next.Fingerprint
+	check(false)
+	if _, err := RemoveLocalUICertificate(layout.StateDir); err != nil {
+		t.Fatal(err)
+	}
+	check(true)
+}
