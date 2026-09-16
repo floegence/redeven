@@ -17,6 +17,7 @@ import {
   reconcileEnvironmentLibraryOverlayState,
   selectEnvironmentEndpointOverlayState,
 } from './environmentLibraryOverlayState';
+import { buildEnvironmentCardEndpointsModel } from './viewModel';
 
 describe('environmentLibraryOverlayState', () => {
   it('opens and closes runtime menu state by environment id', () => {
@@ -127,7 +128,7 @@ describe('environmentLibraryOverlayState', () => {
     });
   });
 
-  it('closes an endpoints popover when the environment no longer exposes endpoints', () => {
+  it('keeps an endpoints popover open when a stopped local environment exposes status', () => {
     const local = testLocalEnvironment({
       label: 'Local Environment',
       currentRuntime: null,
@@ -142,7 +143,28 @@ describe('environmentLibraryOverlayState', () => {
     });
     const state = openEnvironmentLibraryOverlayState('endpoints', local.id);
 
-    expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(closedEnvironmentLibraryOverlayState());
+    expect(buildEnvironmentCardEndpointsModel(snapshot.environments.find((entry) => entry.id === local.id)!))
+      .toEqual([expect.objectContaining({ kind: 'status', value: 'Not running' })]);
+    expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(state);
+  });
+
+  it('closes an endpoints popover when the environment no longer exposes endpoints', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        provider_environments: [testProviderEnvironment('https://provider.example.invalid', 'env_demo')],
+      }),
+    });
+    const environment = {
+      ...snapshot.environments.find((entry) => entry.kind === 'provider_environment')!,
+      remote_environment_url: 'https://environment.example.invalid/',
+    };
+    const state = openEnvironmentLibraryOverlayState('endpoints', environment.id);
+    const withoutEndpoint = { ...environment, remote_environment_url: '' };
+
+    expect(buildEnvironmentCardEndpointsModel(environment)).not.toHaveLength(0);
+    expect(reconcileEnvironmentLibraryOverlayState(state, [environment])).toEqual(state);
+    expect(buildEnvironmentCardEndpointsModel(withoutEndpoint)).toEqual([]);
+    expect(reconcileEnvironmentLibraryOverlayState(state, [withoutEndpoint])).toEqual(closedEnvironmentLibraryOverlayState());
   });
 
   it('keeps a guidance overlay open across refresh while the same environment still exposes popover guidance', () => {
