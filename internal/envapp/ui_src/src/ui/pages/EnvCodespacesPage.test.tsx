@@ -53,7 +53,8 @@ const controlplaneMocks = vi.hoisted(() => ({
   mintEnvEntryTicketForApp: vi.fn(),
 }));
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   cn: (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' '),
   useNotification: () => notificationMocks,
 }));

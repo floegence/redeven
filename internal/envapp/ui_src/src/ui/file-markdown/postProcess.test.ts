@@ -232,7 +232,7 @@ describe('file markdown postProcess', () => {
     await Promise.resolve();
 
     expect(writeText).toHaveBeenCalledWith('const value = 1;');
-    expect(root.querySelector('button.fm-code-copy')?.textContent).toBe('Copied');
+    await vi.waitFor(() => expect(root.querySelector('button.fm-code-copy')?.textContent).toBe('Copied'));
     vi.advanceTimersByTime(1500);
     await Promise.resolve();
     expect(root.querySelector('button.fm-code-copy')?.textContent).toBe('Copy');

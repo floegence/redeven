@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';

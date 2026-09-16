@@ -47,7 +47,8 @@ const filePreviewController = {
   xlsxRows: () => [],
 };
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   useNotification: () => ({
     error: notificationErrorMock,
     success: vi.fn(),

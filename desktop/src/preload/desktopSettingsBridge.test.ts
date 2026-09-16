@@ -110,6 +110,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
       'cancel',
       'cancelRuntimeFlowerAttachment',
       'cancelRuntimeFlowerStream',
+      'certificate',
       'commitRuntimeFlowerAttachment',
       'prepareRuntimeFlowerAttachment',
       'previewRuntimeFlowerAttachment',

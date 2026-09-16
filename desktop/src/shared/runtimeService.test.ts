@@ -33,8 +33,8 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the native CodeSpace transport compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(17);
+  it('publishes the independent Runtime client access compatibility window', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(18);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.12.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.12.0');
   });

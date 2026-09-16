@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 const coreDist = fileURLToPath(new URL('./node_modules/@floegence/floe-webapp-core/dist/', import.meta.url));
 
 export default defineConfig({
+  server: { fs: { allow: ['..'] } },
   resolve: {
     conditions: ['browser'], dedupe: ['solid-js'],
     alias: [
@@ -16,7 +17,7 @@ export default defineConfig({
   plugins: [solid({ dev: false, hot: false })],
   test: {
     environment: 'jsdom',
-    include: ['src/welcome/**/*.client.test.tsx'],
+    include: ['src/welcome/**/*.client.test.tsx', '../internal/flower_ui/src/**/*.client.test.ts'],
     maxWorkers: 1,
   },
 });

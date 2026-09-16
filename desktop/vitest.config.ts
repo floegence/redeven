@@ -33,7 +33,7 @@ export default defineConfig({
   ],
   test: {
     environment: 'node',
-    exclude: ['**/node_modules/**', '**/*.client.test.tsx'],
+    exclude: ['**/node_modules/**', '**/*.client.test.{ts,tsx}'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', '../internal/flower_ui/src/**/*.test.ts'],
     maxWorkers: 1,
     testTimeout: 10_000,
