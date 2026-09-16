@@ -1779,7 +1779,7 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 		return "", errors.New("invalid Local UI authority")
 	}
 	if !s.isAllowedNetworkAuthority(r.Host) {
-		return "", errors.New("Local UI endpoint is unavailable")
+		return "", errors.New("local UI endpoint is unavailable")
 	}
 	scheme := "ws"
 	if s.protocol == config.LocalUIProtocolHTTPS {

@@ -102,12 +102,12 @@ func (c *cli) localAuthorityAccessCmd(args []string) int {
 			writeText(c.stderr, err.Error()+"\n")
 			return 1
 		}
-		lock, err := lockfile.Acquire(layout.LockPath)
-		if err != nil {
+		lock, lockErr := lockfile.Acquire(layout.LockPath)
+		if lockErr != nil {
 			writeText(c.stderr, "Stop Runtime before saving access settings through the CLI, or use its authenticated Desktop management connection.\n")
 			return 1
 		}
-		defer lock.Release()
+		defer func() { _ = lock.Release() }()
 		access, err = localui.SaveRuntimeAccess(layout, input)
 	}
 	if err != nil {
