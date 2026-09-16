@@ -105,11 +105,9 @@ func canonicalServiceConfiguration(configuration serviceConfiguration) (string, 
 }
 
 func applyServiceConfiguration(baseline TemplateSpec, configuration serviceConfiguration, templateSource string) (TemplateSpec, error) {
+	baseline = cloneTemplateSpec(baseline)
 	if baseline.Container != nil {
-		normalizeContainerTemplateDefaults(baseline.Container)
-		if configuration.Container != nil {
-			applyContainerOverride(baseline.Container, *configuration.Container)
-		}
+		resolveContainerConfiguration(baseline.Container, configuration.Container)
 	}
 	if baseline.Host != nil && configuration.Host != nil {
 		applyHostOverride(baseline.Host, *configuration.Host)
@@ -126,6 +124,10 @@ func applyServiceConfiguration(baseline TemplateSpec, configuration serviceConfi
 }
 
 func normalizeContainerTemplateDefaults(spec *ContainerTemplateSpec) {
+	resolveContainerConfiguration(spec, nil)
+}
+
+func resolveContainerConfiguration(spec *ContainerTemplateSpec, override *containerSettingsOverride) {
 	if spec == nil {
 		return
 	}
@@ -139,21 +141,34 @@ func normalizeContainerTemplateDefaults(spec *ContainerTemplateSpec) {
 		if spec.PIDsLimit == 0 {
 			spec.PIDsLimit = 2048
 		}
-		if spec.ShmSizeBytes == 0 {
-			spec.ShmSizeBytes = 1024 * 1024 * 1024
+	} else {
+		if spec.PIDsLimit == 0 {
+			spec.PIDsLimit = 512
 		}
+		if len(spec.CapDrop) == 0 {
+			spec.CapDrop = []string{"ALL"}
+		}
+		if len(spec.SecurityOpts) == 0 {
+			spec.SecurityOpts = []string{"no-new-privileges:true"}
+		}
+		spec.ReadOnlyRoot = true
+	}
+	if override != nil {
+		applyContainerOverride(spec, *override)
+	}
+	normalizeContainerSharedMemory(spec, override == nil || override.ShmSizeBytes == nil)
+}
+
+func normalizeContainerSharedMemory(spec *ContainerTemplateSpec, useProfileDefault bool) {
+	// Shared IPC uses the namespace owner's memory. Only a private namespace
+	// receives a default; explicit values remain subject to engine validation.
+	if spec.ShmSizeBytes != 0 || !privateNamespaceMode(spec.IPCMode) {
 		return
 	}
-	if spec.PIDsLimit == 0 {
-		spec.PIDsLimit = 512
+	spec.ShmSizeBytes = 64 * 1024 * 1024
+	if useProfileDefault && spec.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
+		spec.ShmSizeBytes = 1024 * 1024 * 1024
 	}
-	if len(spec.CapDrop) == 0 {
-		spec.CapDrop = []string{"ALL"}
-	}
-	if len(spec.SecurityOpts) == 0 {
-		spec.SecurityOpts = []string{"no-new-privileges:true"}
-	}
-	spec.ReadOnlyRoot = true
 }
 
 func applyContainerOverride(target *ContainerTemplateSpec, override containerSettingsOverride) {
