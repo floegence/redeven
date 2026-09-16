@@ -356,6 +356,7 @@ function runtimeInputRequest(
     prompt_id: trim(interaction.id),
     message_id: identity.turnID,
     tool_id: trim(interaction.id),
+    ...(trim(interaction.tool_call_id) ? { tool_call_id: trim(interaction.tool_call_id) } : {}),
     tool_name: trim(view.items?.find((item) => item.turn_id === interaction.turn_id && item.run_id === interaction.run_id && item.activity?.tool_id === interaction.tool_call_id)?.activity?.tool_name) || 'ask_user',
     required_from_user: questions.map((question) => trim(question.id)).filter(Boolean),
     questions: questions.map((question) => {
@@ -452,6 +453,9 @@ export function applyFlowerRuntimeCurrentView(
     updated_at_ms: base.updated_at_ms,
     status,
     active_run_id: activeRunID || undefined,
+    current_execution: trim(current.turn_id) && trim(current.run_id)
+      ? { turn_id: trim(current.turn_id), run_id: trim(current.run_id), status }
+      : undefined,
     run_progress: runtimeRunProgress(current),
     cancellation: mapFlowerCancellation(current.cancellation, threadID, trim(current.run_id), trim(current.turn_id)),
     approval_pending: approvalCount > 0,

@@ -31,7 +31,7 @@ Welcome and settings display only Runtime-reported public URLs as copyable, shar
 
 Narrow settings windows keep the current URL on its own full-width row, with copy and share actions below it. Translated action labels must not compress the address into a narrow column; the footer remains visible while configuration content scrolls.
 
-Background snapshots update current connection information without resetting the open settings interaction: expanded sections, scroll position, input focus, selection, and unsaved edits remain intact. Certificate state and pending operations belong to the actual Environment ID, not the snapshot object. Only a target change or reopening the certificate section initializes a new check; explicit refresh remains available. Responses from a previous target or closed section are ignored.
+Background snapshots refresh connection details while preserving expanded settings sections, scroll position, input focus, selection and unsaved edits. Certificate state and pending operations belong to the actual Environment ID, not the snapshot object. Only a target change or reopening the certificate section initializes a new check; explicit refresh remains available. Responses from a previous target or closed section are ignored.
 
 Missing saved protocol settings use HTTP on load and startup, including existing Environment catalogs. The connection security control selects HTTP without a confirmation or certificate prompt. Explicit HTTPS remains unchanged. When saving a stopped Environment, Desktop supplies any retained password with `keep` to the Runtime authority. Runtime may establish a missing verifier, but never replaces an existing server password unless the user explicitly chooses replacement.
 

@@ -32,6 +32,26 @@ function receive(
 }
 
 describe('ThreadCache', () => {
+  it('retains presentation but resets process-local ordering at a transport boundary', () => {
+    const before = receive(createThreadCache(), view('a', 27, 'previous pixels'));
+    const reset = before.invalidateRuntimeVersions();
+    expect(reset.views.get('a')?.version).toBe(0);
+    expect(reset.views.get('a')?.thread).toEqual(before.views.get('a')?.thread);
+    expect(reset.views.get('a')?.thread.messages).toBe(before.views.get('a')?.thread.messages);
+    const fresh = receive(reset, view('a', 1, 'restarted runtime'));
+    expect(fresh.views.get('a')?.thread.messages[0].content).toBe('restarted runtime');
+    expect(receive(fresh, view('a', 1, 'duplicate')).views.get('a')?.thread.messages[0].content).toBe('restarted runtime');
+  });
+  it('keeps execution results in accepted canonical detail, never summary refreshes', () => {
+    const stopped = { ...view('a', 4, 'stopped'), thread: { ...thread('a', 4, 'stopped'), current_execution: { turn_id: 'turn-a', run_id: 'run-a', status: 'canceled' as const } } };
+    let cache = receive(createThreadCache(), stopped);
+    cache = cache.replaceSummary({ ...thread('a', 9, 'summary'), current_execution: { turn_id: 'wrong', run_id: 'wrong', status: 'success' } });
+    cache = receive(cache, { ...stopped, version: 3, thread: { ...stopped.thread, current_execution: undefined } });
+    expect(cache.views.get('a')?.thread.current_execution).toEqual(stopped.thread.current_execution);
+    expect(cache.summaries.get('a')?.current_execution).toBeUndefined();
+    cache = receive(cache, { ...stopped, version: 5, thread: { ...stopped.thread, current_execution: { turn_id: 'text-turn', run_id: 'text-run', status: 'running' } } });
+    expect(cache.views.get('a')?.thread.current_execution?.run_id).toBe('text-run');
+  });
   it('uses only the runtime view version to classify detail snapshots', () => {
     const current = view('a', 4, 'current');
     expect(classifyThreadView(undefined, current)).toBe('accepted');

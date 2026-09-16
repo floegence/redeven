@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Computer use safety pauses and user control
 description: Keep sensitive browser input outside model history and resume canonical tool-requested input only after fresh target observation.
 tags: [ai, computer-use, safety, takeover]
-timestamp: 2026-09-15T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
@@ -46,14 +46,12 @@ Floret canonical invocation, matching the terminal view that releases control.
 Uninitialized legacy run fields cannot authorize an action. Failure diagnostics
 record those same canonical identities.
 
-The current resource lease identifies its thread, turn and run. Floret input
-continuation creates a new run within that turn. Binding its canonical execution
-identity advances existing non-user leases before provider work, including a
-text-only continuation; it never acquires an unowned target or returns user
-control. Private commands still match the original pending interaction run. Another thread cannot
-capture or manipulate a leased target. A safe target switch releases the
-previous target; canonical terminal views release only the matching run's lease.
-An old terminal notification cannot release a later run's target.
+Leases identify thread, turn and run. Floret continuation starts a new run in
+the same turn, advancing existing non-user leases before provider work without
+acquiring unowned targets or returning user control. Private commands match the
+original interaction run. Other threads cannot capture or manipulate a leased
+target. Safe target switches release the previous target; terminal views release
+only their matching run, never a later run’s target.
 
 A takeover retains user control even if the page becomes safe. Model actions and
 ordinary live sampling remain blocked until explicit handback. Waiting for the
@@ -64,12 +62,10 @@ canonical provenance before accepting a private command.
 
 ## Browser observation and private input
 
-The Playwright helper examines visible password fields, `one-time-code` input
-semantics, CAPTCHA text and explicit instruction-override signals in each frame.
-An unreadable frame is unknown. It inspects before input, after an action, and
-after capture; an unsafe result discards the captured bytes. These deterministic
-signals are bounded protections, not a claim of complete injection detection or
-atomic observation of all dynamic web content.
+The Playwright helper checks visible password fields, `one-time-code`, CAPTCHA
+and instruction-override signals per frame before input, after actions and after
+capture. Unreadable frames are unknown; unsafe captures are discarded. These
+bounded checks do not claim complete injection detection or atomic observation.
 
 The authenticated `POST /_redeven_proxy/api/ai/computer/input` accepts bounded
 click/type/key/scroll commands and returns only an acknowledgement. It requires
@@ -94,13 +90,10 @@ returned control. Unsafe handback returns `computer_control_not_ready`; Flower
 keeps the original interaction and explains inline that sign-in or verification
 still needs completion. It resumes private viewing without replaying actions.
 
-Flower presents localized takeover/handback controls in the input card.
-A compact status heading and muted explanation introduce the control card.
-Recoverable validation appears in an inline notice. One footer places Stop on
-the left and content-sized takeover/handback buttons on the right, wrapping on
-narrow surfaces without a second action strip. Computer input has one handback action; the generic question Continue
-button is not shown. The ordinary Stop control remains available while waiting
-for the user and preserves the same cancellation contract as active execution.
+The localized input card has a compact status heading, muted explanation and
+inline validation notice. Its wrapping footer groups Stop on the left and
+content-sized takeover/handback buttons on the right. Handback replaces the
+generic question Continue action. Stop retains ordinary canonical cancellation.
 Explicit takeover opens the media-only Stage. Keyboard and pointer actions go to the
 private endpoint; only the acknowledgement goes through `submitInput`. Images
 are decoded before replacement and Blob URLs are retired on disposal. Failed
@@ -113,12 +106,21 @@ the carrier is cleared immediately after submission or a control-owner change.
 Non-text keys use the same ordered private queue. The image itself is not a
 text editor and synthetic composition events do not qualify IME support.
 A full command queue reports control failure and discards unsent input instead
-of silently losing characters. Explicit frame recovery is required before further
-input after a failure. Hiding the image stops sampling but preserves user ownership; reopening rechecks
-canonical authority. Closing the image hides it; neither a later Activity nor
-an in-flight private response reopens it. Explicit takeover or the Activity
-viewer action opens it again. Selecting another thread resets viewer visibility;
-ending the turn uses the existing Stop behavior.
+of silently losing characters. Failed viewing requires explicit recovery before
+further input. Hiding stops sampling, preserves target ownership and does not
+allow late results to reopen the window. Reopening rechecks canonical authority.
+
+A workspace connection boundary immediately disables private input, discards
+unsent commands, invalidates the observer/viewer revision and rejects late frames.
+The same interface retains its last decoded image with Connection lost. A new
+`ready` never resumes private control. Resume control explicitly authorizes the
+latest interaction and observer; only a matching newly decoded private frame
+reenables input. An ended interaction collapses the viewer. Closing or switching
+threads during recovery cancels decoding and prevents reopening. A new client
+shows Waiting for you to take control; it does not infer Runtime restart. No
+navigation, page restoration, or private input is replayed. Ordinary preview
+reconnection never grants private input. Historical display and terminal collapse
+follow the [media contract](computer-use-media.md).
 
 The Runtime's canonical target lease is the authority for admitting another
 turn. Browser requests carry a host-derived thread/turn session hash, stable
@@ -131,12 +133,9 @@ and are never closed or replaced by this managed-page recovery.
 
 # Boundaries
 
-Service tests cover pause, private input, rejected stale input, handback,
-re-observation, a real resumed screenshot tool, no action replay and restart using production tool registration
-and Floret runtime. Browser helper fixtures cover login, OTP, CAPTCHA, injection
-and framed login independently, plus a real user form submission and explicit
-return. Browser UI tests verify decoded user pixels and separation from chat
-submission. These are separate from built Desktop/DeepSeek qualification.
+Service/browser fixtures cover pause, private and stale input, handback, safety,
+no replay and restart. UI tests cover decoded pixels and separation from chat.
+Built Desktop acceptance follows the [qualification contract](computer-use-qualification.md).
 
 Native Accessibility safety, complete app/window takeover, extension-authorized
 Chrome, remote input and full live-view qualification remain unaccepted until

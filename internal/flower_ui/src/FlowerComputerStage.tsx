@@ -5,12 +5,12 @@ import { MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
 
 import { FloatingWindow, SurfaceFloatingPanel } from '@floegence/floe-webapp-core/ui';
 
-import type { FlowerActivityItem, FlowerChatMessage, FlowerComputerInputCommand, FlowerComputerFrameSource, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerComputerInputCommand, FlowerComputerFrameSource, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 
 export type FlowerComputerStageSnapshot = Readonly<{
   item: FlowerActivityItem;
   runID?: string;
-  messageStatus?: FlowerChatMessage['status'];
+  turnID?: string;
   targetID?: string;
   target: string;
   action: string;
@@ -31,13 +31,14 @@ export type FlowerComputerStageCopy = Readonly<{
   move: string;
   noFrame: string;
   retry: string;
+  resumeControl: string;
   frameRate: string;
   frameRateHint: string;
   receivedFrameRate: string;
   state: Readonly<Record<FlowerComputerStageSessionState, string>>;
 }>;
 
-export type FlowerComputerStageSessionState = 'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'returning_control' | 'paused';
+export type FlowerComputerStageSessionState = 'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'returning_control' | 'paused' | 'historical' | 'stopped' | 'disconnected' | 'awaiting_control';
 
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;
@@ -46,7 +47,8 @@ export type FlowerComputerStageProps = Readonly<{
   frameRate?: number;
   receivedFrameRate?: number;
   onFrameRateChange?: (fps: number) => void;
-  onFrameReady?: () => void;
+  onFrameReady?: (frame: FlowerComputerFrameSource) => void;
+  historical?: boolean;
   onFrameError?: () => void;
   onRetry?: () => void;
   onInput?: (input: FlowerComputerInputCommand) => void;
@@ -121,7 +123,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           currentURL = nextURL;
           setResolvedURL(nextURL); setFailed(false);
           if (previous) URL.revokeObjectURL(previous);
-          props.onFrameReady?.();
+          props.onFrameReady?.(frame);
         } catch {
           if (!request.signal.aborted && generation === frameGeneration && !pendingFrame) { setFailed(true); props.onFrameError?.(); }
         }
@@ -172,15 +174,15 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         boundary={props.boundary} compactBelow={560} viewportInsets={{ top: 12, right: 12, bottom: 12, left: 12 }}
         labels={{ close: props.copy.close, maximize: props.copy.maximize, restore: props.copy.restoreSize }}
         headerActions={<div class="flower-computer-header-actions">
-          <span class="flower-computer-state" data-session-state={props.sessionState}>{props.copy.state[props.sessionState]}</span>
-          <label class="flower-computer-frame-rate" title={`${props.copy.frameRateHint}\n${props.copy.receivedFrameRate.replace('{fps}', String(props.receivedFrameRate ?? 0))}`}>
+          <Show when={props.sessionState !== 'historical'}><span class="flower-computer-state" data-session-state={props.sessionState}>{props.copy.state[props.sessionState]}</span></Show>
+          <Show when={!props.historical}><label class="flower-computer-frame-rate" title={`${props.copy.frameRateHint}\n${props.copy.receivedFrameRate.replace('{fps}', String(props.receivedFrameRate ?? 0))}`}>
             <span class="sr-only">{props.copy.frameRate}</span>
             <select aria-label={props.copy.frameRate} aria-description={`${props.copy.frameRateHint} ${props.copy.receivedFrameRate.replace('{fps}', String(props.receivedFrameRate ?? 0))}`} value={props.frameRate ?? 3} onChange={(event) => props.onFrameRateChange?.(Number(event.currentTarget.value))}
               onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
               {COMPUTER_FRAME_RATES.map(fps => <option value={fps}>{fps} FPS</option>)}
             </select>
-          </label>
-          <Show when={props.sessionState === 'paused'}><button type="button" aria-label={props.copy.retry} title={props.copy.retry} onClick={retryFrames}><Refresh class="h-4 w-4" /></button></Show>
+          </label></Show>
+          <Show when={props.sessionState === 'paused' || props.sessionState === 'disconnected'}><button type="button" aria-label={props.sessionState === 'disconnected' ? props.copy.resumeControl : props.copy.retry} title={props.sessionState === 'disconnected' ? props.copy.resumeControl : props.copy.retry} onClick={retryFrames}><Refresh class="h-4 w-4" /></button></Show>
         </div>}
         footer={<Show when={!props.onInput && resolvedURL()}><button type="button" class="flower-computer-zoom" aria-pressed={actualSize()}
           onClick={() => setActualSize(value => !value)}>{actualSize() ? props.copy.zoomOut : props.copy.zoomIn}</button></Show>}
@@ -250,7 +252,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
       </Show>
     </div>
     </FloatingWindow>
-      <SurfaceFloatingPanel
+      <Show when={!props.historical}><SurfaceFloatingPanel
         boundary={props.boundary}
         class={`flower-computer-viewer-minimized${props.open ? ' flower-computer-viewer-minimized-hidden' : ''}`}
         aria-hidden={props.open ? 'true' : undefined}
@@ -276,7 +278,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
             <span aria-hidden="true"><MonitorPointer class="flower-computer-stage-ball-icon" size={20} /></span>
           </button>
         )}
-      </SurfaceFloatingPanel>
+      </SurfaceFloatingPanel></Show>
     </>}
   </Show>
   );

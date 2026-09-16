@@ -12,6 +12,15 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('retains canonical terminal execution identity without deriving it from a successful tool', () => {
+    const view: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 2, turn_id: 'turn-a', run_id: 'run-a', activity: 'idle', last_outcome: 'cancelled' };
+    const stopped = applyFlowerRuntimeCurrentView(summary(), view);
+    expect(stopped.active_run_id).toBeUndefined();
+    expect(stopped.current_execution).toEqual({ turn_id: 'turn-a', run_id: 'run-a', status: 'canceled' });
+    const next = applyFlowerRuntimeCurrentView(stopped, { ...view, view_version: 3, turn_id: 'turn-text', run_id: 'run-text', activity: 'active', last_outcome: undefined, run_progress: { phase: 'tool_execution' } });
+    expect(next.current_execution).toEqual({ turn_id: 'turn-text', run_id: 'run-text', status: 'running' });
+    expect(applyFlowerRuntimeCurrentView(stopped, { thread_id: 'thread-a', view_version: 4, activity: 'idle' }).current_execution).toBeUndefined();
+  });
   it('normalizes legacy choices to explicit submitted values', () => {
     const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 1, activity: 'active', turn_id: 'turn-a', run_id: 'run-a', interactions: [{
       id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', input: { summary: '', questions: [{ id: 'q', kind: 'select', prompt: 'Choose', options: ['Stable'] }] },

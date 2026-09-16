@@ -373,13 +373,15 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerBlockedTitle: string;
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
+    computerViewLastScreenshot: string;
+    computerResumeControl: string;
     computerStageTitle: string;
     computerStageMaximize: string;
     computerStageRestoreSize: string;
     computerStageZoomIn: string;
     computerStageZoomOut: string;
     computerStageRestore: string;
-    computerStageStatus: Readonly<Record<'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'returning_control' | 'paused', string>>;
+    computerStageStatus: Readonly<Record<'running' | 'awaiting_user' | 'completed' | 'failed' | 'taking_control' | 'user_control' | 'returning_control' | 'paused' | 'historical' | 'stopped' | 'disconnected' | 'awaiting_control', string>>;
     computerStageMove: string;
     computerStageClose: string;
     handlerRetry: string;
@@ -688,6 +690,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',
+    computerViewLastScreenshot: "View last screenshot",
+    computerResumeControl: "Resume control",
     computerStageTitle: "Computer",
     computerStageMaximize: "Maximize viewer",
     computerStageRestoreSize: "Restore viewer size",
@@ -695,6 +699,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     computerStageZoomOut: "Fit to window",
     computerStageRestore: "Restore viewer",
     computerStageStatus: {
+      awaiting_control: "Waiting for you to take control",
+      historical: "Historical screenshot",
+      stopped: "Computer task stopped",
+      disconnected: "Connection lost",
       taking_control: "Taking control\u2026",
       user_control: "You are controlling",
       returning_control: "Returning control\u2026",

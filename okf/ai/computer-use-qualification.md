@@ -113,6 +113,13 @@ Google verification is an optional human check, never an automated dependency.
 Private user pixels and input must stay out of logs and retained evidence;
 synthetic fixture outcomes may be recorded without their input or image bytes.
 
+Restart and history checks use a task-owned built Desktop and Runtime with a
+local verification fixture. Cover fresh-client waiting, explicit takeover,
+Runtime disconnect and resume after new decoded pixels, terminal collapse,
+historical entry and narrow layout. Restart must not navigate or replay input.
+Browser tests separately inject late decoding, expired interactions and queued
+commands to verify close, selection and connection boundaries deterministically.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs` - Built Desktop and Linux scenarios with actual provider and pixel evidence.

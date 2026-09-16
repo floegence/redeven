@@ -157,7 +157,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   RadioGroup: actual.RadioGroup,
   RadioOption: actual.RadioOption,
   Button: (props: any) => {
-    if (props.class?.includes('flower-composer-approval-decision')) return <Dynamic component={actual.Button} {...props} />;
+    if (props.class?.includes('flower-composer-approval-decision') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
     return (
       <button
         type={props.type ?? "button"}
@@ -183,6 +183,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     );
   },
   FloatingWindow: (props: any) => {
+    if (props.class === 'flower-computer-stage') return <Dynamic component={actual.FloatingWindow} {...props} />;
     const presence = actual.createFloatingPresence({
       open: () => Boolean(props.open),
       exitDurationMs: 0,

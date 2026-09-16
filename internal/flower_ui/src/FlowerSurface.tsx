@@ -1355,6 +1355,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 	const selectedThreadSummaryNeedsDetail = createMemo(() => (
 		threadSummaryNeedsDetail(selectedThreadSummary(), selectedThread() ?? undefined)
+      || (Boolean(computerObserverID()) && threadCache().views.get(selectedThreadID())?.version === 0)
 	));
 	const selectedThreadTerminalSyncing = createMemo(() => {
 		const summary = selectedThreadSummary();
@@ -2079,8 +2080,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const previousSnapshot = snapshot();
     setPendingModelPatch({ threadID, requested: mid, previous });
     try {
+      const requestEpoch = liveTransport.connectionEpoch();
       const live = await props.adapter.setThreadModel(threadID, mid);
-      const updated = receiveThreadView(live, 'user_action').thread;
+      const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
       if (persistsRemoteDefault) {
         applyPersistedDefaultModelLocally(mid);
         try {
@@ -2121,8 +2123,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (sameFlowerReasoningSelection(previous, normalized)) return;
     setPendingReasoningThreadIDs((current) => new Set(current).add(threadID));
     try {
+      const requestEpoch = liveTransport.connectionEpoch();
       const live = await props.adapter.setThreadReasoningSelection(threadID, normalized);
-      const updated = receiveThreadView(live, 'user_action').thread;
+      const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
       }
@@ -2161,8 +2164,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (previous === permissionType) return;
     setPendingPermissionPatch({ threadID, requested: permissionType, previous });
     try {
+      const requestEpoch = liveTransport.connectionEpoch();
       const live = await props.adapter.setThreadPermissionType(threadID, permissionType);
-      const updated = receiveThreadView(live, 'user_action').thread;
+      const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
       }
@@ -3269,8 +3273,13 @@ webSearch: model.web_search,
 
   const receiveThreadView = (
     live: FlowerThreadView,
-    source: ThreadDetailSource = 'background_refresh',
+    source: ThreadDetailSource,
+    requestEpoch: number,
   ): ThreadDetailReceiveResult => {
+    if (requestEpoch !== liveTransport.connectionEpoch()) return {
+      state: 'stale', runtimeState: 'stale', activityState: 'stale', settingsState: 'stale',
+      thread: threadCache().views.get(live.thread.thread_id)?.thread ?? live.thread,
+    };
     // Validate the complete presentation contract before this view can enter
     // the cache. Rendering must never be the first place malformed history is
     // discovered.
@@ -3354,9 +3363,10 @@ webSearch: model.web_search,
     }
     const sequence = ++queuedTurnReorderSequence;
     setQueuedTurnReorder(null);
+    const requestEpoch = liveTransport.connectionEpoch();
     void props.adapter.reorderQueuedTurns(reorder.threadID, reorder.orderedQueueIDs).then((live) => {
       if (sequence !== queuedTurnReorderSequence) return;
-      receiveThreadView(live, 'user_action');
+      receiveThreadView(live, 'user_action', requestEpoch);
     }).catch((error) => {
       if (sequence !== queuedTurnReorderSequence) return;
       notifyThreadActionError(getErrorMessage(error));
@@ -3375,10 +3385,14 @@ webSearch: model.web_search,
     ) return;
     setQueuedTurnReorder(null);
     try {
-      receiveThreadView(await props.adapter.deleteQueuedTurn(threadID, queueID), 'user_action');
+      const requestEpoch = liveTransport.connectionEpoch();
+      const live = await props.adapter.deleteQueuedTurn(threadID, queueID);
+      receiveThreadView(live, 'user_action', requestEpoch);
     } catch (error) {
       try {
-        receiveThreadView(await props.adapter.loadThread(threadID), 'background_refresh');
+        const requestEpoch = liveTransport.connectionEpoch();
+        const live = await props.adapter.loadThread(threadID);
+        receiveThreadView(live, 'background_refresh', requestEpoch);
       } catch (recoveryError) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'background_refresh', recoveryError);
       }
@@ -3398,7 +3412,9 @@ webSearch: model.web_search,
     scrollTranscriptToBottom({ smooth: false });
     requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
     try {
-	  receiveThreadView(await props.adapter.promoteQueuedTurn(threadID, queueID), 'user_action');
+	  const requestEpoch = liveTransport.connectionEpoch();
+	  const live = await props.adapter.promoteQueuedTurn(threadID, queueID);
+	  receiveThreadView(live, 'user_action', requestEpoch);
       requestComposerFocus();
     } catch (error) {
       notifyThreadActionError(getErrorMessage(error));
@@ -3466,9 +3482,10 @@ webSearch: model.web_search,
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid) || tid !== selectedThreadID()) return Promise.resolve();
     const state = threadDetailLoadState(tid);
-    const detail = threadCache().views.get(tid)?.thread;
+    const cached = threadCache().views.get(tid);
+    const detail = cached?.thread;
     const summary = threadCache().summaries.get(tid);
-    if (!force && detail && !threadSummaryNeedsDetail(summary, detail)) return Promise.resolve();
+    if (!force && cached?.version && detail && !threadSummaryNeedsDetail(summary, detail)) return Promise.resolve();
 
     const target: ThreadDetailLoadTarget = {
       cycle: state.cycle,
@@ -3488,6 +3505,7 @@ webSearch: model.web_search,
 
     setThreadDetailLoading(tid, true);
     state.inFlightTarget = target;
+    const requestEpoch = liveTransport.connectionEpoch();
     const request = (async () => {
       try {
         const live = await Promise.resolve().then(() => props.adapter.loadThread(tid));
@@ -3495,9 +3513,11 @@ webSearch: model.web_search,
           surfaceDisposed
           || retiredThreadIDs.has(tid)
           || target.sequence !== threadLoadSequence
+          || target.cycle !== state.cycle
+          || requestEpoch !== liveTransport.connectionEpoch()
           || selectedThreadID() !== tid
         ) return;
-        const result = receiveThreadView(live, source);
+        const result = receiveThreadView(live, source, requestEpoch);
         state.failedTarget = null;
         const latestSummary = threadCache().summaries.get(tid);
         if (threadSummaryNeedsDetail(latestSummary, result.thread)) {
@@ -3524,6 +3544,7 @@ webSearch: model.web_search,
           }
         }
       } catch (error) {
+        if (requestEpoch !== liveTransport.connectionEpoch()) return;
         if (target.cycle === state.cycle) state.failedTarget = target;
         reportThreadDetailDiagnostic(tid, 'request_or_mapping', source, error);
         if (target.cycle === state.cycle && selectedThreadID() === tid) {
@@ -3743,7 +3764,9 @@ webSearch: model.web_search,
     setRenameSaving(true);
     setRenameError('');
     try {
-      receiveThreadView(await props.adapter.renameThread(threadID, renameDraft()), 'user_action');
+      const requestEpoch = liveTransport.connectionEpoch();
+      const live = await props.adapter.renameThread(threadID, renameDraft());
+      receiveThreadView(live, 'user_action', requestEpoch);
       setRenameThreadID('');
       setRenameDraft('');
       renameRestoreRef?.focus();
@@ -3885,8 +3908,9 @@ webSearch: model.web_search,
             applyOptimisticPinnedState(threadID, pinned);
             setThreadActionBusy({ threadID, action });
             try {
+              const requestEpoch = liveTransport.connectionEpoch();
               const live = await props.adapter.setThreadPinned(threadID, pinned);
-              if (live) receiveThreadView(live, 'user_action');
+              if (live) receiveThreadView(live, 'user_action', requestEpoch);
               if (pinMutationSequences.get(threadID) === sequence) {
                 pinMutationSequences.delete(threadID);
               }
@@ -4361,9 +4385,9 @@ webSearch: model.web_search,
     return true;
   };
 
-  const applyAcceptedTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt): void => {
+  const applyAcceptedTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt, requestEpoch: number): void => {
     const entry = transportOutbox().entries.get(trimString(receipt.client_request_id));
-    if (receipt.current) {
+    if (receipt.current && requestEpoch === liveTransport.connectionEpoch()) {
       applyRuntimeCurrent(
         receipt.current,
         undefined,
@@ -4399,12 +4423,13 @@ webSearch: model.web_search,
 				});
 			}
 			outboxResendInFlight.add(entry.requestId);
+			const requestEpoch = liveTransport.connectionEpoch();
 			void props.adapter.launchTurn(entry.input).then((receipt) => {
 				outboxRetryAttempts.delete(entry.requestId);
 				const retryTimer = outboxRetryTimers.get(entry.requestId);
 				if (retryTimer !== undefined) clearTimeout(retryTimer);
 				outboxRetryTimers.delete(entry.requestId);
-				applyAcceptedTurnLaunchReceipt(receipt);
+				applyAcceptedTurnLaunchReceipt(receipt, requestEpoch);
 			}).catch((error) => {
                 if (error && typeof error === 'object' && error.code === 'AI_STORAGE_RESTORED') {
                     pendingAdmissionHandoffs.delete(entry.requestId);
@@ -4476,7 +4501,8 @@ webSearch: model.web_search,
         }
       }
       if (selectedID) {
-        void requestThreadDetail(selectedID, 'summary_update');
+        if (envelope.kind === 'ready') beginThreadDetailDisplayCycle(selectedID);
+        void requestThreadDetail(selectedID, 'summary_update', envelope.kind === 'ready');
       }
       if (envelope.kind === 'ready' && flowerLiveReadyCount > 1 && activeSubagentDetail()) {
         void refreshActiveSubagentDetail();
@@ -4578,7 +4604,15 @@ webSearch: model.web_search,
     const stop = liveTransport.start({
       connect,
       onCurrent: frames.push,
-      onBoundary: () => { frames.boundary(); setComputerObserverID(''); setComputerLiveFrame(undefined); },
+      onBoundary: () => {
+        frames.boundary();
+        setThreadCache(cache => cache.invalidateRuntimeVersions());
+        if (untrack(privateControlRequested)) setComputerControlDisconnected(true);
+        computerInputGeneration++; queuedComputerText = undefined;
+        setComputerControlReady(false);
+        setActiveComputerViewerRevision(++computerViewerRevision);
+        setComputerObserverID(''); setComputerLiveFrame(undefined);
+      },
       onTerminalError: (error) => setThreadLoadError(threadDetailUserError(error)),
     });
     onCleanup(() => { frames.dispose(); stop(); });
@@ -5186,6 +5220,7 @@ webSearch: model.web_search,
         // The original command and recovery resend share one request-id fence.
         // Otherwise persisting the outbox entry can immediately trigger a
         // duplicate send before this command has returned its current view.
+        const requestEpoch = liveTransport.connectionEpoch();
         const returnedReceipt = await props.adapter.launchTurn(launchInput);
         if (trimString(returnedReceipt.client_request_id) !== clientRequestID) {
           throw flowerTurnAdmissionError(
@@ -5193,7 +5228,7 @@ webSearch: model.web_search,
             new Error('Flower send returned a different client request identity.'),
           );
         }
-        applyAcceptedTurnLaunchReceipt(returnedReceipt);
+        applyAcceptedTurnLaunchReceipt(returnedReceipt, requestEpoch);
       } catch (error) {
         if (originalCommandFenced) {
           outboxResendInFlight.delete(clientRequestID);
@@ -5535,15 +5570,18 @@ webSearch: model.web_search,
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
-  const [computerStageOpen, setComputerStageOpen] = createSignal(true);
+  const [computerStageOpen, setComputerStageOpen] = createSignal(false);
+  let computerStageManuallyHidden = false;
   const [computerStageRestoreFocus, setComputerStageRestoreFocus] = createSignal<HTMLElement>();
   const restoreComputerStage = (source: HTMLElement) => {
+    computerStageManuallyHidden = false;
     if (!computerStageOpen()) setComputerStageRestoreFocus(source);
     setComputerStageOpen(true);
   };
   const [computerStageBoundary, setComputerStageBoundary] = createSignal<HTMLElement>();
   const [viewerFPS, setViewerFPS] = createSignal(computerFrameRate(props.adapter.computerFrameRate?.read()));
   const [privateControlRequested, setPrivateControlRequested] = createSignal(false);
+  const [computerControlDisconnected, setComputerControlDisconnected] = createSignal(false);
   const [computerControlReady, setComputerControlReady] = createSignal(false);
   const [computerReturning, setComputerReturning] = createSignal(false);
   const [computerHandbackCommitting, setComputerHandbackCommitting] = createSignal(false);
@@ -5560,13 +5598,16 @@ webSearch: model.web_search,
     computerRateChanging = true;
     void computerInputQueue.then(() => { setViewerFPS(next); computerRateChanging = false; });
   };
-  const resumeComputerViewer = () => {
+  const computerCurrentVerified = () => (threadCache().views.get(selectedThreadID())?.version ?? 0) > 0;
+  const resumeComputerViewer = () => batch(() => {
+    if (computerControlDisconnected() && (!computerObserverID() || !computerCurrentVerified())) return;
+    setComputerControlDisconnected(false);
     setComputerControlError(false); setComputerViewFailed(false); setComputerHandbackError('');
     setComputerControlReady(false); setComputerViewerRetry(value => value + 1);
-  };
-  const takeComputerControl = (source: HTMLElement) => {
+  });
+  const takeComputerControl = (source: HTMLElement) => batch(() => {
     restoreComputerStage(source); setPrivateControlRequested(true); resumeComputerViewer();
-  };
+  });
   const [computerControlError, setComputerControlError] = createSignal(false);
   const isComputerInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
     && (request.tool_name.startsWith('computer.') || request.tool_name.startsWith('browser.'))
@@ -5580,7 +5621,7 @@ webSearch: model.web_search,
     const thread_id = selectedThreadID();
     const control = props.adapter.inputComputerControl;
     if (!thread_id || !request || !isComputerInput(request) || !control) return;
-    if (computerRateChanging || computerControlError() || computerViewFailed() || computerReturning() || !computerControlReady()) return;
+    if (computerControlDisconnected() || computerRateChanging || computerControlError() || computerViewFailed() || computerReturning() || !computerControlReady()) return;
     if (input.action === 'type' && queuedComputerText && queuedComputerText.text.length + (input.text?.length ?? 0) <= 4000) {
       queuedComputerText.text += input.text ?? '';
       return;
@@ -5613,6 +5654,7 @@ webSearch: model.web_search,
     void selectedInputRequest()?.prompt_id;
     computerInputGeneration++;
     queuedComputerText = undefined;
+    setComputerControlDisconnected(false);
     setPrivateControlRequested(false); setComputerControlReady(false); setComputerControlError(false);
     setComputerReturning(false); setComputerHandbackCommitting(false); setComputerHandbackError(''); setComputerViewFailed(false);
   });
@@ -5635,7 +5677,7 @@ webSearch: model.web_search,
           candidates.push({
             item,
             runID: block.block.run_id,
-            ...(entry.type === 'message' ? { messageStatus: entry.message.status } : {}),
+            turnID: block.block.turn_id,
             target: detail.target,
             ...(detail.target_id ? { targetID: detail.target_id } : {}),
             action: detail.action,
@@ -5649,57 +5691,62 @@ webSearch: model.web_search,
     }
     const pending = selectedInputRequest();
     if (isComputerInput(pending)) {
-      const control = candidates.find(candidate => candidate.item.tool_id === pending?.tool_id);
+      const execution = selectedThread()?.current_execution;
+      const control = candidates.find(candidate => candidate.turnID === execution?.turn_id && candidate.runID === execution?.run_id && candidate.item.tool_id === pending?.tool_call_id);
       if (control) return control;
     }
-    const active = candidates.find((candidate) => (
-      (candidate.status === 'running' || candidate.status === 'pending' || candidate.status === 'waiting')
-      && Boolean(candidate.frame)
-    ));
+    const execution = selectedThread()?.current_execution;
+    const active = candidates.find(candidate => candidate.turnID === execution?.turn_id
+      && candidate.runID === execution?.run_id && Boolean(candidate.frame));
     if (active) return active;
     return candidates.find((candidate) => Boolean(candidate.frame))
       ?? candidates[0]
       ?? null;
   });
+  const computerStageExecution = createMemo(() => {
+    const stage = selectedComputerStage(), execution = selectedThread()?.current_execution;
+    return stage?.turnID && stage?.runID && stage.turnID === execution?.turn_id && stage.runID === execution.run_id ? execution : undefined;
+  });
+  const computerStageHistorical = createMemo(() => {
+    const status = computerStageExecution()?.status;
+    return status !== 'running' && status !== 'waiting_user' && status !== 'waiting_approval';
+  });
   const computerStageSessionState = createMemo<FlowerComputerStageSessionState>(() => {
+    if (computerStageHistorical()) {
+      switch (computerStageExecution()?.status) {
+        case 'success': return 'completed';
+        case 'canceled': return 'stopped';
+        case 'failed': return 'failed';
+        default: return 'historical';
+      }
+    }
+    if (computerControlDisconnected()) return 'disconnected';
     if (computerReturning()) return 'returning_control';
     if (computerViewFailed() || computerControlError()) return 'paused';
     if (privateControlRequested() && isComputerInput(selectedInputRequest())) return computerControlReady() ? 'user_control' : 'taking_control';
-    const stage = selectedComputerStage();
-    if (stage?.runID && stage.runID === selectedThread()?.active_run_id) {
-      switch (selectedThreadLiveStatus()) {
-        case 'running': return 'running';
-        case 'waiting_user':
-        case 'waiting_approval': return 'awaiting_user';
-        case 'failed': return 'failed';
-        case 'success':
-        case 'canceled': return 'completed';
-        default: break;
-      }
-    }
-    switch (stage?.messageStatus) {
-      case 'error': return 'failed';
-      case 'canceled': return 'completed';
-      default: break;
-    }
-    switch (stage?.status) {
-      case 'waiting': return 'awaiting_user';
-      case 'success':
-      case 'canceled': return 'completed';
-      case 'error':
-      case 'declined': return 'failed';
-      default: return 'running';
-    }
+    if (isComputerInput(selectedInputRequest())) return 'awaiting_control';
+    return computerStageExecution()?.status === 'running' ? 'running' : 'awaiting_user';
   });
   createEffect(() => {
     selectedThreadID();
+    computerStageManuallyHidden = false;
     setComputerLiveFrame(undefined);
     setComputerStageRestoreFocus(undefined);
-    setComputerStageOpen(true);
+    setComputerStageOpen(false);
+  });
+  let previousComputerThread = '';
+  let previousComputerLive = false;
+  createEffect(() => {
+    const thread = selectedThreadID(), live = !computerStageHistorical();
+    if (thread === previousComputerThread && previousComputerLive && !live) {
+      setComputerStageOpen(false); setComputerViewFailed(false);
+    }
+    previousComputerThread = thread; previousComputerLive = live;
+    if (live && selectedComputerStage()?.frame && !computerStageManuallyHidden) setComputerStageOpen(true);
   });
   const computerViewerKey = createMemo(() => {
     const stage = selectedComputerStage();
-    if (!computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerHandbackCommitting() || computerViewFailed()) return '';
+    if (!computerCurrentVerified() || computerStageHistorical() || computerControlDisconnected() || !computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerHandbackCommitting() || computerViewFailed()) return '';
     const interaction = privateControlRequested() && isComputerInput(selectedInputRequest()) ? selectedInputRequest()?.prompt_id : '';
     if (!interaction && (!stage.frame || !stage.runID || stage.runID !== selectedThread()?.active_run_id || selectedThread()?.status !== 'running')) return '';
     return JSON.stringify([computerObserverID(), selectedThreadID(), stage.targetID, interaction || '', viewerFPS(), computerViewerRetry()]);
@@ -5728,7 +5775,7 @@ webSearch: model.web_search,
   });
   const computerStageFrame = createMemo<FlowerComputerFrameSource | undefined>(() => {
     const stage = selectedComputerStage();
-    if (!stage?.targetID || computerViewFailed()) return;
+    if (!stage?.targetID || computerViewFailed() || computerControlDisconnected()) return;
     const thread_id = selectedThreadID(), target_id = stage.targetID;
     const live = computerLiveFrame()?.computer_frame;
     if (privateControlRequested() && isComputerInput(selectedInputRequest())) {
@@ -6163,7 +6210,9 @@ webSearch: model.web_search,
       const threadID = trimString(selectedThreadID());
       if (!threadID) return;
       try {
-        receiveThreadView(await props.adapter.retryThread(threadID), 'user_action');
+        const requestEpoch = liveTransport.connectionEpoch();
+        const live = await props.adapter.retryThread(threadID);
+        receiveThreadView(live, 'user_action', requestEpoch);
       } catch (error) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
       }
@@ -7414,10 +7463,12 @@ webSearch: model.web_search,
     const focusHandoff = captureBottomActionFocus(threadID);
     if (!setDecisionSubmitting(threadID, request.prompt_id, true)) return;
     const computer = isComputerInput(request);
+    const requestEpoch = liveTransport.connectionEpoch();
     try {
       if (computer) {
         setComputerReturning(true); setComputerHandbackError('');
         await computerInputQueue;
+        if (requestEpoch !== liveTransport.connectionEpoch()) return;
         if (threadID !== selectedThreadID() || selectedInputRequest()?.prompt_id !== request.prompt_id) return;
         if (computerControlError()) { setComputerHandbackError(copy().chat.computerControlFailed ?? ''); return; }
         setComputerHandbackCommitting(true);
@@ -7434,11 +7485,13 @@ webSearch: model.web_search,
       ) {
         throw new Error('Flower input response returned an invalid current view.');
       }
+      if (requestEpoch !== liveTransport.connectionEpoch()) return;
       applyRuntimeCurrent(receipt.current);
       if (selectedThreadDetailMatches(threadID)) {
         scheduleBottomActionFocus(focusHandoff);
       }
     } catch (error) {
+      if (requestEpoch !== liveTransport.connectionEpoch()) return;
       if (selectedThreadDetailMatches(threadID) && selectedInputRequest()?.prompt_id === request.prompt_id) {
         if (computer) setComputerHandbackError(computerControlErrorCode(error) === 'computer_control_not_ready' ? copy().chat.computerControlNotReady : copy().chat.computerControlFailed ?? '');
         else notifyComposerError(getErrorMessage(error));
@@ -7481,7 +7534,9 @@ webSearch: model.web_search,
     const focusHandoff = captureBottomActionFocus(threadID, submittedApproval.action_id);
     let focusAfterSubmit = false;
     try {
+      const requestEpoch = liveTransport.connectionEpoch();
       const result = await props.adapter.submitApproval(flowerApprovalRequest(submittedThread, submittedApproval, approved));
+      if (requestEpoch !== liveTransport.connectionEpoch()) return;
       applyRuntimeCurrent(result.current);
       focusAfterSubmit = true;
     } catch (error) {
@@ -7527,7 +7582,9 @@ webSearch: model.web_search,
     batch(() => submissionIDs.forEach((id) => setDecisionSubmitting(threadID, id, true)));
     setApprovalQueueAnnouncement(copy().chat.toolApprovalSubmitting);
     try {
+      const requestEpoch = liveTransport.connectionEpoch();
       const result = await props.adapter.submitApproval({ thread_id: threadID, interaction_ids: submissionIDs, approved });
+      if (requestEpoch !== liveTransport.connectionEpoch()) return;
       applyRuntimeCurrent(result.current);
       if (selectedThreadDetailMatches(threadID)) scheduleBottomActionFocus(focusHandoff);
     } catch (error) {
@@ -7665,14 +7722,14 @@ webSearch: model.web_search,
             <div class="flower-computer-control-heading">
               <span class="flower-computer-control-icon" aria-hidden="true"><MonitorPointer class="h-4 w-4" /></span>
               <div class="flower-computer-control-copy">
-                <div class="flower-computer-control-title">{computerReturning() ? copy().chat.computerStageStatus.returning_control : privateControlRequested() ? copy().chat.computerStageStatus.user_control : copy().chat.computerTakeControl}</div>
+                <div class="flower-computer-control-title">{copy().chat.computerStageStatus[computerStageSessionState()]}</div>
                 <p class="flower-computer-control-hint">{copy().chat.computerControlHint}</p>
               </div>
             </div>
-            <Show when={computerControlError() || computerHandbackError()}>
+            <Show when={computerControlError() || computerViewFailed() || computerHandbackError()}>
               <div class="flower-computer-control-notice" role="alert">
                 <AlertCircle class="h-4 w-4" aria-hidden="true" />
-                <p>{computerControlError() ? copy().chat.computerControlFailed : computerHandbackError()}</p>
+                <p>{(computerControlError() || computerViewFailed()) ? copy().chat.computerControlFailed : computerHandbackError()}</p>
               </div>
             </Show>
             <div class="flower-computer-control-footer">
@@ -7684,7 +7741,7 @@ webSearch: model.web_search,
               </Show>
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
-              <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
+              <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               <Button variant="primary" data-computer-control-action="return" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
@@ -8219,7 +8276,7 @@ webSearch: model.web_search,
       </Show>
       <Show when={block().frame}>
         <button type="button" class="flower-activity-inline-button" aria-expanded={computerStageOpen()} onClick={(event) => restoreComputerStage(event.currentTarget)}>
-          {copy().settings.computerUseTitle}
+          {computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}
         </button>
       </Show>
     </div>
@@ -10957,12 +11014,12 @@ webSearch: model.web_search,
           <div class="flower-chat-header-actions">
             <Show when={computerStageAvailable() && selectedComputerStage()}>
               <button type="button" class="flower-computer-entry" aria-expanded={computerStageOpen()}
-                title={`${copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
-                aria-label={`${copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                title={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                aria-label={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
                 onClick={(event) => restoreComputerStage(event.currentTarget)}>
                 <MonitorPointer size={15} aria-hidden="true" />
-                <span>{copy().chat.computerStageTitle}</span>
-                <span class="flower-computer-state" role="status" data-session-state={computerStageSessionState()}>{copy().chat.computerStageStatus[computerStageSessionState()]}</span>
+                <span>{computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageTitle}</span>
+                <Show when={computerStageSessionState() !== 'historical'}><span class="flower-computer-state" role="status" data-session-state={computerStageSessionState()}>{copy().chat.computerStageStatus[computerStageSessionState()]}</span></Show>
               </button>
             </Show>
             <Show when={presentation() === 'companion'}>
@@ -11037,7 +11094,7 @@ webSearch: model.web_search,
             transcriptScroll.bind(node);
           }}
           class="flower-chat-transcript flower-chat-transcript"
-          data-computer-launcher={computerStageAvailable() && !computerStageOpen() ? 'true' : undefined}
+          data-computer-launcher={computerStageAvailable() && !computerStageHistorical() && !computerStageOpen() ? 'true' : undefined}
           aria-hidden={companionCollapsed() ? 'true' : undefined}
           inert={companionCollapsed()}
           onPointerDown={transcriptScroll.onPointerDown}
@@ -11965,12 +12022,18 @@ webSearch: model.web_search,
           return (
             <FlowerComputerStage
               snapshot={stage()}
+              historical={computerStageHistorical()}
               frame={computerStageFrame()}
               privateInteractionID={privateControlRequested() ? selectedInputRequest()?.prompt_id : undefined}
               frameRate={viewerFPS()} receivedFrameRate={receivedComputerFPS()} onFrameRateChange={changeComputerFrameRate}
-              onFrameReady={() => { if (privateControlRequested() && !computerViewFailed()) setComputerControlReady(true); }}
+              onFrameReady={(frame) => {
+                const privateFrame = frame.private_frame;
+                if (computerStageOpen() && privateControlRequested() && !computerControlDisconnected() && !computerViewFailed()
+                  && privateFrame?.observer_id === computerObserverID() && privateFrame?.viewer_revision === activeComputerViewerRevision()
+                  && privateFrame?.interaction_id === selectedInputRequest()?.prompt_id) setComputerControlReady(true);
+              }}
               onFrameError={() => setComputerViewFailed(true)} onRetry={resumeComputerViewer}
-              onInput={computerStageOpen() && computerControlReady() && privateControlRequested() && !computerReturning() && !computerControlError() && !computerViewFailed() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
+              onInput={!computerStageHistorical() && !computerControlDisconnected() && computerStageOpen() && computerControlReady() && privateControlRequested() && !computerReturning() && !computerControlError() && !computerViewFailed() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
               boundary={computerStageBoundary()}
               threadID={selectedThreadID()}
               open={computerStageOpen()}
@@ -11979,7 +12042,8 @@ webSearch: model.web_search,
               onRestore={restoreComputerStage}
               loadFrame={props.adapter.loadComputerFrame}
               copy={{
-                title: copy().chat.computerStageTitle,
+                title: computerStageHistorical() ? copy().chat.computerStageStatus.historical : copy().chat.computerStageTitle,
+                resumeControl: copy().chat.computerResumeControl,
                 frameRate: copy().chat.computerFrameRate,
                 frameRateHint: copy().chat.computerFrameRateHint,
                 receivedFrameRate: copy().chat.computerReceivedFrameRate,
@@ -11996,7 +12060,7 @@ webSearch: model.web_search,
                 noFrame: copy().chat.toolActivityDetailsPending,
                 retry: copy().chat.handlerRetry,
               }}
-              onClose={() => setComputerStageOpen(false)}
+              onClose={() => { computerStageManuallyHidden = true; setComputerStageOpen(false); }}
             />
           );
         }}

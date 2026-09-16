@@ -5,6 +5,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { createLiveTransport } from './liveTransport';
 
 describe('LiveTransport', () => {
+  it('invalidates outstanding reads immediately on disconnect before reconnecting', async () => {
+    vi.useFakeTimers();
+    const transport = createLiveTransport<{ kind: string }>();
+    let connectedEpoch = 0, disconnectedEpoch = 0;
+    const stop = transport.start({
+      connect: async function* () { yield { kind: 'ready' }; },
+      onCurrent: () => { connectedEpoch = transport.connectionEpoch(); },
+      onBoundary: () => { disconnectedEpoch = transport.connectionEpoch(); },
+      onTerminalError: () => undefined,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(disconnectedEpoch).toBeGreaterThan(connectedEpoch);
+    stop(); vi.useRealTimers();
+  });
   it('reports a current-view contract failure once without reconnecting', async () => {
     vi.useFakeTimers();
     const connect = vi.fn(async function* () {

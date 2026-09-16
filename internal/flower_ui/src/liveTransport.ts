@@ -47,10 +47,11 @@ export function createLiveTransport<T>(): LiveTransport<T> {
               if (stopped || controller.signal.aborted || connectionEpoch !== epoch) return;
               input.onCurrent(value, connectionEpoch);
             }
-            if (!stopped) input.onBoundary?.();
+            if (!stopped) { epoch++; input.onBoundary?.(); }
             if (Date.now() - connectedAt >= 30_000) reconnectAttempt = 0;
           } catch (error) {
             if (stopped || controller.signal.aborted || connectionEpoch !== epoch) return;
+            epoch++;
             input.onBoundary?.();
             const status = Number((error as { status?: unknown })?.status ?? 0);
             const code = String((error as { code?: unknown })?.code ?? '').trim();
