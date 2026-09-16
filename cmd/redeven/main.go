@@ -823,7 +823,8 @@ func (c *cli) runCmd(args []string) int {
 			remediation := "Start Redeven on another local port, for example: redeven run --local-ui-bind 127.0.0.1:24000"
 			if errors.Is(err, localui.ErrLocalUIDeviceCAMissing) ||
 				errors.Is(err, localui.ErrLocalUIDeviceCAInvalid) ||
-				errors.Is(err, localui.ErrLocalUIDeviceCAExpired) {
+				errors.Is(err, localui.ErrLocalUIDeviceCAExpired) ||
+				errors.Is(err, localui.ErrLocalUIDeviceCANotYetValid) {
 				remediation = "Run `redeven local-authority device-ca status --state-root <path>` and repair the explicit Local UI serving identity before restarting."
 			}
 			return failRuntimeLaunch(

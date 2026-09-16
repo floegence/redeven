@@ -1,5 +1,5 @@
-import { manageDesktopCertificate } from './desktopCertificate';
-import { DESKTOP_CERTIFICATE_CHANNEL, isDesktopCertificateOperation, parseDesktopCertificateReport } from '../shared/desktopCertificate';
+import { manageDesktopCertificate, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart } from './desktopCertificate';
+import { DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest, parseDesktopCertificateReport, type DesktopCertificateRequest, type DesktopCertificateReport } from '../shared/desktopCertificate';
 import { DesktopTemplateSources } from './templateSources';
 import { TEMPLATE_SOURCE_ACQUIRE_CHANNEL, TEMPLATE_SOURCE_CANCEL_CHANNEL } from '../shared/desktopTemplateSources';
 import { CodeSpaceBrowserSessions } from './codespaceBrowserSessions';
@@ -5062,6 +5062,29 @@ function scheduleGatewaySyncAfterLauncherAction(
 }
 
 const runtimeAccessSettingsByTargetID = new Map<string, RuntimeAccessSettings>();
+
+const certificateOperations = new Map<string, Promise<DesktopCertificateReport>>();
+
+async function manageEnvironmentCertificate(request: DesktopCertificateRequest): Promise<DesktopCertificateReport> {
+  const preferences = await loadDesktopPreferencesCached();
+  const managed = preferences.saved_runtime_targets.some((target) => target.id === request.environment_id);
+  if (!managed && (request.environment_id !== preferences.local_environment.id || !desktopPlatformCapabilities.native_host_runtime)) {
+    throw new Error('Certificate management requires this Environment management connection.');
+  }
+  if (managed && (request.operation === 'install' || request.operation === 'setup')) {
+    throw new Error('Server certificate trust must be configured on each client.');
+  }
+  const pending = certificateOperations.get(request.environment_id);
+  if (pending) return pending;
+  const operation = managed
+    ? performDesktopCertificateOperation(async (command) => parseDesktopCertificateReport(
+      await runManagedRuntimeAuthority(request.environment_id, ['device-ca', command])), request.operation, false)
+    : manageDesktopCertificate(bundledRuntimeExecutablePath(), localEnvironmentStateRoot(), request.operation);
+  if (request.operation === 'status') return operation;
+  certificateOperations.set(request.environment_id, operation);
+  try { return await operation; }
+  finally { if (certificateOperations.get(request.environment_id) === operation) certificateOperations.delete(request.environment_id); }
+}
 
 async function nativeAccessSettingsStartup(): Promise<StartupReport | null> {
   return loadManagedRuntimeStartupFromStatus({
@@ -15224,6 +15247,13 @@ async function executeDirectManagedEnvironmentLifecycle(
       update: updateProgress,
     });
     const preferences = await loadDesktopPreferencesCached();
+    if (input.operation === 'restart') {
+      const access = input.host_access.kind === 'local_host' && input.placement.kind === 'host_process'
+        ? localEnvironmentAccess(preferences.local_environment)
+        : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(input.environment_id, ['access', 'get']));
+      await requireHTTPSCertificateBeforeRestart(access?.local_ui_protocol,
+        (operation) => manageEnvironmentCertificate({ environment_id: input.environment_id, operation }));
+    }
     const closeOwnedSessions = async (): Promise<void> => {
       if (input.operation === 'start') {
         return;
@@ -18149,18 +18179,11 @@ if (!app.requestSingleInstanceLock()) {
     return desktopDownloadWriter.open(normalized.token);
   });
 
-  ipcMain.handle(DESKTOP_CERTIFICATE_CHANNEL, async (event, operation) => {
-    if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame
-      || !isDesktopCertificateOperation(operation)) {
+  ipcMain.handle(DESKTOP_CERTIFICATE_CHANNEL, async (event, request) => {
+    if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
       throw new Error('Certificate management requires the Desktop settings window.');
     }
-    const preferences = await loadDesktopPreferencesCached();
-    const environmentID = currentUtilityWindowState('launcher').selectedEnvironmentID;
-    if (preferences.saved_runtime_targets.some((target) => target.id === environmentID)) {
-      if (operation === 'install') throw new Error('Trust the server public CA on this client explicitly; server trust installation is not supported here.');
-      return parseDesktopCertificateReport(await runManagedRuntimeAuthority(environmentID, ['device-ca', operation]));
-    }
-    return manageDesktopCertificate(bundledRuntimeExecutablePath(), localEnvironmentStateRoot(), operation);
+    return manageEnvironmentCertificate(parseDesktopCertificateRequest(request));
   });
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {
     try {

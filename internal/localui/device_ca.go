@@ -27,11 +27,13 @@ const (
 )
 
 var (
-	ErrLocalUIDeviceCAMissing   = errors.New("local UI device CA is missing")
-	ErrLocalUIDeviceCAInvalid   = errors.New("local UI device CA is invalid")
-	ErrLocalUIDeviceCAExpired   = errors.New("local UI device CA is expired")
-	ErrLocalUIDeviceCAUntrusted = errors.New("local UI device CA is not trusted by this OS user")
-	ErrLocalUIDeviceCAManual    = errors.New("local UI device CA requires manual trust installation")
+	ErrLocalUIDeviceCAMissing     = errors.New("local UI device CA is missing")
+	ErrLocalUIDeviceCAInvalid     = errors.New("local UI device CA is invalid")
+	ErrLocalUIDeviceCAExpired     = errors.New("local UI device CA is expired")
+	ErrLocalUIDeviceCAUntrusted   = errors.New("local UI device CA is not trusted by this OS user")
+	ErrLocalUIDeviceCAManual      = errors.New("local UI device CA requires manual trust installation")
+	ErrLocalUIDeviceCAExists      = errors.New("local UI device CA already exists")
+	ErrLocalUIDeviceCANotYetValid = errors.New("local UI device CA is not yet valid")
 )
 
 // DeviceCAStatus is the stable, credential-free Local UI trust projection.
@@ -60,7 +62,7 @@ func GenerateLocalUIDeviceCA(stateDir string) (DeviceCAStatus, error) {
 	}
 	target := localUIDeviceCADir(stateDir)
 	if _, err := os.Lstat(target); err == nil {
-		return DeviceCAStatus{}, fmt.Errorf("%w: device CA already exists", ErrLocalUIDeviceCAInvalid)
+		return DeviceCAStatus{}, ErrLocalUIDeviceCAExists
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return DeviceCAStatus{}, fmt.Errorf("inspect Local UI device CA: %w", err)
 	}
@@ -130,13 +132,19 @@ func InspectLocalUIDeviceCA(stateDir string) (DeviceCAStatus, error) {
 func inspectLocalUIDeviceCA(stateDir string, checkTrust bool) (DeviceCAStatus, error) {
 	ca, err := loadLocalUIDeviceCA(stateDir)
 	if err != nil {
-		status := DeviceCAStatus{Identity: "invalid", Trust: "unknown", Remedy: "Regenerate the Local UI device CA after removing the invalid files."}
+		status := DeviceCAStatus{Identity: "unknown", Trust: "unknown", CertPath: localUIDeviceCACertificatePath(stateDir), Remedy: "Check the certificate diagnostics before retrying HTTPS configuration."}
+		if errors.Is(err, ErrLocalUIDeviceCAInvalid) {
+			status.Identity = "invalid"
+		}
 		if errors.Is(err, ErrLocalUIDeviceCAMissing) {
 			status.Identity = "missing"
 			status.Remedy = "Run `redeven local-authority device-ca generate --state-root <path>`."
 		}
 		if errors.Is(err, ErrLocalUIDeviceCAExpired) {
 			status.Identity = "expired"
+		}
+		if errors.Is(err, ErrLocalUIDeviceCANotYetValid) {
+			status.Identity = "not_yet_valid"
 		}
 		return status, err
 	}
@@ -155,9 +163,12 @@ func inspectLocalUIDeviceCA(stateDir string, checkTrust bool) (DeviceCAStatus, e
 		return status, nil
 	}
 	if err := verifyLocalUIDeviceCATrust(ca); err != nil {
+		if !errors.Is(err, ErrLocalUIDeviceCAUntrusted) {
+			return status, err
+		}
 		status.Trust = "untrusted"
-		status.Remedy = "Install the exported CA certificate for the current OS user, then restart Redeven."
-		return status, err
+		status.Remedy = "Trust the public CA certificate for the current OS user. Other clients configure their own trust stores."
+		return status, nil
 	}
 	status.Trust = "trusted"
 	return status, nil
@@ -212,7 +223,10 @@ func loadLocalUIDeviceCA(stateDir string) (*deviceCA, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrLocalUIDeviceCAMissing
 	}
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+	if err != nil {
+		return nil, fmt.Errorf("inspect Local UI device CA directory: %w", err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("%w: unsafe device CA directory", ErrLocalUIDeviceCAInvalid)
 	}
 	certBody, err := readSecureDeviceCAFile(filepath.Join(dir, localUIDeviceCACertName), false)
@@ -235,7 +249,10 @@ func loadLocalUIDeviceCA(stateDir string) (*deviceCA, error) {
 		return nil, fmt.Errorf("%w: device CA is not self-signed", ErrLocalUIDeviceCAInvalid)
 	}
 	now := time.Now()
-	if now.Before(certificate.NotBefore) || !now.Before(certificate.NotAfter) {
+	if now.Before(certificate.NotBefore) {
+		return nil, ErrLocalUIDeviceCANotYetValid
+	}
+	if !now.Before(certificate.NotAfter) {
 		return nil, ErrLocalUIDeviceCAExpired
 	}
 	keyBlock, rest := pem.Decode(keyBody)
@@ -257,9 +274,12 @@ func loadLocalUIDeviceCA(stateDir string) (*deviceCA, error) {
 func readSecureDeviceCAFile(path string, private bool) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, ErrLocalUIDeviceCAMissing
+		return nil, fmt.Errorf("%w: device CA files are incomplete", ErrLocalUIDeviceCAInvalid)
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+	if err != nil {
+		return nil, fmt.Errorf("inspect Local UI device CA file: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("%w: unsafe device CA file", ErrLocalUIDeviceCAInvalid)
 	}
 	if private && info.Mode().Perm()&0o077 != 0 {
@@ -329,8 +349,11 @@ func verifyLocalUIDeviceCATrust(ca *deviceCA) error {
 		return ErrLocalUIDeviceCAInvalid
 	}
 	roots, err := x509.SystemCertPool()
-	if err != nil || roots == nil {
-		return ErrLocalUIDeviceCAUntrusted
+	if err != nil {
+		return fmt.Errorf("read current-user certificate trust: %w", err)
+	}
+	if roots == nil {
+		return fmt.Errorf("current-user certificate trust is unavailable")
 	}
 	if _, err := certificate.Leaf.Verify(x509.VerifyOptions{
 		Roots:     roots,

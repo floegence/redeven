@@ -1,5 +1,5 @@
-import type { DesktopCertificateOperation, DesktopCertificateReport } from '../shared/desktopCertificate';
-import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
+import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
+import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import qrcode from 'qrcode-generator';
@@ -54,6 +54,7 @@ import {
   Tag,
 } from '@floegence/floe-webapp-core/ui';
 
+import { LocalCertificateSettings } from './LocalCertificateSettings';
 import { SSHEnvironmentSettingsDialog } from './SSHEnvironmentSettingsDialog';
 import { validateSSHEnvironmentSettings, type SSHConnectionDialogState } from './sshEnvironmentSettingsState';
 
@@ -1233,6 +1234,7 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Start this runtime before connecting it to a provider.': 'runtimeMessage.startRuntimeBeforeProvider',
     'Start this runtime before connecting it to Redeven Cloud.': 'runtimeMessage.startRuntimeBeforeProvider',
     'Start this runtime before opening it.': 'runtimeMessage.startRuntimeBeforeOpening',
+    'HTTPS certificate verification failed. Check HTTPS configuration before restarting; the current Runtime has been kept running.': 'settings.certificateRestartBlocked',
     'Restart this runtime from Desktop so runtime-control can be prepared.': 'runtimeMessage.restartRuntimeForRuntimeControl',
     'Restart this runtime with the current Desktop Runtime before connecting it to Redeven Cloud.': 'runtimeMessage.restartRuntimeForRuntimeControl',
     'Runtime-control is not available for this runtime.': 'runtimeMessage.runtimeControlUnavailable',
@@ -13447,7 +13449,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
   runtimeStatusLabel: string;
   runtimeStatusTone: EnvironmentCardTone;
   dark: boolean;
-  certificate?: (operation: DesktopCertificateOperation) => Promise<DesktopCertificateReport>;
+  certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
   editConnection?: () => void;
   desktopOpenLabel: string;
   openInDesktop: () => void;
@@ -13466,7 +13468,9 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
   const pending = createMemo(() => desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft));
   const saving = () => busyStateMatchesAction(props.busyState, 'save_settings');
   const canSave = () => pending() && validation().valid && !saving();
-  const canApply = () => (pending() || props.snapshot.runtime_configuration_pending) && validation().valid && !saving();
+  const [certificateReady, setCertificateReady] = createSignal(false);
+  const canApply = () => (pending() || props.snapshot.runtime_configuration_pending) && validation().valid && !saving()
+    && (props.draft.local_ui_protocol !== 'https' || certificateReady());
   const urls = createMemo(() => [...new Set([
     ...props.snapshot.current_runtime_urls,
     props.snapshot.current_runtime_url,
@@ -13596,7 +13600,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
           </Show>
           <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
           <Show when={props.open && props.draft.local_ui_protocol === 'https' && props.certificate}>
-            <LocalCertificateSettings i18n={props.i18n} manage={props.certificate!} remote={remote()} />
+            <LocalCertificateSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} />
           </Show>
           <Show when={props.draft.local_ui_protocol === 'https' && remote()}>
             <p class="text-xs text-muted-foreground">{props.i18n.t('settings.remoteCertificateHelp')}</p>
@@ -13639,56 +13643,6 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
         </Show>
       </div>
     </Dialog>
-  );
-}
-
-function LocalCertificateSettings(props: Readonly<{
-  i18n: DesktopI18n;
-  manage: (operation: DesktopCertificateOperation) => Promise<DesktopCertificateReport>;
-  remote?: boolean;
-}>) {
-  const [report, setReport] = createSignal<DesktopCertificateReport>();
-  const [busy, setBusy] = createSignal(false);
-  const [error, setError] = createSignal('');
-  async function perform(operation: DesktopCertificateOperation): Promise<void> {
-    setBusy(true);
-    setError('');
-    try {
-      const result = await props.manage(operation);
-      setReport(result);
-      if (operation !== 'status' && result.status !== 'failed') setReport(await props.manage('status'));
-    } catch (error) { setError(getErrorMessage(error)); }
-    finally { setBusy(false); }
-  }
-  onMount(() => void perform('status'));
-  const missing = () => report()?.code === 'local_ui_device_ca_missing';
-  const invalid = () => report()?.status === 'failed' && !missing();
-  return (
-    <div class="space-y-3 rounded-md bg-muted/25 p-3">
-      <p class="text-xs font-medium" role="status">{props.i18n.t(!report() ? 'environmentStatus.checking' : invalid() ? 'settings.certificateInvalid' : missing() ? 'settings.certificateMissing'
-        : !props.remote && report()?.trust === 'trusted' ? 'settings.certificateTrusted' : 'settings.certificateTrustRequired')}</p>
-      <Show when={report()?.certificate_path}>
-        <p class="select-text break-all font-mono text-xs text-muted-foreground">{report()?.certificate_path}</p>
-      </Show>
-      <Show when={invalid()}><p class="text-xs text-destructive">{props.i18n.t('settings.certificateInvalidHelp')}</p></Show>
-      <Show when={report()?.trust === 'manual_required'}><p class="text-xs text-muted-foreground">{props.i18n.t('settings.certificateManualTrust')}</p></Show>
-      <div class="flex flex-wrap gap-2">
-        <Show when={missing()} fallback={(
-          <Show when={!props.remote}>
-          <Button size="sm" variant="outline" disabled={busy() || invalid() || !report()?.certificate_path}
-            onClick={() => void perform('install')}>{props.i18n.t('settings.trustCertificate')}</Button>
-          </Show>
-        )}>
-          <Button size="sm" variant="outline" disabled={busy()} onClick={() => void perform('generate')}>
-            {props.i18n.t('settings.generateCertificate')}
-          </Button>
-        </Show>
-        <Button size="sm" variant="ghost" loading={busy()} onClick={() => void perform('status')}>
-          {props.i18n.t('environmentAction.refreshStatus')}
-        </Button>
-      </div>
-      <Show when={error()}><p role="alert" class="text-xs text-destructive">{error()}</p></Show>
-    </div>
   );
 }
 

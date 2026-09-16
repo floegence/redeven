@@ -91,7 +91,7 @@ func TestLocalUIDeviceCALifecycle(t *testing.T) {
 	if generated.Identity != "ready" || generated.Trust != "unknown" {
 		t.Fatalf("generated status = %#v", generated)
 	}
-	if _, err := GenerateLocalUIDeviceCA(stateDir); !errors.Is(err, ErrLocalUIDeviceCAInvalid) {
+	if _, err := GenerateLocalUIDeviceCA(stateDir); !errors.Is(err, ErrLocalUIDeviceCAExists) {
 		t.Fatalf("duplicate GenerateLocalUIDeviceCA() error = %v", err)
 	}
 
@@ -131,6 +131,20 @@ func TestLocalUIDeviceCALifecycle(t *testing.T) {
 	}
 	if string(exported) == string(mustReadTestFile(t, filepath.Join(localUIDeviceCADir(stateDir), localUIDeviceCAKeyName))) {
 		t.Fatal("public export contains the private key")
+	}
+}
+
+func TestInspectLocalUIDeviceCASeparatesIdentityFromClientTrust(t *testing.T) {
+	stateDir := t.TempDir()
+	if _, err := GenerateLocalUIDeviceCA(stateDir); err != nil {
+		t.Fatal(err)
+	}
+	status, err := InspectLocalUIDeviceCA(stateDir)
+	if err != nil {
+		t.Fatalf("querying an untrusted certificate must succeed: %v", err)
+	}
+	if status.Identity != "ready" || (status.Trust != "untrusted" && status.Trust != "manual_required") {
+		t.Fatalf("fresh certificate status = %#v", status)
 	}
 }
 
@@ -201,4 +215,56 @@ func mustReadTestFile(t *testing.T, path string) []byte {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return body
+}
+
+func TestDeviceCAIncompleteAndFutureIdentityAreNotReportedAsMissingOrExpired(t *testing.T) {
+	t.Run("incomplete", func(t *testing.T) {
+		stateDir := t.TempDir()
+		if err := os.Mkdir(filepath.Join(stateDir, localUIDeviceCADirName), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		status, err := InspectLocalUIDeviceCA(stateDir)
+		if !errors.Is(err, ErrLocalUIDeviceCAInvalid) || status.Identity != "invalid" {
+			t.Fatalf("status=%#v err=%v", status, err)
+		}
+	})
+	t.Run("future", func(t *testing.T) {
+		stateDir := t.TempDir()
+		if _, err := GenerateLocalUIDeviceCA(stateDir); err != nil {
+			t.Fatal(err)
+		}
+		ca, err := loadLocalUIDeviceCA(stateDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		certificate := *ca.certificate
+		certificate.NotBefore = time.Now().Add(time.Hour)
+		der, err := x509.CreateCertificate(rand.Reader, &certificate, &certificate, &ca.key.PublicKey, ca.key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(LocalUIDeviceCACertificatePath(stateDir), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		status, err := InspectLocalUIDeviceCA(stateDir)
+		if !errors.Is(err, ErrLocalUIDeviceCANotYetValid) || status.Identity != "not_yet_valid" {
+			t.Fatalf("status=%#v err=%v", status, err)
+		}
+	})
+}
+
+func TestDeviceCATrustInstallErrorsKeepPlatformCancellationDistinct(t *testing.T) {
+	for _, test := range []struct {
+		platform, output string
+		want             error
+	}{
+		{"darwin", "OSStatus (-128)", ErrLocalUIDeviceCAInstallCanceled},
+		{"windows", "0x800704c7", ErrLocalUIDeviceCAInstallCanceled},
+		{"darwin", "access denied", ErrLocalUIDeviceCAInstallFailed},
+	} {
+		err := deviceCATrustInstallError(test.platform, []byte(test.output), errors.New("exit status 1"))
+		if !errors.Is(err, test.want) {
+			t.Fatalf("%s: %v", test.platform, err)
+		}
+	}
 }
