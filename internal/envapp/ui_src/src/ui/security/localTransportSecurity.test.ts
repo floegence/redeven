@@ -27,10 +27,11 @@ describe('resolveLocalTransportSecurityPolicy', () => {
 		});
 	});
 
-	it.each(['localhost', '127.0.0.1', '192.168.1.20'])('fails closed for plaintext host %s', (hostname) => {
+	it.each(['localhost', '127.0.0.1', '192.168.1.20', '[2001:db8::20]'])('uses the explicit HTTP profile for public host %s', (hostname) => {
 		const resolved = resolveLocalTransportSecurityPolicy('http:', hostname);
-		expect(resolved.policy).toBeNull();
-		expect(resolved.error).not.toBe('');
+		expect(resolved.policy).toBe(true);
+		expect(resolved.transport).toBe('public_http');
+		expect(resolved.error).toBe('');
 	});
 
 	it.each(['127.0.0.1', '[::1]'])('accepts the exact numeric private Desktop bridge host %s', (hostname) => {

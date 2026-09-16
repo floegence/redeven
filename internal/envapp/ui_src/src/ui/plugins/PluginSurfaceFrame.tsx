@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import {
   PluginSurfaceSlot,
   type PluginSurfaceHost,
@@ -224,7 +225,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const copyDiagnostic = async () => {
     const ownedSlot = slot;
     try {
-      await navigator.clipboard.writeText(diagnostic());
+      await writeTextToClipboard(diagnostic());
       if (mounted && slot === ownedSlot) setCopyState('copied');
     } catch {
       if (mounted && slot === ownedSlot) setCopyState('failed');

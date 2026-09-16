@@ -88,7 +88,15 @@ Para máquinas remotas, o Desktop pode instalar automaticamente a versão corres
 # 1. Instalar
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Gerar a CA do dispositivo da Local UI (uma vez)
+redeven run
+```
+
+Novos ambientes iniciam com HTTP em `localhost:23998`, acessível apenas no dispositivo do ambiente de execução. Não é necessário configurar certificados nem o Redeven Cloud. Abra o endereço real exibido após a inicialização no Desktop ou em um navegador. O estado local fica em `~/.redeven/local-environment/`; Ctrl+C encerra o ambiente de execução CLI.
+
+Para dispositivos acessíveis pela rede, configure um endereço de escuta e uma senha de acesso ao ambiente. Cada Desktop ou navegador faz login de forma independente; páginas e WS/WSS compartilham uma porta. HTTP não criptografa páginas nem informações de login. HTTPS é opcional e exige a criação explícita de um certificado e a confiança nele em cada dispositivo cliente:
+
+```bash
+# Gerar a CA do dispositivo da Local UI (uma vez)
 redeven local-authority device-ca generate --state-root ~/.redeven
 
 # macOS ou Windows: instalar no repositório de confiança do usuário atual
@@ -97,17 +105,10 @@ redeven local-authority device-ca install --state-root ~/.redeven --scope user
 # Linux: exportar o certificado público e depois importá-lo manualmente
 redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
-# 3. Executar
-redeven run
-
-# 4. Abrir https://localhost:23998 no navegador.
+redeven run --local-ui-protocol https
 ```
 
-No Linux, importe o certificado público exportado no repositório de confiança realmente usado pelo navegador ou cliente. `install --scope user` retorna `manual_required` intencionalmente no Linux; o Redeven nunca executa `sudo` nem modifica um repositório de confiança do sistema. O ambiente de execução valida a identidade da CA e o certificado de servidor gerado antes de servir HTTPS/WSS, mas não pode estabelecer a confiança do cliente por você. Portanto, o TLS do cliente falha de forma segura até que esse navegador ou cliente confie na CA.
-
-Na primeira execução, `redeven run` inicializa o estado local em `~/.redeven/local-environment/` e inicia no modo local. Não é necessário executar o bootstrap nem configurar o plano de controle. A Local UI escuta em `localhost:23998` e só pode ser acessada a partir deste dispositivo; não há suporte para acesso direto pela LAN ou por redes públicas. Pressione Ctrl+C para interromper o ambiente de execução.
-
-Execute `redeven help run` para conhecer outros modos de execução e a proteção local opcional por senha.
+No Linux, importe o certificado público exportado para o repositório de confiança do cliente; `install --scope user` retorna `manual_required`. O Redeven nunca chama `sudo` nem modifica a confiança do sistema. HTTPS rejeita certificados ausentes, inválidos, expirados ou não confiáveis sem recorrer a HTTP. Ambientes existentes sem protocolo salvo exigem escolher HTTP ou HTTPS explicitamente. Execute `redeven help run` para ver as opções de configuração.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

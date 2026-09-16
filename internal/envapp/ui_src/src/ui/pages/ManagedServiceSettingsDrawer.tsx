@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
   ErrorBoundary,
   For,
@@ -1111,7 +1112,7 @@ export function ManagedServiceSettingsDrawer(props: {
                               value.mounts = [
                                 ...(value.mounts ?? []),
                                 {
-                                  resource_id: `mount-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+                                  resource_id: `mount-${secureRandomUUID()}`,
                                   type: "bind",
                                   source: "",
                                   target: "/data",
@@ -1390,7 +1391,7 @@ export function ManagedServiceSettingsDrawer(props: {
                               value.ports = [
                                 ...(value.ports ?? []),
                                 {
-                                  resource_id: `port-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+                                  resource_id: `port-${secureRandomUUID()}`,
                                   container_port: 3000,
                                   host_port: 0,
                                   host_ip: "127.0.0.1",
@@ -1580,7 +1581,7 @@ export function ManagedServiceSettingsDrawer(props: {
                                 value.devices = [
                                   ...(value.devices ?? []),
                                   {
-                                    resource_id: `device-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+                                    resource_id: `device-${secureRandomUUID()}`,
                                     host_path: "",
                                     container_path: "",
                                     permissions: "rwm",

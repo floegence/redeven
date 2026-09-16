@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
   Show,
@@ -172,7 +173,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
     setCopied(false);
     setCopyFailed(false);
     try {
-      await navigator.clipboard.writeText(projection().diagnosticText);
+      await writeTextToClipboard(projection().diagnosticText);
       setCopied(true);
     } catch {
       setCopyFailed(true);

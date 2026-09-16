@@ -157,6 +157,7 @@ describe('desktopWelcomeRuntimeState', () => {
             {
               password_required: true,
               effective_run_mode: 'local',
+              local_ui_urls: [localUIURL, 'http://192.0.2.10:23998/'],
               pid: 4242,
               started_at_unix_ms: 1778750000000,
             },
@@ -169,6 +170,7 @@ describe('desktopWelcomeRuntimeState', () => {
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toMatchObject({
         local_ui_url: localUIURL,
+        local_ui_urls: [localUIURL, 'http://192.0.2.10:23998/'],
         effective_run_mode: 'local',
         remote_enabled: false,
         password_required: true,

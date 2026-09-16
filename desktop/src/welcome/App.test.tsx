@@ -2524,18 +2524,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("case 'serve_runtime_locally':");
   });
 
-  it('keeps Local UI access controls inside Local Environment Settings', () => {
-    const appSrc = readWelcomeSource();
-
-    expect(appSrc).toContain('props.baselineSnapshot.access_mode_options');
-    expect(appSrc).toContain("aria-label={props.i18n.t('settings.visibilityTitle')}");
-    expect(appSrc).toContain("props.i18n.t('settings.settingsWindowDescription'");
-    expect(appSrc).toContain("props.i18n.t('settings.visibilityDescription')");
-    expect(appSrc).toContain("i18n.t('environmentCenter.localLinksTooltipTitle')");
-    expect(appSrc).toContain("i18n.t('environmentCenter.localLinksTooltipDescription')");
-    expect(appSrc).toContain("props.i18n.t('settings.localOnlyProtectionNote')");
-    expect(appSrc).toContain("props.i18n.t('settings.networkTrustNote')");
-  });
 
   it('uses the selected Environment health and card status for the settings runtime state', () => {
     const appSrc = readWelcomeSource();
@@ -2550,30 +2538,6 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).not.toContain("accessModel().current_runtime_url !== ''");
   });
 
-  it('uses the shared surface hierarchy for Local Environment Settings boundaries', () => {
-    const appSrc = readWelcomeSource();
-    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
-    const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
-    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
-
-    expect(appSrc).toContain("'redeven-settings-dialog',");
-    expect(dialogSrc).toContain('redeven-settings-status-overview grid min-w-0');
-    expect(dialogSrc).toContain('redeven-settings-state-card--current redeven-boundary-panel');
-    expect(dialogSrc).toContain('redeven-settings-state-card--next redeven-boundary-panel');
-    expect(dialogSrc.match(/redeven-settings-state-glyph[^"]*rounded-full/gu)).toHaveLength(2);
-    expect(dialogSrc).not.toMatch(/redeven-settings-state-glyph[^"]*rounded-md/u);
-    expect(dialogSrc).toContain('redeven-tile redeven-boundary-panel redeven-surface-panel--interactive');
-    expect(dialogSrc).toContain('sm:grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)]');
-    expect(dialogSrc).toContain('redeven-surface-control bg-background');
-    expect(dialogSrc).toContain('redeven-settings-form-panel redeven-boundary-panel');
-    expect(appSrc).toContain('redeven-settings-form-row grid gap-2');
-    expect(appSrc).toContain('redeven-settings-apply-row redeven-boundary-panel');
-    expect(dialogSrc).not.toContain('redeven-settings-detail-card');
-    expect(dialogSrc).toContain('tabIndex={selected() ? 0 : -1}');
-    expect(dialogSrc).toContain('rovingRadioIndexForKey(event.key, index(), options.length)');
-    expect(dialogSrc).toContain('selectAccessMode(nextOption.value);');
-    expect(dialogSrc).toContain('focusAccessMode(nextOption.value);');
-  });
 
   it('keeps global language controls out of Local Environment Settings', () => {
     const appSrc = readWelcomeSource();
@@ -2606,55 +2570,7 @@ describe('DesktopWelcomeShell', () => {
     );
   });
 
-  it('includes Local Environment Settings copy inside the source', () => {
-    const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("props.i18n.t('settings.nextStartLabel')");
-    expect(appSrc).toContain("props.i18n.t('settings.visibilityTitle')");
-    expect(appSrc).toContain("props.i18n.t('settings.detailsTitle')");
-    expect(appSrc).toContain("props.i18n.t('settings.runtimeLabel')");
-    expect(appSrc).toContain("props.i18n.t('settings.settingsWindowDescription'");
-    expect(appSrc).not.toContain("props.i18n.t('settings.accessSecurityTitle')");
-  });
-
-  it('keeps network settings compact, validated, and aligned with the TLS access contract', () => {
-    const appSrc = readWelcomeSource();
-    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
-    const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
-    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
-
-    expect(dialogSrc).toContain('<SettingsApplyTimingControl');
-    expect(appSrc).toContain("props.i18n.t('settings.applyTimingTitle')");
-    expect(appSrc).toContain("props.i18n.t('settings.applyNextStart')");
-    expect(appSrc).toContain("props.i18n.t('settings.applyRestartNow')");
-    expect(appSrc).toContain("props.i18n.t('settings.applyNextStartHelp')");
-    expect(appSrc).toContain('aria-live="polite" class="mt-1.5 grid min-w-0"');
-    expect(appSrc).toContain("props.i18n.t('settings.sharedPasswordRequired')");
-    expect(appSrc).toContain("props.i18n.t('settings.networkTrustNote')");
-    expect(dialogSrc).toContain('validateDesktopAccessDraft(props.draft, accessModelOptions())');
-    expect(dialogSrc).toContain("props.i18n.t('settings.saveAndRestart')");
-    expect(dialogSrc).toContain(
-      'desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft)',
-    );
-    expect(dialogSrc).toContain('props.runtimeRestartAvailable && hasPendingChanges()');
-    expect(dialogSrc).toContain(
-      "const [applyTiming, setApplyTiming] = createSignal<DesktopSettingsApplyTiming>('next_start')",
-    );
-    expect(dialogSrc).toContain("applyTiming() === 'restart_now'");
-    expect(appSrc).toContain("props.value !== 'next_start' && 'invisible'");
-    expect(appSrc).toContain("props.value !== 'restart_now' && 'invisible'");
-    expect(dialogSrc).toContain('redeven-settings-status-overview');
-    expect(dialogSrc).toContain('redeven-settings-state-card--current');
-    expect(dialogSrc).toContain('redeven-settings-state-card--next');
-    expect(appSrc).toContain('sm:grid-cols-[9rem_minmax(0,1fr)]');
-    expect(dialogSrc).toContain("restartAfterSave() ? 'visible' : 'invisible'");
-    expect(dialogSrc).toContain('disabled={!hasPendingChanges() || !accessValidation().valid}');
-    expect(dialogSrc).toContain('queueMicrotask(() => passwordInputRef?.focus())');
-    expect(dialogSrc).not.toContain('props.openDesktopUpdates');
-    expect(dialogSrc).not.toContain("props.i18n.t('desktopUpdate.checkForUpdates')");
-    expect(dialogSrc).not.toContain('plaintext');
-    expect(dialogSrc).not.toContain('<ConfirmDialog');
-  });
 
   it('exposes auto status detection only on non-provider runtime forms', () => {
     const appSrc = readWelcomeSource();
@@ -2746,7 +2662,7 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogBodyRule).toContain('flex: 1 1 auto;');
     expect(dialogBodyRule).toContain('overflow: auto;');
     expect(styles).toContain('.redeven-welcome-dialog-panel--settings');
-    expect(styles).toContain('width: min(52rem, 96vw);');
+    expect(styles).toContain('width: min(47.5rem, 96vw);');
     expect(styles).toContain('.redeven-welcome-dialog-panel--connection');
     expect(styles).toContain('width: min(58rem, 96vw);');
 

@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Tag, Button, type TagProps } from '@floegence/floe-webapp-core/ui';
@@ -507,7 +508,7 @@ export function CopyButton(props: { value: string; label?: string }) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(props.value);
+      await writeTextToClipboard(props.value);
       setCopied(true);
       clearTimeout(timer);
       timer = setTimeout(() => setCopied(false), 2000);

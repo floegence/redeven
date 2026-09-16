@@ -56,12 +56,14 @@ export type DesktopAccessDraftModel = Readonly<{
   password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   current_runtime_url: string;
-  current_runtime_transport: 'external_url' | 'desktop_bridge' | 'not_running';
+  current_runtime_running: boolean;
+  current_runtime_urls: readonly string[];
 }>;
 
 export type DesktopAccessModelOptions = Readonly<{
   current_runtime_url?: string;
-  current_runtime_transport?: DesktopAccessDraftModel['current_runtime_transport'];
+  current_runtime_running?: boolean;
+  current_runtime_urls?: readonly string[];
   local_ui_password_configured?: boolean;
   runtime_password_required?: boolean;
   mode_override?: DesktopAccessMode | null;
@@ -70,7 +72,8 @@ export type DesktopAccessModelOptions = Readonly<{
 export type DesktopAccessDraftValidation = Readonly<{
   valid: boolean;
   address_error_key?: 'settings.portInvalid' | 'settings.bindAddressInvalid';
-  password_error_key?: 'settings.sharedPasswordRequired';
+  password_error_key?: 'settings.sharedPasswordRequired' | 'settings.passwordTooLong';
+  protocol_error_key?: 'settings.protocolRequired';
 }>;
 
 function trimString(value: unknown): string {
@@ -154,14 +157,10 @@ export function desktopAccessModeLabel(mode: DesktopAccessMode): DesktopAccessMo
 
 export function desktopAccessModeForDraft(
   draft: DesktopSettingsDraft,
-  options: DesktopAccessModelOptions = {},
+  _options: DesktopAccessModelOptions = {},
 ): DesktopAccessMode {
   const bind = splitHostPortLoose(trimString(draft.local_ui_bind) || DEFAULT_DESKTOP_LOCAL_UI_BIND);
-  const hasPassword = effectiveLocalUIPasswordConfigured(
-    draft,
-    options.local_ui_password_configured === true,
-  );
-  if (bind && isLoopbackHost(bind.host) && !hasPassword) {
+  if (bind && isLoopbackHost(bind.host)) {
     return 'local_only';
   }
   if (bind && isWildcardHost(bind.host)) {
@@ -218,7 +217,7 @@ function nextStartAddressDisplay(
 }
 
 function passwordState(
-  accessMode: DesktopAccessMode,
+  _accessMode: DesktopAccessMode,
   bindHost: string,
   draft: DesktopSettingsDraft,
   options: DesktopAccessModelOptions = {},
@@ -233,14 +232,6 @@ function passwordState(
   const passwordMode = localUIPasswordMode(draft, storedPasswordConfigured);
   const typedPassword = trimString(draft.local_ui_password) !== '';
   const hasEffectivePassword = effectiveLocalUIPasswordConfigured(draft, storedPasswordConfigured);
-  if (accessMode === 'local_only') {
-    return {
-      id: 'not_required',
-      tone: 'default',
-      required: false,
-      configured: false,
-    };
-  }
   if (passwordMode === 'clear') {
     return {
       id: 'clear_on_save',
@@ -312,8 +303,8 @@ export function deriveDesktopAccessDraftModel(
     password_state_id: password.id,
     password_state_tone: password.tone,
     current_runtime_url: trimString(options.current_runtime_url),
-    current_runtime_transport: options.current_runtime_transport
-      ?? (trimString(options.current_runtime_url) !== '' ? 'external_url' : 'not_running'),
+    current_runtime_running: options.current_runtime_running ?? trimString(options.current_runtime_url) !== '',
+    current_runtime_urls: options.current_runtime_urls ?? (trimString(options.current_runtime_url) ? [trimString(options.current_runtime_url)] : []),
   };
 }
 
@@ -333,13 +324,18 @@ export function validateDesktopAccessDraft(
       ? 'settings.bindAddressInvalid'
       : 'settings.portInvalid';
   }
-  const passwordErrorKey = !addressErrorKey
+  const passwordErrorKey = new TextEncoder().encode(draft.local_ui_password).length > 72
+    ? 'settings.passwordTooLong' as const
+    : !addressErrorKey
     && model.password_required
     && !model.password_requirement_satisfied
     ? 'settings.sharedPasswordRequired' as const
     : undefined;
+  const protocolErrorKey = draft.local_ui_protocol !== 'http' && draft.local_ui_protocol !== 'https'
+    ? 'settings.protocolRequired' as const : undefined;
   return {
-    valid: addressErrorKey === undefined && passwordErrorKey === undefined,
+    valid: !addressErrorKey && !passwordErrorKey && !protocolErrorKey,
+    ...(protocolErrorKey ? { protocol_error_key: protocolErrorKey } : {}),
     ...(addressErrorKey ? { address_error_key: addressErrorKey } : {}),
     ...(passwordErrorKey ? { password_error_key: passwordErrorKey } : {}),
   };
@@ -349,7 +345,8 @@ export function desktopSettingsDraftRequiresRuntimeRestart(
   baseline: DesktopSettingsDraft,
   draft: DesktopSettingsDraft,
 ): boolean {
-  if (trimString(baseline.local_ui_bind) !== trimString(draft.local_ui_bind)) {
+  if (baseline.local_ui_protocol !== draft.local_ui_protocol
+    || trimString(baseline.local_ui_bind) !== trimString(draft.local_ui_bind)) {
     return true;
   }
   const passwordMode = normalizeDesktopLocalUIPasswordMode(draft.local_ui_password_mode);
@@ -433,13 +430,11 @@ export function applyDesktopAccessModeToDraft(
       return {
 			...draft,
 			local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
-			local_ui_password: '',
       };
     }
     return {
 		...draft,
 		local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
-		local_ui_password: '',
     };
   }
   return {
@@ -456,7 +451,8 @@ export function applyDesktopAccessFixedPortToDraft(
   const model = deriveDesktopAccessDraftModel(draft);
   const nextPort = trimString(portText);
   const nextMode = accessMode ?? model.access_mode;
-  const nextHost = nextMode === 'shared_local_network' ? '0.0.0.0' : 'localhost';
+  const nextHost = accessMode === undefined ? model.bind_host
+    : nextMode === 'shared_local_network' ? '0.0.0.0' : 'localhost';
   return {
     ...draft,
     local_ui_bind: formatHostPort(nextHost, nextPort),
@@ -471,12 +467,10 @@ export function applyDesktopAccessAutoPortToDraft(
     return {
 		...draft,
 		local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
-		local_ui_password: '',
     };
   }
   return {
 		...draft,
 		local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
-		local_ui_password: '',
   };
 }

@@ -1,6 +1,13 @@
 export const SAVE_DESKTOP_SETTINGS_CHANNEL = 'redeven-desktop:save-settings';
 export const CANCEL_DESKTOP_SETTINGS_CHANNEL = 'redeven-desktop:cancel-settings';
 
+export type LocalUIProtocol = 'http' | 'https';
+
+export function parseLocalUIProtocol(value: unknown): LocalUIProtocol {
+  if (value !== 'http' && value !== 'https') throw new Error('Choose HTTP or HTTPS for this environment.');
+  return value;
+}
+
 export type DesktopLocalUIPasswordMode = 'keep' | 'replace' | 'clear';
 
 export function normalizeDesktopLocalUIPasswordMode(
@@ -12,6 +19,7 @@ export function normalizeDesktopLocalUIPasswordMode(
 
 export type DesktopSettingsDraft = Readonly<{
   local_ui_bind: string;
+  local_ui_protocol?: LocalUIProtocol;
   local_ui_password: string;
   local_ui_password_mode: DesktopLocalUIPasswordMode;
   auto_runtime_probe_enabled: boolean;

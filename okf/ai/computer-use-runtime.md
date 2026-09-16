@@ -13,7 +13,7 @@ Redeven exposes computer and browser use as typed functions. Calls use logical `
 
 # Contract
 
-Desktop and Runtime negotiate compatibility epoch 17 for the media reference
+Desktop and Runtime negotiate compatibility epoch 18, retaining the media reference
 and binary-loading contract. Older Desktop decoders reject unknown Activity
 fields, so mixed versions must be rejected during attachment, before a thread
 is displayed. The existing model catalog and earlier upgrade paths remain.

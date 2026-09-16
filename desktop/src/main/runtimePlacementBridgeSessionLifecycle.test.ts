@@ -60,6 +60,7 @@ async function createMockBridgeCommand(options: MockBridgeOptions = {}) {
         local_ui: {
           available: true,
           base_path: '/',
+          urls: ['https://192.0.2.20:23998/'],
           bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         },
         runtime_control: {
@@ -220,6 +221,9 @@ describe('runtime placement HTTP/2 session lifecycle', () => {
     const command = await createMockBridgeCommand();
     const session = await startLocalSession(command);
     try {
+      expect(session.startup.local_ui_urls).toEqual(['https://192.0.2.20:23998/']);
+      expect(session.startup.local_ui_url).toBe('https://192.0.2.20:23998/');
+      expect(session.startup.local_ui_bridge_url).toBe(session.local_ui_url);
       expect(session.startup.started_at_unix_ms).toBe(1778751234567);
       const first = await connectLoopback(session.local_ui_url);
       const second = await connectLoopback(session.local_ui_url);

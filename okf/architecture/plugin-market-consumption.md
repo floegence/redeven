@@ -12,7 +12,7 @@ refreshes and atomically publishes a validated snapshot without restarting the
 Desktop, and serves that snapshot only to the trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `v3.0.31`.
+passes the complete signed release transport to released ReDevPlugin `v3.0.32`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -41,6 +41,10 @@ generation. The resulting snapshot is sorted, timestamped, written atomically
 to the product cache, and atomically replaces the current in-process snapshot.
 An older generation is rejected before it can replace memory, cache, or release
 authority; an equal generation may update its check time.
+
+An external package installation refreshes the Host's installed inventory directly,
+independently of the market generation. A successful install must appear in the
+application launcher without a page reload, including when discovery is empty.
 
 Remote refresh and cached reads are separate operations. At startup Redeven may
 load only a previously persisted snapshot that still passes the current schema

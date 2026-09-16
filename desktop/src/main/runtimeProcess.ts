@@ -4,7 +4,7 @@ import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { Readable, Writable } from 'node:stream';
+import type { Writable } from 'node:stream';
 import { promisify } from 'node:util';
 
 import {
@@ -79,7 +79,7 @@ async function validateBundledCLIIdentity(executablePath: string, env: NodeJS.Pr
   }
 }
 
-type SpawnedRuntimeProcess = ChildProcessByStdio<Writable, Readable, Readable>;
+type SpawnedRuntimeProcess = ChildProcessByStdio<Writable, null, null>;
 type RuntimeProcessCommand = 'desktop-runtime-inventory' | 'desktop-runtime-stop';
 
 export type ManagedRuntime = Readonly<{
@@ -969,10 +969,21 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   );
   const reportDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-desktop-'));
   const reportFile = path.join(reportDir, 'startup-report.json');
-  const child = spawn(args.executablePath, [...args.runtimeArgs, '--startup-report-file', reportFile], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: mergedEnv,
-  });
+  // Runtime logs must survive the initiating Desktop process and its pipes.
+  const stdoutLog = fsSync.openSync(path.join(reportDir, 'stdout.log'), 'ax', 0o600);
+  let stderrLog: number | undefined;
+  let child: SpawnedRuntimeProcess;
+  try {
+    stderrLog = fsSync.openSync(path.join(reportDir, 'stderr.log'), 'ax', 0o600);
+    child = spawn(args.executablePath, [...args.runtimeArgs, '--startup-report-file', reportFile], {
+      stdio: ['pipe', stdoutLog, stderrLog],
+      detached: true,
+      env: mergedEnv,
+    }) as SpawnedRuntimeProcess;
+  } finally {
+    fsSync.closeSync(stdoutLog);
+    if (stderrLog !== undefined) fsSync.closeSync(stderrLog);
+  }
   let spawnError: Error | null = null;
   const recentLogs: RecentLogs = { stdout: '', stderr: '' };
 
@@ -980,16 +991,33 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     spawnError = error instanceof Error ? error : new Error(String(error));
   });
 
-  child.stdout.setEncoding('utf8');
-  child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk: string) => {
-    recentLogs.stdout = appendRecentLog(recentLogs.stdout, chunk);
-    args.onLog?.('stdout', chunk);
-  });
-  child.stderr.on('data', (chunk: string) => {
-    recentLogs.stderr = appendRecentLog(recentLogs.stderr, chunk);
-    args.onLog?.('stderr', chunk);
-  });
+  const offsets = { stdout: 0, stderr: 0 };
+  const readLogs = () => {
+    for (const stream of ['stdout', 'stderr'] as const) {
+      const logPath = path.join(reportDir, `${stream}.log`);
+      try {
+        const size = fsSync.statSync(logPath).size;
+        const start = Math.max(offsets[stream], size - 64 * 1024);
+        if (start >= size) continue;
+        const buffer = Buffer.alloc(size - start);
+        const fd = fsSync.openSync(logPath, 'r');
+        try { fsSync.readSync(fd, buffer, 0, buffer.length, start); }
+        finally { fsSync.closeSync(fd); }
+        offsets[stream] = size;
+        const chunk = buffer.toString('utf8');
+        recentLogs[stream] = appendRecentLog(recentLogs[stream], chunk);
+        args.onLog?.(stream, chunk);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          recentLogs.stderr = appendRecentLog(recentLogs.stderr, `Runtime log read failed: ${String(error)}\n`);
+        }
+      }
+    }
+  };
+  const logWatcher = fsSync.watch(reportDir, { persistent: false }, readLogs);
+  readLogs();
+  child.once('exit', () => { readLogs(); logWatcher.close(); });
+  child.once('error', () => logWatcher.close());
 
   const startupSecretsStdin = String(args.startupSecretsStdin ?? '');
   try {
@@ -1123,6 +1151,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       'Runtime ready',
       'The local runtime is ready to open.',
     );
+    child.unref();
     return {
       kind: 'ready',
       managedRuntime: {

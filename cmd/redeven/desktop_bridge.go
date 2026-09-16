@@ -70,9 +70,11 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 			RuntimeCommit:   Commit,
 			StartedAtUnixMS: state.Identity.StartedAtUnixMS,
 			LocalUI: desktopbridge.HelloLocalUI{
-				Available:   true,
-				BasePath:    "/",
-				BridgeToken: localUIBridgeToken,
+				URLs:             append([]string(nil), state.Endpoint.LocalUIURLs...),
+				PasswordRequired: state.Endpoint.PasswordRequired,
+				Available:        true,
+				BasePath:         "/",
+				BridgeToken:      localUIBridgeToken,
 			},
 			RuntimeControl: desktopbridge.RuntimeControl{
 				Available:       controlEndpoint != nil,

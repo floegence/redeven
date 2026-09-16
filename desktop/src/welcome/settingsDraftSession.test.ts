@@ -26,6 +26,8 @@ function surface(
     next_start_address_display: localUIBind,
     next_start_address_kind: 'raw',
     current_runtime_url: '',
+    current_runtime_urls: [],
+    current_runtime_running: false,
     password_state_id: 'not_required',
     password_state_tone: 'default',
     local_ui_password_configured: false,

@@ -33,6 +33,7 @@ function runtimeStateFromStartup(
   });
   return {
     local_ui_url: localUIURL,
+    local_ui_urls: startup.local_ui_urls ?? [localUIURL],
     effective_run_mode: compact(startup.effective_run_mode),
     remote_enabled: startup.remote_enabled === true,
     controlplane_base_url: compact(startup.controlplane_base_url) || undefined,
@@ -127,6 +128,7 @@ function withCurrentRuntime(
   const nextURL = compact(currentRuntime?.local_ui_url);
   if (
     existingURL === nextURL
+    && JSON.stringify(existingRuntime?.local_ui_urls ?? []) === JSON.stringify(currentRuntime?.local_ui_urls ?? [])
     && (existingRuntime?.controlplane_base_url ?? '') === (currentRuntime?.controlplane_base_url ?? '')
     && (existingRuntime?.controlplane_provider_id ?? '') === (currentRuntime?.controlplane_provider_id ?? '')
     && (existingRuntime?.env_public_id ?? '') === (currentRuntime?.env_public_id ?? '')

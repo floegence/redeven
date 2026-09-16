@@ -28,6 +28,8 @@ export type RuntimePlacementBridgeHello = Readonly<{
   local_ui: Readonly<{
     available: boolean;
     base_path: string;
+    urls?: readonly string[];
+    password_required?: boolean;
     bridge_token?: string;
   }>;
   runtime_control: Readonly<{
@@ -101,6 +103,8 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
     local_ui: {
       available: localUIAvailable,
       base_path: compact(localUI.base_path) || '/',
+      urls: Array.isArray(localUI.urls) ? localUI.urls.filter((value): value is string => typeof value === 'string' && /^https?:\/\//u.test(value)) : [],
+      password_required: localUI.password_required === true,
       ...(localUIBridgeToken ? { bridge_token: localUIBridgeToken } : {}),
     },
     runtime_control: {

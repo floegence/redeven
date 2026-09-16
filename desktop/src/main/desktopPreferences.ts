@@ -1,3 +1,4 @@
+import { parseLocalUIProtocol } from '../shared/settingsIPC';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -182,6 +183,7 @@ type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
     state_dir?: unknown;
 		access?: Readonly<{
 			local_ui_bind?: unknown;
+      local_ui_protocol?: unknown;
 			local_ui_password_configured?: unknown;
 		}>;
   }>;
@@ -433,6 +435,7 @@ export function desktopPreferencesToDraft(
   })();
   return {
 		local_ui_bind: access.local_ui_bind,
+      local_ui_protocol: access.local_ui_protocol,
 		local_ui_password: '',
 		local_ui_password_mode: access.local_ui_password_configured ? 'keep' : 'replace',
     auto_runtime_probe_enabled: (selectedLocalEnvironment ?? localEnvironment).auto_runtime_probe_enabled,
@@ -554,10 +557,12 @@ function normalizeLocalEnvironmentAccess(
 	localUIBind: unknown,
 	localUIPassword: string,
 	localUIPasswordConfigured = compact(localUIPassword) !== '',
+  localUIProtocol?: unknown,
 ): DesktopLocalEnvironmentAccess {
 	const localUIBindCanonical = canonicalLocalUIBind(compact(localUIBind) || DEFAULT_DESKTOP_LOCAL_UI_BIND);
 	return {
 		local_ui_bind: localUIBindCanonical,
+    ...(localUIProtocol === undefined ? {} : { local_ui_protocol: parseLocalUIProtocol(localUIProtocol) }),
 		local_ui_password: localUIPassword,
 		local_ui_password_configured: localUIPasswordConfigured,
   };
@@ -1929,6 +1934,7 @@ export function validateDesktopSettingsDraft(
   }
 	return {
     local_ui_bind: canonicalBind,
+    local_ui_protocol: parseLocalUIProtocol(draft.local_ui_protocol),
     local_ui_password: passwordState.local_ui_password,
     local_ui_password_configured: passwordState.local_ui_password_configured,
   };
@@ -2059,6 +2065,7 @@ function normalizeLocalEnvironmentCatalogCandidate(
 		localHostingSource?.access?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
 		password,
 		passwordConfigured,
+    localHostingSource?.access?.local_ui_protocol,
     );
     try {
       return createDesktopLocalEnvironmentHosting({
@@ -2149,6 +2156,7 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
       state_dir: environment.local_hosting.state_dir,
       access: {
 			local_ui_bind: access.local_ui_bind,
+      local_ui_protocol: access.local_ui_protocol,
 			local_ui_password_configured: access.local_ui_password_configured,
       },
     },

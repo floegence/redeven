@@ -5,7 +5,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
@@ -43,6 +45,9 @@ func (c *cli) localAuthorityCmd(args []string) int {
 	if operation == "device-ca" {
 		return c.localAuthorityDeviceCACmd(args[1:])
 	}
+	if operation == "access" {
+		return c.localAuthorityAccessCmd(args[1:])
+	}
 	if operation != "rotate-key" {
 		writeLocalAuthorityReport(c.stderr, localAuthorityReport{
 			Operation: "unknown",
@@ -53,6 +58,66 @@ func (c *cli) localAuthorityCmd(args []string) int {
 		return 2
 	}
 	return c.localAuthorityRotateKeyCmd(args[1:])
+}
+
+func (c *cli) localAuthorityAccessCmd(args []string) int {
+	if len(args) == 0 || (args[0] != "get" && args[0] != "set") {
+		writeText(c.stderr, "Usage: redeven local-authority access get|set --state-root <path>\nSet reads one access settings JSON object from stdin. Stop Runtime before using set.\n")
+		return 2
+	}
+	fs := newCLIFlagSet("local-authority access " + args[0])
+	stateRoot := fs.String("state-root", "", "Exact Redeven state root")
+	if err := parseCommandFlags(fs, args[1:]); err != nil {
+		writeText(c.stderr, err.Error()+"\n")
+		return 2
+	}
+	if strings.TrimSpace(*stateRoot) == "" {
+		writeText(c.stderr, "--state-root is required\n")
+		return 2
+	}
+	layout, err := config.LocalEnvironmentStateLayout(*stateRoot)
+	if err != nil {
+		writeText(c.stderr, err.Error()+"\n")
+		return 2
+	}
+	var access *config.EnvironmentCatalogAccess
+	if args[0] == "get" {
+		access, err = config.ReadEnvironmentCatalogAccess(layout)
+		if err == nil && access == nil {
+			access = &config.EnvironmentCatalogAccess{LocalUIBind: "localhost:23998", LocalUIProtocol: "http"}
+		}
+	} else {
+		var input localui.RuntimeAccessUpdate
+		decoder := json.NewDecoder(io.LimitReader(c.stdin, startupSecretsEnvelopeMaxLen+1))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			writeText(c.stderr, "Invalid access settings JSON\n")
+			return 2
+		}
+		if err := decoder.Decode(new(any)); err != io.EOF {
+			writeText(c.stderr, "Expected one access settings object\n")
+			return 2
+		}
+		if err := os.MkdirAll(layout.StateDir, 0700); err != nil {
+			writeText(c.stderr, err.Error()+"\n")
+			return 1
+		}
+		lock, err := lockfile.Acquire(layout.LockPath)
+		if err != nil {
+			writeText(c.stderr, "Stop Runtime before saving access settings through the CLI, or use its authenticated Desktop management connection.\n")
+			return 1
+		}
+		defer lock.Release()
+		access, err = localui.SaveRuntimeAccess(layout, input)
+	}
+	if err != nil {
+		writeText(c.stderr, err.Error()+"\n")
+		return 1
+	}
+	if err := json.NewEncoder(c.stdout).Encode(access); err != nil {
+		return 1
+	}
+	return 0
 }
 
 func (c *cli) localAuthorityDeviceCACmd(args []string) int {
@@ -150,7 +215,7 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: "local_ui_device_ca_generation_failed", Message: "Local UI device CA generation did not complete."})
 			return 1
 		}
-		lock, err := lockfile.Acquire(layout.LockPath)
+		lock, err := lockfile.Acquire(filepath.Join(layout.StateDir, "device-ca.lock"))
 		if err != nil {
 			writeLocalAuthorityReport(c.stderr, localAuthorityFailureFor("device-ca-generate", err))
 			return 1

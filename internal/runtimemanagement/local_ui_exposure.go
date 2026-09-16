@@ -8,6 +8,7 @@ const (
 	LocalUIExposureScopeLoopback LocalUIExposureScope = "loopback"
 	LocalUIExposureScopeNetwork  LocalUIExposureScope = "network"
 	LocalUITransportTLS                               = "tls"
+	LocalUITransportHTTP                              = "http"
 )
 
 // LocalUIExposure is the canonical runtime security posture projected to every
@@ -18,14 +19,18 @@ type LocalUIExposure struct {
 	PasswordRequired bool                 `json:"password_required"`
 }
 
-func NewLocalUIExposure(network bool, passwordRequired bool) LocalUIExposure {
+func NewLocalUIExposure(protocol string, network bool, passwordRequired bool) LocalUIExposure {
 	scope := LocalUIExposureScopeLoopback
 	if network {
 		scope = LocalUIExposureScopeNetwork
 	}
+	transport := protocol
+	if protocol == "https" {
+		transport = LocalUITransportTLS
+	}
 	return LocalUIExposure{
 		Scope:            scope,
-		Transport:        LocalUITransportTLS,
+		Transport:        transport,
 		PasswordRequired: passwordRequired,
 	}
 }
@@ -34,7 +39,7 @@ func (e LocalUIExposure) Validate() error {
 	if e.Scope != LocalUIExposureScopeLoopback && e.Scope != LocalUIExposureScopeNetwork {
 		return fmt.Errorf("invalid Local UI exposure scope %q", e.Scope)
 	}
-	if e.Transport != LocalUITransportTLS {
+	if e.Transport != LocalUITransportTLS && e.Transport != LocalUITransportHTTP {
 		return fmt.Errorf("invalid Local UI exposure transport %q", e.Transport)
 	}
 	if e.Scope == LocalUIExposureScopeNetwork && !e.PasswordRequired {

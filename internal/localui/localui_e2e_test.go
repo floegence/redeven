@@ -28,6 +28,25 @@ import (
 	"github.com/floegence/redeven/internal/terminal"
 )
 
+func TestServer_E2E_HTTPSRejectsUntrustedClientsAndPlainHTTP(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+	address := s.listeners[0].Addr().String()
+	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: x509.NewCertPool()}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	if response, err := client.Get("https://" + address + "/"); err == nil {
+		response.Body.Close()
+		t.Fatal("untrusted client reached HTTPS")
+	}
+	response, err := client.Get("http://" + address + "/")
+	if err == nil {
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("plaintext request status = %d, want rejection", response.StatusCode)
+		}
+	}
+}
+
 func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -89,9 +108,7 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	if err := json.Unmarshal(envelope.ConnectArtifact, &artifactWire); err != nil {
 		t.Fatalf("decode HTTPS localhost artifact candidate: %v", err)
 	}
-	s.authorityMu.RLock()
-	wantCandidate := "wss://" + s.directAuthorities[net.JoinHostPort("localhost", fmt.Sprint(port))] + flowersec.WebSocketDirectPath
-	s.authorityMu.RUnlock()
+	wantCandidate := "wss://" + net.JoinHostPort("localhost", fmt.Sprint(port)) + flowersec.WebSocketDirectPath
 	if len(artifactWire.Path.Candidates) != 1 || artifactWire.Path.Candidates[0].URL != wantCandidate {
 		t.Fatalf("HTTPS localhost artifact candidates = %#v, want %q", artifactWire.Path.Candidates, wantCandidate)
 	}
@@ -119,6 +136,95 @@ func TestServer_E2E_HTTPSLocalhostConnectsDirectSessionOverWSS(t *testing.T) {
 	}
 	if _, ok := listResponse["entries"]; !ok {
 		t.Fatalf("filesystem list response is missing entries: %#v", listResponse)
+	}
+}
+
+func TestServerDoesNotAdvertiseConfiguredAddressBeforeListening(t *testing.T) {
+	s := newTestServer(t, nil)
+	s.bind, _ = ParseBind(DefaultBind)
+	if urls := s.DisplayURLs(); len(urls) != 0 {
+		t.Fatalf("unstarted Runtime advertised configured addresses: %v", urls)
+	}
+}
+
+func TestServer_E2E_PublicHTTPWithoutCertificatesUsesOnePort(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newTestServer(t, accessgate.New(accessgate.Options{Password: "shared-secret"}))
+	s.protocol, s.deviceCA = "http", nil
+	s.bind, err = ParseBind(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.a = newRuntimeHealthTestAgent(t, s.configPath)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.StartOnListeners(ctx, []net.Listener{listener}, nil); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	base := "http://" + listener.Addr().String()
+	clients := make([]*http.Client, 3)
+	for index := range clients {
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clients[index] = &http.Client{Jar: jar, Timeout: 5 * time.Second}
+		response, err := clients[index].Post(base+"/api/local/access/unlock", "application/json", bytes.NewBufferString(`{"password":"shared-secret"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("client %d unlock: %d", index, response.StatusCode)
+		}
+		response, err = clients[index].Post(base+"/api/local/direct/connect_artifact", "application/json", bytes.NewBufferString(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var acquisition connectArtifactEnvelope
+		err = json.NewDecoder(response.Body).Decode(&acquisition)
+		response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusOK {
+			t.Fatalf("acquire: %v, %d", err, response.StatusCode)
+		}
+		var artifact struct {
+			Profile  string `json:"profile"`
+			Endpoint string `json:"endpoint"`
+		}
+		if err := json.Unmarshal(acquisition.ConnectArtifact, &artifact); err != nil {
+			t.Fatal(err)
+		}
+		if artifact.Profile != "flowersec-http-direct/1" || artifact.Endpoint != "ws://"+listener.Addr().String()+flowersec.WebSocketDirectPath {
+			t.Fatalf("public HTTP artifact did not use the application port: %+v", artifact)
+		}
+	}
+	response, err := clients[0].Post(base+"/api/local/access/logout", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	for index, client := range clients {
+		response, err := client.Get(base + "/api/local/access/status")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var status struct {
+			Data struct {
+				Unlocked bool `json:"unlocked"`
+			} `json:"data"`
+		}
+		err = json.NewDecoder(response.Body).Decode(&status)
+		response.Body.Close()
+		if err != nil || status.Data.Unlocked != (index != 0) {
+			t.Fatalf("client %d isolation: %+v, %v", index, status, err)
+		}
+	}
+	if s.tlsConfig != nil || s.deviceCA != nil {
+		t.Fatal("HTTP unexpectedly prepared certificates")
 	}
 }
 
@@ -529,33 +635,9 @@ func newDesktopBridgeTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
 	s.bind = bind
-	if err := s.prepareSecureNetwork([]net.Listener{listener}); err != nil {
-		_ = listener.Close()
-		t.Fatalf("prepareSecureNetwork() error = %v", err)
+	if err := s.StartOnListeners(t.Context(), []net.Listener{listener}, nil); err != nil {
+		t.Fatalf("StartOnListeners() error = %v", err)
 	}
-	if err := s.prepareDesktopBridgeListener(); err != nil {
-		_ = listener.Close()
-		t.Fatalf("prepareDesktopBridgeListener() error = %v", err)
-	}
-	if err := s.configureAcceptor(); err != nil {
-		_ = listener.Close()
-		t.Fatalf("configureAcceptor() error = %v", err)
-	}
-	if err := s.createDirectServers(); err != nil {
-		_ = listener.Close()
-		t.Fatalf("createDirectServers() error = %v", err)
-	}
-	if err := s.configureDesktopBridgeDirectHandler(); err != nil {
-		_ = listener.Close()
-		t.Fatalf("configureDesktopBridgeDirectHandler() error = %v", err)
-	}
-	if err := s.startDesktopBridgeServer(); err != nil {
-		_ = listener.Close()
-		t.Fatalf("startDesktopBridgeServer() error = %v", err)
-	}
-	s.srv = newLocalUIHTTPServer(s.networkHandler())
-	s.listeners = []net.Listener{listener}
-	s.serveSecureNetwork(s.srv, s.listeners)
 	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
@@ -699,12 +781,7 @@ func mintDesktopBridgeArtifact(t *testing.T, s *Server, _ *http.Client, _ string
 		t.Fatalf("bridge artifact candidates = %#v, want one WSS candidate", artifactWire.Path.Candidates)
 	}
 	candidateURL := artifactWire.Path.Candidates[0].URL
-	s.authorityMu.RLock()
-	validCandidate := false
-	for _, authority := range s.directAuthorities {
-		validCandidate = validCandidate || candidateURL == "wss://"+authority+flowersec.WebSocketDirectPath
-	}
-	s.authorityMu.RUnlock()
+	validCandidate := candidateURL == strings.Replace(publicURL, "https://", "wss://", 1)+flowersec.WebSocketDirectPath
 	if !validCandidate {
 		t.Fatalf("bridge artifact candidate = %q, want configured Flowersec WSS endpoint", candidateURL)
 	}
@@ -749,9 +826,13 @@ func connectDesktopBridgeArtifactResult(ctx context.Context, s *Server, encodedA
 		return nil, errors.New("missing test Local UI device CA")
 	}
 	trustRoots.AddCert(s.deviceCA.certificate)
+	urls := s.DisplayURLs()
+	if len(urls) == 0 {
+		return nil, errors.New("Runtime is not listening")
+	}
 	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{
 		TrustRoots:     trustRoots,
-		Origin:         strings.TrimRight(s.DisplayURLs()[0], "/"),
+		Origin:         strings.TrimRight(urls[0], "/"),
 		ConnectTimeout: 5 * time.Second,
 	})
 }

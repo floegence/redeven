@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -259,18 +258,8 @@ func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *app
 		appServer:          appSrv,
 		pending:            make(map[string]pendingDirect),
 		deviceCA:           testDeviceCA,
-		directAuthorities:  make(map[string]string),
-		resolveDirectAuthority: func(authority string) (string, error) {
-			host, portText, splitErr := net.SplitHostPort(authority)
-			if splitErr != nil {
-				return "", splitErr
-			}
-			port, parseErr := strconv.Atoi(portText)
-			if parseErr != nil || port >= 65535 {
-				return "", errors.New("invalid test authority")
-			}
-			return net.JoinHostPort(host, strconv.Itoa(port+1)), nil
-		},
+		protocol:           "https",
+		networkAuthorities: map[string]struct{}{"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {}},
 	}
 }
 
@@ -978,6 +967,7 @@ func TestServer_DiagnosticsAddsTraceHeaderForRuntime(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
 	s := &Server{
+		protocol:   "https",
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		configPath: cfgPath,
 		version:    "dev",
@@ -1022,13 +1012,14 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
 	s := &Server{
-		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
-		configPath:        cfgPath,
-		version:           "dev",
-		appServer:         newTestAppServer(t, cfgPath),
-		diag:              diagStore,
-		pending:           make(map[string]pendingDirect),
-		directAuthorities: map[string]string{"localhost:23998": "localhost:24000"},
+		protocol:           "https",
+		log:                slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath:         cfgPath,
+		version:            "dev",
+		appServer:          newTestAppServer(t, cfgPath),
+		diag:               diagStore,
+		pending:            make(map[string]pendingDirect),
+		networkAuthorities: map[string]struct{}{"localhost:23998": {}},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "https://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
@@ -1074,6 +1065,7 @@ func TestServer_DiagnosticsSkipsDiagnosticsAPIRequests(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
 	s := &Server{
+		protocol:   "https",
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		configPath: cfgPath,
 		version:    "dev",
@@ -1289,6 +1281,7 @@ func TestServer_Start_UsesActualDynamicPortForDisplayURLs(t *testing.T) {
 	}
 
 	s := &Server{
+		protocol:   "https",
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		bind:       bind,
 		configPath: cfgPath,
@@ -1325,7 +1318,7 @@ func TestNew_PreservesExplicitDynamicLoopbackBind(t *testing.T) {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
 
-	s, err := New(Options{
+	s, err := New(Options{Protocol: "https",
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Bind:       bind,
 		AppServer:  newTestAppServer(t, cfgPath),

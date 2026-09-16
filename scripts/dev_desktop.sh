@@ -65,7 +65,7 @@ Environment:
   REDEVEN_DESKTOP_AUTO_START_RUNTIME=0|1 (default: 1 for this development launch)
   REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=<port|0> (overrides instance-derived default)
   REDEVEN_DESKTOP_INSPECT_PORT=<port|0> (overrides instance-derived default)
-  REDEVEN_DESKTOP_LOCAL_UI_BIND=<loopback-host:port> (overrides instance-derived default)
+  REDEVEN_DESKTOP_LOCAL_UI_BIND=<loopback-host:port> (explicit Runtime bind override; otherwise uses saved configuration)
   REDEVEN_STATE_ROOT=<absolute isolated profile root>
   REDEVEN_DEV_STATE_BASE=<absolute parent for the stable checkout profile>
   REDEVEN_DEV_ALLOW_USER_STATE_ROOT=1 (required to explicitly use ~/.redeven)
@@ -264,10 +264,9 @@ allocate_development_ports() {
 	preferred_base="$DEVELOPMENT_PORT_BASE"
 	if [ "$PORTS_EXPLICIT" -eq 1 ]; then
 		explicit_local_port="${LOCAL_UI_BIND##*:}"
-		local_port="${explicit_local_port:-$preferred_base}"
+		local_port="${explicit_local_port:-0}"
 		cdp_port="${REMOTE_DEBUGGING_PORT:-$((preferred_base + 1))}"
 		inspect_port="${INSPECT_PORT:-$((preferred_base + 2))}"
-		LOCAL_UI_BIND="${LOCAL_UI_BIND:-localhost:$local_port}"
 		REMOTE_DEBUGGING_PORT="$cdp_port"
 		INSPECT_PORT="$inspect_port"
 		validate_debug_port "REDEVEN_DESKTOP_LOCAL_UI_BIND port" "$local_port"
@@ -285,18 +284,17 @@ allocate_development_ports() {
 	acquire_development_port_lock
 	for offset in $(seq 0 5999); do
 		candidate_base=$((24000 + (((preferred_base - 24000) / 4 + offset) % 6000) * 4))
-		local_port="$candidate_base"
+		local_port=0
 		cdp_port=$((candidate_base + 1))
 		inspect_port=$((candidate_base + 2))
-		if ! port_lease_available_locked "$local_port" || ! port_lease_available_locked "$cdp_port" || ! port_lease_available_locked "$inspect_port"; then
+		if ! port_lease_available_locked "$cdp_port" || ! port_lease_available_locked "$inspect_port"; then
 			continue
 		fi
-		if ! development_port_is_available "$local_port" 1 || ! development_port_is_available "$cdp_port" 0 || ! development_port_is_available "$inspect_port" 0; then
+		if ! development_port_is_available "$cdp_port" 0 || ! development_port_is_available "$inspect_port" 0; then
 			continue
 		fi
 		claim_ports_locked "$local_port" "$cdp_port" "$inspect_port"
 		DEVELOPMENT_PORT_BASE="$candidate_base"
-		LOCAL_UI_BIND="localhost:$local_port"
 		REMOTE_DEBUGGING_PORT="$cdp_port"
 		INSPECT_PORT="$inspect_port"
 		release_development_port_lock
@@ -307,6 +305,7 @@ allocate_development_ports() {
 }
 
 validate_local_ui_bind() {
+  [ -n "$LOCAL_UI_BIND" ] || return 0
   local port
   case "$LOCAL_UI_BIND" in
     localhost:*|127.0.0.1:*|'[::1]':*) ;;
@@ -638,7 +637,11 @@ log_development_configuration() {
 	ui_pkg_log "Development cache root: $REDEVEN_DESKTOP_CACHE_ROOT"
 	ui_pkg_log "Development temp root: $REDEVEN_DESKTOP_TEMP_ROOT"
 	ui_pkg_log "Development immutable bundle root: $DEVELOPMENT_STATE_ROOT/desktop/bundles"
-  ui_pkg_log "Development Local UI: $LOCAL_UI_BIND"
+  if [ -n "$LOCAL_UI_BIND" ]; then
+    ui_pkg_log "Runtime bind override (not yet listening): $LOCAL_UI_BIND"
+  else
+    ui_pkg_log "Runtime access: saved configuration; connection address is reported after startup"
+  fi
   if debug_port_disabled "$REMOTE_DEBUGGING_PORT"; then
     ui_pkg_log "Development CDP port: disabled"
   else

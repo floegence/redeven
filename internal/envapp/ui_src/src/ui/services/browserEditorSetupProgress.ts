@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import type { DesktopCodeWorkspaceProgress } from '../../../../../../desktop/src/shared/desktopCodeWorkspaceIPC';
 
 export type BrowserEditorSetupProgressPhase =
@@ -49,8 +50,7 @@ export function browserEditorProgressFromDesktop(progress: DesktopCodeWorkspaceP
 }
 
 export function createBrowserEditorSetupOperationID(): string {
-  if (typeof crypto.randomUUID === 'function') return `browser-editor:${crypto.randomUUID()}`;
-  return `browser-editor:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  return `browser-editor:${secureRandomUUID()}`;
 }
 
 export function shouldRefreshBrowserEditorProgressText(

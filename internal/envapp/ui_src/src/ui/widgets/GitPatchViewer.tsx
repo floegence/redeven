@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout, useNotification } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -70,7 +71,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
     const text = patchText();
     if (!text || !navigator?.clipboard?.writeText) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await writeTextToClipboard(text);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {

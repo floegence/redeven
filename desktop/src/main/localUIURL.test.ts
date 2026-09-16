@@ -19,6 +19,7 @@ describe('localUIURL', () => {
     expect(isSupportedLocalHostname('localhost')).toBe(true);
     expect(isSupportedLocalHostname('192.168.1.11')).toBe(true);
     expect(isSupportedLocalHostname('example.com')).toBe(false);
+    expect(normalizeLocalUIBaseURL('http://[2001:db8::20]:23998/')).toBe('http://[2001:db8::20]:23998/');
   });
 
   it('normalizes a Local UI base URL to its origin root', () => {

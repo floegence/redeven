@@ -575,7 +575,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
     expect(entry!.local_ui_url).toBe('');
     expect(buildEnvironmentSettingsRuntimeModel(entry!)).toEqual({
       running: true,
-      status_label: 'READY',
+      status_label: 'Running',
       status_tone: 'success',
     });
   });
@@ -912,7 +912,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
 });
 
 describe('buildEnvironmentLibrarySummaryModel', () => {
-  it('summarizes only visible environment entries with shared display-state buckets', () => {
+  it('counts running servers independently of their windows within the visible entries', () => {
     const local = testLocalEnvironment();
     const offlineURL = 'http://192.168.1.12:24000/';
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -947,7 +947,7 @@ describe('buildEnvironmentLibrarySummaryModel', () => {
       environment_count: 2,
       window_count: 0,
       ready_count: 1,
-      running_count: 0,
+      running_count: 1,
       attention_count: 1,
     });
     expect(buildEnvironmentLibrarySummaryModel(snapshot, snapshot.environments)).toEqual({
@@ -955,7 +955,7 @@ describe('buildEnvironmentLibrarySummaryModel', () => {
       environment_count: 3,
       window_count: 1,
       ready_count: 1,
-      running_count: 0,
+      running_count: 2,
       attention_count: 1,
     });
   });
@@ -1170,7 +1170,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
+          { kind: 'url', label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
         ],
       }),
       defaultFact('VERSION', 'v1.4.2'),
@@ -1197,8 +1197,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
       defaultFact('RUNS ON', 'ops@example.internal:2222', {
         endpoints: [
-          { label: 'SSH HOST', value: 'ops@example.internal:2222', monospace: true, copy_label: 'Copy SSH host' },
-          { label: 'FORWARDED URL', value: 'http://127.0.0.1:24111/', monospace: true, copy_label: 'Copy forwarded URL' },
+          { kind: 'url', label: 'URL', value: 'http://127.0.0.1:24111/', monospace: true, copy_label: 'Copy local endpoint' },
         ],
       }),
       defaultFact('VERSION', 'v1.4.0'),
@@ -1214,16 +1213,11 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     expect(buildEnvironmentCardEndpointsModel(sshEntry!)).toEqual([
       {
-        label: 'SSH HOST',
-        value: 'ops@example.internal:2222',
-        monospace: true,
-        copy_label: 'Copy SSH host',
-      },
-      {
-        label: 'FORWARDED URL',
+        kind: 'url',
+        label: 'URL',
         value: 'http://127.0.0.1:24111/',
         monospace: true,
-        copy_label: 'Copy forwarded URL',
+        copy_label: 'Copy local endpoint',
       },
     ]);
   });
@@ -1274,7 +1268,7 @@ describe('buildEnvironmentCardModel', () => {
     ]);
   });
 
-  it('shows a private Desktop bridge as a non-copyable status endpoint', () => {
+  it('shows the public URL while Desktop uses a private bridge', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -1283,14 +1277,12 @@ describe('buildEnvironmentCardModel', () => {
       })],
     });
     const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
-    expect(entry?.local_environment_transport).toBe('desktop_bridge');
     expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([{
-      kind: 'status',
-      label: 'STATUS',
-      value: 'Desktop only',
-      detail: 'Private Desktop bridge; browser access is unavailable',
-      monospace: false,
-      copy_label: '',
+      kind: 'url',
+      label: 'URL',
+      value: 'http://localhost:23998/',
+      monospace: true,
+      copy_label: 'Copy local endpoint',
     }]);
   });
 
@@ -1305,8 +1297,8 @@ describe('buildEnvironmentCardModel', () => {
       preferences: testDesktopPreferences({ local_environment: local }),
     });
     const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
-    expect(entry?.local_environment_transport).toBe('external_url');
     expect(buildEnvironmentCardEndpointsModel(entry!)).toEqual([{
+      kind: 'url',
       label: 'URL',
       value: 'https://localhost:23998/',
       monospace: true,
@@ -1367,7 +1359,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device', {
         endpoints: [
-          { label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
+          { kind: 'url', label: 'URL', value: 'http://localhost:23998/', monospace: true, copy_label: 'Copy local endpoint' },
         ],
       }),
       defaultFact('VERSION', 'v1.4.3'),

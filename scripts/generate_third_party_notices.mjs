@@ -32,7 +32,7 @@ const floetermThemePackageRoot = path.join(
   'internal/envapp/ui_src/node_modules/@floegence/floeterm-terminal-web',
 );
 const floetermThemeArtifactContract = {
-  packageVersion: '0.19.1',
+  packageVersion: '0.19.2',
   files: {
     'THEME_PROVENANCE.json': '2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06',
     'THEME_QUALITY_EVIDENCE.json': 'e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005',
@@ -43,7 +43,7 @@ const floetermThemeArtifactContract = {
 };
 
 const npmLicenseOverrides = new Map([
-  ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.19.1 package.' }],
+  ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package.' }],
   ['@floegence/redevplugin-ui', { license: 'MIT', note: 'License inherited from floegence/redevplugin root LICENSE.' }],
   ['khroma', { license: 'MIT', note: 'The published README declares MIT copyright for the package authors.' }],
 ]);
@@ -53,6 +53,18 @@ const npmCoordinateLicenseOverrides = new Map([
   ['@floegence/flowersec-node-native-darwin-x64@5.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/flowersec-node-native-linux-arm64-gnu@5.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/flowersec-node-native-linux-x64-gnu@5.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-android-arm64@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-darwin-arm64@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-darwin-x64@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-freebsd-x64@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-arm-gnueabihf@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-arm64-gnu@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-arm64-musl@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-x64-gnu@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-x64-musl@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-wasm32-wasi@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-win32-arm64-msvc@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-win32-x64-msvc@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@floegence/redeven-service-templates@0.6.0', { license: 'MIT', note: 'Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field.' }],
 	['@noble/hashes@2.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['react@19.2.8', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],

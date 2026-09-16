@@ -12,7 +12,6 @@ import type { GatewayDesktopTarget } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type {
   DesktopEnvironmentEntry,
-  DesktopLocalEnvironmentTransport,
   DesktopLauncherSurface,
   DesktopLocalCloseBehavior,
   DesktopLocalRuntimeState,
@@ -77,9 +76,6 @@ import {
   runtimeServiceSupportsProviderLink,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
-import {
-  buildDesktopLocalRuntimeOpenPlan,
-} from '../shared/localRuntimeSupervisor';
 import {
   desktopProviderRuntimeLinkTargetID,
   type DesktopProviderEnvironmentCandidate,
@@ -158,22 +154,6 @@ function runtimeStartedAtUnixMS(
   return undefined;
 }
 
-function localEnvironmentTransport(
-  session: DesktopSessionSummary | null,
-  runtimeURL: string,
-  runtimeState: DesktopLocalRuntimeState,
-): DesktopLocalEnvironmentTransport {
-  if (session?.transport_kind === 'native_local_bridge' || session?.transport_kind === 'placement_bridge') {
-    return 'desktop_bridge';
-  }
-  if (compact(session?.startup?.local_ui_url) !== '' || compact(runtimeURL) !== '') {
-    return 'external_url';
-  }
-  if (session?.lifecycle === 'open' || session?.lifecycle === 'opening' || runtimeState === 'running') {
-    return 'desktop_bridge';
-  }
-  return 'not_running';
-}
 
 function normalizeRuntimeURLForComparison(value: unknown): string {
   const raw = compact(value);
@@ -969,7 +949,7 @@ function localRuntimeState(
   environment: DesktopLocalEnvironmentState,
 ): DesktopLocalRuntimeState {
   const currentRuntime = environment.local_hosting?.current_runtime;
-  if (!currentRuntime?.local_ui_url) {
+  if (!currentRuntime) {
     return 'not_running';
   }
   return 'running';
@@ -1085,10 +1065,8 @@ function localRuntimeStateFromCachedHealth(
   fallback: DesktopLocalRuntimeState,
   health: DesktopRuntimeHealth | undefined,
 ): DesktopLocalRuntimeState {
-  if (health?.status !== 'online') {
-    return fallback;
-  }
-  return 'running';
+  if (!health) return fallback;
+  return health.status === 'online' ? 'running' : 'not_running';
 }
 
 function providerEnvironmentRuntimeHealth(
@@ -1232,10 +1210,20 @@ function buildLocalEnvironmentEntry(
   const providerOrigin = localEnvironmentProviderOrigin(environment);
   const providerID = localEnvironmentProviderID(environment);
   const envPublicID = localEnvironmentPublicID(environment);
-  const resolvedLocalRuntimeState = presence?.running
-    ? 'running'
-    : localRuntimeStateFromCachedHealth(localRuntimeState(environment), cachedRuntimeHealth);
-  const resolvedLocalRuntimeURL = presence?.local_ui_url ?? cachedRuntimeHealth?.local_ui_url ?? localRuntimeURL(environment);
+  const resolvedLocalRuntimeState = presence
+    ? (presence.running ? 'running' : 'not_running')
+    : localRuntimeStateFromCachedHealth(
+      localSession?.startup ? 'running' : localRuntimeState(environment), cachedRuntimeHealth,
+    );
+  const runtimeRunning = resolvedLocalRuntimeState === 'running';
+  const resolvedLocalRuntimeURL = runtimeRunning
+    ? (presence?.local_ui_url ?? cachedRuntimeHealth?.local_ui_url
+      ?? localSession?.startup?.local_ui_url ?? localRuntimeURL(environment))
+    : '';
+  const resolvedLocalRuntimeURLs = !runtimeRunning ? [] : presence
+    ? (presence.local_ui_urls ?? (resolvedLocalRuntimeURL ? [resolvedLocalRuntimeURL] : []))
+    : (localSession?.startup?.local_ui_urls ?? environment.local_hosting.current_runtime?.local_ui_urls
+      ?? (resolvedLocalRuntimeURL ? [resolvedLocalRuntimeURL] : []));
   const startedAtUnixMS = runtimeStartedAtUnixMS(
     presence?.started_at_unix_ms,
     localSession?.startup?.started_at_unix_ms,
@@ -1243,10 +1231,6 @@ function buildLocalEnvironmentEntry(
     cachedRuntimeHealth?.started_at_unix_ms,
   );
   const runtimeService = preferredRuntimeService(localEnvironmentRuntimeService(environment), cachedRuntimeHealth, presence);
-  const localRuntimePlan = buildDesktopLocalRuntimeOpenPlan(
-    { kind: 'local_environment' },
-    environment.local_hosting?.current_runtime,
-  );
   const providerLink = runtimeService?.bindings?.provider_link;
   const resolvedLocalCloseBehavior = localCloseBehavior(resolvedLocalRuntimeState);
   const localRuntimeFallbackHealth = cachedRuntimeHealth
@@ -1260,7 +1244,6 @@ function buildLocalEnvironmentEntry(
     presence,
     localRuntimeFallbackHealth,
   );
-  const transport = localEnvironmentTransport(localSession, resolvedLocalRuntimeURL, resolvedLocalRuntimeState);
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const effectiveHostAccess = presence?.host_access ?? { kind: 'local_host' as const };
   const effectivePlacement = presence?.placement ?? {
@@ -1310,17 +1293,16 @@ function buildLocalEnvironmentEntry(
     kind: 'local_environment',
     registration_ref: { kind: 'local_environment', id: environment.id },
     label: environment.label,
-    local_ui_url: localSession?.entry_url ?? localSession?.startup?.local_ui_url ?? resolvedLocalRuntimeURL,
+    local_ui_url: resolvedLocalRuntimeURL,
     secondary_text: kind === 'local'
       ? access.local_ui_bind
       : [access.local_ui_bind, remoteEnvironmentURL || providerIdentitySummary].filter(Boolean).join(' · '),
     local_environment_kind: kind,
     local_environment_ui_bind: access.local_ui_bind,
-    local_environment_transport: transport,
+    local_ui_urls: resolvedLocalRuntimeURLs,
     local_environment_ui_password_configured: access.local_ui_password_configured,
     local_environment_runtime_state: resolvedLocalRuntimeState,
     local_environment_runtime_url: resolvedLocalRuntimeURL || undefined,
-    local_environment_runtime_plan: localRuntimePlan,
     local_environment_runtime_service: runtimeService,
     local_environment_close_behavior: resolvedLocalCloseBehavior,
     provider_runtime_link_target: providerRuntimeLinkTarget,
@@ -1854,7 +1836,8 @@ function buildSavedRuntimeTargetEntry(
     runtimeService,
     redevenCloudOriginPolicy,
   });
-  const localUIURL = presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '';
+  const localUIURL = presence?.running === false ? '' : presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '';
+  const localUIURLs = presence?.running === false ? [] : presence?.local_ui_urls ?? openSession?.startup?.local_ui_urls ?? (localUIURL ? [localUIURL] : []);
   const effectiveHostAccess = presence?.host_access ?? target.host_access;
   const effectivePlacement = presence?.placement ?? target.placement;
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
@@ -1881,6 +1864,7 @@ function buildSavedRuntimeTargetEntry(
     registration_ref: { kind: 'runtime_target', id: target.id },
     label: target.label,
     local_ui_url: localUIURL,
+    local_ui_urls: localUIURLs,
     secondary_text: runtimeTargetSecondaryText(effectiveTarget),
     ssh_details: sshDetailsFromRuntimeTarget(target),
     ssh_password_configured: target.ssh_password_configured,
@@ -1995,11 +1979,8 @@ export function buildDesktopWelcomeSnapshot(
           ?? providerSession?.startup?.local_ui_url
           ?? compact(providerRoute.providerEnvironment?.environment_url)
           ?? compact(selectedProviderEnvironment.remote_catalog_entry?.environment_url),
-        current_runtime_transport: (providerSession
-          ? ((providerSession.transport_kind === 'native_local_bridge' || providerSession.transport_kind === 'placement_bridge')
-            ? 'desktop_bridge'
-            : (compact(providerSession.entry_url ?? providerSession.startup?.local_ui_url) !== '' ? 'external_url' : 'desktop_bridge'))
-          : 'not_running') as DesktopLocalEnvironmentTransport,
+        current_runtime_running: Boolean(providerSession),
+        current_runtime_urls: providerSession?.startup?.local_ui_urls ?? [],
         local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
         runtime_password_required: providerSession?.startup?.password_required === true,
         auto_runtime_probe_configurable: false,
@@ -2020,15 +2001,9 @@ export function buildDesktopWelcomeSnapshot(
       environment_id: localEnvironment.id,
       environment_label: localEnvironment.label,
       environment_kind: localEnvironmentStateKind(localEnvironment),
-      current_runtime_url: managedSession?.entry_url
-        ?? managedSession?.startup?.local_ui_url
-        ?? localEnvironmentEntry?.local_environment_runtime_url
-        ?? '',
-      current_runtime_transport: (managedSession
-        ? ((managedSession.transport_kind === 'native_local_bridge' || managedSession.transport_kind === 'placement_bridge')
-          ? 'desktop_bridge'
-          : (compact(managedSession.entry_url ?? managedSession.startup?.local_ui_url) !== '' ? 'external_url' : 'desktop_bridge'))
-        : localEnvironmentEntry?.local_environment_transport ?? 'not_running') as DesktopLocalEnvironmentTransport,
+      current_runtime_url: compact(localEnvironmentEntry?.local_ui_url),
+      current_runtime_running: localEnvironmentEntry?.local_environment_runtime_state === 'running',
+      current_runtime_urls: localEnvironmentEntry?.local_ui_urls ?? [],
       local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
       runtime_password_required: managedSession?.startup?.password_required === true,
       auto_runtime_probe_configurable: false,

@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
@@ -58,13 +59,9 @@ function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-let flowerProviderIDSequence = 0;
 
 function newProviderID(): string {
-  const cryptoUUID = globalThis.crypto?.randomUUID?.();
-  if (cryptoUUID) return `prov_${cryptoUUID}`;
-  flowerProviderIDSequence += 1;
-  return `prov_local_${flowerProviderIDSequence}`;
+  return `prov_${secureRandomUUID()}`;
 }
 
 function cloneProviderForForm(provider: NonNullable<FlowerSettingsSnapshot['model_profile']>['providers'][number]): FlowerProviderDraft {

@@ -652,7 +652,7 @@ export function buildGitFlowerTurnLauncherIntent(request: GitAskFlowerRequest): 
   })();
 
   const intent: EnvFlowerTurnLauncherIntent = {
-    id: createClientId('ask-flower'),
+    id: createClientId(),
     source_surface: 'git_browser',
     suggested_working_dir: suggestedWorkingDirAbs,
     context_items: [contextItem],

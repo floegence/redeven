@@ -50,6 +50,7 @@ export type PluginCenterViewProps = {
   onRetryRuntimeRecovery?: (pluginInstanceID?: string) => Promise<unknown> | unknown;
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
+  onRefreshInstalled?: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
   installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
@@ -1017,7 +1018,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           throw new Error(i18n.t('uiCopy.plugin.external.commitFailed'));
         })}
         onCommitted={async (result) => {
-          await props.onRefresh();
+          await (props.onRefreshInstalled ?? props.onRefresh)();
           const inventoryKey = `instance:${result.plugin.plugin_instance_id}`;
           setProtectedSelectionInventoryKey(inventoryKey);
           setSelectedInventoryKey(inventoryKey);

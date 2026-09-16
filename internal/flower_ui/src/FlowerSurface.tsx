@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { WebSearchCapabilityBadge } from './WebSearchCapabilityBadge';
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
@@ -6977,13 +6978,9 @@ webSearch: model.web_search,
       setComposerSelection({ start: cursor, end: cursor });
     });
   };
-  let composerReferenceSequence = 0;
   let composerReferenceLoadingTimer: number | undefined;
   const createComposerReferenceLocalID = (): string => {
-    const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `${Date.now()}_${composerReferenceSequence += 1}`;
-    return `flower_ref_${uuid}`;
+    return `flower_ref_${secureRandomUUID()}`;
   };
   const beginComposerReferenceMutation = (): boolean => {
     if (composerReferenceMutationActive()) return false;

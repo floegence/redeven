@@ -54,9 +54,12 @@ Quick start:
   Start the Local UI on this device:
     redeven run
 
-  Generate and trust the Local UI device CA once, then open https://localhost:23998:
+  Open http://localhost:23998 after startup. No certificate is needed.
+
+  To use HTTPS, explicitly prepare the device CA and trust it on each client:
     redeven local-authority device-ca generate --state-root ~/.redeven
     redeven local-authority device-ca install --state-root ~/.redeven --scope user
+    redeven run --local-ui-protocol https
   No bootstrap or control-plane configuration is required.
   Local UI stays on loopback and is available only from this device.
 
@@ -115,6 +118,14 @@ Usage:
   redeven local-authority device-ca status --state-root <path>
   redeven local-authority device-ca export --state-root <path> --output <new-path>
   redeven local-authority device-ca install --state-root <path> --scope user
+  redeven local-authority access get --state-root <path>
+  redeven local-authority access set --state-root <path> < access-settings.json
+
+Access settings:
+  get prints saved bind, protocol, and password presence, never a password or verifier.
+  set requires a stopped Runtime and one JSON object on stdin with local_ui_bind,
+  local_ui_protocol, local_ui_password_mode (keep|replace|clear), and local_ui_password.
+  Changes apply at the next start; network access always requires a password.
 
 Flags:
   --state-root <path>              Exact Redeven state root.
@@ -279,15 +290,19 @@ Local UI bind rules:
   - Loopback examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, [::1]:24000
   - Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998
   - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
-  - Every Local UI bind uses trusted HTTPS; Flowersec uses an independent runtime-assigned WSS listener.
-  - Runtime startup fails when the explicit device CA identity is missing, invalid, or expired.
-  - Each browser or client must trust the exported CA; Linux trust import is manual and never uses sudo.
+  - New environments use HTTP. Choose --local-ui-protocol https for encrypted transport.
+  - Public pages and WS/WSS connections share the configured port.
+  - HTTPS startup fails when the explicit device CA identity is missing, invalid, or expired; it never falls back to HTTP.
+  - HTTPS clients must trust the exported CA; Linux trust import is manual and never uses sudo.
+  - Existing environments without a saved protocol require an explicit protocol choice once.
   - Network binds additionally require a fixed port and password authentication.
 
 Password rules:
   - Select at most one of --password-prompt, --password-stdin, or --password-file.
   - If no explicit source is selected, REDEVEN_LOCAL_UI_PASSWORD is read automatically.
   - Empty environment values are ignored. Explicit sources override the fixed environment fallback.
+  - Runtime saves a private bcrypt verifier for independent restarts. Omitted secrets preserve it.
+  - Use --password-clear to remove the saved password explicitly; network access cannot be password-free.
 
 Rich terminal controls:
   - Arrow keys move focus between Control plane, Sessions, and Logs.
@@ -299,7 +314,9 @@ Rich terminal controls:
 Flags:
   --mode <remote|hybrid|local|desktop>
                                     Run mode (default: local).
-  --local-ui-bind <host:port>       Local UI bind address (default: localhost:23998).
+  --local-ui-bind <host:port>       Saved bind address, or localhost:23998 for a new environment.
+  --local-ui-protocol <http|https>  Connection security (new environments: http).
+  --local-ui-bind-override <addr>  One-start bind override; keeps the saved address.
   --provider-origin <url>           Provider authority origin for one-shot bootstrap.
   --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
@@ -309,6 +326,7 @@ Flags:
   --password-prompt                 Prompt for the Local UI password without echo.
   --password-stdin                  Read the Local UI password from stdin.
   --password-file <path>            Read the Local UI password from a file.
+  --password-clear                  Explicitly remove the saved password (loopback only).
   --startup-secrets-stdin           Desktop shell machine startup envelope (internal).
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --startup-report-file <path>      Write structured Local UI readiness JSON.

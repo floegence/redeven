@@ -35,7 +35,7 @@ type NormalizedRuntimeProbeOptions = Readonly<{
 export type RuntimeProbeFailureStage = 'runtime_health' | 'env_app_shell' | 'env_app_asset';
 
 export type RuntimeProbeFailure = Readonly<{
-  kind: 'timeout' | 'network_error' | 'invalid_response';
+  kind: 'timeout' | 'network_error' | 'invalid_response' | 'tls_error' | 'protocol_mismatch';
   stage?: RuntimeProbeFailureStage;
   code?: string;
   status_code?: number;
@@ -139,10 +139,13 @@ function request(
         return;
       }
       const code = String(error.code ?? '').trim();
+      const protocolMismatch = code === 'EPROTO' || code === 'ERR_SSL_WRONG_VERSION_NUMBER';
+      const certificateError = code.startsWith('CERT_') || code.startsWith('ERR_TLS_')
+        || ['DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'].includes(code);
       resolve({
         ok: false,
         failure: {
-          kind: 'network_error',
+          kind: protocolMismatch ? 'protocol_mismatch' : certificateError ? 'tls_error' : 'network_error',
           ...(code ? { code } : {}),
         },
       });
@@ -233,7 +236,8 @@ async function probeRedevenLocalUIHealth(
     return {
       ok: false,
       failure: {
-        kind: 'invalid_response',
+        kind: response.value.statusCode === 400 && response.value.body.includes('HTTP request to an HTTPS server')
+          ? 'protocol_mismatch' : 'invalid_response',
         stage: 'runtime_health',
         status_code: response.value.statusCode,
       },
@@ -413,7 +417,7 @@ async function applyEnvAppShellReadiness(
 }
 
 function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatus): StartupReport {
-  const localUIURL = status.local_ui_url ?? baseURL;
+  const localUIURL = status.local_ui_urls?.includes(baseURL) ? baseURL : status.local_ui_url ?? baseURL;
   const localUIURLs = status.local_ui_urls && status.local_ui_urls.length > 0
     ? [...status.local_ui_urls]
     : [localUIURL];

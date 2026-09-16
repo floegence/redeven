@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import type {
   DownloadCommand,
   DownloadErrorCode,
@@ -33,14 +34,9 @@ export type DownloadManagerOptions = Readonly<{
   createId?: () => string;
 }>;
 
-let downloadTaskIdSeq = 0;
 
 function defaultCreateId(): string {
-  downloadTaskIdSeq += 1;
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `download-${crypto.randomUUID()}`;
-  }
-  return `download-${Date.now()}-${downloadTaskIdSeq}`;
+  return `download-${secureRandomUUID()}`;
 }
 
 function positiveInteger(value: unknown): number | undefined {

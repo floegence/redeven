@@ -577,7 +577,7 @@ html:not(.dark) .redeven-welcome-surface {
 }
 
 .redeven-welcome-dialog-panel--settings {
-  width: min(52rem, 96vw);
+  width: min(47.5rem, 96vw);
 }
 
 .redeven-welcome-dialog-panel--connection {

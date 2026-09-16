@@ -854,46 +854,12 @@ export function buildEnvironmentCardFactsModel(
 export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
-  if (environment.kind === 'local_environment') {
-    const transport = environment.local_environment_transport
-      ?? (compact(environment.local_ui_url) !== '' ? 'external_url' : 'not_running');
-    const localEndpoint = transport === 'external_url'
-      ? compact(environment.local_ui_url)
-      : '';
-    if (localEndpoint !== '') {
-      return [{
-        label: looksLikeAbsoluteURL(localEndpoint) ? 'URL' : 'LOCAL',
-        value: localEndpoint,
-        monospace: shouldUseMonospaceEndpoint(localEndpoint),
-        copy_label: 'Copy local endpoint',
-      }];
+  if (environment.kind === 'local_environment' || environment.registration_ref?.kind === 'runtime_target') {
+    const urls = [...new Set([...(environment.local_ui_urls ?? []), compact(environment.local_ui_url)].filter(Boolean))];
+    if (urls.length > 0) {
+      return urls.map((value) => ({ kind: 'url', label: 'URL', value, monospace: true, copy_label: 'Copy local endpoint' }));
     }
-    if (transport === 'desktop_bridge') {
-      return [{
-        kind: 'status',
-        label: 'STATUS',
-        value: 'Desktop only',
-        detail: 'Private Desktop bridge; browser access is unavailable',
-        monospace: false,
-        copy_label: '',
-      }];
-    }
-    if (transport === 'not_running') {
-      return [{
-        kind: 'status',
-        label: 'STATUS',
-        value: 'Not running',
-        monospace: false,
-        copy_label: '',
-      }];
-    }
-    return [{
-      kind: 'status',
-      label: 'STATUS',
-      value: 'Not running',
-      monospace: false,
-      copy_label: '',
-    }];
+    return [{ kind: 'status', label: 'STATUS', value: environment.local_environment_runtime_state === 'running' ? 'Address pending' : 'Not running', monospace: false, copy_label: '' }];
   }
 
   if (environment.kind === 'provider_environment') {
@@ -1189,12 +1155,12 @@ export function buildEnvironmentLibrarySummaryModel(
   };
 
   for (const environment of entries) {
+    if (environment.runtime_health.status === 'online') summary.running_count += 1;
     switch (buildEnvironmentDisplayStateModel(environment).summary_bucket) {
       case 'ready':
         summary.ready_count += 1;
         break;
       case 'running':
-        summary.running_count += 1;
         break;
       case 'attention':
         summary.attention_count += 1;
@@ -2306,11 +2272,7 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   const displayState = buildEnvironmentDisplayStateModel(environment);
   if (environment.kind === 'local_environment') {
-    const transport = environment.local_environment_transport
-      ?? (compact(environment.local_ui_url) !== '' ? 'external_url' : 'not_running');
-    const localEndpoint = transport === 'external_url'
-      ? compact(environment.local_ui_url)
-      : '';
+    const localEndpoint = compact(environment.local_ui_url);
     const targetPrimary = localEndpoint || 'This device';
     return {
       kind_label: environmentKindLabel(environment),
@@ -2396,7 +2358,9 @@ export function buildEnvironmentSettingsRuntimeModel(
   const card = buildEnvironmentCardModel(environment);
   return {
     running: environment.runtime_health.status === 'online',
-    status_label: card.status_label,
+    status_label: environment.kind === 'local_environment' && environment.local_environment_runtime_state === 'not_running'
+      ? 'Not running' : environment.runtime_health.status === 'online' && environment.window_state !== 'open'
+        ? 'Running' : card.status_label,
     status_tone: card.status_tone,
   };
 }

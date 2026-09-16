@@ -45,7 +45,7 @@ export function buildFilePathFlowerTurnLauncherIntent(params: {
   const suggestedWorkingDirAbs = deriveAbsoluteWorkingDirFromItems(normalizedItems, params.fallbackWorkingDirAbs ?? '/');
 
   const intent: EnvFlowerTurnLauncherIntent = {
-    id: createClientId('ask-flower'),
+    id: createClientId(),
     source_surface: 'file_browser',
     suggested_working_dir: suggestedWorkingDirAbs || undefined,
     context_items: normalizedItems.map((item) => ({

@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import type {
   FlowerAttachmentCapability,
   FlowerAttachmentSource,
@@ -153,15 +154,7 @@ function safeFileType(file: File): string {
 }
 
 function secureRandomID(kind: 'local' | 'request' | 'attempt'): string {
-  const runtimeCrypto = globalThis.crypto;
-  if (typeof runtimeCrypto?.randomUUID === 'function') {
-    return `flower_attachment_${kind}_${runtimeCrypto.randomUUID()}`;
-  }
-  if (typeof runtimeCrypto?.getRandomValues !== 'function') {
-    throw new Error('Secure randomness is required for Flower attachment identifiers.');
-  }
-  const bytes = runtimeCrypto.getRandomValues(new Uint8Array(16));
-  return `flower_attachment_${kind}_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+  return `flower_attachment_${kind}_${secureRandomUUID()}`;
 }
 
 function uploadFailure(error: unknown): Readonly<{ code: FlowerAttachmentErrorCode; retryable: boolean }> {

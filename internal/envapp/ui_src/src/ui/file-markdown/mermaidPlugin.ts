@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import mermaid from 'mermaid';
 import DOMPurify from 'dompurify';
 
@@ -303,7 +304,7 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
 
       try {
         const code = decodeURIComponent(src);
-        const id = `mermaid-${crypto.randomUUID()}`;
+        const id = `mermaid-${secureRandomUUID()}`;
         const container = document.createElement('div');
         container.id = id;
         sandbox.appendChild(container);

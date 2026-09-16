@@ -37,7 +37,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		LocalUIBridgeURL:   "http://127.0.0.1:43211/",
 		LocalUIBridgeToken: testLocalUIBridgeToken,
 		PasswordRequired:   true,
-		Exposure:           runtimemanagement.NewLocalUIExposure(false, true),
+		Exposure:           runtimemanagement.NewLocalUIExposure("https", false, true),
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
 		StartedAtUnixMS:    1778751234567,
@@ -188,7 +188,7 @@ func TestWriteDesktopLaunchReportAcceptsPrivateBridgeWithoutPublicURL(t *testing
 		Status:             desktopLaunchStatusReady,
 		LocalUIBridgeURL:   "http://127.0.0.1:43124/",
 		LocalUIBridgeToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		Exposure:           runtimemanagement.NewLocalUIExposure(false, false),
+		Exposure:           runtimemanagement.NewLocalUIExposure("https", false, false),
 	})
 	if err != nil {
 		t.Fatalf("writeDesktopLaunchReport() error = %v", err)
@@ -224,7 +224,7 @@ func TestWriteDesktopLaunchReportRejectsInvalidLocalUIBridgeURL(t *testing.T) {
 				LocalUIURL:         "http://127.0.0.1:43122/",
 				LocalUIBridgeURL:   raw,
 				LocalUIBridgeToken: testLocalUIBridgeToken,
-				Exposure:           runtimemanagement.NewLocalUIExposure(true, false),
+				Exposure:           runtimemanagement.NewLocalUIExposure("https", true, false),
 			})
 			if err == nil {
 				t.Fatalf("writeDesktopLaunchReport() accepted bridge URL %q", raw)
@@ -241,7 +241,7 @@ func TestWriteDesktopLaunchReportRejectsInvalidLocalUIBridgeToken(t *testing.T) 
 				LocalUIURL:         "http://127.0.0.1:43122/",
 				LocalUIBridgeURL:   "http://127.0.0.1:43123/",
 				LocalUIBridgeToken: raw,
-				Exposure:           runtimemanagement.NewLocalUIExposure(true, false),
+				Exposure:           runtimemanagement.NewLocalUIExposure("https", true, false),
 			})
 			if err == nil {
 				t.Fatalf("writeDesktopLaunchReport() accepted bridge token %q", raw)

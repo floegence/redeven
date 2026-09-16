@@ -39,7 +39,7 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 				LocalUIBridgeURL:   "http://127.0.0.1:43123/",
 				LocalUIBridgeToken: testLocalUIBridgeToken,
 				PasswordRequired:   true,
-				Exposure:           runtimemanagement.NewLocalUIExposure(false, true),
+				Exposure:           runtimemanagement.NewLocalUIExposure("https", false, true),
 			},
 			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
 				EffectiveRunMode: "hybrid",

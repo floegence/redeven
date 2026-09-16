@@ -22,6 +22,31 @@ type authorityTestListener struct {
 	addr net.Addr
 }
 
+func TestPublicDefaultPortsDoNotRelaxPrivateBridgeAuthority(t *testing.T) {
+	for _, test := range []struct{ authority, protocol, canonical string }{
+		{"localhost", "http", "localhost:80"},
+		{"192.168.1.20", "http", "192.168.1.20:80"},
+		{"[2001:db8::20]", "https", "[2001:db8::20]:443"},
+		{"127.0.0.1", "https", "127.0.0.1:443"},
+	} {
+		actual, err := canonicalPublicAuthority(test.authority, test.protocol)
+		if err != nil || actual != test.canonical {
+			t.Fatalf("public authority %q: %q, %v", test.authority, actual, err)
+		}
+		if got := publicURLAuthority(actual, test.protocol); got != test.authority {
+			t.Fatalf("display authority = %q, want %q", got, test.authority)
+		}
+		if _, err := canonicalLoopbackAuthority(test.authority); err == nil {
+			t.Fatalf("private bridge accepted an implicit port: %q", test.authority)
+		}
+	}
+	for _, invalid := range []string{"user@localhost", "example.com", "[::1]:bad", "2001:db8::20", "localhost/path"} {
+		if _, err := canonicalPublicAuthority(invalid, "http"); err == nil {
+			t.Fatalf("accepted invalid public authority %q", invalid)
+		}
+	}
+}
+
 func (l authorityTestListener) Accept() (net.Conn, error) { return nil, errors.New("not implemented") }
 func (l authorityTestListener) Close() error              { return nil }
 func (l authorityTestListener) Addr() net.Addr            { return l.addr }
@@ -209,7 +234,7 @@ func TestConfigureNetworkAuthoritiesUsesResolvedWildcardHosts(t *testing.T) {
 	}
 	s := newTestServer(t, accessgate.New(accessgate.Options{Password: "secret"}))
 	s.bind = bind
-	s.exposure = runtimemanagement.NewLocalUIExposure(true, true)
+	s.exposure = runtimemanagement.NewLocalUIExposure("https", true, true)
 	s.resolveAccessHosts = func(BindSpec) ([]netip.Addr, error) {
 		return []netip.Addr{
 			netip.MustParseAddr("10.0.0.8"),
@@ -266,27 +291,24 @@ func TestStrictSameOriginWSRequest(t *testing.T) {
 	}
 }
 
-func TestDirectWSURLFromRequestUsesConfiguredWSSAuthority(t *testing.T) {
+func TestDirectWSURLFromRequestUsesPublicPort(t *testing.T) {
 	bind, err := ParseBind("localhost:23998")
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := newTestServer(t, nil)
 	s.bind = bind
-	s.resolveDirectAuthority = nil
-	s.directAuthorities = map[string]string{
-		"localhost:23998": "localhost:34101",
-		"127.0.0.1:23998": "127.0.0.1:34102",
-		"[::1]:23998":     "[::1]:34103",
+	s.networkAuthorities = map[string]struct{}{
+		"localhost:23998": {}, "127.0.0.1:23998": {}, "[::1]:23998": {},
 	}
 
 	localhostRequest := httptest.NewRequest(http.MethodGet, "https://localhost:23998/api/local/runtime", nil)
-	if got, err := s.directWSURLFromRequest(localhostRequest); err != nil || got != "wss://localhost:34101"+flowersec.WebSocketDirectPath {
+	if got, err := s.directWSURLFromRequest(localhostRequest); err != nil || got != "wss://localhost:23998"+flowersec.WebSocketDirectPath {
 		t.Fatalf("localhost Flowersec WSS URL = %q, %v", got, err)
 	}
 
 	ipRequest := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:23998/api/local/runtime", nil)
-	if got, err := s.directWSURLFromRequest(ipRequest); err != nil || got != "wss://127.0.0.1:34102"+flowersec.WebSocketDirectPath {
+	if got, err := s.directWSURLFromRequest(ipRequest); err != nil || got != "wss://127.0.0.1:23998"+flowersec.WebSocketDirectPath {
 		t.Fatalf("IPv4 Flowersec WSS URL = %q, %v", got, err)
 	}
 

@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
 
+import { DESKTOP_CERTIFICATE_CHANNEL, isDesktopCertificateOperation } from '../shared/desktopCertificate';
+
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 import {
@@ -43,6 +45,10 @@ import {
 
 export function bootstrapDesktopSettingsBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopSettings', {
+    certificate: (operation: unknown) => {
+      if (!isDesktopCertificateOperation(operation)) throw new Error('Invalid certificate operation.');
+      return ipcRenderer.invoke(DESKTOP_CERTIFICATE_CHANNEL, operation);
+    },
     save: (draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> =>
       ipcRenderer.invoke(SAVE_DESKTOP_SETTINGS_CHANNEL, draft),
     requestRuntimeFlower: (request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> =>

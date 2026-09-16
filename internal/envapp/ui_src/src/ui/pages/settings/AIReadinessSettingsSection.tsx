@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { AlertTriangle, Check, Copy, Database, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
 
@@ -162,7 +163,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
     setCopied(false);
     setCopyFailed(false);
     try {
-      await navigator.clipboard.writeText(presentation().diagnosticText);
+      await writeTextToClipboard(presentation().diagnosticText);
       setCopied(true);
     } catch {
       setCopyFailed(true);

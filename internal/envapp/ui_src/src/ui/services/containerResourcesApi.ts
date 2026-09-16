@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
 
 export type ContainerEngine = 'docker' | 'podman';
@@ -502,7 +503,7 @@ export async function createContainerOperation(
   return fetchLocalApiJSON<ContainerOperation>('/_redeven_proxy/api/container-resource-operations', {
     method: 'POST',
     body: JSON.stringify({
-      request_id: `envapp-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+      request_id: `envapp-${secureRandomUUID()}`,
       method: preflight.method,
       request,
       request_hash: preflight.request_hash,

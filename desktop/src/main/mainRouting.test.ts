@@ -20,6 +20,16 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
+  it('keeps native Open and its cold-start recovery under one target operation', () => {
+    const source = readMainSource();
+    const start = source.indexOf('async function openLocalEnvironmentRecord(');
+    const end = source.indexOf('async function openLocalEnvironmentRecordWithLifecycleOwner(', start);
+    const admission = source.slice(start, end);
+    expect(admission).toContain('const operationKey = `${localHostOpenTarget(environment).targetID}:open`;');
+    expect(admission).toContain('operation_key: operationKey');
+    expect(admission).toContain('openLocalEnvironmentRecordWithLifecycleOwner(preferences, environment, target, operationKey, options)');
+    expect(source).toContain("openOwner?.intent !== 'open' || openOwner.operation_key !== operationKey || !openSignal");
+  });
   it('owns and injects one Desktop SSH transport manager without direct consumer SSH spawns', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).toContain('const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager({');
@@ -1875,6 +1885,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('function rendererSafeStartupReport(startup: StartupReport): StartupReport');
     expect(mainSrc).toContain('delete rendererStartup.local_ui_bridge_url;');
     expect(mainSrc).toContain('delete rendererStartup.local_ui_bridge_token;');
+    expect(mainSrc).toContain('delete rendererStartup.runtime_control;');
     expect(mainSrc).toContain('entry_url: rendererSafeSessionURL(session)');
     expect(mainSrc).toContain('transport_kind: session.transport.kind');
     expect(mainSrc).toContain('startup: rendererSafeStartupReport(session.startup)');

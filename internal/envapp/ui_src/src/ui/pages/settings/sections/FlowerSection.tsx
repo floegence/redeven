@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { modelCatalogCopy } from '../../../../../../../flower_ui/src/settings/modelCatalogCopy';
 import { hydrateFlowerProviderCatalog, applyFlowerModelDiscovery, flowerProviderModelChoices, setFlowerModelsEnabled, defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -33,7 +34,6 @@ import { AIReadinessSettingsSection } from '../AIReadinessSettingsSection';
 
 const AUTO_SAVE_DELAY_MS = 700;
 const PERMISSION_TYPES: readonly AIPermissionType[] = ['readonly', 'approval_required', 'full_access'];
-let envProviderIDSequence = 0;
 
 function isJSONObject(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === 'object' && !Array.isArray(value)); }
 
@@ -70,10 +70,7 @@ function PermissionTypeIcon(props: Readonly<{ kind: AIPermissionType; class?: st
 }
 
 function newProviderID(): string {
-  const uuid = globalThis.crypto?.randomUUID?.();
-  if (uuid && typeof uuid === 'string') return `prov_${uuid}`;
-  envProviderIDSequence += 1;
-  return `prov_local_${envProviderIDSequence}`;
+  return `prov_${secureRandomUUID()}`;
 }
 
 function newAIProviderDraft(): AIProviderRow {

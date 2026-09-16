@@ -1,6 +1,9 @@
 package localui
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -10,7 +13,74 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestHTTPSRejectsExpiredAndMismatchedIdentityWithoutHTTPFallback(t *testing.T) {
+	for _, expired := range []bool{true, false} {
+		name := "mismatched_key"
+		if expired {
+			name = "expired"
+		}
+		t.Run(name, func(t *testing.T) {
+			stateDir := t.TempDir()
+			if _, err := GenerateLocalUIDeviceCA(stateDir); err != nil {
+				t.Fatal(err)
+			}
+			ca, err := loadLocalUIDeviceCA(stateDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if expired {
+				certificate := *ca.certificate
+				certificate.NotBefore = time.Now().Add(-48 * time.Hour)
+				certificate.NotAfter = time.Now().Add(-24 * time.Hour)
+				der, err := x509.CreateCertificate(rand.Reader, &certificate, &certificate, &ca.key.PublicKey, ca.key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(localUIDeviceCADir(stateDir), localUIDeviceCACertName), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+				if err != nil {
+					t.Fatal(err)
+				}
+				der, err := x509.MarshalPKCS8PrivateKey(key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(localUIDeviceCADir(stateDir), localUIDeviceCAKeyName), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s := newTestServer(t, nil)
+			s.stateDir, s.deviceCA = stateDir, nil
+			listener, err := net.Listen("tcp4", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			s.bind, err = ParseBind(listener.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = s.StartOnListeners(t.Context(), []net.Listener{listener}, nil)
+			defer s.Close()
+			want := ErrLocalUIDeviceCAInvalid
+			if expired {
+				want = ErrLocalUIDeviceCAExpired
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("startup = %v, want %v", err, want)
+			}
+			if s.protocol != "https" || len(s.networkServers) != 0 {
+				t.Fatal("invalid HTTPS identity started a public listener or changed protocol")
+			}
+		})
+	}
+}
 
 func TestLocalUIDeviceCALifecycle(t *testing.T) {
 	stateDir := t.TempDir()
@@ -82,12 +152,11 @@ func TestPrepareSecureNetworkRequiresServingIdentityWithoutClaimingClientTrust(t
 	s.bind = bind
 	s.stateDir = stateDir
 	s.deviceCA = nil
-	if err := s.prepareSecureNetwork([]net.Listener{listener}); err != nil {
-		t.Fatalf("prepareSecureNetwork() rejected a valid serving identity: %v", err)
+	if err := s.prepareNetwork([]net.Listener{listener}); err != nil {
+		t.Fatalf("prepareNetwork() rejected a valid serving identity: %v", err)
 	}
-	t.Cleanup(s.closePreparedDirectListeners)
 	if s.deviceCA == nil || s.tlsConfig == nil || len(s.tlsConfig.Certificates) != 1 {
-		t.Fatal("prepareSecureNetwork() did not retain the validated CA-backed serving identity")
+		t.Fatal("prepareNetwork() did not retain the validated CA-backed serving identity")
 	}
 }
 

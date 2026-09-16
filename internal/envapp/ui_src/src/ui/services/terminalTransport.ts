@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
   validateHistoryChunk,
   type SemanticHistoryChunk,
@@ -17,9 +18,7 @@ import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
 
 export function createTerminalConnId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? `web_${(crypto as Crypto).randomUUID()}`
-    : `web_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
+  return `web_${secureRandomUUID()}`;
 }
 
 export type RedevenTerminalTransport = SemanticTerminalLiveTransport;

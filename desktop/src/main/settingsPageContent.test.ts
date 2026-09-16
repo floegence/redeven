@@ -122,26 +122,27 @@ describe('settingsPageContent', () => {
     expect(snapshot.host_fields[1]?.help_key).toBe('settings.localUIPasswordRuntimeRequiredHelp');
   });
 
-  it('preserves current transport separately from the next-start bind', () => {
+  it('preserves actual current addresses independently of saved configuration', () => {
     const bridge = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({}), settingsOptions({
       current_runtime_url: 'http://localhost:23998/',
-      current_runtime_transport: 'desktop_bridge',
+      current_runtime_running: true,
     }));
-    expect(bridge.current_runtime_transport).toBe('desktop_bridge');
+    expect(bridge.current_runtime_running).toBe(true);
     expect(bridge.current_runtime_url).toBe('http://localhost:23998/');
     expect(bridge.next_start_address_display).toBe('localhost:23998');
 
     const external = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({}), settingsOptions({
       current_runtime_url: 'https://localhost:23998/',
-      current_runtime_transport: 'external_url',
+      current_runtime_running: true,
     }));
-    expect(external.current_runtime_transport).toBe('external_url');
+    expect(external.current_runtime_urls).toEqual(['https://localhost:23998/']);
     expect(external.current_runtime_url).toBe('https://localhost:23998/');
 
     const stopped = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({}), settingsOptions({
       current_runtime_url: '',
-      current_runtime_transport: 'not_running',
+      current_runtime_running: false,
     }));
-    expect(stopped.current_runtime_transport).toBe('not_running');
+    expect(stopped.current_runtime_running).toBe(false);
+    expect(stopped.current_runtime_urls).toEqual([]);
   });
 });

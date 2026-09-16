@@ -23,7 +23,7 @@ function makeFixture() {
 }
 
 test('published Go and npm Floeterm dependencies use one released version', () => {
-  assert.deepEqual(validateFloetermDependencies(), { version: '0.19.1' });
+  assert.deepEqual(validateFloetermDependencies(), { version: '0.19.2' });
 });
 
 test('rejects a stale active terminal-web declaration', () => {

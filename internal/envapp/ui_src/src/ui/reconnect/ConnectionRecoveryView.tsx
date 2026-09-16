@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import {
   Check,
@@ -106,7 +107,7 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
     return Math.max(0, Math.ceil((step.next_retry_at_unix_ms - nowMs()) / 1_000));
   };
   const copyDiagnostic = async () => {
-    await navigator.clipboard.writeText(presentation().diagnostic_text);
+    await writeTextToClipboard(presentation().diagnostic_text);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
   };

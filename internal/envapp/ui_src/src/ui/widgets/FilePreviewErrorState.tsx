@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import { Show, createSignal, type JSX } from 'solid-js';
 import {
   AlertCircle,
@@ -36,7 +37,7 @@ const ERROR_ICON: Record<FilePreviewErrorType, (props: { class?: string }) => JS
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
+    await writeTextToClipboard(text);
     return true;
   } catch {
     return false;
