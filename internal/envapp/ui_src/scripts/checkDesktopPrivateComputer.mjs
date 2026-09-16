@@ -71,7 +71,7 @@ let threadID;
 try {
   await mkdir(output, { recursive: true });
   await request('PUT', '/_redeven_proxy/api/ai/provider_bundle', {
-    model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Local fixture', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini' }] }] },
+    model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Local fixture', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 400000, max_output_tokens: 8192 }] }] },
     provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'fixture-only' }], web_search_provider_key_patches: [],
   });
   await request('PUT', '/_redeven_proxy/api/ai/default_permission', { permission_type: 'full_access' });
@@ -149,7 +149,19 @@ try {
   assert.equal(await page.evaluate(() => window.redevenDesktopStateStorage.getItem('flower.computer-viewer.fps')), '15');
   await writeFile(path.join(output, 'private-viewer.json'), JSON.stringify({ ordinaryPreviewContinued: true, delayMS, rates: [3,5,10,15,30], paste: true, nativeIME: true, rejectedHandbackRetained: true, safeHandbackOnce: true, navigationOnce: true, narrowHeader: true, persisted: true, threadID }, null, 2));
   console.log(`Private Desktop qualification passed: delayed pixels visible in ${delayMS}ms; all FPS, handback, paste and IME passed.`);
+} catch (error) {
+  const presentation = await page.evaluate(() => ({
+    status: document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-status'),
+    state: document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state'),
+    width: document.querySelector('.flower-computer-stage img')?.naturalWidth,
+    controls: document.querySelectorAll('[data-computer-control-action]').length,
+  }));
+  const failedID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
+  const detail = failedID ? await request('GET', `/_redeven_proxy/api/ai/threads/${failedID}`) : {};
+  console.error(JSON.stringify({ providerCalls, navigations, presentation, code: detail.thread?.run_error_code, error: detail.thread?.run_error }));
+  throw error;
 } finally {
+  threadID ||= await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => undefined);
   if (threadID) await request('DELETE', `/_redeven_proxy/api/ai/threads/${threadID}?force=true`).catch(() => undefined);
   await browser.close(); fixture.closeAllConnections(); provider.closeAllConnections();
   await Promise.all([new Promise(resolve => fixture.close(resolve)), new Promise(resolve => provider.close(resolve))]);

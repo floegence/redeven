@@ -5728,7 +5728,7 @@ webSearch: model.web_search,
   });
   const computerStageFrame = createMemo<FlowerComputerFrameSource | undefined>(() => {
     const stage = selectedComputerStage();
-    if (!stage?.targetID) return;
+    if (!stage?.targetID || computerViewFailed()) return;
     const thread_id = selectedThreadID(), target_id = stage.targetID;
     const live = computerLiveFrame()?.computer_frame;
     if (privateControlRequested() && isComputerInput(selectedInputRequest())) {
@@ -5741,7 +5741,7 @@ webSearch: model.web_search,
     const sha256 = /^computer:\/\/[^/]+\/([a-f0-9]{64})$/u.exec(resource_ref ?? '')?.[1];
     return resource_ref && sha256 ? { thread_id, target_id, resource_ref, sha256, ...(computerViewerKey() && live ? { viewer_revision: live.viewer_revision, sequence: live.sequence } : {}) } : undefined;
   });
-  const computerStageAvailable = createMemo(() => Boolean(computerStageFrame() || privateControlRequested()) && Boolean(selectedComputerStage()));
+  const computerStageAvailable = createMemo(() => Boolean(selectedComputerStage()?.frame || privateControlRequested()) && Boolean(selectedComputerStage()));
   createEffect(() => {
     const preview = contextSnapshotPreview();
     if (!preview) return;
@@ -7684,7 +7684,7 @@ webSearch: model.web_search,
               </Show>
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
-              <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !props.adapter.inputComputerControl || (computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
+              <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               <Button variant="primary" data-computer-control-action="return" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
@@ -11968,7 +11968,7 @@ webSearch: model.web_search,
               frame={computerStageFrame()}
               privateInteractionID={privateControlRequested() ? selectedInputRequest()?.prompt_id : undefined}
               frameRate={viewerFPS()} receivedFrameRate={receivedComputerFPS()} onFrameRateChange={changeComputerFrameRate}
-              onFrameReady={() => { if (!computerViewFailed()) setComputerControlReady(true); }}
+              onFrameReady={() => { if (privateControlRequested() && !computerViewFailed()) setComputerControlReady(true); }}
               onFrameError={() => setComputerViewFailed(true)} onRetry={resumeComputerViewer}
               onInput={computerStageOpen() && computerControlReady() && privateControlRequested() && !computerReturning() && !computerControlError() && !computerViewFailed() && isComputerInput(selectedInputRequest()) ? inputComputerControl : undefined}
               boundary={computerStageBoundary()}
