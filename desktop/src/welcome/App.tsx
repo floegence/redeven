@@ -13514,8 +13514,8 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
           )}>
             <div class="space-y-2">
               <For each={urls()}>{(url) => (
-                <div class="flex min-w-0 items-center gap-2 rounded-md bg-muted/35 px-3 py-2">
-                  <span class="min-w-0 flex-1 select-text break-all font-mono text-sm">{url}</span>
+                <div class="flex min-w-0 flex-wrap items-center justify-end gap-2 rounded-md bg-muted/35 px-3 py-2 sm:flex-nowrap">
+                  <span class="w-full min-w-0 select-text break-all font-mono text-sm sm:w-auto sm:flex-1">{url}</span>
                   <Button size="sm" variant="ghost" aria-label={props.i18n.t('environmentFacts.copyEnvironmentUrl')}
                     onClick={() => void props.copyEnvironmentValue(url, props.i18n.t('environmentFacts.copyEnvironmentUrl'))}>
                     <Copy class="h-3.5 w-3.5" />
