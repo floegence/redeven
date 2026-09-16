@@ -385,7 +385,7 @@
     },
     "threadList": {
       "title": "对话",
-      "description": "按创建时间稳定排序，对话更新时位置不漂移。",
+      "description": "置顶优先，其余按创建时间",
       "warmupDescription": "本地环境运行时准备就绪后加载。",
       "refreshLabel": "刷新对话",
       "searchPlaceholder": "搜索对话...",
@@ -448,7 +448,13 @@
       "groupToday": "今天",
       "groupYesterday": "昨天",
       "groupThisWeek": "本周",
-      "groupOlder": "更早"
+      "groupOlder": "更早",
+      "dragPinned": "拖动以调整置顶对话顺序",
+      "movePinnedUp": "上移",
+      "movePinnedDown": "下移",
+      "clearSearchToReorder": "清空搜索以调整置顶顺序",
+      "pinUpdateFailed": "无法更新置顶对话。",
+      "pinRefreshFailed": "置顶对话已保存，但列表刷新失败。请刷新以查看最新顺序。"
     },
     "emptyState": {
       "title": "询问 Flower",

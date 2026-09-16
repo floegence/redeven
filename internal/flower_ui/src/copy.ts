@@ -71,6 +71,12 @@ export type FlowerThreadListCopy = Readonly<{
   forkCreating: string;
   forkCreated: string;
   forkLoadFailed: string;
+  dragPinned: string;
+  movePinnedUp: string;
+  movePinnedDown: string;
+  clearSearchToReorder: string;
+  pinUpdateFailed: string;
+  pinRefreshFailed: string;
   pin: string;
   unpin: string;
   pinnedGroup: string;
@@ -923,7 +929,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   },
   threadList: {
     title: 'Conversations',
-    description: 'Created-time order stays stable while conversations update.',
+    description: 'Pinned first, newest below',
     warmupDescription: 'Loading after the Local Environment runtime is ready.',
     refreshLabel: 'Refresh conversations',
     searchPlaceholder: 'Search conversations...',
@@ -960,6 +966,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     forkCreating: "Creating branch…",
     forkCreated: "Branch created.",
     forkLoadFailed: "Branch created, but could not load the conversation.",
+    dragPinned: "Drag to reorder pinned conversation",
+    movePinnedUp: "Move up",
+    movePinnedDown: "Move down",
+    clearSearchToReorder: "Clear search to reorder pinned conversations",
+    pinUpdateFailed: "Could not update pinned conversations.",
+    pinRefreshFailed: "Pinned conversations were saved, but the list could not refresh. Refresh to see the latest order.",
     pin: 'Pin conversation',
     unpin: 'Unpin conversation',
     pinnedGroup: 'Pinned',

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 description: Preserve interactive subtree identity and bound streaming rendering work in the shared Flower UI.
 tags: [flower, streaming, performance, interaction]
-timestamp: 2026-09-09T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 
 # Summary
@@ -34,7 +34,10 @@ unchanged values; mutable text and array positions do not become interaction IDs
 The activity row retains its complete presentation. Nonterminal details mount a
 component once per semantic kind and read current properties. Existing keyed
 thread cards, reference chips, timeline entries, and child activity rows keep their
-ownership. No new durable state, public Floret contract, or second transport is
+ownership. The [conversation sidebar](flower-thread-sidebar.md) retains rows
+across groups, menu action nodes and wave animation phase across DOM moves;
+ordinary DOM identity alone does not preserve CSS animation progress. No new
+durable runtime state, public Floret contract, or second transport is
 introduced.
 
 ## Streaming dependency audit
@@ -53,7 +56,7 @@ The shared Surface is used by Desktop and the Env App.
 | Structured rows, summaries, errors, questions, file read/diff, search/fetch, Todo and child-tool details | Repaired: stable detail components and retained nested presentation | Eleven open detail kinds with zero child-list mutations during 300 updates; selection, latest file action and real content edit |
 | Reference chips and icons | Repaired icon factories; retained reference ID controls | 300 equal snapshots without node mutations; changed label and latest activation; canonical-reference browser tests |
 | Attachments and composer references | Retained: composer draft/reference owner, upload identity, search query/root generation | Attachment and composer-reference tests, canonical admission/restore tests |
-| Thread rail and thread menus | Retained ThreadID controls; repaired stable summary overlays | Rail nodes in 300-update regression; thread-card, title, navigation and menu tests |
+| Thread rail and thread menus | Retained ThreadID rows across groups, stable menu actions and state-preserving DOM moves | 300 title/summary/reorder updates preserve rows, menu focus and wave progress; native drag, pin convergence and theme tests |
 | Terminal reader and output viewport | Repaired: execution/process/eligibility scalar dependencies; canonical snapshot effect does not track live output | No extra read starts during 300 updates; terminal identity, delta, status, internal scrolling and disposal tests |
 | Disclosure motion and geometry | Repaired: 180/140 ms motion, natural open height, observer only while opening, one viewport frame | 300 notifications produce one read/write pass; motion deadline, native press, wheel, cancellation and reduced-motion tests |
 | Markdown and code-copy controls | Repaired: full lexer plus complete-token/reference-aware HTML reuse, local copy decoration | 300 updates retain completed code/copy controls; parser count and reference/replacement/finalization tests |

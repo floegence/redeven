@@ -36,12 +36,12 @@ describe('groupFlowerThreadItems', () => {
 		expect(filterFlowerThreadItems([thread({ thread_id: 'legacy-empty', title: '' })], '')).toEqual([]);
 	});
 
-  it('keeps pinned conversations in a dedicated newest-pinned group', () => {
+  it('orders pinned conversations by persisted rank regardless of pin time', () => {
     vi.setSystemTime(new Date('2026-06-12T10:00:00Z'));
     const groups = groupFlowerThreadItems([
       thread({ thread_id: 'regular', created_at_ms: Date.now() }),
-      thread({ thread_id: 'pinned-old', pinned: true, pinned_at_ms: 100, created_at_ms: 1000 }),
-      thread({ thread_id: 'pinned-new', pinned: true, pinned_at_ms: 200, created_at_ms: 900 }),
+      thread({ thread_id: 'pinned-old', pinned: true, pinned_at_ms: 200, pin_rank: 1, created_at_ms: 1000 }),
+      thread({ thread_id: 'pinned-new', pinned: true, pinned_at_ms: 100, pin_rank: 2, created_at_ms: 900 }),
     ]);
 
     expect(groups[0]).toMatchObject({

@@ -77,6 +77,7 @@ function mergeThreadSettings<T extends ThreadDetail>(
     model_id: settings.model_id,
     working_dir: settings.working_dir,
     pinned_at_ms: settings.pinned_at_ms,
+    pin_rank: settings.pin_rank,
     permission_type: settings.permission_type,
     reasoning_selection: settings.reasoning_selection,
     reasoning_capability: settings.reasoning_capability,

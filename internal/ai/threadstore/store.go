@@ -102,6 +102,7 @@ type ThreadSettings struct {
 	PermissionType         string `json:"permission_type"`
 	WorkingDir             string `json:"working_dir"`
 	PinnedAtUnixMs         int64  `json:"pinned_at_unix_ms"`
+	PinRank                int64  `json:"pin_rank"`
 
 	SettingsCreatedAtUnixMs int64 `json:"settings_created_at_unix_ms"`
 	SettingsUpdatedAtUnixMs int64 `json:"settings_updated_at_unix_ms"`
@@ -120,7 +121,7 @@ type ThreadSettingsRecoveryCursor struct {
 
 const threadSelectColumnsSQL = `
   thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
-  pinned_at_unix_ms,
+  pinned_at_unix_ms, pin_rank,
   settings_created_at_unix_ms, settings_updated_at_unix_ms
 `
 
@@ -142,6 +143,7 @@ func scanThreadRow(scan rowScanner, t *ThreadSettings) error {
 		&t.PermissionType,
 		&t.WorkingDir,
 		&t.PinnedAtUnixMs,
+		&t.PinRank,
 		&t.SettingsCreatedAtUnixMs,
 		&t.SettingsUpdatedAtUnixMs,
 	); err != nil {
@@ -242,35 +244,24 @@ FROM ai_thread_settings
 WHERE endpoint_id = ? AND parent_thread_id = ''
 `, threadSelectColumnsSQL)
 	if cursor.SettingsCreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
-		cursorPinned := nonNegativeInt64(cursor.PinnedAtUnixMs)
-		cursorThreadID := strings.TrimSpace(cursor.ThreadID)
+		// Keep existing cursor encodings readable. Resolve the current product
+		// position instead of interpreting the old pin timestamp as a rank.
+		anchor, err := s.GetThreadSettings(ctx, endpointID, cursor.ThreadID)
+		if err != nil {
+			return nil, "", err
+		}
+		if anchor == nil || anchor.ParentThreadID != "" {
+			return nil, "", errors.New("conversation cursor expired; refresh the conversation list")
+		}
 		q += `
-  AND (
-    CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END < CASE WHEN ? > 0 THEN 1 ELSE 0 END
-    OR (
-      CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END = CASE WHEN ? > 0 THEN 1 ELSE 0 END
-      AND (
-        (? > 0 AND pinned_at_unix_ms < ?)
-		OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND settings_created_at_unix_ms < ?)
-		OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND settings_created_at_unix_ms = ? AND thread_id > ?)
-      )
-    )
-  )
+  AND (pin_rank < ? OR (pin_rank = ? AND (
+    settings_created_at_unix_ms < ? OR (settings_created_at_unix_ms = ? AND thread_id > ?)
+  )))
 `
-		args = append(args,
-			cursorPinned,
-			cursorPinned,
-			cursorPinned, cursorPinned,
-			cursorPinned, cursorPinned, cursor.SettingsCreatedAtUnixMs,
-			cursorPinned, cursorPinned, cursor.SettingsCreatedAtUnixMs, cursorThreadID,
-		)
+		args = append(args, anchor.PinRank, anchor.PinRank, anchor.SettingsCreatedAtUnixMs, anchor.SettingsCreatedAtUnixMs, anchor.ThreadID)
 	}
 	q += `
-ORDER BY
-  CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END DESC,
-  pinned_at_unix_ms DESC,
-  settings_created_at_unix_ms DESC,
-  thread_id ASC
+ORDER BY pin_rank DESC, settings_created_at_unix_ms DESC, thread_id ASC
 LIMIT ?
 `
 	args = append(args, limit+1)
@@ -436,11 +427,18 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if t.PinnedAtUnixMs > 0 && t.ParentThreadID == "" {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(pin_rank), 0) + 1 FROM ai_thread_settings WHERE endpoint_id = ?`, t.EndpointID).Scan(&t.PinRank); err != nil {
+			return err
+		}
+	} else {
+		t.PinRank = 0
+	}
 	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_thread_settings(
   thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
-  pinned_at_unix_ms, settings_created_at_unix_ms, settings_updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  pinned_at_unix_ms, pin_rank, settings_created_at_unix_ms, settings_updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		t.ThreadID,
 		t.ParentThreadID,
@@ -451,6 +449,7 @@ INSERT INTO ai_thread_settings(
 		t.PermissionType,
 		t.WorkingDir,
 		nonNegativeInt64(t.PinnedAtUnixMs),
+		t.PinRank,
 		t.SettingsCreatedAtUnixMs,
 		t.SettingsUpdatedAtUnixMs,
 	)
@@ -635,53 +634,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 		return sql.ErrNoRows
 	}
 	return tx.Commit()
-}
-
-func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID string, pinned bool) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return 0, errors.New("invalid request")
-	}
-	pinnedAt := int64(0)
-	if pinned {
-		pinnedAt = time.Now().UnixMilli()
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return 0, err
-	}
-	revision, err := nextThreadSettingsRevisionTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		return 0, err
-	}
-	res, err := tx.ExecContext(ctx, `
-UPDATE ai_thread_settings
-SET pinned_at_unix_ms = ?,
-    settings_updated_at_unix_ms = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`, pinnedAt, revision, endpointID, threadID)
-	if err != nil {
-		return 0, err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return 0, sql.ErrNoRows
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return pinnedAt, nil
 }
 
 func canonicalPermissionType(permissionType string) (string, error) {

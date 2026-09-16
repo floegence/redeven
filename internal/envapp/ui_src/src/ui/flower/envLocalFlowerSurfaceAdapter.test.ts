@@ -129,6 +129,14 @@ function typedCommandResponse(
 }
 
 describe('Env local Flower surface adapter', () => {
+  it('sends a relative pin move and maps only revisioned pin metadata', async () => {
+    const pin = { thread_id: 'thread/source', pinned_at_unix_ms: 10, pin_rank: 3, settings_revision: 20 };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ pins: [pin] }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_a', envLabel: 'Demo Env', rpc: { ai: {} } as any });
+    const input = { anchor_thread_id: 'thread/anchor', placement: 'before' as const };
+    expect(await adapter.movePinnedThread!('thread/source', input)).toEqual([{ thread_id: pin.thread_id, pinned_at_ms: 10, pin_rank: 3, settings_revision: 20 }]);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith('/_redeven_proxy/api/ai/threads/thread%2Fsource/pin-position', expect.objectContaining({ method: 'PATCH', body: JSON.stringify(input) }));
+  });
   it('passes declared roots and external absolute directory requests through unchanged', async () => {
     const context = { homePathAbs: '/Users/alice', agentHomePathAbs: '/Users/alice', defaultRootId: 'project', roots: [
       { id: 'project', label: 'Project', pathAbs: '/Volumes/team', kind: 'custom', permissions: { read: true, write: false } },

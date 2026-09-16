@@ -118,6 +118,7 @@
         "namespace_public_id",
         "parent_thread_id",
         "permission_type",
+        "pin_rank",
         "pinned_at_unix_ms",
         "reasoning_selection_json",
         "settings_created_at_unix_ms",
@@ -126,40 +127,48 @@
         "working_dir"
       ],
       "indexes": [
-        "idx_ai_thread_settings_endpoint_pinned_created",
+        "idx_ai_thread_settings_endpoint_rank_created",
         "idx_ai_thread_settings_endpoint_updated",
         "sqlite_autoindex_ai_thread_settings_1"
       ],
       "triggers": [],
       "index_uses": [
         {
-          "name": "idx_ai_thread_settings_endpoint_pinned_created",
+          "name": "idx_ai_thread_settings_endpoint_rank_created",
           "purpose": "accelerate reviewed product coordination, resource, routing, or settings queries",
           "integrity_only": false,
           "allowed_query_ids": [
             "threadstore.0145d51ccbdfef0b",
             "threadstore.06b73535a1ce4063",
             "threadstore.18f0a98e6b38e014",
+            "threadstore.197b8296d3fe476c",
             "threadstore.1f672a9203e31ba9",
             "threadstore.27958659c3f5ca47",
             "threadstore.2c98775a07b4d6a1",
+            "threadstore.3a0d5726c44549a9",
             "threadstore.3f10590750eff409",
             "threadstore.3f5feb51f37b0152",
             "threadstore.40c8cedd2f823e19",
             "threadstore.4e62abc9d85290fd",
+            "threadstore.59aa500dd1f111c9",
             "threadstore.6b24632197817354",
             "threadstore.70b26601b1ba18cf",
+            "threadstore.70dd725866651015",
             "threadstore.7658bdf0a617ae82",
+            "threadstore.800ded64d758901b",
             "threadstore.840f8a318a9a0a7b",
+            "threadstore.8bcf5c5145a82f91",
             "threadstore.99f119b8babb76ed",
             "threadstore.a063f35ee107fdcd",
-            "threadstore.b4a68387a5a24902",
             "threadstore.bc44d19b074454ab",
+            "threadstore.c6f039127de30f5b",
+            "threadstore.c7a899d23377f62b",
+            "threadstore.ca3e33f6a1601cda",
+            "threadstore.d4ca7f53431ad1b2",
             "threadstore.d8f24aba80dce36d",
-            "threadstore.e7197907d77a8f67",
+            "threadstore.e701ee742dfbb7ff",
             "threadstore.efea620c691ef4b7",
-            "threadstore.f87ecba020551579",
-            "threadstore.f9f015abc34fd5b2"
+            "threadstore.f87ecba020551579"
           ]
         },
         {
@@ -170,26 +179,34 @@
             "threadstore.0145d51ccbdfef0b",
             "threadstore.06b73535a1ce4063",
             "threadstore.18f0a98e6b38e014",
+            "threadstore.197b8296d3fe476c",
             "threadstore.1f672a9203e31ba9",
             "threadstore.27958659c3f5ca47",
             "threadstore.2c98775a07b4d6a1",
+            "threadstore.3a0d5726c44549a9",
             "threadstore.3f10590750eff409",
             "threadstore.3f5feb51f37b0152",
             "threadstore.40c8cedd2f823e19",
             "threadstore.4e62abc9d85290fd",
+            "threadstore.59aa500dd1f111c9",
             "threadstore.6b24632197817354",
             "threadstore.70b26601b1ba18cf",
+            "threadstore.70dd725866651015",
             "threadstore.7658bdf0a617ae82",
+            "threadstore.800ded64d758901b",
             "threadstore.840f8a318a9a0a7b",
+            "threadstore.8bcf5c5145a82f91",
             "threadstore.99f119b8babb76ed",
             "threadstore.a063f35ee107fdcd",
-            "threadstore.b4a68387a5a24902",
             "threadstore.bc44d19b074454ab",
+            "threadstore.c6f039127de30f5b",
+            "threadstore.c7a899d23377f62b",
+            "threadstore.ca3e33f6a1601cda",
+            "threadstore.d4ca7f53431ad1b2",
             "threadstore.d8f24aba80dce36d",
-            "threadstore.e7197907d77a8f67",
+            "threadstore.e701ee742dfbb7ff",
             "threadstore.efea620c691ef4b7",
-            "threadstore.f87ecba020551579",
-            "threadstore.f9f015abc34fd5b2"
+            "threadstore.f87ecba020551579"
           ]
         },
         {
@@ -209,7 +226,9 @@
         "thread_id",
         "pinned_at_unix_ms",
         "settings_created_at_unix_ms",
-        "settings_updated_at_unix_ms"
+        "settings_updated_at_unix_ms",
+        "pin_rank",
+        "parent_thread_id"
       ],
       "consumers": [
         "thread settings service",
@@ -694,7 +713,7 @@
       "path": "internal/persistence/sqliteutil/engine.go",
       "function": "ensureSchema",
       "method": "Exec",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "action": "execute",
       "consumer": "ensureSchema",
       "consumer_kind": "schema_maintenance",
@@ -706,7 +725,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.RescheduleUploadDeletion",
       "method": "ExecContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_uploads"
       ],
@@ -731,12 +750,14 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.ListThreadSettings",
       "method": "QueryContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_thread_settings"
       ],
       "lookup_keys": [
-        "pinned_at_unix_ms",
+        "endpoint_id",
+        "parent_thread_id",
+        "pin_rank",
         "settings_created_at_unix_ms",
         "thread_id"
       ],
@@ -746,6 +767,7 @@
         "namespace_public_id",
         "parent_thread_id",
         "permission_type",
+        "pin_rank",
         "pinned_at_unix_ms",
         "reasoning_selection_json",
         "settings_created_at_unix_ms",
@@ -948,7 +970,7 @@
       "path": "internal/ai/threadstore/orphan_adoption.go",
       "function": "Store.GetThreadSettingsByCanonicalThreadID",
       "method": "QueryRowContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_thread_settings"
       ],
@@ -966,11 +988,38 @@
       "rendered_sql_expression": "fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE thread_id = ? ORDER BY endpoint_id LIMIT 1`, threadSelectColumnsSQL)"
     },
     {
+      "id": "threadstore.197b8296d3fe476c",
+      "path": "internal/ai/threadstore/store.go",
+      "function": "Store.CreateThreadSettings",
+      "method": "ExecContext",
+      "sql_sha256": "e8cd45b05e107ab6d999d936ebc0fd4b6774f956396b122cb7a019e995a641d8",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "write_columns": [
+        "endpoint_id",
+        "model_id",
+        "namespace_public_id",
+        "parent_thread_id",
+        "permission_type",
+        "pin_rank",
+        "pinned_at_unix_ms",
+        "reasoning_selection_json",
+        "settings_created_at_unix_ms",
+        "settings_updated_at_unix_ms",
+        "thread_id",
+        "working_dir"
+      ],
+      "action": "insert",
+      "consumer": "Store.CreateThreadSettings",
+      "consumer_kind": "product_operation"
+    },
+    {
       "id": "threadstore.1b83da901a7b729b",
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.PrepareExpiredUploadsForDeletion",
       "method": "ExecContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_uploads"
       ],
@@ -1140,7 +1189,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.ListThreadSettingsForRecoveryPage",
       "method": "QueryContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_thread_settings"
       ],
@@ -1154,6 +1203,7 @@
         "namespace_public_id",
         "parent_thread_id",
         "permission_type",
+        "pin_rank",
         "pinned_at_unix_ms",
         "reasoning_selection_json",
         "settings_created_at_unix_ms",
@@ -1271,12 +1321,32 @@
       "path": "internal/persistence/sqliteutil/inspect.go",
       "function": "TableColumnNamesTx",
       "method": "Query",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "action": "read",
       "consumer": "TableColumnNamesTx",
       "consumer_kind": "schema_maintenance",
       "dynamic_review": "reviewed shared schema introspection; identifier is strictly quoted and supplied by the sqliteutil schema verifier",
       "rendered_sql_expression": "fmt.Sprintf(`PRAGMA table_info(%s)`, quoteIdentifier(tableName))"
+    },
+    {
+      "id": "threadstore.3a0d5726c44549a9",
+      "path": "internal/ai/threadstore/store.go",
+      "function": "Store.CreateThreadSettings",
+      "method": "QueryRowContext",
+      "sql_sha256": "cd3365aa14ea59c723307bb56a041b4f5a3c7a425fb8f0972c5a798be0f82fa0",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "endpoint_id"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "pin_rank"
+      ],
+      "action": "read",
+      "consumer": "Store.CreateThreadSettings",
+      "consumer_kind": "product_operation"
     },
     {
       "id": "threadstore.3b715ae70a6c331d",
@@ -1374,7 +1444,7 @@
       "path": "internal/ai/threadstore/orphan_adoption.go",
       "function": "Store.AdoptCanonicalRootSettings",
       "method": "QueryRowContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_thread_settings"
       ],
@@ -1432,7 +1502,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedTableTx",
       "method": "Query",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "action": "read",
       "consumer": "inspectReviewedTableTx",
       "consumer_kind": "product_operation",
@@ -1674,7 +1744,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.FinalizeDeletedUploads",
       "method": "ExecContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_uploads"
       ],
@@ -1705,12 +1775,36 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.MaybeCompact",
       "method": "ExecContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "action": "execute",
       "consumer": "Store.MaybeCompact",
       "consumer_kind": "product_operation",
       "dynamic_review": "reviewed SQLite maintenance PRAGMA; formatted value is a bounded integer page count",
       "rendered_sql_expression": "fmt.Sprintf(`PRAGMA incremental_vacuum(%d);`, plan.PagesToRelease)"
+    },
+    {
+      "id": "threadstore.59aa500dd1f111c9",
+      "path": "internal/ai/threadstore/schema.go",
+      "function": "addPinRankColumnTx",
+      "method": "Query",
+      "sql_sha256": "050f9980d906d127f35170fc87eb8defa7cda22a786161564772051ecf041fc1",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "parent_thread_id",
+        "pinned_at_unix_ms"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "parent_thread_id",
+        "pinned_at_unix_ms",
+        "settings_created_at_unix_ms",
+        "thread_id"
+      ],
+      "action": "read",
+      "consumer": "addPinRankColumnTx",
+      "consumer_kind": "schema_maintenance"
     },
     {
       "id": "threadstore.5f00e4c52421c5cb",
@@ -2006,6 +2100,28 @@
       "consumer_kind": "product_operation"
     },
     {
+      "id": "threadstore.70dd725866651015",
+      "path": "internal/ai/threadstore/schema.go",
+      "function": "addPinRankColumnTx",
+      "method": "Exec",
+      "sql_sha256": "46aeeb883aec12372e690efd4ac98335adf782bfdec0892f9ae7467c12500af4",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "thread_id"
+      ],
+      "read_columns": [
+        "thread_id"
+      ],
+      "write_columns": [
+        "pin_rank"
+      ],
+      "action": "update",
+      "consumer": "addPinRankColumnTx",
+      "consumer_kind": "schema_maintenance"
+    },
+    {
       "id": "threadstore.72907fc4adcf9510",
       "path": "internal/ai/threadstore/schema.go",
       "function": "createUploadResourcesTx",
@@ -2105,6 +2221,19 @@
       "action": "read",
       "consumer": "Store.GetComputerTarget",
       "consumer_kind": "product_operation"
+    },
+    {
+      "id": "threadstore.800ded64d758901b",
+      "path": "internal/ai/threadstore/schema.go",
+      "function": "addPinRankColumnTx",
+      "method": "Exec",
+      "sql_sha256": "3ef19f66cf8754aa46cef7ee878d5e95c4057492c0a915a447ffabb45420e664",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "action": "schema",
+      "consumer": "addPinRankColumnTx",
+      "consumer_kind": "schema_maintenance"
     },
     {
       "id": "threadstore.804d1b46953fdc5c",
@@ -2282,7 +2411,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.FinalizeDeletedUploads",
       "method": "ExecContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_upload_refs"
       ],
@@ -2353,6 +2482,26 @@
       "consumer_kind": "product_operation"
     },
     {
+      "id": "threadstore.8bcf5c5145a82f91",
+      "path": "internal/ai/threadstore/pin_order.go",
+      "function": "Store.SetThreadPinned",
+      "method": "QueryRowContext",
+      "sql_sha256": "cd3365aa14ea59c723307bb56a041b4f5a3c7a425fb8f0972c5a798be0f82fa0",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "endpoint_id"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "pin_rank"
+      ],
+      "action": "read",
+      "consumer": "Store.SetThreadPinned",
+      "consumer_kind": "product_operation"
+    },
+    {
       "id": "threadstore.90c4f4809628704b",
       "path": "internal/persistence/sqliteutil/inspect.go",
       "function": "ListUserTablesTx",
@@ -2408,7 +2557,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.GetThreadSettings",
       "method": "QueryRowContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_thread_settings"
       ],
@@ -2733,7 +2882,7 @@
       "path": "internal/persistence/sqliteutil/engine.go",
       "function": "setUserVersionTx",
       "method": "Exec",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "action": "execute",
       "consumer": "setUserVersionTx",
       "consumer_kind": "schema_maintenance",
@@ -2940,7 +3089,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedIndexTx",
       "method": "Query",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "action": "read",
       "consumer": "inspectReviewedIndexTx",
       "consumer_kind": "product_operation",
@@ -2952,37 +3101,12 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedTableTx",
       "method": "Query",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "action": "read",
       "consumer": "inspectReviewedTableTx",
       "consumer_kind": "product_operation",
       "dynamic_review": "reviewed schema introspection; identifier is quoted and originates from the exact sqlite_master snapshot",
       "rendered_sql_expression": "fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))"
-    },
-    {
-      "id": "threadstore.b4a68387a5a24902",
-      "path": "internal/ai/threadstore/store.go",
-      "function": "Store.SetThreadPinned",
-      "method": "ExecContext",
-      "sql_sha256": "0458dbe27612060dd3675d48d29e5f197b77ac0b2eb5cb99ff9994aaa2ac3c56",
-      "tables": [
-        "ai_thread_settings"
-      ],
-      "lookup_keys": [
-        "endpoint_id",
-        "thread_id"
-      ],
-      "read_columns": [
-        "endpoint_id",
-        "thread_id"
-      ],
-      "write_columns": [
-        "pinned_at_unix_ms",
-        "settings_updated_at_unix_ms"
-      ],
-      "action": "update",
-      "consumer": "Store.SetThreadPinned",
-      "consumer_kind": "product_operation"
     },
     {
       "id": "threadstore.b4c8d9e9c90e2f25",
@@ -3236,6 +3360,88 @@
       "consumer_kind": "product_operation"
     },
     {
+      "id": "threadstore.c6f039127de30f5b",
+      "path": "internal/ai/threadstore/pending_input_migration.go",
+      "function": "pendingInputMigrationSource.GetThreadSettings",
+      "method": "QueryRowContext",
+      "sql_sha256": "b0314ff1162ce4a2c45bf3197d726258b7da86a840bdc8357d19a68748b874bc",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "endpoint_id",
+        "thread_id"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "model_id",
+        "namespace_public_id",
+        "parent_thread_id",
+        "permission_type",
+        "pinned_at_unix_ms",
+        "reasoning_selection_json",
+        "settings_created_at_unix_ms",
+        "settings_updated_at_unix_ms",
+        "thread_id",
+        "working_dir"
+      ],
+      "action": "read",
+      "consumer": "pendingInputMigrationSource.GetThreadSettings",
+      "consumer_kind": "schema_maintenance"
+    },
+    {
+      "id": "threadstore.c7a899d23377f62b",
+      "path": "internal/ai/threadstore/pin_order.go",
+      "function": "Store.MovePinnedThread",
+      "method": "ExecContext",
+      "sql_sha256": "fe1a4089fd83b11e3b7d3520c0f0843df3488d83cd802f78a83f6c542df64b5c",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "endpoint_id",
+        "thread_id"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "thread_id"
+      ],
+      "write_columns": [
+        "pin_rank",
+        "settings_updated_at_unix_ms"
+      ],
+      "action": "update",
+      "consumer": "Store.MovePinnedThread",
+      "consumer_kind": "product_operation"
+    },
+    {
+      "id": "threadstore.ca3e33f6a1601cda",
+      "path": "internal/ai/threadstore/pin_order.go",
+      "function": "Store.MovePinnedThread",
+      "method": "QueryContext",
+      "sql_sha256": "959f15c93fd7f165552a5899fab97391ab55185ee8d45c89b86e059513961e9b",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "endpoint_id",
+        "parent_thread_id",
+        "pinned_at_unix_ms"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "parent_thread_id",
+        "pin_rank",
+        "pinned_at_unix_ms",
+        "settings_created_at_unix_ms",
+        "settings_updated_at_unix_ms",
+        "thread_id"
+      ],
+      "action": "read",
+      "consumer": "Store.MovePinnedThread",
+      "consumer_kind": "product_operation"
+    },
+    {
       "id": "threadstore.ccb8c0628d066c35",
       "path": "internal/persistence/sqliteutil/engine.go",
       "function": "updateMetaTx",
@@ -3266,7 +3472,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "collectUnreferencedUploadsTx",
       "method": "ExecContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_uploads"
       ],
@@ -3289,6 +3495,32 @@
       "rendered_sql_expression": "updateSQL"
     },
     {
+      "id": "threadstore.d4ca7f53431ad1b2",
+      "path": "internal/ai/threadstore/pin_order.go",
+      "function": "Store.SetThreadPinned",
+      "method": "ExecContext",
+      "sql_sha256": "f9946c11c8fd8a4f12dd29e09bc338e4875441375305397802a15a7f781f4304",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "endpoint_id",
+        "thread_id"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "thread_id"
+      ],
+      "write_columns": [
+        "pin_rank",
+        "pinned_at_unix_ms",
+        "settings_updated_at_unix_ms"
+      ],
+      "action": "update",
+      "consumer": "Store.SetThreadPinned",
+      "consumer_kind": "product_operation"
+    },
+    {
       "id": "threadstore.d5ebf34b86208a0b",
       "path": "internal/ai/threadstore/pending_input_migration.go",
       "function": "migrateThreadstoreV4ToV5",
@@ -3306,7 +3538,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "collectUnreferencedUploadsTx",
       "method": "QueryContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_upload_refs",
         "ai_uploads"
@@ -3404,29 +3636,29 @@
       "consumer_kind": "product_operation"
     },
     {
-      "id": "threadstore.e7197907d77a8f67",
-      "path": "internal/ai/threadstore/store.go",
-      "function": "Store.CreateThreadSettings",
-      "method": "ExecContext",
-      "sql_sha256": "3fada5a34e19d7a7f8f7aa2519a9fee9ca7a2ece84c6e8de175e52c9ac37f795",
+      "id": "threadstore.e701ee742dfbb7ff",
+      "path": "internal/ai/threadstore/pin_order.go",
+      "function": "Store.SetThreadPinned",
+      "method": "QueryRowContext",
+      "sql_sha256": "d47911c455975535fbbe2ca37f212ed420217229765a7cbe2812f81d001619a9",
       "tables": [
         "ai_thread_settings"
       ],
-      "write_columns": [
+      "lookup_keys": [
         "endpoint_id",
-        "model_id",
-        "namespace_public_id",
         "parent_thread_id",
-        "permission_type",
-        "pinned_at_unix_ms",
-        "reasoning_selection_json",
-        "settings_created_at_unix_ms",
-        "settings_updated_at_unix_ms",
-        "thread_id",
-        "working_dir"
+        "thread_id"
       ],
-      "action": "insert",
-      "consumer": "Store.CreateThreadSettings",
+      "read_columns": [
+        "endpoint_id",
+        "parent_thread_id",
+        "pin_rank",
+        "pinned_at_unix_ms",
+        "settings_updated_at_unix_ms",
+        "thread_id"
+      ],
+      "action": "read",
+      "consumer": "Store.SetThreadPinned",
       "consumer_kind": "product_operation"
     },
     {
@@ -3611,29 +3843,6 @@
       "consumer_kind": "schema_maintenance"
     },
     {
-      "id": "threadstore.f9f015abc34fd5b2",
-      "path": "internal/ai/threadstore/pending_input_migration.go",
-      "function": "pendingInputMigrationSource.GetThreadSettings",
-      "method": "QueryRowContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
-      "tables": [
-        "ai_thread_settings"
-      ],
-      "lookup_keys": [
-        "endpoint_id",
-        "thread_id"
-      ],
-      "read_columns": [
-        "endpoint_id",
-        "thread_id"
-      ],
-      "action": "read",
-      "consumer": "pendingInputMigrationSource.GetThreadSettings",
-      "consumer_kind": "schema_maintenance",
-      "dynamic_review": "reviewed migration-only ai_thread_settings exact read; format argument is the package-constant reviewed column projection",
-      "rendered_sql_expression": "fmt.Sprintf(`\nSELECT\n%s\nFROM ai_thread_settings\nWHERE endpoint_id = ? AND thread_id = ?\n`, threadSelectColumnsSQL)"
-    },
-    {
       "id": "threadstore.fa5100fb73fed473",
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.RestartFailedUploadAttempt",
@@ -3672,7 +3881,7 @@
       "path": "internal/ai/threadstore/thread_lifecycle.go",
       "function": "deleteThreadScopedRowsTx",
       "method": "ExecContext",
-      "builder_sha256": "4cf47e7186a620486e783dd1049b80384cb09a9e719ef94abfadb53538e5dad7",
+      "builder_sha256": "b68f34a4495d6ca84fb05378f40521a1e7172a6f2571da361c0d6aff1a1d153a",
       "tables": [
         "ai_flower_execution_authority",
         "ai_upload_staging_scopes"

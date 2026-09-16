@@ -64,7 +64,7 @@ func TestComputerTargetMigrationFailureRollsBackColumnAndVersion(t *testing.T) {
 	seedComputerMigrationThread(t, path)
 	spec := threadstoreSchemaSpec()
 	failure := errors.New("injected migration failure")
-	spec.Migrations[len(spec.Migrations)-1].Apply = func(tx *sql.Tx) error {
+	spec.Migrations[5].Apply = func(tx *sql.Tx) error {
 		if err := migrateThreadstoreV6ToV7(tx); err != nil {
 			return err
 		}

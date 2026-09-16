@@ -31,6 +31,7 @@ import (
 
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/config"
@@ -4490,6 +4491,36 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"detail": resp}})
 			return
 
+		case action == "pin-position" && len(parts) == 2 && r.Method == http.MethodPatch:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			var body struct {
+				AnchorThreadID string `json:"anchor_thread_id"`
+				Placement      string `json:"placement"`
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			changes, err := aiSvc.MovePinnedThread(r.Context(), meta, threadID, body.AnchorThreadID, body.Placement)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				}
+				if errors.Is(err, threadstore.ErrPinPositionConflict) {
+					status = http.StatusConflict
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"pins": changes}})
+			return
+
 		case action == "" && r.Method == http.MethodPatch:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
@@ -4586,6 +4617,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 						"thread": map[string]any{
 							"thread_id":         pinnedThread.ThreadID,
 							"pinned_at_unix_ms": pinnedThread.PinnedAtUnixMs,
+							"pin_rank":          pinnedThread.PinRank,
+							"settings_revision": pinnedThread.SettingsRevision,
 						},
 					}})
 					return

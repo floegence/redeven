@@ -42,6 +42,7 @@ import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNa
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
 import {
   createRuntimeFlowerSurfaceAdapter,
+  type RuntimeThreadPatchResponse,
 } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
   createFlowerClientRequestID,
@@ -784,10 +785,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'POST',
         body: JSON.stringify(body),
       }),
-      patchThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, {
+      patchThread: (threadID, body) => fetchLocalApiJSON<RuntimeThreadPatchResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
+      movePinnedThread: (threadID, input) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/pin-position`,
+        { method: 'PATCH', body: JSON.stringify(input) },
+      ),
       reorderQueuedTurns: (threadID, orderedQueueIDs) => fetchLocalApiJSON(
 		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/order`,
         {

@@ -148,7 +148,8 @@ describe('Flower status motion and thread menu', () => {
 
     expect(document.querySelector('[role="menu"]')).toBe(menu);
     expect(menu?.getAttribute('aria-label')).toContain('Updated live task');
-    expect(originalCard?.isConnected).toBe(false);
+    expect(host.querySelector('[data-flower-thread-card]')).toBe(originalCard);
+    expect(originalCard?.isConnected).toBe(true);
   });
 
   it('uses one stable menu contract for pointer, button, and keyboard entry', async () => {
@@ -206,6 +207,9 @@ describe('Flower status motion and thread menu', () => {
     await nextFrame();
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
     listScroll.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    listScroll.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 20 }));
     await nextFrame();
     expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(menuButton);
