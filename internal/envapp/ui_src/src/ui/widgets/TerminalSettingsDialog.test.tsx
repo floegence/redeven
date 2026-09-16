@@ -185,7 +185,7 @@ describe('TerminalSettingsDialog', () => {
     expect(host.textContent).toContain('Signal Safe Dark');
     expect(host.textContent).toContain('Studio Paper');
     expect(host.textContent).toContain('JetBrains Mono');
-    expect(host.textContent).toContain('Activity border');
+    expect(host.textContent).toContain('Terminal activity');
 
     const themeRadios = Array.from(host.querySelectorAll<HTMLInputElement>('input[name="terminal-theme"]'));
     expect(themeRadios).toHaveLength(TERMINAL_THEME_DEFINITIONS.length + 1);
