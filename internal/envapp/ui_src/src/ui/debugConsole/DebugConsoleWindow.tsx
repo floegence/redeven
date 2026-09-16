@@ -1,3 +1,4 @@
+import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Index, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -270,9 +271,7 @@ function traceMatchesQuery(trace: DebugConsoleTrace, query: string): boolean {
 }
 
 function tabButtonClass(active: boolean): string {
-  return active
-    ? 'group min-w-[9.75rem] cursor-pointer rounded-md border px-3 py-2.5 text-left shadow-[0_14px_30px_-26px_var(--redeven-shadow-color)] transition-all'
-    : 'group min-w-[9.75rem] cursor-pointer rounded-md border border-border/70 bg-background px-3 py-2.5 text-left transition-all hover:border-border hover:bg-muted/[0.14]';
+  return `group min-w-[9.75rem] cursor-pointer rounded-md border px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${redevenSegmentedItemClass(active)}`;
 }
 
 function listRowClass(active: boolean): string {
@@ -798,12 +797,11 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                         aria-selected={tabSelection.visual() === tabDescriptor.value}
                         class={tabButtonClass(tabSelection.visual() === tabDescriptor.value)}
                         onClick={() => tabSelection.request(tabDescriptor.value)}
-                        style={tabSelection.visual() === tabDescriptor.value ? semanticInteractiveStyle(tabDescriptor.tone ?? 'primary', 'strong') : undefined}
                       >
                         <div class="flex items-start justify-between gap-3">
                           <div class="min-w-0">
-                            <div class={`text-[10px] font-semibold ${tabSelection.visual() === tabDescriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{i18n.t(tabDescriptor.labelKey)}</div>
-                            <div class="mt-0.5 text-[9px] leading-[1rem] text-muted-foreground">{i18n.t(tabDescriptor.descriptionKey)}</div>
+                            <div class={`text-[10px] font-semibold ${tabSelection.visual() === tabDescriptor.value ? 'text-inherit' : 'text-foreground/90'}`}>{i18n.t(tabDescriptor.labelKey)}</div>
+                            <div class={`mt-0.5 text-[9px] leading-[1rem] ${tabSelection.visual() === tabDescriptor.value ? 'text-inherit' : 'text-muted-foreground'}`}>{i18n.t(tabDescriptor.descriptionKey)}</div>
                           </div>
                           <Show when={tabDescriptor.hasCount}>
                             <span class="rounded-md border px-1.5 py-0.5 text-[8px] font-semibold tabular-nums" style={semanticBadgeStyle(tabDescriptor.tone ?? 'neutral', tabSelection.visual() === tabDescriptor.value)}>

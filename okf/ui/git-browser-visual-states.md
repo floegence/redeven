@@ -13,7 +13,7 @@ Env App's Git browser derives navigation and inspection selection from Floe's th
 
 ## State ownership
 
-Selected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. List-like selections use a filled surface plus a solid left indicator. Segmented tabs keep their contained active-item presentation and do not adopt list indicators. Hover uses a lower-emphasis neutral surface and never overrides an active selection. Keyboard focus uses a distinct outline that remains visible on selected and unselected controls.
+Selected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. List-like selections use a filled surface plus a solid left indicator. Compact segmented tabs and Files/Git mode buttons use the primary/primary-foreground selection contract owned by [Shared surface material](surface-material.md). They update the actual selected button immediately, retain both button instances, and do not adopt list indicators. Hover uses a lower-emphasis neutral surface and never overrides an active selection. Keyboard focus uses a distinct outline that remains visible on selected and unselected controls.
 
 The Current branch chip is independent of selection styling. It always uses the current-branch chip tokens, including when the current branch is selected. Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.
 

@@ -440,10 +440,10 @@
   transition: background-color var(--container-motion-feedback) var(--container-motion-ease), color var(--container-motion-feedback) var(--container-motion-ease);
 }
 
-.container-filter-switch button:not(:disabled):hover { color: var(--foreground); background: color-mix(in srgb, var(--redeven-surface-control-muted) 60%, transparent); }
-.container-filter-switch button:not(:disabled):active { background: var(--redeven-surface-control-muted); }
+.container-filter-switch button:not(:disabled):not([aria-pressed="true"]):hover { color: var(--foreground); background: color-mix(in srgb, var(--redeven-surface-control-muted) 60%, transparent); }
+.container-filter-switch button:not(:disabled):not([aria-pressed="true"]):active { background: var(--redeven-surface-control-muted); }
 
-.container-filter-switch button[aria-pressed="true"] { color: var(--foreground); background: var(--redeven-surface-control-muted); }
+.container-filter-switch button[aria-pressed="true"] { color: var(--primary-foreground); background: var(--primary); transition: none; }
 .container-filter-count {
   display: inline-flex;
   min-width: 18px;
@@ -1242,4 +1242,12 @@
   .redeven-containers *,
   .redeven-containers *::before,
   .redeven-containers *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation: none !important; }
+}
+
+@media (forced-colors: active) {
+  .container-filter-switch button[aria-pressed="true"] {
+    forced-color-adjust: none;
+    color: HighlightText;
+    background: Highlight;
+  }
 }

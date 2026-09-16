@@ -273,7 +273,7 @@
   --redeven-settings-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);
   --redeven-settings-selection-indicator: color-mix(in srgb, var(--ring) 82%, var(--foreground) 18%);
   --redeven-settings-choice-selected-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 8%, var(--redeven-settings-inset-bg));
-  --redeven-settings-choice-selected-border: color-mix(in srgb, var(--foreground) 18%, var(--redeven-settings-inset-bg));
+  --redeven-settings-choice-selected-border: var(--redeven-settings-selection-indicator);
   --redeven-settings-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-inset-bg));
   --git-table-gridline: var(--redeven-stroke-divider);
   --git-browser-selection-source: var(--ring);
@@ -731,12 +731,6 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   color: var(--git-browser-current-chip-fg);
 }
 
-.git-browser-segmented-tab.redeven-surface-segmented__item--active {
-  color: var(--git-browser-selection-fg) !important;
-  border-color: color-mix(in srgb, var(--git-browser-selection-source) 22%, var(--redeven-stroke-divider)) !important;
-  background: color-mix(in srgb, var(--git-browser-selection-source) 9%, var(--redeven-surface-control)) !important;
-}
-
 @media (forced-colors: active) {
   .git-browser-selection-surface,
   .git-browser-selection-row {
@@ -756,9 +750,6 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
     border-color: CanvasText;
   }
 
-  .git-browser-segmented-tab.redeven-surface-segmented__item--active {
-    border-color: Highlight !important;
-  }
 }
 
 .browser-mode-switch {
@@ -768,30 +759,8 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   overflow: hidden;
 }
 
-.browser-mode-switch__thumb {
-  position: absolute;
-  z-index: 0;
-  inset-block: 0.125rem;
-  inset-inline-start: 0.125rem;
-  width: calc((100% - 0.25rem) / 2);
-  border: 1px solid transparent;
-  border-radius: calc(var(--radius) - 2px);
-  background: var(--accent);
-  transform: translateX(0);
-  transition:
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 120ms ease, background-color 120ms ease;
-}
-
-.browser-mode-switch[data-mode='git'] .browser-mode-switch__thumb {
-  transform: translateX(100%);
-}
-
 .browser-mode-switch :where(button) {
   min-width: 0;
-}
-
-.browser-mode-switch button[aria-checked='true'] {
-  color: var(--git-browser-selection-fg);
 }
 
 @media (max-width: 639px) {
@@ -1562,8 +1531,7 @@ html.dark .git-changes-table-pending {
 .redeven-surface-segmented__item {
   cursor: pointer;
   border: 1px solid transparent;
-  transition:
-    border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition: none;
 }
 
 .redeven-surface-segmented__item:disabled,
@@ -1571,14 +1539,25 @@ html.dark .git-changes-table-pending {
   cursor: not-allowed;
 }
 
-.redeven-surface-segmented__item:hover:not([aria-selected='true']) {
+.redeven-surface-segmented__item:hover:not(.redeven-surface-segmented__item--active):not(:disabled):not([aria-disabled='true']) {
   background: color-mix(in srgb, var(--redeven-surface-control) 84%, transparent) !important;
 }
 
 .redeven-surface-segmented__item--active {
-  border-color: var(--redeven-stroke-control-strong) !important;
-  background: var(--redeven-surface-control) !important;
-  color: var(--foreground) !important;
+  border-color: transparent !important;
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  box-shadow: none;
+}
+
+@media (forced-colors: active) {
+  .redeven-surface-segmented__item--active,
+  .browser-editor-setup__method-option[data-selected='true'] {
+    forced-color-adjust: none;
+    background: Highlight !important;
+    color: HighlightText !important;
+    border-color: Highlight !important;
+  }
 }
 
 .redeven-surface-inset {
@@ -4878,20 +4857,21 @@ html.dark .git-content-skeleton__block {
   transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
 }
 
-.browser-editor-setup__method-option:hover:not(:disabled) {
+.browser-editor-setup__method-option:hover:not(:disabled):not([data-selected='true']) {
   border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
   color: var(--foreground);
 }
 
 .browser-editor-setup__method-option:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--ring) 58%, transparent);
+  outline: 2px solid var(--ring);
   outline-offset: 1px;
 }
 
 .browser-editor-setup__method-option[data-selected='true'] {
-  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
-  background: color-mix(in srgb, var(--primary) 8%, var(--background));
-  color: var(--foreground);
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  transition: none;
 }
 
 .browser-editor-setup__method-option:disabled {
@@ -5650,7 +5630,6 @@ html.dark .git-content-skeleton__block {
     --redeven-settings-sidebar-border: var(--floe-surface-edge);
     --redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 8%, var(--redeven-settings-inset-bg));
     --redeven-settings-divider: color-mix(in srgb, var(--foreground) 3%, var(--redeven-settings-inset-bg));
-    --redeven-settings-choice-selected-border: var(--floe-surface-edge);
     --redeven-overlay-scrim: color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent);
   }
 
@@ -5666,8 +5645,4 @@ html.dark .git-content-skeleton__block {
     transition: none;
   }
 
-  :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) .redeven-surface-segmented__item--active {
-    border-color: transparent !important;
-    background: color-mix(in srgb, var(--primary) 8%, var(--redeven-surface-panel)) !important;
-  }
 }

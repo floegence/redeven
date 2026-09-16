@@ -162,8 +162,7 @@ describe('Git browser rendered selection contract', () => {
       const themeRing = resolvedThemeColor('--ring');
 
       const modeButton = sharedControls.querySelector<HTMLElement>('[aria-checked="true"]')!;
-      const modeThumb = sharedControls.querySelector<HTMLElement>('.browser-mode-switch__thumb')!;
-      expect.soft(contrastRatio(getComputedStyle(modeButton).color, getComputedStyle(modeThumb).backgroundColor), `${preset.name} selected browser mode`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(contrastRatio(getComputedStyle(modeButton).color, getComputedStyle(modeButton).backgroundColor), `${preset.name} selected browser mode`).toBeGreaterThanOrEqual(4.5);
       for (const tag of sharedControls.querySelectorAll<HTMLElement>('.floe-tag')) {
         const style = getComputedStyle(tag);
         expect.soft(contrastRatio(style.color, style.backgroundColor, panelBackground), `${preset.name} repository fact ${tag.textContent}`).toBeGreaterThanOrEqual(4.5);

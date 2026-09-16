@@ -35,9 +35,8 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
       disabled={props.gitHistoryDisabled}
       class={cn(
         buttonBaseClass,
-        props.mode === 'git'
-          ? 'text-foreground'
-          : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
+        redevenSegmentedItemClass(props.mode === 'git'),
+        props.mode !== 'git' && 'text-muted-foreground hover:text-foreground',
       )}
       onPointerEnter={previewGitMode}
       onFocus={previewGitMode}
@@ -58,7 +57,6 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
       data-mode={props.mode}
       class={cn('browser-mode-switch inline-grid w-full grid-cols-2 items-center rounded-md border p-0.5', redevenSurfaceRoleClass('segmented'), props.class)}
     >
-      <span class="browser-mode-switch__thumb" data-floe-surface="flat" aria-hidden="true" />
       <button
         type="button"
         role="radio"
@@ -66,9 +64,8 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
         aria-checked={props.mode === 'files'}
         class={cn(
           buttonBaseClass,
-          props.mode === 'files'
-            ? 'text-foreground'
-            : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
+          redevenSegmentedItemClass(props.mode === 'files'),
+          props.mode !== 'files' && 'text-muted-foreground hover:text-foreground',
         )}
         onClick={() => props.onChange('files')}
       >

@@ -33,14 +33,23 @@ Dialogs, and FloatingWindows use their released component treatment. Product
 neutral panel and divider roles mix 11.5% and 8.5% foreground into their
 opaque owning surface. Control boundaries use the independent input role and
 focus uses the ring role; input fill mixes background and card equally.
-Semantic status hues and selected text remain explicit. Selected product segments, Desktop library filters, and
-appearance choices change their fill immediately without an additional contour.
-High Contrast Light and forced colors retain their explicit boundaries.
+Semantic status hues and selected text remain explicit. Compact shared and
+product segments, Desktop library filters, appearance modes, plugin source tabs,
+service selectors, and Flower reasoning/question buttons use `primary` with
+`primary-foreground`. Selected text reaches 4.5:1 and the filled face reaches 3:1
+against its rail or carrying surface in every preset and both materials. Hover
+must preserve the selected fill and text. Product selections change immediately,
+without decorative shadows or an additional contour. Larger choice cards keep
+quiet fills and a clear selected perimeter or native mark. High Contrast Light
+and forced colors retain explicit selection; system colors use Highlight and
+HighlightText for compact selected faces.
 
 Files toolbars reserve the strong input boundary for filtering or active path
 editing. Read-mode breadcrumbs and ordinary actions have no input frame. The
-Files/Git rail and its moving selection face use shared flat fills without a
-second border, inset highlight, or contact shadow. The actual controls, path
+Files/Git rail and its selected button use shared flat fills without a second
+border, inset highlight, or contact shadow. The selected face updates directly
+with the existing state, so rapid reversals cannot leave a sliding background
+behind the newly selected text. The actual controls, path
 draft, filter, selection and focus owners stay mounted during palette changes.
 Porcelain Light's folder and file-type paints preserve the original Classic
 Light colors through Floe's independent file-icon roles; status text contrast
@@ -124,7 +133,11 @@ and shared Switch boundary. Browser coverage exercises the published package
 with real product styles, light/dark controls and dialogs, unchanged draft
 selection and focus geometry, and the 26-preset settings hierarchy in both
 materials. Relevant Flower, terminal, and Workbench tests validate existing
-interaction ownership. Screenshots supplement computed behavior; the upstream
+interaction ownership. Compact selection matrices cover 26 presets, both
+materials, selected hover, keyboard activation, retained button identity,
+forced colors, and reduced-motion appearance. Real Electron settings capture
+access scope and protocol controls alongside Welcome filters. Screenshots
+supplement computed behavior; the upstream
 component gallery alone is not downstream acceptance evidence.
 
 # Evidence
@@ -143,3 +156,6 @@ component gallery alone is not downstream acceptance evidence.
 - `redeven:internal/envapp/ui_src/src/styles/softSurfacesVisual.browser.test.tsx` - Real control and scoped overlay checks.
 - `redeven:internal/envapp/ui_src/src/styles/settingsThemeHierarchyVisual.browser.test.tsx` - Full preset hierarchy coverage.
 - `redeven:desktop/scripts/check-welcome-cards.mjs` - Checks actual published Cards with Welcome CSS across every theme and material, including open and new states.
+
+- `redeven:internal/envapp/ui_src/src/styles/groupedSelectionVisual.browser.test.tsx` - Shared and product compact selection contrast and interaction.
+- `redeven:internal/envapp/ui_src/src/styles/desktopGroupedSelectionVisual.browser.test.tsx` - Welcome and SSH form selection cascade across presets.
