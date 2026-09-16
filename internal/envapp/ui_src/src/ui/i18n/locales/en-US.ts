@@ -3261,7 +3261,7 @@ export const enUS = defineDictionary({
       popupBlocked: 'Popup was blocked. Please allow popups and try again.',
       missingEnvContext: 'Missing env context. Please reopen from the control plane.',
       desktopWindowFailed: 'Desktop failed to open the isolated Web Service window.',
-      desktopLoopbackRequiresDesktop: 'Local compatibility requires the isolated Redeven Desktop window.',
+      desktopLoopbackRequiresDesktop: 'This service is configured to use local compatibility mode and can only be used in Redeven Desktop.',
     },
     managed: {
       title: 'Managed services',

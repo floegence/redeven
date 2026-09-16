@@ -3888,7 +3888,7 @@
       "popupBlocked": "Всплывающее окно заблокировано. Разрешите всплывающие окна и повторите попытку.",
       "missingEnvContext": "Отсутствует контекст среды. Пожалуйста, откройте снова из плоскости управления.",
       "desktopWindowFailed": "Desktop не удалось открыть изолированное окно веб-сервиса.",
-      "desktopLoopbackRequiresDesktop": "Для режима локальной совместимости требуется изолированное окно Redeven Desktop."
+      "desktopLoopbackRequiresDesktop": "Этот сервис настроен на режим локальной совместимости и доступен только в Redeven Desktop."
     }
   },
   "debugConsoleSettings": {
