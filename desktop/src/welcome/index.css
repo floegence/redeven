@@ -615,6 +615,19 @@ html:not(.dark) .redeven-welcome-surface {
   transition: background-color 120ms ease-out;
 }
 
+/* The environment grid needs an identifiable perimeter even when the page and
+ * card paints are close. Keep one neutral boundary and let Floe own its shadow. */
+.redeven-environment-card[data-floe-surface] {
+  border-color: var(--redeven-welcome-card-border);
+  --floe-surface-shadow-raised: none;
+}
+
+@media (forced-colors: none) {
+  html:not(.dark):not([data-floe-shell-theme='hc-light']) .redeven-environment-card {
+    --redeven-welcome-card-border: color-mix(in srgb, var(--foreground) 20%, var(--background));
+  }
+}
+
 html:not(.dark) .redeven-environment-card {
   border-radius: 0.5rem;
   background: var(--redeven-welcome-card);

@@ -37,15 +37,16 @@ func main() {
 	certificatePath := flag.String("certificate", "", "PEM certificate path")
 	privateKeyPath := flag.String("private-key", "", "PEM private key path")
 	nativeCode := flag.Bool("native-codespace", false, "serve the native CodeSpace HTTP fixture")
+	visualGit := flag.Bool("visual-git", false, "serve read-only Git appearance fixtures")
 	allowedOrigin := flag.String("allowed-origin", "", "exact browser origin")
 	flag.Parse()
-	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *nativeCode); err != nil {
+	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *nativeCode, *visualGit); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode bool) error {
+func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode, visualGit bool) error {
 	if strings.TrimSpace(certificatePath) == "" || strings.TrimSpace(privateKeyPath) == "" || strings.TrimSpace(allowedOrigin) == "" {
 		return errors.New("certificate, private key, and allowed origin are required")
 	}
@@ -91,7 +92,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode bool)
 		return fmt.Errorf("issue direct artifact: %w", err)
 	}
 
-	handlers, err := newHandlers(nativeCode)
+	handlers, err := newHandlers(nativeCode, visualGit)
 	if err != nil {
 		return err
 	}
@@ -175,7 +176,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin string, nativeCode bool)
 	return nil
 }
 
-func newHandlers(nativeCode bool) (*flowersec.SessionHandlers, error) {
+func newHandlers(nativeCode, visualGit bool) (*flowersec.SessionHandlers, error) {
 	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{})
 	if err != nil {
 		return nil, err
@@ -219,6 +220,22 @@ func newHandlers(nativeCode bool) (*flowersec.SessionHandlers, error) {
 		2002: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
 			return map[string]any{"sessions": []any{}}, nil
 		},
+	}
+	if visualGit {
+		// This fixture exposes reads only; mutation RPCs remain unregistered.
+		responses := map[uint32]any{
+			1101: map[string]any{"available": true, "git_available": true, "repo_root_path": "/workspace", "head_ref": "main", "head_commit": "abcdef1234567890"},
+			1102: map[string]any{"repo_root_path": "/workspace", "commits": []any{}, "has_more": false},
+			1104: map[string]any{"repo_root_path": "/workspace", "worktree_path": "/workspace", "head_ref": "main", "head_commit": "abcdef1234567890", "upstream_ref": "origin/main", "workspace_summary": map[string]any{}, "workspace_revision": "visual-1"},
+			1105: map[string]any{"repo_root_path": "/workspace", "summary": map[string]any{}, "staged": []any{}, "unstaged": []any{}, "untracked": []any{}, "conflicted": []any{}},
+			1106: map[string]any{"repo_root_path": "/workspace", "current_ref": "main", "local": []any{map[string]any{"name": "main", "full_name": "refs/heads/main", "kind": "local", "current": true, "upstream_ref": "origin/main", "worktree_path": "/workspace", "subject": "Refine theme surfaces"}}, "remote": []any{map[string]any{"name": "origin/main", "full_name": "refs/remotes/origin/main", "kind": "remote", "subject": "Refine theme surfaces"}}},
+			1121: map[string]any{"repo_root_path": "/workspace", "stashes": []any{}},
+			1128: map[string]any{"repo_root_path": "/workspace", "summary": map[string]any{}, "items": []any{}, "workspace_revision": "visual-1", "total_count": 0, "has_more": false},
+			1131: map[string]any{"repo_root_path": "/workspace", "workspace_revision": "visual-1", "items": []any{}},
+		}
+		for typeID, response := range responses {
+			registrations[typeID] = func(context.Context, json.RawMessage) (any, *flowersec.RPCError) { return response, nil }
+		}
 	}
 	for typeID, handler := range registrations {
 		if err := handlers.HandleRPC(typeID, handler); err != nil {
