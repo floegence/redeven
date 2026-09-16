@@ -122,7 +122,7 @@ for (const relative of ['redeven', 'computer/manifest.json', '.redevplugin-relea
 }
 fs.writeFileSync(file, JSON.stringify(hashes, null, 2));
 JS
-docker exec -d "$CID" bash -ceu 'echo $$ > /qualification/report/runtime.pid; exec /qualification/bundle/redeven run --mode local --state-root /config/qualification-state --local-ui-bind 127.0.0.1:23998 --presentation machine > /qualification/report/runtime.log 2>&1'
+docker exec -d "$CID" bash -ceu 'echo $$ > /qualification/report/runtime.pid; exec /qualification/bundle/redeven run --mode local --state-root /config/qualification-state --local-ui-bind 127.0.0.1:23998 --local-ui-protocol https --presentation machine > /qualification/report/runtime.log 2>&1'
 docker exec "$CID" bash -ceu '
   for attempt in {1..100}; do
     if curl --fail --silent --cacert /config/qualification-state/local-environment/local-ui-tls/device-ca.pem https://127.0.0.1:23998/_redeven_proxy/api/ai/threads >/dev/null; then exit 0; fi

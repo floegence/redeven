@@ -221,6 +221,7 @@ async function startRuntime(tempDir, { bind = '127.0.0.1:0' } = {}) {
     '--mode', 'local',
     '--state-root', stateRoot,
     '--local-ui-bind', bind,
+    '--local-ui-protocol', 'https',
     '--presentation', 'machine',
     '--startup-report-file', startupReportPath,
   ], {
