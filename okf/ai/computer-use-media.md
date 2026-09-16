@@ -62,10 +62,24 @@ Later actions cannot reopen an explicitly hidden viewer.
 A viewer may start only when the frame Activity belongs to the currently active
 canonical run. Historical pixels remain visible during preparation but cannot
 start capture; the first current-run frame activates viewing without retries.
-After the first successful action, Runtime may publish target-scoped live frame metadata at approximately 3 FPS through the existing workspace stream. Each workspace subscriber retains at most one pending media descriptor (maximum 4 KiB), replacing stale media without consuming lifecycle queue capacity. Lifecycle delivery has priority. Viewer closure cancels queued capture immediately; an admitted passive capture
+After the first successful action, Runtime publishes live metadata through the
+existing workspace stream. The header offers 3, 5, 10, 15 and 30 FPS (default 3),
+using existing client storage in Env App and Desktop Welcome. One setting applies
+to every thread and both ordinary and private viewing. This is a sampling ceiling;
+the header explains bandwidth cost and shows actual reception rate in its detail.
+The native selector supports keyboard input without dragging the window.
+
+One target gate serializes input, safety observation and sampling. Input takes
+priority; busy sampling ticks are skipped. Each sampler retains at most two
+frames and waits for the current frame read before generating another, so slow
+clients cannot build a backlog or expire their unread frame. A single decode
+job and latest pending frame replace pixels only after decoding. Interrupted
+viewing retains the last image, displays a paused state and offers explicit
+recovery. Ten seconds without frames also marks active viewing paused.
+ Each workspace subscriber retains at most one pending media descriptor (maximum 4 KiB), replacing stale media without consuming lifecycle queue capacity. Lifecycle delivery has priority. Viewer closure cancels queued capture immediately; an admitted passive capture
 drains within five seconds so hiding the image does not destroy a healthy
 browser session. Late pixels are discarded. Action cancellation retains its
-existing adapter interruption boundary. The sampler stop waits for capture to exit, and an old stop cannot cancel a replacement session. The viewer requests capture through its authenticated workspace observer and the thread media endpoint can resolve that active session's bounded samples. Completion, viewer hiding, thread or target changes, and disconnect retire live samples in the UI; the viewer then resolves the durable action keyframe. Reopening must never prefer a retired live reference over that keyframe. Continuous viewing and sensitive-page suspension still require their complete product qualification; decoded action frames alone do not prove continuous-view support.
+existing adapter interruption boundary. The sampler stop waits for capture to exit, and an old stop cannot cancel a replacement session. The viewer requests capture through its authenticated workspace observer and the thread media endpoint can resolve that active session's bounded samples. Completion, viewer hiding, thread or target changes, and disconnect retire live samples in the UI; the viewer then resolves the durable action keyframe. Reopening must never prefer a retired live reference over that keyframe. Private viewing uses the same scheduling and decoding path with the observer-bound authorization in the [takeover contract](computer-use-takeover.md).
 
 Screenshot identity uses Floret v7.12.0's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. The public timeline sanitizer preserves only hash-addressed references of this kind. Env App and Desktop Welcome resolve them through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
 

@@ -177,7 +177,11 @@
         "running": "Tâche sur l’ordinateur en cours",
         "awaiting_user": "En attente de votre réponse ou autorisation",
         "completed": "Tâche sur l’ordinateur terminée",
-        "failed": "Échec de la tâche sur l’ordinateur"
+        "failed": "Échec de la tâche sur l’ordinateur",
+        "taking_control": "Prise de contrôle…",
+        "user_control": "Vous contrôlez",
+        "returning_control": "Restitution du contrôle…",
+        "paused": "Affichage en pause"
       },
       "computerStageMove": "Déplacer la vue (touches fléchées)",
       "computerStageClose": "Fermer la vue",
@@ -366,7 +370,12 @@
       "computerTakeControl": "Prendre le contrôle",
       "computerReturnControl": "Rendre le contrôle à Flower",
       "computerControlHint": "Connectez-vous dans l’image avec la souris et le clavier. Les mots de passe et les codes ne sont pas enregistrés dans la conversation.",
-      "computerControlFailed": "Impossible de mettre à jour le contrôle. Vérifiez la page avant de réessayer."
+      "computerControlFailed": "Impossible de mettre à jour le contrôle. Vérifiez la page avant de réessayer.",
+      "computerFrameRate": "Fréquence d’images",
+      "computerFrameRateHint": "Une fréquence plus élevée utilise davantage de bande passante. La vitesse réelle dépend de votre appareil et de votre connexion.",
+      "computerReceivedFrameRate": "Réception : {fps} FPS",
+      "computerControlTaken": "Contrôle pris",
+      "computerControlNotReady": "La page nécessite encore votre intervention. Terminez la connexion ou la vérification, puis rendez le contrôle."
     },
     "threadList": {
       "title": "Discussions",

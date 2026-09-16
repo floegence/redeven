@@ -32,12 +32,22 @@ func (r *ComputerUseRuntime) controlForTarget(targetID string) *computerTargetCo
 	return control
 }
 
+var errComputerCaptureBusy = errors.New("computer capture is busy")
+
 func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call TargetToolCall) (*computerTargetControl, func(), error) {
 	control := r.controlForTarget(call.TargetID)
-	select {
-	case <-ctx.Done():
-		return nil, nil, ctx.Err()
-	case control.gate <- struct{}{}:
+	if call.passiveCapture {
+		select {
+		case control.gate <- struct{}{}:
+		default:
+			return nil, nil, errComputerCaptureBusy
+		}
+	} else {
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		case control.gate <- struct{}{}:
+		}
 	}
 	unlock := func() { <-control.gate }
 	if err := ctx.Err(); err != nil {
@@ -65,9 +75,9 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TAKEOVER_REQUIRED")
 	}
-	if (!call.liveFrame || call.controlReturn || call.userInput) && call.ThreadID != "" {
+	if (!call.liveFrame || call.controlReturn) && call.ThreadID != "" {
 		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
-		if call.controlReturn || call.userInput {
+		if call.controlReturn {
 			control.user = true
 		}
 	}

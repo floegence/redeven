@@ -143,6 +143,11 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       computerStageZoomOut: t(i18n, k('chat.computerStageZoomOut')),
       computerStageRestore: t(i18n, k('chat.computerStageRestore')),
       computerStageStatus: {
+        taking_control: t(i18n, k('chat.computerStageStatus.taking_control')),
+        user_control: t(i18n, k('chat.computerStageStatus.user_control')),
+        returning_control: t(i18n, k('chat.computerStageStatus.returning_control')),
+        paused: t(i18n, k('chat.computerStageStatus.paused')),
+
         running: t(i18n, k('chat.computerStageStatus.running')),
         awaiting_user: t(i18n, k('chat.computerStageStatus.awaiting_user')),
         completed: t(i18n, k('chat.computerStageStatus.completed')),
@@ -286,6 +291,11 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         deliveryNeedsReview: t(i18n, k('chat.delegatedApprovalStatusDeliveryNeedsReview')),
       },
       readOnlyComposerLabel: t(i18n, k('chat.readOnlyComposerLabel')),
+      computerFrameRate: t(i18n, k('chat.computerFrameRate')),
+      computerFrameRateHint: t(i18n, k('chat.computerFrameRateHint')),
+      computerReceivedFrameRate: t(i18n, k('chat.computerReceivedFrameRate')),
+      computerControlTaken: t(i18n, k('chat.computerControlTaken')),
+      computerControlNotReady: t(i18n, k('chat.computerControlNotReady')),
       computerTakeControl: t(i18n, k('chat.computerTakeControl')),
       computerReturnControl: t(i18n, k('chat.computerReturnControl')),
       computerControlHint: t(i18n, k('chat.computerControlHint')),

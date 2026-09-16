@@ -920,6 +920,7 @@ func TestComputerViewerStopsWithWorkspaceConnection(t *testing.T) {
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for executor.calls.Load() < 3 && time.Now().Before(deadline) {
+		_, _ = runtime.ResolveComputerLiveFrame(t.Context(), "thread", "target", executor.attachment.ResourceRef)
 		time.Sleep(20 * time.Millisecond)
 	}
 	if executor.calls.Load() < 3 {

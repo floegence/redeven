@@ -3,62 +3,84 @@ package ai
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 )
 
 type computerLiveSampler struct {
-	cancel   context.CancelFunc
-	done     chan struct{}
-	threadID string
-	targetID string
-	frames   []computerLiveImage
+	awaitingRead bool
+	cancel       context.CancelFunc
+	done         chan struct{}
+	request      ComputerViewerRequest
+	frames       []computerLiveImage
 }
-
 type computerLiveImage struct {
-	attachment TargetToolAttachment
-	body       []byte
+	frame FlowerComputerFrame
+	body  []byte
+}
+type computerLiveRequest struct {
+	ComputerViewerRequest
+	privateCall TargetToolCall
+	validate    func(context.Context) error
 }
 
-const computerLiveFrameInterval = 333 * time.Millisecond
+const computerLiveFrameInterval = time.Second / 3
 
-// StartComputerLiveFrames starts the single target-scoped live sampler. It
-// keeps no durable state; the
-// returned stop function waits for capture to finish and must be called when the viewer or
-// takeover session ends.
-func (r *ComputerUseRuntime) StartComputerLiveFrames(ctx context.Context, threadID, sessionID, targetID string, publish func(FlowerComputerFrame)) (func(), error) {
-	if r == nil || publish == nil || threadID == "" || sessionID == "" || targetID == "" {
+func computerFrameInterval(fps int) (time.Duration, error) {
+	switch fps {
+	case 0, 3:
+		return computerLiveFrameInterval, nil
+	case 5, 10, 15, 30:
+		return time.Second / time.Duration(fps), nil
+	}
+	return 0, errors.New("invalid computer frame rate")
+}
+
+// One bounded sampler owns either public observations or observer-private pixels.
+// Input waiters acquire the target before another passive sample can start.
+func (r *ComputerUseRuntime) startComputerLiveFrames(ctx context.Context, request computerLiveRequest, publish func(FlowerComputerFrame)) (func(), error) {
+	if r == nil || publish == nil || request.ThreadID == "" || request.ObserverID == "" || request.TargetID == "" {
 		return nil, errors.New("invalid computer live frame session")
 	}
-	// A keyframe authorizes reading history, not acquiring a shared target.
-	// Recheck the current owner's control on every capture as well as startup.
-	_, release, err := r.acquireComputerControl(ctx, TargetToolCall{liveFrame: true, ThreadID: threadID, TargetID: targetID, ToolName: "computer.screenshot"})
+	interval, err := computerFrameInterval(request.FPS)
 	if err != nil {
 		return nil, err
 	}
-	defer release()
-	key := threadID + "\x00" + sessionID + "\x00" + targetID
-	r.mu.Lock()
-	if r.closed {
-		r.mu.Unlock()
-		return nil, errors.New("computer use runtime is closed")
+	private := request.InteractionID != ""
+	call := TargetToolCall{liveFrame: true, ThreadID: request.ThreadID, TargetID: request.TargetID, ToolName: "computer.screenshot"}
+	if private {
+		if request.validate == nil {
+			return nil, errors.New("missing private viewer authority")
+		}
+		call = request.privateCall
+		call.ToolName, call.Arguments, call.userInput, call.liveFrame = "computer.screenshot", nil, true, true
 	}
-	if err := ctx.Err(); err != nil {
-		r.mu.Unlock()
+	_, release, err := r.acquireComputerControl(ctx, call)
+	if err != nil {
 		return nil, err
 	}
-	if len(r.liveFrames) >= 8 {
+	if request.validate != nil {
+		err = request.validate(ctx)
+	}
+	release()
+	if err != nil {
+		return nil, err
+	}
+	key := request.ObserverID
+	r.mu.Lock()
+	if r.closed || ctx.Err() != nil {
+		r.mu.Unlock()
+		return nil, errors.New("computer viewer unavailable")
+	}
+	if len(r.liveFrames) >= 8 || r.liveFrames[key] != nil {
 		r.mu.Unlock()
 		return nil, errors.New("computer live viewer limit reached")
 	}
 	if r.liveFrames == nil {
 		r.liveFrames = make(map[string]*computerLiveSampler)
 	}
-	if _, exists := r.liveFrames[key]; exists {
-		r.mu.Unlock()
-		return nil, errors.New("computer live frame session already exists")
-	}
 	liveCtx, cancel := context.WithCancel(ctx)
-	sampler := &computerLiveSampler{cancel: cancel, done: make(chan struct{}), threadID: threadID, targetID: targetID}
+	sampler := &computerLiveSampler{cancel: cancel, done: make(chan struct{}), request: request.ComputerViewerRequest}
 	r.liveFrames[key] = sampler
 	r.liveWG.Add(1)
 	r.mu.Unlock()
@@ -74,55 +96,135 @@ func (r *ComputerUseRuntime) StartComputerLiveFrames(ctx context.Context, thread
 			r.mu.Unlock()
 			close(sampler.done)
 		}()
-		ticker := time.NewTicker(computerLiveFrameInterval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		capture := func() {
-			result, err := r.ExecuteTargetTool(liveCtx, TargetToolCall{liveFrame: true, ThreadID: threadID, TargetID: targetID, ToolName: "computer.screenshot", Arguments: []byte(`{"target":"` + targetID + `"}`)})
-			if err != nil || len(result.Attachments) == 0 {
-				return
+		var sequence uint64
+		capture := func() bool {
+			call.passiveCapture = true
+			control, unlock, err := r.acquireComputerControl(liveCtx, call)
+			if errors.Is(err, errComputerCaptureBusy) {
+				return true
 			}
-			attachment := result.Attachments[len(result.Attachments)-1]
-			if validateComputerFrame(attachment, result.frameBytes) != nil || liveCtx.Err() != nil {
-				return
+			var result TargetToolResult
+			var body []byte
+			if err == nil {
+				// A closed viewer drains its already dispatched screenshot without killing
+				// the shared browser helper. Validation and lock admission remain cancelable.
+				if request.validate != nil {
+					err = request.validate(liveCtx)
+				}
+				if err == nil {
+					r.mu.RLock()
+					waiting := sampler.awaitingRead
+					r.mu.RUnlock()
+					if waiting {
+						unlock()
+						return true
+					}
+				}
+				if err == nil {
+					captureCtx, done := context.WithTimeout(context.WithoutCancel(liveCtx), 5*time.Second)
+					if private {
+						control.mu.Lock()
+						control.threadID, control.turnID, control.runID, control.user = call.ThreadID, call.TurnID, call.RunID, true
+						control.mu.Unlock()
+						body, err = r.executeComputerUserInputLocked(captureCtx, call)
+					} else {
+						result, err = r.executeComputerToolLocked(captureCtx, call, control)
+						if err == nil && len(result.Attachments) != 1 {
+							err = errors.New("computer observation unavailable")
+						}
+						if err == nil {
+							body = result.frameBytes
+							err = validateComputerFrame(result.Attachments[0], body)
+						}
+					}
+					done()
+				}
+				unlock()
+			}
+			if liveCtx.Err() != nil {
+				return false
+			}
+			sequence++
+			frame := FlowerComputerFrame{ThreadID: request.ThreadID, SessionID: request.ObserverID, TargetID: request.TargetID, ViewerRevision: request.Revision, InteractionID: request.InteractionID, MIMEType: "image/png", Sequence: sequence, CapturedAtMS: time.Now().UnixMilli()}
+			if err != nil {
+				frame.ErrorCode = "computer_view_unavailable"
+				publish(frame)
+				return false
+			}
+			if private {
+				frame.FrameID = strconv.FormatUint(sequence, 10)
+			} else {
+				frame.ResourceRef, frame.SHA256 = result.Attachments[0].ResourceRef, result.Attachments[0].SHA256
 			}
 			r.mu.Lock()
-			sampler.frames = append(sampler.frames, computerLiveImage{attachment: attachment, body: result.frameBytes})
+			sampler.frames = append(sampler.frames, computerLiveImage{frame: frame, body: body})
+			sampler.awaitingRead = true
 			if len(sampler.frames) > 2 {
 				sampler.frames = append([]computerLiveImage(nil), sampler.frames[len(sampler.frames)-2:]...)
 			}
 			r.mu.Unlock()
-			publish(FlowerComputerFrame{ThreadID: threadID, SessionID: sessionID, TargetID: targetID, ResourceRef: attachment.ResourceRef, SHA256: attachment.SHA256, MIMEType: attachment.MIMEType, Sequence: uint64(time.Now().UnixNano()), CapturedAtMS: time.Now().UnixMilli()})
+			publish(frame)
+			return true
 		}
-		capture()
+		if !capture() {
+			return
+		}
 		for {
 			select {
 			case <-liveCtx.Done():
 				return
 			case <-ticker.C:
-				capture()
+				if !capture() {
+					return
+				}
 			}
 		}
 	}()
 	return stop, nil
 }
 
-// ResolveComputerLiveFrame authorizes only frames captured by this active
-// thread/target session. These images never enter the keyframe store.
+// Public media lookup never resolves private viewing frames.
 func (r *ComputerUseRuntime) ResolveComputerLiveFrame(ctx context.Context, threadID, targetID, ref string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var body []byte
 	for _, sampler := range r.liveFrames {
-		if sampler.threadID != threadID || sampler.targetID != targetID {
+		if sampler.request.InteractionID != "" || sampler.request.ThreadID != threadID || sampler.request.TargetID != targetID {
 			continue
 		}
 		for _, frame := range sampler.frames {
-			if frame.attachment.ResourceRef == ref {
+			if frame.frame.ResourceRef == ref {
+				if sampler.frames[len(sampler.frames)-1].frame.ResourceRef == ref {
+					sampler.awaitingRead = false
+				}
+				body = frame.body
+			}
+		}
+	}
+	if body != nil {
+		return append([]byte(nil), body...), nil
+	}
+	return nil, errors.New("computer live frame is unavailable")
+}
+
+func (r *ComputerUseRuntime) resolvePrivateComputerFrame(request ComputerPrivateFrameRequest) ([]byte, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	sampler := r.liveFrames[request.ObserverID]
+	if sampler != nil && sampler.request.Revision == request.ViewerRevision && sampler.request.ThreadID == request.ThreadID && sampler.request.InteractionID == request.InteractionID && request.InteractionID != "" {
+		for _, frame := range sampler.frames {
+			if frame.frame.FrameID == request.FrameID {
+				if sampler.frames[len(sampler.frames)-1].frame.FrameID == request.FrameID {
+					sampler.awaitingRead = false
+				}
 				return append([]byte(nil), frame.body...), nil
 			}
 		}
 	}
-	return nil, errors.New("computer live frame is unavailable")
+	return nil, errors.New("private computer frame unavailable")
 }

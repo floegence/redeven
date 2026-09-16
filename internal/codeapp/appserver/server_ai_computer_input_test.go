@@ -31,3 +31,14 @@ func TestComputerInputRejectsInvalidBodiesWithoutEchoingPrivateInput(t *testing.
 		})
 	}
 }
+
+func TestPrivateComputerFrameRejectsUnknownAuthorityWithoutCaching(t *testing.T) {
+	srv, origin, _ := newUploadRouteServer(t)
+	response := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/computer/private-frame?observer_id=other&viewer_revision=1&thread_id=missing&interaction_id=expired&frame_id=1", origin, "")
+	if response.Code != http.StatusNotFound || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("private frame response: status=%d cache=%q", response.Code, response.Header().Get("Cache-Control"))
+	}
+	if strings.Contains(response.Body.String(), "missing") || strings.Contains(response.Body.String(), "expired") {
+		t.Fatal("private authority was reflected")
+	}
+}

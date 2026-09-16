@@ -131,7 +131,7 @@ for await (const line of rl) {
     else if (req.tool_name === 'computer.wait') { await page.waitForTimeout(Math.min(30000, Math.max(0, Number(args.milliseconds || 0)))); summary = 'waited for page'; }
     else if (req.tool_name !== 'computer.screenshot') throw new Error(`unsupported tool ${req.tool_name}`);
     if (userInput) {
-      response({ id: req.id, target_id: req.target_id, execution_location: executionLocation, screenshot: await screenshot() });
+      response({ id: req.id, target_id: req.target_id, execution_location: executionLocation, ...(req.tool_name === 'computer.screenshot' ? { screenshot: await screenshot() } : { acknowledged: true }) });
       continue;
     }
     const executed = req.tool_name !== 'computer.screenshot';

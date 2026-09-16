@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-09-16 — Continuous private Computer viewing
+
+Separate private input acknowledgements from observer-bound continuous frames.
+Document shared header FPS preferences, bounded sampling and decoding, explicit
+paused recovery, and atomic safe handback with localized feedback. See
+[Computer takeover](ai/computer-use-takeover.md) and
+[Computer media](ai/computer-use-media.md).
+
 ## 2026-09-16 — Refined Computer viewer and launcher
 
 Adopt published Floe Webapp 0.52.13 for resilient launcher dragging, shared landing

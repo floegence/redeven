@@ -177,7 +177,11 @@
         "running": "电脑任务执行中",
         "awaiting_user": "等待你的输入或批准",
         "completed": "电脑任务已完成",
-        "failed": "电脑任务失败"
+        "failed": "电脑任务失败",
+        "taking_control": "正在接管…",
+        "user_control": "你正在控制",
+        "returning_control": "正在交还…",
+        "paused": "画面已暂停"
       },
       "computerStageMove": "移动画面（方向键）",
       "computerStageClose": "关闭画面",
@@ -366,7 +370,12 @@
       "computerTakeControl": "接管操作",
       "computerReturnControl": "交还给 Flower",
       "computerControlHint": "在画面中使用鼠标和键盘完成登录。密码和验证码不会进入对话。",
-      "computerControlFailed": "未能更新控制状态。请检查页面后重试。"
+      "computerControlFailed": "未能更新控制状态。请检查页面后重试。",
+      "computerFrameRate": "画面帧率",
+      "computerFrameRateHint": "提高帧率会占用更多带宽。实际更新速度取决于设备和网络。",
+      "computerReceivedFrameRate": "实际接收 {fps} FPS",
+      "computerControlTaken": "已接管",
+      "computerControlNotReady": "页面仍需要人工处理。请完成登录或验证后再交还控制。"
     },
     "threadList": {
       "title": "对话",

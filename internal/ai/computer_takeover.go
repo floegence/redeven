@@ -7,6 +7,7 @@ import (
 
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/redeven/internal/session"
 )
 
 // A safety pause is a completed observation followed by canonical user input,
@@ -63,21 +64,44 @@ func computerControlCall(view flruntime.ThreadView, interaction flruntime.Thread
 	return TargetToolCall{}, false, nil
 }
 
-func (s *Service) reobserveComputerControlReturn(ctx context.Context, view flruntime.ThreadView, interaction flruntime.ThreadInteraction, answers map[string]string) error {
+func (s *Service) respondComputerControl(ctx context.Context, meta *session.Meta, view flruntime.ThreadView, interaction flruntime.ThreadInteraction, answers map[string]string, respond func() (flruntime.ThreadView, error)) (flruntime.ThreadView, error) {
 	call, computer, err := computerControlCall(view, interaction)
-	if err != nil || !computer {
-		return err
+	if err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	if !computer {
+		return respond()
 	}
 	if len(answers) != 1 || answers["computer_control"] != "Return control to Flower" {
-		return errors.New("invalid computer control acknowledgement")
+		return flruntime.ThreadView{}, errors.New("invalid computer control acknowledgement")
 	}
-	host, ok := s.targetToolExecutor.(interface {
-		ReobserveComputerTarget(context.Context, TargetToolCall) error
-	})
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
 	if !ok {
-		return &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "control_return_unavailable"}
+		return flruntime.ThreadView{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "control_return_unavailable"}
 	}
-	return host.ReobserveComputerTarget(ctx, call)
+	call.ToolName, call.Arguments, call.liveFrame, call.controlReturn = "computer.screenshot", nil, true, true
+	control, unlock, err := host.acquireComputerControl(ctx, call)
+	if err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	defer unlock()
+	if _, err := s.pendingComputerControl(ctx, meta, string(view.ThreadID), interaction.ID); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	if _, err := host.executeComputerToolLocked(ctx, call, control); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	// Keep the gate until Respond commits. A queued private input must recheck
+	// canonical authority after this point instead of reclaiming the target.
+	result, err := respond()
+	if err != nil {
+		control.mu.Lock()
+		if control.threadID == call.ThreadID && control.runID == call.RunID {
+			control.user = true
+		}
+		control.mu.Unlock()
+	}
+	return result, err
 }
 
 func (r *ComputerUseRuntime) ReobserveComputerTarget(ctx context.Context, call TargetToolCall) error {

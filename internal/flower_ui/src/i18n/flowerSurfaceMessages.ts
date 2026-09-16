@@ -137,6 +137,11 @@ export const flowerSurfaceEnUS = {
     computerStageZoomOut: "Fit to window",
     computerStageRestore: "Restore viewer",
     computerStageStatus: {
+      taking_control: "Taking control\u2026",
+      user_control: "You are controlling",
+      returning_control: "Returning control\u2026",
+      paused: "Viewing paused",
+
       "running": "Computer running",
       "awaiting_user": "Waiting for your input or approval",
       "completed": "Computer task completed",
@@ -304,6 +309,11 @@ export const flowerSurfaceEnUS = {
     delegatedApprovalStatusDeliveryDelivered: 'Decision delivered.',
     delegatedApprovalStatusDeliveryNeedsReview: 'Delivery status needs review.',
     readOnlyComposerLabel: 'Read only · Managed by parent thread',
+    computerFrameRate: "Frame rate",
+    computerFrameRateHint: "Higher frame rates use more bandwidth. Actual updates depend on your device and connection.",
+    computerReceivedFrameRate: "Receiving {fps} FPS",
+    computerControlTaken: "You have control",
+    computerControlNotReady: "The page still needs your attention. Complete sign-in or verification, then return control.",
     computerTakeControl: "Take control",
     computerReturnControl: "Return to Flower",
     computerControlHint: "Complete sign-in in the image using your mouse and keyboard. Passwords and codes stay out of the conversation.",

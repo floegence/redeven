@@ -120,6 +120,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadStagedAttachmentPreview?: FlowerSurfaceAdapter['loadStagedAttachmentPreview'];
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   loadComputerFrame?: FlowerSurfaceAdapter['loadComputerFrame'];
+  computerFrameRate?: FlowerSurfaceAdapter['computerFrameRate'];
   connectComputerBrowser?: FlowerSurfaceAdapter['connectComputerBrowser'];
   setComputerViewer?: FlowerSurfaceAdapter['setComputerViewer'];
   inputComputerControl?: FlowerSurfaceAdapter['inputComputerControl'];
@@ -205,12 +206,16 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   const contextUsage = mapContextUsage(value.context_usage);
   const rawFrame = value.computer_frame && typeof value.computer_frame === 'object' ? value.computer_frame as Record<string, unknown> : undefined;
   const computerFrame = rawFrame && typeof rawFrame.session_id === 'string' && typeof rawFrame.target_id === 'string'
-    && typeof rawFrame.resource_ref === 'string' && typeof rawFrame.sha256 === 'string' && typeof rawFrame.mime_type === 'string'
+    && typeof rawFrame.mime_type === 'string' && Number.isSafeInteger(rawFrame.viewer_revision)
     ? {
       session_id: rawFrame.session_id,
       target_id: rawFrame.target_id,
-      resource_ref: rawFrame.resource_ref,
-      sha256: rawFrame.sha256,
+      viewer_revision: Number(rawFrame.viewer_revision),
+      ...(typeof rawFrame.resource_ref === 'string' ? { resource_ref: rawFrame.resource_ref } : {}),
+      ...(typeof rawFrame.sha256 === 'string' ? { sha256: rawFrame.sha256 } : {}),
+      ...(typeof rawFrame.interaction_id === 'string' ? { interaction_id: rawFrame.interaction_id } : {}),
+      ...(typeof rawFrame.frame_id === 'string' ? { frame_id: rawFrame.frame_id } : {}),
+      ...(typeof rawFrame.error_code === 'string' ? { error_code: rawFrame.error_code } : {}),
       mime_type: rawFrame.mime_type,
       ...(Number.isFinite(Number(rawFrame.width)) ? { width: Number(rawFrame.width) } : {}),
       ...(Number.isFinite(Number(rawFrame.height)) ? { height: Number(rawFrame.height) } : {}),
@@ -397,6 +402,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),
     ...(options.canMutate !== false && options.loadStagedAttachmentPreview ? { loadStagedAttachmentPreview: options.loadStagedAttachmentPreview } : {}),
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
+    ...(options.computerFrameRate ? { computerFrameRate: options.computerFrameRate } : {}),
     ...(options.loadComputerFrame ? { loadComputerFrame: options.loadComputerFrame } : {}),
     ...(options.canMutate !== false && options.inputComputerControl ? { inputComputerControl: options.inputComputerControl } : {}),
     ...(options.setComputerViewer ? { setComputerViewer: options.setComputerViewer } : {}),

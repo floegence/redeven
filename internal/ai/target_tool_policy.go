@@ -143,6 +143,7 @@ type TargetToolCall struct {
 	liveFrame            bool
 	controlReturn        bool
 	userInput            bool
+	passiveCapture       bool
 	ThreadID             string          `json:"thread_id,omitempty"`
 	TurnID               string          `json:"turn_id,omitempty"`
 	RunID                string          `json:"run_id,omitempty"`

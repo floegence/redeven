@@ -521,8 +521,8 @@ try {
   await waitForProgress(stageHasImage, 'user takeover image');
   const userImage = page.locator('.flower-computer-stage-frame');
   await userImage.focus();
-  // Desktop IPC has no renderer HTTP response. Wait for each returned frame
-  // before the next input so an unknown input outcome is never replayed.
+  // Desktop IPC acknowledges input separately from viewing. Observe a new
+  // continuously sampled frame between keys without replaying any input.
   const userKey = async (key) => {
     const before = await userImage.getAttribute('src');
     await userImage.press(key);

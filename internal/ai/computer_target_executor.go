@@ -53,13 +53,14 @@ type playwrightTargetRequest struct {
 }
 
 type playwrightTargetResponse struct {
-	Safety     *InteractionSafetyDecision `json:"safety,omitempty"`
-	ID         string                     `json:"id"`
-	TargetID   string                     `json:"target_id"`
-	Location   string                     `json:"execution_location"`
-	Result     map[string]any             `json:"result"`
-	Error      string                     `json:"error,omitempty"`
-	Screenshot *struct {
+	Acknowledged bool                       `json:"acknowledged,omitempty"`
+	Safety       *InteractionSafetyDecision `json:"safety,omitempty"`
+	ID           string                     `json:"id"`
+	TargetID     string                     `json:"target_id"`
+	Location     string                     `json:"execution_location"`
+	Result       map[string]any             `json:"result"`
+	Error        string                     `json:"error,omitempty"`
+	Screenshot   *struct {
 		MIME string `json:"mime"`
 		Data string `json:"data"`
 	} `json:"screenshot,omitempty"`
@@ -191,6 +192,13 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		healthy = true
 		return TargetToolResult{}, computerTargetFailure(call, response.Error)
 	}
+	if userControl && call.ToolName != "computer.screenshot" {
+		if !response.Acknowledged || response.Screenshot != nil {
+			return TargetToolResult{}, errors.New("invalid private input acknowledgement")
+		}
+		healthy = true
+		return TargetToolResult{}, nil
+	}
 	result := TargetToolResult{TargetID: targetID, ExecutionLocation: response.Location, Result: response.Result, Safety: response.Safety}
 	if response.Result != nil {
 		result.ActionSummary = strings.TrimSpace(anyToString(response.Result["summary"]))
@@ -204,13 +212,16 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		if err != nil {
 			return TargetToolResult{}, fmt.Errorf("decode browser screenshot: %w", err)
 		}
-		sum := sha256.Sum256(body)
-		ref := "computer://" + targetID + "/" + hex.EncodeToString(sum[:])
 		result.frameBytes = body
 		if userControl {
+			if response.Screenshot.MIME != "image/png" {
+				return TargetToolResult{}, errors.New("invalid private frame media")
+			}
 			healthy = true
 			return result, nil
 		}
+		sum := sha256.Sum256(body)
+		ref := "computer://" + targetID + "/" + hex.EncodeToString(sum[:])
 		e.mediaMu.Lock()
 		e.media[ref] = append([]byte(nil), body...)
 		e.mediaMu.Unlock()

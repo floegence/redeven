@@ -34,6 +34,13 @@ func validateComputerFrame(attachment TargetToolAttachment, body []byte) error {
 	if hash != attachment.SHA256 || !strings.HasSuffix(attachment.ResourceRef, "/"+hash) {
 		return errors.New("computer frame content changed")
 	}
+	return validateComputerPixels(body)
+}
+
+func validateComputerPixels(body []byte) error {
+	if len(body) == 0 || len(body) > maxComputerFrameBytes {
+		return errors.New("invalid computer frame size")
+	}
 	config, err := png.DecodeConfig(bytes.NewReader(body))
 	if err != nil || config.Width < 1 || config.Height < 1 || config.Width > 16384 || config.Height > 16384 || int64(config.Width)*int64(config.Height) > 32<<20 {
 		return errors.New("invalid computer frame dimensions")

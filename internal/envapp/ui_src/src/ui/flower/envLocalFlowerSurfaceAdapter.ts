@@ -1,3 +1,6 @@
+import { COMPUTER_FRAME_RATE_KEY, computerFrameRate, computerFramePath } from '../../../../../flower_ui/src/computerViewer';
+import type { FlowerComputerFrameSource } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { withFlowerWebSearchAvailability } from '../../../../../flower_ui/src/webSearchCapability';
@@ -202,16 +205,10 @@ async function uploadEnvLocalFlowerAttachment(input: FlowerAttachmentUploadInput
   };
 }
 
-async function loadEnvComputerFrame(input: Readonly<{
-  thread_id: string;
-  target_id: string;
-  resource_ref: string;
-  sha256: string;
-  signal: AbortSignal;
-}>): Promise<Blob> {
+async function loadEnvComputerFrame(input: FlowerComputerFrameSource & Readonly<{ signal: AbortSignal }>): Promise<Blob> {
   const init = await prepareLocalApiRequestInit({ method: 'GET', signal: input.signal });
   const response = await fetch(
-    `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/computer-media/${encodeURIComponent(input.target_id)}/${encodeURIComponent(input.sha256)}`,
+    computerFramePath(input),
     init,
   );
   if (!response.ok) throw new LocalApiError({ message: 'Computer frame is unavailable.', status: response.status });
@@ -918,13 +915,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
     loadComputerFrame: loadEnvComputerFrame,
+    computerFrameRate: {
+      read: () => computerFrameRate(readUIStorageItem(COMPUTER_FRAME_RATE_KEY)),
+      write: (fps) => writeUIStorageItem(COMPUTER_FRAME_RATE_KEY, String(fps)),
+    },
     inputComputerControl: async (input) => {
-      const init = await prepareLocalApiRequestInit({ method: 'POST', body: JSON.stringify(input) });
-      const response = await fetch('/_redeven_proxy/api/ai/computer/input', init);
-      if (!response.ok) throw new Error('Computer control unavailable.');
-      const frame = await response.blob();
-      if (frame.type !== 'image/png') throw new Error('Computer control returned invalid media.');
-      return frame;
+      await fetchLocalApiJSON('/_redeven_proxy/api/ai/computer/input', { method: 'POST', body: JSON.stringify(input) });
     },
     setComputerViewer: async (input) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/computer/view', { method: 'PUT', body: JSON.stringify(input) }); },
     resolveStorageGeneration: async () => {

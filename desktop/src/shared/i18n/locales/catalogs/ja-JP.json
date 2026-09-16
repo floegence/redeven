@@ -177,7 +177,11 @@
         "running": "コンピューターのタスクを実行中",
         "awaiting_user": "入力または承認を待っています",
         "completed": "コンピューターのタスクが完了しました",
-        "failed": "コンピューターのタスクが失敗しました"
+        "failed": "コンピューターのタスクが失敗しました",
+        "taking_control": "操作権を取得中…",
+        "user_control": "あなたが操作中",
+        "returning_control": "操作権を返却中…",
+        "paused": "画面更新を一時停止中"
       },
       "computerStageMove": "ビューアーを移動（矢印キー）",
       "computerStageClose": "ビューアーを閉じる",
@@ -366,7 +370,12 @@
       "computerTakeControl": "操作を引き継ぐ",
       "computerReturnControl": "Flower に操作を戻す",
       "computerControlHint": "画像上でマウスとキーボードを使ってログインしてください。パスワードや認証コードは会話に保存されません。",
-      "computerControlFailed": "操作状態を更新できませんでした。ページを確認してから再試行してください。"
+      "computerControlFailed": "操作状態を更新できませんでした。ページを確認してから再試行してください。",
+      "computerFrameRate": "フレームレート",
+      "computerFrameRateHint": "フレームレートを上げると帯域幅の使用量が増えます。実際の更新速度は端末と接続状況に左右されます。",
+      "computerReceivedFrameRate": "受信中: {fps} FPS",
+      "computerControlTaken": "操作権を取得済み",
+      "computerControlNotReady": "このページではまだ操作が必要です。ログインまたは認証を完了してから操作権を返してください。"
     },
     "threadList": {
       "title": "会話",

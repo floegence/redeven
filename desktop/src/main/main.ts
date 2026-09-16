@@ -10050,6 +10050,11 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/computer/connect', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/computer/view', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/computer/input', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/computer/private-frame', methods: ['GET'], allowsQuery: (parsed) => {
+    const keys = ['observer_id', 'viewer_revision', 'thread_id', 'interaction_id', 'frame_id'];
+    return [...parsed.searchParams.keys()].length === keys.length && keys.every(key => parsed.searchParams.getAll(key).length === 1 && Boolean(parsed.searchParams.get(key)))
+      && /^\d+$/u.test(parsed.searchParams.get('viewer_revision')!) && /^\d+$/u.test(parsed.searchParams.get('frame_id')!);
+  } },
   { path: RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
@@ -10467,7 +10472,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (error) {
     return { ok: false, error, failureKind: 'response' };
   }
-  if ((RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path) || path === '/_redeven_proxy/api/ai/computer/input') && response.status === 200) {
+  if ((RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path) || path.startsWith('/_redeven_proxy/api/ai/computer/private-frame?')) && response.status === 200) {
     return { ok: true, data: runtimeFlowerComputerFrame(response) };
   }
   const invalidJSONError = runtimeFlowerInvalidJSONError(response, parsed);

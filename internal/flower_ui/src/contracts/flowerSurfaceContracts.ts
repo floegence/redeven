@@ -780,8 +780,12 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   computer_frame?: Readonly<{
     session_id: string;
     target_id: string;
-    resource_ref: string;
-    sha256: string;
+    viewer_revision: number;
+    interaction_id?: string;
+    frame_id?: string;
+    error_code?: string;
+    resource_ref?: string;
+    sha256?: string;
     mime_type: string;
     width?: number;
     height?: number;
@@ -1162,9 +1166,11 @@ export type FlowerTargetDescriptor = Readonly<{
 }>;
 
 export type FlowerComputerUserInput = Readonly<{
+  observer_id: string;
+  viewer_revision: number;
   thread_id: string;
   interaction_id: string;
-  action: 'observe' | 'click' | 'type' | 'key' | 'scroll';
+  action: 'click' | 'type' | 'key' | 'scroll';
   x?: number; y?: number; text?: string; key?: string; delta_x?: number; delta_y?: number;
 }>;
 
@@ -1203,16 +1209,12 @@ export type FlowerSurfaceAdapter = Readonly<{
   readStagedLongText?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => Promise<FlowerStagedLongTextReadResult>;
   loadStagedAttachmentPreview?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope, signal: AbortSignal) => Promise<Blob>;
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
-  loadComputerFrame?: (input: Readonly<{
-    thread_id: string;
-    target_id: string;
-    resource_ref: string;
-    sha256: string;
-    signal: AbortSignal;
-  }>) => Promise<Blob>;
-  inputComputerControl?: (input: FlowerComputerUserInput) => Promise<Blob>;
+  loadComputerFrame?: (input: FlowerComputerFrameSource & Readonly<{ signal: AbortSignal }>) => Promise<Blob>;
+  computerFrameRate?: Readonly<{ read: () => number; write: (fps: number) => void }>;
+  inputComputerControl?: (input: FlowerComputerUserInput) => Promise<void>;
   setComputerViewer?: (input: Readonly<{
     observer_id: string; revision: number; thread_id?: string; target_id?: string; resource_ref?: string;
+    interaction_id?: string; fps?: number;
   }>) => Promise<void>;
   connectComputerBrowser?: (cdpURL: string) => Promise<FlowerTargetDescriptor>;
   resolveStorageGeneration?: () => Promise<string>;
@@ -1234,3 +1236,9 @@ export type FlowerSurfaceAdapter = Readonly<{
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;
 }>;
+
+export type FlowerComputerFrameSource = Readonly<{ thread_id: string; target_id: string }> & (
+  Readonly<{ resource_ref: string; sha256: string; viewer_revision?: number; sequence?: number; private_frame?: never }>
+  | Readonly<{ private_frame: Readonly<{ observer_id: string; viewer_revision: number; interaction_id: string; frame_id: string }>; resource_ref?: never; sha256?: never }>
+);
+export type FlowerComputerInputCommand = Omit<FlowerComputerUserInput, 'thread_id' | 'interaction_id' | 'observer_id' | 'viewer_revision'>;
