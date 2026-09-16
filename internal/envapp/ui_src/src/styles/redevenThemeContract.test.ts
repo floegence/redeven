@@ -109,7 +109,7 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-selection-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 18%, var(--redeven-settings-panel-bg));',
       '--redeven-settings-selection-fg: color-mix(in srgb, var(--foreground) 78%, var(--redeven-settings-contrast-source) 22%);',
       '--redeven-settings-choice-selected-bg: color-mix(in srgb, var(--redeven-settings-selection-source) 8%, var(--redeven-settings-inset-bg));',
-      '--redeven-settings-choice-selected-border: color-mix(in srgb, var(--foreground) 18%, var(--redeven-settings-inset-bg));',
+      '--redeven-settings-choice-selected-border: var(--redeven-settings-selection-indicator);',
       '--redeven-settings-control-border: color-mix(in srgb, var(--foreground) 24%, var(--redeven-settings-inset-bg));',
     ]) {
       expect(sharedRoot).toContain(token);
@@ -360,7 +360,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-browser-selection-secondary {');
     expect(src).toContain('.git-browser-selection-chip {');
     expect(src).toContain('.git-browser-current-chip {');
-    expect(src).toContain('.git-browser-segmented-tab.redeven-surface-segmented__item--active {');
+    expect(src).not.toContain('.git-browser-segmented-tab.redeven-surface-segmented__item--active {');
     expect(src).toContain('.git-browser-interactive:hover');
     expect(src).toContain('.git-browser-interactive:focus-visible {');
     expect(src).toContain('--tag-surface: var(--git-browser-selection-chip-bg);');
@@ -372,7 +372,8 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain(".redeven-surface-segmented__item:disabled,");
     expect(src).toContain("cursor: not-allowed;");
     expect(src).toContain('.redeven-surface-segmented__item--active {');
-    expect(src).toContain('color: var(--foreground) !important;');
+    expect(src).toContain('background: var(--primary) !important;');
+    expect(src).toContain('color: var(--primary-foreground) !important;');
     expect(src).toContain('.redeven-surface-inset {');
     expect(src).toContain('.redeven-divider {');
     expect(src).toContain('.redeven-divider--strong {');
