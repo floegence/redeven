@@ -167,7 +167,11 @@
       "handlerBlockedTitle": "Flower requiert votre attention",
       "handlerStartFailedTitle": "Flower n’a pas pu démarrer",
       "handlerStillStarting": "Flower est encore en cours de démarrage.",
-      "computerStageMinimize": "Réduire la vue",
+      "computerStageTitle": "Ordinateur",
+      "computerStageMaximize": "Agrandir la vue",
+      "computerStageRestoreSize": "Rétablir la taille de la vue",
+      "computerStageZoomIn": "Taille réelle",
+      "computerStageZoomOut": "Adapter à la fenêtre",
       "computerStageRestore": "Restaurer la vue",
       "computerStageStatus": {
         "running": "Tâche sur l’ordinateur en cours",

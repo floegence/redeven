@@ -4513,7 +4513,11 @@
       "handlerBlockedTitle": "Flower требует внимания",
       "handlerStartFailedTitle": "Flower не удалось запустить",
       "handlerStillStarting": "Flower все еще запускается.",
-      "computerStageMinimize": "Свернуть просмотр",
+      "computerStageTitle": "Компьютер",
+      "computerStageMaximize": "Развернуть окно просмотра",
+      "computerStageRestoreSize": "Восстановить размер окна просмотра",
+      "computerStageZoomIn": "Исходный размер",
+      "computerStageZoomOut": "По размеру окна",
       "computerStageRestore": "Развернуть просмотр",
       "computerStageStatus": {
         "running": "Задача на компьютере выполняется",

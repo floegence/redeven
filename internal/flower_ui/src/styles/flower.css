@@ -720,6 +720,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-chat-shell {
+  container: flower-chat / inline-size;
   --flower-chat-surface: var(--redeven-surface-main, var(--background));
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
@@ -5099,101 +5100,65 @@ html.dark .flower-component-shell {
 
 .flower-computer-stage { min-width: 0; min-height: 0; }
 .flower-computer-stage [data-floe-floating-window-content] { display: flex; min-width: 0; min-height: 0; padding: 0; overflow: hidden; }
-.flower-computer-viewer-minimized {
-  width: 3.5rem;
-  height: 3.5rem;
-  border-radius: 50%;
-  transition: opacity 160ms ease-out;
-}
-
-.flower-computer-viewer-minimized-hidden {
-  visibility: hidden;
-  pointer-events: none;
-  opacity: 0;
-}
-
+.flower-computer-viewer-minimized { width: 40px; height: 40px; border-radius: 50%; }
+.flower-computer-viewer-minimized-hidden { visibility: hidden; pointer-events: none; opacity: 0; }
 .flower-computer-stage-ball {
-  --flower-computer-stage-state: var(--primary);
   position: relative;
-  isolation: isolate;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   width: 100%;
   height: 100%;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--flower-computer-stage-state) 46%, var(--border-subtle));
+  border: 1px solid color-mix(in srgb, var(--foreground) 24%, var(--card));
   border-radius: inherit;
-  outline: none;
-  background: var(--card, var(--surface));
-  color: color-mix(in srgb, var(--foreground, var(--text-strong)) 90%, var(--flower-computer-stage-state) 10%);
-  box-shadow:
-    0 0.65rem 1.75rem color-mix(in srgb, var(--redeven-shadow-color) 82%, transparent),
-    0 0.2rem 0.55rem color-mix(in srgb, var(--redeven-shadow-color) 72%, transparent),
-    0 0 0 0.2rem color-mix(in srgb, var(--flower-computer-stage-state) 28%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--foreground) 24%, transparent);
+  background: var(--card);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--card));
+  box-shadow: 0 3px 6px -1px var(--redeven-shadow-color);
   cursor: grab;
   -webkit-tap-highlight-color: transparent;
-  transition: border-color 160ms ease-out, background 160ms ease-out, box-shadow 160ms ease-out, transform 120ms ease-out;
+  transition: background-color 140ms ease, transform 220ms cubic-bezier(.22,.7,.18,1), box-shadow 220ms cubic-bezier(.22,.7,.18,1);
 }
-
-.flower-computer-stage-ball[data-session-state='awaiting_user'] {
-  --flower-computer-stage-state: var(--redeven-status-warning);
-}
-
-.flower-computer-stage-ball[data-session-state='completed'] {
-  --flower-computer-stage-state: var(--redeven-status-success);
-}
-
-.flower-computer-stage-ball[data-session-state='failed'] {
-  --flower-computer-stage-state: var(--redeven-status-error);
-}
-
-.flower-computer-stage-ball:hover {
-  background: color-mix(in srgb, var(--flower-computer-stage-state) 7%, var(--card, var(--surface)));
-  box-shadow:
-    0 0.8rem 2rem color-mix(in srgb, var(--redeven-shadow-color) 88%, transparent),
-    0 0.25rem 0.7rem color-mix(in srgb, var(--redeven-shadow-color) 76%, transparent),
-    0 0 0 0.22rem color-mix(in srgb, var(--flower-computer-stage-state) 38%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--foreground) 28%, transparent);
-  transform: translateY(-1px);
-}
-
-.flower-computer-stage-ball:active {
+.flower-computer-stage-ball:hover { background: color-mix(in srgb, var(--foreground) 5%, var(--card)); }
+.flower-computer-stage-ball:active { transform: scale(.97); cursor: grabbing; transition-duration: 100ms; }
+[data-floe-panel-dragging='true'] > .flower-computer-stage-ball {
+  transform: translateY(-1px) scale(1.035);
+  box-shadow: 0 7px 12px -3px var(--redeven-shadow-color);
   cursor: grabbing;
-  transform: scale(0.96);
+  transition-duration: 160ms;
 }
-
-.flower-computer-stage-ball:focus-visible {
-  outline: 2px solid var(--flower-computer-stage-state);
-  outline-offset: 0.3rem;
+[data-floe-panel-settling='true'] > .flower-computer-stage-ball { transform: none; }
+.flower-computer-stage-ball:focus-visible { outline: 2px solid var(--foreground); outline-offset: 3px; }
+.flower-computer-stage-ball-icon { display: block; width: 20px; height: 20px; stroke-width: 1.8; }
+.flower-computer-entry { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--text-strong); font-size: 11px; cursor: pointer; }
+.flower-computer-entry:hover, .flower-computer-zoom:hover { background: var(--surface-muted); }
+.flower-computer-entry > svg { flex: none; }
+.flower-computer-entry:focus-visible, .flower-computer-zoom:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+.flower-computer-state { display: block; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 10px; font-weight: 400; }
+.flower-computer-state[data-session-state='awaiting_user'] { color: var(--redeven-status-warning); }
+.flower-computer-state[data-session-state='failed'] { color: var(--redeven-status-error); }
+.flower-computer-stage [data-floe-floating-window-footer] { min-height: 30px; padding: 3px 8px; }
+.flower-computer-stage [data-floe-floating-window-header-actions] { min-width: 0; }
+.flower-computer-zoom { border: 0; border-radius: 4px; padding: 3px 6px; color: var(--text-muted); background: transparent; font-size: 11px; cursor: pointer; }
+@media (pointer: coarse) {
+  .flower-computer-stage-ball::before { content: ''; position: absolute; inset: -4px; border-radius: inherit; }
+  .flower-computer-zoom { min-height: 40px; }
 }
-
-.flower-computer-stage-ball-icon {
-  display: block;
-  width: 2rem;
-  height: 2rem;
-  filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--redeven-shadow-color) 46%, transparent));
+@container flower-chat (max-width: 560px) {
+  .flower-computer-entry .flower-computer-state { max-width: 5rem; }
+  .flower-chat-transcript[data-computer-launcher='true'] { padding-inline-end: 64px; }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .flower-computer-viewer-minimized,
-  .flower-computer-stage-ball {
-    transition-duration: 0.01ms;
-  }
+  .flower-computer-stage-ball { transition: none; }
+  .flower-computer-stage-ball:active, [data-floe-panel-dragging='true'] > .flower-computer-stage-ball { transform: none; }
 }
-
 @media (forced-colors: active) {
-  .flower-computer-stage-ball {
-    border: 2px solid ButtonText;
-    background: ButtonFace;
-    color: ButtonText;
-    box-shadow: none;
-  }
+  .flower-computer-stage-ball { border: 1px solid ButtonText; background: ButtonFace; color: ButtonText; box-shadow: none; }
 }
 
 .flower-computer-stage-frame-wrap { display: flex; width: 100%; height: 100%; min-height: 0; flex: 1 1 auto; align-items: center; justify-content: center; overflow: hidden; background: var(--surface-muted); }
 .flower-computer-stage-frame { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+.flower-computer-stage-frame-wrap[data-zoomed='true'] { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+.flower-computer-stage-frame-wrap[data-zoomed='true'] .flower-computer-stage-frame { width: auto; height: auto; max-width: none; max-height: none; flex: none; margin: auto; }
 .flower-computer-stage-no-frame { padding: 3rem 1rem; color: var(--text-muted); font-size: 0.8rem; text-align: center; }
 .flower-computer-control-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
 .flower-computer-control-actions > button { flex: 0 0 auto; }

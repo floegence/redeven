@@ -8,7 +8,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
@@ -5526,6 +5526,11 @@ webSearch: model.web_search,
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
   const [computerStageOpen, setComputerStageOpen] = createSignal(true);
+  const [computerStageRestoreFocus, setComputerStageRestoreFocus] = createSignal<HTMLElement>();
+  const restoreComputerStage = (source: HTMLElement) => {
+    if (!computerStageOpen()) setComputerStageRestoreFocus(source);
+    setComputerStageOpen(true);
+  };
   const [computerStageBoundary, setComputerStageBoundary] = createSignal<HTMLElement>();
   const [computerUserFrame, setComputerUserFrame] = createSignal<Blob>();
   const [computerControlBusy, setComputerControlBusy] = createSignal(false);
@@ -5648,6 +5653,7 @@ webSearch: model.web_search,
   createEffect(() => {
     selectedThreadID();
     setComputerLiveFrame(undefined);
+    setComputerStageRestoreFocus(undefined);
     setComputerStageOpen(true);
   });
   const computerViewerKey = createMemo(() => {
@@ -7599,7 +7605,7 @@ webSearch: model.web_search,
             <p>{copy().chat.computerControlHint}</p>
             <Show when={computerControlError()}><p role="alert">{copy().chat.computerControlFailed}</p></Show>
             <div class="flower-computer-control-actions">
-              <Button variant="secondary" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => { setComputerStageOpen(true); inputComputerControl({ action: 'observe' }); }}>{copy().chat.computerTakeControl}</Button>
+              <Button variant="secondary" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={(event) => { restoreComputerStage(event.currentTarget); inputComputerControl({ action: 'observe' }); }}>{copy().chat.computerTakeControl}</Button>
               <Button variant="primary" data-computer-control-action="return" class="rounded-full" disabled={!selectedDecisionAvailable() || computerControlBusy() || inputRequestIsSubmitting()} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
@@ -8132,7 +8138,7 @@ webSearch: model.web_search,
         <div class="flower-activity-computer-meta">{[block().location, block().safety].filter(Boolean).join(' · ')}</div>
       </Show>
       <Show when={block().frame}>
-        <button type="button" class="flower-activity-inline-button" onClick={() => setComputerStageOpen(true)}>
+        <button type="button" class="flower-activity-inline-button" aria-expanded={computerStageOpen()} onClick={(event) => restoreComputerStage(event.currentTarget)}>
           {copy().settings.computerUseTitle}
         </button>
       </Show>
@@ -10869,6 +10875,16 @@ webSearch: model.web_search,
             <Show when={!companionCollapsed()}>{companionHeaderIdentity()}</Show>
           </Show>
           <div class="flower-chat-header-actions">
+            <Show when={Boolean(computerStageFrameRef() || computerUserFrame()) && selectedComputerStage()}>
+              <button type="button" class="flower-computer-entry" aria-expanded={computerStageOpen()}
+                title={`${copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                aria-label={`${copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
+                onClick={(event) => restoreComputerStage(event.currentTarget)}>
+                <MonitorPointer size={15} aria-hidden="true" />
+                <span>{copy().chat.computerStageTitle}</span>
+                <span class="flower-computer-state" role="status" data-session-state={computerStageSessionState()}>{copy().chat.computerStageStatus[computerStageSessionState()]}</span>
+              </button>
+            </Show>
             <Show when={presentation() === 'companion'}>
               <button
                 type="button"
@@ -10941,6 +10957,7 @@ webSearch: model.web_search,
             transcriptScroll.bind(node);
           }}
           class="flower-chat-transcript flower-chat-transcript"
+          data-computer-launcher={Boolean(computerStageFrameRef() || computerUserFrame()) && !computerStageOpen() ? 'true' : undefined}
           aria-hidden={companionCollapsed() ? 'true' : undefined}
           inert={companionCollapsed()}
           onPointerDown={transcriptScroll.onPointerDown}
@@ -11875,14 +11892,18 @@ webSearch: model.web_search,
               threadID={selectedThreadID()}
               open={computerStageOpen()}
               sessionState={computerStageSessionState()}
-              onRestore={() => setComputerStageOpen(true)}
+              restoreFocus={computerStageRestoreFocus()}
+              onRestore={restoreComputerStage}
               loadFrame={props.adapter.loadComputerFrame}
               copy={{
-                title: copy().settings.computerUseTitle,
+                title: copy().chat.computerStageTitle,
                 // Closing the Stage only hides the panel; it must never read
                 // like the destructive Stop action.
                 close: copy().chat.computerStageClose,
-                minimize: copy().chat.computerStageMinimize,
+                maximize: copy().chat.computerStageMaximize,
+                restoreSize: copy().chat.computerStageRestoreSize,
+                zoomIn: copy().chat.computerStageZoomIn,
+                zoomOut: copy().chat.computerStageZoomOut,
                 restore: copy().chat.computerStageRestore,
                 state: copy().chat.computerStageStatus,
                 move: copy().chat.computerStageMove,

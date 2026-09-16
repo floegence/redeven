@@ -28,7 +28,7 @@ describe('Flower computer stage', () => {
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
       userFrame={new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' })}
-      copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize viewer', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: STAGE_STATES }}
+      copy={{ title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: STAGE_STATES }}
       open sessionState="awaiting_user" onRestore={() => undefined} onClose={() => undefined} onInput={input}
     />, host);
     try {
@@ -59,7 +59,7 @@ describe('Flower computer stage', () => {
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'frame', status: status() }), status: status(), targetID: 'browser-main', target: 'Managed browser', action: 'Screenshot', location: 'local', safety: '' }}
       threadID={owner()} frameRef={frame()} loadFrame={loadFrame}
-      copy={{ title: 'Computer', close: 'Close', minimize: 'Minimize viewer', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: STAGE_STATES }}
+      copy={{ title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: STAGE_STATES }}
       open sessionState={status() === 'success' ? 'completed' : 'running'} onRestore={() => undefined} onClose={() => undefined}
     />, host);
     try {
@@ -135,7 +135,7 @@ describe('Flower computer stage', () => {
     await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(document.querySelector('.flower-computer-stage')?.closest('[role="dialog"]')).not.toBeNull();
     expect(document.querySelector('[data-floe-floating-window-titlebar]')).not.toBeNull();
-    expect(document.querySelector('[data-floe-floating-window-footer]')).toBeNull();
+    expect(document.querySelector('[data-floe-floating-window-footer] .flower-computer-zoom')?.textContent).toBe('Actual size');
     expect(document.querySelector('.flower-computer-stage-frame')).not.toBeNull();
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({
       thread_id: threadID, target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64),
@@ -151,7 +151,7 @@ describe('Flower computer stage', () => {
     await waitFor(() => loadComputerFrame.mock.calls.length === 3);
     await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame.resource_ref }));
-    expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer and browser use');
+    expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer');
     // Completion retires the ephemeral sampler. A reopened viewer must load
     // the durable keyframe, never the expired last live sample.
     const completedBase = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
@@ -322,7 +322,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => inputComputerControl.mock.calls.length === 2);
   expect(inputComputerControl).toHaveBeenLastCalledWith({ thread_id: threadID, interaction_id: 'tool-input:result-control', action: 'type', text: 's' });
   expect(submitInput).not.toHaveBeenCalled();
-  expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer and browser use');
+  expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer');
   const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Return to Flower')!;
   await waitFor(() => !handback.disabled);
   const privateURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;

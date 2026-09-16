@@ -136,7 +136,11 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       handlerBlockedTitle: t(i18n, k('chat.handlerBlockedTitle')),
       handlerStartFailedTitle: t(i18n, k('chat.handlerStartFailedTitle')),
       handlerStillStarting: t(i18n, k('chat.handlerStillStarting')),
-      computerStageMinimize: t(i18n, k('chat.computerStageMinimize')),
+      computerStageTitle: t(i18n, k('chat.computerStageTitle')),
+      computerStageMaximize: t(i18n, k('chat.computerStageMaximize')),
+      computerStageRestoreSize: t(i18n, k('chat.computerStageRestoreSize')),
+      computerStageZoomIn: t(i18n, k('chat.computerStageZoomIn')),
+      computerStageZoomOut: t(i18n, k('chat.computerStageZoomOut')),
       computerStageRestore: t(i18n, k('chat.computerStageRestore')),
       computerStageStatus: {
         running: t(i18n, k('chat.computerStageStatus.running')),

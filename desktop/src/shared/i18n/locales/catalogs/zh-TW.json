@@ -167,7 +167,11 @@
       "handlerBlockedTitle": "Flower 需要處理",
       "handlerStartFailedTitle": "Flower 啟動失敗",
       "handlerStillStarting": "Flower 仍在啟動。",
-      "computerStageMinimize": "最小化畫面",
+      "computerStageTitle": "電腦",
+      "computerStageMaximize": "最大化檢視器",
+      "computerStageRestoreSize": "還原檢視器大小",
+      "computerStageZoomIn": "實際大小",
+      "computerStageZoomOut": "符合視窗",
       "computerStageRestore": "還原畫面",
       "computerStageStatus": {
         "running": "電腦工作執行中",

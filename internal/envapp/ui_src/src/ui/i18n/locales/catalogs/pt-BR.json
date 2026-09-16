@@ -4410,7 +4410,11 @@
       "handlerBlockedTitle": "O Flower precisa de atenção",
       "handlerStartFailedTitle": "O Flower não pôde iniciar",
       "handlerStillStarting": "O Flower ainda está iniciando.",
-      "computerStageMinimize": "Minimizar visualização",
+      "computerStageTitle": "Computador",
+      "computerStageMaximize": "Maximizar visualização",
+      "computerStageRestoreSize": "Restaurar tamanho da visualização",
+      "computerStageZoomIn": "Tamanho real",
+      "computerStageZoomOut": "Ajustar à janela",
       "computerStageRestore": "Restaurar visualização",
       "computerStageStatus": {
         "running": "Tarefa no computador em andamento",

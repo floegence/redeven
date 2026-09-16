@@ -4425,7 +4425,11 @@
       "handlerBlockedTitle": "Flower 需要处理",
       "handlerStartFailedTitle": "Flower 启动失败",
       "handlerStillStarting": "Flower 仍在启动。",
-      "computerStageMinimize": "最小化画面",
+      "computerStageTitle": "电脑",
+      "computerStageMaximize": "最大化查看器",
+      "computerStageRestoreSize": "还原查看器大小",
+      "computerStageZoomIn": "实际大小",
+      "computerStageZoomOut": "适应窗口",
       "computerStageRestore": "恢复画面",
       "computerStageStatus": {
         "running": "电脑任务执行中",
