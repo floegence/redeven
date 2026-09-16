@@ -119,9 +119,14 @@ export default mergeConfig(viteConfig, defineConfig({
             await session.send('Input.insertText', { text });
             await page.keyboard.type('ab');
             await page.keyboard.press('Tab');
-            await page.keyboard.insertText('paste');
+            await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+            await frame.evaluate(() => navigator.clipboard.writeText('paste'));
+            await page.keyboard.press('ControlOrMeta+V');
             return { beforeCommit };
-          } finally { await session.detach(); }
+          } finally {
+            await page.context().clearPermissions();
+            await session.detach();
+          }
         },
         dismissPluginCenterBackdrop: async ({ page }) => {
           const frame = await frameForSelector(page, '[data-test-workbench-background]');
