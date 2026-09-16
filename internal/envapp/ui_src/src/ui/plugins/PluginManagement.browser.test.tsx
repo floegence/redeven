@@ -237,6 +237,9 @@ function expectTouchTargets(elements: readonly Element[]): void {
 }
 
 async function expectScreenshotHasPixelVariance(): Promise<void> {
+  // Capture settled content; an entry fade can legitimately contain only the
+  // carrying plane in its early frames. Motion has separate intermediate checks.
+  await Promise.allSettled(document.getAnimations().filter((animation) => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished));
   const screenshot = await page.screenshot({ save: false });
   expect(screenshot.length).toBeGreaterThan(1_000);
   const image = new Image();

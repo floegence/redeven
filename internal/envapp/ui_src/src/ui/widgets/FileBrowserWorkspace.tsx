@@ -41,13 +41,12 @@ import {
 } from '../utils/fileBrowserDisplayPath';
 
 const FILE_WORKSPACE_TOOLBAR_FIELD_CLASS =
-  cn('h-7 min-w-0 rounded-md border px-2.5 shadow-sm', redevenSurfaceRoleClass('control'), redevenSurfaceRoleClass('controlMuted'));
+  cn('h-7 min-w-0 rounded-md border px-2.5', redevenSurfaceRoleClass('controlMuted'));
 const FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS =
   cn('h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0', redevenSurfaceRoleClass('segmented'));
-const FILE_WORKSPACE_TOOLBAR_PATH_CLASS = `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center`;
+const FILE_WORKSPACE_TOOLBAR_PATH_CLASS = 'h-7 min-w-0 rounded-md border border-transparent px-2.5 flex items-center';
 const FILE_WORKSPACE_TOOLBAR_FILTER_CLASS =
   `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center gap-1.5 text-[11px] text-muted-foreground`;
-const FILE_WORKSPACE_OUTLINE_CONTROL_CLASS = cn('cursor-pointer', redevenSurfaceRoleClass('control'));
 
 export type FileBrowserPathSubmitResult =
   | { status: 'ready' | 'refreshed'; committedPath: string }
@@ -161,10 +160,9 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
           <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
             <Button
               size="sm"
-              variant="outline"
+              variant="ghost"
               icon={FilesIcon}
               {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
-              class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS}
               aria-label={i18n.t('files.sidebarToggle')}
               onClick={props.onToggleSidebar}
             >
@@ -172,12 +170,12 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             </Button>
           </Show>
 
-          <Button size="sm" variant="outline" icon={ArrowUp} {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS} onClick={browser.navigateUp} disabled={!canNavigateUp()}>
+          <Button size="sm" variant="ghost" icon={ArrowUp} {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} onClick={browser.navigateUp} disabled={!canNavigateUp()}>
             {i18n.t('files.up')}
           </Button>
         </div>
 
-        <div data-floe-input-surface={props.pathControlMode === 'edit' ? '' : undefined} aria-invalid={Boolean(props.pathError) || undefined} class={FILE_WORKSPACE_TOOLBAR_PATH_CLASS}>
+        <div data-floe-surface={props.pathControlMode === 'edit' ? 'inset' : undefined} data-floe-input-surface={props.pathControlMode === 'edit' ? '' : undefined} aria-invalid={Boolean(props.pathError) || undefined} class={cn(FILE_WORKSPACE_TOOLBAR_PATH_CLASS, props.pathControlMode === 'edit' && redevenSurfaceRoleClass('controlMuted'))}>
           <FileBrowserPathControl
             class="min-w-0 flex-1"
             mode={props.pathControlMode}
@@ -202,6 +200,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
         >
           <label
             data-floe-input-surface
+            data-floe-surface="inset"
             class={cn(
               FILE_WORKSPACE_TOOLBAR_FILTER_CLASS,
               toolbarLayout() === 'inline'
@@ -217,7 +216,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
               placeholder={i18n.t('files.filterPlaceholder')}
               aria-label={i18n.t('files.filterPlaceholder')}
-              class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
+              class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground"
             />
           </label>
 

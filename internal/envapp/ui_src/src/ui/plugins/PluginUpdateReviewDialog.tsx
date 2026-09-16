@@ -291,7 +291,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
       title={i18n.t('uiCopy.plugin.updateReview.title', { plugin: props.item?.displayName ?? '' })}
       description={i18n.t('uiCopy.plugin.updateReview.description')}
       class={cn(
-        'h-dvh max-h-dvh w-screen max-w-none rounded-none bg-background text-foreground sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[min(47rem,calc(100vw-2rem))] sm:max-w-[47rem] sm:rounded-lg',
+        'redeven-plugin-update-dialog h-dvh max-h-dvh w-screen max-w-none rounded-none bg-background text-foreground sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[min(47rem,calc(100vw-2rem))] sm:max-w-[47rem] sm:rounded-lg',
         closeBlocked() && '[&>div:first-child>button]:hidden',
       )}
       footer={(

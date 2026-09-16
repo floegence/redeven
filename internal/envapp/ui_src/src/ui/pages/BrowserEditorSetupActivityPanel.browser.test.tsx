@@ -540,7 +540,11 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(screenshot.length).toBeGreaterThan(1_000);
   });
 
-  it('keeps the dark frame and major section dividers distinct across layouts', async () => {
+  it('keeps opaque quiet seams and readable sections across dark layouts', async () => {
+    const expectQuietSeam = (contrast: number) => {
+      expect(contrast).toBeGreaterThan(1.1);
+      expect(contrast).toBeLessThan(1.6);
+    };
     document.documentElement.classList.add('dark');
     await page.viewport(1440, 900);
 
@@ -558,8 +562,8 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(wideSecondaryStyle.borderLeftWidth).toBe('1px');
     expect(frameBorder[3]).toBe(255);
     expect(wideDivider[3]).toBe(255);
-    expect(contrastRatio(frameBorder, panelBackground)).toBeGreaterThanOrEqual(2.2);
-    expect(contrastRatio(wideDivider, panelBackground)).toBeGreaterThanOrEqual(1.8);
+    expectQuietSeam(contrastRatio(frameBorder, panelBackground));
+    expectQuietSeam(contrastRatio(wideDivider, panelBackground));
     expect(widePanel.scrollWidth).toBeLessThanOrEqual(widePanel.clientWidth + 1);
     wide.dispose();
     wide.host.remove();
@@ -577,10 +581,10 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(responsiveSecondaryStyle.borderTopWidth).toBe('1px');
     expect(responsiveSecondaryStyle.borderLeftWidth).toBe('0px');
     expect(responsiveDivider[3]).toBe(255);
-    expect(contrastRatio(
+    expectQuietSeam(contrastRatio(
       responsiveDivider,
       cssColorRgba(getComputedStyle(responsivePanel).backgroundColor),
-    )).toBeGreaterThanOrEqual(1.8);
+    ));
     expect(responsivePanel.scrollWidth).toBeLessThanOrEqual(responsivePanel.clientWidth + 1);
     responsive.dispose();
     responsive.host.remove();
@@ -597,8 +601,7 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(compactSecondaryStyle.borderTopWidth).toBe('1px');
     expect(compactSecondaryStyle.borderLeftWidth).toBe('0px');
     expect(compactDivider[3]).toBe(255);
-    expect(contrastRatio(compactDivider, cssColorRgba(getComputedStyle(compactPanel).backgroundColor)))
-      .toBeGreaterThanOrEqual(1.8);
+    expectQuietSeam(contrastRatio(compactDivider, cssColorRgba(getComputedStyle(compactPanel).backgroundColor)));
     expect(compactPanel.scrollWidth).toBeLessThanOrEqual(compactPanel.clientWidth + 1);
 
     const screenshot = await page.screenshot({ save: false });

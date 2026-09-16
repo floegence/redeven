@@ -31,7 +31,7 @@ function mountCompanion(phase: 'expanding' | 'expanded' | 'collapsing' | 'collap
           </div>
         </main>
         <footer class="flower-chat-bottom-dock">
-          <div class="flower-composer p-3" data-floe-surface="${phase === 'collapsed' || phase === 'collapsing' ? 'flat' : 'inset'}"><textarea aria-label="Ask Flower"></textarea></div>
+          <div class="flower-composer p-3" data-floe-surface="${phase === 'collapsed' || phase === 'collapsing' ? 'flat' : 'inset'}" ${phase === 'collapsed' || phase === 'collapsing' ? '' : 'data-floe-input-surface'}><textarea aria-label="Ask Flower"></textarea></div>
         </footer>
       </section>
     </div>
@@ -172,15 +172,15 @@ describe('Flower bottom companion computed visual contract', () => {
     host.append(surface);
     const style = getComputedStyle(composer);
     expect(style.borderTopWidth).toBe('1px');
-    expect(style.borderRadius).toBe('14px');
+    expect(style.borderRadius).toBe('12px');
     expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect(composer.dataset.floeSurface).toBe('inset');
-    expect(style.boxShadow).toContain('inset');
+    expect(style.boxShadow).not.toContain('inset');
     expect(style.backdropFilter).toBe('none');
     for (const mode of ['approval', 'input_request']) {
       composer.classList.add('flower-decision-surface');
       composer.dataset.flowerBottomMode = mode;
-      expect(getComputedStyle(composer).borderRadius).toBe('14px');
+      expect(getComputedStyle(composer).borderRadius).toBe('12px');
     }
   });
 

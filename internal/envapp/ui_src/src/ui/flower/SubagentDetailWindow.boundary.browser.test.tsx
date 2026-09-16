@@ -162,7 +162,7 @@ describe('Subagent detail window boundary', () => {
 
       expect(surfaceStyle.backgroundColor).not.toBe(fixtureStyle.backgroundColor);
       expect(parseRGBColor(surfaceStyle.backgroundColor).alpha).toBe(1);
-      expect(surfaceStyle.borderRadius).toBe('10px');
+      expect(surfaceStyle.borderRadius).toBe('12px');
       expect(geometryStyle.boxShadow).toBe('none');
       expect(geometryStyle.contain).not.toContain('paint');
       expect(surface.dataset.floeSurface).toBe('floating');
