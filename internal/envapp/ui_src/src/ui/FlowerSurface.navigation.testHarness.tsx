@@ -113,6 +113,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     AlertCircle: Icon,
     AlertTriangle: Icon,
     ArrowUp: Icon,
+    ArrowDown: Icon,
     Bot: Icon,
     Check: Icon,
     ChevronDown: Icon,

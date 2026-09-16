@@ -385,7 +385,7 @@
     },
     "threadList": {
       "title": "会話",
-      "description": "会話が更新されても、作成時刻順の並びは安定します。",
+      "description": "固定した会話、新しい会話の順",
       "warmupDescription": "ローカル環境ランタイムの準備ができた後に読み込みます。",
       "refreshLabel": "会話を更新",
       "searchPlaceholder": "会話を検索...",
@@ -448,7 +448,13 @@
       "groupToday": "今日",
       "groupYesterday": "昨日",
       "groupThisWeek": "今週",
-      "groupOlder": "以前"
+      "groupOlder": "以前",
+      "dragPinned": "ドラッグしてピン留めした会話を並べ替え",
+      "movePinnedUp": "上に移動",
+      "movePinnedDown": "下に移動",
+      "clearSearchToReorder": "検索をクリアしてピン留めした会話を並べ替え",
+      "pinUpdateFailed": "ピン留めした会話を更新できませんでした。",
+      "pinRefreshFailed": "ピン留めした会話は保存されましたが、一覧を更新できませんでした。再読み込みして最新の順序を確認してください。"
     },
     "emptyState": {
       "title": "Flower に聞く",

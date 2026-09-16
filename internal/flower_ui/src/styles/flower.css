@@ -8,7 +8,9 @@
   --flower-thread-rail-control: color-mix(in srgb, var(--background) 50%, var(--card));
   --flower-thread-rail-control-border: var(--input);
   --flower-thread-rail-accent: color-mix(in srgb, var(--primary) 9%, var(--flower-thread-rail-control));
-  --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 10%, var(--flower-thread-rail-control));
+  --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 18%, var(--flower-thread-rail-surface));
+  --flower-thread-selected-foreground: oklch(from var(--foreground) min(l, 0.4) c h);
+  --flower-thread-selected-indicator: color-mix(in srgb, var(--primary) 60%, var(--foreground));
   display: grid;
   grid-template-columns: var(--flower-thread-rail-width, 17rem) 0 minmax(0, 1fr);
   min-width: 0;
@@ -6579,7 +6581,91 @@
 }
 
 .flower-thread-card-active .flower-thread-list-title {
-  color: color-mix(in srgb, var(--primary) 34%, var(--flower-thread-rail-foreground) 66%);
+  color: var(--flower-thread-selected-foreground);
+  font-weight: 600;
+}
+
+.flower-thread-card-active::before {
+  content: '';
+  position: absolute;
+  inset: 6px auto 6px 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--flower-thread-selected-indicator);
+  pointer-events: none;
+}
+
+.dark .flower-component-shell {
+  --flower-thread-selected-foreground: var(--foreground);
+  --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 22%, var(--flower-thread-rail-surface));
+}
+
+.flower-thread-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.flower-thread-rows > .flower-thread-group-label:not(:first-child) {
+  margin-top: 0.75rem;
+}
+
+.flower-thread-card[data-pinned='true']:has(.flower-thread-drag-handle) .flower-thread-card-select-button {
+  padding-left: 1.875rem;
+}
+
+.flower-thread-drag-handle {
+  position: absolute;
+  left: 0.25rem;
+  top: 0.25rem;
+  z-index: 3;
+  display: flex;
+  width: 1.25rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  color: var(--flower-thread-rail-muted);
+  opacity: 0;
+  cursor: grab;
+}
+
+.flower-thread-card:hover .flower-thread-drag-handle,
+.flower-thread-card:focus-within .flower-thread-drag-handle { opacity: 1; }
+.flower-thread-drag-handle:active { cursor: grabbing; }
+.flower-thread-drag-handle:disabled { cursor: not-allowed; opacity: 0; }
+.flower-thread-drag-handle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.flower-thread-card-pin-button:disabled { cursor: not-allowed; opacity: 0.45; }
+.flower-thread-card[data-flower-thread-dragging='true'] { opacity: 0.55; }
+.flower-thread-card[data-flower-thread-drop]::after {
+  content: '';
+  position: absolute;
+  left: 0.25rem;
+  right: 0.25rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--flower-thread-selected-indicator);
+  pointer-events: none;
+}
+.flower-thread-card[data-flower-thread-drop='before']::after { top: -3px; }
+.flower-thread-card[data-flower-thread-drop='after']::after { bottom: -3px; }
+.flower-thread-clear-sort-search {
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--flower-thread-rail-foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (forced-colors: active) {
+  .flower-thread-card-active { background: Highlight; color: HighlightText; }
+  .flower-thread-card-active .flower-thread-list-title { color: HighlightText; }
+  .flower-thread-card-active::before { background: HighlightText; }
+  .flower-thread-card[data-flower-thread-drop]::after { background: Highlight; }
+}
+@media (hover: none), (pointer: coarse) {
+  .flower-thread-drag-handle { display: none; }
+  .flower-thread-card[data-pinned='true']:has(.flower-thread-drag-handle) .flower-thread-card-select-button { padding-left: 0.625rem; }
 }
 
 .flower-thread-list-title {

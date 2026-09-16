@@ -353,7 +353,7 @@
   },
   "threadList": {
     "title": "Conversations",
-    "description": "Created-time order stays stable while conversations update.",
+    "description": "Pinned first, newest below",
     "warmupDescription": "Loading after the Local Environment runtime is ready.",
     "refreshLabel": "Refresh conversations",
     "searchPlaceholder": "Search conversations...",
@@ -416,7 +416,13 @@
     "groupToday": "Today",
     "groupYesterday": "Yesterday",
     "groupThisWeek": "This week",
-    "groupOlder": "Older"
+    "groupOlder": "Older",
+    "dragPinned": "Drag to reorder pinned conversation",
+    "movePinnedUp": "Move up",
+    "movePinnedDown": "Move down",
+    "clearSearchToReorder": "Clear search to reorder pinned conversations",
+    "pinUpdateFailed": "Could not update pinned conversations.",
+    "pinRefreshFailed": "Pinned conversations were saved, but the list could not refresh. Refresh to see the latest order."
   },
   "emptyState": {
     "title": "Ask Flower",

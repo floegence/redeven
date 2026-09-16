@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
+
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -46,8 +48,8 @@ function thread(overrides: Partial<FlowerCompanionThreadListItem> = {}): FlowerC
     model_id: 'default/model',
     working_dir: '/workspace/redeven',
     pinned: false,
-    created_at_ms: Date.now(),
-    updated_at_ms: Date.now(),
+    created_at_ms: 1,
+    updated_at_ms: 1,
     preview: '',
     status: 'idle',
     source_label: 'this host',
@@ -69,6 +71,7 @@ const statuses: Record<FlowerThreadStatus, string> = {
 };
 
 const threadListCopy: FlowerThreadListCopy = {
+  ...DEFAULT_FLOWER_SURFACE_COPY.threadList,
   title: 'Conversations',
   description: 'Conversation history',
   warmupDescription: 'Loading conversations',

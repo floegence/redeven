@@ -38,6 +38,7 @@ ORDER BY name
 		"namespace_public_id",
 		"parent_thread_id",
 		"permission_type",
+		"pin_rank",
 		"pinned_at_unix_ms",
 		"reasoning_selection_json",
 		"settings_created_at_unix_ms",

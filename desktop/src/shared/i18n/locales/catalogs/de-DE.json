@@ -385,7 +385,7 @@
     },
     "threadList": {
       "title": "Unterhaltungen",
-      "description": "Die Reihenfolge nach Erstellzeit bleibt stabil, während Unterhaltungen aktualisiert werden.",
+      "description": "Angeheftete zuerst, dann neueste",
       "warmupDescription": "Wird geladen, nachdem die Laufzeitumgebung der lokalen Umgebung bereit ist.",
       "refreshLabel": "Unterhaltungen aktualisieren",
       "searchPlaceholder": "Unterhaltungen suchen...",
@@ -448,7 +448,13 @@
       "groupToday": "Heute",
       "groupYesterday": "Gestern",
       "groupThisWeek": "Diese Woche",
-      "groupOlder": "Älter"
+      "groupOlder": "Älter",
+      "dragPinned": "Ziehen, um angeheftete Unterhaltung zu verschieben",
+      "movePinnedUp": "Nach oben",
+      "movePinnedDown": "Nach unten",
+      "clearSearchToReorder": "Suche leeren, um angeheftete Unterhaltungen zu sortieren",
+      "pinUpdateFailed": "Angeheftete Unterhaltungen konnten nicht aktualisiert werden.",
+      "pinRefreshFailed": "Angeheftete Unterhaltungen wurden gespeichert, aber die Liste konnte nicht aktualisiert werden. Aktualisieren Sie die Liste, um die aktuelle Reihenfolge zu sehen."
     },
     "emptyState": {
       "title": "Flower fragen",

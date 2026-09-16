@@ -49,12 +49,17 @@ func (source pendingInputMigrationSource) GetThreadSettings(ctx context.Context,
 		return nil, errors.New("invalid pending input migration thread")
 	}
 	var settings ThreadSettings
-	err := scanThreadRow(source.tx.QueryRowContext(ctxOrBackground(ctx), fmt.Sprintf(`
-SELECT
-%s
+	// This reader runs at the v4 edge, before any later columns exist.
+	err := source.tx.QueryRowContext(ctxOrBackground(ctx), `
+SELECT thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id,
+       reasoning_selection_json, permission_type, working_dir, pinned_at_unix_ms,
+       settings_created_at_unix_ms, settings_updated_at_unix_ms
 FROM ai_thread_settings
 WHERE endpoint_id = ? AND thread_id = ?
-`, threadSelectColumnsSQL), endpointID, threadID), &settings)
+`, endpointID, threadID).Scan(&settings.ThreadID, &settings.ParentThreadID,
+		&settings.EndpointID, &settings.NamespacePublicID, &settings.ModelID,
+		&settings.ReasoningSelectionJSON, &settings.PermissionType, &settings.WorkingDir,
+		&settings.PinnedAtUnixMs, &settings.SettingsCreatedAtUnixMs, &settings.SettingsUpdatedAtUnixMs)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -27,6 +27,8 @@ import type {
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadView,
+  FlowerThreadPinMetadata,
+  FlowerThreadPinPosition,
   FlowerLiveStreamConnectInput,
   FlowerLiveStreamEnvelope,
   FlowerRuntimeCurrentView,
@@ -41,6 +43,22 @@ import {
   type FlowerLiveThreadMapperOptions,
 } from './flowerLiveMapper';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+
+export type RuntimeThreadPinMetadata = Readonly<{
+  thread_id: string;
+  pinned_at_unix_ms: number;
+  pin_rank: number;
+  settings_revision: number;
+}>;
+
+function mapThreadPinMetadata(value: unknown): FlowerThreadPinMetadata {
+  const pin = value as RuntimeThreadPinMetadata | undefined;
+  if (!pin || typeof pin.thread_id !== 'string' || !pin.thread_id.trim()
+    || ![pin.pinned_at_unix_ms, pin.pin_rank, pin.settings_revision].every((number) => Number.isSafeInteger(number) && number >= 0)) {
+    throw new Error('Invalid pinned conversation metadata.');
+  }
+  return { thread_id: pin.thread_id, pinned_at_ms: pin.pinned_at_unix_ms, pin_rank: pin.pin_rank, settings_revision: pin.settings_revision };
+}
 
 type ThreadView = Readonly<{
   thread_id?: string;
@@ -71,6 +89,8 @@ type MarkThreadReadInput = Readonly<{
   }>;
 }>;
 
+export type RuntimeThreadPatchResponse = LoadThreadResponse | { thread: RuntimeThreadPinMetadata };
+
 type ThreadPatchInput = Readonly<{
   title?: string;
   model_id?: string;
@@ -90,7 +110,8 @@ export type FlowerRuntimeTransport = Readonly<{
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
-  patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
+  patchThread(threadID: string, input: ThreadPatchInput): Promise<RuntimeThreadPatchResponse>;
+  movePinnedThread?(threadID: string, input: FlowerThreadPinPosition): Promise<{ pins: readonly RuntimeThreadPinMetadata[] }>;
   reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
   promoteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
@@ -307,9 +328,15 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       setThreadPinned: async (threadID: string, pinned: boolean) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
-        await options.transport.patchThread(tid, { pinned });
-        return undefined;
+        const result = await options.transport.patchThread(tid, { pinned });
+        return mapThreadPinMetadata(result.thread);
       },
+      ...(options.transport.movePinnedThread ? {
+        movePinnedThread: async (threadID: string, input: FlowerThreadPinPosition) => {
+          const result = await options.transport.movePinnedThread!(threadID, input);
+          return result.pins.map(mapThreadPinMetadata);
+        },
+      } : {}),
       setThreadPermissionType: async (threadID: string, permissionType: FlowerPermissionType) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));

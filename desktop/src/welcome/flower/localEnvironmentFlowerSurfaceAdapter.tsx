@@ -67,6 +67,7 @@ import type {
 import { requireAskFlowerContextActionEnvelope } from '../../../../internal/envapp/ui_src/src/ui/contextActions/protocol';
 import {
   createRuntimeFlowerSurfaceAdapter,
+  type RuntimeThreadPatchResponse,
 } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
   normalizeFlowerReasoningCapability,
@@ -771,11 +772,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/read`,
         body,
       ),
-      patchThread: (threadID, body) => runtimeJSON<LoadThreadResponse>(
+      patchThread: (threadID, body) => runtimeJSON<RuntimeThreadPatchResponse>(
         bridge,
         'PATCH',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`,
         body,
+      ),
+      movePinnedThread: (threadID, input) => runtimeJSON(
+        bridge, 'PATCH', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/pin-position`, input,
       ),
       reorderQueuedTurns: (threadID, orderedQueueIDs) => runtimeJSON(
         bridge,

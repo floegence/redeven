@@ -521,6 +521,7 @@ export type FlowerThreadSnapshot = Readonly<{
   model_id: string;
   working_dir: string;
   pinned_at_ms?: number;
+  pin_rank?: number;
   settings_revision: number;
   home_runtime_id?: string;
   home_runtime_kind?: 'local_environment' | 'env_local';
@@ -810,6 +811,18 @@ export type FlowerApprovalCommandResult = Readonly<{
   current: FlowerRuntimeCurrentView;
 }>;
 
+export type FlowerThreadPinPosition = Readonly<{
+  anchor_thread_id: string;
+  placement: 'before' | 'after';
+}>;
+
+export type FlowerThreadPinMetadata = Readonly<{
+  thread_id: string;
+  pinned_at_ms: number;
+  pin_rank: number;
+  settings_revision: number;
+}>;
+
 export type FlowerThreadListItem = Readonly<{
   cancellation?: FlowerThreadCancellation;
   thread_id: string;
@@ -819,6 +832,7 @@ export type FlowerThreadListItem = Readonly<{
   working_dir: string;
   pinned: boolean;
   pinned_at_ms?: number;
+  pin_rank?: number;
   created_at_ms: number;
   updated_at_ms: number;
   preview: string;
@@ -1193,7 +1207,8 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadSubagentDetail: (parentThreadID: string, childThreadID: string) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerThreadView>;
-  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadView | undefined>;
+  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadPinMetadata>;
+  movePinnedThread?: (threadID: string, input: FlowerThreadPinPosition) => Promise<readonly FlowerThreadPinMetadata[]>;
   setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerThreadView>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerThreadView>;

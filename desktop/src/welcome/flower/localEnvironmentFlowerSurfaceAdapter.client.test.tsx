@@ -132,6 +132,14 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('sends relative pin moves through the runtime bridge without loading detail', async () => {
+    const pin = { thread_id: 'thread/source', pinned_at_unix_ms: 10, pin_rank: 3, settings_revision: 20 };
+    const bridge = bridgeFor(() => ({ pins: [pin] }));
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    const input = { anchor_thread_id: 'thread/anchor', placement: 'after' as const };
+    expect(await adapter.movePinnedThread!('thread/source', input)).toEqual([{ thread_id: pin.thread_id, pinned_at_ms: 10, pin_rank: 3, settings_revision: 20 }]);
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledExactlyOnceWith({ method: 'PATCH', path: '/_redeven_proxy/api/ai/threads/thread%2Fsource/pin-position', body: input });
+  });
   it('loads computer media through the Desktop runtime bridge', async () => {
     const bytes = new Uint8Array([137, 80, 78, 71]);
     const bridge = bridgeFor(() => ({ bytes, mime_type: 'image/png' }));

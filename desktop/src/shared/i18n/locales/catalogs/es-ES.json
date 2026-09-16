@@ -385,7 +385,7 @@
     },
     "threadList": {
       "title": "Conversaciones",
-      "description": "El orden por fecha de creación se mantiene estable mientras las conversaciones se actualizan.",
+      "description": "Fijadas, luego las más recientes",
       "warmupDescription": "Cargando después de que el tiempo de ejecución del entorno local esté listo.",
       "refreshLabel": "Actualizar conversaciones",
       "searchPlaceholder": "Buscar conversaciones...",
@@ -448,7 +448,13 @@
       "groupToday": "Hoy",
       "groupYesterday": "Ayer",
       "groupThisWeek": "Esta semana",
-      "groupOlder": "Anteriores"
+      "groupOlder": "Anteriores",
+      "dragPinned": "Arrastrar para reordenar la conversación fijada",
+      "movePinnedUp": "Subir",
+      "movePinnedDown": "Bajar",
+      "clearSearchToReorder": "Borrar la búsqueda para reordenar las conversaciones fijadas",
+      "pinUpdateFailed": "No se pudieron actualizar las conversaciones fijadas.",
+      "pinRefreshFailed": "Las conversaciones fijadas se guardaron, pero no se pudo actualizar la lista. Actualízala para ver el orden más reciente."
     },
     "emptyState": {
       "title": "Pregunta a Flower",

@@ -23,6 +23,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Pin: () => <span data-icon="pin" />,
   Refresh: () => <span data-icon="refresh" />,
   Search: () => <span data-icon="search" />,
+  ArrowUp: () => <span data-icon="up" />,
+  ArrowDown: () => <span data-icon="down" />,
   Trash: () => <span data-icon="trash" />,
 }));
 
@@ -222,6 +224,9 @@ describe('FlowerThreadList deletion entry', () => {
 
     (host.querySelector('.flower-scroll') as HTMLElement).dispatchEvent(new Event('scroll'));
     await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    (host.querySelector('.flower-scroll') as HTMLElement).dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }));
+    await Promise.resolve();
     expect(host.querySelector('[role="menu"]')).toBeNull();
 
     await open();
@@ -238,11 +243,12 @@ describe('FlowerThreadList deletion entry', () => {
 
     setItems([{ ...thread(), pinned: true }]);
     await Promise.resolve();
-    expect(originalTrigger.isConnected).toBe(false);
+    expect(originalTrigger.isConnected).toBe(true);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await Promise.resolve();
 
     const currentTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    expect(currentTrigger).toBe(originalTrigger);
     expect(host.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(currentTrigger);
   });

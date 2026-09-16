@@ -165,6 +165,20 @@ describe('runtime Flower surface adapter read state', () => {
     await expect(createRuntimeFlowerSurfaceAdapter(options).forkThread!('source', { client_request_id: 'fork-request', title: 'Source · Fork' })).rejects.toThrow('different client request identity');
     expect(options.transport.loadThread).not.toHaveBeenCalled();
   });
+  it('maps pin acknowledgements without loading thread detail and rejects incomplete metadata', async () => {
+    const pin = { thread_id: 'thread', pinned_at_unix_ms: 10, pin_rank: 4, settings_revision: 20 };
+    const patchThread = vi.fn(async () => ({ thread: pin }));
+    const movePinnedThread = vi.fn(async () => ({ pins: [pin] }));
+    const options = adapterOptions({ patchThread, movePinnedThread });
+    const adapter = createRuntimeFlowerSurfaceAdapter(options);
+    const expected = { thread_id: 'thread', pinned_at_ms: 10, pin_rank: 4, settings_revision: 20 };
+    expect(await adapter.setThreadPinned!('thread', true)).toEqual(expected);
+    expect(await adapter.movePinnedThread!('thread', { anchor_thread_id: 'anchor', placement: 'after' })).toEqual([expected]);
+    expect(options.transport.loadThread).not.toHaveBeenCalled();
+    patchThread.mockResolvedValueOnce({ thread: { ...pin, settings_revision: undefined } } as never);
+    await expect(adapter.setThreadPinned!('thread', true)).rejects.toThrow('Invalid pinned conversation metadata');
+  });
+
 	it('treats stop as an acknowledgement without mapping or loading thread detail', async () => {
 		const loadThread = vi.fn(async () => { throw new Error('loadThread must not race stop'); });
 		const stopThread = vi.fn(async () => ({ ok: true }));

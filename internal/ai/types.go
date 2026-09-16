@@ -161,6 +161,7 @@ type ThreadView struct {
 	ApprovalPendingCount int                           `json:"approval_pending_count,omitempty"`
 	ReasoningSelection   config.AIReasoningSelection   `json:"reasoning_selection,omitempty"`
 	ReasoningCapability  config.AIReasoningCapability  `json:"reasoning_capability,omitempty"`
+	PinRank              int64                         `json:"pin_rank"`
 	PinnedAtUnixMs       int64                         `json:"pinned_at_unix_ms,omitempty"`
 	SettingsRevision     int64                         `json:"settings_revision"`
 	CreatedAtUnixMs      int64                         `json:"created_at_unix_ms"`

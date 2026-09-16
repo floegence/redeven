@@ -99,6 +99,7 @@ func (s *Service) threadSettingsView(_ context.Context, th *threadstore.ThreadSe
 		// stored selection and let the current model catalog decorate it in UI.
 		ReasoningCapability: config.AIReasoningCapability{},
 		PinnedAtUnixMs:      th.PinnedAtUnixMs,
+		PinRank:             th.PinRank,
 		SettingsRevision:    th.SettingsUpdatedAtUnixMs,
 	}, nil
 }
@@ -852,7 +853,7 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
 		return nil, err
 	}
-	pinnedAt, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned)
+	pinnedState, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned)
 	if err != nil {
 		return nil, err
 	}
@@ -861,7 +862,41 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 	s.requestCanonicalThreadSummary(endpointID, threadID)
 	// Pinning is product metadata, independent of the active run lifecycle.
 	// Return a receipt instead of waiting for a canonical transcript read.
-	return &ThreadView{ThreadID: threadID, PinnedAtUnixMs: pinnedAt}, nil
+	return &ThreadView{ThreadID: threadID, PinnedAtUnixMs: pinnedState.PinnedAtUnixMs, PinRank: pinnedState.PinRank, SettingsRevision: pinnedState.SettingsRevision}, nil
+}
+
+// MovePinnedThread changes only Redeven navigation metadata, including during an active Turn.
+func (s *Service) MovePinnedThread(ctx context.Context, meta *session.Meta, threadID, anchorID, placement string) ([]threadstore.ThreadPinMetadata, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return nil, err
+	}
+	threadID, anchorID = strings.TrimSpace(threadID), strings.TrimSpace(anchorID)
+	if threadID == "" || anchorID == "" || threadID == anchorID || (placement != "before" && placement != "after") {
+		return nil, errors.New("invalid pinned conversation position")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	for _, id := range []string{threadID, anchorID} {
+		if err := s.requireEndpointThreadAuthority(ctx, endpointID, id); err != nil {
+			return nil, err
+		}
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	changes, err := db.MovePinnedThread(ctx, endpointID, threadID, anchorID, placement)
+	if err != nil {
+		return nil, err
+	}
+	for _, change := range changes {
+		s.requestCanonicalThreadSummary(endpointID, change.ThreadID)
+	}
+	return changes, nil
 }
 
 func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThreadID string, title string) (*ThreadView, error) {
@@ -922,6 +957,7 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	forked := *source
 	forked.ThreadID = current.ThreadID.String()
 	forked.PinnedAtUnixMs = 0
+	forked.PinRank = 0
 	forked.SettingsCreatedAtUnixMs = now
 	forked.SettingsUpdatedAtUnixMs = now
 	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), forked); err != nil {

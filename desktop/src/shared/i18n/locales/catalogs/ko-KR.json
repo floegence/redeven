@@ -385,7 +385,7 @@
     },
     "threadList": {
       "title": "대화",
-      "description": "대화가 업데이트되어도 생성 시간순 정렬은 안정적으로 유지됩니다.",
+      "description": "고정된 대화 우선, 나머지는 최신순",
       "warmupDescription": "로컬 환경 런타임이 준비된 후 로드 중입니다.",
       "refreshLabel": "대화 새로고침",
       "searchPlaceholder": "대화 검색...",
@@ -448,7 +448,13 @@
       "groupToday": "오늘",
       "groupYesterday": "어제",
       "groupThisWeek": "이번 주",
-      "groupOlder": "이전"
+      "groupOlder": "이전",
+      "dragPinned": "드래그하여 고정된 대화 순서 변경",
+      "movePinnedUp": "위로 이동",
+      "movePinnedDown": "아래로 이동",
+      "clearSearchToReorder": "검색을 지워 고정된 대화 순서 변경",
+      "pinUpdateFailed": "고정된 대화를 업데이트하지 못했습니다.",
+      "pinRefreshFailed": "고정된 대화는 저장되었지만 목록을 새로 고치지 못했습니다. 새로 고침하여 최신 순서를 확인하세요."
     },
     "emptyState": {
       "title": "Flower에게 묻기",

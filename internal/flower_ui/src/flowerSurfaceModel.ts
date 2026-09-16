@@ -40,6 +40,7 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot, untitl
     model_id: thread.model_id,
     working_dir: thread.working_dir,
     pinned: Number(thread.pinned_at_ms ?? 0) > 0,
+    pin_rank: thread.pin_rank ?? 0,
     ...(Number(thread.pinned_at_ms ?? 0) > 0 ? { pinned_at_ms: Number(thread.pinned_at_ms) } : {}),
     created_at_ms: thread.created_at_ms,
     updated_at_ms: thread.updated_at_ms,

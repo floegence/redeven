@@ -10142,6 +10142,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/pin-position$/u, methods: ['PATCH'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/queue\/order$/u, methods: ['PATCH'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/queue\/[^/]+$/u, methods: ['DELETE'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/queue\/[^/]+\/promote$/u, methods: ['POST'] },

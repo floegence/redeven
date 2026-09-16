@@ -14,7 +14,7 @@ export function FlowerContextMenu(props: Readonly<{
 }>): JSX.Element {
   let menuRef: HTMLDivElement | undefined;
   let disposed = false;
-  const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? []);
+  const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled):not([aria-disabled="true"])') ?? []);
   const focusItem = (delta: number) => {
     const items = focusableItems();
     if (items.length === 0) return;
@@ -102,10 +102,20 @@ export function FlowerContextMenu(props: Readonly<{
         onFocusOut={(event) => {
           const next = event.relatedTarget;
           if (next instanceof Node && (menuRef?.contains(next) || next === props.resolveRestore())) return;
+          const previous = event.target;
+          const previousIndex = previous instanceof HTMLButtonElement ? focusableItems().indexOf(previous) : -1;
           queueMicrotask(() => {
             if (disposed) return;
             const active = document.activeElement;
             if (active instanceof Node && (menuRef?.contains(active) || active === props.resolveRestore())) return;
+            // A live status change can remove an action. Keep the menu open and
+            // transfer focus locally unless the user already focused elsewhere.
+            if (previous instanceof HTMLElement && !previous.isConnected && (!active || active === document.body)) {
+              const items = focusableItems();
+              const replacement = items[Math.min(Math.max(previousIndex, 0), items.length - 1)];
+              (replacement ?? menuRef)?.focus({ preventScroll: true });
+              return;
+            }
             props.onClose();
           });
         }}

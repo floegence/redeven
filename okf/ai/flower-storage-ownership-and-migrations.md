@@ -3,7 +3,7 @@ type: Storage Contract
 title: Flower storage ownership and migrations
 description: Keep canonical Floret storage opaque and preserve every supported product migration through deterministic imports.
 tags: [ai, storage, sqlite, migrations, floret]
-timestamp: 2026-09-08T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
@@ -22,13 +22,18 @@ uses public `InspectSQLite`, `BackupSQLite`, deferred `runtime.Open`, typed
 queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor
 repairs Floret tables.
 
-Product kind `ai_threadstore_product_v1` retains its entire contiguous v1-to-v7
-migration chain. Fresh version 7 has exactly seven tables: schema metadata,
+Product kind `ai_threadstore_product_v1` retains its entire contiguous v1-to-v8
+migration chain. Fresh version 8 has exactly seven tables: schema metadata,
 thread settings, execution authority, uploads, upload attempts, upload
 references and staging scopes. Version 7 adds a default-empty computer target
 selection to thread settings; it preserves all existing records and does not
 persist target readiness or control authority. The [target selection contract](computer-use-target-selection.md)
-owns its execution boundary. Historical rows and shapes are accepted only by
+owns its execution boundary. Version 8 adds nonnegative integer `pin_rank` and
+an endpoint/rank/creation/ThreadID index. Its v7-to-v8 transaction initializes
+ranks in the previous pin-time, creation-time and ThreadID order without changing
+pin timestamps, settings revisions or other user records. The
+[sidebar contract](../ui/flower-thread-sidebar.md) owns relative reorder semantics.
+Historical rows and shapes are accepted only by
 the exact migration edge that owns them. The read-state owner retains its
 supported v0-to-v4 lineage and moves the former path using a complete SQLite
 snapshot before removing the source. Existing compatibility does not expand to
@@ -65,7 +70,8 @@ permission still comes from the current authorization boundary.
 
 The v4-to-v5 product transaction imports canonical pending inputs through
 Floret's public idempotent import API, records necessary product authority and
-removes retired source tables before commit. The same source always produces
+removes retired source tables before commit. Its thread settings reader uses a frozen v4 field projection, independent of later
+columns. The same source always produces
 the same RequestKey and normalized input. If Floret commits and the product
 transaction rolls back, another startup repeats the same import and continues
 without duplication. Different content under that key fails explicitly. No

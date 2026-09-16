@@ -801,7 +801,7 @@ func reviewedDynamicThreadstoreQuery(query ThreadstoreQueryContract) string {
 }
 
 func reviewedThreadstoreConsumerKind(query ThreadstoreQueryContract) string {
-	if query.Action == "schema" || strings.HasPrefix(query.Function, "migrateThreadstore") || strings.Contains(query.Path, "/sqliteutil/") || strings.Contains(query.Path, "/pending_input_migration.go") {
+	if query.Action == "schema" || query.Function == "addPinRankColumnTx" || strings.HasPrefix(query.Function, "migrateThreadstore") || strings.Contains(query.Path, "/sqliteutil/") || strings.Contains(query.Path, "/pending_input_migration.go") {
 		return "schema_maintenance"
 	}
 	return "product_operation"
@@ -827,8 +827,8 @@ func applyReviewedDynamicInventory(query *ThreadstoreQueryContract) {
 		write  []string
 	}
 	inventories := map[string]inventory{
-		"threadstore.06b73535a1ce4063": {[]string{"ai_thread_settings"}, []string{"pinned_at_unix_ms", "settings_created_at_unix_ms", "thread_id"}, []string{"endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "working_dir"}, nil},
-		"threadstore.2c98775a07b4d6a1": {[]string{"ai_thread_settings"}, []string{"endpoint_id", "thread_id"}, []string{"endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "working_dir"}, nil},
+		"threadstore.06b73535a1ce4063": {[]string{"ai_thread_settings"}, []string{"endpoint_id", "parent_thread_id", "pin_rank", "settings_created_at_unix_ms", "thread_id"}, []string{"endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pin_rank", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "working_dir"}, nil},
+		"threadstore.2c98775a07b4d6a1": {[]string{"ai_thread_settings"}, []string{"endpoint_id", "thread_id"}, []string{"endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pin_rank", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "working_dir"}, nil},
 		"threadstore.d0f67f8765bb2a81": {[]string{"ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, []string{"delete_after_unix_ms", "state"}},
 		"threadstore.d8b5ab2c0ba41c63": {[]string{"ai_upload_refs", "ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, nil},
 		"threadstore.fa59a5e9f6bba496": {

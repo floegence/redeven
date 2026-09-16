@@ -1142,6 +1142,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
       title_status: titleStatus(record.title_status, record.title),
       title_generation: record.title_generation as number,
     }),
+    pin_rank: nonNegativeInteger(record.pin_rank ?? 0, 'thread.pin_rank'),
     model_id: trim(record.model_id),
     working_dir: trim(record.working_dir),
     ...(Number(record.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(record.pinned_at_unix_ms)) } : {}),

@@ -13,7 +13,7 @@ import (
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
 	threadstoreMinimumSchemaVersion = 1
-	threadstoreCurrentSchemaVersion = 7
+	threadstoreCurrentSchemaVersion = 8
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -42,6 +42,7 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 			}},
 			{FromVersion: 5, ToVersion: 6, Apply: migrateThreadstoreV5ToV6},
 			{FromVersion: 6, ToVersion: 7, Apply: migrateThreadstoreV6ToV7},
+			{FromVersion: 7, ToVersion: 8, Apply: migrateThreadstoreV7ToV8},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -112,6 +113,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		createUploadStagingScopesTableTx,
 		createFlowerExecutionAuthorityTableTx,
 		addComputerTargetColumnTx,
+		addPinRankColumnTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {
@@ -465,6 +467,52 @@ func migrateThreadstoreV6ToV7(tx *sql.Tx) error {
 		return err
 	}
 	return verifyProductSchemaVersion(tx, 7)
+}
+
+// The same deterministic initializer is used for fresh stores and the reviewed v7 edge.
+func addPinRankColumnTx(tx *sql.Tx) error {
+	if _, err := tx.Exec(`
+ALTER TABLE ai_thread_settings ADD COLUMN pin_rank INTEGER NOT NULL DEFAULT 0 CHECK(pin_rank >= 0);
+DROP INDEX idx_ai_thread_settings_endpoint_pinned_created;
+CREATE INDEX idx_ai_thread_settings_endpoint_rank_created ON ai_thread_settings(endpoint_id, pin_rank DESC, settings_created_at_unix_ms DESC, thread_id ASC);
+`); err != nil {
+		return err
+	}
+	rows, err := tx.Query(`SELECT thread_id, ROW_NUMBER() OVER (PARTITION BY endpoint_id ORDER BY pinned_at_unix_ms ASC, settings_created_at_unix_ms ASC, thread_id DESC) FROM ai_thread_settings WHERE pinned_at_unix_ms > 0 AND parent_thread_id = ''`)
+	if err != nil {
+		return err
+	}
+	type rankedThread struct {
+		id   string
+		rank int64
+	}
+	var threads []rankedThread
+	for rows.Next() {
+		var thread rankedThread
+		if err := rows.Scan(&thread.id, &thread.rank); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		threads = append(threads, thread)
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, thread := range threads {
+		if _, err := tx.Exec(`UPDATE ai_thread_settings SET pin_rank = ? WHERE thread_id = ?`, thread.rank, thread.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateThreadstoreV7ToV8(tx *sql.Tx) error {
+	if err := addPinRankColumnTx(tx); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 8)
 }
 
 func verifyThreadstoreSchema(tx *sql.Tx) error {

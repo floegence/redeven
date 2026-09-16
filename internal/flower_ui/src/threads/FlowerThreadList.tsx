@@ -1,10 +1,12 @@
 import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Copy, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, GripVertical, Copy, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Input } from '@floegence/floe-webapp-core/ui';
 
+import { FlowerThreadRows } from './FlowerThreadRows';
+import type { FlowerThreadPinPosition } from '../contracts/flowerSurfaceContracts';
 import { FlowerContextMenu } from '../FlowerContextMenu';
 import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAvailability } from '../FlowerDirectoryMenuItems';
 
@@ -15,7 +17,7 @@ import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems,
 import { canForkThreadItem, canPinThreadItem, canRenameThreadItem, canStopThreadItem } from './threadListActions';
 
 type TimeGroup = FlowerThreadTimeGroup;
-export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete' | 'browse_workdir' | 'terminal_workdir';
+export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete' | 'browse_workdir' | 'terminal_workdir' | 'move_up' | 'move_down';
 export type { FlowerThreadGroup };
 
 type FlowerThreadRenderGroup = Readonly<{
@@ -58,6 +60,14 @@ export type FlowerThreadCardProps = Readonly<{
   onKeyboardMenu?: (event: KeyboardEvent, item: FlowerThreadListItem) => void;
   onRename?: (item: FlowerThreadListItem) => void;
   onPin?: (item: FlowerThreadListItem) => void;
+  pinBusy?: boolean;
+  reorderable?: boolean;
+  dragging?: boolean;
+  dropPosition?: 'before' | 'after';
+  onDragStart?: (event: DragEvent, item: FlowerThreadListItem) => void;
+  onDragOver?: (event: DragEvent, item: FlowerThreadListItem) => void;
+  onDrop?: (event: DragEvent) => void;
+  onDragEnd?: () => void;
 }>;
 
 export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
@@ -75,6 +85,11 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   return (
     <div
       data-flower-thread-card
+      data-pinned={props.item.pinned ? 'true' : 'false'}
+      data-flower-thread-dragging={props.dragging ? 'true' : undefined}
+      data-flower-thread-drop={props.dropPosition}
+      onDragOver={(event) => props.onDragOver?.(event, props.item)}
+      onDrop={(event) => props.onDrop?.(event)}
       data-thread-id={props.item.thread_id}
       data-flower-thread-id={props.item.thread_id}
       data-flower-thread-status={props.item.status}
@@ -90,6 +105,19 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         props.active && 'flower-thread-card-active',
       )}
     >
+      <Show when={props.item.pinned && props.onDragStart}>
+        <button
+          type="button"
+          class="flower-thread-drag-handle"
+          draggable={props.reorderable}
+          disabled={!props.reorderable}
+          aria-label={copy().dragPinned}
+          title={copy().dragPinned}
+          onClick={(event) => { event.stopPropagation(); props.onContextMenu?.(event, props.item); }}
+          onDragStart={(event) => props.onDragStart?.(event, props.item)}
+          onDragEnd={() => props.onDragEnd?.()}
+        ><GripVertical class="h-3.5 w-3.5" /></button>
+      </Show>
       <button
         type="button"
         class="flower-thread-card-select-button flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
@@ -136,6 +164,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         <button
           type="button"
           class="flower-thread-card-pin-button"
+          disabled={props.pinBusy}
           data-pinned={props.item.pinned ? 'true' : 'false'}
           aria-label={props.item.pinned ? copy().unpin : copy().pin}
           title={props.item.pinned ? copy().unpin : copy().pin}
@@ -180,6 +209,9 @@ type FlowerThreadContextMenuProps = Readonly<{
   canFork: boolean;
   canRename: boolean;
   canPin: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  pinBusy: boolean;
   showStopAction: boolean;
   showDeleteAction: boolean;
   actionsBusy: boolean;
@@ -198,36 +230,37 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
     if (kind === 'rename' && !canRenameThreadItem(props.item)) return;
     props.onAction(kind, props.item);
   };
-  const itemButton = (
-    kind: FlowerThreadMenuAction,
-    label: string,
-    icon: JSX.Element,
-    disabled = false,
-  ) => (
-    <button
+  const ItemButton: Component<{
+    kind: FlowerThreadMenuAction;
+    label: string;
+    icon: JSX.Element;
+    disabled?: boolean;
+  }> = (itemProps) => {
+    const disabled = createMemo(() => Boolean(itemProps.disabled || props.actionsBusy));
+    return <button
       type="button"
       role="menuitem"
-      class={cn('flower-thread-menu-item', kind === 'delete' && 'flower-thread-menu-item-destructive')}
-      data-destructive={kind === 'delete' ? 'true' : undefined}
-      disabled={disabled || props.actionsBusy}
-      aria-busy={props.busyAction === kind ? 'true' : undefined}
-      onClick={() => action(kind)}
+      class={cn('flower-thread-menu-item', itemProps.kind === 'delete' && 'flower-thread-menu-item-destructive')}
+      data-destructive={itemProps.kind === 'delete' ? 'true' : undefined}
+      aria-disabled={disabled() ? 'true' : undefined}
+      aria-busy={props.busyAction === itemProps.kind ? 'true' : undefined}
+      onClick={() => { if (!disabled()) action(itemProps.kind); }}
     >
-      {icon}
-      <span>{props.busyAction === kind ? props.copy.working : label}</span>
-    </button>
-  );
+      {itemProps.icon}
+      <span>{props.busyAction === itemProps.kind ? props.copy.working : itemProps.label}</span>
+    </button>;
+  };
   return (
     <FlowerContextMenu
       x={props.x}
       y={props.y}
       label={props.copy.contextMenuLabel(props.item.title.trim())}
-      height={340 + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0)}
+      height={340 + (props.item.pinned ? 72 : 0) + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0)}
       resolveRestore={props.resolveRestore}
       onClose={props.onClose}
     >
-      {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
-      {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
+      <ItemButton kind="copy_thread_id" label={props.copy.copyThreadID} icon={<Copy class="h-3.5 w-3.5" />} />
+      <ItemButton kind="fork" label={props.copy.fork} icon={<GitBranch class="h-3.5 w-3.5" />} disabled={!props.canFork || !canForkThreadItem(props.item)} />
       <FlowerDirectoryMenuItems
         path={props.workingDirectory}
         copy={props.copy}
@@ -236,13 +269,17 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       />
       <div class="flower-thread-menu-separator" />
       <Show when={props.showStopAction && canStopThreadItem(props.item)}>
-        {itemButton('stop', props.copy.stop, <XCircle class="h-3.5 w-3.5" />)}
+        <ItemButton kind="stop" label={props.copy.stop} icon={<XCircle class="h-3.5 w-3.5" />} />
       </Show>
-      {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
-      {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
+      <ItemButton kind="pin" label={props.item.pinned ? props.copy.unpin : props.copy.pin} icon={<Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />} disabled={!props.canPin || props.pinBusy || !canPinThreadItem(props.item)} />
+      <Show when={props.item.pinned}>
+        <ItemButton kind="move_up" label={props.copy.movePinnedUp} icon={<ArrowUp class="h-3.5 w-3.5" />} disabled={!props.canMoveUp || props.pinBusy} />
+        <ItemButton kind="move_down" label={props.copy.movePinnedDown} icon={<ArrowDown class="h-3.5 w-3.5" />} disabled={!props.canMoveDown || props.pinBusy} />
+      </Show>
+      <ItemButton kind="rename" label={props.copy.rename} icon={<Pencil class="h-3.5 w-3.5" />} disabled={!props.canRename || !canRenameThreadItem(props.item)} />
       <Show when={props.showDeleteAction}>
         <div class="flower-thread-menu-separator" />
-        {itemButton('delete', props.copy.deleteMenuAction, <Trash class="h-3.5 w-3.5" />)}
+        <ItemButton kind="delete" label={props.copy.deleteMenuAction} icon={<Trash class="h-3.5 w-3.5" />} />
       </Show>
     </FlowerContextMenu>
   );
@@ -268,6 +305,8 @@ export type FlowerThreadListProps = Readonly<{
   canFork?: boolean;
   canRename?: boolean;
   canPin?: boolean;
+  pinBusy?: boolean;
+  onMovePinned?: (threadID: string, position: FlowerThreadPinPosition) => void;
   showStopAction?: boolean;
   showDeleteAction?: boolean;
   busyThreadID?: string;
@@ -277,6 +316,7 @@ export type FlowerThreadListProps = Readonly<{
 
 export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   let listRef: HTMLDivElement | undefined;
+  let scrollRef: HTMLDivElement | undefined;
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const filtered = createMemo(() => filterFlowerThreadItems(props.items, props.query));
   const itemByID = createMemo(() => new Map(props.items.map((item) => [item.thread_id, item] as const)));
@@ -286,7 +326,88 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       : { key: `time:${group.group}`, kind: group.kind, group: group.group, threadIDs: group.threads.map((thread) => thread.thread_id) }
   )));
   const groupByKey = createMemo(() => new Map(groups().map((group) => [group.key, group] as const)));
-  const groupKeys = createMemo(() => groups().map((group) => group.key));
+  const rowKeys = createMemo(() => groups().flatMap((group) => [`group:${group.key}`, ...group.threadIDs.map((id) => `thread:${id}`)]));
+  const pinnedIDs = createMemo(() => groupFlowerThreadItems(props.items).find((group) => group.kind === 'pinned')?.threads.map((item) => item.thread_id) ?? []);
+  const canReorder = () => Boolean(props.onMovePinned && !props.pinBusy && !props.query.trim() && pinnedIDs().length > 1);
+  const [drag, setDrag] = createSignal<{ threadID: string; keys: readonly string[]; target?: FlowerThreadPinPosition } | null>(null);
+  const visibleKeys = createMemo(() => drag()?.keys ?? rowKeys());
+  let scrollFrame: number | undefined;
+  let dragY = 0;
+  const cancelDrag = () => {
+    setDrag(null);
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+    scrollFrame = undefined;
+  };
+  const updateDragTarget = (y: number) => {
+    const state = drag();
+    if (!state || !scrollRef) return;
+    const rows = Array.from(scrollRef.querySelectorAll<HTMLElement>('[data-flower-thread-card][data-pinned="true"]'));
+    const target = rows.find((row) => y <= row.getBoundingClientRect().bottom) ?? rows.at(-1);
+    if (!target) return;
+    const id = target.dataset.threadId!;
+    if (id === state.threadID) { if (state.target) setDrag({ ...state, target: undefined }); return; }
+    const rect = target.getBoundingClientRect();
+    const placement = y < rect.top + rect.height / 2 ? 'before' : 'after';
+    if (state.target?.anchor_thread_id !== id || state.target.placement !== placement) {
+      setDrag({ ...state, target: { anchor_thread_id: id, placement } });
+    }
+  };
+  const edgeScroll = () => {
+    scrollFrame = undefined;
+    if (!drag() || !scrollRef) return;
+    const rect = scrollRef.getBoundingClientRect();
+    const distance = dragY < rect.top + 32 ? dragY - rect.top - 32 : dragY > rect.bottom - 32 ? dragY - rect.bottom + 32 : 0;
+    if (distance) {
+      scrollRef.scrollTop += Math.max(-12, Math.min(12, distance / 3));
+      updateDragTarget(dragY);
+      scrollFrame = requestAnimationFrame(edgeScroll);
+    }
+  };
+  const startDrag = (event: DragEvent, item: FlowerThreadListItem) => {
+    if (!canReorder() || !item.pinned || !event.dataTransfer) { event.preventDefault(); return; }
+    setMenu(null);
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', item.thread_id);
+    const card = (event.currentTarget as HTMLElement).closest('[data-flower-thread-card]');
+    if (card instanceof HTMLElement) event.dataTransfer.setDragImage(card, 16, 16);
+    setDrag({ threadID: item.thread_id, keys: rowKeys() });
+  };
+  const overDrag = (event: DragEvent) => {
+    if (!drag()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dragY = event.clientY;
+    updateDragTarget(dragY);
+    if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(edgeScroll);
+  };
+  const dropDrag = (event: DragEvent) => {
+    const state = drag();
+    if (!state) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // Commit the visible insertion target once. Dragend only releases ownership.
+    if (state.target && canReorder()) props.onMovePinned?.(state.threadID, state.target);
+    cancelDrag();
+  };
+  const moveNeighbour = (threadID: string, direction: -1 | 1) => {
+    if (!canReorder()) return;
+    const ids = pinnedIDs();
+    const index = ids.indexOf(threadID);
+    const anchor = index < 0 ? undefined : ids[index + direction];
+    if (anchor) props.onMovePinned?.(threadID, { anchor_thread_id: anchor, placement: direction < 0 ? 'before' : 'after' });
+  };
+  createEffect(() => {
+    const state = drag();
+    if (!state) return;
+    if (!canReorder() || props.visible === false || !itemByID().get(state.threadID)?.pinned
+      || (state.target && !itemByID().get(state.target.anchor_thread_id)?.pinned)) cancelDrag();
+  });
+  const escapeDrag = (event: KeyboardEvent) => { if (event.key === 'Escape') cancelDrag(); };
+  document.addEventListener('keydown', escapeDrag);
+  window.addEventListener('blur', cancelDrag);
+  onCleanup(() => { cancelDrag(); document.removeEventListener('keydown', escapeDrag); window.removeEventListener('blur', cancelDrag); });
   // IMPORTANT: An open thread menu is owned by ThreadID and must survive summary
   // refreshes and row replacement; only the explicit lifecycle events below may close it.
   const [menu, setMenu] = createSignal<{
@@ -388,10 +509,24 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           onInput={(event) => props.onQueryChange(event.currentTarget.value)}
         />
       </label>
+      <Show when={props.query.trim() && pinnedIDs().length > 1 && props.onMovePinned}>
+        <button type="button" class="flower-thread-clear-sort-search" onClick={() => props.onQueryChange('')}>{copy().clearSearchToReorder}</button>
+      </Show>
       <div
-        class="flower-scroll flex-1 space-y-2"
-        onScroll={() => {
-          if (menu()) closeMenu();
+        ref={scrollRef}
+        class="flower-scroll flex-1"
+        onWheel={() => { if (menu()) closeMenu(); }}
+        onTouchMove={() => { if (menu()) closeMenu(); }}
+        onPointerDown={(event) => { if (event.target === scrollRef && menu()) closeMenu(); }}
+        onDragOver={overDrag}
+        onDrop={dropDrag}
+        onDragLeave={(event) => {
+          if (!(event.relatedTarget instanceof Node) || !scrollRef?.contains(event.relatedTarget)) {
+            if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+            scrollFrame = undefined;
+            const state = drag();
+            if (state?.target) setDrag({ ...state, target: undefined });
+          }
         }}
       >
         <Show when={!showLoadingSkeleton()} fallback={(
@@ -427,41 +562,36 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
               when={filtered().length > 0}
               fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
             >
-            <For each={groupKeys()}>
-              {(groupKey) => {
-                const group = () => groupByKey().get(groupKey);
-                return (
-                  <section class="space-y-1">
-                    <h3 class="flower-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
-                      {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
-                    </h3>
-                    <For each={group()?.threadIDs ?? []}>
-                      {(threadID) => {
-                        const thread = () => itemByID().get(threadID);
-                        return (
-                          <Show when={thread()}>
-                            {(item) => (
-                              <FlowerThreadCard
-                                item={item()}
-                                active={props.activeThreadID === threadID}
-                                copy={copy()}
-                                busy={props.busyThreadID === threadID}
-                                busyLabel={props.busyThreadID === threadID && props.busyAction === 'fork' ? copy().forkCreating : undefined}
-                                onSelect={() => props.onSelect(threadID)}
-                                onContextMenu={openMenu}
-                                onKeyboardMenu={openMenu}
-                                onRename={props.onMenuAction && canRenameThreadItem(item()) ? (value) => props.onMenuAction?.('rename', value) : undefined}
-                                onPin={props.canPin && props.onMenuAction && canPinThreadItem(item()) ? (value) => props.onMenuAction?.('pin', value) : undefined}
-                              />
-                            )}
-                          </Show>
-                        );
-                      }}
-                    </For>
-                  </section>
-                );
-              }}
-            </For>
+            <FlowerThreadRows keys={visibleKeys()} render={(key) => {
+              if (key.startsWith('group:')) {
+                const group = () => groupByKey().get(key.slice(6));
+                return <h3 class="flower-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
+                  {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
+                </h3>;
+              }
+              const threadID = key.slice(7);
+              const item = createMemo<FlowerThreadListItem>((previous) => itemByID().get(threadID) ?? previous!);
+              return <FlowerThreadCard
+                item={item()}
+                active={props.activeThreadID === threadID}
+                copy={copy()}
+                busy={props.busyThreadID === threadID}
+                busyLabel={props.busyThreadID === threadID && props.busyAction === 'fork' ? copy().forkCreating : undefined}
+                onSelect={() => props.onSelect(threadID)}
+                onContextMenu={openMenu}
+                onKeyboardMenu={openMenu}
+                onRename={props.onMenuAction ? (value) => props.onMenuAction?.('rename', value) : undefined}
+                onPin={props.canPin && props.onMenuAction ? (value) => props.onMenuAction?.('pin', value) : undefined}
+                pinBusy={props.pinBusy}
+                reorderable={canReorder()}
+                onDragStart={props.onMovePinned ? startDrag : undefined}
+                onDragOver={overDrag}
+                onDragEnd={cancelDrag}
+                onDrop={dropDrag}
+                dragging={drag()?.threadID === threadID}
+                dropPosition={drag()?.target?.anchor_thread_id === threadID ? drag()?.target?.placement : undefined}
+              />;
+            }} />
             </Show>
           </Show>
         </Show>
@@ -478,6 +608,9 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             canFork={!!props.canFork}
             canRename={!!props.canRename}
             canPin={!!props.canPin}
+            pinBusy={props.pinBusy === true}
+            canMoveUp={canReorder() && pinnedIDs().indexOf(state().threadID) > 0}
+            canMoveDown={canReorder() && pinnedIDs().indexOf(state().threadID) >= 0 && pinnedIDs().indexOf(state().threadID) < pinnedIDs().length - 1}
             showStopAction={props.showStopAction === true}
             showDeleteAction={props.showDeleteAction === true}
             actionsBusy={!!props.actionsBusy}
@@ -487,7 +620,10 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             onAction={(action, item) => {
               const restore = resolveMenuRestore(state());
               setMenu(null);
-              props.onMenuAction?.(action, item, restore);
+              if (action === 'move_up' || action === 'move_down') {
+                moveNeighbour(item.thread_id, action === 'move_up' ? -1 : 1);
+                restore?.focus({ preventScroll: true });
+              } else props.onMenuAction?.(action, item, restore);
             }}
           />
         )}

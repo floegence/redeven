@@ -270,6 +270,7 @@ func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *r
 		child.PermissionType = permissionTypeString(FlowerPermissionReadonly)
 	}
 	child.PinnedAtUnixMs = 0
+	child.PinRank = 0
 	child.SettingsCreatedAtUnixMs = 0
 	child.SettingsUpdatedAtUnixMs = 0
 	return service.threadsDB.CreateThreadSettings(ctxOrBackground(ctx), child)

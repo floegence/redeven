@@ -385,7 +385,7 @@
     },
     "threadList": {
       "title": "Discussions",
-      "description": "L’ordre par date de création reste stable pendant les mises à jour des discussions.",
+      "description": "Épinglées, puis les plus récentes",
       "warmupDescription": "Chargement dès que l’environnement d’exécution local est prêt.",
       "refreshLabel": "Actualiser les conversations",
       "searchPlaceholder": "Rechercher des conversations...",
@@ -448,7 +448,13 @@
       "groupToday": "Aujourd’hui",
       "groupYesterday": "Hier",
       "groupThisWeek": "Cette semaine",
-      "groupOlder": "Plus anciennes"
+      "groupOlder": "Plus anciennes",
+      "dragPinned": "Faire glisser pour réorganiser la conversation épinglée",
+      "movePinnedUp": "Monter",
+      "movePinnedDown": "Descendre",
+      "clearSearchToReorder": "Effacer la recherche pour réorganiser les conversations épinglées",
+      "pinUpdateFailed": "Impossible de mettre à jour les conversations épinglées.",
+      "pinRefreshFailed": "Les conversations épinglées ont été enregistrées, mais la liste n’a pas pu être actualisée. Actualisez-la pour voir le nouvel ordre."
     },
     "emptyState": {
       "title": "Demander à Flower",

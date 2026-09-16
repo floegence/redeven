@@ -49,10 +49,14 @@ export function groupFlowerThreadsByDate(threads: readonly FlowerThreadListItem[
     .map((group) => ({ group, threads: groups[group] }));
 }
 
+export function comparePinnedFlowerThreads(a: FlowerThreadListItem, b: FlowerThreadListItem): number {
+  return (b.pin_rank ?? 0) - (a.pin_rank ?? 0) || b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id);
+}
+
 export function groupFlowerThreadItems(threads: readonly FlowerThreadListItem[]): FlowerThreadGroup[] {
   const pinned = threads
     .filter((thread) => thread.pinned)
-    .sort((a, b) => (b.pinned_at_ms ?? 0) - (a.pinned_at_ms ?? 0) || b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id));
+    .sort(comparePinnedFlowerThreads);
   const regular = threads
     .filter((thread) => !thread.pinned)
     .sort((a, b) => b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id));
