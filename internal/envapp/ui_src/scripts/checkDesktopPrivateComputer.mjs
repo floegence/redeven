@@ -130,7 +130,7 @@ try {
   const ime = await page.context().newCDPSession(page);
   await ime.send('Input.imeSetComposition', { text: '\u79c1\u5bc6', selectionStart: 2, selectionEnd: 2 });
   await ime.send('Input.insertText', { text: '\u79c1\u5bc6' }); await ime.detach();
-  await wait(() => privateText === marker, 'private paste and native IME');
+  await wait(() => privateText === marker, 'private native text insertion and IME');
   assert(!JSON.stringify(await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`)).includes(marker));
   await rate.selectOption('15');
   await page.locator('[data-floe-floating-window-control="close"]').click();
@@ -147,8 +147,8 @@ try {
   assert.equal(navigations, 1); assert.equal(providerCalls, 3);
   await page.reload();
   assert.equal(await page.evaluate(() => window.redevenDesktopStateStorage.getItem('flower.computer-viewer.fps')), '15');
-  await writeFile(path.join(output, 'private-viewer.json'), JSON.stringify({ ordinaryPreviewContinued: true, delayMS, rates: [3,5,10,15,30], paste: true, nativeIME: true, rejectedHandbackRetained: true, safeHandbackOnce: true, navigationOnce: true, narrowHeader: true, persisted: true, threadID }, null, 2));
-  console.log(`Private Desktop qualification passed: delayed pixels visible in ${delayMS}ms; all FPS, handback, paste and IME passed.`);
+  await writeFile(path.join(output, 'private-viewer.json'), JSON.stringify({ ordinaryPreviewContinued: true, delayMS, rates: [3,5,10,15,30], nativeTextInsertion: true, nativeIME: true, rejectedHandbackRetained: true, safeHandbackOnce: true, navigationOnce: true, narrowHeader: true, persisted: true, threadID }, null, 2));
+  console.log(`Private Desktop qualification passed: delayed pixels visible in ${delayMS}ms; all FPS, handback, native text insertion and IME passed.`);
 } catch (error) {
   const presentation = await page.evaluate(() => ({
     status: document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-status'),

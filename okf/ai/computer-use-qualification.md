@@ -94,8 +94,11 @@ task-owned Desktop built from the current checkout. Its provider is deterministi
 the Runtime, managed browser helper, workspace stream, private IPC and decoder
 remain production implementations. It verifies ordinary preview after unchanged
 samples, a 600ms delayed private page change at default 3 FPS, all FPS choices,
-client persistence, narrow header placement, private text and native Chromium
+client persistence, narrow header placement, native text insertion and Chromium
 IME, rejected handback and one safe continuation without navigation replay.
+The isolated headless Stage browser test separately verifies clipboard paste
+through the native paste shortcut; the Desktop script does not alter the user's
+system clipboard.
 Only presentation diagnostics and outcome facts are reported. Test threads and
 fixture servers are removed on exit; the owner of the isolated Desktop launch
 must stop its exact process tree and verify port release.

@@ -22,7 +22,7 @@ function renderWithFloeLayout(factory: () => JSX.Element, host: HTMLElement): ()
 }
 
 describe('Flower computer stage', () => {
-  it('commits real IME and native text once without exposing drafts or losing key order', async () => {
+  it('commits real IME, native text and clipboard paste once without exposing drafts or losing key order', async () => {
     const host = document.createElement('div'); document.body.append(host);
     const input = vi.fn(() => { document.querySelector('.flower-computer-stage')?.setAttribute('data-input-count', String(input.mock.calls.length)); });
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
