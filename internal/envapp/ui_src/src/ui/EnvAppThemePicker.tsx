@@ -1,3 +1,4 @@
+import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import {
   getShellThemePresetsForMode,
@@ -334,8 +335,8 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
                         'h-7 cursor-pointer rounded-md px-2 text-[11px] font-medium transition-colors',
                         'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
                         selected()
-                          ? 'bg-card text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                          ? redevenSegmentedItemClass(true)
+                          : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
                       )}
                       onClick={() => selectSource(source)}
                       onKeyDown={(event) => {

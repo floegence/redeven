@@ -1,3 +1,4 @@
+import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
@@ -612,7 +613,7 @@ function SourceForm(props: {
               tabIndex={props.sourceKind === choice.kind ? 0 : -1}
               class={cn(
                 'flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-1 rounded px-1 py-2 text-xs font-medium transition-[background-color,color,box-shadow] duration-150 sm:min-h-9 sm:flex-row sm:gap-1.5 sm:px-2 sm:py-0 motion-reduce:transition-none',
-                props.sourceKind === choice.kind ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                props.sourceKind === choice.kind ? redevenSegmentedItemClass(true) : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
               )}
               disabled={props.pending}
               onClick={() => selectSource(choice.kind)}

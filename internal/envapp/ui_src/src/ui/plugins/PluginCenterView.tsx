@@ -1,3 +1,4 @@
+import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, Refresh, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
@@ -2120,7 +2121,7 @@ function TabButton(props: {
       tabIndex={isActive() ? 0 : -1}
       class={cn(
         'min-h-[44px] min-w-[44px] cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 sm:min-h-8 sm:min-w-0 motion-reduce:transition-none',
-        isActive() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+        isActive() ? redevenSegmentedItemClass(true) : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
       )}
       onClick={() => props.onSelect(props.id)}
       onKeyDown={selectAdjacentTab}

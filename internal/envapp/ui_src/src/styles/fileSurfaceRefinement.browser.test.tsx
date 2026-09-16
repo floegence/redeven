@@ -39,7 +39,7 @@ it.each(['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'])(
   const rail = host.querySelector('[data-browser-mode-switch]')!;
   expect(getComputedStyle(rail).borderTopColor, 'navigation does not use the input frame').not.toBe(getComputedStyle(boundary).borderTopColor);
   noContourShadow(rail);
-  noContourShadow(host.querySelector('.browser-mode-switch__thumb')!);
+  noContourShadow(host.querySelector('[data-browser-mode-switch] [aria-checked="true"]')!);
   noContourShadow(boundary);
   const path = host.querySelector('nav')!.parentElement!;
   expect(getComputedStyle(path).borderTopColor, 'read-only breadcrumbs are not an input').not.toBe(getComputedStyle(boundary).borderTopColor);

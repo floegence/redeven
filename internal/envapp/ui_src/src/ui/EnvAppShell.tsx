@@ -1,3 +1,4 @@
+import { redevenSegmentedItemClass } from './utils/redevenSurfaceRoles';
 import { writeTextToClipboard } from './utils/clipboard';
 import { For, Show, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -495,8 +496,8 @@ function EnvDisplayModeSwitcher(props: {
             aria-selected={active()}
             class={`inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium transition-colors ${
               active()
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
+                ? redevenSegmentedItemClass(true)
+                : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`
             }`}
             onClick={() => props.onChange(option.id)}
           >

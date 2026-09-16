@@ -47,7 +47,7 @@ describe('GitHistoryModeSwitch', () => {
     }
   });
 
-  it('renders a stable sliding thumb and previews Git mode on focus', () => {
+  it('keeps both native buttons mounted while changing selection and previewing Git on focus', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const preview = vi.fn();
@@ -63,10 +63,10 @@ describe('GitHistoryModeSwitch', () => {
 
     try {
       const group = host.querySelector('[data-browser-mode-switch]') as HTMLElement | null;
-      const thumb = host.querySelector('.browser-mode-switch__thumb');
+      const filesButton = host.querySelector('[aria-checked="true"]');
       const gitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Git')) as HTMLButtonElement | undefined;
       expect(group).toBeTruthy();
-      expect(thumb).toBeTruthy();
+      expect(filesButton).toBeTruthy();
       expect(group?.getAttribute('data-mode')).toBe('files');
 
       gitButton?.dispatchEvent(new FocusEvent('focus'));
@@ -74,6 +74,9 @@ describe('GitHistoryModeSwitch', () => {
 
       gitButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(group?.getAttribute('data-mode')).toBe('git');
+      expect(host.querySelector('[aria-checked="true"]')).toBe(gitButton);
+      expect(host.querySelector('[aria-checked="false"]')).toBe(filesButton);
+      expect(gitButton?.className).toContain('redeven-surface-segmented__item--active');
     } finally {
       dispose();
     }

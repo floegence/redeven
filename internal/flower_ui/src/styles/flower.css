@@ -2472,17 +2472,27 @@
   white-space: nowrap;
 }
 
-.flower-reasoning-segment:hover,
-.flower-reasoning-segment:focus-visible {
+.flower-reasoning-segment:not(.flower-reasoning-segment-active):hover {
   background: color-mix(in srgb, var(--primary) 10%, transparent);
   color: color-mix(in srgb, var(--foreground) 84%, var(--primary) 16%);
   outline: none;
 }
 
 .flower-reasoning-segment-active {
-  background: color-mix(in srgb, var(--primary) 16%, transparent);
-  color: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  transition: none;
 }
+
+.flower-reasoning-segment:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.flower-reasoning-segment-active:focus-visible {
+  outline-color: var(--primary-foreground);
+}
+
 
 .flower-reasoning-budget {
   width: 6.5rem;
@@ -6412,9 +6422,11 @@
   text-align: left;
 }
 
-.flower-input-request-choice-custom[aria-checked='true'] {
-  color: var(--foreground);
-  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated));
+.flower-input-request-choice-custom[aria-checked='true'],
+.flower-input-request-choice-custom[aria-checked='true']:hover {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  transition: none;
 }
 
 .flower-input-request-choice-label {
@@ -6453,8 +6465,7 @@
     background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 150ms ease;
 }
 
-.flower-input-request-text-target:hover,
-.flower-input-request-text-target:focus-visible {
+.flower-input-request-text-target:not(.flower-input-request-text-target-active):hover {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--primary) 7%, var(--flower-chat-surface-elevated));
   outline: none;
@@ -6463,9 +6474,16 @@
 .flower-input-request-text-target-active,
 .flower-input-request-text-target-active:hover,
 .flower-input-request-text-target-active:focus-visible {
-  border-color: color-mix(in srgb, var(--primary) 46%, var(--flower-chat-surface-border));
-  background: color-mix(in srgb, var(--primary) 12%, var(--flower-chat-surface-elevated));
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
   box-shadow: none;
+  transition: none;
+}
+
+.flower-input-request-text-target:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .flower-input-request-text-target:disabled {
@@ -9304,7 +9322,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-settings-policy-card-active {
-  border-color: color-mix(in srgb, var(--primary) 70%, transparent);
+  border-color: var(--ring);
   background: color-mix(in srgb, var(--primary) 5%, transparent);
 }
 
@@ -10101,3 +10119,16 @@ button.flower-attachment-preview-trigger:disabled {
 @media (max-width: 560px) { .flower-computer-header-actions .flower-computer-state { max-width: 6rem; } }
 
 .flower-input-request-surface.flower-computer-control-panel { gap: 0.875rem; }
+
+@media (forced-colors: active) {
+  .flower-reasoning-segment-active,
+  .flower-input-request-choice-custom[aria-checked='true'],
+  .flower-input-request-choice-custom[aria-checked='true']:hover,
+  .flower-input-request-text-target-active,
+  .flower-input-request-text-target-active:hover,
+  .flower-input-request-text-target-active:focus-visible {
+    forced-color-adjust: none;
+    color: HighlightText;
+    background: Highlight;
+  }
+}
