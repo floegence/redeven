@@ -46,6 +46,9 @@ The published `BottomBarCompanion` owns the collapsed surface's only visible out
 
 ## Contextual Ask Flower
 
+[Ask Flower window boundaries](ask-flower-window.md) owns Header avoidance,
+constrained resizing, and the launcher's disabled maximization.
+
 Activity and Workbench keep the existing `FlowerTurnLauncherWindow` interaction. Opening records the exact origin mode, Activity surface, companion placement, and Workbench anchor where applicable. The Activity Flower instance remains the presence owner but is hidden, inert, disengaged, and unable to acknowledge transcript reads while its launcher is open.
 
 Successful submit closes the launcher and focuses the accepted thread. From ordinary Activity it opens the companion detail surface; from the dedicated Flower page it stays full page. Workbench retains its existing widget handoff. Cancel restores the captured origin. Send and context-action behavior remain defined by [Flower turn launcher](flower-turn-launcher.md).

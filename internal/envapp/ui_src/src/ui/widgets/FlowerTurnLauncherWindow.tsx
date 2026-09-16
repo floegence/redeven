@@ -30,6 +30,8 @@ import { RemoteFileBrowser } from './RemoteFileBrowser';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowStackContext';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
+import { desktopWindowChromeBridge } from '../services/desktopWindowChrome';
+import { createAskFlowerWindowViewportInsets } from '../../../../../../desktop/src/shared/askFlowerWindowViewport';
 
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
 const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
@@ -448,6 +450,10 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   const filePreview = useFilePreviewContext();
   const i18n = useI18n();
   const floatingWindowStack = useEnvAppFloatingWindowStack();
+  const viewportInsets = createAskFlowerWindowViewportInsets({
+    open: () => props.open && props.placement !== 'panel',
+    chrome: desktopWindowChromeBridge(),
+  });
   const [contextPreview, setContextPreview] = createSignal<ContextPreviewState | null>(null);
   const [contextBrowser, setContextBrowser] = createSignal<ContextBrowserState | null>(null);
   let previewRequestSeq = 0;
@@ -619,6 +625,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             open={props.open}
             intent={props.intent}
             anchor={props.anchor}
+            viewportInsets={viewportInsets()}
             copy={createFlowerTurnLauncherCopy(i18n)}
             draft={props.draft}
             onDraftChange={props.onDraftChange}

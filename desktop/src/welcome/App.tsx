@@ -124,6 +124,7 @@ import {
   type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
 import { endpointDisplayValue } from './endpointDisplay';
+import { createAskFlowerWindowViewportInsets } from '../shared/askFlowerWindowViewport';
 import {
   FlowerIcon,
   FlowerSoftAuraIcon,
@@ -2836,6 +2837,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
+  const flowerTurnLauncherViewportInsets = createAskFlowerWindowViewportInsets({
+    open: flowerTurnLauncherOpen,
+    chrome: window.redevenDesktopWindowChrome,
+  });
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerFocusThreadRequest, setFlowerFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
@@ -6508,6 +6513,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         open={flowerTurnLauncherOpen()}
         intent={flowerTurnLauncherIntent()}
         anchor={flowerTurnLauncherAnchor()}
+        viewportInsets={flowerTurnLauncherViewportInsets()}
         copy={{
           window_title: i18n().t('environmentCenter.askFlowerCardTitle'),
           linked_context_label: i18n().t('environmentCenter.askFlowerCardContextLabel'),
