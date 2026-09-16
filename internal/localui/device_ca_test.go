@@ -259,6 +259,10 @@ func TestDeviceCATrustInstallErrorsKeepPlatformCancellationDistinct(t *testing.T
 		want             error
 	}{
 		{"darwin", "OSStatus (-128)", ErrLocalUIDeviceCAInstallCanceled},
+		{"darwin", "OSStatus (-60006)", ErrLocalUIDeviceCAInstallCanceled},
+		{"darwin", "SecTrustSettingsSetTrustSettings: The authorization was canceled by the user.", ErrLocalUIDeviceCAInstallCanceled},
+		{"darwin", "SecTrustSettingsSetTrustSettings: The authorization was denied.", ErrLocalUIDeviceCAInstallFailed},
+		{"windows", "SecTrustSettingsSetTrustSettings: The authorization was canceled by the user.", ErrLocalUIDeviceCAInstallFailed},
 		{"windows", "0x800704c7", ErrLocalUIDeviceCAInstallCanceled},
 		{"darwin", "access denied", ErrLocalUIDeviceCAInstallFailed},
 	} {

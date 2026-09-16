@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
-import { AlertCircle, Check, Lock } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, Check, ChevronDown, Copy, FileText, Info, Lock, Refresh, ShieldCheck } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { desktopCertificateIdentity, type DesktopCertificateOperation, type DesktopCertificateReport, type DesktopCertificateRequest } from '../shared/desktopCertificate';
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
@@ -10,10 +10,13 @@ export function LocalCertificateSettings(props: Readonly<{
   manage: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
   remote: boolean;
   onReadiness: (ready: boolean) => void;
+  copyText: (value: string, label: string) => Promise<void>;
 }>) {
   const [report, setReport] = createSignal<DesktopCertificateReport>();
   const [operation, setOperation] = createSignal<DesktopCertificateOperation>();
   const [queryFailed, setQueryFailed] = createSignal(false);
+  const [copying, setCopying] = createSignal(false);
+  const [copyFailed, setCopyFailed] = createSignal(false);
   let revision = 0;
   onCleanup(() => { revision += 1; });
   const identity = () => queryFailed() ? 'unknown' : desktopCertificateIdentity(report());
@@ -49,6 +52,7 @@ export function LocalCertificateSettings(props: Readonly<{
   const environmentID = createMemo(() => props.environmentID);
   createEffect(on(environmentID, (id) => {
     revision += 1;
+    setCopyFailed(false);
     setReport(undefined);
     setOperation(undefined);
     setQueryFailed(false);
@@ -78,50 +82,136 @@ export function LocalCertificateSettings(props: Readonly<{
     }
   };
   const canInstall = () => !props.remote && report()?.can_install === true;
+  const canceled = () => report()?.code === 'local_ui_device_ca_install_canceled';
+  const showFailure = () => !operation() && (queryFailed() || failed() && !invalid() && identity() !== 'missing');
+  const validUntil = () => report()?.not_after
+    ? props.i18n.t('settings.certificateValidUntil', { date: new Date(report()!.not_after!).toLocaleDateString(props.i18n.locale) })
+    : '';
+
+  async function copyDetails(): Promise<void> {
+    if (copying()) return;
+    const target = environmentID();
+    setCopying(true);
+    setCopyFailed(false);
+    try {
+      await props.copyText([
+        report()?.certificate_path,
+        validUntil(),
+        failed() ? report()?.code : '',
+        failed() ? report()?.message : '',
+      ].filter(Boolean).join('\n'), props.i18n.t('settings.certificateDetails'));
+    } catch {
+      if (environmentID() === target) setCopyFailed(true);
+    } finally {
+      setCopying(false);
+    }
+  }
+
   return (
-    <section aria-label={props.i18n.t('settings.certificateSetup')} aria-busy={Boolean(operation())} class="space-y-3 rounded-md bg-muted/25 p-3">
-      <h4 class="flex items-center gap-2 text-xs font-medium"><Lock class="h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.certificateSetup')}</h4>
-      <dl class="space-y-2 text-xs" aria-live="polite">
-        <div class="flex flex-wrap items-center justify-between gap-2"><dt class="text-muted-foreground">{props.i18n.t('settings.certificateIdentity')}</dt>
-          <dd class="flex items-center gap-1.5" classList={{ 'text-destructive': invalid() }}>
-            <Show when={identity() === 'ready'}><Check class="h-3.5 w-3.5" aria-hidden="true" /></Show>
-            <Show when={invalid()}><AlertCircle class="h-3.5 w-3.5" aria-hidden="true" /></Show>
-            {props.i18n.t(identityKey())}
-          </dd></div>
+    <section aria-label={props.i18n.t('settings.certificateSetup')} aria-busy={Boolean(operation())}
+      class="min-w-0 overflow-hidden rounded-lg border border-border/60 bg-muted/15">
+      <header class="flex items-center justify-between gap-3 px-4 py-2.5">
+        <h4 class="text-xs font-semibold text-foreground">{props.i18n.t('settings.certificateSetup')}</h4>
+        <Button size="icon" variant="ghost" class="h-7 w-7 shrink-0" disabled={Boolean(operation())}
+          aria-label={props.i18n.t('settings.certificateRefresh')} title={props.i18n.t('settings.certificateRefresh')}
+          onClick={() => void perform('status')}>
+          <Refresh class="h-3.5 w-3.5" classList={{ 'animate-spin': operation() === 'status' }} aria-hidden="true" />
+        </Button>
+      </header>
+      <div class="space-y-3 px-4 pb-4">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2" aria-live="polite">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground" aria-hidden="true"><FileText class="h-4 w-4" /></span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <span class="font-medium">{props.i18n.t('settings.certificateIdentity')}</span>
+              <span class="inline-flex items-center gap-1.5" classList={{ 'text-destructive': invalid(), 'text-primary': identity() === 'ready', 'text-muted-foreground': !invalid() && identity() !== 'ready' }}>
+                <Show when={identity() === 'ready'}><Check class="h-3.5 w-3.5" aria-hidden="true" /></Show>
+                <Show when={invalid()}><AlertCircle class="h-3.5 w-3.5" aria-hidden="true" /></Show>
+                {props.i18n.t(identityKey())}
+              </span>
+            </div>
+            <Show when={identity() === 'ready' && validUntil()}><p class="mt-1 text-xs text-muted-foreground">{validUntil()}</p></Show>
+          </div>
+          <Show when={identity() === 'missing'}>
+            <Button size="sm" class="h-auto min-h-8 whitespace-normal text-left" disabled={Boolean(operation())}
+              loading={operation() === 'setup' || operation() === 'generate'} onClick={() => void perform(canInstall() ? 'setup' : 'generate')}>
+              {props.i18n.t(canInstall() ? 'settings.certificateSetupAction' : 'settings.generateCertificate')}
+            </Button>
+          </Show>
+        </div>
+
         <Show when={!props.remote && identity() === 'ready'}>
-          <div class="flex flex-wrap items-center justify-between gap-2"><dt class="text-muted-foreground">{props.i18n.t('settings.certificateSystemTrust')}</dt>
-            <dd>{props.i18n.t(report()?.trust === 'trusted' ? 'settings.certificateTrusted' : 'settings.certificateUntrusted')}</dd></div>
+          <div class="flex flex-wrap items-start gap-3 border-t border-border/50 pt-3">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground" aria-hidden="true"><ShieldCheck class="h-4 w-4" /></span>
+            <div class="min-w-0 flex-1 basis-48 space-y-1">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" aria-live="polite">
+                <span class="font-medium">{props.i18n.t('settings.certificateSystemTrust')}</span>
+                <span class="inline-flex items-center gap-1.5" classList={{ 'text-primary': report()?.trust === 'trusted', 'text-muted-foreground': report()?.trust !== 'trusted' }}>
+                  <Show when={report()?.trust === 'trusted'}><Check class="h-3.5 w-3.5" aria-hidden="true" /></Show>
+                  {props.i18n.t(report()?.trust === 'trusted' ? 'settings.certificateTrusted' : 'settings.certificateUntrusted')}
+                </span>
+              </div>
+              <p class="max-w-prose text-xs leading-relaxed text-muted-foreground">{props.i18n.t(canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
+            </div>
+            <Show when={canInstall() && report()?.trust !== 'trusted'}>
+              <Button size="sm" class="h-auto min-h-8 whitespace-normal text-left" disabled={Boolean(operation())}
+                loading={operation() === 'install'} onClick={() => void perform('install')}>
+                {props.i18n.t('settings.trustCertificate')}
+              </Button>
+            </Show>
+          </div>
         </Show>
-      </dl>
-      <Show when={operation() && operation() !== 'status'}>
-        <p role="status" class="text-xs text-muted-foreground">{props.i18n.t(operation() === 'install' ? 'settings.certificateTrustBusy' : 'settings.certificateSetupBusy')}</p>
-      </Show>
-      <Show when={invalid()}><p class="text-xs text-destructive">{props.i18n.t('settings.certificateInvalidHelp')}</p></Show>
-      <Show when={queryFailed() || failed() && !invalid() && report()?.code !== 'local_ui_device_ca_missing'}>
-        <p role="alert" class="text-xs" classList={{ 'text-destructive': report()?.code !== 'local_ui_device_ca_install_canceled' }}>{props.i18n.t(errorKey())}</p>
-      </Show>
-      <div class="flex flex-wrap items-center gap-2">
-        <Show when={identity() === 'missing'}>
-          <Button size="sm" disabled={Boolean(operation())} onClick={() => void perform(canInstall() ? 'setup' : 'generate')}>
-            {props.i18n.t(canInstall() ? 'settings.certificateSetupAction' : 'settings.generateCertificate')}
-          </Button>
+        <Show when={props.remote}><p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t('settings.remoteCertificateHelp')}</p></Show>
+        <Show when={identity() === 'missing' && !props.remote}>
+          <p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t(canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
         </Show>
-        <Show when={identity() === 'ready' && canInstall() && report()?.trust !== 'trusted'}>
-          <Button size="sm" disabled={Boolean(operation())} onClick={() => void perform('install')}>{props.i18n.t('settings.trustCertificate')}</Button>
+
+        <Show when={operation() && operation() !== 'status'}>
+          <p role="status" class="text-xs text-muted-foreground">{props.i18n.t(operation() === 'install' ? 'settings.certificateTrustBusy' : 'settings.certificateSetupBusy')}</p>
         </Show>
-        <Button size="sm" variant="ghost" disabled={Boolean(operation())} onClick={() => void perform('status')}>{props.i18n.t('environmentAction.refreshStatus')}</Button>
+        <Show when={invalid() && !operation()}>
+          <p role="alert" class="text-xs leading-relaxed text-destructive">{props.i18n.t('settings.certificateInvalidHelp')}</p>
+        </Show>
+        <Show when={showFailure()}>
+          <div role={canceled() ? 'status' : 'alert'} class="flex items-start gap-2 rounded-md px-3 py-2 text-xs leading-relaxed"
+            classList={{ 'bg-muted/60 text-muted-foreground': canceled(), 'bg-destructive/5 text-destructive': !canceled() }}>
+            <Show when={canceled()} fallback={<AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}>
+              <Info class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            </Show>
+            <p>{props.i18n.t(errorKey())}</p>
+          </div>
+        </Show>
+        <Show when={identity() !== 'ready' && !operation()}><p class="text-xs leading-relaxed text-muted-foreground">{props.i18n.t('settings.certificateRestartBlocked')}</p></Show>
+        <p class="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
+          <Lock class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />{props.i18n.t('settings.certificateImmediateHelp')}
+        </p>
       </div>
-      <Show when={!props.remote}>
-        <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t(canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
-      </Show>
-      <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('settings.certificateImmediateHelp')}</p>
-      <Show when={identity() !== 'ready' && !operation()}><p class="text-xs text-muted-foreground">{props.i18n.t('settings.certificateRestartBlocked')}</p></Show>
+
       <Show when={report()?.certificate_path || report()?.message}>
-        <details class="text-xs"><summary class="cursor-pointer text-muted-foreground hover:text-foreground">{props.i18n.t('settings.certificateDetails')}</summary>
-          <div class="mt-2 select-text space-y-2 break-all text-muted-foreground">
-            <Show when={report()?.not_after}><p>{props.i18n.t('settings.certificateValidUntil', { date: new Date(report()!.not_after!).toLocaleDateString(props.i18n.locale) })}</p></Show>
-            <p class="font-mono">{report()?.certificate_path}</p>
-            <Show when={failed()}><p class="font-mono">{report()?.code}</p><p>{report()?.message}</p></Show>
+        <details class="group border-t border-border/50 text-xs">
+          <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <ChevronDown class="h-3.5 w-3.5 -rotate-90 transition-transform group-open:rotate-0 motion-reduce:transition-none" aria-hidden="true" />
+            {props.i18n.t('settings.certificateDetails')}
+          </summary>
+          <div class="space-y-3 px-4 pb-4">
+            <Show when={report()?.certificate_path}>
+              <div class="space-y-1.5">
+                <p class="font-medium text-muted-foreground">{props.i18n.t('settings.certificateFile')}</p>
+                <p class="select-text break-all rounded-md bg-background/70 px-3 py-2 font-mono text-[11px] leading-relaxed">{report()?.certificate_path}</p>
+              </div>
+            </Show>
+            <Show when={failed()}>
+              <div class="space-y-1.5">
+                <p class="font-medium text-muted-foreground">{props.i18n.t('settings.certificateDiagnostics')}</p>
+                <pre tabIndex={0} class="max-h-32 select-text overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/70 px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">{[report()?.code, report()?.message].filter(Boolean).join('\n')}</pre>
+              </div>
+            </Show>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <Show when={copyFailed()}><p role="alert" class="text-xs text-destructive">{props.i18n.t('settings.certificateCopyFailed')}</p></Show>
+              <Button size="sm" variant="outline" disabled={copying()} onClick={() => void copyDetails()}>
+                <Copy class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{props.i18n.t('settings.certificateCopyDetails')}
+              </Button>
+            </div>
           </div>
         </details>
       </Show>
