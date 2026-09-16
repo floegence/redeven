@@ -126,7 +126,9 @@ describe('browser workspace layout wiring', () => {
     expect(modeSrc).toContain("import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
     expect(modeSrc).toContain('data-browser-mode-switch=""');
     expect(modeSrc).toContain('data-mode={props.mode}');
-    expect(modeSrc).toContain('<span class="browser-mode-switch__thumb" aria-hidden="true" />');
+    const selectionFace = modeSrc.match(/<span\b[^>]*class="browser-mode-switch__thumb"[^>]*\/>/)?.[0];
+    expect(selectionFace).toContain('aria-hidden="true"');
+    expect(selectionFace).toContain('data-floe-surface="flat"');
     expect(modeSrc).toContain("onPointerEnter={previewGitMode}");
     expect(modeSrc).toContain("onFocus={previewGitMode}");
     expect(modeSrc).toContain("redevenSegmentedItemClass(false)");
