@@ -16,12 +16,14 @@ function button(label: string) {
 }
 function mount(manage: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>, remote = false) {
   const host = document.createElement('div'); document.body.append(host);
-  const [environmentID, setEnvironmentID] = createSignal('local');
+  const [snapshot, setSnapshot] = createSignal({ environment_id: 'local' });
+  const setEnvironmentID = (id: string) => setSnapshot({ environment_id: id });
+  const refreshSnapshot = () => setSnapshot((previous) => ({ ...previous }));
   const onReadiness = vi.fn();
-  const dispose = render(() => <LocalCertificateSettings environmentID={environmentID()} i18n={createDesktopI18n('en-US')}
+  const dispose = render(() => <LocalCertificateSettings environmentID={snapshot().environment_id} i18n={createDesktopI18n('en-US')}
     manage={manage} remote={remote} onReadiness={onReadiness} />, host);
   disposers.push(dispose);
-  return { setEnvironmentID, onReadiness, dispose };
+  return { setEnvironmentID, refreshSnapshot, onReadiness, dispose };
 }
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); });
 
@@ -64,6 +66,40 @@ describe('HTTPS certificate configuration', () => {
     finish({ ...ready, trust: 'trusted' }); await settle();
     expect(document.body.textContent).toContain('Certificate trusted');
     expect(test.onReadiness).toHaveBeenLastCalledWith(true);
+  });
+  it('keeps a pending trust operation attached to its target during background snapshots', async () => {
+    let finish!: (report: DesktopCertificateReport) => void;
+    const manage = vi.fn(({ operation }: DesktopCertificateRequest) => operation === 'status' ? Promise.resolve(ready)
+      : new Promise<DesktopCertificateReport>((resolve) => { finish = resolve; }));
+    const test = mount(manage); await settle();
+    const details = document.querySelector('details')!;
+    details.open = true;
+    button('Trust on this device').click();
+    for (let i = 0; i < 3; i += 1) {
+      test.refreshSnapshot();
+      await settle();
+      expect(manage).toHaveBeenCalledTimes(2);
+      expect(button('Trust on this device').disabled).toBe(true);
+      expect(test.onReadiness).toHaveBeenLastCalledWith(false);
+      expect(document.querySelector('details')).toBe(details);
+      expect(details.open).toBe(true);
+    }
+    finish({ ...ready, trust: 'trusted' }); await settle();
+    expect(document.body.textContent).toContain('Certificate trusted');
+    expect(test.onReadiness).toHaveBeenLastCalledWith(true);
+    expect(document.querySelector('details')).toBe(details);
+    expect(details.open).toBe(true);
+  });
+  it('refreshes certificate status explicitly without replacing its expanded details', async () => {
+    const manage = vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce({ ...ready, trust: 'trusted' });
+    mount(manage); await settle();
+    const details = document.querySelector('details')!;
+    details.open = true;
+    button('Refresh').click(); await settle();
+    expect(manage).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent).toContain('Certificate trusted');
+    expect(document.querySelector('details')).toBe(details);
+    expect(details.open).toBe(true);
   });
   it('ignores old environment results and results after closing', async () => {
     let finish!: (report: DesktopCertificateReport) => void;

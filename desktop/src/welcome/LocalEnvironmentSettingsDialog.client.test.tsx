@@ -33,23 +33,26 @@ async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'leg
     local_ui_password_configured: true,
   }), runtime_configuration_pending: options.pending };
   const [draft, setDraft] = createSignal(baseline);
+  const [liveSnapshot, setSnapshot] = createSignal(snapshot);
+  const [isOpen, setOpen] = createSignal(true);
+  const [runtimeStatus, setRuntimeStatus] = createSignal(url ? 'Running' : 'Not running');
   const copy = vi.fn(async () => {});
   const save = vi.fn(async () => {});
   const open = vi.fn(async () => {});
   const certificate = vi.fn(options.certificate ?? (async () => ({ status: 'failed', code: 'local_ui_device_ca_missing' })));
   disposers.push(render(() => (
-    <LocalEnvironmentSettingsDialog open snapshot={snapshot} baselineSnapshot={snapshot} draft={draft()}
+    <LocalEnvironmentSettingsDialog open={isOpen()} snapshot={liveSnapshot()} baselineSnapshot={liveSnapshot()} draft={draft()}
       i18n={createDesktopI18n('en-US')} busyState={IDLE_LAUNCHER_BUSY_STATE} settingsError=""
       settingsErrorRef={() => {}} updateDraftField={(name, value) => setDraft((current) => ({ ...current, [name]: value }))}
       applyAccessMode={(mode) => setDraft((current) => applyDesktopAccessModeToDraft(current, mode))}
       applyAccessFixedPort={(port) => setDraft((current) => applyDesktopAccessFixedPortToDraft(current, port))}
       toggleAutoPort={() => {}} saveSettings={save} runtimeRestartAvailable={Boolean(url)} runtimeRunning={Boolean(url)}
-      runtimeStatusLabel={url ? 'Running' : 'Not running'} runtimeStatusTone="neutral" dark={false}
+      runtimeStatusLabel={runtimeStatus()} runtimeStatusTone="neutral" dark={false}
       desktopOpenLabel="Open Env App" openInDesktop={() => {}} openInBrowser={open} copyEnvironmentValue={copy}
       cancelSettings={() => {}} clearStoredLocalUIPassword={() => {}} certificate={certificate} />
   ), host));
   await settle();
-  return { draft, setDraft, copy, save, open, certificate };
+  return { draft, setDraft, copy, save, open, certificate, setSnapshot, setOpen, setRuntimeStatus };
 }
 
 afterEach(() => {
@@ -60,6 +63,62 @@ afterEach(() => {
 });
 
 describe('Runtime connection settings', () => {
+  it.each([false, true])('preserves dialog interaction state across Runtime snapshots (edited: %s)', async (edited) => {
+    const test = await mount({ url: 'http://localhost:23998/', protocol: 'https', certificate: async () => ({
+      status: 'ready', code: 'local_ui_device_ca_untrusted', identity: 'ready', trust: 'untrusted',
+      certificate_path: '/isolated/device-ca.pem', can_install: true,
+    }) });
+    if (edited) {
+      test.setDraft((previous) => ({ ...previous, local_ui_bind: 'localhost:25000' }));
+      await settle();
+    }
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const content = dialog.querySelector('.overflow-auto')!;
+    const details = [...dialog.querySelectorAll('details')];
+    expect(details).toHaveLength(2);
+    for (const detail of details) detail.open = true;
+    const port = document.getElementById('local-ui-port') as HTMLInputElement;
+    port.focus();
+    port.setSelectionRange(1, 3);
+    content.scrollTop = 240;
+
+    for (let i = 0; i < 3; i += 1) {
+      test.setSnapshot((previous) => ({ ...structuredClone(previous), current_runtime_url: 'http://localhost:24120/', current_runtime_urls: ['http://localhost:24120/'] }));
+      test.setDraft((previous) => ({ ...previous }));
+      test.setRuntimeStatus('Connected');
+      await settle();
+      expect(test.certificate).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+      expect(dialog.querySelector('.overflow-auto')).toBe(content);
+      for (const [index, detail] of details.entries()) expect(dialog.querySelectorAll('details')[index]).toBe(detail);
+      expect(details.every((detail) => detail.open)).toBe(true);
+      expect(content.scrollTop).toBe(240);
+      expect(document.getElementById('local-ui-port')).toBe(port);
+      expect(port.value).toBe(edited ? '25000' : '23998');
+      expect(test.draft().local_ui_bind).toBe(edited ? 'localhost:25000' : 'localhost:23998');
+      expect(document.activeElement).toBe(port);
+      expect([port.selectionStart, port.selectionEnd]).toEqual([1, 3]);
+      expect(dialog.textContent).toContain('Connected');
+      expect(dialog.textContent).toContain('http://localhost:24120/');
+    }
+  });
+
+  it('checks certificates again after closing and reopening the dialog', async () => {
+    const test = await mount({ protocol: 'https', certificate: async () => ({
+      status: 'ready', code: 'local_ui_device_ca_untrusted', identity: 'ready', trust: 'untrusted',
+      certificate_path: '/isolated/device-ca.pem',
+    }) });
+    const details = document.querySelector('details')!;
+    details.open = true;
+    test.setOpen(false);
+    await settle();
+    test.setOpen(true);
+    await settle();
+    expect(test.certificate).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('details')).not.toBe(details);
+    expect(document.querySelector('details')?.open).toBe(false);
+  });
+
   it('keeps saved changes pending when the dialog reopens with an unchanged draft', async () => {
     const test = await mount({ url: 'http://localhost:24120/', pending: true });
     expect(document.body.textContent).toContain('Changes not yet applied');
