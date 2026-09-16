@@ -62,10 +62,10 @@ describe('Flower warmup presentation', () => {
     expect(css).toContain('.flower-warmup');
     expect(css).toContain('.flower-thread-warmup-card');
     expect(css).toContain('.flower-model-chip-warmup');
-    expect(css).toContain('@keyframes flower-thread-card-warmup');
+    expect(css).not.toContain('@keyframes flower-thread-card-warmup');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(css).toContain('.flower-thread-warmup-card::after,');
-    expect(css).toContain('.flower-model-chip-warmup::after,');
+    expect(css).not.toContain('.flower-thread-warmup-card::after');
+    expect(css).not.toContain('.flower-model-chip-warmup::after');
     expect(css).toContain(".flower-surface[data-flower-warmup='true'] .flower-new-chat-button:disabled");
     expect(css).toContain(".flower-surface[data-flower-warmup='true'] .flower-composer textarea:disabled");
   });

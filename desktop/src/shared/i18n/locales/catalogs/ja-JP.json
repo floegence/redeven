@@ -883,6 +883,8 @@
       "changeFailed": "外観を更新できませんでした。もう一度お試しください。",
       "presets": {
         "classic-light": "クラシック ライト",
+        "porcelain-light": "ポーセリン ライト",
+        "porcelain-dark": "ポーセリン ダーク",
         "paper": "ペーパー",
         "mist": "ミスト",
         "meadow": "メドウ",

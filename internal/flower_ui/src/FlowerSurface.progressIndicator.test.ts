@@ -43,14 +43,13 @@ function cssRuleStartingWith(css: string, selector: string): string {
 }
 
 describe('Flower progress indicator', () => {
-  it('uses readable localized dock text with a decorative left-to-right shimmer', () => {
+  it('keeps localized dock text steady beside a small progress symbol', () => {
     const css = flowerStyles();
     const laneRule = cssRule(css, '.flower-model-status-lane');
     const indicatorRule = cssRule(css, '.flower-model-status-indicator');
     const flowerRule = cssRule(css, '.flower-model-status-flower');
     const flowerIconRule = cssRule(css, '.flower-model-status-flower-icon');
     const textRule = cssRule(css, '.flower-model-status-text');
-    const shimmerRule = cssRule(css, '.flower-model-status-text::after');
     const src = progressIndicatorSource();
     const indicatorMarkupIndex = src.indexOf('class="flower-model-status-indicator"');
     const flowerMarkupIndex = src.indexOf('class="flower-model-status-flower"', indicatorMarkupIndex);
@@ -98,24 +97,11 @@ describe('Flower progress indicator', () => {
     expect(textRule).toContain('white-space: nowrap');
     expect(textRule).toContain('color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%)');
     expect(textRule).not.toContain('color: transparent');
+    expect(css).not.toContain('flower-model-status-shimmer');
+    expect(css).not.toContain('flower-model-status-text::after');
     expect(textRule).not.toContain('-webkit-text-fill-color: transparent');
-    expect(shimmerRule).toContain('content: attr(data-text)');
-    expect(shimmerRule).toContain('position: absolute');
-    expect(shimmerRule).toContain('pointer-events: none');
-    expect(shimmerRule).toContain('color: transparent');
-    expect(shimmerRule).toContain('90deg');
-    expect(shimmerRule).toContain('background-size: 220% 100%');
-    expect(shimmerRule).toContain('background-clip: text');
-    expect(shimmerRule).toContain('-webkit-background-clip: text');
-    expect(shimmerRule).toContain('-webkit-text-fill-color: transparent');
-    expect(shimmerRule).toContain('animation: flower-model-status-shimmer 2.4s ease-in-out infinite');
-    expect(css).toContain('@keyframes flower-model-status-shimmer');
-    expect(css).toContain('background-position: -120% 0');
-    expect(css).toContain('background-position: 180% 0');
-    expect(css).toContain('.flower-model-status-text::after,');
     expect(css).toContain('.flower-model-status-dots,');
     expect(css).toContain('.flower-model-status-text {\n    color: var(--muted-foreground);');
-    expect(css).toContain('.flower-model-status-text::after {\n    content: none !important;');
     expect(css).toContain('.flower-model-status-dots {\n    animation: none !important;');
     expect(indicatorRule).not.toContain('width: 1.65rem');
     expect(indicatorRule).not.toContain('height: 0.82rem');
@@ -303,8 +289,6 @@ describe('Flower progress indicator', () => {
     const dividerIconRule = cssRule(css, '.flower-compaction-divider-running-clock');
     const dividerIconMinuteRule = cssRule(css, '.flower-compaction-divider-running-clock::before');
     const dividerIconHourRule = cssRule(css, '.flower-compaction-divider-running-clock::after');
-    const dividerLabelRule = cssRule(css, '.flower-compaction-divider-label-shimmer');
-    const dividerShimmerRule = cssRule(css, ".flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-label-shimmer::after");
 
     expect(anchorRule).toContain('position: relative');
     expect(anchorRule).toContain('flex-direction: column');
@@ -318,7 +302,7 @@ describe('Flower progress indicator', () => {
     expect(itemRule).toContain('grid-template-rows: auto auto');
     expect(css).toContain(".flower-composer-command-item[aria-selected='true'],");
     expect(css).toContain('.flower-composer-command-item:hover,');
-    expect(css).toContain('transform: translateY(-0.5px);');
+    expect(cssRule(css, '.flower-composer-command-item:hover,\n.flower-composer-command-item:focus-visible')).not.toContain('transform:');
     expect(descriptionRule).toContain('font-size: 0.74rem');
     expect(descriptionRule).toContain('white-space: nowrap');
     expect(dividerRunningRule).toContain('border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%)');
@@ -331,12 +315,8 @@ describe('Flower progress indicator', () => {
     expect(dividerIconHourRule).toContain('bottom: 50%');
     expect(dividerIconHourRule).toContain('transform-origin: bottom center');
     expect(dividerIconHourRule).toContain('animation: flower-waiting-clock-hour 12s linear infinite');
-    expect(dividerLabelRule).toContain('position: relative');
-    expect(dividerLabelRule).toContain('display: inline-block');
-    expect(dividerShimmerRule).toContain('content: attr(data-text)');
-    expect(dividerShimmerRule).toContain('animation: flower-compaction-divider-shimmer 2.2s ease-in-out infinite');
-    expect(css).toContain('@keyframes flower-compaction-divider-shimmer');
     expect(css).not.toContain('flower-compaction-divider-clock-tick');
+    expect(css).not.toContain('flower-compaction-divider-shimmer');
     expect(pillRule).toContain('box-shadow');
   });
 

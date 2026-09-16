@@ -26,6 +26,7 @@ export type FlowerScrollTailController = Readonly<{
 }>;
 
 export type FlowerScrollTailControllerOptions = Readonly<{
+  canFollowLatest?: () => boolean;
   reducedMotionPreferred: () => boolean;
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame: (handle: number) => void;
@@ -114,7 +115,7 @@ export function createFlowerScrollTailController(
         smoothScroll = { startedAt: timestamp, startTop: scrollTop };
       } else if (request) smoothScroll = undefined;
       let nextTop = scrollTop + anchorDelta;
-      if (followingLatest()) {
+      if (followingLatest() && (options.canFollowLatest?.() ?? true)) {
         const bottom = Math.max(0, scrollHeight - viewportHeight);
         if (smoothScroll) {
           const progress = Math.min(1, Math.max(0, (timestamp - smoothScroll.startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
@@ -129,7 +130,7 @@ export function createFlowerScrollTailController(
     });
   };
   const scrollToBottom = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
-    if (!node) return;
+    if (!node || !(options.canFollowLatest?.() ?? true)) return;
     startFollowing();
     if (scrollOptions.smooth && !options.reducedMotionPreferred()) {
       pendingScroll = scrollOptions;

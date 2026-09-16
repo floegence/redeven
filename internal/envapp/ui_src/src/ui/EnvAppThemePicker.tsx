@@ -45,6 +45,8 @@ const PRESET_TRANSLATION_KEYS = {
   nord: 'shell.themePicker.presets.nord',
   dracula: 'shell.themePicker.presets.dracula',
   abyss: 'shell.themePicker.presets.abyss',
+  'porcelain-light': 'shell.themePicker.presets.porcelain-light',
+  'porcelain-dark': 'shell.themePicker.presets.porcelain-dark',
 } as const satisfies Readonly<Record<string, EnvAppTranslationKey>>;
 
 function moveIndex(event: KeyboardEvent, current: number, count: number): number | null {

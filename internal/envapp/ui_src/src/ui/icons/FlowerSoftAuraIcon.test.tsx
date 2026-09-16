@@ -22,7 +22,7 @@ describe('FlowerNavigationIcon', () => {
       expect(root?.style.height).toBe('1.5rem');
 
       const glow = root?.querySelector('.redeven-flower-soft-aura-glow') as HTMLElement | null;
-      expect(glow?.className).toContain('redeven-flower-soft-aura-nav-glow');
+      expect(glow).toBeNull();
 
       const svg = root?.querySelector('svg') as SVGElement | null;
       expect(svg?.getAttribute('class')).toContain('redeven-flower-soft-aura-nav-svg');
@@ -52,7 +52,7 @@ describe('FlowerContextMenuIcon', () => {
       expect(root?.className).toContain('h-3.5');
 
       const glow = root?.querySelector('.redeven-flower-soft-aura-glow') as HTMLElement | null;
-      expect(glow?.className).toContain('redeven-flower-soft-aura-workbench-glow');
+      expect(glow).toBeNull();
 
       const svg = root?.querySelector('svg') as SVGElement | null;
       expect(svg?.getAttribute('class')).toContain('redeven-flower-soft-aura-workbench-svg');
@@ -80,7 +80,7 @@ describe('FlowerWorkbenchIcon', () => {
       expect(root?.style.height).toBe('');
 
       const glow = root?.querySelector('.redeven-flower-soft-aura-glow') as HTMLElement | null;
-      expect(glow?.className).toContain('redeven-flower-soft-aura-workbench-glow');
+      expect(glow).toBeNull();
 
       const svg = root?.querySelector('svg') as SVGElement | null;
       expect(svg?.getAttribute('class')).toContain('redeven-flower-soft-aura-workbench-svg');

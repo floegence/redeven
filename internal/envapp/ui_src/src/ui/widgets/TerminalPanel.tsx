@@ -1,6 +1,6 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 
 import {
   Button,
@@ -145,7 +145,6 @@ type pending_terminal_session_status = 'creating' | 'failed';
 
 export type TerminalPanelVariant = 'panel' | 'workbench';
 
-const TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX = 3.5;
 const TERMINAL_TAB_SHORTCUT_MAX_INDEX = 8;
 
 export type TerminalPanelSessionPlacementState = Readonly<{
@@ -1247,10 +1246,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return selected;
   });
 
-  const terminalWorkIndicatorTheme = createMemo(() => {
-    return theme.resolvedTheme() === 'light' ? 'light' : 'dark';
-  });
-
   const terminalThemeColors = createMemo<Record<string, string>>(() => {
     const colors = getThemeColors(terminalThemeName()) as Record<string, string>;
     if (userTheme() !== 'system') return colors;
@@ -2339,9 +2334,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return variant === 'workbench' ? panelWorkState() : 'idle';
   });
 
-  const terminalWorkIndicatorThicknessPx = createMemo(() => {
-    return TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX;
-  });
+  const terminalWorkIndicatorLabel = createMemo(() => terminalWorkIndicatorState() === 'active'
+    ? i18n.t('terminal.outputStreaming')
+    : i18n.t('terminal.processRunningDescription'));
 
   const useMobileRecoveryStatusBar = createMemo(() => (
     shouldUseFloeMobileKeyboard() && mobileKeyboardVisible()
@@ -4869,7 +4864,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 mobileToolbarEl = element;
               }}
               tabIndex={-1}
-              class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-2 outline-none"
+              class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background px-2 outline-none"
             >
               <Show when={isMobileLayout()}>
                 <Button
@@ -4897,6 +4892,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 </Button>
               </Show>
               <div class="contents">
+                <Show when={terminalWorkIndicatorState() !== 'idle'}>
+                  <span
+                    class="redeven-terminal-work-status inline-flex h-5 w-5 shrink-0 items-center justify-center text-[var(--redeven-status-success-foreground)]"
+                    data-terminal-work-state={terminalWorkIndicatorState()}
+                    role="img"
+                    aria-label={terminalWorkIndicatorLabel()}
+                    title={terminalWorkIndicatorLabel()}
+                  >
+                    <Show when={terminalWorkIndicatorState() === 'active'} fallback={<Refresh class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />}>
+                      <Activity class="h-3.5 w-3.5" />
+                    </Show>
+                  </span>
+                </Show>
                 <div class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
                   <TerminalSessionChromeIcon avatar={activeToolbarAvatar()} class="h-3.5 w-3.5" />
                   <TerminalSessionTransitionBadge state={activeToolbarTransitionIndicator()} />
@@ -5020,21 +5028,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               ref={setTerminalContextMenuHostEl}
               data-testid="terminal-content"
               data-terminal-work-state={terminalWorkIndicatorState()}
-              data-terminal-work-theme={terminalWorkIndicatorTheme()}
               class="flex-1 min-h-0 relative"
               style={terminalLoadingVars()}
             >
-              <Show when={workIndicatorEnabled()}>
-                <div
-                  class="redeven-terminal-work-indicator"
-                  data-terminal-work-state={terminalWorkIndicatorState()}
-                  data-terminal-work-theme={terminalWorkIndicatorTheme()}
-                  style={{
-                    '--redeven-terminal-work-indicator-size': `${terminalWorkIndicatorThicknessPx()}px`,
-                  }}
-                  aria-hidden="true"
-                />
-              </Show>
               <Show when={searchOpen()}>
                 <TerminalSearchOverlay
                   mobile={isMobileLayout()}

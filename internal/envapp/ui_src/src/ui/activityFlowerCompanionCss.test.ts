@@ -60,18 +60,12 @@ describe('Flower bottom companion visual contract', () => {
     expect(frameRule.body).not.toContain('var(--foreground)');
   });
 
-  it('deepens only dark companions while preserving the light surface mix', () => {
+  it('uses the published opaque popover role in every theme', () => {
     const rules = companionRules(readCompanionCss());
     const baseRule = findRule(rules, '.flower-activity-companion');
-    const darkRule = findRule(rules, 'html.dark .flower-activity-companion');
-
-    expect(baseRule.body).toContain('var(--redeven-surface-main) 95%');
-    expect(baseRule.body).toContain('var(--redeven-surface-shadow-source) 5%');
-    expect(darkRule.body).toContain('var(--redeven-surface-main) 72%');
-    expect(darkRule.body).toContain('var(--redeven-surface-shadow-source) 28%');
-    expect(darkRule.body).toContain('var(--redeven-surface-panel-soft) 30%');
-    expect(darkRule.body).toContain('var(--redeven-surface-panel-elevated) 28%');
-    expect(darkRule.body).toContain('var(--redeven-surface-panel-border) 76%');
+    expect(baseRule.body).toContain('--flower-companion-surface: var(--popover);');
+    expect(baseRule.body).toContain('--flower-companion-border: var(--redeven-stroke-overlay);');
+    expect(rules.some((rule) => rule.selectors.includes('html.dark'))).toBe(false);
   });
 
   it('scopes every drawer child treatment to non-collapsed phases', () => {
@@ -94,24 +88,16 @@ describe('Flower bottom companion visual contract', () => {
     expect(dockGlowRule.body).toBe('box-shadow: none;');
     expect(composerRule.body).toContain('backdrop-filter: none;');
     expect(composerRule.selectors).toContain(':where(:not(.flower-surface-companion-collapsed))');
-    expect(composerRule.body).toContain('var(--redeven-surface-shadow-source)');
+    expect(composerRule.body).toContain('border-color: var(--input);');
+    expect(composerRule.body).toContain('box-shadow: none;');
     expect(composerRule.body).not.toContain('var(--foreground)');
     expect(focusRule).toBeUndefined();
   });
 
-  it('softens the empty-state aura only inside active dark drawers', () => {
-    const rules = companionRules(readCompanionCss());
-    const auraRule = findRule(rules, '.redeven-flower-soft-aura-glow');
-    const breatheRule = findRule(rules, '.redeven-flower-icon-breathe');
-
-    expect(auraRule.selectors).toContain('html.dark .flower-activity-companion:is(');
-    expectDrawerPhases(auraRule);
-    expect(auraRule.body).toContain('animation: none;');
-    expect(auraRule.body).toContain('filter: blur(7px);');
-    expect(auraRule.body).toContain('opacity: 0.28;');
-    expect(breatheRule.selectors).toContain('html.dark .flower-activity-companion:is(');
-    expectDrawerPhases(breatheRule);
-    expect(breatheRule.body).toContain('animation: none;');
-    expect(breatheRule.body).toContain('transform: none;');
+  it('keeps decoration out of the retained companion geometry owner', () => {
+    const css = readCompanionCss();
+    expect(css).not.toContain('soft-aura-glow');
+    expect(css).not.toContain('icon-breathe');
+    expect(css).not.toContain('filter: blur(');
   });
 });

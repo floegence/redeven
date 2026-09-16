@@ -87,14 +87,14 @@ function contrastRatio(first: string, second: string): number {
 }
 
 describe('desktop shell theme native catalog', () => {
-  it('matches the published Floe 0.39 shell theme catalog', () => {
+  it('matches the published shell theme catalog and mode membership', () => {
     const builtInShellThemePresets = publishedShellThemePresets();
     const presetNames = Object.keys(desktopShellThemeCatalog) as DesktopShellThemePreset[];
     expect(presetNames).toEqual(builtInShellThemePresets.map((preset) => preset.name));
-    expect(presetNames).toEqual([
+    expect(new Set(presetNames)).toEqual(new Set([
       ...DESKTOP_SHELL_THEME_PRESETS.light,
       ...DESKTOP_SHELL_THEME_PRESETS.dark,
-    ]);
+    ]));
 
     for (const presetName of presetNames) {
       const entry = desktopShellThemeCatalog[presetName];

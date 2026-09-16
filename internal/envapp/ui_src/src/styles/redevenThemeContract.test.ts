@@ -22,15 +22,11 @@ function readFlowerSettingsSource(): string {
 }
 
 describe('Redeven Env App surface theme contract', () => {
-  it('strengthens Git table gridlines only for Classic Dark', () => {
+  it('uses one quiet Git divider role across themes', () => {
     const src = readRedevenCss();
-
     expect(src).toContain('--git-table-gridline: var(--redeven-stroke-divider);');
-    expect(src).toMatch(
-      /:root\[data-floe-shell-theme='classic-dark'\],[\s\S]*?--git-table-gridline: color-mix\(in srgb, var\(--redeven-stroke-panel\) 88%, var\(--foreground\) 12%\);/,
-    );
-    expect(src).toContain('.git-table-frame .redeven-divider {');
     expect(src).toContain('border-color: var(--git-table-gridline) !important;');
+    expect(src).not.toContain('--git-table-gridline: color-mix');
   });
 
   it('scopes desktop theme transition suppression to shell chrome instead of the full Workbench tree', () => {
@@ -45,98 +41,17 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain("html[data-redeven-theme-switching='true'] .workbench");
   });
 
-  it('defines the light demo palette, root surface family, and paired stroke tokens', () => {
+  it('keeps published shell colors authoritative and control boundaries independent', () => {
     const src = readRedevenCss();
-    const classicDarkStart = src.indexOf(":root[data-floe-shell-theme='classic-dark'],");
-    const classicDarkEnd = src.indexOf('@media (max-width: 960px)', classicDarkStart);
-    const classicDarkScope = src.slice(classicDarkStart, classicDarkEnd);
-
-    expect(src).toContain(":root[data-floe-shell-theme='classic-light'],");
-    expect(src).toContain(":root:not([data-floe-shell-theme]):not(.dark),");
-    expect(src).toContain(":root[data-floe-shell-theme='classic-dark'],");
-    expect(src).toContain(":root:not([data-floe-shell-theme]).dark {");
-    expect(src).not.toContain(':root:not(.dark),\n.light {');
-    expect(src).toContain('--background: #f4f1ed;');
-    expect(src).toContain('--foreground: #202a37;');
-    expect(src).toContain('--primary: #202a37;');
-    expect(src).toContain('--ring: #202a37;');
-    expect(src).toContain('--primary-foreground: #fffdfa;');
-    expect(src).toContain('--secondary: #f1efec;');
-    expect(src).toContain('--muted: #f1efec;');
-    expect(src).toContain('--muted-foreground: #5a687c;');
-    expect(src).toContain('--accent: #e4e1dd;');
-    expect(src).toContain('--sidebar-accent: #e4e1dd;');
-    expect(src).toContain('--border: #d8d3cc;');
-    expect(src).toContain('--input: #ccc5ba;');
-    expect(src).toContain('--sidebar: #eeece9;');
-    expect(src).toContain('--activity-bar: #eeece9;');
-    expect(src).toContain('--activity-bar-foreground: #5a687c;');
-    expect(src).toContain('--chrome-border: #dad6d1;');
-    expect(src).toContain('--sidebar-border: #dad6d1;');
-    expect(src).toContain('--info: #3b82f6;');
-    expect(src).toContain('--warning: #f59e0b;');
-    expect(src).toContain('--redeven-runtime-monitor-cpu-line: var(--redeven-categorical-graph-1);');
-    expect(src).toContain('--redeven-surface-main: #f4f1ed;');
-    expect(src).toContain('--redeven-surface-panel: #f7f4f1;');
-    expect(src).toContain('--redeven-surface-panel-soft: #f1efec;');
-    expect(src).toContain('--redeven-surface-panel-elevated: #fffdfa;');
-    expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
-    expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--redeven-surface-panel) 58%, var(--redeven-surface-panel-elevated) 42%);');
-    expect(src).toContain('--redeven-surface-control-muted: #f1efec;');
-    expect(src).toContain('--redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, var(--redeven-surface-highlight-source) 18%);');
-    expect(src).toContain('--redeven-stroke-panel: var(--redeven-surface-panel-border);');
-    expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);');
-    expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 82%, var(--foreground) 18%);');
-    expect(src).toContain('--redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 76%, var(--foreground) 24%);');
-    expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 74%, var(--foreground) 26%);');
-    expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);');
-    expect(src).toContain('--redeven-link-fg: var(--color-blue-600);');
-    expect(src).toContain('--redeven-link-hover-fg: var(--color-blue-700);');
-    expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 9%, var(--background));');
-    expect(src).toContain('--card: #fffdfa;');
-    expect(src).toContain('--popover: #fffdfa;');
-    expect(src).toContain('--git-browser-selection-source: var(--selection-bg, var(--ring));');
-    expect(src).toContain('--git-browser-selection-accent: var(--ring);');
-    expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 5%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-source: var(--color-blue-600);');
-    expect(src).toContain('--git-browser-selection-accent: var(--color-blue-600);');
-    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 10%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 35%, var(--redeven-stroke-divider));');
-    expect(src).toContain('--git-browser-selection-indicator: var(--git-browser-selection-accent);');
-    expect(src).toContain('--git-browser-focus-ring: var(--git-browser-selection-accent);');
-    expect(src).toContain('--git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 48%, var(--foreground) 52%);');
-    expect(src).toContain('--git-browser-selection-shadow: none;');
-    expect(src).not.toContain(':root {\n  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */\n  --background:');
-
-    expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
-    expect(src).toContain('--border: #59616e;');
-    expect(src).toContain('--input: #68788f;');
-    expect(src).toContain('--chrome-border: #4a5462;');
-    expect(src).toContain('--sidebar-border: var(--chrome-border);');
-    expect(src).toContain('--redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-5);');
-    expect(src).toContain('--redeven-surface-main: var(--redeven-surface-panel);');
-    expect(src).toContain('--redeven-surface-panel-soft: #353942;');
-    expect(src).toContain('--redeven-surface-panel-elevated: #40454f;');
-    expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
-    expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--background) 62%, var(--redeven-surface-panel-elevated) 38%);');
-    expect(src).toContain('--redeven-surface-control-muted: color-mix(in srgb, var(--muted) 56%, var(--background));');
-    expect(src).toContain('--redeven-surface-panel-border: var(--border);');
-    expect(src).toContain('--redeven-stroke-panel: var(--redeven-surface-panel-border);');
-    expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-surface-panel) 60%, var(--foreground) 40%);');
-    expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--redeven-surface-overlay) 56%, var(--foreground) 44%);');
+    for (const token of ['background', 'foreground', 'primary', 'card', 'popover', 'input', 'ring']) {
+      expect(src).not.toMatch(new RegExp('--' + token + ':\\s*#[0-9a-f]', 'i'));
+    }
+    expect(src).toContain('--redeven-surface-main: var(--background);');
+    expect(src).toContain('--redeven-surface-panel: var(--card);');
     expect(src).toContain('--redeven-stroke-control: var(--input);');
-    expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);');
-    expect(src).toContain('--redeven-stroke-divider: #4e5664;');
-    expect(src).toContain('--redeven-link-fg: var(--color-sky-400);');
-    expect(src).toContain('--redeven-link-hover-fg: var(--color-sky-300);');
-    expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 13%, var(--background));');
-    expect(src).toContain('--git-browser-selection-accent: color-mix(in srgb, var(--ring) 92%, var(--foreground) 8%);');
-    expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 1%, var(--redeven-surface-panel));');
-    expect(classicDarkScope).not.toContain('--git-browser-selection-source: var(--color-sky-400);');
-    expect(classicDarkScope).not.toContain('--git-browser-selection-accent: var(--color-sky-400);');
-    expect(classicDarkScope).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 18%, var(--redeven-surface-panel));');
-    expect(classicDarkScope).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 38%, var(--redeven-stroke-divider));');
-    expect(src).toContain('--git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 45%, var(--foreground) 55%);');
+    expect(src).toContain('--redeven-stroke-control-strong: var(--ring);');
+    expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--foreground) 11.5%, var(--redeven-surface-overlay));');
+    expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--foreground) 8.5%, var(--redeven-surface-panel));');
   });
 
   it('keeps the main content surface separate from shell chrome while pairing its Classic Dark strokes', () => {
@@ -151,11 +66,11 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-workbench-default-body-surface: var(--redeven-surface-main);');
     expect(src).not.toContain('--background: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).not.toContain('--muted: color-mix(in srgb, var(--redeven-surface-panel)');
-    expect(src).toContain('--border: #59616e;');
+    expect(src).toContain('--redeven-stroke-control: var(--input);');
     expect(src).not.toContain('--sidebar: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).not.toContain('--activity-bar: color-mix(in srgb, var(--redeven-surface-panel)');
-    expect(src).toContain('--card: #fffdfa;');
-    expect(src).toContain('--popover: #fffdfa;');
+    expect(src).toContain('--redeven-surface-panel: var(--card);');
+    expect(src).toContain('--redeven-surface-overlay: var(--popover, var(--card));');
   });
 
   it('derives one settings hierarchy for every shell theme without Classic-only copies', () => {
@@ -269,8 +184,8 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--flower-chat-surface-border: var(--redeven-surface-panel-border);');
     expect(src).not.toContain('--flower-chat-surface: #f7f4f1;');
     expect(src).not.toContain('--flower-chat-surface: rgb(41, 44, 51);');
-    expect(src.match(/--redeven-surface-panel: #f7f4f1;/g)?.length ?? 0).toBe(1);
-    expect(src.match(/rgb\(41, 44, 51\)/g)?.length ?? 0).toBe(1);
+    expect(src.match(/--redeven-surface-panel: #f7f4f1;/g)?.length ?? 0).toBe(0);
+    expect(src.match(/rgb\(41, 44, 51\)/g)?.length ?? 0).toBe(0);
   });
 
   it('owns shared product colors through semantic aliases and keeps chat shells theme-aware', () => {
@@ -300,21 +215,16 @@ describe('Redeven Env App surface theme contract', () => {
     expect(chatShell).not.toMatch(/#(?:0d1117|0f141b|161b22|2d333b|30363d|58a6ff|3fb950|f85149|e6edf3|8b949e)\b/i);
   });
 
-  it('removes the Flower glow only for the dark-mode activity icon and chat avatar variants', () => {
+  it('leaves brand icon styles with their shared component owner', () => {
     const src = readRedevenCss();
-
-    expect(src).toContain('html.dark .redeven-flower-soft-aura-nav-glow,');
-    expect(src).toContain('html.dark .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {');
-    expect(src).toContain('opacity: 0;');
-    expect(src).toContain('filter: none;');
+    expect(src).not.toContain('.redeven-flower-soft-aura');
   });
 
-  it('defines compact workbench icon support for the Flower launcher slot', () => {
-    const src = readRedevenCss();
-
-    expect(src).toContain('.redeven-flower-soft-aura-workbench-glow {');
-    expect(src).toContain('.redeven-flower-soft-aura-workbench-svg {');
-    expect(src).toContain('html.dark .redeven-flower-soft-aura-workbench-glow {');
+  it('retains compact Workbench brand sizing without glow', () => {
+    const src = fs.readFileSync(new URL('../../../../flower_ui/src/icons/flower-icon.css', import.meta.url), 'utf8');
+    expect(src).toContain('.redeven-flower-soft-aura-workbench-svg');
+    expect(src).toContain('width: 84%');
+    expect(src).not.toMatch(/blur|animation|box-shadow/);
   });
 
   it('keeps the terminal surface focus state free of an outer halo ring', () => {
@@ -337,7 +247,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('scale 120ms ease-out');
     expect(src).toContain(".workbench-widget[data-redeven-workbench-widget-closing='true'] {");
     expect(src).toContain('scale: 0.985;');
-    expect(src).toContain(".redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .redeven-terminal-work-indicator {");
+    expect(src).not.toContain('redeven-terminal-work-indicator');
     expect(src).toContain('transition: none !important;');
   });
 
@@ -359,7 +269,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-loading-curtain__indicator {');
     expect(src).toContain('height: 3px;');
     expect(src).toContain('.redeven-loading-curtain__indicator-bar {');
-    expect(src).toContain('color-mix(in srgb, var(--primary) 78%, var(--redeven-surface-highlight-source) 18%)');
+    expect(src).toContain('background: var(--muted-foreground);');
     expect(src).toContain('animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;');
     expect(src).toContain('@keyframes redeven-loading-curtain-sweep {');
     expect(src).toContain('.redeven-loading-curtain__message {');
@@ -386,13 +296,13 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('perspective: 1400px;');
   });
 
-  it('keeps managed operation text motion optional', () => {
+  it('keeps managed operation labels readable and free of decorative motion', () => {
     const src = readRedevenCss();
 
     expect(src).toContain('.managed-operation-shimmer-text {');
-    expect(src).toContain('animation: managed-operation-text-shimmer 2.4s linear infinite;');
-    expect(src).toContain('@keyframes managed-operation-text-shimmer {');
-    expect(src).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.managed-operation-shimmer-text \{[\s\S]*?animation: none;/u);
+    expect(src).not.toContain('animation: managed-operation-text-shimmer 2.4s linear infinite;');
+    expect(src).not.toContain('@keyframes managed-operation-text-shimmer {');
+    expect(src).toContain('.managed-operation-shimmer-text {\n  color: var(--foreground);\n}');
   });
 
   it('keeps git branch graph details compact and responsive', () => {
@@ -424,47 +334,15 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('.git-branch-history-reveal');
   });
 
-  it('defines a non-interactive terminal work indicator with reduced-motion support', () => {
-    const src = readRedevenCss();
-
-    expect(src).toContain('.redeven-terminal-work-indicator {');
-    expect(src).toContain('pointer-events: none;');
-    expect(src).toContain("--redeven-terminal-work-indicator-size: 3.5px;");
-    expect(src).toContain('inset: calc(-1 * var(--redeven-terminal-work-indicator-outset));');
-    expect(src).toContain('--redeven-terminal-work-indicator-outset: calc(var(--redeven-terminal-work-indicator-size) * 0.28);');
-    expect(src).toContain('--redeven-terminal-work-sky: var(--redeven-status-info);');
-    expect(src).toContain('--redeven-terminal-work-emerald: var(--redeven-status-success);');
-    expect(src).toContain('--redeven-terminal-work-aqua: var(--redeven-categorical-7);');
-    expect(src).toContain('--redeven-terminal-work-bright: var(--foreground);');
-    expect(src).toContain('--redeven-terminal-work-running-line: var(--redeven-status-success);');
-    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-theme='light'] {");
-    expect(src).toContain('--redeven-terminal-work-sky: var(--redeven-status-info);');
-    expect(src).toContain('--redeven-terminal-work-mint: var(--redeven-categorical-8);');
-    expect(src).toContain('--redeven-terminal-work-bright: var(--foreground);');
-    expect(src).toContain('--redeven-terminal-work-running-line: var(--redeven-status-success);');
-    expect(src).toContain('--redeven-terminal-work-running-opacity-low: 0.84;');
-    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='active'] {");
-    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='running'] {");
-    expect(src).toContain('box-shadow:');
-    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='active']::before {");
-    expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='running']::before {");
-    expect(src).toContain('@property --redeven-terminal-work-flow-angle {');
-    expect(src).toContain('conic-gradient(');
-    expect(src).toContain('@keyframes redeven-terminal-work-indicator-flow {');
-    expect(src).toContain('@keyframes redeven-terminal-work-indicator-breathe {');
-    expect(src).toContain('--redeven-terminal-work-flow-angle: 360deg;');
-    expect(src).toContain('background: var(--redeven-terminal-work-running-line);');
-    expect(src).toContain('will-change: background;');
-    expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
-
-    const indicatorCss = src.slice(src.indexOf('.redeven-terminal-work-indicator {'), src.indexOf(':root {'));
-    expect(indicatorCss).not.toContain('transform: rotate');
-    expect(indicatorCss).toContain('drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8)');
-    expect(indicatorCss).toContain('inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.85) var(--redeven-terminal-work-track-glow)');
-    expect(indicatorCss).not.toContain('drop-shadow(0 0 10px');
-    expect(indicatorCss).not.toContain('drop-shadow(0 0 16px');
-    expect(indicatorCss).not.toContain('drop-shadow(0 0 24px');
-    expect(indicatorCss).not.toContain('drop-shadow(0 0 28px');
+  it('keeps terminal activity in local header icons with accessible status', () => {
+    const css = readRedevenCss();
+    const source = fs.readFileSync(new URL('../ui/widgets/TerminalPanel.tsx', import.meta.url), 'utf8');
+    expect(css).not.toContain('redeven-terminal-work-indicator');
+    expect(source).toContain('redeven-terminal-work-status');
+    expect(source).toContain('aria-label={terminalWorkIndicatorLabel()}');
+    expect(source).toContain('motion-reduce:animate-none');
+    expect(source).toContain("if (!workIndicatorEnabled())");
+    expect(source).toContain("variant === 'workbench' ? panelWorkState() : 'idle'");
   });
 
   it('defines reusable semantic surface and divider classes for local Env App consumers', () => {

@@ -13,6 +13,7 @@ const envState = vi.hoisted(() => ({
 const rpcState = vi.hoisted(() => ({
   sessions: [] as any[],
   outputActivityHandler: null as ((event: any) => void) | null,
+  workStateHandler: null as ((event: any) => void) | null,
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -80,7 +81,10 @@ vi.mock('../protocol/redeven_v1', () => ({
         };
       }),
       onExecutionContextUpdate: vi.fn(() => () => undefined),
-      onWorkStateUpdate: vi.fn(() => () => undefined),
+      onWorkStateUpdate: vi.fn((handler: (event: any) => void) => {
+        rpcState.workStateHandler = handler;
+        return () => { rpcState.workStateHandler = null; };
+      }),
     },
     fs: {
       getPathContext: vi.fn(async () => ({ agentHomePathAbs: '/Users/test' })),
@@ -132,6 +136,7 @@ import {
   useTerminalSessionCatalog,
 } from '../services/terminalSessionCatalog';
 import { TerminalPanel } from './TerminalPanel';
+import { useTerminalPreferences } from '../services/terminalPreferences';
 
 let latestCatalog: ReturnType<typeof useTerminalSessionCatalog> = null;
 let disposeRendered: (() => void) | null = null;
@@ -190,6 +195,8 @@ describe('TerminalPanel stock Agent unread integration', () => {
     envState.setViewMode = setViewMode;
     rpcState.sessions = [stockAgentSession('pi')];
     rpcState.outputActivityHandler = null;
+    rpcState.workStateHandler = null;
+    useTerminalPreferences().setWorkIndicatorEnabled(false);
     latestCatalog = null;
     sessionStorage.clear();
   });
@@ -199,6 +206,40 @@ describe('TerminalPanel stock Agent unread integration', () => {
     disposeRendered = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+  });
+
+  it('keeps work activity in the header and honors the existing preference without remounting the session', async () => {
+    envState.setViewMode('workbench');
+    const host = document.createElement('div');
+    document.body.append(host);
+    disposeRendered = render(() => (
+      <TerminalSessionCatalogProvider>
+        <TerminalPanel variant="workbench" workbenchSelected />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.workStateHandler).not.toBeNull());
+    await vi.waitFor(() => expect(host.querySelector('[data-terminal-runtime-session]')).not.toBeNull());
+    const runtime = host.querySelector('[data-terminal-runtime-session]');
+    const publish = (phase: 'working' | 'idle', revision: number) => rpcState.workStateHandler?.({
+      sessionId: 'agent-session',
+      workState: { phase, source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision, updatedAtMs: revision * 10 },
+    });
+    publish('working', 1);
+    expect(host.querySelector('.redeven-terminal-work-status')).toBeNull();
+    useTerminalPreferences().setWorkIndicatorEnabled(true);
+    await vi.waitFor(() => expect(host.querySelector('.redeven-terminal-work-status')?.getAttribute('data-terminal-work-state')).toBe('active'));
+    const indicator = host.querySelector('.redeven-terminal-work-status')!;
+    expect(indicator.getAttribute('aria-label')).toBeTruthy();
+    expect(indicator.querySelector('.animate-spin')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-content"]')?.contains(indicator)).toBe(false);
+    expect(host.querySelector('.redeven-terminal-work-glow')).toBeNull();
+    publish('idle', 2);
+    await vi.waitFor(() => expect(host.querySelector('.redeven-terminal-work-status')).toBeNull());
+    publish('working', 3);
+    await vi.waitFor(() => expect(host.querySelector('.redeven-terminal-work-status')).not.toBeNull());
+    useTerminalPreferences().setWorkIndicatorEnabled(false);
+    expect(host.querySelector('.redeven-terminal-work-status')).toBeNull();
+    expect(host.querySelector('[data-terminal-runtime-session]')).toBe(runtime);
   });
 
   it.each([

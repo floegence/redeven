@@ -20,7 +20,7 @@ function cn(...values: Array<string | undefined | null | false>): string {
   return values.filter(Boolean).join(' ');
 }
 
-const ACTION_POPOVER_EXIT_MS = 180;
+const ACTION_POPOVER_EXIT_MS = 160;
 
 function firstFocusableElement(root: HTMLElement | undefined): HTMLElement | null {
   if (!root) {
@@ -110,7 +110,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
       setClosing(false);
       setClosingFrameHTML(null);
       props.onExitComplete?.();
-    }, ACTION_POPOVER_EXIT_MS);
+    }, window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : ACTION_POPOVER_EXIT_MS);
   });
 
   createEffect(() => {

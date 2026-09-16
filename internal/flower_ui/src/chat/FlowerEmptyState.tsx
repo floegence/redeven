@@ -31,11 +31,9 @@ export type FlowerEmptyStateProps = Readonly<{
 }>;
 
 export const FlowerHeroBadge: Component<{ class?: string }> = (props) => (
-  <span class={cn('flower-empty-hero-badge mb-5 inline-flex h-20 w-20 items-center justify-center rounded-full border border-primary/20 bg-primary/8 shadow-[0_20px_60px_-32px_var(--primary)]', props.class)}>
+  <span class={cn('flower-empty-hero-badge mb-5 inline-flex h-20 w-20 items-center justify-center', props.class)}>
     <FlowerSoftAuraIcon
-      class="redeven-flower-soft-aura-lg h-16 w-16 redeven-flower-icon-breathe"
-      glowClass="animate-[pulse_3s_ease-in-out_1.35s_infinite] motion-reduce:animate-none"
-      iconClass="redeven-flower-icon-spin"
+      class="redeven-flower-soft-aura-lg h-16 w-16"
     />
   </span>
 );
@@ -66,12 +64,12 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
                   onClick={() => props.onSuggestionClick(item.prompt)}
                   disabled={props.disabled}
                   class={cn(
-                    'flower-empty-suggestion group flex cursor-pointer items-start gap-3 rounded-xl border border-border/50 bg-card/40 p-4 text-left backdrop-blur-sm transition-all duration-200',
-                    'hover:border-primary/30 hover:bg-card hover:shadow-lg hover:shadow-primary/5 active:scale-[0.98]',
-                    'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/50 disabled:hover:bg-card/40',
+                    'flower-empty-suggestion group flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors duration-[120ms]',
+                    'hover:bg-accent',
+                    'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-card',
                   )}
                 >
-                  <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-all duration-200 group-hover:scale-110 group-hover:bg-primary/20">
+                  <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
                     <Icon class="h-5 w-5 text-primary" />
                   </div>
                   <div class="min-w-0 flex-1">

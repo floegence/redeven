@@ -141,7 +141,7 @@ function deltaEOK(first: Rgb, second: Rgb): number {
 
 function graphPalette(profile: ThemeProfile): readonly Rgb[] {
   const officialOrder = [1, 3, 0, 2, 4].map((index) => parseColor(profile.charts[index]));
-  if (profile.name === 'classic-light') {
+  if (profile.name === 'classic-light' || profile.name === 'porcelain-light') {
     const foreground = parseColor(profile.foreground);
     officialOrder[1] = mix(officialOrder[1], foreground, 0.65);
     officialOrder[4] = mix(officialOrder[4], foreground, 0.65);
@@ -178,13 +178,13 @@ function runtimeMonitorPalette(profile: ThemeProfile): readonly [Rgb, Rgb, Rgb] 
   return [graph[0], graph[1], graph[4]];
 }
 
-describe('Redeven 24-preset color quality', () => {
+describe('Redeven 26-preset color quality', () => {
   const profiles = publishedThemeProfiles();
 
   it('keeps all published light and dark presets in the executable matrix', () => {
-    expect(profiles).toHaveLength(24);
-    expect(profiles.filter((profile) => profile.mode === 'light')).toHaveLength(11);
-    expect(profiles.filter((profile) => profile.mode === 'dark')).toHaveLength(13);
+    expect(profiles).toHaveLength(26);
+    expect(profiles.filter((profile) => profile.mode === 'light')).toHaveLength(12);
+    expect(profiles.filter((profile) => profile.mode === 'dark')).toHaveLength(14);
   });
 
   it('keeps graph roles visible, adjacent roles distinct, and text roles readable', () => {

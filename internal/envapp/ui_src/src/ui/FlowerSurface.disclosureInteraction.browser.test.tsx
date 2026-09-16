@@ -189,8 +189,8 @@ describe('Activity disclosure interaction', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(row.querySelector('.flower-activity-inline-details')).toBeNull();
     const title = row.querySelector<HTMLElement>('.flower-activity-inline-title')!;
-    expect(window.getComputedStyle(title, '::after').animationName).toBe('flower-activity-title-sweep');
-    expect(window.getComputedStyle(title, '::after').pointerEvents).toBe('none');
+    expect(window.getComputedStyle(title, '::after').animationName).toBe('none');
+    expect(window.getComputedStyle(title, '::after').content).toBe('none');
     await userEvent.click(toggle);
     await waitFor(() => row.querySelector('.flower-activity-terminal-command')?.textContent === 'printf READY');
     const finished = { ...running, status: 'success' as const, payload: { ...running.payload, exit_code: 0, output: 'Ready' } };

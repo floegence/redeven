@@ -403,14 +403,6 @@ function InlineButtonSnakeLoading(props: { class?: string }) {
   );
 }
 
-function CodespaceActionButtonShimmer(props: { active: boolean }) {
-  return (
-    <Show when={props.active}>
-      <span class="redeven-loading-shimmer-overlay" aria-hidden="true" />
-    </Show>
-  );
-}
-
 // Empty state component
 function EmptyState(props: { onCreateClick: () => void }) {
   const i18n = useI18n();
@@ -549,7 +541,6 @@ function CodespaceCard(props: {
                   <InlineButtonSnakeLoading class="mr-1" />
                 </Show>
                 {props.busyAction === "start" ? busyActionLabel() : i18n.t("codespaces.actions.start")}
-                <CodespaceActionButtonShimmer active={props.busyAction === "start"} />
               </Button>
               <Show
                 when={props.desktopOpenAvailable}
@@ -588,7 +579,6 @@ function CodespaceCard(props: {
                       </Show>
                       <span class="hidden sm:inline">{props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}</span>
                       <ChevronDown class="w-3 h-3 text-muted-foreground" />
-                      <CodespaceActionButtonShimmer active={props.busyAction === "open"} />
                     </Button>
                   }
                 />
@@ -612,7 +602,6 @@ function CodespaceCard(props: {
                 <InlineButtonSnakeLoading class="mr-1" />
               </Show>
               <span class="truncate">{props.busyAction === "open" ? busyActionLabel() : primaryOpenLabel()}</span>
-              <CodespaceActionButtonShimmer active={props.busyAction === "open"} />
             </Button>
             <Show when={props.desktopOpenAvailable}>
               <Dropdown

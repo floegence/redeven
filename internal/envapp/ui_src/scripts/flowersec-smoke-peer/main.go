@@ -181,6 +181,29 @@ func newHandlers(nativeCode bool) (*flowersec.SessionHandlers, error) {
 		return nil, err
 	}
 	registrations := map[uint32]flowersec.RPCHandler{
+		1001: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			entries := []map[string]any{}
+			for _, name := range []string{"src", "assets", "package.json", "README.md"} {
+				kind := "file"
+				if name == "src" || name == "assets" {
+					kind = "folder"
+				}
+				entries = append(entries, map[string]any{"name": name, "path": "/workspace/" + name, "is_directory": kind == "folder", "entry_type": kind, "resolved_type": kind, "size": 2048, "modified_at": 1789516800000, "created_at": 1789516800000})
+			}
+			return map[string]any{"entries": entries}, nil
+		},
+		1010: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			return map[string]any{"agent_home_path_abs": "/workspace", "home_path_abs": "/workspace", "default_root_id": "home", "roots": []map[string]any{{"id": "home", "label": "Workspace", "path": "/workspace", "path_abs": "/workspace", "kind": "home", "permissions": map[string]bool{"read": true, "write": true}}}}, nil
+		},
+		1101: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			return map[string]any{"available": false, "git_available": true, "unavailable_reason": "not_a_repository"}, nil
+		},
+		1106: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			return map[string]any{"repo_root_path": "/workspace", "local": []any{}, "remote": []any{}}, nil
+		},
+		1130: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			return map[string]bool{"workspace_revision_v1": true, "workspace_path_status_v1": true, "workspace_directory_scope_v1": true, "stash_section_diff_v1": true}, nil
+		},
 		4001: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
 			return map[string]any{"server_time_ms": time.Now().UnixMilli()}, nil
 		},

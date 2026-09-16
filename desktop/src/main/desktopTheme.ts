@@ -5,7 +5,6 @@ import {
 
 import {
   DESKTOP_SHELL_THEME_DEFAULTS,
-  DESKTOP_SHELL_THEME_PRESETS,
   DESKTOP_THEME_SEMANTIC_PALETTE_VERSION,
   isDesktopCssColor,
   isDesktopHexColor,
@@ -47,16 +46,6 @@ function nativeHexColor(preset: FloeThemePreset, value: string | undefined, role
   return value.toLowerCase() as `#${string}`;
 }
 
-const classicLightWindow = {
-  backgroundColor: '#f4f1ed',
-  symbolColor: '#202a37',
-} as const satisfies DesktopWindowThemeSnapshot;
-
-const classicDarkWindow = {
-  backgroundColor: '#0e121b',
-  symbolColor: '#f9fafb',
-} as const satisfies DesktopWindowThemeSnapshot;
-
 function semanticPaletteForPublishedPreset(
   name: DesktopShellThemePreset,
 ): DesktopThemeSemanticPalette {
@@ -82,23 +71,12 @@ function windowSnapshotForPublishedPreset(name: DesktopShellThemePreset): Deskto
   const preset = publishedPreset(name);
   const semantic = semanticPaletteForPublishedPreset(name);
   return {
-    backgroundColor: name === 'classic-light'
-      ? classicLightWindow.backgroundColor
-      : name === 'classic-dark'
-        ? classicDarkWindow.backgroundColor
-        : nativeHexColor(preset, preset.preview?.background, 'preview background'),
-    symbolColor: name === 'classic-light'
-      ? classicLightWindow.symbolColor
-      : name === 'classic-dark'
-        ? classicDarkWindow.symbolColor
-        : nativeHexColor(preset, semantic.foreground, 'foreground'),
+    backgroundColor: nativeHexColor(preset, preset.preview?.background, 'preview background'),
+    symbolColor: nativeHexColor(preset, semantic.foreground, 'foreground'),
   };
 }
 
-const allPresetNames = [
-  ...DESKTOP_SHELL_THEME_PRESETS.light,
-  ...DESKTOP_SHELL_THEME_PRESETS.dark,
-] as readonly DesktopShellThemePreset[];
+const allPresetNames = builtInShellThemePresets.map((preset) => preset.name);
 
 export const desktopShellThemeCatalog = Object.fromEntries(
   allPresetNames.map((name) => [name, {

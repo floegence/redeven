@@ -213,7 +213,7 @@ afterEach(() => {
 describe('Settings theme hierarchy', () => {
   it.each(['standard', 'soft-neumorphic'])('keeps structure quiet and selection clear in every built-in shell theme with %s material', async (material) => {
     document.documentElement.dataset.floeSurfaceStyle = material;
-    expect(builtInShellThemePresets).toHaveLength(24);
+    expect(builtInShellThemePresets).toHaveLength(26);
 
     for (const preset of builtInShellThemePresets) {
       document.body.replaceChildren();

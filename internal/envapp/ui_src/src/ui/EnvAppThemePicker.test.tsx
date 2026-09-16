@@ -90,14 +90,14 @@ describe('EnvAppThemePicker', () => {
     return trigger!;
   }
 
-  it('shows all 11 light themes, including the original Classic Light preset', () => {
+  it('shows all 12 light themes, including Classic Light and Porcelain Light', () => {
     const { dispose } = mountPicker();
     try {
       const trigger = openPicker();
       const presets = Array.from(host.querySelectorAll<HTMLElement>('[data-envapp-theme-preset]'));
 
       expect(trigger.getAttribute('aria-expanded')).toBe('true');
-      expect(presets).toHaveLength(11);
+      expect(presets).toHaveLength(12);
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-light');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('github-light');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-dark');
@@ -107,7 +107,7 @@ describe('EnvAppThemePicker', () => {
     }
   });
 
-  it('shows all 13 dark themes and selects Nord without changing the source', () => {
+  it('shows all 14 dark themes and selects Nord without changing the source', () => {
     themeHarness.setSource('dark');
     themeHarness.setResolved('dark');
     const { dispose, onSourceChange, onShellThemeChange } = mountPicker();
@@ -116,7 +116,7 @@ describe('EnvAppThemePicker', () => {
       const presets = Array.from(host.querySelectorAll<HTMLElement>('[data-envapp-theme-preset]'));
       const nord = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="nord"]');
 
-      expect(presets).toHaveLength(13);
+      expect(presets).toHaveLength(14);
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-dark');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-light');
       nord?.click();

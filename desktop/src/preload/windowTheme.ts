@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { desktopWindowThemeSnapshotForResolvedTheme } from '../main/desktopTheme';
 
 import {
   DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
@@ -65,10 +66,7 @@ function fallbackDesktopThemeSnapshot(): DesktopRendererThemeSnapshot {
     resolvedTheme: 'light',
     shellThemes: { ...DESKTOP_SHELL_THEME_DEFAULTS },
     activeShellTheme: DESKTOP_SHELL_THEME_DEFAULTS.light,
-    window: {
-      backgroundColor: '#f4f1ed',
-      symbolColor: '#202a37',
-    },
+    window: desktopWindowThemeSnapshotForResolvedTheme('light'),
   };
 }
 

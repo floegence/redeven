@@ -49,6 +49,10 @@ const npmLicenseOverrides = new Map([
 ]);
 
 const npmCoordinateLicenseOverrides = new Map([
+  ['@floegence/flowersec-node-native-darwin-arm64@5.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@floegence/flowersec-node-native-darwin-x64@5.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@floegence/flowersec-node-native-linux-arm64-gnu@5.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@floegence/flowersec-node-native-linux-x64-gnu@5.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@floegence/redeven-service-templates@0.6.0', { license: 'MIT', note: 'Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field.' }],
 	['@noble/hashes@2.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['react@19.2.8', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],

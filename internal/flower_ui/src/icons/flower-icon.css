@@ -1,0 +1,14 @@
+.redeven-flower-soft-aura {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.redeven-flower-soft-aura-primary { color: var(--primary); }
+.redeven-flower-soft-aura-current { color: inherit; }
+.redeven-flower-soft-aura-svg { width: 76%; height: 76%; flex-shrink: 0; }
+.redeven-flower-soft-aura-nav-svg { width: 88%; height: 88%; }
+.redeven-flower-soft-aura-workbench-svg { width: 84%; height: 84%; }
+.redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-svg { width: 86%; height: 86%; }
+.redeven-flower-soft-aura-lg .redeven-flower-soft-aura-svg { width: 64%; height: 64%; }

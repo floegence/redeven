@@ -24,6 +24,9 @@ search fields, path editing, and fields with prefixes or suffixes. Focus within
 that boundary changes its border color without an additional outline, ring,
 spaced contour, glow, background change, or focus shadow. Focus never changes
 border width, padding, or dimensions. Underlined inputs retain their underline.
+The input boundary uses the published input role, independently of the weaker
+8.5% divider and 11.5% panel decoration. Reducing decorative contrast must
+never weaken input or keyboard-focus recognition.
 
 Errors use `aria-invalid` and preserve error color. Disabled controls cannot
 acquire an interactive focus appearance. Readonly inputs remain focusable.

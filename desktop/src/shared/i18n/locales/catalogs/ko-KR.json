@@ -883,6 +883,8 @@
       "changeFailed": "화면 모양을 업데이트하지 못했습니다. 다시 시도하세요.",
       "presets": {
         "classic-light": "클래식 라이트",
+        "porcelain-light": "포슬린 라이트",
+        "porcelain-dark": "포슬린 다크",
         "paper": "페이퍼",
         "mist": "미스트",
         "meadow": "메도우",

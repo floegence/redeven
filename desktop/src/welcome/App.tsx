@@ -9704,21 +9704,6 @@ function EnvironmentPrimaryActionPanel(
                       <Refresh class="h-3.5 w-3.5" />
                     </Show>
                   </Button>
-                  <Presence>
-                    <Show when={loading()}>
-                      <Motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.25 }}
-                        class="redeven-welcome-loading-shimmer-overlay"
-                        data-shimmer-surface={welcomeLoadingShimmerSurface(
-                          item.emphasis === 'primary' ? 'default' : 'outline',
-                        )}
-                        aria-hidden="true"
-                      />
-                    </Show>
-                  </Presence>
                 </div>
               );
             }}
@@ -9756,12 +9741,6 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
     default:
       return null;
   }
-}
-
-function welcomeLoadingShimmerSurface(
-  variant: EnvironmentActionModel['variant'],
-): 'primary' | 'surface' {
-  return variant === 'outline' ? 'surface' : 'primary';
 }
 
 function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
@@ -9960,7 +9939,6 @@ function EnvironmentSplitActionButton(
   const popoverOpen = createMemo(
     () => progressPanelVisible() || (props.guidanceOpen && popoverOverlay() !== undefined),
   );
-  const shimmerBlocked = createMemo(() => (primaryProgressPresentation() ? false : blockedPrimaryActionDisabled()));
   const primaryButtonClass = createMemo(() =>
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0'),
   );
@@ -10279,21 +10257,6 @@ function EnvironmentSplitActionButton(
             </Show>
           </DesktopActionPopover>
         </Show>
-        <Presence>
-          <Show when={props.operationState.actionsDisabled}>
-            <Motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-welcome-loading-shimmer-overlay'}
-              data-shimmer-surface={
-                shimmerBlocked() ? undefined : welcomeLoadingShimmerSurface(props.presentation.primary_action.variant)
-              }
-              aria-hidden="true"
-            />
-          </Show>
-        </Presence>
       </div>
       <Show when={hasMenuActions()}>
         <button
@@ -10612,7 +10575,6 @@ function EnvironmentConnectionCard(
               <FlowerSoftAuraIcon
                 class="redeven-environment-card__flower-aura"
                 iconClass="redeven-environment-card__flower-icon"
-                glowClass="redeven-environment-card__flower-glow"
               />
             </button>
           </DesktopTooltip>
@@ -13124,19 +13086,6 @@ function GatewayActionPanel(props: Readonly<{
                 <GatewaySourceActionIcon intent={action().intent} />
                 <span>{localizedPanelActionLabel(action())}</span>
               </Button>
-              <Presence>
-                <Show when={props.foregroundActionBusy(action())}>
-                  <Motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    class="redeven-welcome-loading-shimmer-overlay"
-                    data-shimmer-surface="primary"
-                    aria-hidden="true"
-                  />
-                </Show>
-              </Presence>
             </div>
           </div>
         )}

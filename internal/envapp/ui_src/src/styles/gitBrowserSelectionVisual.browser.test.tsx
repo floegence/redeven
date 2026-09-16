@@ -107,7 +107,7 @@ afterEach(() => {
 
 describe('Git browser rendered selection contract', () => {
   it('keeps selected, hovered, focused, and current states distinct in every built-in theme', async () => {
-    expect(builtInShellThemePresets).toHaveLength(24);
+    expect(builtInShellThemePresets).toHaveLength(26);
 
     for (const preset of builtInShellThemePresets) {
       document.body.replaceChildren();
@@ -150,7 +150,7 @@ describe('Git browser rendered selection contract', () => {
       expect(currentOnSelectedStyle.color, `${preset.name} current selected color`).toBe(currentStyle.color);
       expect(currentOnSelectedStyle.backgroundColor, `${preset.name} current selected background`).toBe(currentStyle.backgroundColor);
       expect(currentOnSelectedStyle.borderColor, `${preset.name} current selected border`).toBe(currentStyle.borderColor);
-      if (preset.name !== 'classic-light') {
+      if (preset.name !== 'classic-light' && preset.name !== 'porcelain-light') {
         expect(deltaEOK(selectionSource, themeSelection), `${preset.name} native selection source`).toBeLessThanOrEqual(0.004);
         expect(deltaEOK(selectionAccent, themeRing), `${preset.name} native focus accent`).toBeLessThanOrEqual(0.04);
       }

@@ -1228,6 +1228,8 @@ export const enUS = defineDictionary({
       changeFailed: 'Could not update appearance. Try again.',
       presets: {
         'classic-light': 'Classic Light',
+        'porcelain-light': 'Porcelain Light',
+        'porcelain-dark': 'Porcelain Dark',
         paper: 'Paper',
         mist: 'Mist',
         meadow: 'Meadow',

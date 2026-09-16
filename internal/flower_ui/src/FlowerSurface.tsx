@@ -1261,6 +1261,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     { defer: false },
   ));
   const transcriptScroll = createFlowerScrollTailController({
+    canFollowLatest: () => selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0,
     onUserInteraction: () => { if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal(); },
     reducedMotionPreferred,
     requestAnimationFrame: requestTranscriptAnimationFrame,
@@ -10162,7 +10163,7 @@ webSearch: model.web_search,
   const warmupPanel = () => (
     <div class="flower-warmup" role="status" aria-live="polite" aria-label={warmupTitle()}>
       <div class="flower-warmup-panel">
-        <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
+        <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14" />
         <div class="flower-warmup-copy">
           <div class="flower-warmup-eyebrow">{warmupPhaseLabel()}</div>
           <h2>{warmupTitle()}</h2>

@@ -89,13 +89,14 @@ describe('Flower setup browser presentation', () => {
 
     const emptyState = runtime.querySelector('.flower-empty-state') as HTMLElement;
     const setupInline = runtime.querySelector('.flower-setup-inline') as HTMLElement;
-    const iconGlow = emptyState.querySelector('.redeven-flower-soft-aura-glow') as HTMLElement;
-    const iconGlowStyle = getComputedStyle(iconGlow);
+    const icon = emptyState.querySelector('.redeven-flower-soft-aura') as HTMLElement;
+    const iconStyle = getComputedStyle(icon);
 
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
     expect(setupInline.textContent).toContain('Set up a model provider to start chatting.');
-    expect(iconGlowStyle.backgroundImage).not.toBe('none');
-    expect(iconGlowStyle.filter).toContain('blur');
+    expect(emptyState.querySelector('.redeven-flower-soft-aura-glow')).toBeNull();
+    expect(iconStyle.filter).toBe('none');
+    expect(iconStyle.animationName).toBe('none');
   });
 
   it('shows both provider setup destinations clearly at narrow widths', async () => {

@@ -16,7 +16,7 @@ does not prove the user can see a frame.
 
 # Contract
 
-Each safe completed action returns target ID, target display name, execution location, an action summary, a safety decision, and an after-frame attachment. Attachment descriptors contain an opaque `computer://` resource reference, MIME, byte size, and SHA-256. Provider renderers resolve bytes only at request time; durable state stores descriptor and hash, never base64. A resolver error, unknown reference, changed bytes, or unsupported model capability is an explicit error.
+Each safe completed action returns target ID and name, execution location, summary, safety decision, and an after-frame attachment. Descriptors contain an opaque `computer://` reference, MIME, byte size, and SHA-256. Providers resolve bytes at request time; durable state stores descriptor and hash, never base64. Resolution failure, unknown references, changed bytes, and unsupported model capabilities fail explicitly.
 
 The Stage uses the published Floe `FloatingWindow` for its title bar, drag,
 resize, maximize, and close controls. Its body contains decoded pixels only.
@@ -67,7 +67,7 @@ drains within five seconds so hiding the image does not destroy a healthy
 browser session. Late pixels are discarded. Action cancellation retains its
 existing adapter interruption boundary. The sampler stop waits for capture to exit, and an old stop cannot cancel a replacement session. The viewer requests capture through its authenticated workspace observer and the thread media endpoint can resolve that active session's bounded samples. Completion, viewer hiding, thread or target changes, and disconnect retire live samples in the UI; the viewer then resolves the durable action keyframe. Reopening must never prefer a retired live reference over that keyframe. Continuous viewing and sensitive-page suspension still require their complete product qualification; decoded action frames alone do not prove continuous-view support.
 
-Screenshot identity crosses Floret v7.12.0's published `ActivityPresentation.target_refs` boundary as `kind: computer_frame`, with a `computer://<target>/<sha256>` opaque `resource_ref` and target display label. Navigable `uri` is not the media contract. The renderer remains `structured`; custom frame fields do not belong to its closed payload. Redeven's public timeline sanitizer preserves only hash-addressed computer frame references under that kind. Both Env App and Desktop Welcome resolve the same reference through the authenticated thread media endpoint into a short-lived Blob URL. Desktop uses its existing authorized Runtime IPC request channel to carry PNG bytes as `Uint8Array`; runtime credentials stay in main. No opaque reference is assigned directly to an image source, and no HTTP image fallback bypasses this boundary.
+Screenshot identity uses Floret v7.12.0's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. The public timeline sanitizer preserves only hash-addressed references of this kind. Env App and Desktop Welcome resolve them through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
 
 Live capture requires the target's currently active thread lease at sampler
 startup and before every observation. A historical keyframe permits reading
@@ -84,15 +84,13 @@ maps product data and preserves admission, cancellation, and event semantics;
 it does not independently estimate the DeepSeek intermediate DTO. Large images,
 tool results, and replay must retain their exact transmitted bytes.
 
-Built Desktop qualification listens read-only to the existing preload workspace
-stream; Linux Webtop uses CDP's passive copy of the existing HTTP workspace
-stream. Both run the same Composer scenarios and hash decoded Stage Blob bytes.
-They require matching thread, target
-and image hash across multiple live events in each turn, not just tool keyframes
-or a successful first turn. Animated fixture markers prove pixels continue to
-change without requiring additional model actions. Observation
-stops before private takeover; no image bytes or private input enter this report.
-A missing native or browser live-frame match fails its explicit scope.
+Desktop qualification observes the preload workspace stream; Linux Webtop uses
+CDP's passive HTTP workspace stream copy. Both run the same Composer scenarios
+and hash decoded Stage Blob bytes, requiring matching thread, target and image
+hash across multiple live events in every turn. Animated fixture markers prove
+pixels change without more model actions. Observation stops before private
+takeover; reports exclude image bytes and private input. A missing native or
+browser live-frame match fails that scope.
 
 `scripts/check_computer_use_webtop.sh` is an opt-in Linux browser and X11 UI
 qualification entrypoint. It requires the local DeepSeek configuration and an

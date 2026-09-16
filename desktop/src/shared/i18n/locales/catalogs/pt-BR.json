@@ -883,6 +883,8 @@
       "changeFailed": "Não foi possível atualizar a aparência. Tente novamente.",
       "presets": {
         "classic-light": "Clássico claro",
+        "porcelain-light": "Porcelana clara",
+        "porcelain-dark": "Porcelana escura",
         "paper": "Papel",
         "mist": "Névoa",
         "meadow": "Prado",

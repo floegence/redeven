@@ -170,20 +170,13 @@
 
 .redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .workbench-widget {
   transition:
-    opacity 120ms ease-out,
-    scale 120ms ease-out,
-    border-color 120ms ease-out !important;
+    opacity 120ms ease-out, scale 120ms ease-out, border-color 120ms ease-out !important;
 }
 
 .workbench-widget[data-redeven-workbench-widget-closing='true'] {
   opacity: 0;
   scale: 0.985;
   pointer-events: none !important;
-}
-
-.redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .redeven-terminal-work-indicator {
-  opacity: 0 !important;
-  transition: none !important;
 }
 
 .redeven-workbench-page .workbench-surface {
@@ -194,243 +187,6 @@
   display: none !important;
 }
 
-@property --redeven-terminal-work-flow-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
-.redeven-terminal-work-indicator {
-  position: absolute;
-  inset: calc(-1 * var(--redeven-terminal-work-indicator-outset));
-  z-index: 12;
-  pointer-events: none;
-  overflow: visible;
-  isolation: isolate;
-  border-radius: inherit;
-  opacity: 0;
-  transition:
-    opacity 180ms ease-out,
-    box-shadow 180ms ease-out;
-  --redeven-terminal-work-cyan: var(--redeven-categorical-2);
-  --redeven-terminal-work-sky: var(--redeven-status-info);
-  --redeven-terminal-work-teal: var(--redeven-categorical-3);
-  --redeven-terminal-work-emerald: var(--redeven-status-success);
-  --redeven-terminal-work-aqua: var(--redeven-categorical-7);
-  --redeven-terminal-work-mint: var(--redeven-categorical-8);
-  --redeven-terminal-work-bright: var(--foreground);
-  --redeven-terminal-work-running-line: var(--redeven-status-success);
-  --redeven-terminal-work-track-opacity-active: 0.96;
-  --redeven-terminal-work-track-opacity-running: 0.84;
-  --redeven-terminal-work-flow-opacity-active: 1;
-  --redeven-terminal-work-flow-opacity-running: 0;
-  --redeven-terminal-work-running-opacity-low: 0.7;
-  --redeven-terminal-work-running-opacity-high: 1;
-  --redeven-terminal-work-track-outline: color-mix(in srgb, var(--redeven-terminal-work-cyan) 74%, transparent);
-  --redeven-terminal-work-track-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 40%, transparent);
-  --redeven-terminal-work-track-shine: color-mix(in srgb, var(--redeven-terminal-work-bright) 58%, transparent);
-  --redeven-terminal-work-flow-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 86%, transparent);
-  --redeven-terminal-work-flow-spread: color-mix(in srgb, var(--redeven-terminal-work-sky) 60%, transparent);
-  --redeven-terminal-work-active-outer-stroke: color-mix(in srgb, var(--redeven-terminal-work-cyan) 34%, transparent);
-  --redeven-terminal-work-active-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-teal) 46%, transparent);
-  --redeven-terminal-work-active-inner-glow: color-mix(in srgb, var(--redeven-terminal-work-cyan) 18%, transparent);
-  --redeven-terminal-work-running-outer-stroke: color-mix(in srgb, var(--redeven-terminal-work-running-line) 28%, transparent);
-  --redeven-terminal-work-running-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 30%, transparent);
-  --redeven-terminal-work-running-inner-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 14%, transparent);
-  --redeven-terminal-work-indicator-size: 3.5px;
-  --redeven-terminal-work-indicator-outset: calc(var(--redeven-terminal-work-indicator-size) * 0.28);
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-theme='light'] {
-  --redeven-terminal-work-cyan: var(--redeven-categorical-2);
-  --redeven-terminal-work-sky: var(--redeven-status-info);
-  --redeven-terminal-work-teal: var(--redeven-categorical-3);
-  --redeven-terminal-work-emerald: var(--redeven-status-success);
-  --redeven-terminal-work-aqua: var(--redeven-categorical-7);
-  --redeven-terminal-work-mint: var(--redeven-categorical-8);
-  --redeven-terminal-work-bright: var(--foreground);
-  --redeven-terminal-work-running-line: var(--redeven-status-success);
-  --redeven-terminal-work-track-opacity-active: 1;
-  --redeven-terminal-work-track-opacity-running: 0.96;
-  --redeven-terminal-work-running-opacity-low: 0.84;
-  --redeven-terminal-work-track-outline: color-mix(in srgb, var(--redeven-status-info) 90%, var(--background) 10%);
-  --redeven-terminal-work-track-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 60%, transparent);
-  --redeven-terminal-work-track-shine: color-mix(in srgb, var(--redeven-terminal-work-bright) 74%, var(--redeven-surface-highlight-source) 26%);
-  --redeven-terminal-work-flow-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 82%, transparent);
-  --redeven-terminal-work-flow-spread: color-mix(in srgb, var(--redeven-terminal-work-sky) 52%, transparent);
-  --redeven-terminal-work-active-outer-stroke: color-mix(in srgb, var(--redeven-status-info) 70%, transparent);
-  --redeven-terminal-work-active-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-aqua) 50%, transparent);
-  --redeven-terminal-work-active-inner-glow: color-mix(in srgb, var(--redeven-categorical-2) 24%, transparent);
-  --redeven-terminal-work-running-outer-stroke: color-mix(in srgb, var(--redeven-terminal-work-running-line) 44%, transparent);
-  --redeven-terminal-work-running-outer-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 36%, transparent);
-  --redeven-terminal-work-running-inner-glow: color-mix(in srgb, var(--redeven-terminal-work-running-line) 16%, transparent);
-}
-
-.redeven-terminal-work-indicator::before,
-.redeven-terminal-work-indicator::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  padding: var(--redeven-terminal-work-indicator-size);
-  border-radius: inherit;
-  box-sizing: border-box;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-.redeven-terminal-work-indicator::before {
-  z-index: 1;
-  --redeven-terminal-work-flow-angle: 0deg;
-  background: conic-gradient(
-    from var(--redeven-terminal-work-flow-angle),
-    transparent 0deg,
-    color-mix(in srgb, var(--redeven-terminal-work-sky) 18%, transparent) 36deg,
-    color-mix(in srgb, var(--redeven-terminal-work-aqua) 36%, transparent) 62deg,
-    color-mix(in srgb, var(--redeven-terminal-work-mint) 18%, transparent) 90deg,
-    transparent 116deg,
-    transparent 154deg,
-    color-mix(in srgb, var(--redeven-terminal-work-sky) 20%, transparent) 180deg,
-    color-mix(in srgb, var(--redeven-terminal-work-cyan) 48%, transparent) 208deg,
-    color-mix(in srgb, var(--redeven-terminal-work-aqua) 76%, transparent) 238deg,
-    var(--redeven-terminal-work-teal) 264deg,
-    var(--redeven-terminal-work-emerald) 286deg,
-    var(--redeven-terminal-work-mint) 306deg,
-    var(--redeven-terminal-work-bright) 324deg,
-    var(--redeven-terminal-work-cyan) 338deg,
-    color-mix(in srgb, var(--redeven-terminal-work-sky) 68%, transparent) 350deg,
-    transparent 360deg
-  );
-  filter:
-    drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8) var(--redeven-terminal-work-flow-glow))
-    drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.35) var(--redeven-terminal-work-flow-spread));
-  opacity: 0;
-  will-change: background;
-}
-
-.redeven-terminal-work-indicator::after {
-  z-index: 0;
-  box-shadow:
-    inset 0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.1) var(--redeven-terminal-work-track-outline),
-    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.85) var(--redeven-terminal-work-track-glow),
-    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.38) var(--redeven-terminal-work-track-shine);
-  filter: drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.9) var(--redeven-terminal-work-track-glow));
-  opacity: 0;
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='active']::after {
-  background: conic-gradient(
-    from 0deg,
-    var(--redeven-terminal-work-sky),
-    var(--redeven-terminal-work-cyan),
-    var(--redeven-terminal-work-teal),
-    var(--redeven-terminal-work-emerald),
-    var(--redeven-terminal-work-mint),
-    var(--redeven-terminal-work-sky)
-  );
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='running']::after {
-  background: var(--redeven-terminal-work-running-line);
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='active'],
-.redeven-terminal-work-indicator[data-terminal-work-state='running'] {
-  opacity: 1;
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='active'] {
-  box-shadow:
-    0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.12) var(--redeven-terminal-work-active-outer-stroke),
-    0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.35) var(--redeven-terminal-work-active-outer-glow),
-    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8) var(--redeven-terminal-work-active-inner-glow);
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='running'] {
-  animation: redeven-terminal-work-indicator-breathe 6.2s ease-in-out infinite;
-  box-shadow:
-    0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.12) var(--redeven-terminal-work-running-outer-stroke),
-    0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.8) var(--redeven-terminal-work-running-outer-glow),
-    inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 1) var(--redeven-terminal-work-running-inner-glow);
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='active']::before {
-  animation: redeven-terminal-work-indicator-flow 4.2s linear infinite;
-  opacity: var(--redeven-terminal-work-flow-opacity-active);
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='active']::after {
-  opacity: var(--redeven-terminal-work-track-opacity-active);
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='running']::before {
-  animation: none;
-  opacity: var(--redeven-terminal-work-flow-opacity-running);
-}
-
-.redeven-terminal-work-indicator[data-terminal-work-state='running']::after {
-  animation: redeven-terminal-work-indicator-track-breathe 6.2s ease-in-out infinite;
-  opacity: var(--redeven-terminal-work-track-opacity-running);
-}
-
-@keyframes redeven-terminal-work-indicator-flow {
-  from {
-    --redeven-terminal-work-flow-angle: 0deg;
-  }
-
-  to {
-    --redeven-terminal-work-flow-angle: 360deg;
-  }
-}
-
-@keyframes redeven-terminal-work-indicator-breathe {
-  0%,
-  100% {
-    opacity: var(--redeven-terminal-work-running-opacity-low);
-    box-shadow:
-      0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.1) var(--redeven-terminal-work-running-outer-stroke),
-      0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.3) var(--redeven-terminal-work-running-outer-glow),
-      inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.8) var(--redeven-terminal-work-running-inner-glow);
-  }
-
-  45% {
-    opacity: var(--redeven-terminal-work-running-opacity-high);
-    box-shadow:
-      0 0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.2) var(--redeven-terminal-work-running-outer-stroke),
-      0 0 calc(var(--redeven-terminal-work-indicator-size) * 2.6) var(--redeven-terminal-work-running-outer-glow),
-      inset 0 0 calc(var(--redeven-terminal-work-indicator-size) * 1.5) var(--redeven-terminal-work-running-inner-glow);
-  }
-}
-
-@keyframes redeven-terminal-work-indicator-track-breathe {
-  0%,
-  100% {
-    filter:
-      drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 0.9) var(--redeven-terminal-work-track-glow))
-      saturate(1.02)
-      brightness(0.92);
-  }
-
-  45% {
-    filter:
-      drop-shadow(0 0 calc(var(--redeven-terminal-work-indicator-size) * 2.4) var(--redeven-terminal-work-track-glow))
-      saturate(1.35)
-      brightness(1.18);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .redeven-terminal-work-indicator[data-terminal-work-state='running'],
-  .redeven-terminal-work-indicator[data-terminal-work-state='running']::after,
-  .redeven-terminal-work-indicator::before {
-    animation: none !important;
-  }
-}
 
 .redeven-terminal-output-wave-bar {
   animation: redeven-terminal-output-wave 1.1s ease-in-out infinite;
@@ -482,15 +238,15 @@
   --redeven-surface-panel-soft: var(--muted);
   --redeven-surface-panel-elevated: var(--popover, var(--card));
   --redeven-surface-overlay: var(--popover, var(--card));
-  --redeven-surface-control: color-mix(in srgb, var(--card) 84%, var(--background) 16%);
+  --redeven-surface-control: color-mix(in srgb, var(--card) 50%, var(--background));
   --redeven-surface-control-muted: color-mix(in srgb, var(--muted) 74%, var(--background) 26%);
-  --redeven-surface-panel-border: color-mix(in srgb, var(--border) 84%, var(--foreground) 16%);
+  --redeven-surface-panel-border: color-mix(in srgb, var(--foreground) 11.5%, var(--redeven-surface-panel));
   --redeven-stroke-panel: var(--redeven-surface-panel-border);
-  --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);
-  --redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 78%, var(--foreground) 22%);
-  --redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);
-  --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 72%, var(--foreground) 28%);
-  --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);
+  --redeven-stroke-panel-strong: color-mix(in srgb, var(--foreground) 16%, var(--redeven-surface-panel));
+  --redeven-stroke-overlay: color-mix(in srgb, var(--foreground) 11.5%, var(--redeven-surface-overlay));
+  --redeven-stroke-control: var(--input);
+  --redeven-stroke-control-strong: var(--ring);
+  --redeven-stroke-divider: color-mix(in srgb, var(--foreground) 8.5%, var(--redeven-surface-panel));
   /* Settings own one semantic hierarchy across every Floe shell preset. */
   --redeven-settings-selection-source: var(--ring, var(--primary));
   --redeven-settings-contrast-source: var(--redeven-surface-shadow-source);
@@ -639,45 +395,10 @@
 }
 
 :root[data-floe-shell-theme='classic-light'],
-:root:not([data-floe-shell-theme]):not(.dark),
-:root:not([data-floe-shell-theme]).light {
-  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */
-  --background: #f4f1ed;
-  --foreground: #202a37;
-  --primary: #202a37;
-  --ring: #202a37;
-  --primary-foreground: #fffdfa;
-  --secondary: #f1efec;
-  --muted: #f1efec;
-  --muted-foreground: #5a687c;
-  --accent: #e4e1dd;
-  --sidebar-accent: #e4e1dd;
-  --border: #d8d3cc;
-  --input: #ccc5ba;
-  --sidebar: #eeece9;
-  --activity-bar: #eeece9;
-  --activity-bar-foreground: #5a687c;
-  --chrome-border: #dad6d1;
-  --sidebar-border: #dad6d1;
-  --info: #3b82f6;
-  --warning: #f59e0b;
-  /* Classic's green and amber chart sources need ink support on the warm paper canvas. */
+:root[data-floe-shell-theme='porcelain-light'] {
+  /* Graphical series remain separate from the shell's action palette. */
   --redeven-categorical-graph-2: color-mix(in srgb, var(--chart-4) 65%, var(--foreground) 35%);
   --redeven-categorical-graph-5: color-mix(in srgb, var(--chart-5) 65%, var(--foreground) 35%);
-  --redeven-surface-main: #f4f1ed;
-  --redeven-surface-panel: #f7f4f1;
-  --redeven-surface-panel-soft: #f1efec;
-  --redeven-surface-panel-elevated: #fffdfa;
-  --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
-  --redeven-surface-control: color-mix(in srgb, var(--redeven-surface-panel) 58%, var(--redeven-surface-panel-elevated) 42%);
-  --redeven-surface-control-muted: #f1efec;
-  --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, var(--redeven-surface-highlight-source) 18%);
-  --redeven-stroke-panel: var(--redeven-surface-panel-border);
-  --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);
-  --redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 82%, var(--foreground) 18%);
-  --redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 76%, var(--foreground) 24%);
-  --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 74%, var(--foreground) 26%);
-  --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);
   --redeven-link-fg: var(--color-blue-600);
   --redeven-link-hover-fg: var(--color-blue-700);
   --redeven-link-underline: color-mix(in srgb, var(--redeven-link-fg) 42%, transparent);
@@ -686,8 +407,6 @@
   --redeven-link-code-border: color-mix(in srgb, var(--redeven-link-fg) 22%, transparent);
   --redeven-link-on-primary-fg: var(--color-blue-100);
   --redeven-link-on-primary-hover-fg: var(--color-sky-100);
-  --card: #fffdfa;
-  --popover: #fffdfa;
   --git-title-dot-neutral: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
   --git-title-dot-info: color-mix(in srgb, var(--info) 75%, transparent);
   --git-title-dot-brand: color-mix(in srgb, var(--color-blue-600) 80%, transparent);
@@ -716,41 +435,15 @@
 }
 
 :root[data-floe-shell-theme='classic-dark'],
-:root:not([data-floe-shell-theme]).dark {
-  /* Redeven lifts Classic Dark's product panels above Floe's base card. Keep the paired strokes visible. */
-  --border: #59616e;
-  --input: #68788f;
-  --chrome-border: #4a5462;
-  --top-bar-border: var(--chrome-border);
-  --activity-bar-border: var(--chrome-border);
-  --bottom-bar-border: var(--chrome-border);
-  --terminal-panel-border: var(--chrome-border);
-  --sidebar-border: var(--chrome-border);
-  --redeven-surface-panel: rgb(41, 44, 51);
-  --redeven-surface-main: var(--redeven-surface-panel);
-  --redeven-surface-panel-soft: #353942;
-  --redeven-surface-panel-elevated: #40454f;
-  --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
-  --redeven-surface-control: color-mix(in srgb, var(--background) 62%, var(--redeven-surface-panel-elevated) 38%);
-  --redeven-surface-control-muted: color-mix(in srgb, var(--muted) 56%, var(--background));
-  --redeven-surface-panel-border: var(--border);
-  --redeven-stroke-panel: var(--redeven-surface-panel-border);
-  --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-surface-panel) 60%, var(--foreground) 40%);
-  --redeven-stroke-overlay: color-mix(in srgb, var(--redeven-surface-overlay) 56%, var(--foreground) 44%);
-  --redeven-stroke-control: var(--input);
-  --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);
-  --redeven-stroke-divider: #4e5664;
-  --git-table-gridline: color-mix(in srgb, var(--redeven-stroke-panel) 88%, var(--foreground) 12%);
+:root[data-floe-shell-theme='porcelain-dark'] {
   --redeven-link-fg: var(--color-sky-400);
   --redeven-link-hover-fg: var(--color-sky-300);
   --redeven-link-underline: color-mix(in srgb, var(--redeven-link-fg) 46%, transparent);
   --redeven-link-underline-hover: color-mix(in srgb, var(--redeven-link-hover-fg) 76%, transparent);
   --redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 13%, var(--background));
   --redeven-link-code-border: color-mix(in srgb, var(--redeven-link-fg) 28%, transparent);
-  --redeven-link-on-primary-fg: var(--color-sky-100);
-  --redeven-link-on-primary-hover-fg: #ffffff;
-  --card: var(--redeven-surface-panel);
-  --popover: var(--redeven-surface-panel);
+  --redeven-link-on-primary-fg: var(--primary-foreground);
+  --redeven-link-on-primary-hover-fg: var(--primary-foreground);
   --git-title-dot-neutral: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
   --git-title-dot-info: color-mix(in srgb, var(--info) 75%, transparent);
   --git-title-dot-brand: color-mix(in srgb, var(--color-sky-400) 85%, transparent);
@@ -763,6 +456,10 @@
 }
 
 :root[data-floe-shell-theme='hc-light'] {
+  --redeven-stroke-panel: var(--border);
+  --redeven-stroke-panel-strong: var(--border);
+  --redeven-stroke-overlay: var(--border);
+  --redeven-stroke-divider: var(--border);
   --redeven-settings-header-bg: var(--background);
   --redeven-settings-sidebar-bg: var(--sidebar);
   --redeven-settings-sidebar-border: var(--border);
@@ -1080,9 +777,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
     inset 0 1px 0 color-mix(in srgb, var(--background) 92%, var(--redeven-surface-highlight-source) 8%);
   transform: translateX(0);
   transition:
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 160ms ease,
-    background-color 160ms ease;
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 120ms ease, background-color 120ms ease;
 }
 
 .browser-mode-switch[data-mode='git'] .browser-mode-switch__thumb {
@@ -1597,7 +1292,7 @@ html.dark .git-branch-stable-placeholder {
   min-height: 1.875rem;
   display: flex;
   align-items: center;
-  transition: opacity 140ms ease;
+  transition: opacity 120ms ease;
 }
 
 .git-changes-breadcrumb-slot[data-visible='false'] {
@@ -1813,8 +1508,7 @@ html.dark .git-changes-table-pending {
 
 .redeven-surface-panel--interactive {
   transition:
-    background-color 120ms ease-out,
-    opacity 120ms ease-out;
+    background-color 120ms ease-out, opacity 120ms ease-out;
 }
 
 .redeven-surface-panel--interactive:hover {
@@ -1855,10 +1549,7 @@ html.dark .git-changes-table-pending {
   cursor: pointer;
   border: 1px solid transparent;
   transition:
-    border-color 150ms ease,
-    background-color 150ms ease,
-    color 150ms ease,
-    box-shadow 150ms ease;
+    border-color 120ms ease, background-color 120ms ease, color 120ms ease;
 }
 
 .redeven-surface-segmented__item:disabled,
@@ -2066,8 +1757,7 @@ html.dark .git-changes-table-pending {
   border-color: var(--redeven-settings-inset-border) !important;
   background: var(--redeven-settings-inset-bg) !important;
   transition:
-    border-color 150ms ease,
-    background-color 150ms ease;
+    border-color 120ms ease, background-color 120ms ease;
 }
 
 .redeven-settings-choice:hover:not(:disabled):not([aria-disabled='true']) {
@@ -2181,7 +1871,7 @@ html.dark .git-changes-table-pending {
 }
 
 .redeven-settings-table__row--interactive {
-  transition: background-color 150ms ease;
+  transition: background-color 120ms ease;
 }
 
 .redeven-settings-table__row--interactive:hover {
@@ -2248,9 +1938,7 @@ html.dark .git-changes-table-pending {
   font-size: 0.6875rem;
   font-weight: 650;
   transition:
-    border-color 150ms ease,
-    background-color 150ms ease,
-    color 150ms ease;
+    border-color 120ms ease, background-color 120ms ease, color 120ms ease;
 }
 
 .redeven-permission-segment > span:last-child {
@@ -2538,11 +2226,6 @@ html.dark .git-changes-table-pending {
   line-height: 1;
 }
 
-.flower-chat-input-send-btn.chat-input-send-btn-active:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 18%, transparent);
-}
-
 .flower-chat-input-send-btn-reply {
   display: inline-flex;
   align-items: center;
@@ -2586,7 +2269,7 @@ html.dark .git-changes-table-pending {
   color: var(--muted-foreground);
   font-size: 0.75rem;
   font-weight: 600;
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, opacity 120ms ease;
 }
 
 .flower-chat-chip-actionable:hover:not(:disabled),
@@ -2652,7 +2335,7 @@ html.dark .git-changes-table-pending {
   border-radius: 9999px;
   background: color-mix(in srgb, var(--muted) 36%, var(--background));
   color: var(--muted-foreground);
-  transition: background-color 150ms ease, color 150ms ease, opacity 150ms ease;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
 .flower-chat-meta-btn:hover:not(:disabled),
@@ -2716,106 +2399,6 @@ html.dark .git-changes-table-pending {
   color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
-.redeven-flower-soft-aura {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  isolation: isolate;
-}
-
-.redeven-flower-soft-aura-primary {
-  color: var(--primary);
-}
-
-.redeven-flower-soft-aura-current {
-  color: inherit;
-}
-
-.redeven-flower-soft-aura-glow {
-  position: absolute;
-  inset: 4%;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      72% 72% at 50% 50%,
-      color-mix(in srgb, var(--primary) 76%, transparent) 0%,
-      color-mix(in srgb, var(--primary) 60%, transparent) 34%,
-      color-mix(in srgb, var(--primary) 36%, transparent) 60%,
-      transparent 84%
-    ),
-    radial-gradient(
-      44% 44% at 50% 50%,
-      color-mix(in srgb, var(--primary) 56%, transparent) 0%,
-      color-mix(in srgb, var(--primary) 28%, transparent) 52%,
-      transparent 76%
-    );
-  filter: blur(5px);
-  opacity: 1;
-  transform: translateZ(0);
-}
-
-.redeven-flower-soft-aura-svg {
-  position: relative;
-  z-index: 1;
-  width: 76%;
-  height: 76%;
-  flex-shrink: 0;
-}
-
-.redeven-flower-soft-aura-nav-glow {
-  inset: -4%;
-  filter: blur(6px);
-}
-
-.redeven-flower-soft-aura-nav-svg {
-  width: 88%;
-  height: 88%;
-}
-
-.redeven-flower-soft-aura-workbench-glow {
-  inset: -1%;
-  filter: blur(4.5px);
-  opacity: 0.92;
-}
-
-.redeven-flower-soft-aura-workbench-svg {
-  width: 84%;
-  height: 84%;
-}
-
-.redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
-  inset: -6%;
-  filter: blur(6px);
-}
-
-.redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-svg {
-  width: 86%;
-  height: 86%;
-}
-
-.redeven-flower-soft-aura-lg .redeven-flower-soft-aura-glow {
-  inset: -2%;
-  filter: blur(9px);
-  opacity: 1;
-}
-
-.redeven-flower-soft-aura-lg .redeven-flower-soft-aura-svg {
-  width: 64%;
-  height: 64%;
-}
-
-html.dark .redeven-flower-soft-aura-nav-glow,
-html.dark .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
-  opacity: 0;
-  filter: none;
-}
-
-html.dark .redeven-flower-soft-aura-workbench-glow {
-  opacity: 0.42;
-  filter: blur(4px);
-}
 
 @media (max-width: 640px) {
   .flower-chat-header {
@@ -2964,94 +2547,14 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   scrollbar-gutter: stable;
 }
 
-@keyframes redeven-flower-intro-spin {
-  0% {
-    transform: rotate(0deg) scale(1);
-  }
-  70% {
-    transform: rotate(390deg) scale(1.12);
-  }
-  100% {
-    transform: rotate(360deg) scale(1);
-  }
-}
 
-@keyframes redeven-flower-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.06);
-  }
-}
 
-.redeven-flower-icon-spin {
-  transform-origin: 50% 50%;
-  will-change: transform;
-  animation: redeven-flower-intro-spin 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.15s 1;
-}
 
-.redeven-flower-icon-breathe {
-  will-change: transform;
-  animation: redeven-flower-breathe 2.8s ease-in-out 1.35s infinite;
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .redeven-flower-icon-spin,
-  .redeven-flower-icon-breathe {
-    animation: none !important;
-    transform: none !important;
-  }
-
-  .chat-message-avatar-streaming .chat-message-avatar-custom-wrapper,
-  .chat-message-avatar-streaming .chat-message-avatar-image-wrapper,
-  .chat-message-avatar-streaming .chat-message-avatar-image {
-    animation: none !important;
-    transform: none !important;
-  }
-}
 
 /* Flower avatar animation while streaming: smooth playful spin -> pause -> spin. */
-@keyframes redeven-flower-avatar-playful-rotate {
-  0% {
-    transform: rotate(0deg);
-  }
-  26% {
-    transform: rotate(140deg);
-  }
-  34% {
-    transform: rotate(168deg);
-  }
-  42% {
-    transform: rotate(160deg);
-  }
-  58% {
-    transform: rotate(160deg);
-  }
-  84% {
-    transform: rotate(334deg);
-  }
-  92% {
-    transform: rotate(366deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
 
-.chat-message-avatar-streaming .chat-message-avatar-custom-wrapper,
-.chat-message-avatar-streaming .chat-message-avatar-image-wrapper {
-  animation: redeven-flower-avatar-playful-rotate 2.4s cubic-bezier(0.33, 1, 0.68, 1) infinite;
-  transform-origin: 50% 50%;
-  will-change: transform;
-}
 
-.chat-message-avatar-streaming .chat-message-avatar-image {
-  animation: none;
-  transform: none;
-  will-change: auto;
-}
 
 .redeven-file-list-compact > div:first-child {
   font-size: 0.625rem;
@@ -3090,7 +2593,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   background: linear-gradient(180deg, var(--redeven-chat-surface-raised) 0%, var(--redeven-chat-output) 100%);
   color: var(--redeven-chat-text);
   box-shadow: 0 1px 2px var(--redeven-shadow-color);
-  transition: box-shadow 200ms ease;
+  transition: none;
 }
 
 .chat-message-bubble-assistant > .chat-message-block-slot.chat-message-block-slot-compact {
@@ -3184,7 +2687,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   color: var(--redeven-chat-muted);
   cursor: pointer;
   padding: 0;
-  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .chat-shell-command-action:hover,
@@ -3603,7 +3106,7 @@ a.chat-sources-cell-url:focus-visible {
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 .chat-sources-action-btn:hover {
@@ -3667,7 +3170,7 @@ a.chat-sources-cell-url:focus-visible {
   background-color: color-mix(in srgb, var(--background) 90%, var(--muted) 10%);
   color: var(--foreground);
   cursor: pointer;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .chat-sources-page-btn:hover:not(:disabled) {
@@ -4022,7 +3525,7 @@ a.chat-sources-cell-url:focus-visible {
   box-shadow:
     0 0 0 4px var(--background),
     0 2px 8px color-mix(in srgb, var(--foreground) 12%, transparent);
-  transition: box-shadow 0.15s ease, background 0.15s ease;
+  transition: background 120ms ease;
   touch-action: none;
   user-select: none;
   backdrop-filter: blur(8px);
@@ -4313,7 +3816,7 @@ a.chat-sources-cell-url:focus-visible {
 }
 
 .redeven-loading-curtain__eyebrow {
-  color: color-mix(in srgb, var(--foreground) 38%, transparent);
+  color: var(--muted-foreground);
   font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1;
@@ -4322,7 +3825,7 @@ a.chat-sources-cell-url:focus-visible {
 }
 
 .redeven-loading-curtain__indicator {
-  width: 10.5rem;
+  width: 1.5rem;
   height: 3px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--foreground) 13%, transparent);
@@ -4333,14 +3836,7 @@ a.chat-sources-cell-url:focus-visible {
   width: 42%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--primary) 54%, var(--foreground) 18%) 42%,
-    color-mix(in srgb, var(--primary) 78%, var(--redeven-surface-highlight-source) 18%) 55%,
-    transparent 100%
-  );
-  box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 28%, transparent);
+  background: var(--muted-foreground);
   animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;
   will-change: transform;
 }
@@ -4356,7 +3852,7 @@ a.chat-sources-cell-url:focus-visible {
 }
 
 .redeven-loading-curtain__message {
-  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  color: var(--muted-foreground);
   font-size: 0.8125rem;
   line-height: 1.5;
   font-weight: 480;
@@ -4985,7 +4481,7 @@ html.dark .git-content-skeleton__block {
 
   .redeven-loading-curtain__indicator-bar {
     animation: none;
-    background: color-mix(in srgb, var(--foreground) 15%, transparent);
+    background: var(--muted-foreground);
     width: 100%;
   }
 
@@ -5005,31 +4501,22 @@ html.dark .git-content-skeleton__block {
   --redeven-workbench-default-canvas-bg: color-mix(in srgb, var(--background) 92%, var(--muted) 8%);
   --redeven-workbench-default-grid-stroke: color-mix(in srgb, var(--border) 34%, transparent);
   --redeven-workbench-default-grid-dot: color-mix(in srgb, var(--border) 48%, transparent);
-  --redeven-workbench-default-widget-bg: color-mix(in srgb, var(--card) 94%, var(--redeven-surface-highlight-source) 6%);
-  --redeven-workbench-default-widget-border: color-mix(in srgb, var(--border) 88%, var(--foreground) 12%);
-  --redeven-workbench-default-widget-border-hover: color-mix(in srgb, var(--border) 70%, var(--foreground) 30%);
-  --redeven-workbench-default-widget-header-bg: color-mix(in srgb, var(--card) 84%, var(--muted) 16%);
-  --redeven-workbench-default-widget-header-border: color-mix(in srgb, var(--border) 76%, var(--foreground) 24%);
-  --redeven-workbench-default-widget-ring: color-mix(in srgb, var(--primary) 22%, transparent);
-  --redeven-workbench-default-widget-border-active: color-mix(in srgb, var(--primary) 68%, var(--border) 32%);
+  --redeven-workbench-default-widget-bg: var(--card);
+  --redeven-workbench-default-widget-border: var(--redeven-stroke-panel);
+  --redeven-workbench-default-widget-border-hover: var(--redeven-stroke-panel-strong);
+  --redeven-workbench-default-widget-header-bg: var(--sidebar);
+  --redeven-workbench-default-widget-header-border: var(--redeven-stroke-divider);
+  --redeven-workbench-default-widget-ring: transparent;
+  --redeven-workbench-default-widget-border-active: var(--redeven-stroke-panel-strong);
   --redeven-workbench-default-widget-shadow:
-    0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent),
-    0 14px 32px -20px color-mix(in srgb, var(--foreground) 18%, transparent);
-  --redeven-workbench-default-widget-shadow-hover:
-    0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent),
-    0 18px 38px -22px color-mix(in srgb, var(--foreground) 22%, transparent);
-  --redeven-workbench-default-widget-shadow-active:
-    0 22px 48px -18px color-mix(in srgb, var(--primary) 18%, transparent),
-    0 2px 6px color-mix(in srgb, var(--foreground) 10%, transparent);
+    0 1px 3px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent),
+    0 14px 32px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
+  --redeven-workbench-default-widget-shadow-hover: var(--redeven-workbench-default-widget-shadow);
+  --redeven-workbench-default-widget-shadow-active: var(--redeven-workbench-default-widget-shadow);
   --redeven-workbench-default-body-surface: var(--redeven-surface-main);
   --redeven-workbench-default-body-surface-soft: color-mix(in srgb, var(--redeven-surface-main) 84%, var(--background) 16%);
   --redeven-workbench-default-body-border: color-mix(in srgb, var(--border) 72%, transparent);
-  --redeven-workbench-default-rail-bg:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--sidebar) 86%, var(--card) 14%),
-      color-mix(in srgb, var(--sidebar) 94%, transparent)
-    );
+  --redeven-workbench-default-rail-bg: var(--sidebar);
 }
 
 .workbench-surface[data-workbench-theme='default'] .workbench-canvas {
@@ -5121,7 +4608,7 @@ html.dark .git-content-skeleton__block {
   border: 1px solid var(--browser-editor-frame-border);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--card) 88%, var(--background) 12%);
-  transition: border-color 180ms ease, background-color 180ms ease;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 html.dark .browser-editor-setup {
@@ -5379,7 +4866,7 @@ html.dark .browser-editor-setup {
   color: var(--muted-foreground);
   cursor: pointer;
   text-align: center;
-  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
 }
 
 .browser-editor-setup__method-option:hover:not(:disabled) {
@@ -5453,7 +4940,7 @@ html.dark .browser-editor-setup {
 
 .browser-editor-setup__step {
   min-width: 0;
-  transition: opacity 180ms ease, color 180ms ease;
+  transition: opacity 120ms ease, color 120ms ease;
 }
 
 .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-connector {
@@ -5487,7 +4974,7 @@ html.dark .browser-editor-setup {
   border: 1.5px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 50%;
   background: transparent;
-  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 
 .browser-editor-setup__step-dot[data-state='done'] {
@@ -5516,7 +5003,7 @@ html.dark .browser-editor-setup {
 .browser-editor-setup__step-line {
   flex: 1;
   background: color-mix(in srgb, var(--border) 55%, transparent);
-  transition: background-color 180ms ease;
+  transition: background-color 120ms ease;
 }
 
 .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-line {
@@ -5684,7 +5171,7 @@ html.dark .browser-editor-setup {
   font-weight: 600;
   color: var(--muted-foreground);
   text-align: left;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .browser-editor-setup__details-trigger:hover {
@@ -5856,49 +5343,10 @@ html.dark .browser-editor-setup {
 /* ── Loading shimmer overlay ── */
 
 .managed-operation-shimmer-text {
-  color: var(--primary);
-  background: linear-gradient(
-    105deg,
-    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 0%,
-    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 36%,
-    color-mix(in srgb, var(--primary) 28%, var(--primary-foreground)) 50%,
-    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 64%,
-    color-mix(in srgb, var(--primary) 72%, var(--foreground)) 100%
-  );
-  background-size: 220% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: managed-operation-text-shimmer 2.4s linear infinite;
+  color: var(--foreground);
 }
 
-.redeven-loading-shimmer-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  overflow: hidden;
-  border-radius: inherit;
-  pointer-events: none;
-}
 
-.redeven-loading-shimmer-overlay::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  mix-blend-mode: overlay;
-  background: linear-gradient(
-    105deg,
-    transparent 0%,
-    transparent 25%,
-    color-mix(in srgb, var(--foreground) 4%, transparent) 34%,
-    color-mix(in srgb, var(--foreground) 35%, transparent) 50%,
-    color-mix(in srgb, var(--foreground) 4%, transparent) 66%,
-    transparent 75%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: redeven-loading-shimmer 3s linear infinite;
-}
 
 /* ── Step animations ── */
 
@@ -5912,15 +5360,6 @@ html.dark .browser-editor-setup {
   }
 }
 
-@keyframes managed-operation-text-shimmer {
-  0% {
-    background-position: 120% 0;
-  }
-
-  100% {
-    background-position: -120% 0;
-  }
-}
 
 @keyframes browser-editor-precision-orbit {
   to {
@@ -5977,14 +5416,7 @@ html.dark .browser-editor-setup {
 
 @media (prefers-reduced-motion: reduce) {
   .managed-operation-shimmer-text {
-    color: var(--primary);
-    background: none;
-    -webkit-text-fill-color: currentColor;
-    animation: none;
-  }
-
-  .redeven-loading-shimmer-overlay::after {
-    animation-duration: 1ms;
+    color: var(--foreground);
   }
 }
 
@@ -6035,7 +5467,7 @@ html.dark .browser-editor-setup {
   background: var(--redeven-status-info-soft, var(--muted));
   color: var(--redeven-status-info-foreground, var(--muted-foreground));
   white-space: nowrap;
-  transition: color 100ms ease, border-color 100ms ease, background-color 100ms ease;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 
 .terminal-shared-geometry-notice__trigger:hover .terminal-shared-geometry-notice__chrome,
@@ -6206,13 +5638,6 @@ html.dark .browser-editor-setup {
 /* Product roles follow the released material without owning a second shadow system. */
 @media (forced-colors: none) {
   :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) {
-    --redeven-stroke-panel: var(--floe-surface-edge);
-    --redeven-stroke-panel-strong: color-mix(in srgb, var(--border) 36%, var(--background));
-    --redeven-stroke-overlay: var(--floe-surface-edge);
-    --redeven-stroke-control: color-mix(in srgb, var(--border) 36%, var(--background));
-    --redeven-stroke-control-strong: color-mix(in srgb, var(--border) 52%, var(--background));
-    --redeven-stroke-divider: var(--floe-surface-divider);
-    --git-table-gridline: var(--floe-surface-divider);
     --redeven-settings-sidebar-border: var(--floe-surface-edge);
     --redeven-settings-inset-border: color-mix(in srgb, var(--foreground) 8%, var(--redeven-settings-inset-bg));
     --redeven-settings-divider: color-mix(in srgb, var(--foreground) 3%, var(--redeven-settings-inset-bg));
