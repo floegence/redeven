@@ -3798,7 +3798,7 @@
       "popupBlocked": "O pop-up foi bloqueado. Permita pop-ups e tente novamente.",
       "missingEnvContext": "Contexto de ambiente ausente. Por favor, reabra a partir do plano de controle. Somente estado",
       "desktopWindowFailed": "O Desktop não conseguiu abrir a janela isolada do serviço web.",
-      "desktopLoopbackRequiresDesktop": "O modo de compatibilidade local requer a janela isolada do Redeven Desktop."
+      "desktopLoopbackRequiresDesktop": "Este serviço está configurado no modo de compatibilidade local e só pode ser usado no Redeven Desktop."
     }
   },
   "debugConsoleSettings": {

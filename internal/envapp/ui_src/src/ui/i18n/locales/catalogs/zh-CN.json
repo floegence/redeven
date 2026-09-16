@@ -3813,7 +3813,7 @@
       "popupBlocked": "弹窗被阻止。请允许弹窗后重试。",
       "missingEnvContext": "缺少环境上下文。请从控制平面重新打开。",
       "desktopWindowFailed": "Desktop 无法打开隔离的 Web 服务窗口。",
-      "desktopLoopbackRequiresDesktop": "本地兼容模式需要使用 Redeven Desktop 隔离窗口。"
+      "desktopLoopbackRequiresDesktop": "该服务已配置为“本地兼容模式”，只能在 Redeven Desktop 中使用。"
     }
   },
   "debugConsoleSettings": {

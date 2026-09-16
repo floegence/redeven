@@ -3813,7 +3813,7 @@
       "popupBlocked": "彈出視窗被阻擋。請允許彈出視窗後再試。",
       "missingEnvContext": "缺少環境上下文。請從控制平面重新開啟。",
       "desktopWindowFailed": "Desktop 無法開啟隔離的 Web 服務視窗。",
-      "desktopLoopbackRequiresDesktop": "本機相容模式需要使用 Redeven Desktop 隔離視窗。"
+      "desktopLoopbackRequiresDesktop": "此服務已設定為「本機相容模式」，只能在 Redeven Desktop 中使用。"
     }
   },
   "debugConsoleSettings": {

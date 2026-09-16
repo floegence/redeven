@@ -3798,7 +3798,7 @@
       "popupBlocked": "La ventana emergente fue bloqueada. Permite ventanas emergentes y vuelve a intentarlo.",
       "missingEnvContext": "Falta el contexto ambiental. Vuelva a abrir desde el plano de control.",
       "desktopWindowFailed": "Desktop no pudo abrir la ventana aislada del servicio web.",
-      "desktopLoopbackRequiresDesktop": "El modo de compatibilidad local requiere la ventana aislada de Redeven Desktop."
+      "desktopLoopbackRequiresDesktop": "Este servicio está configurado en modo de compatibilidad local y solo se puede usar en Redeven Desktop."
     }
   },
   "debugConsoleSettings": {

@@ -3798,7 +3798,7 @@
       "popupBlocked": "ポップアップがブロックされました。ポップアップを許可してから再試行してください。",
       "missingEnvContext": "環境コンテキストが欠落しています。コントロールプレーンから再度開いてください。",
       "desktopWindowFailed": "Desktop で隔離された Web サービスウィンドウを開けませんでした。",
-      "desktopLoopbackRequiresDesktop": "ローカル互換モードには Redeven Desktop の分離ウィンドウが必要です。"
+      "desktopLoopbackRequiresDesktop": "このサービスは「ローカル互換モード」に設定されており、Redeven Desktop でのみ使用できます。"
     }
   },
   "debugConsoleSettings": {
