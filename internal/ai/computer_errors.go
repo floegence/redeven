@@ -1,6 +1,9 @@
 package ai
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // Both helper protocols use a closed error vocabulary. Raw browser exceptions
 // can include endpoint credentials, typed text, or page content.
@@ -27,4 +30,13 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 		failure.code = "target_action_failed"
 	}
 	return failure
+}
+
+// ComputerControlErrorCode exposes only a closed, non-secret UI classification.
+func ComputerControlErrorCode(err error) string {
+	var failure *targetToolPolicyError
+	if errors.As(err, &failure) && failure.code == "interaction_takeover_required" {
+		return "computer_control_not_ready"
+	}
+	return "computer_control_unavailable"
 }

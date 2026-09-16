@@ -146,7 +146,11 @@
       "running": "Computer running",
       "awaiting_user": "Waiting for your input or approval",
       "completed": "Computer task completed",
-      "failed": "Computer task failed"
+      "failed": "Computer task failed",
+      "taking_control": "Taking control…",
+      "user_control": "You are controlling",
+      "returning_control": "Returning control…",
+      "paused": "Viewing paused"
     },
     "computerStageMove": "Move viewer (arrow keys)",
     "computerStageClose": "Close viewer",
@@ -334,7 +338,12 @@
     "computerTakeControl": "Take control",
     "computerReturnControl": "Return to Flower",
     "computerControlHint": "Complete sign-in in the image using your mouse and keyboard. Passwords and codes stay out of the conversation.",
-    "computerControlFailed": "Control could not be updated. Check the page before trying again."
+    "computerControlFailed": "Control could not be updated. Check the page before trying again.",
+    "computerFrameRate": "Frame rate",
+    "computerFrameRateHint": "Higher frame rates use more bandwidth. Actual updates depend on your device and connection.",
+    "computerReceivedFrameRate": "Receiving {fps} FPS",
+    "computerControlTaken": "You have control",
+    "computerControlNotReady": "The page still needs your attention. Complete sign-in or verification, then return control."
   },
   "threadList": {
     "title": "Conversations",

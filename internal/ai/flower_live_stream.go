@@ -68,16 +68,20 @@ type FlowerLiveStreamEnvelope struct {
 }
 
 type FlowerComputerFrame struct {
-	ThreadID     string `json:"thread_id"`
-	SessionID    string `json:"session_id"`
-	TargetID     string `json:"target_id"`
-	ResourceRef  string `json:"resource_ref"`
-	SHA256       string `json:"sha256"`
-	MIMEType     string `json:"mime_type"`
-	Width        int    `json:"width,omitempty"`
-	Height       int    `json:"height,omitempty"`
-	Sequence     uint64 `json:"sequence"`
-	CapturedAtMS int64  `json:"captured_at_ms,omitempty"`
+	ViewerRevision uint64 `json:"viewer_revision"`
+	InteractionID  string `json:"interaction_id,omitempty"`
+	FrameID        string `json:"frame_id,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	ThreadID       string `json:"thread_id"`
+	SessionID      string `json:"session_id"`
+	TargetID       string `json:"target_id"`
+	ResourceRef    string `json:"resource_ref,omitempty"`
+	SHA256         string `json:"sha256,omitempty"`
+	MIMEType       string `json:"mime_type"`
+	Width          int    `json:"width,omitempty"`
+	Height         int    `json:"height,omitempty"`
+	Sequence       uint64 `json:"sequence"`
+	CapturedAtMS   int64  `json:"captured_at_ms,omitempty"`
 }
 
 // PublishFlowerComputerFrame sends only the latest target-scoped frame metadata
@@ -88,6 +92,9 @@ func (s *Service) PublishFlowerComputerFrame(meta *session.Meta, frame FlowerCom
 	}
 	if strings.TrimSpace(frame.ThreadID) == "" {
 		return errors.New("computer frame thread is required")
+	}
+	if frame.InteractionID != "" || frame.FrameID != "" {
+		return errors.New("private computer frames require an individual observer")
 	}
 	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamComputerFrame, ThreadID: frame.ThreadID, ComputerFrame: &frame})
 	if len(batch.data) > 4096 {
@@ -124,6 +131,7 @@ type flowerLiveSubscriber struct {
 	observerContext context.Context
 	viewerMu        sync.Mutex
 	viewerRevision  uint64
+	viewerRequest   ComputerViewerRequest
 	viewerCancel    context.CancelFunc
 	viewerStop      func()
 	id              uint64

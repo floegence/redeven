@@ -177,7 +177,11 @@
         "running": "컴퓨터 작업 실행 중",
         "awaiting_user": "입력 또는 승인 대기 중",
         "completed": "컴퓨터 작업 완료",
-        "failed": "컴퓨터 작업 실패"
+        "failed": "컴퓨터 작업 실패",
+        "taking_control": "제어권 인수 중…",
+        "user_control": "직접 제어 중",
+        "returning_control": "제어권 반환 중…",
+        "paused": "화면 업데이트 일시 중지됨"
       },
       "computerStageMove": "뷰어 이동 (방향키)",
       "computerStageClose": "뷰어 닫기",
@@ -366,7 +370,12 @@
       "computerTakeControl": "직접 제어",
       "computerReturnControl": "Flower에 제어 반환",
       "computerControlHint": "화면에서 마우스와 키보드로 로그인하세요. 비밀번호와 인증 코드는 대화에 저장되지 않습니다.",
-      "computerControlFailed": "제어 상태를 업데이트하지 못했습니다. 페이지를 확인한 후 다시 시도하세요."
+      "computerControlFailed": "제어 상태를 업데이트하지 못했습니다. 페이지를 확인한 후 다시 시도하세요.",
+      "computerFrameRate": "프레임 속도",
+      "computerFrameRateHint": "프레임 속도가 높을수록 더 많은 대역폭을 사용합니다. 실제 업데이트 속도는 기기와 네트워크에 따라 달라집니다.",
+      "computerReceivedFrameRate": "수신 속도: {fps} FPS",
+      "computerControlTaken": "제어권 인수됨",
+      "computerControlNotReady": "아직 직접 처리해야 하는 단계가 있습니다. 로그인 또는 인증을 완료한 후 제어권을 반환하세요."
     },
     "threadList": {
       "title": "대화",

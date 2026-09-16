@@ -236,15 +236,19 @@ func (s *Service) ResolveTargetToolAttachmentForThread(ctx context.Context, meta
 			}
 		}
 	}
-	if !owned {
-		s.mu.Lock()
-		resolver, ok := s.targetToolExecutor.(interface {
-			ResolveComputerLiveFrame(context.Context, string, string, string) ([]byte, error)
-		})
-		s.mu.Unlock()
-		if ok {
-			return resolver.ResolveComputerLiveFrame(ctx, threadID, targetID, resourceRef)
+	// A live sample may have identical bytes to a durable keyframe. Resolve the
+	// active sample first so reading it also releases the sampler's backpressure.
+	s.mu.Lock()
+	resolver, ok := s.targetToolExecutor.(interface {
+		ResolveComputerLiveFrame(context.Context, string, string, string) ([]byte, error)
+	})
+	s.mu.Unlock()
+	if ok {
+		if body, err := resolver.ResolveComputerLiveFrame(ctx, threadID, targetID, resourceRef); err == nil {
+			return body, nil
 		}
+	}
+	if !owned {
 		return nil, errors.New("computer frame does not belong to thread target")
 	}
 	return s.ResolveTargetToolAttachment(ctx, resourceRef)

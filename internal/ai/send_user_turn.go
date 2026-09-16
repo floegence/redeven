@@ -456,16 +456,19 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 		}
 		answers[questionID] = value
 	}
-	if !inputInteraction.Resolved {
-		if err := s.reobserveComputerControlReturn(ctx, view, inputInteraction, answers); err != nil {
-			return SubmitRequestUserInputResponseResponse{}, err
-		}
+	respond := func() (flruntime.ThreadView, error) {
+		return typed.Respond(ctx, flruntime.RespondInput{
+			ThreadID: identity.ThreadID(threadID), InteractionID: interactionID,
+			Answers:    []flruntime.InteractionAnswer{{InteractionID: interactionID, Input: answers}},
+			RequestKey: flruntime.RequestKey("respond:" + promptID),
+		})
 	}
-	result, err := typed.Respond(ctx, flruntime.RespondInput{
-		ThreadID: identity.ThreadID(threadID), InteractionID: interactionID,
-		Answers:    []flruntime.InteractionAnswer{{InteractionID: interactionID, Input: answers}},
-		RequestKey: flruntime.RequestKey("respond:" + promptID),
-	})
+	var result flruntime.ThreadView
+	if inputInteraction.Resolved {
+		result, err = respond()
+	} else {
+		result, err = s.respondComputerControl(ctx, meta, view, inputInteraction, answers, respond)
+	}
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}

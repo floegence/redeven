@@ -98,9 +98,12 @@ type takeoverObservationExecutor struct {
 	userInputs   atomic.Int32
 }
 
-func (e *takeoverObservationExecutor) ExecuteComputerUserInput(context.Context, TargetToolCall) ([]byte, error) {
+func (e *takeoverObservationExecutor) ExecuteComputerUserInput(_ context.Context, call TargetToolCall) ([]byte, error) {
+	if call.ToolName == "computer.screenshot" {
+		return e.body, nil
+	}
 	e.userInputs.Add(1)
-	return e.body, nil
+	return nil, nil
 }
 
 func (e *takeoverObservationExecutor) EnsureTargetReady(context.Context, string) error { return nil }
@@ -201,7 +204,42 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				}
 				open()
 			}
-			userInput := ComputerUserInput{ThreadID: thread.ThreadID, InteractionID: waiting.WaitingPrompt.PromptID, Action: "type", Text: "fixture-secret-never-in-history"}
+			subscription, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer subscription.Close()
+			observerID := subscription.subscriber.observerID
+			if err := svc.SetComputerViewer(t.Context(), meta, ComputerViewerRequest{ObserverID: observerID, Revision: 1, ThreadID: thread.ThreadID, TargetID: "target", InteractionID: waiting.WaitingPrompt.PromptID}); err != nil {
+				t.Fatal(err)
+			}
+			var privateEnvelope FlowerLiveStreamEnvelope
+			select {
+			case batch := <-subscription.subscriber.media:
+				if err := json.Unmarshal(batch.data, &privateEnvelope); err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("private frame missing")
+			}
+			frameRequest := ComputerPrivateFrameRequest{ObserverID: observerID, ViewerRevision: 1, ThreadID: thread.ThreadID, InteractionID: waiting.WaitingPrompt.PromptID, FrameID: privateEnvelope.ComputerFrame.FrameID}
+			if _, err := svc.ReadPrivateComputerFrame(t.Context(), meta, frameRequest); err != nil {
+				t.Fatal(err)
+			}
+			other := *meta
+			other.UserPublicID = "other-user"
+			if _, err := svc.ReadPrivateComputerFrame(t.Context(), &other, frameRequest); err == nil {
+				t.Fatal("another user read private pixels")
+			}
+			other = *meta
+			other.CanExecute = false
+			if _, err := svc.ReadPrivateComputerFrame(t.Context(), &other, frameRequest); err == nil {
+				t.Fatal("private viewing accepted read-only authority")
+			}
+			if err := svc.PublishFlowerComputerFrame(meta, *privateEnvelope.ComputerFrame); err == nil {
+				t.Fatal("private descriptor entered the broadcast path")
+			}
+			userInput := ComputerUserInput{ObserverID: observerID, ViewerRevision: 1, ThreadID: thread.ThreadID, InteractionID: waiting.WaitingPrompt.PromptID, Action: "type", Text: "fixture-secret-never-in-history"}
 			for _, missing := range []string{"read", "write", "execute", "thread authority"} {
 				unauthorized := *meta
 				switch missing {
@@ -214,7 +252,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				case "thread authority":
 					unauthorized.EndpointID = "other-endpoint"
 				}
-				if _, err := svc.InputComputerControl(t.Context(), &unauthorized, userInput); err == nil {
+				if err := svc.InputComputerControl(t.Context(), &unauthorized, userInput); err == nil {
 					t.Fatalf("user input accepted without %s", missing)
 				}
 			}
@@ -223,10 +261,10 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 			}
 			staleInput := userInput
 			staleInput.InteractionID = "unknown"
-			if _, err := svc.InputComputerControl(t.Context(), meta, staleInput); err == nil {
+			if err := svc.InputComputerControl(t.Context(), meta, staleInput); err == nil {
 				t.Fatal("unknown interaction accepted user input")
 			}
-			if body, err := svc.InputComputerControl(t.Context(), meta, userInput); err != nil || len(body) == 0 {
+			if err := svc.InputComputerControl(t.Context(), meta, userInput); err != nil {
 				t.Fatalf("user control frame: %v", err)
 			}
 			if executor.userInputs.Load() != 1 {
@@ -256,7 +294,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				t.Fatal(err)
 			}
 			waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" })
-			if _, err := svc.InputComputerControl(t.Context(), meta, userInput); err == nil {
+			if err := svc.InputComputerControl(t.Context(), meta, userInput); err == nil {
 				t.Fatal("resolved interaction retained user control")
 			}
 			if requests.Load() != 3 || executor.effects.Load() != 1 || executor.observations.Load() != 3 {

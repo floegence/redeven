@@ -71,17 +71,34 @@ after capture; an unsafe result discards the captured bytes. These deterministic
 signals are bounded protections, not a claim of complete injection detection or
 atomic observation of all dynamic web content.
 
-The authenticated `POST /_redeven_proxy/api/ai/computer/input` accepts only a
-current computer input interaction and a bounded observe/click/type/key/scroll
-command. The adapter reuses the same helper exchange but returns pixels only to
-the authenticated caller. Request bodies, field values, raw helper errors and
-screenshots must not enter Activity, model history, logs or the durable media
-store. The endpoint returns PNG bytes with `Cache-Control: no-store`; Desktop
-transports them through its existing private IPC boundary.
+The authenticated `POST /_redeven_proxy/api/ai/computer/input` accepts bounded
+click/type/key/scroll commands and returns only an acknowledgement. It requires
+the exact active workspace observer, viewer revision and unresolved interaction.
+Canonical provenance supplies the original target, turn and run; full read,
+write and execute permission is required. Authority is checked again after
+acquiring the target gate. Input never automatically replays.
+
+Continuous private viewing uses the shared sampler and workspace channel under
+that same authority. Only the requesting observer receives its descriptors.
+`GET /_redeven_proxy/api/ai/computer/private-frame` requires that observer,
+revision, thread, unresolved interaction and frame ID; it returns PNG with
+`Cache-Control: no-store`. Private pixels never receive `computer://` references,
+model attachments or durable media entries. Input, pixels and raw helper errors
+must not enter Activity, history, audit or debug logs. Desktop carries these
+bytes through its existing private IPC boundary.
+
+Handback stops new UI input, drains submitted commands and holds the target gate
+across safe re-observation and canonical `Respond`. Queued input rechecks its
+interaction after acquiring the gate, preventing late commands from reclaiming
+returned control. Unsafe handback returns `computer_control_not_ready`; Flower
+keeps the original interaction and explains inline that sign-in or verification
+still needs completion. It resumes private viewing without replaying actions.
 
 Flower presents localized takeover/handback controls in the input card.
-Takeover and handback use content-sized standard buttons that wrap on narrow
-surfaces. Computer input has one handback action; the generic question Continue
+A compact status heading and muted explanation introduce the control card.
+Recoverable validation appears in an inline notice. One footer places Stop on
+the left and content-sized takeover/handback buttons on the right, wrapping on
+narrow surfaces without a second action strip. Computer input has one handback action; the generic question Continue
 button is not shown. The ordinary Stop control remains available while waiting
 for the user and preserves the same cancellation contract as active execution.
 Explicit takeover opens the media-only Stage. Keyboard and pointer actions go to the
@@ -96,8 +113,9 @@ the carrier is cleared immediately after submission or a control-owner change.
 Non-text keys use the same ordered private queue. The image itself is not a
 text editor and synthetic composition events do not qualify IME support.
 A full command queue reports control failure and discards unsent input instead
-of silently losing characters. Explicit observation is required before further
-input after a failure. Closing the image hides it; neither a later Activity nor
+of silently losing characters. Explicit frame recovery is required before further
+input after a failure. Hiding the image stops sampling but preserves user ownership; reopening rechecks
+canonical authority. Closing the image hides it; neither a later Activity nor
 an in-flight private response reopens it. Explicit takeover or the Activity
 viewer action opens it again. Selecting another thread resets viewer visibility;
 ending the turn uses the existing Stop behavior.
@@ -135,4 +153,5 @@ those targets are safe.
 - `redeven:internal/ai/computer_takeover_integration_test.go` - Service continuation, private input and restart checks.
 - `redeven:internal/ai/computer_control_test.go` - isolation, handback and cancellation.
 - `redeven:scripts/check_computer_host_safety.mjs` - isolated real-browser safety and private form fixtures with cleanup.
+- `redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` - isolated built Desktop, scripted provider, real private stream, delayed pixels, header FPS, paste, native IME and handback.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - user-only Stage pixels and chat-input separation.

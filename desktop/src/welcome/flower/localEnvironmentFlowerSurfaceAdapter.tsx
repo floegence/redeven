@@ -1,3 +1,4 @@
+import { COMPUTER_FRAME_RATE_KEY, computerFrameRate, computerFramePath } from '../../../../internal/flower_ui/src/computerViewer';
 import type { DesktopCertificateOperation, DesktopCertificateReport } from '../../shared/desktopCertificate';
 import { withFlowerWebSearchAvailability } from '../../../../internal/flower_ui/src/webSearchCapability';
 import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../internal/flower_ui/src/settings/modelSelection';
@@ -825,17 +826,19 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     loadComputerFrame: async (input) => {
       input.signal.throwIfAborted();
       const frame = await runtimeJSON<RuntimeFlowerComputerFrame>(bridge, 'GET',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/computer-media/${encodeURIComponent(input.target_id)}/${encodeURIComponent(input.sha256)}`);
+        computerFramePath(input));
       input.signal.throwIfAborted();
       if (!(frame.bytes instanceof Uint8Array) || frame.mime_type !== 'image/png') {
         throw new Error('Flower returned invalid computer media.');
       }
       return new Blob([new Uint8Array(frame.bytes)], { type: frame.mime_type });
     },
+    computerFrameRate: {
+      read: () => computerFrameRate(window.redevenDesktopStateStorage?.getItem(COMPUTER_FRAME_RATE_KEY)),
+      write: (fps) => { window.redevenDesktopStateStorage?.setItem(COMPUTER_FRAME_RATE_KEY, String(fps)); },
+    },
     inputComputerControl: async (input) => {
-      const frame = await runtimeJSON<RuntimeFlowerComputerFrame>(bridge, 'POST', '/_redeven_proxy/api/ai/computer/input', input);
-      if (!(frame.bytes instanceof Uint8Array) || frame.mime_type !== 'image/png') throw new Error('Computer control returned invalid media.');
-      return new Blob([new Uint8Array(frame.bytes)], { type: frame.mime_type });
+      await runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/input', input);
     },
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
     connectComputerBrowser: async (cdpURL): Promise<FlowerTargetDescriptor> => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/connect', { cdp_url: cdpURL }),

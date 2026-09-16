@@ -229,6 +229,10 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 		return TargetToolResult{}, err
 	}
 	defer unlock()
+	return r.executeComputerToolLocked(ctx, call, control)
+}
+
+func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call TargetToolCall, control *computerTargetControl) (TargetToolResult, error) {
 	// Look up only after acquiring the gate: a queued action must use the
 	// admitted adapter, not one retired while it was waiting for control.
 	r.mu.RLock()

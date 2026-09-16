@@ -4280,13 +4280,28 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		// Input may contain passwords. Never echo, audit or log the body or raw
 		// helper errors. These user-only pixels are not model attachments.
-		body, err := aiSvc.InputComputerControl(r.Context(), meta, request)
+		if err := aiSvc.InputComputerControl(r.Context(), meta, request); err != nil {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer control unavailable", ErrorCode: ai.ComputerControlErrorCode(err)})
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/private-frame":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		query := r.URL.Query()
+		revision, _ := strconv.ParseUint(query.Get("viewer_revision"), 10, 64)
+		body, err := aiSvc.ReadPrivateComputerFrame(r.Context(), meta, ai.ComputerPrivateFrameRequest{ObserverID: query.Get("observer_id"), ViewerRevision: revision, ThreadID: query.Get("thread_id"), InteractionID: query.Get("interaction_id"), FrameID: query.Get("frame_id")})
+		w.Header().Set("Cache-Control", "no-store")
 		if err != nil {
-			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer control unavailable"})
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "private computer frame unavailable"})
 			return
 		}
 		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(body)
@@ -4878,7 +4893,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			body.ThreadID = threadID
 			resp, err := aiSvc.SubmitRequestUserInputResponse(r.Context(), meta, body)
 			if err != nil {
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				if ai.ComputerControlErrorCode(err) == "computer_control_not_ready" {
+					writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "The page still needs user attention.", ErrorCode: "computer_control_not_ready"})
+				} else {
+					writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				}
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})

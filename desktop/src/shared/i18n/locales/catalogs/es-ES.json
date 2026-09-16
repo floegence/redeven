@@ -177,7 +177,11 @@
         "running": "Tarea en el equipo en curso",
         "awaiting_user": "Esperando tu respuesta o aprobación",
         "completed": "Tarea en el equipo completada",
-        "failed": "La tarea en el equipo falló"
+        "failed": "La tarea en el equipo falló",
+        "taking_control": "Asumiendo el control…",
+        "user_control": "Tienes el control",
+        "returning_control": "Devolviendo el control…",
+        "paused": "Vista en pausa"
       },
       "computerStageMove": "Mover vista (teclas de flecha)",
       "computerStageClose": "Cerrar vista",
@@ -366,7 +370,12 @@
       "computerTakeControl": "Tomar el control",
       "computerReturnControl": "Devolver el control a Flower",
       "computerControlHint": "Inicia sesión en la imagen con el ratón y el teclado. Las contraseñas y los códigos no se guardan en la conversación.",
-      "computerControlFailed": "No se pudo actualizar el control. Comprueba la página antes de volver a intentarlo."
+      "computerControlFailed": "No se pudo actualizar el control. Comprueba la página antes de volver a intentarlo.",
+      "computerFrameRate": "Frecuencia de imagen",
+      "computerFrameRateHint": "Una frecuencia mayor consume más ancho de banda. La velocidad real depende del dispositivo y de la conexión.",
+      "computerReceivedFrameRate": "Recibiendo {fps} FPS",
+      "computerControlTaken": "Control asumido",
+      "computerControlNotReady": "La página aún necesita tu intervención. Completa el inicio de sesión o la verificación y devuelve el control."
     },
     "threadList": {
       "title": "Conversaciones",
