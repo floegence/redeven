@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -191,6 +192,17 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	if !resp.OK || resp.Data.Kind != "accepted" || resp.Data.Current.ThreadID.String() != thread.ThreadID || resp.Data.Current.ViewVersion == 0 || resp.Data.ConsumedWaitingPromptID != promptID {
 		t.Fatalf("unexpected input response payload: %+v", resp)
 	}
+	for _, replay := range []struct {
+		answer string
+		status int
+	}{{"ship it", http.StatusOK}, {"different", http.StatusConflict}} {
+		body := fmt.Sprintf(`{"response":{"prompt_id":%q,"answers":{"question_1":{"text":%q}}}}`, promptID, replay.answer)
+		rr := performServerRequest(srv, http.MethodPost, inputResponsePath, envOrigin, body)
+		if rr.Code != replay.status {
+			t.Errorf("response replay status=%d, want %d: %s", rr.Code, replay.status, rr.Body.String())
+		}
+	}
+
 }
 
 type appserverAskUserGateway struct {

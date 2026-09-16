@@ -178,6 +178,7 @@ main() {
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \
         src/ui/FlowerSurface.decisionSurface.browser.test.tsx \
+        src/ui/FlowerSurface.inputSubmission.browser.test.tsx \
         src/ui/FlowerSurface.inputResponse.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \

@@ -45,7 +45,6 @@ import type {
   FlowerLiveStreamConnectInput,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
-  FlowerThreadSnapshot,
   FlowerWorkingDirectoryEntry,
   FlowerWorkingDirectoryListInput,
   FlowerWorkingDirectoryPathContext,
@@ -64,9 +63,6 @@ import type {
   AIModelProfile,
 } from '../../../../internal/envapp/ui_src/src/ui/pages/settings/types';
 import { requireAskFlowerContextActionEnvelope } from '../../../../internal/envapp/ui_src/src/ui/contextActions/protocol';
-import {
-  mapFlowerThread,
-} from '../../../../internal/flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
 } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
@@ -436,9 +432,6 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
   };
 }
 
-export function mapRuntimeFlowerThread(thread: ThreadView): FlowerThreadSnapshot {
-  return mapFlowerThread(thread, [], localEnvironmentLiveMapperOptions(), thread.read_status);
-}
 function decision(): FlowerRouterDecision {
   const now = Date.now();
   return {

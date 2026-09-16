@@ -928,8 +928,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
   const [approvalQueueAnnouncement, setApprovalQueueAnnouncement] = createSignal('');
-  const approvalSubmissionIDs = new Set<string>();
-  const [approvalSubmissionRevision, setApprovalSubmissionRevision] = createSignal(0);
+  const decisionSubmissionIDs = new Set<string>();
+  const [decisionSubmissionRevision, setDecisionSubmissionRevision] = createSignal(0);
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
   const [copiedApprovalAction, setCopiedApprovalAction] = createSignal('');
   const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
@@ -1459,6 +1459,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		const threadID = trimString(selectedThreadID());
 		return Boolean(threadID && !threadCache().views.has(threadID));
   });
+  const selectedDecisionAvailable = createMemo(() => (
+    !selectedThreadReadOnly() && !selectedThreadDetailPending() && !threadLoadError()
+  ));
   const selectedThreadHasContent = createMemo(() => {
     const thread = selectedThread();
     if (!thread) return false;
@@ -1477,30 +1480,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     action.surface_role === 'primary_action'
     || !action.surface_role
   );
-  const approvalActionIsSubmitting = (actionID: string): boolean => {
-    approvalSubmissionRevision();
-    return approvalSubmissionIDs.has(trimString(actionID));
+  const decisionSubmissionKey = (threadID: string, interactionID: string) => JSON.stringify([threadID, interactionID]);
+  const decisionIsSubmitting = (threadID: string, interactionID: string): boolean => {
+    decisionSubmissionRevision();
+    return decisionSubmissionIDs.has(decisionSubmissionKey(threadID, interactionID));
   };
-  const setApprovalActionSubmitting = (actionID: string, submitting: boolean): boolean => {
-    const normalizedID = trimString(actionID);
-    if (!normalizedID) return false;
+  const setDecisionSubmitting = (threadID: string, interactionID: string, submitting: boolean): boolean => {
+    if (!threadID || !interactionID) return false;
+    const key = decisionSubmissionKey(threadID, interactionID);
     if (submitting) {
-      if (approvalSubmissionIDs.has(normalizedID)) return false;
-      approvalSubmissionIDs.add(normalizedID);
+      if (decisionSubmissionIDs.has(key)) return false;
+      decisionSubmissionIDs.add(key);
     } else {
-      approvalSubmissionIDs.delete(normalizedID);
+      decisionSubmissionIDs.delete(key);
     }
-    setApprovalSubmissionRevision((revision) => revision + 1);
+    setDecisionSubmissionRevision((revision) => revision + 1);
     return true;
   };
+  const approvalActionIsSubmitting = (actionID: string): boolean => decisionIsSubmitting(selectedThreadID(), actionID);
+  const inputRequestIsSubmitting = () => decisionIsSubmitting(selectedThreadID(), selectedInputRequest()?.prompt_id ?? '');
   const approvalActionCanDecide = (action: FlowerApprovalAction): boolean => (
     action.can_approve
     && approvalActionIsPrimarySurface(action)
     && action.status === 'pending'
     && action.state === 'requested'
     && !approvalActionIsSubmitting(action.action_id)
-    && !selectedThreadReadOnly()
-    && !selectedThreadDetailPending()
+    && selectedDecisionAvailable()
   );
   const selectedComposerApprovalAction = createMemo(() => flowerDisplayApprovalAction(selectedThread()));
   const selectedApprovalBatchActions = createMemo(() => {
@@ -1634,6 +1639,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         working_dir: next.workingDirDraft,
       };
     });
+  };
+  const reconcileInputDraft = (threadID: string, request: FlowerInputRequest | null | undefined) => {
+    const signature = request ? `${threadID}:${request.prompt_id}` : '';
+    updateComposerSessionDraft(threadID, (draft) => ({
+      ...draft,
+      inputPromptSignature: signature,
+      inputDrafts: draft.inputPromptSignature === signature ? draft.inputDrafts : {},
+      activeInputQuestionID: request
+        ? request.questions.find((question) => question.id === draft.activeInputQuestionID)?.id ?? request.questions[0]?.id ?? ''
+        : '',
+    }));
   };
   const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     updateComposerSessionDraft(currentComposerSessionKey(), updater);
@@ -3201,6 +3217,7 @@ webSearch: model.web_search,
       }
       setTransportOutbox(reconciliation.outbox);
       setThreadCache(nextCache);
+      if (runtimeState === 'accepted' && current) reconcileInputDraft(threadID, retained.input_request);
       if (selectionTransferred) {
         setLoadError('');
         setThreadLoadError('');
@@ -4559,21 +4576,9 @@ webSearch: model.web_search,
 
 
   createEffect(() => {
-    const request = selectedInputRequest();
-    const signature = request ? `${currentComposerSessionKey()}:${request.prompt_id}` : '';
-    const firstQuestion = request?.questions[0] ?? null;
-    updateCurrentComposerSessionDraft((draft) => ({
-      ...draft,
-      inputPromptSignature: signature,
-      inputDrafts: request && draft.inputPromptSignature !== signature ? {} : draft.inputDrafts,
-      activeInputQuestionID: request
-        ? (
-          draft.activeInputQuestionID && request.questions.some((question) => question.id === draft.activeInputQuestionID)
-            ? draft.activeInputQuestionID
-            : (firstQuestion?.id ?? '')
-        )
-        : '',
-    }));
+    const threadID = selectedThreadID();
+    const detail = threadCache().views.get(threadID);
+    if (detail && !selectedThreadDetailPending()) reconcileInputDraft(threadID, detail.thread.input_request);
   });
 
   const saveSettingsMutation = async (mutation: () => Promise<FlowerSettingsSnapshot>) => {
@@ -6847,7 +6852,6 @@ webSearch: model.web_search,
       return chatCopyValue('inputRequestChoicePlaceholder', 'Choose an option to continue.');
     }
     return trimString(question.write_placeholder)
-      || trimString(question.question)
       || chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.');
   });
 
@@ -7309,16 +7313,16 @@ webSearch: model.web_search,
   const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
     const draft = questionDraft(question.id);
     const choiceID = trimString(draft.choice_id);
-    const choiceValue = question.choices?.find((choice) => choice.choice_id === choiceID)?.value ?? choiceID;
+    const choiceValue = question.choices?.find((choice) => choice.choice_id === choiceID)?.value;
     const text = trimString(draft.text);
     const mode = questionMode(question);
 
     if (mode === 'write') return text ? { text } : null;
-    if (mode === 'select') return choiceID ? { choice_id: choiceValue } : null;
+    if (mode === 'select') return choiceValue ? { choice_id: choiceValue } : null;
     if (mode === 'select_or_write' && draft.answer_kind === 'custom' && text) {
       return { text };
     }
-    if (mode === 'select_or_write' && draft.answer_kind === 'choice' && choiceID) {
+    if (mode === 'select_or_write' && draft.answer_kind === 'choice' && choiceValue) {
       return { choice_id: choiceValue };
     }
     return null;
@@ -7343,8 +7347,8 @@ webSearch: model.web_search,
   const submitInputRequest = async () => {
     const thread = selectedThread();
     const request = selectedInputRequest();
-    if (selectedThreadDetailPending()) return;
-    if (!thread || !request) return;
+    if (!selectedDecisionAvailable()) return;
+    if (!thread || !request || inputRequestIsSubmitting()) return;
     const threadID = trimString(thread.thread_id);
     const answers = inputRequestAnswers();
     if (!answers) {
@@ -7352,7 +7356,7 @@ webSearch: model.web_search,
       return;
     }
     const focusHandoff = captureBottomActionFocus(threadID);
-    const submittedDraft = currentComposerSessionDraft();
+    if (!setDecisionSubmitting(threadID, request.prompt_id, true)) return;
     try {
       const receipt: FlowerSubmitInputReceipt = await props.adapter.submitInput({
         thread_id: thread.thread_id,
@@ -7366,24 +7370,16 @@ webSearch: model.web_search,
       ) {
         throw new Error('Flower input response returned an invalid current view.');
       }
-      batch(() => {
-        applyRuntimeCurrent(receipt.current);
-        updateComposerSessionDraft(threadID, (draft) => ({
-          ...draft,
-          inputPromptSignature: '',
-          inputDrafts: {},
-          activeInputQuestionID: '',
-          reasoningOverride: undefined,
-        }));
-      });
+      applyRuntimeCurrent(receipt.current);
       if (selectedThreadDetailMatches(threadID)) {
         scheduleBottomActionFocus(focusHandoff);
       }
     } catch (error) {
-      updateComposerSessionDraft(threadID, () => submittedDraft);
-      if (selectedThreadDetailMatches(threadID)) {
+      if (selectedThreadDetailMatches(threadID) && selectedInputRequest()?.prompt_id === request.prompt_id) {
         notifyComposerError(getErrorMessage(error));
       }
+    } finally {
+      setDecisionSubmitting(threadID, request.prompt_id, false);
     }
   };
 
@@ -7400,7 +7396,7 @@ webSearch: model.web_search,
         && candidate.status === 'pending'
         && candidate.state === 'requested'
       ));
-      if (!thread || !currentAction || !approvalActionCanDecide(currentAction) || !setApprovalActionSubmitting(currentAction.action_id, true)) {
+      if (!thread || !currentAction || !approvalActionCanDecide(currentAction) || !setDecisionSubmitting(thread.thread_id, currentAction.action_id, true)) {
         thread = null;
         return;
       }
@@ -7427,7 +7423,7 @@ webSearch: model.web_search,
         notifyComposerError(getErrorMessage(error));
       }
     } finally {
-      setApprovalActionSubmitting(submittedApproval.action_id, false);
+      setDecisionSubmitting(threadID, submittedApproval.action_id, false);
       if (focusAfterSubmit && selectedThreadDetailMatches(threadID)) {
         scheduleBottomActionFocus(focusHandoff);
       }
@@ -7457,31 +7453,21 @@ webSearch: model.web_search,
 
   const submitApprovalBatchDecision = async (approved: boolean) => {
     const thread = selectedThread();
-    const pending = selectedApprovalBatchActions().filter((action) => approvalActionCanDecide(action));
-    if (!thread || pending.length < 2) return;
+    const pending = selectedApprovalBatchActions();
+    if (!thread || pending.length < 2 || pending.some((action) => !approvalActionCanDecide(action))) return;
     const threadID = trimString(thread.thread_id);
     const focusHandoff = captureBottomActionFocus(threadID, pending[0]?.action_id);
-    const submissionIDs = pending
-      .map((action) => action.action_id)
-      .filter((actionID) => setApprovalActionSubmitting(actionID, true));
-    if (submissionIDs.length === 0) return;
+    const submissionIDs = pending.map((action) => action.action_id);
+    batch(() => submissionIDs.forEach((id) => setDecisionSubmitting(threadID, id, true)));
     setApprovalQueueAnnouncement(copy().chat.toolApprovalSubmitting);
-    let focusAfterSubmit = false;
-    const results = await Promise.allSettled(pending.map(async (action) => {
-      const result = await props.adapter.submitApproval(flowerApprovalRequest(thread, action, approved));
+    try {
+      const result = await props.adapter.submitApproval({ thread_id: threadID, interaction_ids: submissionIDs, approved });
       applyRuntimeCurrent(result.current);
-      return result;
-    }));
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        focusAfterSubmit = true;
-      } else if (selectedThreadDetailMatches(threadID) && !isFlowerApprovalConflict(result.reason)) {
-        notifyComposerError(getErrorMessage(result.reason));
-      }
-    }
-    submissionIDs.forEach((actionID) => setApprovalActionSubmitting(actionID, false));
-    if (focusAfterSubmit && selectedThreadDetailMatches(threadID)) {
-      scheduleBottomActionFocus(focusHandoff);
+      if (selectedThreadDetailMatches(threadID)) scheduleBottomActionFocus(focusHandoff);
+    } catch (error) {
+      if (selectedThreadDetailMatches(threadID) && !isFlowerApprovalConflict(error)) notifyComposerError(getErrorMessage(error));
+    } finally {
+      batch(() => submissionIDs.forEach((id) => setDecisionSubmitting(threadID, id, false)));
     }
   };
 
@@ -7614,7 +7600,7 @@ webSearch: model.web_search,
             <Show when={computerControlError()}><p role="alert">{copy().chat.computerControlFailed}</p></Show>
             <div class="flower-computer-control-actions">
               <Button variant="secondary" data-computer-control-action="take" disabled={computerControlBusy() || !props.adapter.inputComputerControl} onClick={() => { setComputerStageOpen(true); inputComputerControl({ action: 'observe' }); }}>{copy().chat.computerTakeControl}</Button>
-              <Button variant="primary" data-computer-control-action="return" disabled={computerControlBusy()} onClick={() => {
+              <Button variant="primary" data-computer-control-action="return" class="rounded-full" disabled={!selectedDecisionAvailable() || computerControlBusy() || inputRequestIsSubmitting()} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
                 if (!question || !choice) return;
@@ -7645,7 +7631,8 @@ webSearch: model.web_search,
       editFile: copy().chat.toolApprovalEditFile,
       runCommand: copy().chat.toolApprovalRunCommand,
       accessNetwork: copy().chat.toolApprovalAccessNetwork,
-      executeAction: copy().chat.toolApprovalExecuteAction,
+      outsideWorkspaceRisk: copy().chat.toolApprovalOutsideWorkspaceRisk,
+      writesFilesRisk: copy().chat.toolApprovalWritesFilesRisk,
       executeRequestedAction: copy().chat.toolApprovalExecuteRequestedAction,
       workingDirectory: copy().chat.toolApprovalWorkingDirectoryDetail,
     }));
@@ -7659,15 +7646,8 @@ webSearch: model.web_search,
     const commandText = createMemo(() => trimString(presentation().command));
     const commandCopyKey = `approval:${actionID}:command`;
     const commandCopied = () => copiedApprovalAction() === commandCopyKey;
-    const operationKind = createMemo<'file' | 'terminal' | 'network' | 'other'>(() => {
-      const toolName = trimString(action().tool_name).toLowerCase();
-      if (['apply_patch', 'file.write', 'file.edit'].includes(toolName)) return 'file';
-      if (toolName.includes('terminal') || commandText()) return 'terminal';
-      if (toolName.includes('network') || toolName.includes('http') || toolName.includes('web')) return 'network';
-      return 'other';
-    });
     const operationIcon = () => {
-      switch (operationKind()) {
+      switch (presentation().operationKind) {
         case 'file':
           return <Pencil class="h-4 w-4" />;
         case 'terminal':
@@ -7685,14 +7665,6 @@ webSearch: model.web_search,
     });
     const statusCopy = createMemo(() => submitting() ? '' : !canDecide() ? unavailableCopy() : '');
     const describedBy = createMemo(() => statusCopy() ? statusID : '');
-    const riskNote = () => {
-      const declaredRisk = trimString(action().summary.risk);
-      if (declaredRisk) return declaredRisk;
-      const notes: string[] = [];
-      if (action().summary.flags?.includes('open_world')) notes.push(copy().chat.toolApprovalOutsideWorkspaceRisk);
-      if (operationKind() === 'file' && action().summary.effects?.includes('write')) notes.push(copy().chat.toolApprovalWritesFilesRisk);
-      return notes.length > 0 ? notes.join(' ') : '';
-    };
     return (
       <section
         class={singleComposer ? 'flower-approval-single' : composerSurface ? 'flower-approval-queue-row' : 'flower-approval-card'}
@@ -7726,7 +7698,7 @@ webSearch: model.web_search,
           <Show when={singleComposer}>
             <div class="flower-approval-eyebrow">{copy().chat.toolApprovalRequired}</div>
           </Show>
-          <div class="flower-approval-operation" data-flower-approval-operation-kind={operationKind()}>
+          <div class="flower-approval-operation" data-flower-approval-operation-kind={presentation().operationKind}>
             <span class="flower-approval-operation-icon" aria-hidden="true">{operationIcon()}</span>
             <div class="flower-approval-operation-copy">
               <div class="flower-approval-operation-heading">
@@ -7763,7 +7735,7 @@ webSearch: model.web_search,
               </div>
             </details>
           </Show>
-          <Show when={riskNote()}>
+          <Show when={presentation().risk}>
             {(note) => <p class="flower-approval-risk"><AlertCircle class="h-3.5 w-3.5" aria-hidden="true" /><span>{note()}</span></p>}
           </Show>
           <Show when={statusCopy()}>
@@ -11346,7 +11318,8 @@ webSearch: model.web_search,
                         variant="primary"
                         icon={ArrowUp}
                         class="flower-composer-continue rounded-full"
-                        disabled={selectedThreadReadOnly() || !inputRequestReadyToSubmit()}
+                        disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || !inputRequestReadyToSubmit()}
+                        loading={inputRequestIsSubmitting()}
                         onClick={() => void submitChat()}
                       >
                         {chatCopyValue('inputRequestSubmit', 'Continue')}

@@ -12,6 +12,25 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('normalizes legacy choices to explicit submitted values', () => {
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 1, activity: 'active', turn_id: 'turn-a', run_id: 'run-a', interactions: [{
+      id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', input: { summary: '', questions: [{ id: 'q', kind: 'select', prompt: 'Choose', options: ['Stable'] }] },
+    }] };
+    expect(applyFlowerRuntimeCurrentView(summary(), current).input_request?.questions[0].choices)
+      .toEqual([{ choice_id: 'Stable', value: 'Stable', label: 'Stable', kind: 'select' }]);
+  });
+
+  it.each(['multiple inputs', 'duplicate questions', 'duplicate choices', 'missing choices', 'invalid choice value'])('rejects ambiguous input: %s', (scenario) => {
+    const question = { id: 'q', kind: 'select', prompt: 'Choose', choices: [{ choice_id: 'stable', value: 'Stable', label: 'Stable' }] };
+    const interaction = { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input' as const, input: { summary: '', questions: [question] } };
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 1, activity: 'active', turn_id: 'turn-a', run_id: 'run-a', interactions: [interaction] };
+    const tested = scenario === 'multiple inputs' ? { ...current, interactions: [interaction, { ...interaction, id: 'input-b' }] } : current;
+    if (scenario === 'duplicate questions') interaction.input.questions.push(question);
+    if (scenario === 'duplicate choices') question.choices.push(question.choices[0]);
+    if (scenario === 'missing choices') question.choices = [];
+    if (scenario === 'invalid choice value') question.choices[0].value = '';
+    expect(() => applyFlowerRuntimeCurrentView(summary(), tested)).toThrow('Flower contract error');
+  });
   it('owns exact Stop provenance and clears it only for the next canonical turn', () => {
     const cancellation = { thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', source: 'user_stop', mode: 'graceful' as const, requested_at: '2026-09-10T03:00:00Z' };
     const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 2, activity: 'active', turn_id: 'turn-a', run_id: 'run-a', run_progress: { phase: 'tool_execution' }, cancellation, items: [] };
@@ -356,7 +375,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
       run_progress: { phase: 'preparing' },
       interactions: [
     { id: 'approval-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'approval' },
-    { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', signal: { name: 'ask_user', call_id: 'input-a' } },
+    { id: 'input-a', turn_id: 'turn-a', run_id: 'run-a', kind: 'input', input: { summary: '', questions: [{ id: 'q', prompt: 'Reply', kind: 'write' }] } },
       ],
     };
     expect(applyFlowerRuntimeCurrentView(summary(), current).status).toBe('waiting_user');

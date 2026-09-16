@@ -426,7 +426,7 @@ export type FlowerInputRequestAction = Readonly<{
 
 export type FlowerInputRequestChoice = Readonly<{
   choice_id: string;
-  value?: string;
+  value: string;
   label: string;
   description?: string;
   kind: 'select';
@@ -792,7 +792,8 @@ export type FlowerLiveStreamEnvelope = Readonly<{
 
 export type FlowerSubmitApprovalRequest = Readonly<{
   thread_id: string;
-  interaction_id: string;
+  interaction_id?: string;
+  interaction_ids?: readonly string[];
   approved: boolean;
   reject_all?: boolean;
 }>;

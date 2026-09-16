@@ -300,7 +300,8 @@ func toAIRPCError(err error) *sessionrpc.Error {
 	switch {
 	case errors.Is(err, ErrNotConfigured):
 		return &sessionrpc.Error{Code: 503, Message: "ai not configured"}
-	case errors.Is(err, ErrThreadBusy),
+	case errors.Is(err, flruntime.ErrRequestConflict),
+		errors.Is(err, ErrThreadBusy),
 		errors.Is(err, ErrThreadModelConflict),
 		errors.Is(err, ErrRunChanged),
 		errors.Is(err, ErrWaitingPromptChanged),

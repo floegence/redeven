@@ -4,10 +4,11 @@ import { presentFlowerApproval } from './flowerApprovalPresentation';
 
 const copy = {
   title: 'Allow the following action?',
-  editFile: (target: string) => `Edit file: ${target}`,
+  editFile: 'Edit file',
   runCommand: 'Run command',
-  accessNetwork: (target: string) => `Access network resource: ${target}`,
-  executeAction: (label: string) => `Execute action: ${label}`,
+  accessNetwork: 'Access network resource',
+  outsideWorkspaceRisk: 'Outside workspace',
+  writesFilesRisk: 'Changes files',
   executeRequestedAction: 'Execute requested action',
   workingDirectory: (target: string) => `Working directory: ${target}`,
 };
@@ -103,4 +104,20 @@ describe('presentFlowerApproval', () => {
 
     expect(presentation.operationLabel).toBe('Execute requested action');
   });
+});
+
+it('owns tool classification and uses only declared risk facts', () => {
+  expect(presentFlowerApproval(action({ tool_name: 'computer.click', summary: { label: 'Click', effects: ['write'] } }), copy))
+    .toMatchObject({ operationKind: 'other' });
+  expect(presentFlowerApproval(action({ tool_name: 'computer.click', summary: { label: 'Click', effects: ['write'] } }), copy).risk).toBeUndefined();
+  expect(presentFlowerApproval(action({ tool_name: 'file.write', summary: { label: '', effects: ['write'], flags: ['open_world'] } }), copy))
+    .toMatchObject({ operationKind: 'file', operationLabel: 'Edit file', risk: 'Outside workspace Changes files' });
+  expect(presentFlowerApproval(action({ tool_name: 'terminal.exec', summary: { label: '', command: 'rm file', risk: 'Declared risk' } }), copy).risk).toBe('Declared risk');
+});
+
+it('uses standalone operation copy independently of target position in a locale', () => {
+  const presentation = presentFlowerApproval(action({ tool_name: 'file.edit', summary: { label: '', targets: [{ kind: 'file', label: 'a.ts' }] } }),
+    { ...copy, editFile: 'ファイルを編集' });
+  expect(presentation.operationLabel).toBe('ファイルを編集');
+  expect(presentation.targets).toEqual(['a.ts']);
 });

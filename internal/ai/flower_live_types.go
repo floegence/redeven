@@ -303,10 +303,11 @@ type FlowerMessageReference struct {
 }
 
 type SubmitFlowerApprovalRequest struct {
-	ThreadID      string `json:"thread_id"`
-	InteractionID string `json:"interaction_id"`
-	Approved      bool   `json:"approved"`
-	RejectAll     bool   `json:"reject_all,omitempty"`
+	ThreadID       string   `json:"thread_id"`
+	InteractionID  string   `json:"interaction_id,omitempty"`
+	InteractionIDs []string `json:"interaction_ids,omitempty"`
+	Approved       bool     `json:"approved"`
+	RejectAll      bool     `json:"reject_all,omitempty"`
 }
 
 type SubmitFlowerApprovalResponse struct {

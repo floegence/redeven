@@ -718,6 +718,18 @@ describe('runtime Flower surface adapter read state', () => {
     expect(receipt).toEqual(result);
   });
 
+  it('forwards the exact batch and rejects ambiguous or invalid selections before transport', async () => {
+    const submitApproval = vi.fn(async () => approvalResult('thread_1'));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
+    await adapter.submitApproval({ thread_id: 'thread_1', interaction_ids: ['a', 'b'], approved: false });
+    expect(submitApproval).toHaveBeenCalledExactlyOnceWith({ thread_id: 'thread_1', interaction_ids: ['a', 'b'], approved: false });
+    for (const selection of [
+      { interaction_ids: [] }, { interaction_ids: ['a', ''] }, { interaction_ids: ['a', 'a'] },
+      { interaction_ids: ['a'], interaction_id: 'b' }, { interaction_ids: ['a'], reject_all: true },
+    ]) await expect(adapter.submitApproval({ thread_id: 'thread_1', approved: true, ...selection })).rejects.toThrow(/selection/);
+    expect(submitApproval).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects missing typed approval identity before transport', async () => {
     const submitApproval = vi.fn(async () => approvalResult('thread_1'));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));

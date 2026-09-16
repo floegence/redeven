@@ -12,7 +12,6 @@ import type {
   FlowerActivityTargetRef,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
-  FlowerInputRequest,
   FlowerContextCompaction,
   FlowerContextUsage,
   FlowerTimelineAnchor,
@@ -43,8 +42,6 @@ export type FlowerLiveThreadMapperOptions = Readonly<{
 }>;
 
 type FlowerMessageBlock = NonNullable<FlowerChatMessage['blocks']>[number];
-type FlowerInputQuestion = FlowerInputRequest['questions'][number];
-type FlowerInputChoice = NonNullable<FlowerInputQuestion['choices']>[number];
 type JsonRecord = Record<string, unknown>;
 
 function recordValue(value: unknown): JsonRecord | null {
@@ -146,14 +143,6 @@ function mapRunProgress(raw: unknown, activeRunID: string): FlowerRunProgress | 
     throw new Error('Flower contract error: thread.run_progress requires exact active run and turn identity.');
   }
   return { run_id: runID, turn_id: turnID, phase: runProgressPhase(record.phase) };
-}
-
-function inputResponseMode(raw: unknown): FlowerInputQuestion['response_mode'] {
-  const mode = trim(raw);
-  if (mode !== 'select' && mode !== 'write' && mode !== 'select_or_write') {
-    throw new Error('Flower contract error: waiting_prompt question response_mode is invalid.');
-  }
-  return mode;
 }
 
 function nonNegativeInteger(raw: unknown, field: string): number {
@@ -901,70 +890,6 @@ export function mapFlowerSubagents(raw: unknown, field: string): readonly Flower
     .filter((value): value is FlowerSubagentSummary => value !== null);
 }
 
-function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
-  const record = recordValue(prompt);
-  if (!record) return null;
-  const promptID = trim(record.prompt_id);
-  const messageID = trim(record.message_id);
-  const toolID = trim(record.tool_id);
-  const toolName = trim(record.tool_name);
-  const questionsRaw = Array.isArray(record.questions) ? record.questions : [];
-  if (!promptID || !messageID || !toolID || !toolName) {
-    throw new Error('Flower contract error: waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
-  }
-	if (questionsRaw.length === 0) {
-		throw new Error('Flower contract error: waiting_prompt requires at least one question.');
-	}
-	const reasoningSelection = normalizeFlowerReasoningSelection(record.reasoning_selection);
-	return {
-		prompt_id: promptID,
-		message_id: messageID,
-		tool_id: toolID,
-		tool_name: toolName,
-		...(trim(record.reason_code) ? { reason_code: trim(record.reason_code) } : {}),
-		...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
-		...(Array.isArray(record.required_from_user) ? { required_from_user: record.required_from_user.map(trim).filter(Boolean) } : {}),
-		...(Array.isArray(record.evidence_refs) ? { evidence_refs: record.evidence_refs.map(trim).filter(Boolean) } : {}),
-    questions: questionsRaw.map((questionValue): FlowerInputQuestion => {
-      const question = recordValue(questionValue) ?? {};
-      const responseMode = inputResponseMode(question.response_mode);
-      return {
-        id: trim(question.id),
-        header: trim(question.header),
-        question: trim(question.question),
-        ...(question.is_secret !== undefined ? { is_secret: Boolean(question.is_secret) } : {}),
-        response_mode: responseMode,
-        ...(question.choices_exhaustive !== undefined ? { choices_exhaustive: Boolean(question.choices_exhaustive) } : {}),
-        ...(trim(question.write_label) ? { write_label: trim(question.write_label) } : {}),
-        ...(trim(question.write_placeholder) ? { write_placeholder: trim(question.write_placeholder) } : {}),
-        ...(Array.isArray(question.choices) ? {
-          choices: question.choices.map((choiceValue): FlowerInputChoice => {
-            const choice = recordValue(choiceValue) ?? {};
-            return {
-              choice_id: trim(choice.choice_id),
-              ...(typeof choice.value === 'string' ? { value: choice.value } : {}),
-              label: trim(choice.label),
-              ...(trim(choice.description) ? { description: trim(choice.description) } : {}),
-              kind: 'select' as const,
-              ...(trim(choice.input_placeholder) ? { input_placeholder: trim(choice.input_placeholder) } : {}),
-              ...(Array.isArray(choice.actions) ? {
-                actions: choice.actions.map((actionValue) => {
-                  const action = recordValue(actionValue) ?? {};
-                  return {
-                    type: trim(action.type),
-                  };
-                }).filter((action) => action.type),
-              } : {}),
-            };
-          }).filter((choice) => choice.choice_id && choice.label),
-        } : {}),
-      };
-    }).filter((question) => question.id && question.question),
-    ...(trim(record.public_summary) ? { public_summary: trim(record.public_summary) } : {}),
-    ...(record.contains_secret !== undefined ? { contains_secret: Boolean(record.contains_secret) } : {}),
-  };
-}
-
 function messageBlockPreviewText(block: FlowerMessageBlock): string {
   if (block.type === 'markdown' || block.type === 'text') return trim(block.content);
   if (block.type === 'input-response') return inputResponseVisibleText(block);
@@ -1197,8 +1122,6 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   if (status === 'running' && !progress) {
     throw new Error('Flower contract error: a running thread summary requires run_progress.');
   }
-  const waitingPrompt = record.waiting_prompt !== undefined ? mapInputRequest(record.waiting_prompt) : null;
-  const inputRequest = status === 'waiting_user' ? waitingPrompt : null;
   const errorMessage = trim(record.run_error);
   const errorCode = trim(record.run_error_code);
   const contextUsage = mapContextUsage(record.context_usage);
@@ -1247,7 +1170,6 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
-    ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
   };

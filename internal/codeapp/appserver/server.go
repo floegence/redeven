@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
@@ -1482,7 +1483,8 @@ func aiThreadActionHTTPStatus(err error) int {
 		return http.StatusOK
 	case errors.Is(err, sql.ErrNoRows):
 		return http.StatusNotFound
-	case errors.Is(err, ai.ErrThreadBusy),
+	case errors.Is(err, flruntime.ErrRequestConflict),
+		errors.Is(err, ai.ErrThreadBusy),
 		errors.Is(err, ai.ErrRunChanged),
 		errors.Is(err, ai.ErrWaitingPromptChanged),
 		errors.Is(err, ai.ErrTurnIdempotencyConflict),
@@ -4765,19 +4767,21 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			resp, err := aiSvc.SubmitFlowerApproval(meta, body)
 			if err != nil {
 				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
-					"thread_id":      threadID,
-					"interaction_id": strings.TrimSpace(body.InteractionID),
-					"approved":       body.Approved,
-					"reject_all":     body.RejectAll,
+					"thread_id":       threadID,
+					"interaction_id":  strings.TrimSpace(body.InteractionID),
+					"interaction_ids": body.InteractionIDs,
+					"approved":        body.Approved,
+					"reject_all":      body.RejectAll,
 				}, err)
 				writeAIApprovalError(w, err)
 				return
 			}
 			g.appendAudit(meta, "ai_tool_approval", "success", map[string]any{
-				"thread_id":      threadID,
-				"interaction_id": strings.TrimSpace(body.InteractionID),
-				"approved":       body.Approved,
-				"reject_all":     body.RejectAll,
+				"thread_id":       threadID,
+				"interaction_id":  strings.TrimSpace(body.InteractionID),
+				"interaction_ids": body.InteractionIDs,
+				"approved":        body.Approved,
+				"reject_all":      body.RejectAll,
 			}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return

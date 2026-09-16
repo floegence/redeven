@@ -328,20 +328,29 @@ function runtimeApprovalActions(
 function runtimeInputRequest(
   view: FlowerRuntimeCurrentView,
 ): FlowerThreadSnapshot['input_request'] {
-  const interaction = (view.interactions ?? []).find((candidate) => (
-    candidate.kind === 'input' && !candidate.resolved && candidate.input
-  ));
-  if (!interaction?.input) return undefined;
+  const pending = (view.interactions ?? []).filter((candidate) => candidate.kind === 'input' && !candidate.resolved);
+  if (pending.length === 0) return undefined;
+  const interaction = pending[0];
+  if (pending.length !== 1 || !interaction.input) {
+    throw new Error('Flower contract error: current requires one complete pending input interaction.');
+  }
+  const input = interaction.input;
   const identity = runtimeInteractionIdentity(interaction);
-  const rawQuestions: unknown = interaction.input.questions;
+  const rawQuestions: unknown = input.questions;
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
     throw new Error('Flower contract error: typed current input interaction requires at least one question.');
   }
   const questions = rawQuestions as NonNullable<FlowerRuntimeInteraction['input']>['questions'];
+  const questionIDs = new Set<string>();
   for (const question of questions) {
-    if (!trim(question.id) || !trim(question.prompt) || !['select', 'write', 'select_or_write'].includes(question.kind)) {
-      throw new Error('Flower contract error: typed current input question requires id, prompt, and kind.');
+    if (
+      !question || typeof question.id !== 'string' || typeof question.prompt !== 'string'
+      || !trim(question.id) || !trim(question.prompt) || questionIDs.has(trim(question.id))
+      || !['select', 'write', 'select_or_write'].includes(question.kind)
+    ) {
+      throw new Error('Flower contract error: typed current input question requires unique id, prompt, and kind.');
     }
+    questionIDs.add(trim(question.id));
   }
   return {
     prompt_id: trim(interaction.id),
@@ -350,7 +359,23 @@ function runtimeInputRequest(
     tool_name: trim(view.items?.find((item) => item.turn_id === interaction.turn_id && item.run_id === interaction.run_id && item.activity?.tool_id === interaction.tool_call_id)?.activity?.tool_name) || 'ask_user',
     required_from_user: questions.map((question) => trim(question.id)).filter(Boolean),
     questions: questions.map((question) => {
-      const options = (question.options ?? []).map(trim).filter(Boolean);
+      const choices = question.choices?.length ? question.choices.map((choice) => ({
+        choice_id: trim(choice.choice_id) || trim(choice.value),
+        value: choice.value,
+        label: choice.label,
+        ...(trim(choice.description) ? { description: trim(choice.description) } : {}),
+        kind: 'select' as const,
+      })) : (question.options ?? []).map((option) => ({ choice_id: trim(option), value: trim(option), label: trim(option), kind: 'select' as const }));
+      const choiceIDs = new Set<string>();
+      for (const choice of choices) {
+        if (!choice.choice_id || typeof choice.label !== 'string' || typeof choice.value !== 'string' || !trim(choice.label) || !trim(choice.value) || choiceIDs.has(choice.choice_id)) {
+          throw new Error('Flower contract error: input choices require unique identity, label, and value.');
+        }
+        choiceIDs.add(choice.choice_id);
+      }
+      if ((question.kind === 'write') !== (choices.length === 0)) {
+        throw new Error('Flower contract error: input choices do not match the declared response mode.');
+      }
       return {
         id: trim(question.id),
         header: trim(question.header),
@@ -360,16 +385,10 @@ function runtimeInputRequest(
         ...(question.choices_exhaustive !== undefined ? { choices_exhaustive: question.choices_exhaustive } : {}),
         ...(trim(question.write_label) ? { write_label: trim(question.write_label) } : {}),
         ...(trim(question.write_placeholder) ? { write_placeholder: trim(question.write_placeholder) } : {}),
-        choices: question.choices?.length ? question.choices.map((choice) => ({
-          choice_id: trim(choice.choice_id) || choice.value,
-          value: choice.value,
-          label: choice.label,
-          ...(trim(choice.description) ? { description: trim(choice.description) } : {}),
-          kind: 'select' as const,
-        })) : options.map((option) => ({ choice_id: option, label: option, kind: 'select' as const })),
+        choices,
       };
     }),
-    public_summary: trim(interaction.input.summary),
+    public_summary: trim(input.summary),
     contains_secret: questions.some((question) => question.secret === true),
   };
 }

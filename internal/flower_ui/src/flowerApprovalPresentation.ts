@@ -2,10 +2,11 @@ import type { FlowerApprovalAction, FlowerSafeTarget } from './contracts/flowerS
 
 export type FlowerApprovalPresentationCopy = Readonly<{
   title: string;
-  editFile: (target: string) => string;
+  editFile: string;
   runCommand: string;
-  accessNetwork: (target: string) => string;
-  executeAction: (label: string) => string;
+  accessNetwork: string;
+  outsideWorkspaceRisk: string;
+  writesFilesRisk: string;
   executeRequestedAction: string;
   workingDirectory: (target: string) => string;
 }>;
@@ -13,6 +14,8 @@ export type FlowerApprovalPresentationCopy = Readonly<{
 export type FlowerApprovalPresentation = Readonly<{
   title: string;
   operationLabel: string;
+  operationKind: 'file' | 'terminal' | 'network' | 'other';
+  risk?: string;
   targets: readonly string[];
   command?: string;
   details: readonly string[];
@@ -48,23 +51,22 @@ export function presentFlowerApproval(
   let operationLabel = copy.executeRequestedAction;
   let displayTargets: readonly string[] = [];
 
-  if (fileMutationTools.has(toolName) && fileTargets.length > 0) {
-    const firstTarget = fileTargets[0]?.label ?? '';
-    const formatted = copy.editFile(firstTarget);
-    operationLabel = firstTarget
-      ? formatted.slice(0, Math.max(0, formatted.length - firstTarget.length)).trim().replace(/[:：]\s*$/, '')
-      : formatted.trim().replace(/[:：]\s*$/, '');
+  const operationKind = fileMutationTools.has(toolName) ? 'file'
+    : commandTools.has(toolName) ? 'terminal'
+      : networkTools.has(toolName) ? 'network' : 'other';
+  if (operationKind === 'file') {
+    operationLabel = copy.editFile;
     displayTargets = fileTargets.map((target) => target.label);
-  } else if (commandTools.has(toolName)) {
+  } else if (operationKind === 'terminal') {
     operationLabel = copy.runCommand;
-  } else if (networkTools.has(toolName) && networkTargets.length > 0) {
-    const firstTarget = networkTargets[0]?.label ?? '';
-    const formatted = copy.accessNetwork(firstTarget);
-    operationLabel = firstTarget
-      ? formatted.slice(0, Math.max(0, formatted.length - firstTarget.length)).trim().replace(/[:：]\s*$/, '')
-      : formatted.trim().replace(/[:：]\s*$/, '');
+  } else if (operationKind === 'network') {
+    operationLabel = copy.accessNetwork;
     displayTargets = networkTargets.map((target) => target.label);
   }
+  const risk = action.summary.risk?.trim() || [
+    action.summary.flags?.includes('open_world') ? copy.outsideWorkspaceRisk : '',
+    operationKind === 'file' && action.summary.effects?.includes('write') ? copy.writesFilesRisk : '',
+  ].filter(Boolean).join(' ');
   const description = action.summary.description?.trim() || '';
   const label = safeSummaryLabel(action);
   operationLabel = (label !== command ? label : '') || description || operationLabel;
@@ -72,6 +74,8 @@ export function presentFlowerApproval(
   return {
     title: copy.title,
     operationLabel,
+    operationKind,
+    ...(risk ? { risk } : {}),
     targets: displayTargets,
     ...(command ? { command } : {}),
     details: workingDirectories.map((target) => copy.workingDirectory(target.label)),

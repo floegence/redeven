@@ -200,7 +200,7 @@ describe('Flower complete interaction subtree stability', () => {
   it.each(['approval', 'input', 'subagents'] as const)('preserves %s controls and applies real semantic changes', async (mode) => {
     const fixture = streamingFixture(8, 0);
     const current = fixture.current();
-    const request = inputRequest({ prompt_id: 'question-stability', tool_id: 'ask-tool', questions: [{ id: 'channel', header: 'Channel', question: 'Choose a channel', response_mode: 'select_or_write', choices: [{ choice_id: 'stable', label: 'Stable', kind: 'select' }, { choice_id: 'beta', label: 'Beta', kind: 'select' }], write_label: 'Custom' }] });
+    const request = inputRequest({ prompt_id: 'question-stability', tool_id: 'ask-tool', questions: [{ id: 'channel', header: 'Channel', question: 'Choose a channel', response_mode: 'select_or_write', choices: [{ choice_id: 'stable', value: 'stable', label: 'Stable', kind: 'select' }, { choice_id: 'beta', value: 'beta', label: 'Beta', kind: 'select' }], write_label: 'Custom' }] });
     if (mode !== 'subagents') fixture.replace({ ...current, interactions: [{ id: mode === 'input' ? request.prompt_id : 'approval-stability', turn_id: current.turn_id!, run_id: current.run_id!, kind: mode === 'input' ? 'input' : 'approval', ...(mode === 'input' ? { input: { summary: 'Choose a channel', questions: [{ id: 'channel', prompt: 'Choose a channel', kind: 'select_or_write', options: ['Stable', 'Beta'], write_label: 'Custom' }] } } : { approval: { label: 'Inspect directory', command: 'ls', tool_name: 'terminal.exec', tool_call_id: 'approve-tool' } }) }] });
     const runtime = await mountFixture(fixture);
     if (mode === 'subagents') {
