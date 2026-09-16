@@ -502,10 +502,9 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalSubmitting: string;
     toolApprovalUnavailable: string;
     toolApprovalComposerTitle: string;
-    toolApprovalEditFile: (target: string) => string;
+    toolApprovalEditFile: string;
     toolApprovalRunCommand: string;
-    toolApprovalAccessNetwork: (target: string) => string;
-    toolApprovalExecuteAction: (label: string) => string;
+    toolApprovalAccessNetwork: string;
     toolApprovalExecuteRequestedAction: string;
     toolApprovalWorkingDirectoryDetail: (target: string) => string;
     toolApprovalComposerDescription: string;
@@ -828,10 +827,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalSubmitting: 'Submitting...',
     toolApprovalUnavailable: 'Approval is no longer available.',
     toolApprovalComposerTitle: 'Allow the following action?',
-    toolApprovalEditFile: (target) => 'Edit file: ' + target,
+    toolApprovalEditFile: 'Edit file',
     toolApprovalRunCommand: 'Run command',
-    toolApprovalAccessNetwork: (target) => 'Access network resource: ' + target,
-    toolApprovalExecuteAction: (label) => 'Execute action: ' + label,
+    toolApprovalAccessNetwork: 'Access network resource',
     toolApprovalExecuteRequestedAction: 'Execute requested action',
     toolApprovalWorkingDirectoryDetail: (target) => 'Working directory: ' + target,
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',

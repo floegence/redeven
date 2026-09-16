@@ -177,6 +177,22 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	if completed.WaitingPrompt != nil || strings.TrimSpace(completed.RunError) != "" {
 		t.Fatalf("completed thread retained waiting/error state: %#v", completed)
 	}
+	for _, answer := range []struct {
+		text     string
+		conflict bool
+	}{{"production", false}, {"staging", true}} {
+		_, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, SubmitRequestUserInputResponseRequest{
+			ThreadID: thread.ThreadID,
+			Response: RequestUserInputResponse{PromptID: prompt.PromptID, Answers: map[string]RequestUserInputAnswer{"target": {Text: answer.text}}},
+		})
+		if answer.conflict {
+			if !errors.Is(err, flruntime.ErrRequestConflict) {
+				t.Errorf("different answer replay error=%v, want conflict", err)
+			}
+		} else if err != nil {
+			t.Errorf("same answer replay: %v", err)
+		}
+	}
 	bootstrap, err := svc.GetFlowerThreadDetail(context.Background(), meta, thread.ThreadID)
 	if err != nil {
 		t.Fatalf("GetFlowerThreadDetail: %v", err)
@@ -204,6 +220,16 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	if mainCalls.Load() != 3 || !sawHistoricalAskUserPair.Load() {
 		t.Fatalf("main_calls=%d historical_pair=%t", mainCalls.Load(), sawHistoricalAskUserPair.Load())
 	}
+	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, SubmitRequestUserInputResponseRequest{
+		ThreadID: thread.ThreadID,
+		Response: RequestUserInputResponse{PromptID: prompt.PromptID, Answers: map[string]RequestUserInputAnswer{"target": {Text: "production"}}},
+	}); err != nil {
+		t.Fatalf("replay after a later Turn: %v", err)
+	}
+	if mainCalls.Load() != 3 {
+		t.Fatal("response replay dispatched another provider request")
+	}
+
 }
 
 func requestContainsPairedToolHistory(request map[string]any, toolName string) bool {

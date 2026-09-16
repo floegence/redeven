@@ -81,12 +81,7 @@ type ThreadPatchInput = Readonly<{
 
 export const FLOWER_LIVE_EVENT_WAIT_MS = 10_000;
 
-type RuntimeApprovalSubmitInput = Readonly<{
-  thread_id: string;
-  interaction_id: string;
-  approved: boolean;
-  reject_all?: boolean;
-}>;
+type RuntimeApprovalSubmitInput = FlowerSubmitApprovalRequest;
 
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
@@ -157,12 +152,10 @@ function missingThreadIDMessage(options: RuntimeFlowerSurfaceAdapterOptions): st
 }
 
 function mapRuntimeThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSnapshot {
-	const { waiting_prompt: _waitingPrompt, ...summary } = thread;
-	return mapFlowerThread(summary, [], options.mapperOptions, thread.read_status);
+	return mapFlowerThread(thread, [], options.mapperOptions, thread.read_status);
 }
 
 function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSnapshot {
-	const { waiting_prompt: _waitingPrompt, ...summary } = thread;
 	const updatedAt = Math.max(0, Math.floor(Number(thread.updated_at_unix_ms ?? 0)));
   const lastMessageAt = Math.max(0, Math.floor(Number(thread.last_message_at_unix_ms ?? updatedAt)));
   const activityRevision = Math.max(updatedAt, lastMessageAt);
@@ -171,7 +164,7 @@ function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfa
     snapshot: { activity_revision: activityRevision },
     read_state: { last_seen_activity_revision: activityRevision },
   };
-	return mapFlowerThread(summary, [], options.mapperOptions, readStatus);
+	return mapFlowerThread(thread, [], options.mapperOptions, readStatus);
 }
 
 function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadView {
@@ -426,10 +419,15 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       const tid = trim(input.thread_id);
       if (!tid) throw new Error(missingThreadIDMessage(options));
       const interactionID = trim(input.interaction_id);
-      if (!interactionID) throw new Error('Missing approval interaction id.');
+      const interactionIDs = input.interaction_ids?.map(trim);
+      if (interactionIDs !== undefined) {
+        if (interactionID || input.reject_all || !interactionIDs.length || interactionIDs.some((id) => !id) || new Set(interactionIDs).size !== interactionIDs.length) {
+          throw new Error('Invalid approval interaction selection.');
+        }
+      } else if (!interactionID && !input.reject_all) throw new Error('Missing approval interaction id.');
       return options.transport.submitApproval({
         thread_id: tid,
-        interaction_id: interactionID,
+        ...(interactionIDs ? { interaction_ids: interactionIDs } : interactionID ? { interaction_id: interactionID } : {}),
         approved: Boolean(input.approved),
         ...(input.reject_all ? { reject_all: true } : {}),
       });

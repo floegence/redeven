@@ -174,9 +174,9 @@ describe('Flower bottom decision surface', () => {
         question: 'Which release channel should Flower use?',
         response_mode: 'select_or_write',
         choices: [
-          { choice_id: 'stable', label: 'Stable', kind: 'select' },
-          { choice_id: 'beta', label: 'Beta', kind: 'select' },
-          { choice_id: 'nightly', label: 'Nightly', kind: 'select' },
+          { choice_id: 'stable', value: 'stable', label: 'Stable', kind: 'select' },
+          { choice_id: 'beta', value: 'beta', label: 'Beta', kind: 'select' },
+          { choice_id: 'nightly', value: 'nightly', label: 'Nightly', kind: 'select' },
         ],
         choices_exhaustive: false,
         write_label: 'Something else',
@@ -238,8 +238,8 @@ describe('Flower bottom decision surface', () => {
         response_mode: 'select_or_write',
         choices_exhaustive: false,
         choices: [
-          { choice_id: 'hiking', label: 'Nature and hiking', kind: 'select' },
-          { choice_id: 'city', label: 'City and culture', kind: 'select' },
+          { choice_id: 'hiking', value: 'hiking', label: 'Nature and hiking', kind: 'select' },
+          { choice_id: 'city', value: 'city', label: 'City and culture', kind: 'select' },
         ],
         write_label: 'None of the above / Other',
         write_placeholder: 'Describe your preference',
@@ -687,7 +687,7 @@ describe('Flower bottom decision surface', () => {
     expect(runtime.querySelector('[data-flower-approval-action-id="approval-concurrent-second"]')).toBeNull();
   });
 
-  it('submits allow all for every pending action in parallel', async () => {
+  it.each([true, false])('submits one atomic exact approval set with decision %s', async (approved) => {
     const firstAction = approval('approval-batch-first', { queue_order: 1 });
     const secondAction = approval('approval-batch-second', { queue_order: 2 });
     const approvalThread = thread({
@@ -695,16 +695,8 @@ describe('Flower bottom decision surface', () => {
       status: 'waiting_approval',
       approval_actions: [firstAction, secondAction],
     });
-    type ApprovalResult = ReturnType<typeof approvalCommandResult>;
-    const deferredResults = new Map<string, {
-      promise: Promise<ApprovalResult>;
-      resolve: (value: ApprovalResult | PromiseLike<ApprovalResult>) => void;
-    }>();
-    const submitApproval = vi.fn((input) => {
-      const result = deferred<ReturnType<typeof approvalCommandResult>>();
-      deferredResults.set(input.interaction_id, result);
-      return result.promise;
-    });
+    const response = deferred<ReturnType<typeof approvalCommandResult>>();
+    const submitApproval = vi.fn(() => response.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [approvalThread]),
@@ -716,15 +708,14 @@ describe('Flower bottom decision surface', () => {
     (runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelectorAll('[data-flower-composer-approval="true"]').length === 2);
     const allowAll = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
-      .find((button) => button.textContent?.trim() === 'Allow all');
+      .find((button) => button.textContent?.trim() === (approved ? 'Allow all' : 'Reject all'));
     expect(allowAll).toBeTruthy();
     allowAll?.click();
-    await waitFor(() => submitApproval.mock.calls.length === 2);
-    expect(submitApproval.mock.calls.map(([input]) => input.interaction_id).sort()).toEqual([
-      firstAction.action_id,
-      secondAction.action_id,
-    ].sort());
-    expect(submitApproval.mock.calls.every(([input]) => input.approved === true)).toBe(true);
+    allowAll?.click();
+    await waitFor(() => submitApproval.mock.calls.length === 1);
+    expect(submitApproval).toHaveBeenCalledWith({ thread_id: approvalThread.thread_id,
+      interaction_ids: [firstAction.action_id, secondAction.action_id], approved });
+    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).every((button) => button.disabled)).toBe(true);
 
     const resolved = (version: number) => ({
       ok: true as const,
@@ -736,13 +727,12 @@ describe('Flower bottom decision surface', () => {
         turn_id: 'turn-fixture',
         run_progress: { phase: 'finalizing' as const },
         interactions: [
-          { id: firstAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved: true },
-          { id: secondAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved: true },
+          { id: firstAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved },
+          { id: secondAction.action_id, turn_id: 'turn-fixture', run_id: 'run-fixture', kind: 'approval' as const, resolved: true, approved },
         ],
       },
     });
-    deferredResults.get(firstAction.action_id)?.resolve(resolved(31));
-    deferredResults.get(secondAction.action_id)?.resolve(resolved(32));
+    response.resolve(resolved(32));
     await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="chat"]') !== null);
   });
 

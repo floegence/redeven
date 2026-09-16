@@ -129,6 +129,15 @@ then reads the canonical current view and summary and emits the existing
 reconnection restores the authoritative baseline instead of retrying, polling,
 or applying an event-derived title patch.
 
+Input response retries are adjudicated by Floret Respond, including resolved
+interactions: the same answer succeeds, a different answer returns conflict
+(HTTP and RPC 409). Authorization remains mandatory. Redeven persists execution
+authority and reobserves computer control only for an unresolved interaction;
+replaying an accepted answer never repeats these preconditions. Approval batches
+forward the caller's exact ID set in one Respond with no host-side partial
+execution. See [Flower interactions](../ui/flower-approval-context.md) for the
+browser submission, compatibility, and draft contracts.
+
 The product Stop boundary is an idempotent command acknowledgement, not a
 thread-read boundary. Redeven invokes typed `Cancel`, discards its returned
 current view, and exposes only `{ok: true}`. Canonical workspace subscription
@@ -318,3 +327,5 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/floret_ask_user_integration_test.go` - Verifies choice copy guidance reaches the provider and covers frozen waiting-turn settings, non-blocking interaction settlement, continuation progress, and natural completion.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Latest-selection generation fence before detail cache mutation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Deterministic out-of-order A to B to A navigation coverage.
+
+- `redeven:internal/ai/computer_takeover_integration_test.go` - Resolved control-response replay avoids repeat observations across restart.

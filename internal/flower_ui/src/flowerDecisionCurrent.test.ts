@@ -11,8 +11,8 @@ const summary = {
   read_status: { is_unread: false, snapshot: { activity_revision: 0 }, read_state: { last_seen_activity_revision: 0 } },
 } satisfies FlowerThreadSnapshot;
 const copy = {
-  title: 'Allow this action?', editFile: (target: string) => `Edit file: ${target}`, runCommand: 'Run command',
-  accessNetwork: (target: string) => `Access network: ${target}`, executeAction: (label: string) => `Execute: ${label}`,
+  title: 'Allow this action?', editFile: 'Edit file', runCommand: 'Run command',
+  accessNetwork: 'Access network', outsideWorkspaceRisk: 'Outside workspace', writesFilesRisk: 'Changes files',
   executeRequestedAction: 'Execute requested action', workingDirectory: (target: string) => `Working directory: ${target}`,
 };
 

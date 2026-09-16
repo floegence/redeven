@@ -481,6 +481,7 @@ export function runtimeCurrentView(
       tool_call_id: action.tool_id,
       resolved: action.status !== 'pending' || action.state !== 'requested',
       approved: action.state === 'approved',
+      approval: { ...action.summary, targets: undefined, safe_targets: action.summary.targets, tool_name: action.tool_name, tool_call_id: action.tool_id },
     })),
     ...(threadValue.input_request ? [{
       id: threadValue.input_request.prompt_id,
@@ -488,10 +489,16 @@ export function runtimeCurrentView(
       run_id: activeRunID,
       kind: 'input' as const,
       resolved: false,
-      signal: {
-        name: 'ask_user',
-        call_id: threadValue.input_request.tool_id,
-        payload: threadValue.input_request as unknown as Readonly<Record<string, unknown>>,
+      tool_call_id: threadValue.input_request.tool_id,
+      input: {
+        summary: threadValue.input_request.public_summary ?? '',
+        questions: threadValue.input_request.questions.map((question) => ({
+          id: question.id, kind: question.response_mode, prompt: question.question,
+          header: question.header, secret: question.is_secret,
+          write_label: question.write_label, write_placeholder: question.write_placeholder,
+          choices_exhaustive: question.choices_exhaustive,
+          choices: question.choices?.map((choice) => ({ choice_id: choice.choice_id, value: choice.value, label: choice.label, description: choice.description })),
+        })),
       },
     }] : []),
   ];
@@ -758,13 +765,13 @@ export function inputRequest(overrides: Partial<FlowerInputRequest> = {}): Flowe
         response_mode: 'select',
         choices: [
           {
-            choice_id: 'staging',
+            choice_id: 'staging', value: 'staging',
             label: 'Staging',
             description: 'Use the safe validation environment.',
             kind: 'select',
           },
           {
-            choice_id: 'production',
+            choice_id: 'production', value: 'production',
             label: 'Production',
             description: 'Use the live environment.',
             kind: 'select',

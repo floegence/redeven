@@ -76,7 +76,7 @@ function inputRequestEntry(key: string): FlowerTimelineEntry {
         header: 'Decision',
         question: 'Continue?',
         response_mode: 'select',
-        choices: [{ choice_id: 'continue', label: 'Continue', kind: 'select' }],
+        choices: [{ choice_id: 'continue', value: 'continue', label: 'Continue', kind: 'select' }],
       }],
     },
   };

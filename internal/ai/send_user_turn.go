@@ -425,22 +425,24 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
 	}
 	interactionID := ""
-	var pendingInteraction flruntime.ThreadInteraction
+	var inputInteraction flruntime.ThreadInteraction
 	for _, interaction := range view.Interactions {
-		if interaction.Kind != flruntime.ThreadInteractionInput || interaction.Resolved {
+		if interaction.Kind != flruntime.ThreadInteractionInput {
 			continue
 		}
 		if strings.TrimSpace(interaction.ID) == promptID || strings.TrimSpace(interaction.ToolCallID) == promptID {
 			interactionID = strings.TrimSpace(interaction.ID)
-			pendingInteraction = interaction
+			inputInteraction = interaction
 			break
 		}
 	}
 	if interactionID == "" {
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
 	}
-	if err := s.persistExecutionAuthority(ctx, meta, threadID, "continue-input:"+interactionID, view.TurnID.String()); err != nil {
-		return SubmitRequestUserInputResponseResponse{}, err
+	if !inputInteraction.Resolved {
+		if err := s.persistExecutionAuthority(ctx, meta, threadID, "continue-input:"+interactionID, inputInteraction.TurnID.String()); err != nil {
+			return SubmitRequestUserInputResponseResponse{}, err
+		}
 	}
 	answers := make(map[string]string, len(req.Response.Answers))
 	for questionID, answer := range req.Response.Answers {
@@ -454,8 +456,10 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 		}
 		answers[questionID] = value
 	}
-	if err := s.reobserveComputerControlReturn(ctx, view, pendingInteraction, answers); err != nil {
-		return SubmitRequestUserInputResponseResponse{}, err
+	if !inputInteraction.Resolved {
+		if err := s.reobserveComputerControlReturn(ctx, view, inputInteraction, answers); err != nil {
+			return SubmitRequestUserInputResponseResponse{}, err
+		}
 	}
 	result, err := typed.Respond(ctx, flruntime.RespondInput{
 		ThreadID: identity.ThreadID(threadID), InteractionID: interactionID,

@@ -85,7 +85,7 @@ describe('Flower approval command presentation', () => {
     const surface = readFile(surfacePath);
 
     expect(surface).toContain('class="flower-approval-operation-description"');
-    expect(surface).not.toContain('presentation().risk');
+    expect(surface).toContain('presentation().risk');
     expect(cssRule(css, '.flower-approval-operation-description')).toContain('overflow-wrap: anywhere');
     expect(surface).toContain('<details class="flower-approval-details">');
   });

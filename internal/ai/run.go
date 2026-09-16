@@ -166,7 +166,6 @@ type run struct {
 	assistantAnswer          assistantAnswerState
 	activityFileActions      map[string]FlowerActivityFileAction
 	activityFileActionSeq    int64
-	waitingPrompt            *RequestUserInputPrompt
 
 	muFloretIdentity    sync.Mutex
 	floretEventIdentity floretRuntimeEventIdentity
@@ -1226,53 +1225,6 @@ func (r *run) reconcileCanonicalMarkdownMessage(source canonicalMarkdownSource, 
 	return true
 }
 
-func (r *run) reconcileCanonicalWaitingUserMessage() bool {
-	if r == nil {
-		return false
-	}
-	if !r.acceptsEngineResultProjection() {
-		return false
-	}
-
-	type markdownUpdate struct {
-		index int
-		block persistedMarkdownBlock
-	}
-
-	r.muAssistant.Lock()
-	if r.waitingPrompt == nil {
-		r.muAssistant.Unlock()
-		return false
-	}
-
-	updates := make([]markdownUpdate, 0, 4)
-	for _, idx := range r.markdownBlockIndicesLocked() {
-		block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
-		if !ok || block == nil || strings.TrimSpace(block.Content) == "" {
-			continue
-		}
-		block.Content = ""
-		updates = append(updates, markdownUpdate{
-			index: idx,
-			block: persistedMarkdownBlock{Type: "markdown", Content: ""},
-		})
-	}
-	r.muAssistant.Unlock()
-
-	if len(updates) == 0 {
-		return false
-	}
-	for _, update := range updates {
-		r.sendStreamEvent(streamEventBlockSet{
-			Type:       "block-set",
-			MessageID:  r.messageID,
-			BlockIndex: update.index,
-			Block:      update.block,
-		})
-	}
-	return true
-}
-
 func (r *run) sessionMetaForTool() (*session.Meta, error) {
 	if r == nil {
 		return nil, errors.New("nil run")
@@ -1856,9 +1808,6 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 	if assistantText == "" {
 		assistantText = r.canonicalMarkdownTextSnapshot("")
 	}
-	if assistantText == "" {
-		assistantText = r.waitingPromptSummarySnapshot()
-	}
 	return string(b), assistantText, assistantAt, nil
 }
 
@@ -1882,14 +1831,6 @@ func assistantVisibleTextFromBlock(block any) string {
 	default:
 		return ""
 	}
-}
-
-func (r *run) waitingPromptSummarySnapshot() string {
-	prompt := r.snapshotWaitingPrompt()
-	if prompt == nil {
-		return ""
-	}
-	return formatRequestUserInputAssistantSummary(*prompt)
 }
 
 func toAnySlice(value any) []any {

@@ -5,7 +5,6 @@ import {
   launchLocalEnvironmentFlowerTurn,
   mapFlowerSettingsDraftToRuntimeBundle,
   mapRuntimeFlowerSettings,
-  mapRuntimeFlowerThread,
   type DesktopSettingsBridge,
 } from './localEnvironmentFlowerSurfaceAdapter';
 import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
@@ -326,8 +325,9 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
-  it('maps runtime threads to runtime ownership metadata', () => {
-    const mapped = mapRuntimeFlowerThread(threadView());
+  it('maps runtime threads to runtime ownership metadata', async () => {
+    const surface = createLocalEnvironmentFlowerSurfaceAdapter(bridgeFor(() => ({ threads: [threadView()] })));
+    const mapped = (await surface.listThreads())[0];
 
     expect(mapped).toMatchObject({
       thread_id: 'thread-1',
@@ -340,12 +340,12 @@ describe('Local Environment Flower surface adapter', () => {
     expect(mapped.read_status.is_unread).toBe(false);
   });
 
-  it('maps runtime run_error_code into shared thread error metadata', () => {
-    const mapped = mapRuntimeFlowerThread(threadView({
+  it('maps runtime run_error_code into shared thread error metadata', async () => {
+    const mapped = (await createLocalEnvironmentFlowerSurfaceAdapter(bridgeFor(() => ({ threads: [threadView({
       run_status: 'failed',
       run_error_code: 'provider_auth_failed',
       run_error: 'The selected AI provider rejected the saved credentials.',
-    }));
+    })] }))).listThreads())[0];
 
     expect(mapped.status).toBe('failed');
     expect(mapped.error).toEqual({
@@ -353,11 +353,11 @@ describe('Local Environment Flower surface adapter', () => {
       message: 'The selected AI provider rejected the saved credentials.',
     });
 
-    const interrupted = mapRuntimeFlowerThread(threadView({
+    const interrupted = (await createLocalEnvironmentFlowerSurfaceAdapter(bridgeFor(() => ({ threads: [threadView({
       run_status: 'canceled',
       run_error_code: 'runtime_restarted',
       run_error: 'The local runtime restarted before this reply finished.',
-    }));
+    })] }))).listThreads())[0];
     expect(interrupted.status).toBe('canceled');
     expect(interrupted.error).toEqual({
       code: 'runtime_restarted',

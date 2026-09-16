@@ -7,7 +7,6 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
-	"github.com/floegence/redeven/internal/config"
 )
 
 const activityTimelineBlockType = "activity-timeline"
@@ -201,40 +200,4 @@ func activityTimelineFromAny(block any) (observation.ActivityTimeline, bool) {
 		return out.ActivityTimeline, true
 	}
 	return observation.ActivityTimeline{}, false
-}
-
-func (r *run) setWaitingPrompt(prompt *RequestUserInputPrompt) {
-	if r == nil {
-		return
-	}
-	normalized := normalizeRequestUserInputPrompt(prompt)
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	if normalized == nil {
-		r.waitingPrompt = nil
-		return
-	}
-	cp := *normalized
-	cp.ReasoningSelection = config.NormalizeAIReasoningSelection(normalized.ReasoningSelection)
-	cp.RequiredFromUser = append([]string(nil), normalized.RequiredFromUser...)
-	cp.EvidenceRefs = append([]string(nil), normalized.EvidenceRefs...)
-	cp.Questions = normalizeRequestUserInputQuestions(normalized.Questions)
-	r.waitingPrompt = &cp
-}
-
-func (r *run) snapshotWaitingPrompt() *RequestUserInputPrompt {
-	if r == nil {
-		return nil
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	if r.waitingPrompt == nil {
-		return nil
-	}
-	cp := *r.waitingPrompt
-	cp.ReasoningSelection = config.NormalizeAIReasoningSelection(r.waitingPrompt.ReasoningSelection)
-	cp.RequiredFromUser = append([]string(nil), r.waitingPrompt.RequiredFromUser...)
-	cp.EvidenceRefs = append([]string(nil), r.waitingPrompt.EvidenceRefs...)
-	cp.Questions = normalizeRequestUserInputQuestions(r.waitingPrompt.Questions)
-	return &cp
 }
