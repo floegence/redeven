@@ -973,6 +973,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let companionActionRef: HTMLButtonElement | undefined;
   let composerReferenceMenuRef: HTMLDivElement | undefined;
   let composerAutosizeController: FlowerComposerAutosizeController | undefined;
   const composerReferenceRemoveButtons = new Map<string, HTMLButtonElement>();
@@ -1097,7 +1098,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         if (mode === 'input_request') {
           const target = surface?.querySelector<HTMLElement>(
-            '[role="radio"]:not([disabled]), textarea:not([disabled]), input:not([disabled]), .flower-composer-continue:not([disabled])',
+            '[role="radio"]:not([disabled]), textarea:not([disabled]), input:not([disabled]), [data-computer-control-action]:not([disabled]), .flower-composer-continue:not([disabled])',
           );
           target?.focus({ preventScroll: true });
           return;
@@ -2230,6 +2231,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const scheduleComposerFocus = () => {
     if (typeof queueMicrotask === 'undefined') return;
+    const focusCollapsedAction = companionCollapsed() && companionActionVisible();
     const token = ++composerFocusToken;
     const focusOwnerAtRequest = composerFocusOwner;
     queueMicrotask(() => {
@@ -2242,9 +2244,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           || activeElement === composerRef;
         if (!focusStillOwned) return;
       }
-      if (!composerRef?.isConnected) return;
-      composerRef.focus();
-      if (typeof document !== 'undefined' && document.activeElement !== composerRef) return;
+      const target = focusCollapsedAction ? companionActionRef : composerRef;
+      if (!target?.isConnected) return;
+      target.focus({ preventScroll: true });
     });
   };
   onCleanup(() => {
@@ -6710,10 +6712,6 @@ webSearch: model.web_search,
     updateCurrentComposerSessionDraft((draft) => ({ ...draft, activeInputQuestionID: nextQuestion.id }));
   };
   const activeInputQuestionIsSecret = createMemo(() => !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
-  const companionActionVisible = createMemo(() => (
-    companionCollapsed()
-    && (activeInputQuestionIsSecret() || Boolean(selectedComposerApprovalDisplayAction()))
-  ));
 
   const composerTextValue = createMemo(() => {
     if (!selectedInputRequest()) {
@@ -6727,6 +6725,22 @@ webSearch: model.web_search,
     if (!question) return false;
     if (questionMode(question) === 'write') return true;
     return questionMode(question) === 'select_or_write' && questionDraft(question.id).answer_kind === 'custom';
+  });
+  const companionActionVisible = createMemo(() => (
+    companionCollapsed()
+    && (Boolean(selectedComposerApprovalDisplayAction())
+      || (Boolean(selectedInputRequest()) && (activeInputQuestionIsSecret() || !activeInputQuestionUsesTextEditor())))
+  ));
+  const companionActionText = createMemo(() => {
+    const question = activeInputQuestion();
+    if (selectedInputRequest() && question && !question.is_secret && !isComputerInput(selectedInputRequest())
+      && (questionMode(question) === 'select' || questionMode(question) === 'select_or_write')) {
+      return trimString(selectedInputRequest()?.public_summary)
+        || trimString(question.question)
+        || props.companionActionLabel
+        || copy().chat.placeholder;
+    }
+    return props.companionActionLabel || props.companionSummary?.visualText || copy().chat.placeholder;
   });
   createEffect(() => {
     composerTextValue();
@@ -6792,6 +6806,10 @@ webSearch: model.web_search,
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
+    if (companionCollapsed()) {
+      event.preventDefault();
+      props.onCompanionOpenRequest?.();
+    }
     const field = composerRef;
     if (
       !(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)
@@ -11103,14 +11121,21 @@ webSearch: model.web_search,
                 </Show>
                 <Show when={companionActionVisible()}>
                   <button
+                    ref={companionActionRef}
                     type="button"
                     class="flower-companion-collapsed-action"
                     aria-controls={props.companionRegionID}
                     aria-expanded="false"
-                    onClick={() => props.onCompanionOpenRequest?.()}
+                    aria-label={companionActionText()}
+                    title={companionActionText()}
+                    onClick={(event) => {
+                      const handoff = captureBottomActionFocus(selectedThreadID());
+                      props.onCompanionOpenRequest?.();
+                      if (event.detail === 0) scheduleBottomActionFocus(handoff);
+                    }}
                   >
                     <span class="truncate">
-                      {props.companionActionLabel || props.companionSummary?.visualText}
+                      {companionActionText()}
                     </span>
                   </button>
                 </Show>

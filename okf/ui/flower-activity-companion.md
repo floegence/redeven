@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower Activity companion
 description: Activity presents one Flower surface as a dedicated page or a continuous bottom-bar companion without changing canonical ownership.
 tags: [ui, flower, activity, companion, read-state, floret]
-timestamp: 2026-09-15T00:00:00Z
+timestamp: 2026-09-16T00:00:00Z
 quality_exception: Cross-surface UI contract spanning Activity placement, shared Flower projection, contextual launch handoff, and Workbench isolation.
 ---
 # Summary
@@ -30,7 +30,7 @@ Redeven owns one stable product Portal around exactly one `EnvAIPage`. That owne
 
 The ordinary Flower composer textarea is literally the collapsed Bottom Bar field and the expanded detail composer. Expansion and collapse do not clone, replace, crossfade, or copy its value, selection, focus, or composition state. Focusing, clicking, or typing in the collapsed textarea requests expansion while that same node remains mounted; clicking also reopens after Escape has retained composer focus. The old quick-entry input, quick draft, IME bridge, composer handoff request, and manual frame resolver do not exist.
 
-Collapsed presentation hides and disengages the header, transcript, thread rail, status lanes, and supporting composer controls while retaining the ordinary textarea. Canonical secret questions and approval decisions are different composer kinds: collapsed presentation shows a compact action that opens the detail surface, while the real password or approval control remains hidden and inert. A presentation change itself never changes composer kind.
+Collapsed presentation hides and disengages the header, transcript, thread rail, status lanes, and supporting composer controls while retaining the ordinary textarea. Canonical secret questions, approval decisions, and input requests without an active text editor use a compact action that opens the detail surface. This includes choice-only questions, select-or-write questions before choosing a custom answer, and Computer takeover requests. The real decision controls remain mounted, hidden, and inert while collapsed. Choice entries display the public question summary, falling back to the active question or localized action label; secret and other actions retain generic localized copy. Answer values never become entry labels. A presentation change itself never changes composer kind or clears an answer draft. Clicking unused composer space also requests expansion without requiring an editable field; the title retains its independent conversation-switcher behavior. Keyboard activation transfers focus into the decision controls, and Escape restores focus to the visible collapsed action after closing completes.
 
 When the collapsed companion has no selected thread, its conversation switcher remains as a compact Flower icon-only button. It omits the fallback `Ask Flower` title, chevron, and title-width reservation so the ordinary composer owns the released space. The icon keeps the localized conversation-switcher accessible name and tooltip; activation opens the companion and its existing thread switcher, including new-conversation entry. Once a thread is selected, the compact title and chevron return. Pending input, approval, and active-work summary precedence remains unchanged.
 
@@ -72,6 +72,7 @@ The companion never auto-expands for completion, failure, approval, or user inpu
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - browser tests cover continuous geometry, outside dismissal, breakpoint placement, and DOM identity.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs` - production-build smoke loads the unmocked lazy Flower feature and verifies one companion, surface, composer, and stable full-page identity.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionAppearance.browser.test.tsx` - the real Flower component keeps one collapsed outline and retains its editor, draft, selection, and composition through presentation changes.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionEntry.browser.test.tsx` - real Flower decisions inside the published companion shell retain pointer and keyboard entry, focus, and answers across thread and presentation changes.
 - `redeven:internal/envapp/ui_src/src/ui/activityFlowerCompanionVisual.browser.test.tsx` - complete production class fixtures verify theme, viewport, focus, state, and transition decoration boundaries.
 - `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx` - focused tests cover collapsed engagement, background refresh, and composer identity.
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerAutosizeController.ts` - one measured controller owns one-to-five-line growth, internal overflow, resize scheduling, suspension, and cleanup.
