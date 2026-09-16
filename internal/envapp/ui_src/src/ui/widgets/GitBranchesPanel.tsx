@@ -3418,9 +3418,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   type="button"
                   class={cn(
                     "git-browser-interactive flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-left transition-colors duration-150 focus-visible:outline-none",
-                    item.active
-                      ? "border-transparent git-browser-selection-surface"
-                      : "border-transparent bg-transparent",
+                    redevenSegmentedItemClass(item.active),
+                    !item.active && "border-transparent bg-transparent",
                   )}
                   aria-pressed={item.active}
                   aria-label={`${item.label}: ${
@@ -3434,16 +3433,16 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   disabled={pending || unavailable}
                   onClick={() => selectStatusSection(item.section)}
                 >
-                  <Icon class={cn("h-3.5 w-3.5 shrink-0", gitToneAccentColor(tone))} />
+                  <Icon class={cn("h-3.5 w-3.5 shrink-0", item.active ? "text-inherit" : gitToneAccentColor(tone))} />
                   <span class={cn(
                       "truncate text-[11px] font-medium leading-4",
-                      item.active ? "text-foreground" : "text-muted-foreground",
+                      item.active ? "text-inherit" : "text-muted-foreground",
                     )}>
                       {item.label}
                   </span>
                   <span class={cn(
                     "inline-flex min-w-[1.25rem] shrink-0 items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold tabular-nums",
-                    item.active ? "git-browser-selection-chip" : "bg-background/60 text-muted-foreground",
+                    item.active ? "text-inherit" : "bg-background/60 text-muted-foreground",
                   )}>
                     {pending || unavailable ? "–" : item.count}
                   </span>

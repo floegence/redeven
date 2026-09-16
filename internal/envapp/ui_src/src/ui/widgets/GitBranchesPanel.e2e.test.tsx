@@ -478,7 +478,7 @@ describe("GitBranchesPanel interactions", () => {
       );
       expect(changesButton?.className).toContain("cursor-pointer");
       expect(changesButton?.className).toContain("rounded-md");
-      expect(changesButton?.className).toContain("git-browser-selection-surface");
+      expect(changesButton?.className).toContain("redeven-surface-segmented__item--active");
       expect(unstagedButton).toBeFalsy();
       expect(untrackedButton).toBeFalsy();
       expect(conflictedButton?.getAttribute("aria-pressed")).toBe("false");
