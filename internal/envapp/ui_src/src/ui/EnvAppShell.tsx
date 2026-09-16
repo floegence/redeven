@@ -481,7 +481,7 @@ function EnvDisplayModeSwitcher(props: {
   const i18n = useI18n();
   return (
     <div
-      class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5"
+      class="flower-turn-launcher-related-surface inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5"
       role="tablist"
       aria-label={i18n.t('uiCopy.shell.displayMode')}
     >

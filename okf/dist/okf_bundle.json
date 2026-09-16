@@ -13237,15 +13237,15 @@
         "title": "Ask Flower window boundaries",
         "type": "UI Contract"
       },
-      "body_length": 2899,
+      "body_length": 3300,
       "summary": "Redeven owns the Ask Flower launcher's placement policy in Activity, Workbench,\nand Desktop Welcome. Its titlebar and composer remain reachable below the visible\nShell header and native Desktop chrome. The launcher supports dragging and manual\nresizing, but neither a maximize button nor titlebar double-click may maximize it.\nWhen available space shrinks, the published Floe geometry constrains the existing\nwindow without replacing the composer or discarding its draft.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Host boundary\n\nThe host adapter measures the visible Shell header's client-space bottom edge and\ntakes the larger of that edge and the current Desktop titlebar safe area. Hidden\nretained shells do not contribute. The adapter observes header resizing, rebinds\nwhen Activity and Workbench switch, and subscribes to native chrome updates. Its\nmeasurement listeners are released when the launcher closes or the owner unmounts.\n\nThe shared launcher adds a 12 CSS pixel viewport margin, reduced to 8 below a\n640 CSS pixel viewport width. The host boundary and margin feed one published\n`viewportInsets` geometry path for anchored opening, centered opening, dragging,\nedge resizing, and viewport changes. Host insets are not duplicated inside an\nalternate drag controller. The launcher is a Shell-level floating window even\nwhen its request originates in a projected Workbench widget.\n\n## Controls and constrained space\n\nAsk Flower sets the published `FloatingWindow.maximizable` capability to false.\nThe upstream component owns both button visibility and double-click behavior;\nmanual resizing remains independent. Other product windows retain their existing\ncapabilities. The launcher titlebar retains its close control.\n\nDefault, minimum, maximum, and anchored geometry use the same available viewport.\nWhen it cannot accommodate the preferred size, the window shrinks within that\nviewport. Context scrolls inside its existing constrained region and the composer\nstays docked at the bottom. Header changes and display-mode changes preserve the\ncurrent DOM, draft, and submission identity. Send, dismissal, and thread handoff\ncontinue to follow the [Flower command contract](flower-turn-launcher.md) and\n[Activity companion placement](flower-activity-companion.md).",
-          "char_count": 1763
+          "body": "## Host boundary\n\nThe host adapter measures the visible Shell header's client-space bottom edge and\ntakes the larger of that edge and the current Desktop titlebar safe area. Hidden\nretained shells do not contribute. The adapter observes header resizing, rebinds\nwhen Activity and Workbench switch, and subscribes to native chrome updates. Its\nmeasurement listeners are released when the launcher closes or the owner unmounts.\n\nThe shared launcher adds a 12 CSS pixel viewport margin, reduced to 8 below a\n640 CSS pixel viewport width. The host boundary and margin feed one published\n`viewportInsets` geometry path for anchored opening, centered opening, dragging,\nedge resizing, and viewport changes. Host insets are not duplicated inside an\nalternate drag controller. The launcher is a Shell-level floating window even\nwhen its request originates in a projected Workbench widget.\n\n## Controls and constrained space\n\nAsk Flower sets the published `FloatingWindow.maximizable` capability to false.\nThe upstream component owns both button visibility and double-click behavior;\nmanual resizing remains independent. Other product windows retain their existing\ncapabilities. The launcher titlebar retains its close control.\n\nDefault, minimum, maximum, and anchored geometry use the same available viewport.\nWhen it cannot accommodate the preferred size, the window shrinks within that\nviewport. Context scrolls inside its existing constrained region and the composer\nstays docked at the bottom. Header changes and display-mode changes preserve the\ncurrent DOM, draft, and submission identity. Send, dismissal, and thread handoff\ncontinue to follow the [Flower command contract](flower-turn-launcher.md) and\n[Activity companion placement](flower-activity-companion.md).\n\nThe Activity/Workbench mode switcher participates in the launcher's existing\nrelated-surface boundary. Clicking a mode tab changes the host without dismissing\nthe draft as an outside click. Other outside-click dismissal remains unchanged.",
+          "char_count": 2003
         }
       ],
       "evidence": [
@@ -13273,6 +13273,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx:0:real browser opening, drag, resize, compact viewport, header replacement, draft, and workbench input checks.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx",
           "description": "Real browser opening, drag, resize, compact viewport, header replacement, draft, and Workbench input checks."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx:0:real shell mode-tab pointer clicks preserve the launcher and its draft.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx",
+          "description": "Real shell mode-tab pointer clicks preserve the launcher and its draft."
         }
       ],
       "snippet": "Redeven owns the Ask Flower launcher's placement policy in Activity, Workbench, and Desktop Welcome. Its titlebar and composer remain reachable below the visible Shell header and native Desktop chrome. The launcher supports dragging and man",
@@ -17771,5 +17776,5 @@
       ]
     }
   ],
-  "source_sha256": "68ce7c21b530ca77080403aed13d2efc36f965ba8aa634b373ae35e4500575df"
+  "source_sha256": "fe1dad1c40ce99db118b06d23f8c6e5b9b583b4d3f269a7f75178b9308683c74"
 }

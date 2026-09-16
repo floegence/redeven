@@ -9,12 +9,14 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { FileBrowserWorkspace } from './widgets/FileBrowserWorkspace';
+import { FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow } from '../../../../flower_ui/src/FlowerTurnLauncherWindow';
 
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
 const FileBrowserSurfaceContextMock = createContext({} as any);
 let floeRegistryComponents = (): any[] => [];
 let testFilesMenu = false;
+let testRealFlowerLauncher = false;
 
 const filePreviewOpenPreviewMock = vi.fn(async () => undefined);
 const filePreviewClosePreviewMock = vi.fn();
@@ -276,10 +278,15 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
   FloeRegistryContributions: () => null,
 }));
 
-vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@floegence/floe-webapp-core/layout')>(),
-  DisplayModePageShell: (props: any) => <div data-testid="display-mode-page-shell">{props.children}</div>,
-}));
+vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/layout')>();
+  return {
+    ...actual,
+    DisplayModePageShell: (props: any) => testRealFlowerLauncher
+      ? <actual.DisplayModePageShell {...props} />
+      : <div data-testid="display-mode-page-shell">{props.children}</div>,
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>();
@@ -325,7 +332,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
           )
     ),
     Dropdown: (props: any) => <>{props.trigger}</>,
-    FloatingWindow: (props: any) => (
+    FloatingWindow: (props: any) => testRealFlowerLauncher ? <actual.FloatingWindow {...props} /> : (
       <Show when={props.open}>
         <div data-floe-geometry-surface="floating-window" class={props.class}>
           <div>{props.title}</div>
@@ -809,7 +816,7 @@ vi.mock('./pages/EnvAIPage', () => ({
 }));
 
 vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
-  FlowerTurnLauncherWindow: (props: any) => (
+  FlowerTurnLauncherWindow: (props: any) => testRealFlowerLauncher ? <SharedFlowerTurnLauncherWindow {...props} /> : (
     <Show when={props.open && props.intent}>
       <div data-testid="flower-turn-launcher" data-placement={props.placement ?? 'window'}>
         <button
@@ -1117,6 +1124,7 @@ afterEach(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   testFilesMenu = false;
+  testRealFlowerLauncher = false;
   debugConsoleEnabled = false;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
   protocolConnectionConfig = null;
@@ -1172,6 +1180,28 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell Activity Flower browser integration', () => {
+  it('preserves the Ask Flower window and draft when clicking the shell mode tabs', async () => {
+    await page.viewport(1440, 900);
+    testRealFlowerLauncher = true;
+    await mountShell();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-open-flower-launcher"]')!);
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window textarea')).toBeTruthy());
+    const editor = document.querySelector<HTMLTextAreaElement>('.flower-turn-launcher-window textarea')!;
+    await userEvent.fill(editor, 'Keep my context while switching display modes');
+    for (const mode of ['Workbench', 'Activity']) {
+      const findTab = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+        .find((element) => element.textContent?.trim() === mode && element.getBoundingClientRect().width > 0);
+      await vi.waitFor(() => expect(findTab()).toBeTruthy());
+      await userEvent.click(findTab()!);
+      await flushAsync();
+      expect(document.querySelector('.flower-turn-launcher-window textarea')).toBe(editor);
+      expect(editor.value).toBe('Keep my context while switching display modes');
+      expect(document.querySelector('[data-floe-floating-window-control="close"]')).toBeTruthy();
+    }
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!);
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window')).toBeNull());
+  });
+
   it('bounds Files menus above the actual mobile Flower rail and refreshes after keyboard viewport changes', async () => {
     await page.viewport(390, 844);
     testFilesMenu = true;

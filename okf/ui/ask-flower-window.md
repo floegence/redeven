@@ -46,6 +46,10 @@ current DOM, draft, and submission identity. Send, dismissal, and thread handoff
 continue to follow the [Flower command contract](flower-turn-launcher.md) and
 [Activity companion placement](flower-activity-companion.md).
 
+The Activity/Workbench mode switcher participates in the launcher's existing
+related-surface boundary. Clicking a mode tab changes the host without dismissing
+the draft as an outside click. Other outside-click dismissal remains unchanged.
+
 # Evidence
 
 - `redeven:desktop/src/shared/askFlowerWindowViewport.tsx` - Host header measurement and native chrome subscription.
@@ -53,3 +57,4 @@ continue to follow the [Flower command contract](flower-turn-launcher.md) and
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Env App host integration.
 - `redeven:desktop/src/welcome/App.tsx` - Desktop Welcome host integration.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.bounds.browser.test.tsx` - Real browser opening, drag, resize, compact viewport, header replacement, draft, and Workbench input checks.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Real shell mode-tab pointer clicks preserve the launcher and its draft.
