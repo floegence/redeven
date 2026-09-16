@@ -4485,63 +4485,12 @@ html.dark .git-content-skeleton__block {
 
 }
 
+/* Shared canvas and window surfaces are owned by Floe. These tokens style product bodies only. */
 .workbench-surface[data-workbench-theme='default'] {
-  --redeven-workbench-default-canvas-bg: color-mix(in srgb, var(--background) 92%, var(--muted) 8%);
-  --redeven-workbench-default-grid-stroke: color-mix(in srgb, var(--border) 34%, transparent);
-  --redeven-workbench-default-grid-dot: color-mix(in srgb, var(--border) 48%, transparent);
-  --redeven-workbench-default-widget-bg: var(--card);
-  --redeven-workbench-default-widget-border: var(--redeven-stroke-panel);
-  --redeven-workbench-default-widget-border-hover: var(--redeven-stroke-panel-strong);
-  --redeven-workbench-default-widget-header-bg: var(--sidebar);
-  --redeven-workbench-default-widget-header-border: var(--redeven-stroke-divider);
-  --redeven-workbench-default-widget-ring: transparent;
-  --redeven-workbench-default-widget-border-active: var(--redeven-stroke-panel-strong);
-  --redeven-workbench-default-widget-shadow:
-    0 1px 3px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent),
-    0 14px 32px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
-  --redeven-workbench-default-widget-shadow-hover: var(--redeven-workbench-default-widget-shadow);
-  --redeven-workbench-default-widget-shadow-active: var(--redeven-workbench-default-widget-shadow);
   --redeven-workbench-default-body-surface: var(--redeven-surface-main);
   --redeven-workbench-default-body-surface-soft: color-mix(in srgb, var(--redeven-surface-main) 84%, var(--background) 16%);
   --redeven-workbench-default-body-border: color-mix(in srgb, var(--border) 72%, transparent);
   --redeven-workbench-default-rail-bg: var(--sidebar);
-}
-
-.workbench-surface[data-workbench-theme='default'] .workbench-canvas {
-  background: var(--redeven-workbench-default-canvas-bg);
-}
-
-.workbench-surface[data-workbench-theme='default'] .workbench-canvas__grid {
-  background-image:
-    linear-gradient(to right, var(--redeven-workbench-default-grid-stroke) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--redeven-workbench-default-grid-stroke) 1px, transparent 1px),
-    radial-gradient(circle, var(--redeven-workbench-default-grid-dot) 0.9px, transparent 1px);
-  opacity: 0.52;
-}
-
-.workbench-surface[data-workbench-theme='default'] .workbench-widget {
-  background: var(--redeven-workbench-default-widget-bg);
-  border-color: var(--redeven-workbench-default-widget-border);
-  box-shadow: var(--redeven-workbench-default-widget-shadow);
-}
-
-.workbench-surface[data-workbench-theme='default'] .workbench-widget:hover {
-  border-color: var(--redeven-workbench-default-widget-border-hover);
-  box-shadow: var(--redeven-workbench-default-widget-shadow-hover);
-}
-
-.workbench-surface[data-workbench-theme='default'] .workbench-widget__header {
-  background: var(--redeven-workbench-default-widget-header-bg);
-  border-bottom-color: var(--redeven-workbench-default-widget-header-border);
-}
-
-.workbench-surface[data-workbench-theme='default'] .workbench-widget.is-selected,
-.workbench-surface[data-workbench-theme='default'] .workbench-widget.is-dragging,
-.workbench-surface[data-workbench-theme='default'] .workbench-widget.is-resizing {
-  border-color: var(--redeven-workbench-default-widget-border-active);
-  box-shadow:
-    0 0 0 2px var(--redeven-workbench-default-widget-ring),
-    var(--redeven-workbench-default-widget-shadow-active);
 }
 
 .redeven-workbench-body-surface {

@@ -156,6 +156,11 @@ describe('RedevenWorkbenchSurface', () => {
       launcherWidgetTypes: ['redeven.files', 'redeven.terminal'],
       dockItemActivationMode: 'focus-cycle',
     });
+    expect(sharedSurfaceMocks.lastProps.compositionMessages).toMatchObject({
+      stickyBody: 'Sticky note body',
+      addName: 'Add name',
+      useRegionMaterial: 'Use region material {value}',
+    });
     expect(sharedSurfaceMocks.lastProps.interactionAdapter.surfaceRootAttr).toBe(
       REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR
     );
@@ -174,7 +179,7 @@ describe('RedevenWorkbenchSurface', () => {
     });
     expect(sharedSurfaceMocks.lastProps.backgroundLayerDefaults).toEqual({
       fill: WORKBENCH_REGION_FILL_OPTIONS[1],
-      opacity: 0.42,
+      opacity: 0.72,
       material: 'solid',
     });
   });

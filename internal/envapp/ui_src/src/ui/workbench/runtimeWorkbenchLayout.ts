@@ -473,6 +473,7 @@ function normalizeWorkbenchStickyNote(value: unknown): WorkbenchStickyNoteItem |
     kind: 'sticky_note',
     body: stringValue(value.body),
     color: normalizeStickyNoteColor(value.color),
+    material: value.material === 'tab' || value.material === 'ruled' ? value.material : 'tint',
     x,
     y,
     width,
@@ -529,7 +530,7 @@ function normalizeWorkbenchBackgroundLayer(value: unknown): WorkbenchBackgroundL
   const material = compact(value.material);
   return {
     id,
-    name: compact(value.name) || 'Background',
+    name: compact(value.name),
     fill: normalizeWorkbenchRegionFill(value.fill),
     opacity: Math.max(0, Math.min(1, finiteNumber(value.opacity, 0.35))),
     material: WORKBENCH_BACKGROUND_MATERIAL_SET.has(material)
@@ -917,6 +918,7 @@ export function runtimeWorkbenchStickyNotesEqual(
       && note.kind === other.kind
       && note.body === other.body
       && note.color === other.color
+      && (note.material ?? 'tint') === (other.material ?? 'tint')
       && note.x === other.x
       && note.y === other.y
       && note.width === other.width

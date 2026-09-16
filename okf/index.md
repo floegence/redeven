@@ -85,6 +85,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Input focus boundaries](ui/input-focus-boundaries.md) - Keep one stable focus border across standard and compound inputs while preserving non-input keyboard cues.
 - [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.
 - [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.
+- [Workbench composition surfaces and editing](ui/workbench-composition.md) - Edit optional region names and note materials with native input and durable layout storage.
 - [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.
 - [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.
 - [Terminal fonts across client devices](ui/terminal-fonts.md) - Resolve bundled and available local fonts without rewriting shared preferences or observer-controlled geometry.
