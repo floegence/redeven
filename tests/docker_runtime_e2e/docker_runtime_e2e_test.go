@@ -272,6 +272,7 @@ func TestDockerUbuntuTLSNetworkExposure(t *testing.T) {
 		"--mode", "local",
 		"--state-root", stateRoot,
 		"--local-ui-bind", "0.0.0.0:"+networkTestPort,
+		"--local-ui-protocol", "https",
 		"--password-file", passwordPath,
 		"--presentation", "machine",
 		"--startup-report-file", reportPath,
@@ -957,17 +958,21 @@ func (f *fixture) waitReady(ctx context.Context) launchReport {
 
 func (f *fixture) assertReadyRuntimeStatus(report launchReport) {
 	f.t.Helper()
-	if report.LocalUIURL != "" || len(report.LocalUIURLs) != 0 {
-		f.t.Fatalf("desktop runtime exposed a public Local UI URL: %#v", report)
+	publicURL, err := url.Parse(report.LocalUIURL)
+	if err != nil || publicURL.Scheme != "http" || publicURL.Hostname() != "127.0.0.1" || publicURL.Port() == "" || publicURL.Port() == "0" || !containsString(report.LocalUIURLs, report.LocalUIURL) {
+		f.t.Fatalf("desktop runtime did not report its actual public HTTP listener: %q", report.LocalUIURL)
 	}
 	if report.LocalUIBridgeURL == "" || report.LocalUIBridgeToken == "" {
-		f.t.Fatalf("ready desktop bridge endpoint is incomplete: %#v", report)
+		f.t.Fatal("ready desktop bridge endpoint is incomplete")
+	}
+	if report.LocalUIBridgeURL == report.LocalUIURL || containsString(report.LocalUIURLs, report.LocalUIBridgeURL) {
+		f.t.Fatal("private bridge must remain separate from public connection URLs")
 	}
 	if report.RuntimeControl == nil || report.RuntimeControl.Token == "" {
 		f.t.Fatalf("ready runtime-control endpoint is incomplete: %#v", report.RuntimeControl)
 	}
-	if report.Exposure.Scope != runtimemanagement.LocalUIExposureScopeLoopback || report.Exposure.Transport != runtimemanagement.LocalUITransportTLS {
-		f.t.Fatalf("ready desktop exposure is not loopback TLS: %#v", report.Exposure)
+	if report.Exposure.Scope != runtimemanagement.LocalUIExposureScopeLoopback || report.Exposure.Transport != runtimemanagement.LocalUITransportHTTP {
+		f.t.Fatalf("ready desktop exposure is not loopback HTTP: %#v", report.Exposure)
 	}
 	if report.RuntimeService == nil {
 		f.t.Fatalf("ready status did not include runtime_service: %#v", report)
