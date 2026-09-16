@@ -128,6 +128,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Computer target selection across threads](ai/computer-use-target-selection.md) - Preserve authorized target choices across turns and restart without inheriting control on fork.
 - [Computer use safety pauses and user control](ai/computer-use-takeover.md) - Pause canonical tool execution, keep private browser input out of history, and require fresh observation on handback.
 - [Computer use media and visual requests](ai/computer-use-media.md) - Separate durable keyframes from live samples and verify decoded Stage pixels and visual request budgets.
+- [Computer use qualification](ai/computer-use-qualification.md) - Verify real pixels, input, handback, target scope and isolated cleanup.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
