@@ -9,6 +9,10 @@ import { test } from 'node:test';
 const source = await readFile(new URL('./check_computer_use_webtop.sh', import.meta.url), 'utf8');
 const cleanup = source.slice(source.indexOf('cleanup() {'), source.indexOf('\ntrap cleanup EXIT'));
 
+test('Webtop qualification explicitly selects its certificate-backed HTTPS listener', () => {
+  assert.match(source, /redeven run[^\n]*--local-ui-protocol https/);
+});
+
 for (const scenario of ['auto-remove-pending', 'retained-container', 'daemon-unavailable', 'qualification-failed']) {
   test(`Webtop cleanup: ${scenario}`, async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'webtop-cleanup-test-'));
