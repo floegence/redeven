@@ -3637,7 +3637,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       </Show>
       <Button
         size="sm"
-        variant="outline"
+        variant="ghost"
         icon={Refresh}
         {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
         class="cursor-pointer"
@@ -3651,7 +3651,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         trigger={(
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
           {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           class="cursor-pointer"
           aria-label={i18n.t('files.moreFileBrowserOptions')}

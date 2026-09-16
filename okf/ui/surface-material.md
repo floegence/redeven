@@ -37,6 +37,19 @@ Semantic status hues and selected text remain explicit. Selected product segment
 appearance choices change their fill immediately without an additional contour.
 High Contrast Light and forced colors retain their explicit boundaries.
 
+Files toolbars reserve the strong input boundary for filtering or active path
+editing. Read-mode breadcrumbs and ordinary actions have no input frame. The
+Files/Git rail and its moving selection face use shared flat fills without a
+second border, inset highlight, or contact shadow. The actual controls, path
+draft, filter, selection and focus owners stay mounted during palette changes.
+Porcelain Light's folder and file-type paints preserve the original Classic
+Light colors through Floe's independent file-icon roles; status text contrast
+changes must not desaturate those identification paints.
+
+Viewport-filling Plugin update reviews use opacity-only entry/exit at mobile
+widths through Floe's offset tokens, so footer actions remain inside the viewport
+even during intermediate frames. Shared presence still owns exit disposal.
+
 Desktop environment cards retain layout, actions, and featured/open status
 fills. They do not add translating card hover, animated shadows, or a second
 outer frame. Dialog decoration belongs to Floe; Desktop only adapts titlebar

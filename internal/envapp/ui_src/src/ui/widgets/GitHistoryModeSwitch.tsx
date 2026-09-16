@@ -20,7 +20,7 @@ export interface GitHistoryModeSwitchProps {
 export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
   const i18n = useI18n();
   const buttonBaseClass =
-    'relative z-10 flex h-7 min-w-0 w-full flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border border-transparent px-2 text-center text-xs font-medium transition-[color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55';
+    'relative z-10 flex h-7 min-w-0 w-full flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border border-transparent px-2 text-center text-xs font-medium transition-[color,opacity] duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55';
   const gitDisabledReason = () => String(props.gitHistoryDisabledReason ?? '').trim();
   const previewGitMode = () => {
     if (props.gitHistoryDisabled) return;
@@ -53,10 +53,12 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
       role="radiogroup"
       aria-label={i18n.t('uiCopy.git.browserMode')}
       data-browser-mode-switch=""
+      data-floe-surface="inset"
+      data-floe-surface-part="rail"
       data-mode={props.mode}
-      class={cn('browser-mode-switch inline-grid w-full grid-cols-2 items-center rounded-md border p-0.5 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)]', redevenSurfaceRoleClass('segmented'), props.class)}
+      class={cn('browser-mode-switch inline-grid w-full grid-cols-2 items-center rounded-md border p-0.5', redevenSurfaceRoleClass('segmented'), props.class)}
     >
-      <span class="browser-mode-switch__thumb" aria-hidden="true" />
+      <span class="browser-mode-switch__thumb" data-floe-surface="flat" aria-hidden="true" />
       <button
         type="button"
         role="radio"

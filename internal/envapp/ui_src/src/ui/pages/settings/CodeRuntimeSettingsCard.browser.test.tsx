@@ -141,8 +141,8 @@ describe('CodeRuntimeSettingsCard rendered update method flow', () => {
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeTruthy();
     expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent?.trim() === 'Cancel')).toHaveLength(1);
 
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 160));
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    // The shared owner paints the exit before starting its 160ms disposal timer.
+    await expect.poll(() => document.querySelector('[role="dialog"]'), { timeout: 500 }).toBeNull();
 
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);

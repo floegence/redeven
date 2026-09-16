@@ -183,7 +183,7 @@ func newHandlers(nativeCode bool) (*flowersec.SessionHandlers, error) {
 	registrations := map[uint32]flowersec.RPCHandler{
 		1001: func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
 			entries := []map[string]any{}
-			for _, name := range []string{"src", "assets", "package.json", "README.md"} {
+			for _, name := range []string{"src", "assets", "package.json", "README.md", "main.py", "index.ts", "app.js", "photo.png", "movie.mp4", "archive.zip"} {
 				kind := "file"
 				if name == "src" || name == "assets" {
 					kind = "folder"

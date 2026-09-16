@@ -18,7 +18,7 @@ export interface FileBrowserPathBreadcrumbProps {
 }
 
 const PATH_BREADCRUMB_ITEM_BASE_CLASS =
-  'text-xs px-1.5 py-0.5 rounded transition-all duration-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+  'text-xs px-1.5 py-0.5 rounded transition-colors duration-120 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
 const PATH_BREADCRUMB_ANCESTOR_CLASS =
   'shrink-0 cursor-pointer text-muted-foreground hover:bg-muted/50 hover:text-foreground'
 const PATH_BREADCRUMB_CURRENT_CLASS =

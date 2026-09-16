@@ -37,8 +37,9 @@ it.each(['standard', 'soft-neumorphic'] as const)('keeps Flower rail text and se
     theme.selectShellTheme(mode, preset.name);
     theme.setTheme(mode);
     await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe(preset.name);
+    await page.getByRole('button', { name: 'New chat', exact: true }).hover();
     const result = await axe.run(host, { runOnly: ['color-contrast'] });
-    expect.soft(result.violations.map((violation) => violation.nodes.map((node) => node.failureSummary)), preset.name).toEqual([]);
+    expect.soft(result.violations.map((violation) => violation.nodes.map((node) => ({ html: node.html, summary: node.failureSummary }))), preset.name).toEqual([]);
   }
 }, 60_000);
 

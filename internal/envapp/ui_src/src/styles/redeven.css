@@ -756,9 +756,6 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   isolation: isolate;
   min-height: 2rem;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--background) 72%, transparent), color-mix(in srgb, var(--muted) 18%, transparent)),
-    color-mix(in srgb, var(--muted) 22%, transparent);
 }
 
 .browser-mode-switch__thumb {
@@ -767,14 +764,9 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   inset-block: 0.125rem;
   inset-inline-start: 0.125rem;
   width: calc((100% - 0.25rem) / 2);
-  border: 1px solid var(--git-browser-selection-border);
+  border: 1px solid transparent;
   border-radius: calc(var(--radius) - 2px);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--background) 96%, var(--primary) 4%), color-mix(in srgb, var(--background) 88%, var(--primary) 8%)),
-    var(--background);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--foreground) 7%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--background) 92%, var(--redeven-surface-highlight-source) 8%);
+  background: var(--accent);
   transform: translateX(0);
   transition:
     transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 120ms ease, background-color 120ms ease;
@@ -786,6 +778,15 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 
 .browser-mode-switch :where(button) {
   min-width: 0;
+}
+
+@media (max-width: 639px) {
+  /* A viewport-filling review has no room for travel. Keep its footer visible
+   * throughout the shared opacity entry/exit lifecycle. */
+  .redeven-plugin-update-dialog {
+    --floe-floating-enter-y: 0px;
+    --floe-floating-exit-y: 0px;
+  }
 }
 
 .browser-mode-transition-stack {
@@ -1541,8 +1542,7 @@ html.dark .git-changes-table-pending {
 }
 
 .redeven-surface-segmented {
-  border-color: var(--redeven-stroke-control) !important;
-  background: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, transparent) !important;
+  background: color-mix(in srgb, var(--card) 65%, var(--muted));
 }
 
 .redeven-surface-segmented__item {
@@ -4598,10 +4598,10 @@ html.dark .git-content-skeleton__block {
 /* Browser Editor setup status band. */
 
 .browser-editor-setup {
-  --browser-editor-frame-border: color-mix(in srgb, var(--border) 82%, transparent);
-  --browser-editor-section-divider: color-mix(in srgb, var(--border) 66%, transparent);
-  --browser-editor-grid-border: color-mix(in srgb, var(--border) 76%, var(--foreground) 24%);
-  --browser-editor-grid-divider: color-mix(in srgb, var(--border) 84%, var(--foreground) 16%);
+  --browser-editor-frame-border: var(--redeven-stroke-panel);
+  --browser-editor-section-divider: var(--redeven-stroke-divider);
+  --browser-editor-grid-border: var(--redeven-stroke-panel);
+  --browser-editor-grid-divider: var(--redeven-stroke-divider);
   --browser-editor-grid-label-bg: color-mix(in srgb, var(--muted) 22%, transparent);
   min-width: 0;
   overflow: hidden;
@@ -4609,11 +4609,6 @@ html.dark .git-content-skeleton__block {
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--card) 88%, var(--background) 12%);
   transition: border-color 120ms ease, background-color 120ms ease;
-}
-
-html.dark .browser-editor-setup {
-  --browser-editor-frame-border: var(--redeven-stroke-overlay);
-  --browser-editor-section-divider: color-mix(in srgb, var(--redeven-stroke-panel) 80%, var(--foreground) 20%);
 }
 
 .browser-editor-setup__body {

@@ -69,7 +69,7 @@ afterEach(() => {
 });
 
 describe('Classic Dark rendered boundary contract', () => {
-  it('keeps structural, divider, control, overlay, and shell boundaries visible', () => {
+  it('keeps decorative seams quiet and actual control boundaries distinct', () => {
     applyTheme('classic-dark', 'dark');
 
     const panel = mountBoundary('redeven-boundary-panel', 'var(--redeven-surface-panel)');
@@ -78,11 +78,12 @@ describe('Classic Dark rendered boundary contract', () => {
     const overlay = mountBoundary('redeven-surface-overlay', 'var(--redeven-surface-overlay)');
     const chrome = mountTokenBoundary('var(--chrome-border)', 'var(--sidebar)');
 
-    expect(contrastRatio(panel.border, panel.background)).toBeGreaterThanOrEqual(2.2);
-    expect(contrastRatio(divider.border, divider.background)).toBeGreaterThanOrEqual(1.8);
+    for (const seam of [panel, divider, overlay, chrome]) {
+      expect(contrastRatio(seam.border, seam.background)).toBeGreaterThan(1.1);
+      expect(contrastRatio(seam.border, seam.background)).toBeLessThan(1.6);
+    }
     expect(contrastRatio(control.border, control.background)).toBeGreaterThanOrEqual(3);
-    expect(contrastRatio(overlay.border, overlay.background)).toBeGreaterThanOrEqual(3);
-    expect(contrastRatio(chrome.border, chrome.background)).toBeGreaterThanOrEqual(2.2);
+    expect(contrastRatio(panel.border, panel.background)).toBeGreaterThan(contrastRatio(divider.border, divider.background));
   });
 
   it('keeps a real input boundary visible while allowing the shared focus color', () => {
@@ -100,7 +101,7 @@ describe('Classic Dark rendered boundary contract', () => {
     expect(contrastRatio(style.borderTopColor, style.backgroundColor)).toBeGreaterThanOrEqual(3);
   });
 
-  it('keeps the stronger Classic Dark palette scoped away from other presets', () => {
+  it('keeps Classic palette roles scoped away from other presets', () => {
     applyTheme('classic-dark', 'dark');
     const classicBorder = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
     const classicInput = getComputedStyle(document.documentElement).getPropertyValue('--input').trim();
@@ -112,7 +113,7 @@ describe('Classic Dark rendered boundary contract', () => {
 
     applyTheme('classic-light', 'light');
     const lightStyle = getComputedStyle(document.documentElement);
-    expect(lightStyle.getPropertyValue('--border').trim()).toBe('#d8d3cc');
-    expect(lightStyle.getPropertyValue('--input').trim()).toBe('#ccc5ba');
+    expect(lightStyle.getPropertyValue('--border').trim()).toBe('#d4d8cd');
+    expect(lightStyle.getPropertyValue('--input').trim()).toBe('#858e80');
   });
 });

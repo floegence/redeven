@@ -591,8 +591,8 @@
 
 .flower-new-chat-button:hover,
 .flower-new-chat-button:focus-visible {
-  background: var(--accent);
-  color: var(--accent-foreground);
+  background: color-mix(in srgb, var(--foreground) 4%, var(--card));
+  color: var(--flower-thread-rail-foreground);
 }
 
 .flower-new-chat-button:disabled {
