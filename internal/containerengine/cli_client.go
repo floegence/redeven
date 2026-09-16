@@ -930,6 +930,7 @@ type inspectHostConfig struct {
 	SecurityOpt    []string                        `json:"SecurityOpt"`
 	PidsLimit      int                             `json:"PidsLimit"`
 	ShmSize        int64                           `json:"ShmSize"`
+	Tmpfs          map[string]string               `json:"Tmpfs"`
 	PortBindings   map[string][]inspectPortBinding `json:"PortBindings"`
 }
 
@@ -970,6 +971,10 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 		return EngineContainer{}, fmt.Errorf("container inspect returned %d records, want 1", len(docs))
 	}
 	doc := docs[0]
+	mounts, err := inspectContainerMountInputs(doc.Mounts, doc.HostConfig.Tmpfs)
+	if err != nil {
+		return EngineContainer{}, err
+	}
 	image := ImageInput{
 		Reference: strings.TrimSpace(doc.Config.Image),
 		Digest:    firstDigest(append(append([]string(nil), doc.RepoDigests...), doc.Config.RepoDigests...)),
@@ -994,7 +999,7 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 			RestartPolicy: strings.TrimSpace(doc.HostConfig.RestartPolicy.Name),
 			Env:           append([]string(nil), doc.Config.Env...),
 			Labels:        cloneStringMap(doc.Config.Labels),
-			Mounts:        inspectMountInputs(doc.Mounts),
+			Mounts:        mounts,
 			Devices:       inspectDeviceInputs(doc.HostConfig.Devices),
 			CapAdd:        append([]string(nil), doc.HostConfig.CapAdd...),
 			CapDrop:       append([]string(nil), doc.HostConfig.CapDrop...),
@@ -1360,6 +1365,49 @@ func normalizeStateString(values ...string) ContainerState {
 	default:
 		return ContainerStateUnknown
 	}
+}
+
+func inspectContainerMountInputs(mounts []inspectMount, tmpfs map[string]string) ([]MountInput, error) {
+	out := make([]MountInput, 0, len(mounts)+len(tmpfs))
+	targets := make(map[string]int, len(mounts)+len(tmpfs))
+	for _, mount := range inspectMountInputs(mounts) {
+		if index, exists := targets[mount.Target]; exists {
+			if out[index] != mount {
+				return nil, errors.New("container inspect contains conflicting mount targets")
+			}
+			continue
+		}
+		targets[mount.Target] = len(out)
+		out = append(out, mount)
+	}
+	keys := make([]string, 0, len(tmpfs))
+	for target := range tmpfs {
+		keys = append(keys, target)
+	}
+	sort.Strings(keys)
+	for _, target := range keys {
+		mount := MountInput{Type: MountTypeTmpfs, Target: strings.TrimSpace(target)}
+		if !strings.HasPrefix(mount.Target, "/") || strings.ContainsAny(mount.Target, "\x00\r\n") {
+			return nil, errors.New("container inspect contains an invalid tmpfs target")
+		}
+		for _, option := range strings.Split(tmpfs[target], ",") {
+			switch strings.TrimSpace(option) {
+			case "ro":
+				mount.ReadOnly = true
+			case "rw":
+				mount.ReadOnly = false
+			}
+		}
+		if index, exists := targets[mount.Target]; exists {
+			if out[index] != mount {
+				return nil, errors.New("container inspect contains conflicting tmpfs mount metadata")
+			}
+			continue
+		}
+		targets[mount.Target] = len(out)
+		out = append(out, mount)
+	}
+	return out, nil
 }
 
 func inspectMountInputs(mounts []inspectMount) []MountInput {

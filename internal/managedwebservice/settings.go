@@ -175,9 +175,6 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		return reconfigureCandidate{}, err
 	}
 	baseline := cloneTemplateSpec(resolved.BaseSpec)
-	if baseline.Container != nil {
-		normalizeContainerTemplateDefaults(baseline.Container)
-	}
 	current, err := decodeServiceConfiguration(service.ConfigurationJSON)
 	if err != nil {
 		return reconfigureCandidate{}, err
@@ -212,7 +209,9 @@ func (m *Manager) buildReconfigureCandidate(ctx context.Context, service *pfregi
 		if baseline.Container == nil || draft.Runtime.Container == nil {
 			return reconfigureCandidate{}, serviceError("CONTAINER_CONFIGURATION_REQUIRED", "Container settings are required for this service.", 400, false, nil)
 		}
-		override, newSecretValues, secretNames, err := containerOverrideFromSettings(*baseline.Container, *draft.Runtime.Container)
+		containerBaseline := *baseline.Container
+		normalizeContainerTemplateDefaults(&containerBaseline)
+		override, newSecretValues, secretNames, err := containerOverrideFromSettings(containerBaseline, *draft.Runtime.Container)
 		if err != nil {
 			return reconfigureCandidate{}, err
 		}
@@ -531,6 +530,7 @@ func applyComposeOverridesToSpec(spec *TemplateSpec, overrides map[string]contai
 		if override, exists := overrides[name]; exists {
 			applyContainerOverride(&container, override)
 		}
+		normalizeContainerSharedMemory(&container, false)
 		writeComposeContainerSettings(raw, container)
 		ensureComposeVolumeDefinitions(document, container.Mounts)
 	}

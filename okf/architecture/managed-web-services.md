@@ -26,6 +26,14 @@ Host supports a verified HTTPS archive or exact npm release. npm installation us
 
 Container pulls an exact current-platform digest and validates image, mounts, ports, and runtime configuration when applying behavior. Ownership checks use exact container ID, the standard `redeven-mws-*` name, and service labels independently of configuration drift. `managed_web_service_resources` is the sole durable authority for volumes and other owned engine resources. Compose similarly validates its deterministic project, private configuration, service membership, images, and entry forward. No file marker, historical resource importer, alternate name, or product-specific driver exists.
 
+Runtime verification uses resolved shared-memory settings and the complete engine
+mount inventory, including tmpfs. Image-only exposed ports have no host binding
+and do not count as additional published ports; unexpected host bindings still
+fail closed. Configuration failures retain stable error codes and log only fixed
+names of mismatched fields, never inspected values. Failed creation removes only
+the verified new container, preserving retained volumes and the workspace for the
+next explicitly reviewed recovery.
+
 ## Runtime identity and operations
 
 Every service has one canonical RuntimeBinding v2 plus SHA-256:
@@ -63,6 +71,7 @@ Redeven does not contain built-in service names, descriptions, notices, icons, t
 - `redeven:internal/managedwebservice/custom_host.go` - Owns generic independent Host execution and native process identity.
 - `redeven:internal/managedwebservice/host_runtime_output.go` - Validates process-bound private opening paths and collects only maintenance output.
 - `redeven:internal/managedwebservice/custom_container.go` - Owns exact current container identity and generic resource validation.
+- `redeven:internal/managedwebservice/container_docker_integration_test.go` - Verifies released-template lifecycle, recovery, retained data, and update rollback against an isolated real Docker instance.
 - `redeven:internal/managedwebservice/update.go` - Commits or restores release and binding state around health validation.
 - `redeven:internal/portforward/registry/schema.go` - Verifies exact historical shapes and retains contiguous default-URL and template-hook migrations.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Renders backend capabilities, localized catalog content, progress, and safe diagnostics.

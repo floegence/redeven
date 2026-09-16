@@ -55,6 +55,12 @@ Docker-only methods reject Podman targets and Podman-only methods reject Docker
 targets. Compose configuration paths and engine connection details remain
 private. Compose down never removes volumes implicitly.
 
+Container inspection combines engine `Mounts` with `HostConfig.Tmpfs` into one
+mount inventory. Tmpfs has no host source; its access mode comes from the engine
+options. Equal entries at the same target appear once, while conflicting type,
+source, or access metadata fails inspection without exposing private paths.
+This normalization serves both Containers and managed Web Services.
+
 Compose project observation is derived from one bound Docker container query
 filtered by the Compose project label. Project status, counts, and members use
 that same observation and do not require the original Compose files; missing

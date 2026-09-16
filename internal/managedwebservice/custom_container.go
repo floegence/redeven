@@ -518,12 +518,8 @@ func (d *containerTemplateDriver) verifyExactContainer(ctx context.Context, serv
 	}
 	expected := containerCreateRequest(service, spec, service.ArtifactReference, expectedMounts, nil)
 	runtime := container.Runtime
-	if runtime.Privileged != expected.Privileged || runtime.ReadOnlyRoot != expected.ReadOnlyRoot || runtime.PIDsLimit != expected.PIDsLimit ||
-		runtime.ShmSizeBytes != expected.ShmSizeBytes || strings.TrimSpace(runtime.NetworkMode) != strings.TrimSpace(expected.NetworkMode) ||
-		!namespaceModeMatches(runtime.PIDMode, expected.PIDMode) || !namespaceModeMatches(runtime.IPCMode, expected.IPCMode) ||
-		strings.TrimSpace(runtime.RestartPolicy) != normalizedRestartPolicy(expected.RestartPolicy) || strings.TrimSpace(runtime.User) != strings.TrimSpace(expected.User) ||
-		!sameStrings(runtime.CapAdd, expected.CapAdd) || !sameStrings(runtime.CapDrop, expected.CapDrop) || !sameStrings(runtime.SecurityOpts, expected.SecurityOpts) {
-		return serviceError("CONTAINER_CONFIGURATION_MISMATCH", "The managed template container no longer matches its effective runtime configuration.", 409, false, nil)
+	if err := compareContainerRuntime(runtime, containerRuntimeSettingsFromSpec(*spec.Container, nil), strings.TrimSpace(runtime.NetworkMode) == strings.TrimSpace(expected.NetworkMode)); err != nil {
+		return serviceError("CONTAINER_CONFIGURATION_MISMATCH", "The managed template container no longer matches its effective runtime configuration.", 409, false, err)
 	}
 	if len(container.Devices) != len(expected.Devices) || len(container.Mounts) != len(expectedMounts) {
 		return serviceError("CONTAINER_CAPABILITY_MISMATCH", "The managed template container exposes a device or mount outside its effective configuration.", 409, false, nil)

@@ -420,6 +420,9 @@ func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfre
 		}
 		runtime := container.Runtime
 		expected, ok := expectedRuntime[child.Service]
+		if !ok {
+			return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_CONFIGURATION_MISMATCH", "A managed Compose container has no effective runtime configuration.", 409, false, nil)
+		}
 		resources, resourceErr := d.manager.registry.ListManagedServiceResources(ctx, service.ServiceID)
 		if resourceErr != nil {
 			return containerengine.ComposeProjectDetails{}, resourceErr
@@ -434,10 +437,6 @@ func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfre
 					break
 				}
 			}
-		}
-		shmSize := expected.ShmSizeBytes
-		if shmSize == 0 {
-			shmSize = 64 * 1024 * 1024
 		}
 		allocatedNetworks := []string{}
 		attach := applied.Services[child.Service].Networks
@@ -459,12 +458,8 @@ func (d *composeTemplateDriver) verifyProject(ctx context.Context, service *pfre
 				allocatedNetworks = append(allocatedNetworks, declaration.Name)
 			}
 		}
-		if !ok || runtime.Privileged != expected.Privileged || runtime.ReadOnlyRoot != expected.ReadOnlyRoot || int64(runtime.PIDsLimit) != expected.PIDsLimit ||
-			!composeNetworkModeMatches(runtime.NetworkMode, expected.NetworkMode, allocatedNetworks...) || !namespaceModeMatches(runtime.PIDMode, expected.PIDMode) ||
-			!namespaceModeMatches(runtime.IPCMode, expected.IPCMode) || strings.TrimSpace(runtime.RestartPolicy) != normalizedRestartPolicy(expected.RestartPolicy) ||
-			runtime.ShmSizeBytes != shmSize || strings.TrimSpace(runtime.User) != strings.TrimSpace(expected.User) ||
-			!sameStrings(runtime.CapAdd, expected.CapAdd) || !sameStrings(runtime.CapDrop, expected.CapDrop) || !sameStrings(runtime.SecurityOpts, expected.SecurityOpts) {
-			return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_CONFIGURATION_MISMATCH", "A managed Compose container no longer matches its effective runtime configuration.", 409, false, nil)
+		if err := compareContainerRuntime(runtime, expected, composeNetworkModeMatches(runtime.NetworkMode, expected.NetworkMode, allocatedNetworks...)); err != nil {
+			return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_CONFIGURATION_MISMATCH", "A managed Compose container no longer matches its effective runtime configuration.", 409, false, err)
 		}
 		if !composePortsMatch(container.Ports, expected.Ports, child.Service == spec.Compose.MainService, service.RuntimePort, spec.Endpoint.ContainerPort) {
 			return containerengine.ComposeProjectDetails{}, serviceError("CONTAINER_NETWORK_MISMATCH", "A managed Compose container no longer matches its effective published-port configuration.", 409, false, nil)
@@ -582,8 +577,16 @@ func composePortsMatch(actual []containerengine.PortSummary, additional []Contai
 	matched := make([]bool, len(actual))
 	for _, want := range expected {
 		found := false
+		protocol := strings.ToLower(strings.TrimSpace(want.Protocol))
+		if protocol == "" {
+			protocol = "tcp"
+		}
 		for index, got := range actual {
-			if matched[index] || got.Port != want.ContainerPort || (want.HostPort > 0 && got.HostPort != want.HostPort) {
+			actualProtocol := strings.ToLower(strings.TrimSpace(got.Protocol))
+			if actualProtocol == "" {
+				actualProtocol = "tcp"
+			}
+			if matched[index] || got.HostPort <= 0 || actualProtocol != protocol || got.Port != want.ContainerPort || (want.HostPort > 0 && got.HostPort != want.HostPort) {
 				continue
 			}
 			if host := strings.TrimSpace(want.HostIP); host != "" && strings.TrimSpace(got.HostIP) != host {
@@ -596,8 +599,8 @@ func composePortsMatch(actual []containerengine.PortSummary, additional []Contai
 			return false
 		}
 	}
-	for _, used := range matched {
-		if !used {
+	for index, used := range matched {
+		if !used && actual[index].HostPort > 0 {
 			return false
 		}
 	}

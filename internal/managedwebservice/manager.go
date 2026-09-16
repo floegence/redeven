@@ -1517,6 +1517,10 @@ func safeManagedFailureCause(cause error) string {
 	if errors.As(cause, &managedErr) && managedErr.Cause != nil {
 		cause = managedErr.Cause
 	}
+	var mismatch *containerConfigurationMismatch
+	if errors.As(cause, &mismatch) {
+		return mismatch.Error()
+	}
 	switch {
 	case errors.Is(cause, os.ErrNotExist):
 		return "managed file not found"

@@ -20,6 +20,15 @@ The current verified template definition is the only Runtime baseline. An instal
 
 The selected application release remains fixed until the user explicitly chooses another verified release. Current template image or package recommendations may change the materialized Runtime contract but do not silently change that release. A canonical Runtime digest covers executable effective behavior and records what is applied to the managed resource. Template presentation or revision-only edits leave it unchanged; Runtime-relevant template, configuration, secret-presence, release, binding, or workspace changes make it stale and require the ordinary rebuild path.
 
+Resolution copies the template baseline before applying instance overrides.
+Private IPC resolves omitted shared memory to 64 MiB, or 1 GiB for the interactive
+desktop profile. An explicit instance override of zero selects 64 MiB; a positive
+value remains exact. Defaults are resolved after the final IPC selection, so host
+or container-shared IPC never acquires a private memory default. Single-container
+creation, Compose output, settings, preflight, Runtime digests, and verification
+consume the same resolved value. Existing applied digests are not rewritten on
+read; changed effective defaults use the ordinary pending-change workflow.
+
 The read-only definition loader verifies the current template and saved configuration identity without requiring every execution parameter to be present. Settings expose current parameter definitions and secret-presence facts so missing inputs can be repaired. Saving a candidate validates all values and keeps private parameters out of configuration JSON and API responses.
 
 The settings controller owns metadata and Runtime drafts but commits them independently. Name, description, and access mode update the service-owned protected forward without stopping the service. Runtime fields are deployment-aware:
@@ -77,5 +86,6 @@ Reads require Web Service read authority. Metadata and Runtime mutation require 
 - `redeven:internal/codeapp/appserver/managed_web_services.go` - Enforces the settings, preflight, operation, permission, and bounded-audit boundary.
 - `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceSettingsDrawer.tsx` - Owns the deployment-aware settings interaction and draft state.
 - `redeven:internal/managedwebservice/configuration_test.go` - Covers effective merge, normalized Compose, risks, typed resources, stable identity, and secret separation.
+- `redeven:internal/managedwebservice/container_validation_test.go` - Covers Docker defaults, override order, shared IPC, strict drift checks, and safe diagnostic fields.
 - `redeven:internal/portforward/registry/registry_test.go` - Covers fresh initialization, exact binding and retry persistence, drift, wrong kind, and future rejection.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.test.tsx` - Covers the drawer-to-preflight-to-shared-operation flow.
