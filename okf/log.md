@@ -6,7 +6,8 @@ Separate private input acknowledgements from observer-bound continuous frames.
 Document shared header FPS preferences, bounded sampling and decoding, explicit
 paused recovery, and atomic safe handback with localized feedback. See
 [Computer takeover](ai/computer-use-takeover.md) and
-[Computer media](ai/computer-use-media.md).
+[Computer media](ai/computer-use-media.md). Separate target-specific acceptance
+evidence into [Computer use qualification](ai/computer-use-qualification.md).
 
 ## 2026-09-16 — Refined Computer viewer and launcher
 
