@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Computer preview history and explicit reconnection
+
+- Document canonical turn/run result projection, automatic terminal collapse and
+  explicit historical screenshot entry without live controls.
+- Describe private control disconnection, discarded inputs and late frames, and
+  fresh authorization/decoding before explicit recovery.
+- Reset process-local view ordering at workspace disconnect and reject old
+  connection responses while canonical detail is refreshed.
+
 ## 2026-09-16 — Continuous private Computer viewing
 
 Separate private input acknowledgements from observer-bound continuous frames.

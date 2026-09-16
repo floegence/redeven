@@ -450,6 +450,7 @@ export type FlowerInputRequest = Readonly<{
   prompt_id: string;
   message_id: string;
   tool_id: string;
+  tool_call_id?: string;
   tool_name: string;
   reason_code?: string;
   reasoning_selection?: FlowerReasoningSelection;
@@ -528,6 +529,8 @@ export type FlowerThreadSnapshot = Readonly<{
   updated_at_ms: number;
   status: FlowerThreadStatus;
   active_run_id?: string;
+  // Detail-only projection of the accepted canonical current, including terminal identity.
+  current_execution?: Readonly<{ turn_id: string; run_id: string; status: FlowerThreadStatus }>;
   run_progress?: FlowerRunProgress | null;
   approval_pending?: boolean;
   approval_pending_count?: number;

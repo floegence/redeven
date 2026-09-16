@@ -1790,7 +1790,8 @@ describe('Flower final thread cache and workspace transport', () => {
     await wait(80);
     expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('full_access');
     expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
-    expect(loadThread).toHaveBeenCalledTimes(3);
+    // Reconnection rereads current because Floret view versions are process-local.
+    expect(loadThread).toHaveBeenCalledTimes(4);
   });
 
   it('retries after a settings revision advances beyond a failed request', async () => {

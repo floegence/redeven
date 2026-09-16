@@ -7,12 +7,22 @@ import type { JSX } from 'solid-js';
 import { createSignal } from 'solid-js';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
-import type { FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerThreadSnapshot, FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { FlowerComputerStage } from '../../../../flower_ui/src/FlowerComputerStage';
-import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-const STAGE_STATES = { taking_control:'Taking control', user_control:'You are controlling', returning_control:'Returning control', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
+const STAGE_STATES = { awaiting_control: 'Waiting for you to take control', historical: 'Historical screenshot', stopped: 'Computer task stopped', disconnected: 'Connection lost', taking_control:'Taking control', user_control:'You are controlling', returning_control:'Returning control', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
+
+function computerBootstrap(snapshot: FlowerThreadSnapshot) {
+  const base = runtimeCurrentView(snapshot, 1);
+  const current = { ...base, run_id: base.run_id ?? snapshot.messages.at(-1)?.run_id, items: base.items?.map(item => {
+    if (!item.activity) return item;
+    const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity;
+    return { ...item, activity: { ...facts, presentation: { label, description, renderer, payload, chips, target_refs } } };
+  }) };
+  return { thread: applyFlowerRuntimeCurrentView(snapshot, current), current };
+}
 
 const FRAME_REF = `computer://browser-main/${'a'.repeat(64)}`;
 const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
@@ -28,7 +38,7 @@ describe('Flower computer stage', () => {
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
       frame={{ thread_id: 'fixture', target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64) }} loadFrame={async () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' })}
-      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: STAGE_STATES }}
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
       open sessionState="awaiting_user" onRestore={() => undefined} onClose={() => undefined} onInput={input}
     />, host);
     try {
@@ -59,7 +69,7 @@ describe('Flower computer stage', () => {
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
       snapshot={{ item: activityItem({ item_id: 'frame', status: status() }), status: status(), targetID: 'browser-main', target: 'Managed browser', action: 'Screenshot', location: 'local', safety: '' }}
       threadID={owner()} frame={{ thread_id: owner(), target_id: 'browser-main', resource_ref: frame(), sha256: frame().split('/').at(-1)! }} loadFrame={loadFrame}
-      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: STAGE_STATES }}
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
       open sessionState={status() === 'success' ? 'completed' : 'running'} onRestore={() => undefined} onClose={() => undefined}
     />, host);
     try {
@@ -125,7 +135,7 @@ describe('Flower computer stage', () => {
         }
       },
       listThreads: vi.fn(async () => [current]),
-      loadThread: vi.fn(async () => liveBootstrap(current, 1)),
+      loadThread: vi.fn(async () => computerBootstrap(current)),
     }, { focusThreadRequest: { request_id: 'focus-computer-stage', thread_id: threadID }, layout: true });
 
     await waitFor(() => document.querySelector('.flower-computer-stage') !== null);
@@ -174,19 +184,18 @@ describe('Flower computer stage', () => {
       return { ...item, activity: { ...facts, status: 'success', presentation: { label, description, renderer, payload, chips, target_refs } } };
     }) };
     deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: completed });
-    await waitFor(() => loadComputerFrame.mock.calls.length === 5);
+    await waitFor(() => document.querySelector('.flower-computer-stage') === null);
+    expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+    await waitFor(() => !('thread_id' in setComputerViewer.mock.calls.at(-1)![0]));
+    runtime.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+    await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
+    expect(document.querySelector('.flower-computer-frame-rate')).toBeNull();
     (document.querySelector('[data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
-    await waitFor(() => {
-      const launcher = document.querySelector<HTMLElement>('.flower-computer-stage-ball');
-      return Boolean(launcher && getComputedStyle(launcher).visibility !== 'hidden');
-    });
-    expect(document.querySelector('.flower-computer-stage-ball')?.getAttribute('data-session-state')).toBe('completed');
-    await waitFor(() => !('thread_id' in setComputerViewer.mock.calls.at(-1)![0]));
-    expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ observer_id: 'observer-1' }));
-    document.querySelector<HTMLButtonElement>('.flower-computer-stage-ball')!.click();
-    await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
+    expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+    runtime.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+    await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
     (document.querySelector('[data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
     (runtime.querySelector('.flower-activity-inline-button[aria-expanded="false"]') as HTMLButtonElement).click();
@@ -206,9 +215,8 @@ describe('Flower computer stage', () => {
     expect(setComputerViewer).toHaveBeenCalledTimes(viewerCommandsBeforeNextRun);
     (document.querySelector('[data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
-    await waitFor(() => getComputedStyle(document.querySelector<HTMLElement>('.flower-computer-stage-ball')!).visibility !== 'hidden');
-    expect(document.querySelector('.flower-computer-stage-ball')?.getAttribute('data-session-state')).toBe('completed');
-    document.querySelector<HTMLButtonElement>('.flower-computer-stage-ball')!.click();
+    expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+    runtime.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
     await waitFor(() => document.querySelector('.flower-computer-stage') !== null);
     expect(setComputerViewer).toHaveBeenCalledTimes(viewerCommandsBeforeNextRun);
 
@@ -266,13 +274,16 @@ describe('Flower computer stage', () => {
         Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0)),
       ], { type: 'image/png' })),
       listThreads: vi.fn(async () => [failedThread]),
-      loadThread: vi.fn(async () => liveBootstrap(failedThread, 1)),
+      loadThread: vi.fn(async () => computerBootstrap(failedThread)),
     }, { focusThreadRequest: { request_id: 'focus-provider-failed', thread_id: threadID }, layout: true });
-    await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
+    await waitFor(() => document.querySelector('.flower-computer-entry') !== null);
+    expect(document.querySelector('.flower-computer-stage')).toBeNull();
+    document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+    await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
+    expect(document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state')).toBe('failed');
     document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
-    await waitFor(() => getComputedStyle(document.querySelector<HTMLElement>('.flower-computer-stage-ball')!).visibility !== 'hidden');
-    expect(document.querySelector('.flower-computer-stage-ball')?.getAttribute('data-session-state')).toBe('failed');
+    expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
   });
 });
 

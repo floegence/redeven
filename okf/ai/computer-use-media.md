@@ -20,28 +20,29 @@ Each safe completed action returns target ID and name, execution location, summa
 
 The Stage uses the published Floe `FloatingWindow` for its title bar, drag,
 resize, maximize, and close controls. Its body contains decoded pixels only.
-Closing switches to a neutral 40px launcher with the published 20px
+Closing a live viewer switches to a neutral 40px launcher with the published 20px
 `MonitorPointer` icon, an opaque theme surface, thin border, and a restrained
 black shadow. It has no glow, status ring or internal dot. Coarse pointers gain
-an invisible 48px hit area. Running, waiting, completion and failure appear as
+an invisible 48px hit area. Running, waiting, completed, stopped and failed states appear as
 localized text in the header and viewer; waiting and failure use muted semantic
-colors. State belongs to the run that produced the displayed frame; a later text
-turn cannot change historical Computer status, and a provider failure overrides
-a successful screenshot from that run.
+colors. The accepted canonical current supplies exact turn/run outcome in the existing
+`ThreadCache` detail. Only matching screenshot identity can show completed,
+stopped or failed; a successful screenshot never proves task success. A later
+text turn does not lend its outcome to an old frame. Without matching facts the
+viewer shows only historical identity, with no inferred result. Floret
+`view_version` is process-local: a workspace disconnect invalidates cached
+version comparisons while retaining presentation. Reconnection rereads canonical
+current; late HTTP results from the previous connection cannot replace it.
+Private recovery waits for this refreshed detail.
 
-Floe `SurfaceFloatingPanel` owns launcher placement, pointer capture, drag/click
-separation, keyboard movement, edge snapping, and projected-surface boundaries.
-Flower supplies the actual transcript element as the safe boundary, excluding
-the header and dynamic composer. A committed drag snaps to the nearest of four
-edges with a 12px gap and a distance-sensitive 210–360ms gentle transition;
-reduced motion completes immediately. The gray landing marker and release share
-the same nearest-edge rule; only exact distance ties use the current gesture's
-latest direction. Release coordinates are applied even without a final move;
-lost capture retains document tracking. Browser cancellation, blur and missed
-release settle at the last held point, while explicit Esc restores the starting
-placement. Animation interruption freezes the visible position. Clicking, Enter, or Space restores the viewer; arrow keys move the
-launcher. Dragging does not activate restoration or send remote input. Hidden
-launchers are absent from pointer interaction and keyboard navigation.
+Floe `SurfaceFloatingPanel` owns launcher placement, drag/click separation,
+keyboard movement, edge snapping and projected boundaries. Flower supplies the
+transcript as its safe boundary, excluding the header and dynamic composer.
+The launcher snaps to four edges with a 12px inset and gentle motion, respecting
+reduced motion. Click, Enter or Space restores viewing; arrows move it. Dragging
+never restores viewing or sends remote input. Hidden launchers do not accept
+pointer interaction or keyboard navigation. Published Floe owns gesture
+cancellation, focus, geometry, snapping and animation details.
 
 Both components remain mounted across visibility changes, preserving the
 window's position, size, and maximization and the launcher's relative placement.
@@ -49,9 +50,15 @@ Floe keeps preferred geometry separate from viewport constraints, so composer
 growth and narrowing do not permanently reduce the saved window size. Below a
 560px content boundary the viewer fills the safe region and hides desktop drag,
 resize and maximize controls. Narrow transcripts reserve a launcher gutter.
-Thread selection resets presentation and clears old pixels. The viewer appears
-only after an Activity supplies a frame. Activity, the header Computer entry,
-and the launcher can restore it; close returns focus to the restoring entry.
+Thread selection resets presentation and clears old pixels. History never opens
+automatically. The current execution's first public frame opens live viewing;
+manual close stays closed through frames and reconnection in that conversation.
+Terminal execution stops sampling and collapses the viewer, allowing a later
+task's first frame to open it again after automatic collapse. Activity and the
+header expose View last screenshot only when a public keyframe exists. Historical
+viewing is titled Historical screenshot, has no FPS, input carrier or launcher,
+and retains zoom, close, keyboard and window geometry controls. Close returns
+focus to the restoring entry. Live viewing retains its launcher and header entry.
 The viewer offers fit-to-window and scrollable actual-size pixels outside user
 takeover. Takeover retains its existing image coordinate, native IME, paste and
 remote scroll semantics and keeps fit mode.
@@ -60,7 +67,7 @@ without pausing execution, relinquishing user control, or recreating a target.
 Later actions cannot reopen an explicitly hidden viewer.
 
 A viewer may start only when the frame Activity belongs to the currently active
-canonical run. Historical pixels remain visible during preparation but cannot
+canonical run. An explicitly opened historical image can remain visible during preparation but cannot
 start capture; the first current-run frame activates viewing without retries.
 After the first successful action, Runtime publishes live metadata through the
 existing workspace stream. The header offers 3, 5, 10, 15 and 30 FPS (default 3),
@@ -69,17 +76,23 @@ to every thread and both ordinary and private viewing. This is a sampling ceilin
 the header explains bandwidth cost and shows actual reception rate in its detail.
 The native selector supports keyboard input without dragging the window.
 
-One target gate serializes input, safety observation and sampling. Input takes
-priority; busy sampling ticks are skipped. Each sampler retains at most two
-frames and waits for the current frame read before generating another, so slow
-clients cannot build a backlog or expire their unread frame. A single decode
-job and latest pending frame replace pixels only after decoding. Interrupted
-viewing retains the last image, displays a paused state and offers explicit
-recovery. Ten seconds without frames also marks active viewing paused.
- Each workspace subscriber retains at most one pending media descriptor (maximum 4 KiB), replacing stale media without consuming lifecycle queue capacity. Lifecycle delivery has priority. Viewer closure cancels queued capture immediately; an admitted passive capture
-drains within five seconds so hiding the image does not destroy a healthy
-browser session. Late pixels are discarded. Action cancellation retains its
-existing adapter interruption boundary. The sampler stop waits for capture to exit, and an old stop cannot cancel a replacement session. The viewer requests capture through its authenticated workspace observer and the thread media endpoint can resolve that active session's bounded samples. Completion, viewer hiding, thread or target changes, and disconnect retire live samples in the UI; the viewer then resolves the durable action keyframe. Reopening must never prefer a retired live reference over that keyframe. Private viewing uses the same scheduling and decoding path with the observer-bound authorization in the [takeover contract](computer-use-takeover.md).
+One target gate serializes input, safety observation and sampling. Input has
+priority; busy ticks are skipped. Samplers retain at most two frames and await
+the current frame read before capturing again. Each workspace subscriber keeps
+one replaceable descriptor (maximum 4 KiB); lifecycle delivery has priority.
+One decode job and one latest pending frame prevent backlog. Pixels replace the
+last decoded image only after decoding. Failure or ten seconds without frames
+marks viewing paused and offers explicit recovery.
+
+Closing cancels queued capture; an admitted passive capture drains within five
+seconds without destroying a healthy browser. Sampler stop waits for capture,
+without letting an old stop cancel its replacement. Action cancellation keeps
+its adapter interruption boundary. Hiding, target/thread change, terminal state
+and disconnect retire live samples; late pixels are rejected. Explicit history
+resolves the durable keyframe, never a retired live reference. Private disconnect
+retains the last decoded pixels and requires the observer-bound recovery in the
+[takeover contract](computer-use-takeover.md). Both kinds of viewing share the
+sampler, authenticated workspace channel and decoding path.
 
 Screenshot identity uses Floret v7.12.0's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. The public timeline sanitizer preserves only hash-addressed references of this kind. Env App and Desktop Welcome resolve them through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
 
@@ -91,12 +104,9 @@ interaction described by the takeover contract.
 
 Only typed executor attachments create model image references or Activity media capabilities. Arbitrary `computer://` strings in result payloads do not grant image authority. Runtime drops unsafe attachments and releases adapter buffers before storage or ordinary live viewing. Explicit private user viewing follows the [takeover contract](computer-use-takeover.md) and never uses the durable image resolver.
 
-DeepSeek budget admission and streaming use the same prepared request from
-published Floret v7.12.0. Visual input uses the upstream image token bound;
-base64 transport bytes are not counted as ordinary text. The Redeven adapter
-maps product data and preserves admission, cancellation, and event semantics;
-it does not independently estimate the DeepSeek intermediate DTO. Large images,
-tool results, and replay must retain their exact transmitted bytes.
+DeepSeek visual budgeting and streaming share Floret's prepared request and
+image token bound. Redeven preserves those exact bytes and does not separately
+estimate provider DTOs or treat base64 bytes as text.
 
 Real product qualification, target scopes, evidence and cleanup requirements are
 owned by [Computer use qualification](computer-use-qualification.md). Unit or
@@ -113,6 +123,7 @@ The media viewer does not authorize target actions, own lifecycle state, or expo
 - `redeven:internal/ai/computer_live_frames.go` - bounded observer-owned samples.
 - `redeven:internal/ai/computer_media.go` - host keyframe storage and validation.
 - `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - decoded Blob URL viewing.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerLifecycle.browser.test.tsx` - history, canonical result identity and interrupted recovery.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - live-to-durable transition and reopening.
 - `redeven:scripts/check_computer_use_webtop.sh` - container-only real Linux Flower qualification and cleanup.
 - `redeven:internal/ai/floret_provider_prepared_test.go` - visual budgeting and prepared request identity.

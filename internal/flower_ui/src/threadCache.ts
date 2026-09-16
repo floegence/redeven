@@ -168,6 +168,7 @@ export type ThreadCache = {
   readonly summaries: ReadonlyMap<string, FlowerThreadSnapshot>;
   readonly views: ReadonlyMap<string, ThreadView>;
   select(id: string | null): ThreadCache;
+  invalidateRuntimeVersions(): ThreadCache;
   replaceSummary(summary: FlowerThreadSnapshot): ThreadCache;
   replaceSummaries(summaries: readonly FlowerThreadSnapshot[]): ThreadCache;
   resetRootSummaries(summaries: readonly FlowerThreadSnapshot[]): ThreadCache;
@@ -185,6 +186,7 @@ const MAX_VIEWS = 12;
 
 function summaryOnly(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
   const summary = { ...thread, messages: [] };
+  delete summary.current_execution;
   delete summary.queued_turns;
   delete summary.restored_inputs;
   delete summary.context_usage;
@@ -355,6 +357,13 @@ function createCache(
       if (!currentSummary) return this;
       // Adjunct updates never author titles or replace runtime detail.
       return createCache(selectedId, nextSummaries, views, clock + 1);
+    },
+    invalidateRuntimeVersions() {
+      // Floret versions order notifications within one Runtime process only.
+      const next = new Map([...views].map(([id, entry]) => [id, {
+        ...entry, view: { ...entry.view, version: 0 },
+      }]));
+      return createCache(selectedId, summaries, next, clock);
     },
     evict(id) {
       const nextSummaries = new Map(summaries);

@@ -140,7 +140,7 @@ it('uses the same pending guard for returning computer control', async () => {
     choices: [{ choice_id: 'return', value: 'Return control to Flower', label: 'Return control', kind: 'select' }] }] }) });
   const button = s.runtime.querySelector<HTMLButtonElement>('.flower-computer-control-actions button:last-child')!;
   button.click(); button.click();
-  expect(s.submitInput).toHaveBeenCalledTimes(1);
+  await waitFor(() => s.submitInput.mock.calls.length === 1);
   expect(button.disabled).toBe(true);
   s.response.reject(new Error('Try again'));
   await waitFor(() => !button.disabled);

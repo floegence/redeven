@@ -10,7 +10,7 @@ import { FlowerComputerStage, type FlowerComputerStageSessionState } from '../..
 
 // No navigation harness: these checks use the published window, panel and icons.
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-const states = { taking_control:'Taking control', user_control:'You are controlling', returning_control:'Returning control', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
+const states = { awaiting_control: 'Waiting for you to take control', historical: 'Historical screenshot', stopped: 'Computer task stopped', disconnected: 'Connection lost', taking_control:'Taking control', user_control:'You are controlling', returning_control:'Returning control', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
 const waitFor = async (predicate: () => boolean) => vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 5000, interval: 16 });
 
 for (const projected of [false, true]) {
@@ -33,7 +33,7 @@ for (const projected of [false, true]) {
         <FlowerComputerStage threadID={owner()} boundary={boundary()} open={open()} sessionState={state()}
           snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'running', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'running', targetID: 'browser-main', target: 'Browser', action: 'Browse', location: 'local', safety: '' }}
           frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={input} onClose={() => setOpen(false)} onRestore={() => setOpen(true)}
-          copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', retry: 'Retry', state: states }} />
+          copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
       </div>
     </LayoutProvider></FloeConfigProvider>, host);
     try {
@@ -104,7 +104,7 @@ it('returns focus to each restore entry and offers actual-size viewing without c
     <FlowerComputerStage threadID="focus-thread" boundary={boundary()} open={open()} sessionState="failed"
       restoreFocus={source()} onRestore={restore} onClose={() => setOpen(false)} frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={takeover() ? input : undefined}
       snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Browser', action: 'Browse', location: 'local', safety: '' }}
-      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close viewer', maximize: 'Maximize viewer', restoreSize: 'Restore viewer size', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', state: states }} />
+      copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close viewer', maximize: 'Maximize viewer', restoreSize: 'Restore viewer size', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
   </LayoutProvider></FloeConfigProvider>, host);
   try {
     for (const selector of ['[data-testid="header-entry"]', '[data-testid="activity-entry"]', '.flower-computer-stage-ball']) {

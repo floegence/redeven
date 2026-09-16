@@ -4923,7 +4923,9 @@
 .flower-computer-entry > svg { flex: none; }
 .flower-computer-entry:focus-visible, .flower-computer-zoom:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
 .flower-computer-state { display: block; max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 10px; font-weight: 400; }
-.flower-computer-state[data-session-state='awaiting_user'] { color: var(--redeven-status-warning); }
+.flower-computer-state[data-session-state='awaiting_user'],
+.flower-computer-state[data-session-state='awaiting_control'],
+.flower-computer-state[data-session-state='disconnected'] { color: var(--redeven-status-warning); }
 .flower-computer-state[data-session-state='failed'] { color: var(--redeven-status-error); }
 .flower-computer-stage [data-floe-floating-window-footer] { min-height: 30px; padding: 3px 8px; }
 .flower-computer-stage [data-floe-floating-window-header-actions] { min-width: 0; }
