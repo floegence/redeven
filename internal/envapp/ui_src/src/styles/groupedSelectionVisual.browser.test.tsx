@@ -41,6 +41,7 @@ it.each(['standard', 'soft-neumorphic'])('keeps product compact selections disti
       <BrowserEditorInstallMethodSelector installMethod="desktop_transfer" desktopTransferAvailable onChange={() => {}} />
       <div class="redeven-surface-segmented"><button class="redeven-surface-segmented__item redeven-surface-segmented__item--active" aria-selected="true">Settings</button></div>
       <div class="redeven-surface-segmented"><button class="git-browser-segmented-tab redeven-surface-segmented__item redeven-surface-segmented__item--active" aria-selected="true">Workspace</button></div>
+      <div><button class="git-browser-interactive redeven-surface-segmented__item redeven-surface-segmented__item--active" aria-pressed="true">Changes <span class="text-inherit">2</span></button></div>
       <div class="container-filter-switch"><button aria-pressed="true">Active containers</button></div>
       <div class="service-template-switcher"><button class="service-template-switcher__item" aria-selected="true">Host <span class="service-template-switcher__count">3</span></button></div>
       <div class="service-template-scheme-picker"><button class="service-template-scheme-picker__option" aria-checked="true">HTTPS</button></div>
@@ -49,7 +50,7 @@ it.each(['standard', 'soft-neumorphic'])('keeps product compact selections disti
       <div><button class="flower-input-request-choice-custom" aria-checked="true">Custom answer</button></div>
     </>, host);
     const selected = [...host.querySelectorAll<HTMLElement>('button[aria-checked="true"], button[aria-selected="true"], button[aria-pressed="true"]')];
-    expect(selected).toHaveLength(11);
+    expect(selected).toHaveLength(12);
     for (const element of selected) expectClearSelection(element, `${preset.name}/${material}`);
     if (['classic-dark', 'classic-light', 'porcelain-light', 'porcelain-dark'].includes(preset.name)) {
       await media.emulateMediaPreferences({ forcedColors: 'active', reducedMotion: 'reduce' });
