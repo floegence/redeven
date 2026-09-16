@@ -76,7 +76,7 @@ func (s *Server) secureCertificateHosts() ([]string, error) {
 // Flowersec constructor owns the selected transport policy for its lifetime.
 func (s *Server) createNetworkServers() error {
 	if s.acceptor == nil || len(s.listeners) == 0 {
-		return errors.New("Local UI listener is not configured")
+		return errors.New("local UI listener is not configured")
 	}
 	for range s.listeners {
 		var server *flowersec.WebSocketHTTPServer
