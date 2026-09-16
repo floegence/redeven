@@ -158,6 +158,13 @@ describe('Flower computer stage', () => {
     // An unchanged sampled image must still be read, releasing the next sample.
     deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { ...frame, sequence: 3 } });
     await waitFor(() => loadComputerFrame.mock.calls.length === 4);
+    const lastPixels = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
+    deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { ...frame, sequence: 4, error_code: 'computer_view_unavailable' } });
+    await waitFor(() => document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state') === 'paused');
+    expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(lastPixels);
+    expect(loadComputerFrame).toHaveBeenCalledTimes(4);
+    document.querySelector<HTMLButtonElement>('.flower-computer-header-actions button')!.click();
+    await waitFor(() => loadComputerFrame.mock.calls.length === 5);
     // Completion retires the ephemeral sampler. A reopened viewer must load
     // the durable keyframe, never the expired last live sample.
     const completedBase = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);

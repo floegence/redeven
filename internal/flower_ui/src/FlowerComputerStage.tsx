@@ -144,7 +144,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     }
     if (!props.open) { lastOfferedFrame = ''; frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
     const frame = props.frame;
-    if (!frame || !props.loadFrame) { lastOfferedFrame = ''; frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
+    if (!frame || !props.loadFrame) { frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
     const key = JSON.stringify(frame);
     if (key === lastOfferedFrame) return;
     lastOfferedFrame = key;
