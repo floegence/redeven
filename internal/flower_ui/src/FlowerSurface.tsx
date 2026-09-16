@@ -974,6 +974,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let companionActionRef: HTMLButtonElement | undefined;
+  let companionSummaryRef: HTMLButtonElement | undefined;
+  let surfaceRef: HTMLElement | undefined;
+  let composerSurfaceRef: HTMLDivElement | undefined;
+  let restoringCompanionFocus = false;
+  let companionActivationToken = 0;
   let composerReferenceMenuRef: HTMLDivElement | undefined;
   let composerAutosizeController: FlowerComposerAutosizeController | undefined;
   const composerReferenceRemoveButtons = new Map<string, HTMLButtonElement>();
@@ -1029,20 +1034,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadSelectionContentFrame = 0;
   let threadSelectionContentTimer: number | undefined;
   let composerFocusToken = 0;
-  let composerFocusOwner: Element | null = null;
-  const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
+  type ComposerFocusRequest = Readonly<{
+    token: number;
+    owner: Element | null;
+    identity: string;
+    restoreCompanion: boolean;
+  }>;
+  const [composerFocusRequest, setComposerFocusRequest] = createSignal<ComposerFocusRequest | null>(null);
   type BottomActionFocusHandoff = Readonly<{
     threadID: string;
     owner: Element | null;
-    surface: HTMLElement | null;
     approvalActionID: string;
     owned: boolean;
   }>;
   const [pendingStopFocusHandoff, setPendingStopFocusHandoff] = createSignal<BottomActionFocusHandoff | null>(null);
   const captureBottomActionFocus = (threadID: string, requestedApprovalActionID = ''): BottomActionFocusHandoff => {
     let owner = typeof document === 'undefined' ? null : document.activeElement;
-    let surface = owner instanceof HTMLElement
-      ? owner.closest<HTMLElement>('[data-flower-bottom-mode]')
+    let surface = owner instanceof HTMLElement && composerSurfaceRef?.contains(owner)
+      ? composerSurfaceRef
       : null;
     let approvalActionID = owner instanceof HTMLElement
       ? trimString(owner.closest<HTMLElement>('[data-flower-approval-action-id]')?.dataset.flowerApprovalActionId)
@@ -1054,7 +1063,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && typeof document !== 'undefined'
       && (owner === document.body || owner == null)
     ) {
-      surface = document.querySelector<HTMLElement>('[data-flower-bottom-mode="approval"]');
+      surface = composerSurfaceRef ?? null;
       const row = [...(surface?.querySelectorAll<HTMLElement>('[data-flower-approval-action-id]') ?? [])]
         .find((candidate) => candidate.dataset.flowerApprovalActionId === requestedActionID);
       owner = row?.querySelector<HTMLElement>('.flower-composer-approval-decision') ?? owner;
@@ -1063,13 +1072,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return {
       threadID,
       owner,
-      surface,
       approvalActionID,
       owned: Boolean(surface && owner && surface.contains(owner)),
     };
   };
   const bottomActionFocusStillOwned = (handoff: BottomActionFocusHandoff): boolean => {
     if (!handoff.owned || typeof document === 'undefined') return false;
+    if (!surfaceEngaged() || companionCollapsed() || surfaceRef?.closest('[inert]')) return false;
     const active = document.activeElement;
     return active == null
       || active === document.body
@@ -1079,49 +1088,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!handoff.owned) return;
     queueMicrotask(async () => {
       if (bottomActionMode() === 'input_request') await FlowerInputChoices.preload();
-      requestTranscriptAnimationFrame(() => {
+      let attempts = 0;
+      const focusNextAction = () => {
         if (!selectedThreadDetailMatches(handoff.threadID) || !bottomActionFocusStillOwned(handoff)) return;
-        const mode = bottomActionMode();
-        const surface = handoff.surface?.isConnected
-          ? handoff.surface
-          : document.querySelector<HTMLElement>(`[data-flower-bottom-mode="${mode}"]`);
-        if (mode === 'approval') {
-          const actionTarget = handoff.approvalActionID
-            ? [...(surface?.querySelectorAll<HTMLElement>('[data-flower-approval-action-id]') ?? [])]
-              .find((candidate) => candidate.dataset.flowerApprovalActionId === handoff.approvalActionID)
-            : undefined;
-          const target = actionTarget?.querySelector<HTMLElement>('.flower-composer-approval-decision:not([disabled])')
-            ?? surface?.querySelector<HTMLElement>('.flower-composer-approval-decision:not([disabled])')
-            ?? surface?.querySelector<HTMLElement>('.flower-composer-stop-thread:not([disabled])');
-          target?.focus({ preventScroll: true });
-          return;
+        const target = bottomActionEditTarget(handoff.approvalActionID);
+        if (target?.isConnected && !target.closest('[inert]') && !target.matches(':disabled')) {
+          target.focus({ preventScroll: true });
+          if (document.activeElement === target) return;
         }
-        if (mode === 'input_request') {
-          const target = surface?.querySelector<HTMLElement>(
-            '[role="radio"]:not([disabled]), textarea:not([disabled]), input:not([disabled]), [data-computer-control-action]:not([disabled]), .flower-composer-continue:not([disabled])',
-          );
-          target?.focus({ preventScroll: true });
-          return;
-        }
-        let attempts = 0;
-        const focusChatComposer = () => {
-          if (!selectedThreadDetailMatches(handoff.threadID) || !bottomActionFocusStillOwned(handoff)) return;
-          const chatComposer = (handoff.surface?.querySelector<HTMLTextAreaElement | HTMLInputElement>(
-            '[data-flower-bottom-mode="chat"] textarea, [data-flower-bottom-mode="chat"] input:not([type="hidden"]):not([type="file"])',
-          ) ?? document.querySelector<HTMLTextAreaElement | HTMLInputElement>(
-            '[data-flower-bottom-mode="chat"] textarea, [data-flower-bottom-mode="chat"] input:not([type="hidden"]):not([type="file"])',
-          ));
-          const target = chatComposer ?? (composerRef?.isConnected ? composerRef : undefined);
-          if (target) {
-            target.focus({ preventScroll: true });
-            if (document.activeElement === target) return;
-          }
-          if (attempts >= 3) return;
-          attempts += 1;
-          requestTranscriptAnimationFrame(focusChatComposer);
-        };
-        focusChatComposer();
-      });
+        if (bottomActionMode() === 'chat' && attempts++ < 3) requestTranscriptAnimationFrame(focusNextAction);
+      };
+      requestTranscriptAnimationFrame(focusNextAction);
     });
   };
   type ThreadReadAcknowledgementState = {
@@ -1540,16 +1517,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const actionCount = selectedComposerApprovalActions().length;
     if (actionCount > 0 && actionID !== previousComposerApprovalActionID) {
       setApprovalQueueAnnouncement(copy().chat.toolApprovalPendingCount(actionCount));
-      if (!previousComposerApprovalActionID) {
-        requestTranscriptAnimationFrame(() => {
-          const approvalSurface = composerApprovalCardRef;
-          if (!approvalSurface?.isConnected || bottomActionMode() !== 'approval') return;
-          const firstDecision = approvalSurface.querySelector<HTMLButtonElement>(
-            '.flower-composer-approval-decision:not([disabled])',
-          );
-          (firstDecision ?? approvalSurface).focus({ preventScroll: true });
-        });
-      }
     }
     previousComposerApprovalActionID = actionID;
   });
@@ -2225,32 +2192,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       focusPermissionMenuItem(FLOWER_PERMISSION_TYPES.length - 1);
     }
   };
-  const requestComposerFocus = (focusOwner = typeof document === 'undefined' ? null : document.activeElement) => {
-    composerFocusOwner = focusOwner;
-    setComposerFocusRevision((revision) => revision + 1);
+  const requestComposerFocus = (
+    owner = typeof document === 'undefined' ? null : document.activeElement,
+    restoreCompanion = false,
+  ) => {
+    setComposerFocusRequest({ token: ++composerFocusToken, owner, identity: bottomActionFocusIdentity(), restoreCompanion });
   };
-  const scheduleComposerFocus = () => {
-    if (typeof queueMicrotask === 'undefined') return;
-    const focusCollapsedAction = companionCollapsed() && companionActionVisible();
-    const token = ++composerFocusToken;
-    const focusOwnerAtRequest = composerFocusOwner;
+  const scheduleComposerFocus = (request: ComposerFocusRequest) => {
     queueMicrotask(() => {
-      if (token !== composerFocusToken) return;
-      if (typeof document !== 'undefined') {
-        const activeElement = document.activeElement;
-        const focusStillOwned = activeElement == null
-          || activeElement === document.body
-          || activeElement === focusOwnerAtRequest
-          || activeElement === composerRef;
-        if (!focusStillOwned) return;
-      }
-      const target = focusCollapsedAction ? companionActionRef : composerRef;
-      if (!target?.isConnected) return;
-      target.focus({ preventScroll: true });
+      if (request.token !== composerFocusToken || request.identity !== bottomActionFocusIdentity()) return;
+      const active = document.activeElement;
+      if (active !== document.body && active !== request.owner && active !== composerRef) return;
+      if (!surfaceRef?.isConnected || surfaceRef.closest('[inert]')) return;
+      if (request.restoreCompanion ? !companionCollapsed() : companionCollapsed() || !surfaceEngaged()) return;
+      // Reading-area focus is an explicit navigation intent, not an edit request.
+      if (!request.restoreCompanion && request.owner === surfaceRef) return;
+      const entry = companionEntry();
+      const target = request.restoreCompanion
+        ? entry.kind === 'editor' ? composerRef : entry.kind === 'status' ? companionSummaryRef : companionActionRef
+        : bottomActionEditTarget();
+      if (!target?.isConnected || target.closest('[inert]') || target.matches(':disabled')) return;
+      restoringCompanionFocus = request.restoreCompanion;
+      try { target.focus({ preventScroll: true }); }
+      finally { restoringCompanionFocus = false; }
     });
   };
   onCleanup(() => {
     composerFocusToken += 1;
+    companionActivationToken += 1;
+  });
+  onMount(() => {
+    const cancelFocusHandoff = (event: FocusEvent) => {
+      if (!(event.target instanceof Node) || surfaceRef?.contains(event.target)) return;
+      composerFocusToken += 1;
+      companionActivationToken += 1;
+      setComposerFocusRequest(null);
+    };
+    document.addEventListener('focusin', cancelFocusHandoff);
+    onCleanup(() => document.removeEventListener('focusin', cancelFocusHandoff));
   });
   const warmupCanReplaceTranscript = createMemo(() => (
     surfaceWarmupActive()
@@ -4215,8 +4194,16 @@ webSearch: model.web_search,
   ));
 
   createEffect(() => {
-    if (composerFocusRevision() <= 0) return;
-    scheduleComposerFocus();
+    const request = composerFocusRequest();
+    if (!request) return;
+    if (request.identity !== bottomActionFocusIdentity()
+      || (request.restoreCompanion && (presentation() !== 'companion' || surfaceEngaged()))) {
+      setComposerFocusRequest(null);
+      return;
+    }
+    if (request.restoreCompanion && !companionCollapsed()) return;
+    setComposerFocusRequest(null);
+    untrack(() => scheduleComposerFocus(request));
   });
 
   const applyRuntimeCurrent = (
@@ -5448,7 +5435,7 @@ webSearch: model.web_search,
     const request = Math.max(0, Math.floor(Number(props.focusComposerRequest ?? 0)));
     if (!request || request === startedFocusComposerRequest) return;
     startedFocusComposerRequest = request;
-    requestComposerFocus();
+    untrack(() => requestComposerFocus(document.activeElement, presentation() === 'companion' && !surfaceEngaged()));
   });
 
   const startThreadRailResize = (event: PointerEvent) => {
@@ -6726,22 +6713,46 @@ webSearch: model.web_search,
     if (questionMode(question) === 'write') return true;
     return questionMode(question) === 'select_or_write' && questionDraft(question.id).answer_kind === 'custom';
   });
-  const companionActionVisible = createMemo(() => (
-    companionCollapsed()
-    && (Boolean(selectedComposerApprovalDisplayAction())
-      || (Boolean(selectedInputRequest()) && (activeInputQuestionIsSecret() || !activeInputQuestionUsesTextEditor())))
-  ));
-  const companionActionText = createMemo(() => {
-    const question = activeInputQuestion();
-    if (selectedInputRequest() && question && !question.is_secret && !isComputerInput(selectedInputRequest())
-      && (questionMode(question) === 'select' || questionMode(question) === 'select_or_write')) {
-      return trimString(selectedInputRequest()?.public_summary)
-        || trimString(question.question)
-        || props.companionActionLabel
-        || copy().chat.placeholder;
-    }
-    return props.companionActionLabel || props.companionSummary?.visualText || copy().chat.placeholder;
+  const bottomActionFocusIdentity = () => JSON.stringify([
+    selectedThreadID(), bottomActionMode(), selectedInputRequest()?.prompt_id,
+    selectedInputRequest()?.tool_id, activeInputQuestion()?.id,
+    selectedComposerApprovalActions().map((action) => action.action_id),
+  ]);
+  const composerTextareaDisabled = createMemo(() => {
+    if (selectedThreadReadOnly()) return true;
+    if (!selectedInputRequest()) return false;
+    return !activeInputQuestion() || !activeInputQuestionUsesTextEditor();
   });
+  const composerReferences = createMemo(() => currentComposerSessionDraft().references);
+  const composerHasReferences = createMemo(() => composerReferences().length > 0);
+  type CompanionEntry = Readonly<{
+    kind: 'pending' | 'status' | 'editor' | 'inspect';
+    targetThreadID: string;
+    text: string;
+  }>;
+  const companionEntry = createMemo<CompanionEntry>(() => {
+    const targetThreadID = selectedThreadID();
+    const actionLabel = props.companionActionLabel || copy().chat.placeholder;
+    if (bottomActionMode() !== 'chat') {
+      const question = activeInputQuestion();
+      const publicQuestion = bottomActionMode() === 'input_request' && question && !question.is_secret
+        && !isComputerInput(selectedInputRequest());
+      return { kind: 'pending', targetThreadID, text: publicQuestion
+        ? trimString(selectedInputRequest()?.public_summary) || trimString(question.question) || actionLabel
+        : actionLabel };
+    }
+    const editing = composerFocused() || isComposing() || Boolean(trimString(composerTextValue()))
+      || composerHasAttachments() || composerHasReferences();
+    if (!editing && trimString(props.companionSummary?.visualText)) {
+      return { kind: 'status', targetThreadID: props.companionSummary?.targetThreadID || targetThreadID,
+        text: props.companionSummary!.visualText };
+    }
+    return { kind: composerTextareaDisabled() || selectedThreadDetailPending() ? 'inspect' : 'editor',
+      targetThreadID, text: actionLabel };
+  });
+  const companionActionVisible = () => companionCollapsed()
+    && (companionEntry().kind === 'pending' || companionEntry().kind === 'inspect');
+  const companionSummaryVisible = () => companionCollapsed() && companionEntry().kind === 'status';
   createEffect(() => {
     composerTextValue();
     currentComposerSessionKey();
@@ -6751,19 +6762,69 @@ webSearch: model.web_search,
       composerAutosizeController?.schedule();
     }
   });
-  const composerReferences = createMemo(() => currentComposerSessionDraft().references);
-  const composerHasReferences = createMemo(() => composerReferences().length > 0);
-  const companionSummaryEligible = createMemo(() => (
-    companionCollapsed()
-    && !companionActionVisible()
-    && !composerFocused()
-    && !isComposing()
-    && !trimString(composerTextValue())
-    && !composerHasAttachments()
-    && !composerHasReferences()
-    && Boolean(trimString(props.companionSummary?.visualText))
+
+  const currentQuestionFocusTarget = () => {
+    const surface = composerSurfaceRef;
+    const region = surface?.querySelector<HTMLElement>('.flower-input-request-surface');
+    if (isComputerInput(selectedInputRequest())) return region;
+    return surface?.querySelector<HTMLElement>('textarea:not(:disabled), input:not([type="radio"]):not(:disabled)')
+      ?? surface?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]:not(:disabled), input[role="radio"]:checked:not(:disabled)')
+      ?? surface?.querySelector<HTMLElement>('[role="radio"]:not(:disabled)')
+      ?? region;
+  };
+  const bottomActionEditTarget = (approvalActionID = '') => {
+    if (bottomActionMode() === 'input_request') return currentQuestionFocusTarget();
+    if (bottomActionMode() === 'chat') return composerRef;
+    const row = approvalActionID
+      ? [...(composerSurfaceRef?.querySelectorAll<HTMLElement>('[data-flower-approval-action-id]') ?? [])]
+        .find((candidate) => candidate.dataset.flowerApprovalActionId === approvalActionID)
+      : undefined;
+    return row?.querySelector<HTMLElement>('.flower-composer-approval-decision:not(:disabled)')
+      ?? composerSurfaceRef?.querySelector<HTMLElement>('.flower-composer-approval-decision:not(:disabled)')
+      ?? composerSurfaceRef?.querySelector<HTMLElement>('.flower-composer-stop-thread:not(:disabled)')
+      ?? composerApprovalCardRef;
+  };
+  const activateCompanionEntry = (event: MouseEvent) => {
+    if (!companionCollapsed() || event.defaultPrevented || event.button !== 0) return;
+    const entry = companionEntry();
+    const identity = bottomActionFocusIdentity();
+    const token = ++companionActivationToken;
+    const owner = document.activeElement;
+    // Cancel an earlier editing request before navigation claims focus.
+    composerFocusToken += 1;
+    setComposerFocusRequest(null);
+    props.onCompanionOpenRequest?.(entry.kind === 'status' ? entry.targetThreadID : undefined);
+    queueMicrotask(async () => {
+      const stillOwned = () => document.activeElement === owner || document.activeElement === document.body
+        || document.activeElement === surfaceRef;
+      const available = () => token === companionActivationToken && surfaceEngaged() && !companionCollapsed()
+        && surfaceRef?.isConnected && !surfaceRef.closest('[inert]') && stillOwned()
+        && (entry.kind === 'status' || identity === bottomActionFocusIdentity());
+      if (!available()) return;
+      surfaceRef?.focus({ preventScroll: true });
+      if (entry.kind === 'editor') {
+        composerRef?.focus({ preventScroll: true });
+        return;
+      }
+      if (event.detail !== 0 || entry.kind !== 'pending') return;
+      if (bottomActionMode() === 'input_request' && !isComputerInput(selectedInputRequest())) {
+        try { await FlowerInputChoices.preload(); }
+        catch { return; } // The existing lazy surface owns load-error presentation; keep reading focus.
+      }
+      requestTranscriptAnimationFrame(() => {
+        if (!available() || identity !== bottomActionFocusIdentity()) return;
+        const target = bottomActionMode() === 'input_request' ? currentQuestionFocusTarget() : composerApprovalCardRef;
+        target?.focus({ preventScroll: true });
+      });
+    });
+  };
+  createEffect(on(
+    () => [companionCollapsed(), surfaceEngaged(), presentation()] as const,
+    ([collapsed, engaged, placement]) => {
+      if (collapsed || !engaged || placement !== 'companion') companionActivationToken += 1;
+    },
+    { defer: true },
   ));
-  const companionSummaryVisible = companionSummaryEligible;
   const companionDescriptionID = createMemo(() => (
     props.companionRegionID ? `${props.companionRegionID}-status` : undefined
   ));
@@ -6790,13 +6851,6 @@ webSearch: model.web_search,
       || chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.');
   });
 
-  const composerTextareaDisabled = createMemo(() => {
-    if (selectedThreadReadOnly()) return true;
-    if (!selectedInputRequest()) return false;
-    const question = activeInputQuestion();
-    return !question || !activeInputQuestionUsesTextEditor();
-  });
-
   const composerTextareaReadOnly = createMemo(() => (
     composerReferenceMutationCount() > 0
   ));
@@ -6806,10 +6860,7 @@ webSearch: model.web_search,
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
-    if (companionCollapsed()) {
-      event.preventDefault();
-      props.onCompanionOpenRequest?.();
-    }
+    if (companionCollapsed()) return;
     const field = composerRef;
     if (
       !(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)
@@ -7452,6 +7503,7 @@ webSearch: model.web_search,
         <section
           class={cn('flower-input-request-panel', composerSurface && 'flower-input-request-surface')}
           data-flower-input-request-prompt
+          tabIndex={composerSurface ? -1 : undefined}
           aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
         >
           <Show when={isComputerInput(inputRequest())} fallback={<>
@@ -10770,7 +10822,7 @@ webSearch: model.web_search,
             setComposerFocused(true);
             const target = event.currentTarget;
             syncComposerSelection(target);
-            if (companionCollapsed()) props.onCompanionOpenRequest?.();
+            if (companionCollapsed() && !restoringCompanionFocus) props.onCompanionOpenRequest?.();
           }}
           onBlur={() => setComposerFocused(false)}
           onClick={() => {
@@ -11066,7 +11118,13 @@ webSearch: model.web_search,
                 data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
                 data-flower-attachment-drag={attachmentDragActive() ? 'true' : undefined}
                 data-flower-text-entry={(bottomActionMode() === 'chat' || (bottomActionMode() === 'input_request' && activeInputQuestionUsesTextEditor())) && !composerTextareaDisabled() ? 'true' : undefined}
+                ref={composerSurfaceRef}
                 onPointerDown={focusComposerFromBlankArea}
+                onClick={(event) => {
+                  if (!(event.target instanceof Element)
+                    || event.target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
+                  activateCompanionEntry(event);
+                }}
                 onDragEnter={(event) => {
                   if (!event.dataTransfer?.types.includes('Files')) return;
                   event.preventDefault();
@@ -11126,16 +11184,12 @@ webSearch: model.web_search,
                     class="flower-companion-collapsed-action"
                     aria-controls={props.companionRegionID}
                     aria-expanded="false"
-                    aria-label={companionActionText()}
-                    title={companionActionText()}
-                    onClick={(event) => {
-                      const handoff = captureBottomActionFocus(selectedThreadID());
-                      props.onCompanionOpenRequest?.();
-                      if (event.detail === 0) scheduleBottomActionFocus(handoff);
-                    }}
+                    aria-label={companionEntry().text}
+                    title={companionEntry().text}
+                    onClick={activateCompanionEntry}
                   >
                     <span class="truncate">
-                      {companionActionText()}
+                      {companionEntry().text}
                     </span>
                   </button>
                 </Show>
@@ -11157,7 +11211,8 @@ webSearch: model.web_search,
                     aria-label={props.companionSummary?.accessibleText}
                     aria-controls={props.companionRegionID}
                     aria-expanded="false"
-                    onClick={() => props.onCompanionOpenRequest?.(props.companionSummary?.targetThreadID)}
+                    ref={companionSummaryRef}
+                    onClick={activateCompanionEntry}
                   >
                     <span
                       class={cn(
@@ -11205,6 +11260,7 @@ webSearch: model.web_search,
                       <section
                         ref={(element) => { composerApprovalCardRef = element; }}
                         class="flower-approval-surface"
+                        tabIndex={-1}
                         data-flower-approval-layout={selectedComposerApprovalActions().length === 1 ? 'single' : 'multi'}
                         aria-label={selectedComposerApprovalActions().length === 1
                           ? copy().chat.toolApprovalComposerTitle
@@ -11559,6 +11615,8 @@ webSearch: model.web_search,
   return (
     <main
       id="redeven-flower-surface"
+      ref={surfaceRef}
+      tabIndex={-1}
       class={cn(
         'flower-component-shell flower-surface',
         presentation() === 'companion' && 'flower-surface-companion',
