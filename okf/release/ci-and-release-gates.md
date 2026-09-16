@@ -85,6 +85,8 @@ The gate builds the embedded UI assets from the exact main source before those
 browser steps; an ignored or previously generated `internal/envapp/ui/dist`
 tree is never accepted as carrier input.
 
+Desktop and shared Flower tests that consume renderer-only Floe APIs run in the client Vitest suite with browser resolution and a DOM environment. Server-side test resolution must not replace or bypass published cryptographic tools to load those tests. UI mocks retain the real upstream utility exports unless the utility itself is the boundary under test.
+
 Headless UI tests keep browser scrollbars enabled so geometry assertions observe
 real scrollbar layout. Fixtures requiring space-consuming scrollbars explicitly
 reset the standard scrollbar properties before setting a custom width; system

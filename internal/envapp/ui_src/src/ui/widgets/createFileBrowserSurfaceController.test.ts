@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FILE_BROWSER_SURFACE_PERSISTENCE_KEY,

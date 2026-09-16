@@ -45,7 +45,8 @@ const envContextMocks = vi.hoisted(() => ({
   permissions: { can_read: true, can_execute: true },
 }));
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   useNotification: () => notificationMocks,
 }));

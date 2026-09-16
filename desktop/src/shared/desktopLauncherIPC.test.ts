@@ -234,12 +234,14 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'save_local_environment_settings',
       local_ui_bind: ' localhost:23998 ',
+      local_ui_protocol: 'http',
       local_ui_password: ' secret ',
       local_ui_password_mode: ' replace ',
       auto_runtime_probe_enabled: true,
     })).toEqual({
       kind: 'save_local_environment_settings',
       local_ui_bind: 'localhost:23998',
+      local_ui_protocol: 'http',
       local_ui_password: ' secret ',
       local_ui_password_mode: 'replace',
       auto_runtime_probe_enabled: true,

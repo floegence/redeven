@@ -118,7 +118,7 @@ main() {
       internal/flower_ui/src/flowerSurfaceModel.test.ts \
       internal/flower_ui/src/approvalAction.test.ts \
       internal/flower_ui/src/attachments/flowerAttachmentModel.test.ts \
-      internal/flower_ui/src/attachments/createFlowerAttachmentController.test.ts \
+      internal/flower_ui/src/attachments/createFlowerAttachmentController.client.test.ts \
       internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts \
       internal/flower_ui/src/composer/createFlowerComposerAutosizeController.test.ts \
       internal/flower_ui/src/composer/flowerComposerReferenceToken.test.ts \

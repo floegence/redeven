@@ -206,7 +206,11 @@ function composePrompt(host: HTMLElement, value: string): HTMLTextAreaElement {
 
 beforeEach(() => {
   vi.stubGlobal('crypto', {
-    randomUUID: vi.fn(() => '00000000-0000-4000-8000-000000000001'),
+    getRandomValues: vi.fn((buffer: Uint8Array) => {
+      buffer.fill(0);
+      buffer[buffer.length - 1] = 1;
+      return buffer;
+    }),
   });
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));

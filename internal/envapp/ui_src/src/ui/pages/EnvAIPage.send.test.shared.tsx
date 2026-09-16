@@ -224,7 +224,8 @@ function deferred<T>(): Readonly<{ promise: Promise<T>; resolve: (value: T) => v
   return { promise, resolve };
 }
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   useNotification: () => mocks.notificationMock,
 }));
