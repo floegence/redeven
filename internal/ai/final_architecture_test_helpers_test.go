@@ -43,8 +43,6 @@ func containsAnyString(values []any, target string) bool {
 	return false
 }
 
-func testBoolPtr(value bool) *bool { return &value }
-
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

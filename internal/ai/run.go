@@ -1087,19 +1087,6 @@ func (r *run) canonicalMarkdownTextSnapshot(fallback string) string {
 	return canonical
 }
 
-func (r *run) markdownBlockIndicesLocked() []int {
-	if r == nil {
-		return nil
-	}
-	idxs := make([]int, 0, len(r.assistantBlocks))
-	for i, blk := range r.assistantBlocks {
-		if _, ok := blk.(*persistedMarkdownBlock); ok {
-			idxs = append(idxs, i)
-		}
-	}
-	return idxs
-}
-
 func (r *run) nonEmptyMarkdownBlockIndicesLocked() []int {
 	if r == nil {
 		return nil
