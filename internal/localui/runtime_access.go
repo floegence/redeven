@@ -29,7 +29,8 @@ func SaveRuntimeAccess(layout config.StateLayout, input RuntimeAccessUpdate) (*c
 	}
 	// Validate both persisted records before changing either one. A failed
 	// catalog write must not silently rotate the next-start credential.
-	if _, err := config.ReadEnvironmentCatalogAccess(layout); err != nil {
+	previousAccess, err := config.ReadEnvironmentCatalogAccess(layout)
+	if err != nil {
 		return nil, err
 	}
 	previousHash, err := accessgate.ReadPasswordHash(layout.StateDir)
@@ -39,10 +40,15 @@ func SaveRuntimeAccess(layout config.StateLayout, input RuntimeAccessUpdate) (*c
 	var hash []byte
 	switch input.PasswordMode {
 	case "keep":
-		if input.Password != "" {
-			return nil, fmt.Errorf("keep cannot include a replacement password")
-		}
 		hash = previousHash
+		// A retained Desktop credential can establish a missing verifier, but
+		// must never replace the current server-owned password.
+		if len(hash) == 0 && input.Password != "" {
+			hash, err = accessgate.HashPassword(input.Password)
+		}
+		if err == nil && len(hash) == 0 && previousAccess != nil && previousAccess.LocalUIPasswordConfigured {
+			return nil, fmt.Errorf("stored environment password is missing; supply the existing password or set a new one explicitly")
+		}
 	case "replace":
 		hash, err = accessgate.HashPassword(input.Password)
 	case "clear":
@@ -59,13 +65,14 @@ func SaveRuntimeAccess(layout config.StateLayout, input RuntimeAccessUpdate) (*c
 		return nil, fmt.Errorf("network access requires an environment password")
 	}
 	access := config.EnvironmentCatalogAccess{LocalUIBind: bind.ListenLabel(), LocalUIProtocol: input.Protocol, LocalUIPasswordConfigured: len(hash) > 0}
-	if input.PasswordMode != "keep" {
+	passwordChanged := !bytes.Equal(hash, previousHash)
+	if passwordChanged {
 		if err := accessgate.WritePasswordHash(layout.StateDir, hash); err != nil {
 			return nil, err
 		}
 	}
 	if err := config.UpdateEnvironmentCatalogAccess(layout, access); err != nil {
-		if input.PasswordMode != "keep" {
+		if passwordChanged {
 			if restoreErr := accessgate.WritePasswordHash(layout.StateDir, previousHash); restoreErr != nil {
 				return nil, errors.Join(err, fmt.Errorf("restore environment password after failed settings save: %w", restoreErr))
 			}

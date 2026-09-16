@@ -52,11 +52,14 @@ describe('desktopLaunch', () => {
     const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
+        local_ui_protocol: 'https',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
       }),
     });
-    expect(buildDesktopRuntimeArgs(environment)).toContain('--startup-secrets-stdin');
+    const args = buildDesktopRuntimeArgs(environment);
+    expect(args[args.indexOf('--local-ui-protocol') + 1]).toBe('https');
+    expect(args).toContain('--startup-secrets-stdin');
   });
 
   it('uses the Runtime-owned password when Desktop does not hold its plaintext', () => {

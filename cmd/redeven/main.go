@@ -239,7 +239,7 @@ func (c *cli) runCmd(args []string) int {
 	modeRaw := fs.String("mode", string(defaultRunMode), "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", "", "Local UI bind address (saved configuration or localhost:23998)")
 	localUIBindOverride := fs.String("local-ui-bind-override", "", "One-start Local UI bind override; does not change saved access settings")
-	localUIProtocolRaw := fs.String("local-ui-protocol", "", "Local UI connection security: http|https (new environments: http)")
+	localUIProtocolRaw := fs.String("local-ui-protocol", "", "Local UI connection security: http|https (default: saved protocol or http)")
 	passwordPrompt := fs.Bool("password-prompt", false, "Prompt for the Local UI access password without echo")
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
@@ -309,7 +309,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 	if err := config.ValidateLocalUIProtocol(localUIProtocol); err != nil && mode != runModeRemote {
 		writeErrorWithHelp(c.stderr, err.Error(), []string{
-			"This environment has no confirmed connection protocol. Choose --local-ui-protocol http or --local-ui-protocol https once; the choice will be saved.",
+			"Use --local-ui-protocol http or --local-ui-protocol https. When unset, Runtime uses the saved protocol or defaults to HTTP.",
 			"HTTP needs no certificate. HTTPS requires a valid Local UI device CA and explicit client trust.",
 		}, runHelpText())
 		return 2

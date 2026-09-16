@@ -562,7 +562,7 @@ function normalizeLocalEnvironmentAccess(
 	const localUIBindCanonical = canonicalLocalUIBind(compact(localUIBind) || DEFAULT_DESKTOP_LOCAL_UI_BIND);
 	return {
 		local_ui_bind: localUIBindCanonical,
-    ...(localUIProtocol === undefined ? {} : { local_ui_protocol: parseLocalUIProtocol(localUIProtocol) }),
+    local_ui_protocol: parseLocalUIProtocol(localUIProtocol),
 		local_ui_password: localUIPassword,
 		local_ui_password_configured: localUIPasswordConfigured,
   };

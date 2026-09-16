@@ -13585,7 +13585,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
 
         <section class="space-y-3 border-t border-border/60 pt-5">
           <SettingsSectionHeader label={props.i18n.t('settings.connectionSecurity')} />
-          <SegmentedControl size="sm" value={props.draft.local_ui_protocol ?? ''}
+          <SegmentedControl size="sm" value={props.draft.local_ui_protocol ?? 'http'}
             options={[
               { value: 'http', label: props.i18n.t('settings.httpLabel') },
               { value: 'https', label: props.i18n.t('settings.httpsLabel') },
@@ -13594,9 +13594,7 @@ export function LocalEnvironmentSettingsDialog(props: Readonly<{
           <Show when={validation().protocol_error_key}>
             <p role="alert" class="text-xs text-destructive">{props.i18n.t('settings.protocolRequired')}</p>
           </Show>
-          <Show when={props.draft.local_ui_protocol}>
-            <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
-          </Show>
+          <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t(props.draft.local_ui_protocol === 'https' ? 'settings.httpsHelp' : 'settings.httpNotice')}</p>
           <Show when={props.open && props.draft.local_ui_protocol === 'https' && props.certificate}>
             <LocalCertificateSettings i18n={props.i18n} manage={props.certificate!} remote={remote()} />
           </Show>

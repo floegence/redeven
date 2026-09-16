@@ -1,5 +1,6 @@
 import {
   normalizeDesktopLocalUIPasswordMode,
+  parseLocalUIProtocol,
   type DesktopSettingsDraft,
 } from './settingsIPC';
 import type {
@@ -331,8 +332,12 @@ export function validateDesktopAccessDraft(
     && !model.password_requirement_satisfied
     ? 'settings.sharedPasswordRequired' as const
     : undefined;
-  const protocolErrorKey = draft.local_ui_protocol !== 'http' && draft.local_ui_protocol !== 'https'
-    ? 'settings.protocolRequired' as const : undefined;
+  let protocolErrorKey: DesktopAccessDraftValidation['protocol_error_key'];
+  try {
+    parseLocalUIProtocol(draft.local_ui_protocol);
+  } catch {
+    protocolErrorKey = 'settings.protocolRequired';
+  }
   return {
     valid: !addressErrorKey && !passwordErrorKey && !protocolErrorKey,
     ...(protocolErrorKey ? { protocol_error_key: protocolErrorKey } : {}),
@@ -345,7 +350,7 @@ export function desktopSettingsDraftRequiresRuntimeRestart(
   baseline: DesktopSettingsDraft,
   draft: DesktopSettingsDraft,
 ): boolean {
-  if (baseline.local_ui_protocol !== draft.local_ui_protocol
+  if ((baseline.local_ui_protocol ?? 'http') !== (draft.local_ui_protocol ?? 'http')
     || trimString(baseline.local_ui_bind) !== trimString(draft.local_ui_bind)) {
     return true;
   }

@@ -24,10 +24,11 @@ function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
 }
 
 describe('desktopAccessModel', () => {
-  it('requires an explicit protocol choice for legacy configuration', () => {
+  it('accepts the HTTP default for a draft without a protocol', () => {
     expect(validateDesktopAccessDraft(draft({ local_ui_protocol: undefined }))).toEqual({
-      valid: false, protocol_error_key: 'settings.protocolRequired',
+      valid: true,
     });
+    expect(desktopSettingsDraftRequiresRuntimeRestart(draft({ local_ui_protocol: undefined }), draft({ local_ui_protocol: 'http' }))).toBe(false);
   });
 
   it('keeps passwords and custom interfaces when editing scope and port', () => {

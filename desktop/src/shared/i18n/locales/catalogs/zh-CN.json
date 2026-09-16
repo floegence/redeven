@@ -887,7 +887,7 @@
     "httpsLabel": "HTTPS · 推荐",
     "httpNotice": "HTTP 不保护页面和登录信息的网络传输。",
     "httpsHelp": "HTTPS 会加密连接。每台连接设备都需要信任此运行时的证书。",
-    "protocolRequired": "请选择 HTTP 或 HTTPS，确认此已有环境的连接安全设置。",
+    "protocolRequired": "请选择 HTTP 或 HTTPS 连接协议。",
     "advancedNetwork": "高级网络设置",
     "listenAddressHelp": "监听地址用于选择服务器接口，并非允许访问的客户端地址列表。",
     "pendingChanges": "尚未应用的更改",

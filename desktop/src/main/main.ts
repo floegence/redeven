@@ -17048,13 +17048,12 @@ async function saveLocalEnvironmentSettingsFromWelcome(
     if (startup && (startup.runtime_service?.compatibility_epoch ?? 0) < RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
       throw new Error('Stop or update this older Runtime before saving its access settings.');
     }
-    const replacePassword = access.local_ui_password !== '' && (
-      draft.local_ui_password_mode === 'replace' || !existingAccess?.local_ui_protocol
-    );
+    const passwordMode = !access.local_ui_password_configured ? 'clear' as const
+      : draft.local_ui_password_mode === 'replace' ? 'replace' as const : 'keep' as const;
     const update = {
       local_ui_bind: access.local_ui_bind, local_ui_protocol: access.local_ui_protocol,
-      local_ui_password_mode: !access.local_ui_password_configured ? 'clear' as const : replacePassword ? 'replace' as const : 'keep' as const,
-      local_ui_password: replacePassword ? access.local_ui_password : '',
+      local_ui_password_mode: passwordMode,
+      local_ui_password: passwordMode === 'replace' || (passwordMode === 'keep' && !startup) ? access.local_ui_password : '',
     };
     const saved = startup?.runtime_control
       ? await saveRuntimeAccessSettings(startup.runtime_control, { ...draft, ...update })

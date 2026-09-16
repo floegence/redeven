@@ -290,7 +290,7 @@ Local UI bind rules:
   - Loopback examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, [::1]:24000
   - Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998
   - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
-  - New environments use HTTP. Choose --local-ui-protocol https for encrypted transport.
+  - The saved protocol is preserved; when unset, HTTP is used. Choose --local-ui-protocol https for encrypted transport.
   - Public pages and WS/WSS connections share the configured port.
   - HTTPS startup fails when the explicit device CA identity is missing, invalid, or expired; it never falls back to HTTP.
   - HTTPS clients must trust the exported CA; Linux trust import is manual and never uses sudo.
@@ -315,7 +315,7 @@ Flags:
   --mode <remote|hybrid|local|desktop>
                                     Run mode (default: local).
   --local-ui-bind <host:port>       Saved bind address, or localhost:23998 for a new environment.
-  --local-ui-protocol <http|https>  Connection security (new environments: http).
+  --local-ui-protocol <http|https>  Connection security (default: saved protocol or http).
   --local-ui-bind-override <addr>  One-start bind override; keeps the saved address.
   --provider-origin <url>           Provider authority origin for one-shot bootstrap.
   --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.

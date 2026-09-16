@@ -4,6 +4,7 @@ export const CANCEL_DESKTOP_SETTINGS_CHANNEL = 'redeven-desktop:cancel-settings'
 export type LocalUIProtocol = 'http' | 'https';
 
 export function parseLocalUIProtocol(value: unknown): LocalUIProtocol {
+  if (value === undefined) return 'http';
   if (value !== 'http' && value !== 'https') throw new Error('Choose HTTP or HTTPS for this environment.');
   return value;
 }

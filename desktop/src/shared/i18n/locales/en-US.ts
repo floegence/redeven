@@ -150,7 +150,7 @@ export const enUS = {
     httpsLabel: 'HTTPS · Recommended',
     httpNotice: 'HTTP does not protect pages or login information in transit.',
     httpsHelp: 'HTTPS encrypts the connection. Each connecting device must trust this Runtime’s certificate.',
-    protocolRequired: 'Choose HTTP or HTTPS to confirm the connection security for this existing environment.',
+    protocolRequired: 'Choose HTTP or HTTPS for the connection.',
     advancedNetwork: 'Advanced network settings',
     listenAddressHelp: 'The listen address selects a server interface. It is not a list of allowed client addresses.',
     pendingChanges: 'Changes not yet applied',

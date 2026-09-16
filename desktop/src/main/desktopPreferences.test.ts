@@ -9,6 +9,7 @@ import {
 } from '../shared/controlPlaneProvider';
 import { REDEVEN_CLOUD_ORIGIN } from '../shared/redevenCloud';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
+import { buildDesktopRuntimeArgs } from './desktopLaunch';
 import { localEnvironmentAccess } from '../shared/desktopLocalEnvironmentState';
 import { migrateDesktopEnvironmentRegistrations } from './desktopEnvironmentRegistrationMigration';
 import {
@@ -853,7 +854,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('requires an explicit protocol choice for a saved legacy Environment', async () => {
+  it('starts a saved Environment without a protocol using HTTP and preserves an explicit HTTPS choice', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
@@ -864,9 +865,12 @@ describe('desktopPreferences', () => {
       await fs.writeFile(catalogPath, JSON.stringify(catalog));
       const before = await fs.readFile(catalogPath, 'utf8');
       const loaded = await loadDesktopPreferences(paths, codec);
-      expect(localEnvironmentAccess(loaded.local_environment).local_ui_protocol).toBeUndefined();
+      expect(localEnvironmentAccess(loaded.local_environment).local_ui_protocol).toBe('http');
+      const args = buildDesktopRuntimeArgs(loaded.local_environment);
+      expect(args[args.indexOf('--local-ui-protocol') + 1]).toBe('http');
+      expect(args[args.indexOf('--local-ui-bind') + 1]).toBe('localhost:23998');
       expect(await fs.readFile(catalogPath, 'utf8')).toBe(before);
-      expect(() => validateDesktopSettingsDraft(desktopPreferencesToDraft(loaded))).toThrow('Choose HTTP or HTTPS');
+      expect(validateDesktopSettingsDraft(desktopPreferencesToDraft(loaded)).local_ui_protocol).toBe('http');
       const updated = updateLocalEnvironmentSettings(loaded, {
         environmentID: loaded.local_environment.id,
         access: validateDesktopSettingsDraft({...desktopPreferencesToDraft(loaded), local_ui_protocol: 'https'}),
@@ -875,6 +879,29 @@ describe('desktopPreferences', () => {
       const reread = await loadDesktopPreferences(paths, codec);
       expect(localEnvironmentAccess(reread.local_environment).local_ui_protocol).toBe('https');
       expect(localEnvironmentAccess(reread.local_environment).local_ui_bind).toBe('localhost:23998');
+    });
+  });
+
+  it('preserves a saved network address and password when defaulting a missing protocol', async () => {
+    await withTempPreferencesDir(async (root) => {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const access = validateDesktopSettingsDraft(draft({
+        local_ui_bind: '0.0.0.0:24000', local_ui_password: 'existing-password',
+      }));
+      await saveDesktopPreferences(paths, testDesktopPreferences({
+        local_environment: testLocalEnvironment({ access }),
+      }), codec);
+      const catalogPath = path.join(paths.stateRoot, 'catalog', 'local-environment.json');
+      const catalog = JSON.parse(await fs.readFile(catalogPath, 'utf8'));
+      delete catalog.local_hosting.access.local_ui_protocol;
+      await fs.writeFile(catalogPath, JSON.stringify(catalog));
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(localEnvironmentAccess(loaded.local_environment)).toMatchObject({
+        local_ui_protocol: 'http', local_ui_bind: '0.0.0.0:24000',
+        local_ui_password: 'existing-password', local_ui_password_configured: true,
+      });
+      expect(buildDesktopRuntimeArgs(loaded.local_environment)).not.toContain('existing-password');
     });
   });
 

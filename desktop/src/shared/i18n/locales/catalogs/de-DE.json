@@ -887,7 +887,7 @@
     "httpsLabel": "HTTPS · Empfohlen",
     "httpNotice": "HTTP schützt Seiten und Anmeldedaten bei der Übertragung nicht.",
     "httpsHelp": "HTTPS verschlüsselt die Verbindung. Jedes zugreifende Gerät muss dem Zertifikat dieser Laufzeit vertrauen.",
-    "protocolRequired": "Wählen Sie HTTP oder HTTPS, um die Verbindungssicherheit dieser bestehenden Umgebung zu bestätigen.",
+    "protocolRequired": "Wählen Sie HTTP oder HTTPS für die Verbindung.",
     "advancedNetwork": "Erweiterte Netzwerkeinstellungen",
     "listenAddressHelp": "Die Listener-Adresse wählt eine Serverschnittstelle aus. Sie ist keine Liste zulässiger Client-Adressen.",
     "pendingChanges": "Änderungen noch nicht angewendet",

@@ -887,7 +887,7 @@
     "httpsLabel": "HTTPS · Recomendado",
     "httpNotice": "HTTP não protege páginas nem informações de login durante a transmissão.",
     "httpsHelp": "HTTPS criptografa a conexão. Cada dispositivo que se conectar deve confiar no certificado deste ambiente de execução.",
-    "protocolRequired": "Escolha HTTP ou HTTPS para confirmar a segurança da conexão deste ambiente existente.",
+    "protocolRequired": "Escolha HTTP ou HTTPS para a conexão.",
     "advancedNetwork": "Configurações avançadas de rede",
     "listenAddressHelp": "O endereço de escuta seleciona uma interface do servidor. Ele não é uma lista de endereços de clientes permitidos.",
     "pendingChanges": "Alterações ainda não aplicadas",

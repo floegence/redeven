@@ -29,7 +29,7 @@ Trusted Desktop, SSH, and container traffic can enter through a separate exact n
 
 A network listener starts only for a concrete non-loopback IP or wildcard with a fixed nonzero port and an effective password. Network-reachable devices are not restricted to the local subnet by a wildcard bind. The listening address selects server interfaces, not a client allowlist. A password may also protect loopback access without changing its scope. `LocalUIExposure` projects `scope` as `loopback` or `network`, `transport` as `http` or `tls`, and the effective password requirement.
 
-The saved `local_ui_protocol` is `http` or `https`. Existing records without a confirmed protocol require explicit selection before startup; missing certificates never infer HTTP. The one-start bind override changes only the actual listener, preserving the saved address. Occupied explicit ports fail with a startup error instead of silently selecting another port.
+The saved `local_ui_protocol` is `http` or `https`. Missing protocol settings default to HTTP in both Desktop and Runtime, including existing catalogs, without requiring confirmation or certificate preparation. Reading that default does not rewrite the catalog, change the saved bind or port, or clear password protection; normal saves and starts persist the effective protocol. An explicit HTTPS choice remains HTTPS and certificate failures stop startup without downgrade. The one-start bind override changes only the actual listener, preserving the saved address. Occupied explicit ports fail with a startup error instead of silently selecting another port.
 
 Connect artifacts are one-shot admission state. Each client authenticates independently with the shared environment password, without contacting the first Desktop or obtaining its bridge token. Pending metadata becomes an active binding only after Flowersec authenticates the session. Transport termination, logout, access expiry, and plugin-scope revoke affect the exact owning session; Runtime shutdown ends all sessions. Closing a Desktop window does not stop Runtime. Flowersec owns admission, session establishment, liveness, handler dispatch, close, and lease release; Redeven does not copy those loops.
 
@@ -41,12 +41,15 @@ Authenticated private runtime-control `GET/PUT /v2/runtime/access` reads or save
 
 Access reports include whether saved configuration or the password verifier differs from the running instance, bound to its process start identity. Reopening settings retains this pending state; a replacement Runtime cannot inherit a stale pending flag. Native Desktop saves through the same server authority before updating its client preferences. An ordinary catalog write failure restores the previous verifier and returns an error; this rollback does not claim crash-atomicity across the two files.
 
+A `keep` settings operation may supply a retained password solely to establish a missing verifier for an existing installation. An existing verifier remains byte-for-byte unchanged, even when the supplied Desktop credential is stale. A password-protected catalog with no verifier or retained credential fails closed instead of silently clearing authentication. Failed catalog saves roll back verifier initialization as well as replacement and clearing.
+
 # Boundaries
 
 Installing trust in each HTTPS client is an explicit user action outside Runtime startup. CA validation proves the serving identity, not client trust. Password authentication controls application access; HTTP does not encrypt pages or login data. Standard SHA-256 and cryptographically secure randomness remain required in HTTP contexts, including plugin and terminal integrity checks. Browser capabilities requiring a secure context remain unavailable with feature-specific guidance; browser security is never disabled. URL access conveys no SSH or lifecycle management authority. The private Desktop profile still requires exact preload provenance and numeric loopback, independently of explicit public HTTP support.
 
 # Evidence
 
+- `redeven:internal/config/catalog_test.go` - Preserves saved addresses, password protection, and explicit HTTPS while defaulting a missing protocol to HTTP without rewriting catalog bytes.
 - `redeven:internal/localui/device_ca.go` - Creates and validates the durable device CA and ephemeral exact-SAN leaf.
 - `redeven:internal/localui/device_ca_install.go` - Installs current-user trust on macOS and Windows and returns manual-required guidance on Linux without elevation.
 - `redeven:cmd/redeven/local_authority.go` - Exposes generate, status, export, and install commands.
