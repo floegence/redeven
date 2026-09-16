@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-09-16T00:00:00Z
 quality_exception: Cross-boundary ownership contract covering the one typed ThreadService lifecycle, restart safety, product mapping, and live projection invariants.
 ---
 # Summary
@@ -29,7 +29,11 @@ value. Redeven maps the explicit mode and submits that value; old string-only
 options remain valid. The existing control-signal projection owns these facts,
 without new tables or host journal access. [Decision presentation](../ui/flower-approval-context.md)
 owns layout and semantic copy. Prompt guidance requests concise, non-duplicated
-content in the user's language and descriptions only for real choice differences.
+content in the user's language. Choice labels stay concise; examples, supporting
+context, and real differences belong in the optional description field, which is
+omitted when a choice is already self-explanatory. The prompt forbids invented
+details and repeated labels; the UI renders the supplied fields without
+splitting or rewriting model text.
 
 A completed tool may request non-secret input through published
 `tools.Result.InputRequired`. Floret settles the batch and persists the input
@@ -310,6 +314,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/execution_authority_continuity_test.go` - Retry and SubAgent authority continuity across accepted turns and restart.
 - `redeven:internal/ai/stop_thread.go` - Idempotent typed cancellation without handler lookup.
 - `redeven:internal/ai/send_user_turn_flow_test.go` - Covers typed canonical send and queue behavior through the published runtime.
-- `redeven:internal/ai/floret_ask_user_integration_test.go` - Covers frozen waiting-turn settings, non-blocking interaction settlement, continuation progress, and natural completion.
+- `redeven:internal/ai/prompt_builder.go` - Owns Ask User wording and the label-versus-description instruction.
+- `redeven:internal/ai/floret_ask_user_integration_test.go` - Verifies choice copy guidance reaches the provider and covers frozen waiting-turn settings, non-blocking interaction settlement, continuation progress, and natural completion.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Latest-selection generation fence before detail cache mutation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Deterministic out-of-order A to B to A navigation coverage.

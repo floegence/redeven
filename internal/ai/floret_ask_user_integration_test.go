@@ -27,6 +27,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	var mainCalls atomic.Int32
 	var sawStructuredContinuation atomic.Bool
 	var sawHistoricalAskUserPair atomic.Bool
+	initialProviderRequest := make(chan map[string]any, 1)
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -49,6 +50,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		}
 		switch mainCalls.Add(1) {
 		case 1:
+			initialProviderRequest <- request
 			args := `{"reason_code":"missing_external_input","required_from_user":["Choose a deployment target."],"evidence_refs":["message:latest"],"questions":[{"id":"target","header":"Target","question":"Which target should I deploy?","response_mode":"write","is_secret":false,"write_label":"Target","write_placeholder":"Type a target"}]}`
 			writeOpenAISSEJSON(w, flusher, map[string]any{
 				"type": "response.output_item.added", "output_index": 0,
@@ -121,6 +123,22 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	prompt := waiting.WaitingPrompt
 	if prompt == nil || len(prompt.Questions) != 1 || prompt.Questions[0].ID != "target" {
 		t.Fatalf("waiting prompt=%#v, want canonical target question", prompt)
+	}
+	request := <-initialProviderRequest
+	systemContent, ok := request["instructions"].(string)
+	if !ok {
+		t.Fatal("provider request omitted System Prompt instructions")
+	}
+	for _, instruction := range []string{
+		"Keep each choice label as a concise option name or decision summary",
+		"put examples, supporting context, real differences, or consequences in the optional `description` field instead of appending them to the label",
+		"Do not invent details, repeat the label, or fill space",
+		"a self-explanatory choice may omit `description`",
+		"choice labels, descriptions, and input placeholders in the user's conversation language",
+	} {
+		if !strings.Contains(systemContent, instruction) {
+			t.Errorf("provider System Prompt omitted Ask User copy guidance: %q", instruction)
+		}
 	}
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "openai/gpt-5-nano"); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("SetThreadModel while waiting error=%v, want ErrThreadBusy", err)
