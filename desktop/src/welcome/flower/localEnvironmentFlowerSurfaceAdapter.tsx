@@ -1,5 +1,5 @@
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate, computerFramePath } from '../../../../internal/flower_ui/src/computerViewer';
-import type { DesktopCertificateOperation, DesktopCertificateReport } from '../../shared/desktopCertificate';
+import type { DesktopCertificateRequest, DesktopCertificateReport } from '../../shared/desktopCertificate';
 import { withFlowerWebSearchAvailability } from '../../../../internal/flower_ui/src/webSearchCapability';
 import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../internal/flower_ui/src/settings/modelSelection';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
@@ -78,7 +78,7 @@ import {
 } from '../../../../internal/flower_host_ui/src/flowerAttachmentStaging';
 
 export type DesktopSettingsBridge = Readonly<{
-  certificate?: (operation: DesktopCertificateOperation) => Promise<DesktopCertificateReport>;
+  certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
   save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
   requestRuntimeFlower: (request: RuntimeFlowerRequest) => Promise<RuntimeFlowerRequestResult>;
   startRuntimeFlowerStream: (request: RuntimeFlowerStreamRequest) => Promise<RuntimeFlowerStreamStartResult>;

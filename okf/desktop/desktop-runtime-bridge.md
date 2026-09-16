@@ -33,6 +33,8 @@ Narrow settings windows keep the current URL on its own full-width row, with cop
 
 Missing saved protocol settings use HTTP on load and startup, including existing Environment catalogs. The connection security control selects HTTP without a confirmation or certificate prompt. Explicit HTTPS remains unchanged. When saving a stopped Environment, Desktop supplies any retained password with `keep` to the Runtime authority. Runtime may establish a missing verifier, but never replaces an existing server password unless the user explicitly chooses replacement.
 
+HTTPS settings show certificate validity and this client's system trust separately. The explicit local "Create and trust on this device" action lets the main process inspect, create only a missing certificate, request current-user trust, and verify the result. Retrying reuses a valid identity; cancellation and installation failure keep it usable. Certificate IPC binds an explicit registered management target, and obsolete UI results cannot update another Environment. The epoch 18 legacy `failed + ready + untrusted` status means an intact identity awaiting client trust. Remote server trust never establishes client trust. Certificate changes apply immediately and survive canceling the settings draft. HTTPS restart is disabled during checks and mutations, and the main process rechecks the saved HTTPS identity before stopping the running Runtime; untrusted valid identities remain allowed. Saving next-start settings does not require an immediately usable certificate.
+
 Managed server settings read and save the selected Runtime's access configuration through its private control channel, or the authorized host CLI while stopped. The same single-column settings surface uses "Only this server" for remote loopback and never opens that address in the client browser. Public network addresses remain copyable and shareable, and SSH connection details have a separate management-connection action. URL registrations edit connection information only. Remote certificate checks and generation run on the selected server; each client must explicitly trust its public CA. Runtime retains the password verifier for independent restarts as specified by [Local UI network exposure](../security/local-ui-network-exposure.md).
 
 When the server cannot return its settings, Desktop keeps the management connection editor available with the connection failure. Password inputs validate the 72-byte UTF-8 limit before saving. A failed server settings write restores the prior password verifier and reports the failure; it must not claim that an incomplete save succeeded.
@@ -61,6 +63,8 @@ Runtime-control is a local Desktop coordination capability, not a general networ
 
 # Evidence
 
+- `redeven:desktop/src/main/desktopCertificate.test.ts` - Exercises explicit setup, preserved identity after trust failure, verification, and HTTPS restart admission.
+- `redeven:desktop/src/welcome/LocalCertificateSettings.client.test.tsx` - Covers legacy trust status, actionable retries, duplicate actions, and stale environment responses.
 - `redeven:desktop/src/main/desktopPreferences.test.ts` - Loads existing catalogs without a protocol into HTTP startup while preserving the saved port, password, and explicit HTTPS choice.
 - `redeven:cmd/redeven/main.go:299` - Local Desktop startup is rejected for remote-only mode.
 - `redeven:desktop/src/main/localUIURL.ts:44` - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.

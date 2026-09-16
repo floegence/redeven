@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/localui"
 	"github.com/floegence/redeven/internal/lockfile"
 )
 
@@ -83,5 +86,42 @@ func TestDeviceCAGenerationDoesNotStopAnActiveRuntimeOrReplaceItsIdentity(t *tes
 	after, err := os.ReadFile(report.CertificatePath)
 	if err != nil || string(before) != string(after) {
 		t.Fatal("existing certificate changed")
+	}
+}
+
+func TestDeviceCAStatusSucceedsBeforeClientTrustIsInstalled(t *testing.T) {
+	root := t.TempDir()
+	if code, _, stderr := runCLITest(t, "local-authority", "device-ca", "generate", "--state-root", root); code != 0 {
+		t.Fatalf("generate: %s", stderr)
+	}
+	code, stdout, stderr := runCLITest(t, "local-authority", "device-ca", "status", "--state-root", root)
+	if code != 0 {
+		t.Fatalf("status: exit=%d stderr=%s", code, stderr)
+	}
+	var report localAuthorityReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Identity != "ready" || report.Status == "failed" || report.Trust == "trusted" {
+		t.Fatalf("unexpected certificate status: %#v", report)
+	}
+}
+
+func TestDeviceCAErrorCodesDoNotCallOperationFailuresInvalidCertificates(t *testing.T) {
+	for _, test := range []struct {
+		err  error
+		code string
+	}{
+		{os.ErrPermission, "local_ui_device_ca_permission_denied"},
+		{context.DeadlineExceeded, "local_ui_device_ca_timeout"},
+		{errors.New("I/O failure"), "local_ui_device_ca_operation_failed"},
+		{localui.ErrLocalUIDeviceCAExists, "local_ui_device_ca_exists"},
+		{localui.ErrLocalUIDeviceCAInvalid, "local_ui_device_ca_invalid"},
+		{localui.ErrLocalUIDeviceCAInstallCanceled, "local_ui_device_ca_install_canceled"},
+		{localui.ErrLocalUIDeviceCAInstallFailed, "local_ui_device_ca_install_failed"},
+	} {
+		if got := deviceCAErrorCode(test.err); got != test.code {
+			t.Fatalf("%v: %s", test.err, got)
+		}
 	}
 }

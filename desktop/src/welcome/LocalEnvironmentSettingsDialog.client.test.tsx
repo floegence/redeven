@@ -5,6 +5,7 @@ import { LocalEnvironmentSettingsDialog } from './App';
 import { createDesktopI18n } from '../shared/i18n';
 import { buildDesktopSettingsSurfaceSnapshot } from '../main/settingsPageContent';
 import { applyDesktopAccessModeToDraft, applyDesktopAccessFixedPortToDraft } from '../shared/desktopAccessModel';
+import type { DesktopCertificateReport, DesktopCertificateRequest } from '../shared/desktopCertificate';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import { IDLE_LAUNCHER_BUSY_STATE } from './launcherBusyState';
 
@@ -16,7 +17,7 @@ function button(label: string): HTMLButtonElement {
   return result;
 }
 
-async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'legacy'; remote?: boolean; urls?: string[]; pending?: boolean } = {}) {
+async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'legacy'; remote?: boolean; urls?: string[]; pending?: boolean; certificate?: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport> } = {}) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('CSS', { escape: (value: string) => value });
   const host = document.createElement('div');
@@ -35,7 +36,7 @@ async function mount(options: { url?: string; protocol?: 'http' | 'https' | 'leg
   const copy = vi.fn(async () => {});
   const save = vi.fn(async () => {});
   const open = vi.fn(async () => {});
-  const certificate = vi.fn(async () => ({ status: 'failed', code: 'local_ui_device_ca_missing' }));
+  const certificate = vi.fn(options.certificate ?? (async () => ({ status: 'failed', code: 'local_ui_device_ca_missing' })));
   disposers.push(render(() => (
     <LocalEnvironmentSettingsDialog open snapshot={snapshot} baselineSnapshot={snapshot} draft={draft()}
       i18n={createDesktopI18n('en-US')} busyState={IDLE_LAUNCHER_BUSY_STATE} settingsError=""
@@ -116,8 +117,8 @@ describe('Runtime connection settings', () => {
 
   it('shares only the actual URL and explains the loopback boundary', async () => {
     const test = await mount({ url: 'https://localhost:23998/', protocol: 'https' });
-    expect(test.certificate).toHaveBeenCalledWith('status');
-    expect(test.certificate).not.toHaveBeenCalledWith('install');
+    expect(test.certificate).toHaveBeenCalledWith({ environment_id: 'local', operation: 'status' });
+    expect(test.certificate).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'install' }));
     button('Share connection').click();
     await settle();
     expect(document.querySelector('img')?.getAttribute('src')).toMatch(/^data:image/);
@@ -125,6 +126,22 @@ describe('Runtime connection settings', () => {
     expect(document.body.textContent).not.toContain('bridge');
     button('Open in browser').click();
     expect(test.open).toHaveBeenCalledWith('https://localhost:23998/');
+  });
+
+  it('keeps the current HTTP URL and blocks restart until HTTPS identity checks complete', async () => {
+    let finish!: (report: DesktopCertificateReport) => void;
+    const test = await mount({ url: 'http://localhost:23998/', protocol: 'https', pending: true,
+      certificate: () => new Promise((resolve) => { finish = resolve; }) });
+    test.setDraft((current) => ({ ...current, local_ui_bind: 'localhost:24000' }));
+    await settle();
+    expect(button('Save and restart').disabled).toBe(true);
+    expect(button('Save for next restart').disabled).toBe(false);
+    finish({ status: 'ready', code: 'local_ui_device_ca_untrusted', identity: 'ready', trust: 'untrusted', can_install: true });
+    await settle();
+    expect(button('Save and restart').disabled).toBe(false);
+    expect(document.body.textContent).toContain('http://localhost:23998/');
+    button('Save and restart').click();
+    expect(test.save).toHaveBeenCalledWith({ restartRuntime: true });
   });
 
   it('uses HTTP without certificate setup for an existing configuration with no protocol', async () => {

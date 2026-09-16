@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -174,13 +175,17 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 		if statusErr != nil {
 			report.Status = "failed"
 			report.Code = deviceCAErrorCode(statusErr)
-			report.Message = status.Remedy
+			report.Message = statusErr.Error()
 			writeLocalAuthorityReport(c.stderr, report)
 			return 1
 		}
 		if status.Trust == "manual_required" {
 			report.Status = "manual_required"
 			report.Code = "local_ui_device_ca_manual_install_required"
+			report.Message = status.Remedy
+		}
+		if status.Trust == "untrusted" {
+			report.Code = "local_ui_device_ca_untrusted"
 			report.Message = status.Remedy
 		}
 		writeLocalAuthorityReport(c.stdout, report)
@@ -203,7 +208,7 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 				report.Status = "manual_required"
 				report.Message = "Import the public CA certificate into the current user's browser or OS trust store; Redeven will not invoke sudo or modify system-wide trust."
 			} else {
-				report.Message = "Current-user trust installation did not complete."
+				report.Message = err.Error()
 			}
 			writeLocalAuthorityReport(c.stderr, report)
 			return 1
@@ -212,18 +217,22 @@ func (c *cli) localAuthorityDeviceCACmd(args []string) int {
 		return 0
 	default:
 		if err := os.MkdirAll(layout.StateDir, 0o700); err != nil {
-			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: "local_ui_device_ca_generation_failed", Message: "Local UI device CA generation did not complete."})
+			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: deviceCAErrorCode(err), Message: "Local UI device CA generation did not complete."})
 			return 1
 		}
 		lock, err := lockfile.Acquire(filepath.Join(layout.StateDir, "device-ca.lock"))
 		if err != nil {
-			writeLocalAuthorityReport(c.stderr, localAuthorityFailureFor("device-ca-generate", err))
+			code := deviceCAErrorCode(err)
+			if errors.Is(err, lockfile.ErrAlreadyLocked) {
+				code = "local_ui_device_ca_busy"
+			}
+			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: code, Message: "Certificate creation could not acquire its operation lock. Retry after checking access and pending operations."})
 			return 1
 		}
 		defer func() { _ = lock.Release() }()
 		status, err := localui.GenerateLocalUIDeviceCA(layout.StateDir)
 		if err != nil {
-			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: deviceCAErrorCode(err), Message: "Local UI device CA generation did not complete."})
+			writeLocalAuthorityReport(c.stderr, localAuthorityReport{Operation: "device-ca-generate", Status: "failed", Code: deviceCAErrorCode(err), Message: err.Error()})
 			return 1
 		}
 		report := deviceCAReport(operation, status)
@@ -248,6 +257,20 @@ func deviceCAReport(operation string, status localui.DeviceCAStatus) localAuthor
 
 func deviceCAErrorCode(err error) string {
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "local_ui_device_ca_timeout"
+	case errors.Is(err, os.ErrPermission):
+		return "local_ui_device_ca_permission_denied"
+	case errors.Is(err, localui.ErrLocalUIDeviceCAExists):
+		return "local_ui_device_ca_exists"
+	case errors.Is(err, localui.ErrLocalUIDeviceCAInstallCanceled):
+		return "local_ui_device_ca_install_canceled"
+	case errors.Is(err, localui.ErrLocalUIDeviceCAInstallFailed):
+		return "local_ui_device_ca_install_failed"
+	case errors.Is(err, localui.ErrLocalUIDeviceCANotYetValid):
+		return "local_ui_device_ca_not_yet_valid"
+	case errors.Is(err, localui.ErrLocalUIDeviceCAInvalid):
+		return "local_ui_device_ca_invalid"
 	case errors.Is(err, localui.ErrLocalUIDeviceCAMissing):
 		return "local_ui_device_ca_missing"
 	case errors.Is(err, localui.ErrLocalUIDeviceCAExpired):
@@ -257,14 +280,8 @@ func deviceCAErrorCode(err error) string {
 	case errors.Is(err, localui.ErrLocalUIDeviceCAManual):
 		return "local_ui_device_ca_manual_install_required"
 	default:
-		return "local_ui_device_ca_invalid"
+		return "local_ui_device_ca_operation_failed"
 	}
-}
-
-func localAuthorityFailureFor(operation string, err error) localAuthorityReport {
-	report := localAuthorityFailure(err)
-	report.Operation = operation
-	return report
 }
 
 func (c *cli) localAuthorityRotateKeyCmd(args []string) int {

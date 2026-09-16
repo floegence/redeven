@@ -1,11 +1,20 @@
 package localui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"time"
+)
+
+var (
+	ErrLocalUIDeviceCAInstallFailed   = errors.New("current-user certificate trust installation failed")
+	ErrLocalUIDeviceCAInstallCanceled = errors.New("current-user certificate trust installation was canceled")
 )
 
 // InstallLocalUIDeviceCAForCurrentUser is invoked only by the explicit CLI
@@ -17,6 +26,8 @@ func InstallLocalUIDeviceCAForCurrentUser(stateDir string) error {
 		return err
 	}
 	certificatePath := localUIDeviceCACertificatePath(stateDir)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
 	var command *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
@@ -25,16 +36,29 @@ func InstallLocalUIDeviceCAForCurrentUser(stateDir string) error {
 			return fmt.Errorf("resolve current-user keychain: %w", err)
 		}
 		keychain := filepath.Join(home, "Library", "Keychains", "login.keychain-db")
-		command = exec.Command("security", "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certificatePath)
+		command = exec.CommandContext(ctx, "security", "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certificatePath)
 	case "windows":
-		command = exec.Command("certutil.exe", "-user", "-addstore", "Root", certificatePath)
+		command = exec.CommandContext(ctx, "certutil.exe", "-user", "-addstore", "Root", certificatePath)
 	default:
 		return ErrLocalUIDeviceCAManual
 	}
 	if output, err := command.CombinedOutput(); err != nil {
-		return fmt.Errorf("install Local UI device CA for current user: %w (%s)", err, sanitizedCommandOutput(output))
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return deviceCATrustInstallError(runtime.GOOS, output, err)
 	}
 	return nil
+}
+
+func deviceCATrustInstallError(platform string, output []byte, err error) error {
+	// Match stable platform error codes rather than translated OS messages.
+	text := strings.ToLower(string(output))
+	if (platform == "darwin" && strings.Contains(text, "(-128)")) ||
+		(platform == "windows" && strings.Contains(text, "0x800704c7")) {
+		return ErrLocalUIDeviceCAInstallCanceled
+	}
+	return fmt.Errorf("%w: %v (%s)", ErrLocalUIDeviceCAInstallFailed, err, sanitizedCommandOutput(output))
 }
 
 func sanitizedCommandOutput(output []byte) string {

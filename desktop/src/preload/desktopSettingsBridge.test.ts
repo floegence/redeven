@@ -123,6 +123,16 @@ describe('bootstrapDesktopSettingsBridge', () => {
     ]);
   });
 
+  it('binds certificate setup to an explicit environment and rejects invalid requests', async () => {
+    const { bootstrapDesktopSettingsBridge } = await import('./desktopSettingsBridge');
+    bootstrapDesktopSettingsBridge();
+    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
+    await bridge.certificate({ environment_id: 'local', operation: 'setup' });
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:local-certificate', { environment_id: 'local', operation: 'setup' });
+    expect(() => bridge.certificate('install')).toThrow();
+    expect(() => bridge.certificate({ environment_id: '', operation: 'setup' })).toThrow();
+  });
+
   it('passes structured runtime Flower error data through IPC unchanged', async () => {
     const { bootstrapDesktopSettingsBridge } = await import('./desktopSettingsBridge');
     const result = {
