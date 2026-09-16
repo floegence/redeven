@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from './utils/clipboard';
 import { For, Show, createEffect, createMemo, createRenderEffect, createResource, createSignal, lazy, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
@@ -1411,7 +1412,7 @@ export function EnvAppShell() {
       });
       return result;
     },
-    createRequestID: () => createClientId('plugin-install'),
+    createRequestID: () => createClientId(),
     resolvePluginID: (pluginInstanceID) => (
       pluginInventoryProjection()?.items.find((item) => (
         item.pluginInstanceID === pluginInstanceID
@@ -2094,7 +2095,7 @@ export function EnvAppShell() {
 
   const requestWorkbenchOverviewEntry = () => {
     setWorkbenchOverviewEntry({
-      requestId: createClientId('workbench-overview'),
+      requestId: createClientId(),
       reason: 'mode_switch',
     });
     setWorkbenchOverviewEntrySeq((n) => n + 1);
@@ -2424,7 +2425,7 @@ export function EnvAppShell() {
       const reusePolicy = options?.reusePolicy ?? 'same_file_or_create';
       const openStrategy = reusePolicy === 'single_surface' ? 'same_file_or_create' : reusePolicy;
       setWorkbenchFilePreviewActivation({
-        requestId: createClientId('workbench-preview'),
+        requestId: createClientId(),
         item: normalizedItem,
         focus: options?.focus ?? true,
         ensureVisible: options?.ensureVisible ?? true,
@@ -2721,7 +2722,13 @@ export function EnvAppShell() {
     },
   };
   const localConnection: EnvAppLocalConnection | undefined =
-    localTransportSecurity.transport === 'desktop_private_bridge_v2'
+    localTransportSecurity.transport === 'public_http'
+      ? {
+        kind: 'public_http',
+        origin: window.location.origin,
+        source: () => createLocalDirectArtifactSource({ ...localArtifactSourceCallbacks, transport: 'public_http' }),
+      }
+      : localTransportSecurity.transport === 'desktop_private_bridge_v2'
       ? {
         kind: 'desktop_private_bridge_v2',
         origin: window.location.origin,
@@ -3782,6 +3789,7 @@ export function EnvAppShell() {
           onCommand={handlePluginCenterCommand}
           onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
           onCommitExternal={commitExternalPluginPackage}
+          onRefreshInstalled={refetchPluginInventory}
           onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
           onClose={closePluginCenter}
         />
@@ -4407,7 +4415,7 @@ export function EnvAppShell() {
           }
 
           try {
-            await navigator.clipboard.writeText(id);
+            await writeTextToClipboard(id);
             notify.success(i18n.t('shell.notifications.copiedTitle'), i18n.t('shell.notifications.environmentIdCopied'));
           } catch {
             notify.error(i18n.t('shell.notifications.copyFailedTitle'), i18n.t('shell.notifications.clipboardPermissionDenied'));

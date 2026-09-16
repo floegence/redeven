@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
@@ -54,11 +55,11 @@ const (
 )
 
 type Options struct {
-	Logger *slog.Logger
-	Bind   BindSpec
+	Logger   *slog.Logger
+	Bind     BindSpec
+	Protocol string
 
 	DisableSelfUpgrade     bool
-	DesktopPrivateAccess   bool
 	EffectiveRunMode       string
 	RemoteEnabled          bool
 	ControlplaneBaseURL    string
@@ -97,13 +98,13 @@ type Server struct {
 	log          *slog.Logger
 
 	bind                   BindSpec
+	protocol               string
 	configPath             string
 	stateRoot              string
 	stateDir               string
 	runtimeControlSockPath string
 	version                string
 	selfUpgradeDisabled    bool
-	desktopPrivateAccess   bool
 	effectiveRunMode       string
 	remoteEnabled          bool
 	controlplaneBaseURL    string
@@ -136,14 +137,10 @@ type Server struct {
 	resolveAccessHosts func(BindSpec) ([]netip.Addr, error)
 
 	listeners []net.Listener
-	srv       *http.Server
 	deviceCA  *deviceCA
 	tlsConfig *tls.Config
 
-	directListeners        []net.Listener
-	directServers          []*flowersec.WebSocketHTTPServer
-	directAuthorities      map[string]string
-	resolveDirectAuthority func(string) (string, error)
+	networkServers []*flowersec.WebSocketHTTPServer
 
 	desktopBridgeListener  net.Listener
 	desktopBridgeServer    *http.Server
@@ -416,7 +413,10 @@ func New(opts Options) (*Server, error) {
 		agent.FloeAppRedevenAgent,
 		config.PermissionSet{Read: true, Write: false, Execute: true},
 	)
-	exposure := runtimemanagement.NewLocalUIExposure(bind.IsNetworkExposure(), opts.AccessGate != nil && opts.AccessGate.Enabled())
+	if err := config.ValidateLocalUIProtocol(opts.Protocol); err != nil {
+		return nil, err
+	}
+	exposure := runtimemanagement.NewLocalUIExposure(opts.Protocol, bind.IsNetworkExposure(), opts.AccessGate != nil && opts.AccessGate.Enabled())
 	if err := exposure.Validate(); err != nil {
 		return nil, err
 	}
@@ -431,13 +431,13 @@ func New(opts Options) (*Server, error) {
 	return &Server{
 		log:                       logger,
 		bind:                      bind,
+		protocol:                  opts.Protocol,
 		configPath:                configPath,
 		stateRoot:                 stateRoot,
 		stateDir:                  filepath.Dir(configPath),
 		runtimeControlSockPath:    strings.TrimSpace(opts.RuntimeControlSocketPath),
 		version:                   strings.TrimSpace(opts.Version),
 		selfUpgradeDisabled:       opts.DisableSelfUpgrade,
-		desktopPrivateAccess:      opts.DesktopPrivateAccess,
 		effectiveRunMode:          strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:             opts.RemoteEnabled,
 		controlplaneBaseURL:       strings.TrimSpace(opts.ControlplaneBaseURL),
@@ -458,7 +458,6 @@ func New(opts Options) (*Server, error) {
 		networkAuthorities:        make(map[string]struct{}),
 		resolveAccessHosts:        resolveNetworkAccessHosts,
 		deviceCA:                  opts.deviceCA,
-		directAuthorities:         make(map[string]string),
 	}, nil
 }
 
@@ -494,7 +493,7 @@ func (s *Server) configureAcceptor() error {
 	s.authorityMu.RLock()
 	origins := make([]string, 0, len(s.networkAuthorities))
 	for authority := range s.networkAuthorities {
-		origins = append(origins, "https://"+authority)
+		origins = append(origins, s.protocol+"://"+publicURLAuthority(authority, s.protocol))
 	}
 	s.authorityMu.RUnlock()
 	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
@@ -623,101 +622,25 @@ func (s *Server) configureDesktopBridgeDirectHandler() error {
 	return nil
 }
 
-func (s *Server) privateDesktopMode() bool {
-	return s != nil && s.desktopPrivateAccess
-}
-
 func (s *Server) Start(ctx context.Context) error {
-	if s == nil {
+	if s == nil || s.desktopBridgeServer != nil {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if s.srv != nil || s.desktopBridgeServer != nil {
-		return nil
-	}
-	if err := s.ensureAuthorizationStore(); err != nil {
-		return err
-	}
-
-	if err := s.prepareDesktopBridgeListener(); err != nil {
-		_ = s.Close()
-		return fmt.Errorf("start trusted Local UI bridge listener: %w", err)
-	}
-
 	var listeners []net.Listener
-	var srv *http.Server
-	if !s.privateDesktopMode() {
-		var errs []string
-		for _, addr := range s.bind.ListenAddrs() {
-			ln, err := net.Listen("tcp", addr)
-			if err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", addr, err))
+	for _, addr := range s.bind.ListenAddrs() {
+		listener, err := net.Listen("tcp", addr)
+		if err != nil {
+			// An unavailable address family may be omitted, but an occupied configured
+			// port must never silently select a different listener or endpoint.
+			if s.bind.localhost && (errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EADDRNOTAVAIL)) {
 				continue
 			}
-			listeners = append(listeners, ln)
+			closeNetworkListeners(listeners)
+			return fmt.Errorf("listen %s: %w", addr, err)
 		}
-		if len(listeners) == 0 {
-			_ = s.Close()
-			return fmt.Errorf("listen %s failed: %s", s.bind.ListenLabel(), strings.Join(errs, "; "))
-		}
-		if err := s.prepareSecureNetwork(listeners); err != nil {
-			_ = s.Close()
-			return err
-		}
-		for _, errText := range errs {
-			s.log.Warn("local ui listener unavailable", "bind", s.bind.ListenLabel(), "error", errText)
-		}
-		srv = newLocalUIHTTPServer(s.networkHandler())
-		s.srv = srv
-		s.listeners = listeners
+		listeners = append(listeners, listener)
 	}
-	if err := s.configureAcceptor(); err != nil {
-		_ = s.Close()
-		return err
-	}
-	if err := s.configureDesktopBridgeDirectHandler(); err != nil {
-		_ = s.Close()
-		return err
-	}
-	if err := s.startDesktopBridgeServer(); err != nil {
-		_ = s.Close()
-		return fmt.Errorf("start trusted Local UI bridge server: %w", err)
-	}
-	if !s.privateDesktopMode() {
-		if err := s.createDirectServers(); err != nil {
-			_ = s.Close()
-			return err
-		}
-		s.serveSecureNetwork(srv, listeners)
-	}
-
-	go func() {
-		<-ctx.Done()
-		_ = s.Close()
-	}()
-
-	go s.sweepLoop(ctx)
-
-	runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.log, nil)
-	if err != nil {
-		_ = s.Close()
-		return fmt.Errorf("init runtime-control: %w", err)
-	}
-	if err := runtimeControl.Start(ctx); err != nil {
-		_ = s.Close()
-		return fmt.Errorf("start runtime-control: %w", err)
-	}
-	s.runtimeControl = runtimeControl
-
-	if err := s.startRuntimeStatusServer(ctx); err != nil {
-		_ = s.Close()
-		return fmt.Errorf("start runtime management socket: %w", err)
-	}
-
-	s.log.Info("local ui listening", "bind", s.ListenLabel(), "desktop_bridge", s.localUIBridgeURL)
-	return nil
+	return s.StartOnListeners(ctx, listeners, nil)
 }
 
 func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener, runtimeControlListener net.Listener) error {
@@ -727,7 +650,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if s.srv != nil || s.desktopBridgeServer != nil {
+	if s.desktopBridgeServer != nil {
 		return nil
 	}
 	if err := s.ensureAuthorizationStore(); err != nil {
@@ -736,13 +659,12 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	if len(listeners) == 0 {
 		return errors.New("missing Local UI listeners")
 	}
-	if err := s.prepareSecureNetwork(listeners); err != nil {
+	s.listeners = append([]net.Listener(nil), listeners...)
+	if err := s.prepareNetwork(listeners); err != nil {
+		_ = s.Close()
 		return err
 	}
 
-	srv := newLocalUIHTTPServer(s.networkHandler())
-	s.srv = srv
-	s.listeners = append([]net.Listener(nil), listeners...)
 	if err := s.prepareDesktopBridgeListener(); err != nil {
 		_ = s.Close()
 		return fmt.Errorf("start trusted Local UI bridge listener: %w", err)
@@ -759,7 +681,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		_ = s.Close()
 		return fmt.Errorf("start trusted Local UI bridge server: %w", err)
 	}
-	if err := s.createDirectServers(); err != nil {
+	if err := s.createNetworkServers(); err != nil {
 		_ = s.Close()
 		return err
 	}
@@ -770,12 +692,26 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	}()
 	go s.sweepLoop(ctx)
 
-	s.serveSecureNetwork(srv, listeners)
+	s.serveNetwork()
 
 	runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.log, nil)
 	if err != nil {
 		_ = s.Close()
 		return fmt.Errorf("init runtime-control: %w", err)
+	}
+	accessLayout, err := config.LocalEnvironmentStateLayout(s.stateRoot)
+	if err != nil {
+		_ = s.Close()
+		return err
+	}
+	runtimeControl.accessLayout = &accessLayout
+	runtimeControl.accessCurrent = config.EnvironmentCatalogAccess{
+		LocalUIBind: s.bind.ListenLabel(), LocalUIProtocol: s.protocol, LocalUIPasswordConfigured: s.accessEnabled(),
+	}
+	runtimeControl.accessPasswordHash, err = accessgate.ReadPasswordHash(accessLayout.StateDir)
+	if err != nil {
+		_ = s.Close()
+		return err
 	}
 	if runtimeControlListener != nil {
 		if err := runtimeControl.StartOnListener(ctx, runtimeControlListener); err != nil {
@@ -923,10 +859,7 @@ func (s *Server) Close() error {
 	for _, directSession := range s.beginDirectShutdown() {
 		_ = directSession.Close()
 	}
-	if s.srv != nil {
-		_ = s.srv.Shutdown(ctx)
-	}
-	for _, directServer := range s.directServers {
+	for _, directServer := range s.networkServers {
 		if directServer != nil {
 			_ = directServer.Shutdown(ctx)
 		}
@@ -943,18 +876,16 @@ func (s *Server) Close() error {
 	for _, ln := range s.listeners {
 		_ = ln.Close()
 	}
-	for _, ln := range s.directListeners {
-		_ = ln.Close()
-	}
 	if s.desktopBridgeListener != nil {
 		_ = s.desktopBridgeListener.Close()
 	}
-	s.srv = nil
 	s.listeners = nil
-	s.directServers = nil
-	s.directListeners = nil
-	s.directAuthorities = make(map[string]string)
+	s.networkServers = nil
 	s.tlsConfig = nil
+	s.authorityMu.Lock()
+	s.displayURLs = nil
+	s.networkAuthorities = make(map[string]struct{})
+	s.authorityMu.Unlock()
 	s.desktopBridgeServer = nil
 	s.desktopBridgeListener = nil
 	s.desktopBridgeDirect = nil
@@ -989,23 +920,19 @@ func (s *Server) ListenLabel() string {
 	if s == nil {
 		return ""
 	}
-	if s.privateDesktopMode() {
+	if len(s.listeners) == 0 {
 		return ""
 	}
 	return s.bind.ListenLabelForPort(s.Port())
 }
 
 func (s *Server) DisplayURLs() []string {
-	if s == nil || s.privateDesktopMode() {
+	if s == nil {
 		return nil
 	}
 	s.authorityMu.RLock()
-	resolved := append([]string(nil), s.displayURLs...)
-	s.authorityMu.RUnlock()
-	if len(resolved) > 0 {
-		return resolved
-	}
-	return s.bind.DisplayURLsForPort(s.Port())
+	defer s.authorityMu.RUnlock()
+	return append([]string(nil), s.displayURLs...)
 }
 
 type apiResp struct {
@@ -1049,12 +976,12 @@ func (s *Server) accessEnabled() bool {
 
 func (s *Server) LocalUIExposure() runtimemanagement.LocalUIExposure {
 	if s == nil {
-		return runtimemanagement.NewLocalUIExposure(false, false)
+		return runtimemanagement.NewLocalUIExposure("https", false, false)
 	}
 	if err := s.exposure.Validate(); err == nil {
 		return s.exposure
 	}
-	return runtimemanagement.NewLocalUIExposure(s.bind.IsNetworkExposure(), s.accessEnabled())
+	return runtimemanagement.NewLocalUIExposure(s.protocol, s.bind.IsNetworkExposure(), s.accessEnabled())
 }
 
 func localAccessResumeMeta() session.Meta {
@@ -1847,23 +1774,18 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if r == nil {
 		return "", errors.New("nil request")
 	}
-	requestAuthority, err := canonicalLocalUIAuthority(r.Host)
+	requestAuthority, err := canonicalPublicAuthority(r.Host, s.protocol)
 	if err != nil {
 		return "", errors.New("invalid Local UI authority")
 	}
-	s.authorityMu.RLock()
-	directAuthority := s.directAuthorities[requestAuthority]
-	s.authorityMu.RUnlock()
-	if directAuthority == "" && s.resolveDirectAuthority != nil {
-		directAuthority, err = s.resolveDirectAuthority(requestAuthority)
-		if err != nil {
-			return "", errors.New("flowersec WSS endpoint is unavailable")
-		}
+	if !s.isAllowedNetworkAuthority(r.Host) {
+		return "", errors.New("Local UI endpoint is unavailable")
 	}
-	if directAuthority == "" {
-		return "", errors.New("flowersec WSS endpoint is unavailable")
+	scheme := "ws"
+	if s.protocol == config.LocalUIProtocolHTTPS {
+		scheme = "wss"
 	}
-	return (&url.URL{Scheme: "wss", Host: directAuthority, Path: flowersec.WebSocketDirectPath}).String(), nil
+	return (&url.URL{Scheme: scheme, Host: publicURLAuthority(requestAuthority, s.protocol), Path: flowersec.WebSocketDirectPath}).String(), nil
 }
 
 func privateLoopbackWSURLFromRequest(r *http.Request) (string, error) {
@@ -2073,6 +1995,17 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 		}
 		artifact = json.RawMessage(issued.ArtifactJSON())
 		authorizationRecord = issued.AuthorizationRecord()
+	} else if s.protocol == config.LocalUIProtocolHTTP {
+		issued, issueErr := controlplane.NewIssuer().IssueHTTPDirect(controlplane.HTTPDirectIssueOptions{
+			Session: sessionOptions, Endpoint: strings.TrimSpace(wsURL),
+			RendezvousGroupID: "local-ui-" + channelID, ListenerAudience: "redeven-local-ui",
+			UpstreamAddress: endpointURL.Host, Metadata: metadata,
+		})
+		if issueErr != nil {
+			return localIssuedPending{}, issueErr
+		}
+		artifact = json.RawMessage(issued.ArtifactJSON())
+		authorizationRecord = issued.AuthorizationRecord()
 	} else {
 		endpoints, endpointsErr := controlplane.NewEndpointSet(controlplane.EndpointConfig{
 			ID: "websocket", URL: strings.TrimSpace(wsURL), TLS: controlplane.CAPolicy(),
@@ -2134,8 +2067,8 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.TLS == nil && !s.bind.IsLoopbackOnly() && !isTrustedLocalUIBridge(r) {
-		http.Error(w, "Flowersec direct sessions require a secure or loopback Local UI endpoint", http.StatusForbidden)
+	if r.TLS == nil && s.protocol != config.LocalUIProtocolHTTP && !isTrustedLocalUIBridge(r) {
+		http.Error(w, "This Runtime requires HTTPS for public connections", http.StatusForbidden)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, localUIJSONBodyLimit)
@@ -2234,7 +2167,7 @@ func (s *Server) localSpendOriginFromRequest(r *http.Request) (string, error) {
 	if s == nil || r == nil || !s.isTrustedOrAllowedAuthority(r) {
 		return "", errors.New("invalid Local UI authority")
 	}
-	authority, err := canonicalLocalUIAuthority(r.Host)
+	authority, err := canonicalPublicAuthority(r.Host, requestProtocol(r))
 	if err != nil {
 		return "", errors.New("invalid Local UI authority")
 	}
@@ -2242,7 +2175,7 @@ func (s *Server) localSpendOriginFromRequest(r *http.Request) (string, error) {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return (&url.URL{Scheme: scheme, Host: authority}).String(), nil
+	return (&url.URL{Scheme: scheme, Host: publicURLAuthority(authority, scheme)}).String(), nil
 }
 
 func (s *Server) handleArtifactSpend(w http.ResponseWriter, r *http.Request) {

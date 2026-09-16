@@ -88,7 +88,15 @@ For remote machines: Desktop can auto-install the matching Redeven release over 
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Generate the Local UI device CA (once)
+redeven run
+```
+
+New environments start with HTTP on `localhost:23998`, accessible only from the Runtime device. No certificate or Redeven Cloud setup is required. Open the actual address printed after startup with Desktop or a browser. Local state lives under `~/.redeven/local-environment/`; Ctrl+C stops a CLI Runtime.
+
+For network-reachable devices, configure a listening address and an environment password. Each Desktop or browser logs in independently; pages and WS/WSS share one port. HTTP does not encrypt pages or login information. HTTPS is optional and requires an explicitly created certificate and trust on every connecting device:
+
+```bash
+# Generate the Local UI device CA (once)
 redeven local-authority device-ca generate --state-root ~/.redeven
 
 # macOS or Windows: install it into the current user's trust store
@@ -97,17 +105,10 @@ redeven local-authority device-ca install --state-root ~/.redeven --scope user
 # Linux: export the public certificate, then import it manually
 redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
-# 3. Run
-redeven run
-
-# 4. Open https://localhost:23998 in your browser.
+redeven run --local-ui-protocol https
 ```
 
-On Linux, import the exported public certificate into the trust store actually used by your browser or client. `install --scope user` intentionally returns `manual_required` on Linux; Redeven never runs `sudo` or modifies a system-wide trust store. The Runtime validates the CA identity and its generated server certificate before serving HTTPS/WSS, but it cannot establish client trust for you. Client TLS therefore fails closed until that browser or client trusts the CA.
-
-The first `redeven run` initializes local state under `~/.redeven/local-environment/` and starts in local mode. No bootstrap or control-plane configuration is required. Local UI listens on `localhost:23998` and is available only from this device; direct LAN or public-network access is not supported. Press Ctrl+C to stop the runtime.
-
-Run `redeven help run` for other run modes and optional local password protection.
+On Linux, import the exported public certificate into the trust store used by the client; `install --scope user` returns `manual_required`. Redeven never invokes `sudo` or modifies system-wide trust. HTTPS rejects missing, invalid, expired, or untrusted certificates without falling back to HTTP. Existing environments without a saved protocol require an explicit HTTP or HTTPS choice. Run `redeven help run` for configuration options.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

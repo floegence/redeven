@@ -88,7 +88,15 @@ Redeven は、ファイル、ターミナル、Git、ブラウザーでの開発
 # 1. インストール
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Local UI デバイス CA を生成する（初回のみ）
+redeven run
+```
+
+新しい環境は HTTP の `localhost:23998` で起動し、ランタイムを実行するデバイスからのみアクセスできます。証明書や Redeven Cloud の設定は不要です。起動後に表示される実際のアドレスを Desktop またはブラウザーで開いてください。ローカル状態は `~/.redeven/local-environment/` に保存されます。Ctrl+C で CLI ランタイムを停止できます。
+
+ネットワーク経由で接続できるデバイスに公開する場合は、待ち受けアドレスと環境のアクセスパスワードを設定してください。各 Desktop とブラウザーは個別にログインし、ページと WS/WSS は同じポートを使います。HTTP はページやログイン情報の通信を暗号化しません。HTTPS は任意で、証明書の明示的な作成と各接続デバイスでの信頼設定が必要です：
+
+```bash
+# Local UI デバイス CA を生成する（初回のみ）
 redeven local-authority device-ca generate --state-root ~/.redeven
 
 # macOS または Windows: 現在のユーザーの信頼ストアにインストールする
@@ -97,17 +105,10 @@ redeven local-authority device-ca install --state-root ~/.redeven --scope user
 # Linux: 公開証明書をエクスポートし、手動でインポートする
 redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
-# 3. 実行
-redeven run
-
-# 4. ブラウザーで https://localhost:23998 を開く。
+redeven run --local-ui-protocol https
 ```
 
-Linux では、エクスポートした公開証明書を、実際に使用するブラウザーまたはクライアントの信頼ストアにインポートしてください。Linux で `install --scope user` を実行すると、意図的に `manual_required` が返されます。Redeven が `sudo` を実行したり、システム全体の信頼ストアを変更したりすることはありません。ランタイムは HTTPS/WSS の提供前に CA のアイデンティティと生成したサーバー証明書を検証しますが、クライアント側の信頼設定は行えません。そのブラウザーまたはクライアントが CA を信頼するまで、クライアント TLS は安全側に失敗します。
-
-初めて `redeven run` を実行すると、`~/.redeven/local-environment/` にローカル状態が初期化され、ローカルモードで起動します。ブートストラップやコントロールプレーンの設定は不要です。Local UI は `localhost:23998` でのみ待ち受け、このデバイスからだけ利用できます。LAN や公開ネットワークからの直接アクセスには対応していません。Ctrl+C でランタイムを停止できます。
-
-その他の実行モードや任意のローカルパスワード保護については、`redeven help run` を実行してください。
+Linux では、エクスポートした公開証明書をクライアントの信頼ストアにインポートしてください。`install --scope user` は `manual_required` を返します。Redeven は `sudo` を呼び出さず、システム全体の信頼設定を変更しません。証明書が存在しない、無効、期限切れ、または信頼されない場合、HTTPS は失敗し、HTTP に切り替わりません。プロトコルが未保存の既存環境では HTTP または HTTPS を明示的に選択してください。設定項目は `redeven help run` で確認できます。
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

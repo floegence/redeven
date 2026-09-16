@@ -1,5 +1,5 @@
 import type { ArtifactSource } from '@floegence/flowersec-core';
-import type { PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
+import type { HTTPDirectArtifactSourceV1, PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
 import type { ConnectConfig } from '@floegence/floe-webapp-protocol';
 import type { ProxyBootstrapOwnerOptions } from '@floegence/floe-webapp-boot';
 
@@ -14,6 +14,11 @@ export type EnvAppLocalConnection =
   | Readonly<{
     kind: 'public_tls';
     source: () => ArtifactSource | Promise<ArtifactSource>;
+  }>
+  | Readonly<{
+    kind: 'public_http';
+    origin: string;
+    source: () => HTTPDirectArtifactSourceV1 | Promise<HTTPDirectArtifactSourceV1>;
   }>
   | Readonly<{
     kind: 'desktop_private_bridge_v2';
@@ -75,7 +80,9 @@ function createConfigLease(config: ConnectConfig): EnvAppConnectionConfigLease {
 export function createEnvAppConnectionRuntime(
   options: EnvAppConnectionRuntimeOptions,
 ): EnvAppConnectionRuntime {
-  const local = options.local?.kind === 'desktop_private_bridge_v2'
+  const local = options.local?.kind === 'public_http'
+    ? { kind: options.local.kind, origin: options.local.origin, source: createCachedSource(options.local.source) } as const
+    : options.local?.kind === 'desktop_private_bridge_v2'
     ? {
       kind: options.local.kind,
       origin: options.local.origin,
@@ -91,6 +98,11 @@ export function createEnvAppConnectionRuntime(
       if (mode === 'local') {
         if (!local) throw new Error('Local connection is unavailable');
         const boot = await loadBootModule();
+        if (local.kind === 'public_http') {
+          return createConfigLease(boot.createHTTPDirectConnectionConfig({
+            source: await local.source(), httpDirect: { origin: local.origin },
+          }));
+        }
         if (local.kind === 'desktop_private_bridge_v2') {
           const source = await local.source();
           return createConfigLease(boot.createPrivateLoopbackDirectConnectionConfig({

@@ -1,6 +1,6 @@
 export type LocalUIExposure = Readonly<{
 	scope: 'loopback' | 'network';
-	transport: 'tls';
+	transport: 'tls' | 'http';
 	password_required: boolean;
 }>;
 
@@ -14,7 +14,7 @@ export function parseLocalUIExposure(value: unknown): LocalUIExposure {
 	if (scope !== 'loopback' && scope !== 'network') {
 		throw new Error('invalid Local UI exposure scope');
 	}
-	if (transport !== 'tls') {
+	if (transport !== 'tls' && transport !== 'http') {
 		throw new Error('invalid Local UI exposure transport');
 	}
 	if (typeof record.password_required !== 'boolean') {
@@ -31,5 +31,5 @@ export function parseLocalUIExposure(value: unknown): LocalUIExposure {
 }
 
 export function networkLocalUIExposureActive(exposure: LocalUIExposure | null | undefined): boolean {
-	return exposure?.scope === 'network' && exposure.transport === 'tls';
+	return exposure?.scope === 'network';
 }

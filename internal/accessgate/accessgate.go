@@ -117,12 +117,10 @@ func New(opts Options) *Gate {
 
 	password := opts.Password
 	enabled := password != ""
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		// bcrypt only fails for an invalid cost or an oversized password. Keep the
-		// gate disabled rather than retaining a weak password representation.
-		passwordHash = nil
-		enabled = false
+	var passwordHash []byte
+	if enabled {
+		// An unusable credential must deny access, never disable authentication.
+		passwordHash, _ = bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	}
 	attemptPolicy := normalizeAttemptPolicy(opts.AttemptPolicy)
 
@@ -138,6 +136,20 @@ func New(opts Options) *Gate {
 		localSessions:   make(map[string]*localSessionState),
 		failedAttempts:  make(map[string]*failedAttemptState),
 	}
+}
+
+// NewWithPasswordHash restores server-owned authentication without retaining a
+// plaintext password. An empty hash explicitly disables the gate.
+func NewWithPasswordHash(hash []byte) (*Gate, error) {
+	if len(hash) > 0 {
+		if _, err := bcrypt.Cost(hash); err != nil {
+			return nil, errors.New("invalid stored environment password hash")
+		}
+	}
+	gate := New(Options{})
+	gate.enabled = len(hash) > 0
+	gate.passwordHash = append([]byte(nil), hash...)
+	return gate, nil
 }
 
 func (g *Gate) Enabled() bool {

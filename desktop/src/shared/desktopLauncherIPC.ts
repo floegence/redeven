@@ -1,3 +1,4 @@
+import { parseLocalUIProtocol, type LocalUIProtocol } from './settingsIPC';
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
@@ -21,7 +22,6 @@ import type { DesktopOpenConnectionProgress } from './desktopOpenConnectionProgr
 import type { DesktopOpenConnectionTiming } from './desktopOpenConnectionProgress';
 import type { DesktopRuntimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 import type { DesktopOperationFailurePresentation } from './desktopOperationFailure';
-import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 import type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
@@ -68,7 +68,6 @@ export type DesktopLauncherProgressSurface = 'open' | 'runtime_lifecycle' | 'rei
 export type DesktopEnvironmentEntryKind = 'local_environment' | 'wsl_environment' | 'provider_environment' | 'gateway_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | 'Gateway' | 'Resolve' | '';
 export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'gateway' | 'saved';
-export type DesktopLocalEnvironmentTransport = 'external_url' | 'desktop_bridge' | 'not_running';
 export type DesktopEnvironmentOpenAction = 'open' | 'opening' | 'focus';
 export type DesktopLauncherCloseAction = 'quit' | 'close_launcher';
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
@@ -367,11 +366,10 @@ export type DesktopEnvironmentEntry = Readonly<{
   secondary_text: string;
   local_environment_kind?: 'local' | 'controlplane';
   local_environment_ui_bind?: string;
-  local_environment_transport?: DesktopLocalEnvironmentTransport;
+  local_ui_urls?: readonly string[];
   local_environment_ui_password_configured?: boolean;
   local_environment_runtime_state?: DesktopLocalRuntimeState;
   local_environment_runtime_url?: string;
-  local_environment_runtime_plan?: DesktopLocalRuntimeOpenPlan;
   local_environment_runtime_service?: RuntimeServiceSnapshot;
   local_environment_close_behavior?: DesktopLocalCloseBehavior;
   local_environment_has_local_hosting?: boolean;
@@ -863,6 +861,7 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'save_local_environment_settings';
       local_ui_bind: string;
+      local_ui_protocol: LocalUIProtocol;
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
       auto_runtime_probe_enabled: boolean;
@@ -1352,6 +1351,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
+        local_ui_protocol: parseLocalUIProtocol((candidate as { local_ui_protocol?: unknown }).local_ui_protocol),
         local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
         local_ui_password_mode: compact(
           (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,

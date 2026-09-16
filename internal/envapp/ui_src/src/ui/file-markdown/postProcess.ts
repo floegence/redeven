@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import {
   encodeCodeHighlightTheme,
   highlightCodeToHtml,
@@ -257,7 +258,7 @@ function enhanceCodeBlocks(root: HTMLElement): void {
 
     button.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(state.copyText);
+        await writeTextToClipboard(state.copyText);
         button.classList.add('fm-copied');
         button.setAttribute('aria-label', 'Code copied');
         button.setAttribute('title', 'Copied');

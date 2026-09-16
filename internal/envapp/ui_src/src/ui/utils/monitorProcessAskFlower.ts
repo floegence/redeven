@@ -72,7 +72,7 @@ export function buildMonitorProcessFlowerTurnLauncherIntent(params: {
   snapshot?: Pick<SysMonitorSnapshot, 'platform' | 'timestampMs'> | null;
 }): FlowerTurnLauncherIntent {
   const intent: EnvFlowerTurnLauncherIntent = {
-    id: createClientId('ask-flower'),
+    id: createClientId(),
     source_surface: 'monitoring',
     context_items: [
       buildMonitorProcessSnapshotContextItem(params),

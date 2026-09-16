@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,8 +19,21 @@ type environmentCatalogProviderBinding struct {
 }
 
 type EnvironmentCatalogAccess struct {
-	LocalUIBind               string
-	LocalUIPasswordConfigured bool
+	LocalUIBind               string `json:"local_ui_bind"`
+	LocalUIProtocol           string `json:"local_ui_protocol"`
+	LocalUIPasswordConfigured bool   `json:"local_ui_password_configured"`
+}
+
+const (
+	LocalUIProtocolHTTP  = "http"
+	LocalUIProtocolHTTPS = "https"
+)
+
+func ValidateLocalUIProtocol(protocol string) error {
+	if protocol != LocalUIProtocolHTTP && protocol != LocalUIProtocolHTTPS {
+		return fmt.Errorf("choose the Local UI connection protocol explicitly: http or https")
+	}
+	return nil
 }
 
 type environmentCatalogFile struct {
@@ -37,6 +51,7 @@ type environmentCatalogFile struct {
 		Owner    string `json:"owner"`
 		Access   struct {
 			LocalUIBind               string `json:"local_ui_bind"`
+			LocalUIProtocol           string `json:"local_ui_protocol,omitempty"`
 			LocalUIPasswordConfigured bool   `json:"local_ui_password_configured"`
 		} `json:"access"`
 	} `json:"local_hosting"`
@@ -78,8 +93,8 @@ func readLocalEnvironmentCatalogRecord(path string) (*environmentCatalogFile, er
 	if err := json.Unmarshal(body, &file); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(file.RecordKind) != "local_environment" {
-		return nil, nil
+	if file.SchemaVersion != 1 || strings.TrimSpace(file.RecordKind) != "local_environment" {
+		return nil, fmt.Errorf("unsupported environment catalog; configuration was left unchanged")
 	}
 	return &file, nil
 }
@@ -87,6 +102,30 @@ func readLocalEnvironmentCatalogRecord(path string) (*environmentCatalogFile, er
 func defaultCatalogEnvironmentLabel(layout StateLayout) string {
 	_ = layout
 	return "Local Environment"
+}
+
+// ReadEnvironmentCatalogAccess preserves a missing legacy protocol as an
+// unconfirmed choice. Reading never rewrites user configuration.
+func ReadEnvironmentCatalogAccess(layout StateLayout) (*EnvironmentCatalogAccess, error) {
+	root, err := catalogRootForLayout(layout)
+	if err != nil {
+		return nil, err
+	}
+	record, err := readLocalEnvironmentCatalogRecord(localEnvironmentCatalogPath(root))
+	if err != nil || record == nil {
+		return nil, err
+	}
+	access := record.LocalHosting.Access
+	if access.LocalUIProtocol != "" {
+		if err := ValidateLocalUIProtocol(access.LocalUIProtocol); err != nil {
+			return nil, err
+		}
+	}
+	return &EnvironmentCatalogAccess{
+		LocalUIBind:               access.LocalUIBind,
+		LocalUIProtocol:           access.LocalUIProtocol,
+		LocalUIPasswordConfigured: access.LocalUIPasswordConfigured,
+	}, nil
 }
 
 func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
@@ -119,7 +158,12 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 	}, nil
 }
 
-func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, access EnvironmentCatalogAccess) error {
+func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, access *EnvironmentCatalogAccess) error {
+	if access != nil {
+		if err := ValidateLocalUIProtocol(access.LocalUIProtocol); err != nil {
+			return err
+		}
+	}
 	catalogRoot, err := catalogRootForLayout(layout)
 	if err != nil {
 		return err
@@ -152,6 +196,7 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, access Envir
 		if record.Label == "" {
 			record.Label = defaultCatalogEnvironmentLabel(layout)
 		}
+		record.LocalHosting.Access = existingRecord.LocalHosting.Access
 		record.Pinned = existingRecord.Pinned
 		if existingRecord.CreatedAtMS > 0 {
 			record.CreatedAtMS = existingRecord.CreatedAtMS
@@ -175,10 +220,41 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, access Envir
 
 	record.LocalHosting.StateDir = strings.TrimSpace(layout.StateDir)
 	record.LocalHosting.Owner = "agent"
-	localUIBind := strings.TrimSpace(access.LocalUIBind)
-	record.LocalHosting.Access.LocalUIBind = localUIBind
+	// A remote-only start does not change saved Local UI configuration.
+	if access != nil {
+		record.LocalHosting.Access.LocalUIBind = strings.TrimSpace(access.LocalUIBind)
+		record.LocalHosting.Access.LocalUIProtocol = access.LocalUIProtocol
+		record.LocalHosting.Access.LocalUIPasswordConfigured = access.LocalUIPasswordConfigured
+	}
+	return writeEnvironmentCatalogFile(recordPath, record)
+}
+
+// UpdateEnvironmentCatalogAccess preserves registration and provider identity.
+func UpdateEnvironmentCatalogAccess(layout StateLayout, access EnvironmentCatalogAccess) error {
+	if err := ValidateLocalUIProtocol(access.LocalUIProtocol); err != nil {
+		return err
+	}
+	root, err := catalogRootForLayout(layout)
+	if err != nil {
+		return err
+	}
+	path := localEnvironmentCatalogPath(root)
+	record, err := readLocalEnvironmentCatalogRecord(path)
+	if err != nil {
+		return err
+	}
+	if record == nil {
+		return WriteEnvironmentCatalogRecord(layout, nil, &access)
+	}
+	record.LocalHosting.Access.LocalUIBind = access.LocalUIBind
+	record.LocalHosting.Access.LocalUIProtocol = access.LocalUIProtocol
 	record.LocalHosting.Access.LocalUIPasswordConfigured = access.LocalUIPasswordConfigured
-	if err := os.MkdirAll(catalogRoot, 0o700); err != nil {
+	record.UpdatedAtMS = time.Now().UnixMilli()
+	return writeEnvironmentCatalogFile(path, *record)
+}
+
+func writeEnvironmentCatalogFile(recordPath string, record environmentCatalogFile) error {
+	if err := os.MkdirAll(filepath.Dir(recordPath), 0o700); err != nil {
 		return err
 	}
 	body, err := json.MarshalIndent(record, "", "  ")

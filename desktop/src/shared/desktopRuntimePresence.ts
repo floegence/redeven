@@ -38,6 +38,7 @@ export type DesktopRuntimePresence = Readonly<{
   placement: DesktopRuntimePlacement;
   running: boolean;
   local_ui_url: string;
+  local_ui_urls?: readonly string[];
   started_at_unix_ms?: number;
   openable: boolean;
   open_connection_required?: boolean;

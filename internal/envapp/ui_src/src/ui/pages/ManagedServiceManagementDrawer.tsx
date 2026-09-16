@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
   Show,
@@ -168,7 +169,7 @@ export function ManagedServiceManagementDrawer(props: {
   const [revision, setRevision] = createSignal(0);
   const [pathCopy, setPathCopy] = createSignal<'idle' | 'copied' | 'failed'>('idle');
   const copyPath = async () => {
-    try { await navigator.clipboard.writeText(plan()?.facts.resources?.find((resource) => resource.resource_id === 'workspace')?.identity ?? displayedService()?.workspace_path ?? ''); setPathCopy('copied'); }
+    try { await writeTextToClipboard(plan()?.facts.resources?.find((resource) => resource.resource_id === 'workspace')?.identity ?? displayedService()?.workspace_path ?? ''); setPathCopy('copied'); }
     catch { setPathCopy('failed'); }
   };
   const copyPathButton = () => <Button size="sm" variant="ghost" class="h-8 w-8 px-0" onClick={() => void copyPath()} aria-label={text('copyPath')}>

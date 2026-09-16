@@ -64,11 +64,11 @@ SOFTWARE.
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/floegence/floeterm/terminal-go | v0.19.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.1 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.13.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.13.0 | Detected from LICENSE. |
-| github.com/floegence/flowersec/flowersec-go/v5 | v5.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.1.0 | Floegence first-party dependency. |
+| github.com/floegence/flowersec/flowersec-go/v5 | v5.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.2.0 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
-| github.com/floegence/redevplugin/v3 | v3.0.31 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.31 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin/v3 | v3.0.32 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.32 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
@@ -236,22 +236,16 @@ SOFTWARE.
 | @floegence/floe-webapp-boot | 0.53.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.53.2 |  |
 | @floegence/floe-webapp-core | 0.53.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.53.2 |  |
 | @floegence/floe-webapp-protocol | 0.53.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.53.2 |  |
-| @floegence/floeterm-terminal-web | 0.19.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.1 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.1 package. |
-| @floegence/flowersec-core | 5.1.0 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.1.0 |  |
-| @floegence/flowersec-core | 5.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.0 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 5.1.0 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.1.0 |  |
-| @floegence/flowersec-node-native-darwin-arm64 | 5.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.2.0 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-darwin-x64 | 5.1.0 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.1.0 |  |
-| @floegence/flowersec-node-native-darwin-x64 | 5.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.2.0 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 5.1.0 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.1.0 |  |
-| @floegence/flowersec-node-native-linux-arm64-gnu | 5.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.2.0 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native-linux-x64-gnu | 5.1.0 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.1.0 |  |
-| @floegence/flowersec-node-native-linux-x64-gnu | 5.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.2.0 | License verified from the exact registry package manifest. |
-| @floegence/flowersec-node-native | 5.1.0 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.1.0 |  |
-| @floegence/flowersec-node-native | 5.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.2.0 |  |
+| @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
+| @floegence/flowersec-core | 5.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.0 |  |
+| @floegence/flowersec-node-native-darwin-arm64 | 5.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.2.0 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native-darwin-x64 | 5.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/5.2.0 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native-linux-arm64-gnu | 5.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/5.2.0 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native-linux-x64-gnu | 5.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.2.0 | License verified from the exact registry package manifest. |
+| @floegence/flowersec-node-native | 5.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.2.0 |  |
 | @floegence/redeven-service-templates | 0.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.6.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field. |
-| @floegence/redevplugin-contracts | 3.0.31 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.31 |  |
-| @floegence/redevplugin-ui | 3.0.31 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.31 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 3.0.32 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.32 |  |
+| @floegence/redevplugin-ui | 3.0.32 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.32 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/ibm-plex-mono | 5.3.0 | OFL-1.1 | Env App UI | https://www.npmjs.com/package/%40fontsource%2Fibm-plex-mono/v/5.3.0 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
@@ -378,40 +372,40 @@ SOFTWARE.
 | @tailwindcss/node | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.3.1 |  |
 | @tailwindcss/oxide-android-arm64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.2.2 |  |
 | @tailwindcss/oxide-android-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-android-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.1 |  |
+| @tailwindcss/oxide-android-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-darwin-arm64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.2.2 |  |
 | @tailwindcss/oxide-darwin-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-darwin-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.1 |  |
+| @tailwindcss/oxide-darwin-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-darwin-x64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.2.2 |  |
 | @tailwindcss/oxide-darwin-x64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-darwin-x64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.3.1 |  |
+| @tailwindcss/oxide-darwin-x64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-freebsd-x64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.2.2 |  |
 | @tailwindcss/oxide-freebsd-x64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-freebsd-x64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.3.1 |  |
+| @tailwindcss/oxide-freebsd-x64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-arm-gnueabihf | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.2.2 |  |
 | @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.3.1 |  |
+| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-arm64-gnu | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.2.2 |  |
 | @tailwindcss/oxide-linux-arm64-gnu | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-linux-arm64-gnu | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.3.1 |  |
+| @tailwindcss/oxide-linux-arm64-gnu | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-arm64-musl | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.2.2 |  |
 | @tailwindcss/oxide-linux-arm64-musl | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-linux-arm64-musl | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.3.1 |  |
+| @tailwindcss/oxide-linux-arm64-musl | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-x64-gnu | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.2.2 |  |
 | @tailwindcss/oxide-linux-x64-gnu | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-linux-x64-gnu | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.3.1 |  |
+| @tailwindcss/oxide-linux-x64-gnu | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-x64-musl | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.2.2 |  |
 | @tailwindcss/oxide-linux-x64-musl | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-linux-x64-musl | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.3.1 |  |
+| @tailwindcss/oxide-linux-x64-musl | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-wasm32-wasi | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.2.2 |  |
 | @tailwindcss/oxide-wasm32-wasi | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-wasm32-wasi | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.3.1 |  |
+| @tailwindcss/oxide-wasm32-wasi | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-win32-arm64-msvc | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.2.2 |  |
 | @tailwindcss/oxide-win32-arm64-msvc | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-win32-arm64-msvc | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.3.1 |  |
+| @tailwindcss/oxide-win32-arm64-msvc | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-win32-x64-msvc | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.2.2 |  |
 | @tailwindcss/oxide-win32-x64-msvc | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.0 | License audited from the exact registry package manifest. |
-| @tailwindcss/oxide-win32-x64-msvc | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.1 |  |
+| @tailwindcss/oxide-win32-x64-msvc | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.1 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.2.2 |  |
 | @tailwindcss/oxide | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.0 | License verified from the exact registry package manifest. |
 | @tailwindcss/oxide | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.1 |  |
@@ -814,7 +808,7 @@ SOFTWARE.
 | jiti | 2.6.1 | MIT | Desktop shell | https://www.npmjs.com/package/jiti/v/2.6.1 |  |
 | jiti | 2.7.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jiti/v/2.7.0 |  |
 | js-tokens | 4.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/js-tokens/v/4.0.0 |  |
-| js-yaml | 4.3.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.3.1 |  |
+| js-yaml | 4.3.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.3.2 |  |
 | jsdom | 26.1.0 | MIT | Env App UI | https://www.npmjs.com/package/jsdom/v/26.1.0 |  |
 | jsdom | 29.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.0.1 |  |
 | jsdom | 29.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.1.1 | License verified from the exact registry package manifest. |
@@ -1277,7 +1271,7 @@ SOFTWARE.
 
 ## Floeterm Built-in Theme Notices
 
-Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.19.1`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.19.2`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
 
 - `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
 - `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`

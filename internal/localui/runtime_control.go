@@ -10,11 +10,13 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -24,13 +26,17 @@ import (
 const runtimeControlProtocolVersion = "redeven-runtime-control-v2"
 
 type runtimeControlServer struct {
-	log         logger
-	agent       *agent.Agent
-	appServer   *appserver.Server
-	afterChange func()
-	token       string
-	ln          net.Listener
-	srv         *http.Server
+	log                logger
+	agent              *agent.Agent
+	appServer          *appserver.Server
+	afterChange        func()
+	token              string
+	ln                 net.Listener
+	srv                *http.Server
+	accessLayout       *config.StateLayout
+	accessCurrent      config.EnvironmentCatalogAccess
+	accessPasswordHash []byte
+	accessMu           sync.Mutex
 }
 
 type logger interface {
@@ -145,6 +151,7 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v2/desktop-model-source/disconnect", s.handleDesktopModelSourceDisconnect)
 	mux.HandleFunc("/v2/desktop-model-source/rpc", s.handleDesktopModelSourceRPC)
 	mux.HandleFunc("GET /v2/runtime/health", s.handleRuntimeHealth)
+	mux.HandleFunc("/v2/runtime/access", s.handleRuntimeAccess)
 	return withLocalUISecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r == nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)

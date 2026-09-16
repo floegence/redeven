@@ -398,7 +398,7 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.flowerSurface.settings.addProvider).toBe('添加模型提供商');
     expect(zhCN.environmentFacts.sshHost).toBe('SSH主机');
     expect(zhCN.environmentFacts.startedAt).toBe('已启动 {time}');
-    expect(zhCN.environmentAction.open).toBe('打开');
+    expect(zhCN.environmentAction.open).toBe('打开 Env App');
     expect(zhCN.environmentAction.runtimeActions).toBe('操作');
     expect(zhCN.environmentAction.refreshStatus).toBe('刷新');
     expect(zhCN.environmentAction.refreshRuntimeStatus).toBe('刷新');

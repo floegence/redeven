@@ -424,6 +424,7 @@ function MockDisplayModeSurface(props: Readonly<{ testId: string; children?: JSX
 vi.mock('@floegence/floe-webapp-core', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
   return {
+  secureRandomUUID: actual.secureRandomUUID,
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   getShellThemePresetsForMode: () => [],
   resolveThemeTokenOverrides: () => ({}),
@@ -2136,6 +2137,29 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally {
       dispose();
     }
+  }, 10000);
+
+  it('refreshes installed plugins after external admission even when the market generation is unchanged', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValueOnce({ items: [], marketUnavailable: false })
+      .mockResolvedValue(examplePluginProjection('enabled'));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      await pluginCenterViewState.lastProps.onRefreshInstalled();
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
+        (tile: any) => tile.kind === 'plugin' && tile.item?.pluginID === examplePluginCatalog.pluginID,
+      ), 40);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      expect(pluginLifecycleMocks.refreshMarketCatalog).not.toHaveBeenCalled();
+    } finally { dispose(); }
   }, 10000);
 
   it('projects a newer market generation from the background stream without reopening Plugin Center', async () => {

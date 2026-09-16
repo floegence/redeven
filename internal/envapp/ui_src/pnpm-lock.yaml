@@ -11,7 +11,7 @@ overrides:
   dompurify: ^3.4.13
   flatted: ^3.4.2
   glob: ^13.0.6
-  js-yaml: ^4.3.1
+  js-yaml: ^4.3.2
   lodash-es: ^4.18.1
   minimatch: ^10.2.5
   nanoid: ^3.3.18
@@ -42,8 +42,8 @@ importers:
         specifier: 0.53.2
         version: 0.53.2(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
-        specifier: 0.19.1
-        version: 0.19.1
+        specifier: 0.19.2
+        version: 0.19.2
       '@floegence/flowersec-core':
         specifier: 5.2.0
         version: 5.2.0
@@ -51,11 +51,11 @@ importers:
         specifier: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
         version: https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz
       '@floegence/redevplugin-contracts':
-        specifier: 3.0.31
-        version: 3.0.31
+        specifier: 3.0.32
+        version: 3.0.32
       '@floegence/redevplugin-ui':
-        specifier: 3.0.31
-        version: 3.0.31
+        specifier: 3.0.32
+        version: 3.0.32
       '@fontsource/ibm-plex-mono':
         specifier: 5.3.0
         version: 5.3.0
@@ -68,6 +68,9 @@ importers:
       '@fontsource/source-code-pro':
         specifier: 5.3.0
         version: 5.3.0
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       '@solidjs/router':
         specifier: ^0.15.3
         version: 0.15.4(solid-js@1.9.13)
@@ -154,8 +157,8 @@ importers:
         specifier: ^17.4.0
         version: 17.6.0
       js-yaml:
-        specifier: ^4.3.1
-        version: 4.3.1
+        specifier: ^4.3.2
+        version: 4.3.2
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
@@ -388,8 +391,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.19.1':
-    resolution: {integrity: sha512-AM1J6+RY0kh4VcMwy1DwbzTz3JfhR9A/nmT7Gu2bLXLdrKoyvr1eNunUYqFC/u56RE1Nnv2yHTMy/Wwa/268Qg==}
+  '@floegence/floeterm-terminal-web@0.19.2':
+    resolution: {integrity: sha512-9XbdmAl51tos2CGTBRcvwC9dW7Qe+BXgXqKAQDYzx9G7ovjRioXUt0fVUXPKgb8q63ltmPr0rum0+EAgrTaaMA==}
 
   '@floegence/flowersec-core@5.2.0':
     resolution: {integrity: sha512-ZmI7/wq9m709zYR/jP94bdqcKOwswgGmOV9ZMumkqqVbgdirSN332vct1YE45z1egQq+75xSN80sf4JSwR6wNQ==}
@@ -413,14 +416,12 @@ packages:
     engines: {node: '>=24.20.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@floegence/flowersec-node-native-linux-x64-gnu@5.2.0':
     resolution: {integrity: sha512-EQpNLH8BeYyJKD36feNeU3Ty5Ci1Kx0aV+oHEMUfZXsOiUxvrbu6xMA7KVsB3ZjeB+gISdWx+AR9jww6kVyAVA==}
     engines: {node: '>=24.20.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@floegence/flowersec-node-native@5.2.0':
     resolution: {integrity: sha512-GbTKqgsvPLGdkA6exC8gp0jN5cVVJ/dLXHDqZKxFCuSBzC7bTwe5v0AODYQ+dUQwm718WI8/7Rf5DuYDyNl4+A==}
@@ -431,11 +432,11 @@ packages:
     version: 0.6.0
     engines: {node: '>=26.0.0 <27'}
 
-  '@floegence/redevplugin-contracts@3.0.31':
-    resolution: {integrity: sha512-gS3gIGa1EE8LozZf5BIqJfHJ6EMgSNFYq7M1KTQjFoWllvQi/wRTqZS1/w2uokt/fUKcYi29r4kqM6hmwmlG4Q==}
+  '@floegence/redevplugin-contracts@3.0.32':
+    resolution: {integrity: sha512-bnluPVWJn/Vbw3jGMWo7ZNoKbgwJ8PXlJLT6tQnrYrpMZy2i1BVAa+iD01MxR9w1i9IGbJ6C4N6yxifYQC8IiQ==}
 
-  '@floegence/redevplugin-ui@3.0.31':
-    resolution: {integrity: sha512-bqJSxSEXYoYC5zQ+O6zzF1uh2Bh27l4Bc2tKc8PbgtI2ytw1TWAqxOVNRrV0LCr+sqZu92Iadn1GU33nvesR7g==}
+  '@floegence/redevplugin-ui@3.0.32':
+    resolution: {integrity: sha512-3srzCr35VK2M6SV/c6lPAJx6e0isOzaATvvOPQ23mjMcaIF2cceWtnzKxWMXDV70ae3zQUhPiI3To7eBmgB2fg==}
 
   '@fontsource/ibm-plex-mono@5.3.0':
     resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
@@ -541,35 +542,30 @@ packages:
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@napi-rs/canvas-linux-arm64-musl@1.0.6':
     resolution: {integrity: sha512-zXeVWNFpj720HZln0bfAs+1/nP3Wy6Z5hUw60UJu+cvgips5jZtuX2+EjDHFk98q3BY35GaE1TQLwE9S244vPA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@napi-rs/canvas-linux-riscv64-gnu@1.0.6':
     resolution: {integrity: sha512-kvy1Ypq4ODEI2WRNGvs588qTMcWCjlEIuZRyW8JXpiBnMUirgxQukIDFVDQEcrLlHP5cqZ9cvvfOkBJ7koOktA==}
     engines: {node: '>= 10'}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@napi-rs/canvas-linux-x64-gnu@1.0.6':
     resolution: {integrity: sha512-czHnfLgSCl48iluS6bNrytGYhsbSTUuIvMucAwO0mPEj1uhkHk6SUiRI0xoqv0PSFzpGFfSnQvFpm7vV+tDO+A==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@napi-rs/canvas-linux-x64-musl@1.0.6':
     resolution: {integrity: sha512-afsg6GyfUx8qZzjsywjimXUEWcSWETY5F80hmMb2FWVSXkRbor8IpftY2gXnasq+Y42Xug/76qTHwqvti7HRTw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@napi-rs/canvas-win32-arm64-msvc@1.0.6':
     resolution: {integrity: sha512-byzha357piy0wgK6IZOQtU4plpt94f6CxHFS7LhJpWYrDWWT/AitQNxRMfCNNaQHZXUB3BwNhQSfH2RpiZ0WaQ==}
@@ -646,42 +642,36 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-musl@1.0.3':
     resolution: {integrity: sha512-VWkUHwWriDciit80wleYwKILoR/KMvxh/IdwS/paX+ZgpuRpCrKLUdadJbc0NpBEiyhpYawsJ73j9aCvOH+f7Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-linux-ppc64-gnu@1.0.3':
     resolution: {integrity: sha512-5f1laC0SlIR0yDbFCd8acUhvJIag6N3zC5P7oUPN6wX0aOma+uKJ0wBDH5aq7I1PVI2ttTlhJwzwRIBnLiSGEg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-s390x-gnu@1.0.3':
     resolution: {integrity: sha512-Iq4ko0r4XsgbrF/LunNgHtAGLRRVE2kXonAXQ/MV0mC6jQpMOhW1SvtZja2EhC/kd05++bP78dsqBeIQyYJ6Yg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-gnu@1.0.3':
     resolution: {integrity: sha512-B8m6tD5+/N5FeNQFbKlLA/2yVq9ycQP1SeedyEYYKWBNR3ZQbkvIUcNnDNM03lO1l5F2roiiFJGgvoLLyZXtSg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-musl@1.0.3':
     resolution: {integrity: sha512-pSdpdUJHkuCxun9LE7jvgUB9qsRgaiyNNCX7m/AvHTcq67AiT/Yhoxvw5zPfhrM8k/BfP8ce/hMOpthKDpEUow==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-openharmony-arm64@1.0.3':
     resolution: {integrity: sha512-OXXS3RKJgX2uLwM+gYyuH5omcH8fL1LJs96pZGgtetVCahON57+d4SJHzTgZiOjxgGkSnpXpOsWuPDGAKAigEg==}
@@ -796,28 +786,24 @@ packages:
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@tailwindcss/oxide-linux-arm64-musl@4.3.1':
     resolution: {integrity: sha512-Bwv9KwOvE0VKa86xPFif9b9c3Y1NxOV1P0gLti/IYaWEsQYZXDlxfGEtA8mdDZ7SG3wyNXAWYT5SIn3giL57oA==}
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@tailwindcss/oxide-linux-x64-gnu@4.3.1':
     resolution: {integrity: sha512-Ymi8O8T15HYQdOUWUtTI6ldN0neHP85FC+Qz32xTcZ7iJXtem/x8ITev0o1e9e5rkqj4lONZfTRLvkmin1+tKg==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@tailwindcss/oxide-linux-x64-musl@4.3.1':
     resolution: {integrity: sha512-M+P/91qJ6uILLw4k2G93GMDRAXj61SMvFQYt39AqvUqYgExXpLL5aepfns7sj4HiAQeolirQF9E0lzRvdf4zPQ==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@tailwindcss/oxide-wasm32-wasi@4.3.1':
     resolution: {integrity: sha512-zsM8uOeqvVGHsAXsJxsT28ttosFahLJKCLOTUBqRAtKnVgGSRitds9T432QiT8b77Yga7JIBkulIRRlJPtYhRA==}
@@ -1766,8 +1752,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@4.3.1:
-    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
   jsdom@26.1.0:
@@ -1872,28 +1858,24 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.32.0:
     resolution: {integrity: sha512-UpQkoenr4UJEzgVIYpI80lDFvRmPVg6oqboNHfoH4CQIfNA+HOrZ7Mo7KZP02dC6LjghPQJeBsvXhJod/wnIBg==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.32.0:
     resolution: {integrity: sha512-V7Qr52IhZmdKPVr+Vtw8o+WLsQJYCTd8loIfpDaMRWGUZfBOYEJeyJIkqGIDMZPwPx24pUMfwSxxI8phr/MbOA==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.32.0:
     resolution: {integrity: sha512-bYcLp+Vb0awsiXg/80uCRezCYHNg1/l3mt0gzHnWV9XP1W5sKa5/TCdGWaR/zBM2PeF/HbsQv/j2URNOiVuxWg==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.32.0:
     resolution: {integrity: sha512-8SbC8BR40pS6baCM8sbtYDSwEVQd4JlFTOlaD3gWGHfThTcABnNDBda6eTZeqbofalIJhFx0qKzgHJmcPTnGdw==}
@@ -2855,7 +2837,7 @@ snapshots:
       globals: 14.0.0
       ignore: 5.3.2
       import-fresh: 3.3.1
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       minimatch: 10.2.5
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
@@ -2917,7 +2899,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.19.1': {}
+  '@floegence/floeterm-terminal-web@0.19.2':
+    dependencies:
+      '@noble/hashes': 2.4.0
 
   '@floegence/flowersec-core@5.2.0':
     dependencies:
@@ -2954,11 +2938,12 @@ snapshots:
 
   '@floegence/redeven-service-templates@https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz': {}
 
-  '@floegence/redevplugin-contracts@3.0.31': {}
+  '@floegence/redevplugin-contracts@3.0.32': {}
 
-  '@floegence/redevplugin-ui@3.0.31':
+  '@floegence/redevplugin-ui@3.0.32':
     dependencies:
-      '@floegence/redevplugin-contracts': 3.0.31
+      '@floegence/redevplugin-contracts': 3.0.32
+      '@noble/hashes': 2.4.0
 
   '@fontsource/ibm-plex-mono@5.3.0': {}
 
@@ -4332,7 +4317,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@4.3.1:
+  js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
 

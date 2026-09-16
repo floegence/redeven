@@ -1,6 +1,6 @@
 export type LocalTransportSecurityResolution = Readonly<{
   policy: true | null;
-  transport: 'public_tls' | 'desktop_private_bridge_v2' | null;
+  transport: 'public_tls' | 'public_http' | 'desktop_private_bridge_v2' | null;
   loopback: boolean;
   network: boolean;
   error: string;
@@ -46,11 +46,14 @@ export function resolveLocalTransportSecurityPolicy(
       error: '',
     };
   }
+  if (normalizedProtocol === 'http:' && !documentTransport) {
+    return { policy: true, transport: 'public_http', loopback, network: !loopback, error: '' };
+  }
   return {
     policy: null,
     transport: null,
     loopback,
     network: !loopback,
-    error: 'Redeven Local UI requires trusted HTTPS and Flowersec WSS.',
+    error: 'Unsupported Runtime connection protocol. Use its reported HTTP or HTTPS address.',
   };
 }

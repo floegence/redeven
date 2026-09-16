@@ -58,7 +58,9 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 			allowed[net.JoinHostPort(host, strconv.Itoa(addr.Port))] = struct{}{}
 			if s.bind.localhost {
 				allowed[net.JoinHostPort("localhost", strconv.Itoa(addr.Port))] = struct{}{}
+				host = "localhost"
 			}
+			displayURLs = append(displayURLs, s.protocol+"://"+publicURLAuthority(net.JoinHostPort(host, strconv.Itoa(addr.Port)), s.protocol)+"/")
 			continue
 		}
 		if s.bind.IsWildcard() {
@@ -71,7 +73,7 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 		for _, host := range accessHosts {
 			authority := net.JoinHostPort(host.String(), strconv.Itoa(addr.Port))
 			allowed[authority] = struct{}{}
-			displayURLs = append(displayURLs, formatHTTPSURL(host.String(), addr.Port))
+			displayURLs = append(displayURLs, s.protocol+"://"+publicURLAuthority(authority, s.protocol)+"/")
 		}
 	}
 	if len(allowed) == 0 {
@@ -129,8 +131,55 @@ func canonicalLoopbackAuthority(raw string) (string, error) {
 	return canonical, nil
 }
 
+// HTTP Host and Origin omit the default port. Keep the internal allowlist in
+// host:port form without changing the private bridge's explicit-port contract.
+func canonicalPublicAuthority(raw, protocol string) (string, error) {
+	if protocol != "http" && protocol != "https" {
+		return "", fmt.Errorf("invalid protocol")
+	}
+	if _, _, err := net.SplitHostPort(raw); err != nil {
+		host := raw
+		if strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]") {
+			host = raw[1 : len(raw)-1]
+		}
+		if host != "localhost" {
+			addr, err := netip.ParseAddr(host)
+			if err != nil || (addr.Is6() && host == raw) {
+				return "", fmt.Errorf("invalid authority")
+			}
+		}
+		port := "80"
+		if protocol == "https" {
+			port = "443"
+		}
+		raw = net.JoinHostPort(host, port)
+	}
+	return canonicalLocalUIAuthority(raw)
+}
+
+func publicURLAuthority(authority, protocol string) string {
+	host, port, err := net.SplitHostPort(authority)
+	if err == nil && ((protocol == "http" && port == "80") || (protocol == "https" && port == "443")) {
+		if strings.Contains(host, ":") {
+			return "[" + host + "]"
+		}
+		return host
+	}
+	return authority
+}
+
+func requestProtocol(r *http.Request) string {
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
 func (s *Server) isAllowedNetworkAuthority(raw string) bool {
-	canonical, err := canonicalLocalUIAuthority(raw)
+	if s == nil {
+		return false
+	}
+	canonical, err := canonicalPublicAuthority(raw, s.protocol)
 	if err != nil || s == nil {
 		return false
 	}
@@ -276,7 +325,7 @@ func strictSameOriginWSRequest(r *http.Request, requireOrigin bool) bool {
 	if r == nil {
 		return false
 	}
-	expected, err := canonicalLocalUIAuthority(r.Host)
+	expected, err := canonicalPublicAuthority(r.Host, requestProtocol(r))
 	if err != nil {
 		return false
 	}
@@ -303,7 +352,7 @@ func requestOriginAuthority(r *http.Request, requireOrigin bool) (string, bool) 
 	if !strings.EqualFold(strings.TrimSpace(origin.Scheme), expectedScheme) {
 		return "", false
 	}
-	actual, err := canonicalLocalUIAuthority(origin.Host)
+	actual, err := canonicalPublicAuthority(origin.Host, expectedScheme)
 	return actual, err == nil
 }
 

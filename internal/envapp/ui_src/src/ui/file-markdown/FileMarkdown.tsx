@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
   Show,
@@ -832,7 +833,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
   async function copyWarningDetails(issue: MarkdownPreviewIssue): Promise<void> {
     try {
-      await navigator.clipboard.writeText(formatMarkdownPreviewIssueDetails(issue));
+      await writeTextToClipboard(formatMarkdownPreviewIssueDetails(issue));
     } catch {
       return;
     }

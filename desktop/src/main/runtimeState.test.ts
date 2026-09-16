@@ -75,6 +75,40 @@ async function closeServer(server: http.Server): Promise<void> {
 }
 
 describe('runtimeState', () => {
+  it('keeps the reachable address selected by the client on a multi-interface Runtime', async () => {
+    let baseURL = '';
+    const server = http.createServer((_request, response) => {
+      const payload = JSON.parse(openableHealthPayload(123));
+      payload.data.local_ui_url = 'http://192.0.2.1:23998/';
+      payload.data.local_ui_urls = ['http://192.0.2.1:23998/', baseURL];
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify(payload));
+    });
+    baseURL = await listenOnLoopback(server);
+    try {
+      expect(expectProbeSuccess(await probeExternalLocalUIHealth(baseURL)).local_ui_url).toBe(baseURL);
+    } finally { await closeServer(server); }
+  });
+  it('identifies a TLS request to a plaintext Runtime without retrying HTTP', async () => {
+    let plaintextRequests = 0;
+    const server = http.createServer((_request, response) => { plaintextRequests++; response.end('{}'); });
+    const baseURL = await listenOnLoopback(server);
+    try {
+      const result = await probeExternalLocalUIHealth(baseURL.replace('http:', 'https:'));
+      expect(result).toMatchObject({ ok: false, failure: { kind: 'protocol_mismatch' } });
+      expect(plaintextRequests).toBe(0);
+    } finally { await closeServer(server); }
+  });
+
+  it('identifies an HTTP request rejected by an HTTPS listener', async () => {
+    const server = http.createServer((_request, response) => {
+      response.writeHead(400); response.end('Client sent an HTTP request to an HTTPS server.');
+    });
+    const baseURL = await listenOnLoopback(server);
+    try {
+      expect(await probeExternalLocalUIHealth(baseURL)).toMatchObject({ ok: false, failure: { kind: 'protocol_mismatch' } });
+    } finally { await closeServer(server); }
+  });
   it('requires and probes the trusted Local Runtime bridge', async () => {
     const authorizedPaths: string[] = [];
     const server = http.createServer((request, response) => {

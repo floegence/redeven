@@ -1,3 +1,4 @@
+import { parseLocalUIProtocol } from '../shared/settingsIPC';
 import {
   localEnvironmentAccess,
   type DesktopLocalEnvironmentState,
@@ -66,10 +67,16 @@ export function buildDesktopRuntimeArgs(
     '--presentation',
     'machine',
     '--local-ui-bind',
-    localUIBind,
+    canonicalLocalUIBind(access.local_ui_bind),
+    '--local-ui-protocol',
+    parseLocalUIProtocol(access.local_ui_protocol),
   ];
+  if (localUIBind !== canonicalLocalUIBind(access.local_ui_bind)) {
+    args.push('--local-ui-bind-override', localUIBind);
+  }
+  if (!access.local_ui_password_configured) args.push('--password-clear');
 	if (!isLoopbackOnlyBind(parsedBind)) {
-		if (!access.local_ui_password_configured || String(access.local_ui_password ?? '') === '') {
+		if (!access.local_ui_password_configured) {
 			throw new Error('Network Local UI access requires a configured password.');
 		}
 	}

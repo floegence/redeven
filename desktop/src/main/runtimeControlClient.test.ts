@@ -8,6 +8,9 @@ import {
   getProviderLinkStatus,
   RuntimeControlError,
   runtimeControlServiceURL,
+  getRuntimeAccessSettings,
+  saveRuntimeAccessSettings,
+  parseRuntimeAccessSettings,
 } from './runtimeControlClient';
 
 type TestServer = Readonly<{
@@ -106,6 +109,25 @@ afterEach(async () => {
 });
 
 describe('runtimeControlClient', () => {
+  it('reads and saves server access only with the private control credential', async () => {
+    const saved = {local_ui_bind: '0.0.0.0:23998', local_ui_protocol: 'http', local_ui_password_configured: true, restart_required: true, runtime_started_at_unix_ms: 1778751234567};
+    const server = await startServer((_request, _body, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ok: true, data: {...saved, local_ui_password: 'must-not-project', bridge_token: 'must-not-project'}}));
+    });
+    const control = endpoint(server.origin + '/');
+    expect(await getRuntimeAccessSettings(control)).toEqual(saved);
+    expect(await saveRuntimeAccessSettings(control, {local_ui_bind: saved.local_ui_bind, local_ui_protocol: 'http', local_ui_password: 'new-secret', local_ui_password_mode: 'replace', auto_runtime_probe_enabled: false})).toEqual(saved);
+    expect(server.requests.map((request) => request.method)).toEqual(['GET', 'PUT']);
+    expect(server.requests.every((request) => request.headers.authorization === 'Bearer runtime-control-token')).toBe(true);
+    expect(server.requests.every((request) => request.url === '/v2/runtime/access')).toBe(true);
+    expect(JSON.parse(server.bodies[1]!)).toEqual({local_ui_bind: saved.local_ui_bind, local_ui_protocol: 'http', local_ui_password_mode: 'replace', local_ui_password: 'new-secret'});
+  });
+
+  it('preserves unconfirmed legacy protocols and rejects unknown protocols', () => {
+    expect(parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false}).local_ui_protocol).toBeUndefined();
+    expect(() => parseRuntimeAccessSettings({local_ui_bind: 'localhost:23998', local_ui_password_configured: false, local_ui_protocol: 'ftp'})).toThrow();
+  });
   it('resolves runtime-control API routes relative to a service root with a path prefix', async () => {
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');

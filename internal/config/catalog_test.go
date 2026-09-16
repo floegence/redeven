@@ -1,11 +1,49 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestReadEnvironmentCatalogAccessPreservesProtocolChoice(t *testing.T) {
+	layout, err := LocalEnvironmentStateLayout(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if access, err := ReadEnvironmentCatalogAccess(layout); err != nil || access != nil {
+		t.Fatalf("fresh catalog = %#v, %v", access, err)
+	}
+	for _, protocol := range []string{"http", "https"} {
+		if err := WriteEnvironmentCatalogRecord(layout, &Config{}, &EnvironmentCatalogAccess{
+			LocalUIBind: "127.0.0.1:0", LocalUIProtocol: protocol, LocalUIPasswordConfigured: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		access, err := ReadEnvironmentCatalogAccess(layout)
+		if err != nil || access == nil || access.LocalUIProtocol != protocol || access.LocalUIBind != "127.0.0.1:0" || !access.LocalUIPasswordConfigured {
+			t.Fatalf("saved access = %#v, %v", access, err)
+		}
+	}
+	path := filepath.Join(layout.StateRoot, "catalog", "local-environment.json")
+	legacy := []byte(`{"schema_version":1,"record_kind":"local_environment","local_hosting":{"access":{"local_ui_bind":"localhost:23998"}}}`)
+	if err := os.WriteFile(path, legacy, 0600); err != nil {
+		t.Fatal(err)
+	}
+	access, err := ReadEnvironmentCatalogAccess(layout)
+	if err != nil || access == nil || access.LocalUIProtocol != "" {
+		t.Fatalf("legacy protocol must remain unconfirmed: %#v, %v", access, err)
+	}
+	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, &EnvironmentCatalogAccess{LocalUIProtocol: ""}); err == nil {
+		t.Fatal("persisted an unconfirmed protocol")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(after, legacy) {
+		t.Fatal("unconfirmed access modified the catalog")
+	}
+}
 
 func readCatalogEnvironmentFile(t *testing.T, path string) environmentCatalogFile {
 	t.Helper()
@@ -35,7 +73,8 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
 	}
-	if err := WriteEnvironmentCatalogRecord(layout, cfg, EnvironmentCatalogAccess{
+	if err := WriteEnvironmentCatalogRecord(layout, cfg, &EnvironmentCatalogAccess{
+		LocalUIProtocol:           LocalUIProtocolHTTPS,
 		LocalUIBind:               "localhost:23998",
 		LocalUIPasswordConfigured: true,
 	}); err != nil {
@@ -93,7 +132,8 @@ func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *tes
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
 	}
-	if err := WriteEnvironmentCatalogRecord(layout, cfg, EnvironmentCatalogAccess{
+	if err := WriteEnvironmentCatalogRecord(layout, cfg, &EnvironmentCatalogAccess{
+		LocalUIProtocol:           LocalUIProtocolHTTPS,
 		LocalUIBind:               "localhost:23998",
 		LocalUIPasswordConfigured: true,
 	}); err != nil {
@@ -117,7 +157,8 @@ func TestWriteEnvironmentCatalogRecordPersistsTLSNetworkAccess(t *testing.T) {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 
-	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, EnvironmentCatalogAccess{
+	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, &EnvironmentCatalogAccess{
+		LocalUIProtocol:           LocalUIProtocolHTTPS,
 		LocalUIBind:               "0.0.0.0:24000",
 		LocalUIPasswordConfigured: true,
 	}); err != nil {
@@ -130,14 +171,32 @@ func TestWriteEnvironmentCatalogRecordPersistsTLSNetworkAccess(t *testing.T) {
 		t.Fatalf("LocalHosting.Access = %#v", record.LocalHosting.Access)
 	}
 
-	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, EnvironmentCatalogAccess{
-		LocalUIBind: "localhost:24000",
+	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, &EnvironmentCatalogAccess{
+		LocalUIBind: "localhost:24000", LocalUIProtocol: LocalUIProtocolHTTP,
 	}); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord(loopback) error = %v", err)
 	}
 	record = readCatalogEnvironmentFile(t, recordPath)
 	if record.LocalHosting.Access.LocalUIBind != "localhost:24000" || record.LocalHosting.Access.LocalUIPasswordConfigured {
 		t.Fatalf("LocalHosting.Access = %#v", record.LocalHosting.Access)
+	}
+}
+
+func TestRemoteOnlyCatalogUpdatePreservesAccessConfiguration(t *testing.T) {
+	layout, err := LocalEnvironmentStateLayout(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := EnvironmentCatalogAccess{LocalUIBind: "0.0.0.0:23998", LocalUIProtocol: LocalUIProtocolHTTPS, LocalUIPasswordConfigured: true}
+	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadEnvironmentCatalogAccess(layout)
+	if err != nil || got == nil || *got != want {
+		t.Fatalf("remote-only update changed access: got=%+v, err=%v", got, err)
 	}
 }
 
@@ -186,8 +245,8 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
 	}
-	if err := WriteEnvironmentCatalogRecord(layout, cfg, EnvironmentCatalogAccess{
-		LocalUIBind: "127.0.0.1:24000",
+	if err := WriteEnvironmentCatalogRecord(layout, cfg, &EnvironmentCatalogAccess{
+		LocalUIBind: "127.0.0.1:24000", LocalUIProtocol: LocalUIProtocolHTTPS,
 	}); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
+	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
@@ -236,10 +237,13 @@ func (c *cli) runCmd(args []string) int {
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read (no general shell/process)|read_only|execute_read_write (optional; applies when bootstrapping)")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 	modeRaw := fs.String("mode", string(defaultRunMode), "Run mode: remote|hybrid|local|desktop")
-	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
+	localUIBindRaw := fs.String("local-ui-bind", "", "Local UI bind address (saved configuration or localhost:23998)")
+	localUIBindOverride := fs.String("local-ui-bind-override", "", "One-start Local UI bind override; does not change saved access settings")
+	localUIProtocolRaw := fs.String("local-ui-protocol", "", "Local UI connection security: http|https (new environments: http)")
 	passwordPrompt := fs.Bool("password-prompt", false, "Prompt for the Local UI access password without echo")
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
+	passwordClear := fs.Bool("password-clear", false, "Explicitly remove the saved environment password (loopback access only)")
 	startupSecretsStdin := fs.Bool("startup-secrets-stdin", false, "Read the Desktop startup secrets envelope from stdin")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
 	presentationRaw := fs.String("presentation", string(runtimepresentation.ModeAuto), "Startup presentation: auto|rich|plain|machine")
@@ -283,6 +287,33 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
+	stateLayout, err := resolveRunStateLayout(*stateRoot)
+	if err != nil {
+		return c.printRunStateLayoutGuidance(err)
+	}
+	savedAccess, err := config.ReadEnvironmentCatalogAccess(stateLayout)
+	if err != nil {
+		writeErrorWithHelp(c.stderr, fmt.Sprintf("read saved Local UI access: %v", err), nil, runHelpText())
+		return 2
+	}
+	localUIProtocol := strings.TrimSpace(*localUIProtocolRaw)
+	if savedAccess != nil {
+		if strings.TrimSpace(*localUIBindRaw) == "" {
+			*localUIBindRaw = savedAccess.LocalUIBind
+		}
+		if localUIProtocol == "" {
+			localUIProtocol = savedAccess.LocalUIProtocol
+		}
+	} else if localUIProtocol == "" {
+		localUIProtocol = config.LocalUIProtocolHTTP
+	}
+	if err := config.ValidateLocalUIProtocol(localUIProtocol); err != nil && mode != runModeRemote {
+		writeErrorWithHelp(c.stderr, err.Error(), []string{
+			"This environment has no confirmed connection protocol. Choose --local-ui-protocol http or --local-ui-protocol https once; the choice will be saved.",
+			"HTTP needs no certificate. HTTPS requires a valid Local UI device CA and explicit client trust.",
+		}, runHelpText())
+		return 2
+	}
 	localUIBind, err := localui.ParseBind(*localUIBindRaw)
 	if err != nil {
 		writeErrorWithHelp(
@@ -290,11 +321,19 @@ func (c *cli) runCmd(args []string) int {
 			fmt.Sprintf("invalid value for `--local-ui-bind`: %v", err),
 			[]string{
 				"Accepted examples: localhost:23998, 127.0.0.1:0, 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998.",
-				"Non-loopback binds require a fixed port, a Local UI password, and a trusted Local UI device CA.",
+				"Non-loopback binds require a fixed port and an environment access password. HTTPS also requires a valid Local UI device CA.",
 			},
 			runHelpText(),
 		)
 		return 2
+	}
+	configuredLocalUIBind := localUIBind
+	if strings.TrimSpace(*localUIBindOverride) != "" {
+		localUIBind, err = localui.ParseBind(*localUIBindOverride)
+		if err != nil {
+			writeErrorWithHelp(c.stderr, fmt.Sprintf("invalid value for `--local-ui-bind-override`: %v", err), nil, runHelpText())
+			return 2
+		}
 	}
 
 	if strings.TrimSpace(*startupReportFile) != "" && mode == runModeRemote {
@@ -317,7 +356,7 @@ func (c *cli) runCmd(args []string) int {
 		)
 		return 2
 	}
-	if mode == runModeRemote && (*passwordPrompt || *passwordStdin || strings.TrimSpace(*passwordFile) != "") {
+	if mode == runModeRemote && (*passwordPrompt || *passwordStdin || *passwordClear || strings.TrimSpace(*passwordFile) != "") {
 		writeErrorWithHelp(
 			c.stderr,
 			"Local UI password options require a Local UI run mode",
@@ -350,8 +389,28 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 	resolvedBootstrapTicket := startupSecrets.bootstrapTicket.value
-	passwordRequired := startupSecrets.localUIPassword.value != ""
-	localUIExposure := runtimemanagement.NewLocalUIExposure(localUIBind.IsNetworkExposure(), passwordRequired)
+	var passwordHash []byte
+	if mode != runModeRemote {
+		if *passwordClear && startupSecrets.localUIPassword.value != "" {
+			writeErrorWithHelp(c.stderr, "--password-clear cannot be combined with a new password", nil, runHelpText())
+			return 2
+		}
+		if startupSecrets.localUIPassword.value != "" {
+			passwordHash, err = accessgate.HashPassword(startupSecrets.localUIPassword.value)
+		} else if !*passwordClear {
+			passwordHash, err = accessgate.ReadPasswordHash(stateLayout.StateDir)
+		}
+		if err != nil {
+			writeErrorWithHelp(c.stderr, err.Error(), nil, runHelpText())
+			return 2
+		}
+	}
+	passwordRequired := len(passwordHash) > 0
+	if mode != runModeRemote && savedAccess != nil && savedAccess.LocalUIPasswordConfigured && !passwordRequired && !*passwordClear {
+		writeErrorWithHelp(c.stderr, "this environment requires its configured access password", []string{"Supply it using --password-prompt, --password-stdin, --password-file, or REDEVEN_LOCAL_UI_PASSWORD."}, runHelpText())
+		return 2
+	}
+	localUIExposure := runtimemanagement.NewLocalUIExposure(localUIProtocol, localUIBind.IsNetworkExposure(), passwordRequired)
 	if mode != runModeRemote && localUIBind.IsNetworkExposure() {
 		if !passwordRequired {
 			writeErrorWithHelp(
@@ -375,10 +434,6 @@ func (c *cli) runCmd(args []string) int {
 		StartupReportFile: *startupReportFile,
 	})
 
-	stateLayout, err := resolveRunStateLayout(*stateRoot)
-	if err != nil {
-		return c.printRunStateLayoutGuidance(err)
-	}
 	presentationSnapshot := runtimepresentation.Snapshot{
 		Version:          Version,
 		Commit:           Commit,
@@ -525,7 +580,15 @@ func (c *cli) runCmd(args []string) int {
 		Detail: lockPath,
 	})
 
-	accessGate := newAccessGate(startupSecrets.localUIPassword.value)
+	accessGate, err := accessgate.NewWithPasswordHash(passwordHash)
+	if err != nil {
+		return failDesktopLaunch(desktopLaunchCodeStartupInvalid, err.Error())
+	}
+	if mode != runModeRemote && (startupSecrets.localUIPassword.value != "" || *passwordClear) {
+		if err := accessgate.WritePasswordHash(stateLayout.StateDir, passwordHash); err != nil {
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("save environment password: %v", err))
+		}
+	}
 	if bootstrapViaFlags {
 		_ = startupReporter.Emit(runtimepresentation.Event{
 			Kind:  runtimepresentation.EventPhaseStarted,
@@ -614,7 +677,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 
 	localUIBindLabel := localUIBind.ListenLabel()
-	localUIURLs := localUIBind.DisplayURLs()
+	var localUIURLs []string
 	lockMetadata, err := newAgentLockMetadata(string(mode), runtimeInstanceID, mode != runModeRemote, stateLayout)
 	if err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to resolve runtime executable identity: %v", err))
@@ -626,10 +689,15 @@ func (c *cli) runCmd(args []string) int {
 	if err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to bind plugin runtime authority: %v", err))
 	}
-	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{
-		LocalUIBind:               localUIBindLabel,
-		LocalUIPasswordConfigured: accessGate.Enabled(),
-	}); err != nil {
+	var catalogAccess *config.EnvironmentCatalogAccess
+	if mode != runModeRemote {
+		catalogAccess = &config.EnvironmentCatalogAccess{
+			LocalUIBind:               configuredLocalUIBind.ListenLabel(),
+			LocalUIProtocol:           localUIProtocol,
+			LocalUIPasswordConfigured: accessGate.Enabled(),
+		}
+	}
+	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, catalogAccess); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update environment catalog: %v", err))
 	}
 	announce := func() {
@@ -732,7 +800,7 @@ func (c *cli) runCmd(args []string) int {
 			Logger:                   localUILogger,
 			Bind:                     localUIBind,
 			DisableSelfUpgrade:       mode == runModeDesktop,
-			DesktopPrivateAccess:     mode == runModeDesktop,
+			Protocol:                 localUIProtocol,
 			EffectiveRunMode:         string(effectiveRunMode),
 			RemoteEnabled:            processRemoteEnabled,
 			ControlplaneBaseURL:      cfg.ControlplaneBaseURL,
@@ -779,8 +847,9 @@ func (c *cli) runCmd(args []string) int {
 			Title:  "Local UI ready",
 			Detail: firstNonEmptyString(localUIURLs),
 		})
-		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{
-			LocalUIBind:               localUIBindLabel,
+		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, &config.EnvironmentCatalogAccess{
+			LocalUIBind:               configuredLocalUIBind.ListenLabel(),
+			LocalUIProtocol:           localUIProtocol,
 			LocalUIPasswordConfigured: accessGate.Enabled(),
 		}); err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to refresh environment catalog: %v", err))

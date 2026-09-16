@@ -54,6 +54,7 @@ import {
 function draft(overrides: Partial<DesktopSettingsDraft> = {}): DesktopSettingsDraft {
   return {
     local_ui_bind: 'localhost:23998',
+    local_ui_protocol: 'http',
     local_ui_password: '',
     local_ui_password_mode: 'replace',
     auto_runtime_probe_enabled: false,
@@ -156,6 +157,7 @@ async function withTempPreferencesDir(testFn: (root: string) => Promise<void>): 
 describe('desktopPreferences', () => {
   it('validates a loopback-only draft without a password', () => {
     expect(validateDesktopSettingsDraft(draft())).toEqual({
+      local_ui_protocol: 'http',
       local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_configured: false,
@@ -851,6 +853,31 @@ describe('desktopPreferences', () => {
     });
   });
 
+  it('requires an explicit protocol choice for a saved legacy Environment', async () => {
+    await withTempPreferencesDir(async (root) => {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      await saveDesktopPreferences(paths, defaultDesktopPreferences(), codec);
+      const catalogPath = path.join(paths.stateRoot, 'catalog', 'local-environment.json');
+      const catalog = JSON.parse(await fs.readFile(catalogPath, 'utf8'));
+      delete catalog.local_hosting.access.local_ui_protocol;
+      await fs.writeFile(catalogPath, JSON.stringify(catalog));
+      const before = await fs.readFile(catalogPath, 'utf8');
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(localEnvironmentAccess(loaded.local_environment).local_ui_protocol).toBeUndefined();
+      expect(await fs.readFile(catalogPath, 'utf8')).toBe(before);
+      expect(() => validateDesktopSettingsDraft(desktopPreferencesToDraft(loaded))).toThrow('Choose HTTP or HTTPS');
+      const updated = updateLocalEnvironmentSettings(loaded, {
+        environmentID: loaded.local_environment.id,
+        access: validateDesktopSettingsDraft({...desktopPreferencesToDraft(loaded), local_ui_protocol: 'https'}),
+      });
+      await saveDesktopPreferences(paths, updated, codec);
+      const reread = await loadDesktopPreferences(paths, codec);
+      expect(localEnvironmentAccess(reread.local_environment).local_ui_protocol).toBe('https');
+      expect(localEnvironmentAccess(reread.local_environment).local_ui_bind).toBe('localhost:23998');
+    });
+  });
+
   it('falls back to defaults when the preferences json is malformed', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
@@ -867,6 +894,7 @@ describe('desktopPreferences', () => {
         label: 'Local Environment',
         local_hosting: expect.objectContaining({
           access: {
+            local_ui_protocol: 'http',
             local_ui_bind: 'localhost:23998',
             local_ui_password: '',
             local_ui_password_configured: false,
@@ -896,6 +924,7 @@ describe('desktopPreferences', () => {
         label: 'Local Environment',
         local_hosting: expect.objectContaining({
           access: {
+            local_ui_protocol: 'http',
             local_ui_bind: 'localhost:23998',
             local_ui_password: '',
             local_ui_password_configured: false,
@@ -935,6 +964,7 @@ describe('desktopPreferences', () => {
         label: 'Local Environment',
         local_hosting: expect.objectContaining({
           access: {
+            local_ui_protocol: 'http',
             local_ui_bind: 'localhost:23998',
             local_ui_password: '',
             local_ui_password_configured: false,
@@ -1907,6 +1937,7 @@ describe('desktopPreferences', () => {
           },
         }),
     }))).toEqual({
+      local_ui_protocol: 'http',
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password: '',
       local_ui_password_mode: 'keep',

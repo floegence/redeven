@@ -88,7 +88,15 @@ Redeven 透過統一工作區連接電腦與伺服器，整合檔案、終端機
 # 1. 安裝
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 產生 Local UI 裝置 CA（只需一次）
+redeven run
+```
+
+新環境預設使用 HTTP，監聽 `localhost:23998`，僅執行階段所在裝置可存取，無需憑證或 Redeven Cloud 設定。啟動成功後，在 Desktop 或瀏覽器中開啟執行階段實際輸出的位址。本機狀態儲存於 `~/.redeven/local-environment/`；按 Ctrl+C 可停止 CLI 執行階段。
+
+若要讓網路可達的裝置連線，請設定監聽位址與環境存取密碼。每個 Desktop 或瀏覽器獨立登入，頁面與 WS/WSS 共用一個連接埠。HTTP 不保護頁面與登入資訊的網路傳輸。HTTPS 為選用設定，需要明確建立憑證，並在每台連線裝置上建立信任：
+
+```bash
+# 產生 Local UI 裝置 CA（只需一次）
 redeven local-authority device-ca generate --state-root ~/.redeven
 
 # macOS 或 Windows：安裝到目前使用者的信任儲存區
@@ -97,17 +105,10 @@ redeven local-authority device-ca install --state-root ~/.redeven --scope user
 # Linux：匯出公開憑證，然後手動匯入
 redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
-# 3. 執行
-redeven run
-
-# 4. 在瀏覽器中開啟 https://localhost:23998。
+redeven run --local-ui-protocol https
 ```
 
-在 Linux 上，請將匯出的公開憑證匯入瀏覽器或用戶端實際使用的信任儲存區。`install --scope user` 在 Linux 上會刻意傳回 `manual_required`；Redeven 絕不會執行 `sudo`，也不會修改系統層級的信任儲存區。執行階段會在提供 HTTPS/WSS 前驗證 CA 身分與產生的伺服器憑證，但無法代替你建立用戶端信任。在該瀏覽器或用戶端信任此 CA 之前，用戶端 TLS 會以安全方式失敗。
-
-首次執行 `redeven run` 會初始化 `~/.redeven/local-environment/` 下的本機狀態，並以本機模式啟動。無需進行引導初始化或控制平面設定。Local UI 僅監聽 `localhost:23998`，只能從目前的裝置存取；不支援從區域網路或公用網路直接存取。按 Ctrl+C 可停止執行階段。
-
-如需瞭解其他執行模式或選用的本機密碼保護，請執行 `redeven help run`。
+Linux 使用者需將匯出的公開憑證匯入客戶端使用的信任庫；`install --scope user` 會傳回 `manual_required`。Redeven 不呼叫 `sudo`，也不修改系統層級信任庫。憑證缺失、無效、過期或不受信任時，HTTPS 明確失敗，不會退回 HTTP。未儲存協定的既有環境需要明確選擇 HTTP 或 HTTPS。執行 `redeven help run` 查看設定選項。
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

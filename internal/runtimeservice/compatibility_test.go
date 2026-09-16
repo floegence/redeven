@@ -16,11 +16,16 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 17 {
-		t.Fatalf("CompatibilityEpoch = %d, want computer media contract epoch 17", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 18 {
+		t.Fatalf("CompatibilityEpoch = %d, want Runtime client access contract epoch 18", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 8 || contract.UpgradeFromRuntimeEpochs[0] != 9 || contract.UpgradeFromRuntimeEpochs[1] != 10 || contract.UpgradeFromRuntimeEpochs[2] != 11 || contract.UpgradeFromRuntimeEpochs[3] != 12 || contract.UpgradeFromRuntimeEpochs[4] != 13 || contract.UpgradeFromRuntimeEpochs[5] != 14 || contract.UpgradeFromRuntimeEpochs[6] != 15 || contract.UpgradeFromRuntimeEpochs[7] != 16 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 16", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 9 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 17", contract.UpgradeFromRuntimeEpochs)
+	}
+	for index, epoch := range contract.UpgradeFromRuntimeEpochs {
+		if epoch != index+9 {
+			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 17", contract.UpgradeFromRuntimeEpochs)
+		}
 	}
 	if contract.MinimumDesktopVersion != "v0.12.0" || contract.MinimumRuntimeVersion != "v0.12.0" {
 		t.Fatalf(

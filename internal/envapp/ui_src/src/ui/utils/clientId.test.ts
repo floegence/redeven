@@ -7,14 +7,6 @@ describe('createClientId', () => {
     vi.unstubAllGlobals();
   });
 
-  it('prefers crypto.randomUUID when available', () => {
-    vi.stubGlobal('crypto', {
-      randomUUID: () => 'uuid-from-randomUUID',
-    } as unknown as Crypto);
-
-    expect(createClientId('message')).toBe('uuid-from-randomUUID');
-  });
-
   it('falls back to getRandomValues when randomUUID is unavailable', () => {
     vi.stubGlobal('crypto', {
       getRandomValues: (buffer: Uint8Array) => {
@@ -25,14 +17,11 @@ describe('createClientId', () => {
       },
     } as unknown as Crypto);
 
-    expect(createClientId('message')).toBe('00010203-0405-4607-8809-0a0b0c0d0e0f');
+    expect(createClientId()).toBe('00010203-0405-4607-8809-0a0b0c0d0e0f');
   });
 
-  it('falls back to a prefixed id when crypto is unavailable', () => {
+  it('fails explicitly when cryptographic randomness is unavailable', () => {
     vi.stubGlobal('crypto', undefined);
-    vi.spyOn(Date, 'now').mockReturnValue(1_742_109_600_000);
-    vi.spyOn(Math, 'random').mockReturnValue(0.123456789);
-
-    expect(createClientId('message')).toBe('message-m8bb2qdc-4fzzzxjylr');
+    expect(() => createClientId()).toThrow();
   });
 });

@@ -995,7 +995,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const wid = String(widgetId ?? '').trim();
     return wid ? `embedded:${wid}` : 'terminal_page';
   })();
-  const agentAttentionReaderId = createClientId('terminal-agent-reader');
+  const agentAttentionReaderId = createClientId();
   const activeSessionStorageKey = buildActiveSessionStorageKey(panelId);
   const sessionPlacementState = createMemo<TerminalPanelSessionPlacementState | null>(() => props.sessionPlacementState ?? null);
 
@@ -2828,7 +2828,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const createPendingSession = (name: string | undefined, workingDir: string, groupId: string): pending_terminal_session => {
     const operationSequence = ++nextCreateOperationSequence;
     const pendingSession: pending_terminal_session = {
-      id: createClientId('pending-terminal'),
+      id: createClientId(),
       operationSequence,
       createdAtMs: Date.now(),
       name: String(name ?? '').trim() || i18n.t('terminal.title'),
@@ -4222,7 +4222,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
 
     env.openFlowerTurnLauncher(attachAskFlowerContextAction({
-      id: createClientId('ask-flower'),
+      id: createClientId(),
       source_surface: 'terminal',
       ...(workingDir ? { suggested_working_dir: workingDir } : {}),
       context_items: contextItems,

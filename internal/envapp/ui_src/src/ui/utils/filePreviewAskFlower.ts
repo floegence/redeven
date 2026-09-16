@@ -29,7 +29,7 @@ export function buildFilePreviewFlowerTurnLauncherIntent(params: {
   const contextItems: EnvFlowerTurnLauncherContextItem[] = [{ kind: 'file_path', path: absolutePath, is_directory: false }];
 
   const intent: EnvFlowerTurnLauncherIntent = {
-    id: createClientId('ask-flower'),
+    id: createClientId(),
     source_surface: 'file_preview',
     suggested_working_dir: dirnameAbsolute(absolutePath),
     context_items: contextItems,

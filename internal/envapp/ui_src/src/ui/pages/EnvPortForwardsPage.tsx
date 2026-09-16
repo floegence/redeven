@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
 import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
@@ -2436,7 +2437,7 @@ export function EnvPortForwardsPage() {
     ctx.goActivity('containers');
   };
 
-  const managedRequestID = () => `envapp-${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+  const managedRequestID = () => `envapp-${secureRandomUUID()}`;
 
   const selectedTemplate = createMemo(() => managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
 

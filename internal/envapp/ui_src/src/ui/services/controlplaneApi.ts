@@ -1,5 +1,5 @@
 import type { ArtifactSource, JsonValue } from '@floegence/flowersec-core';
-import type { PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
+import type { HTTPDirectArtifactSourceV1, PrivateLoopbackArtifactSourceV1 } from '@floegence/flowersec-core/browser';
 import type {
   PrivateLoopbackControlplaneArtifactSourceOptions,
   SpendBindingView,
@@ -72,7 +72,7 @@ export type LocalAccessStatus = {
   unlocked: boolean;
 	exposure?: {
 		scope: 'loopback' | 'network';
-		transport: 'tls';
+		transport: 'tls' | 'http';
     password_required: boolean;
   };
   urls?: readonly string[];
@@ -403,7 +403,7 @@ export async function getLocalAccessStatus(): Promise<LocalAccessStatus | null> 
     if (typeof out?.password_required === 'boolean' && typeof out?.unlocked === 'boolean') {
       const exposure = out.exposure && typeof out.exposure === 'object'
         && (out.exposure.scope === 'loopback' || out.exposure.scope === 'network')
-			&& out.exposure.transport === 'tls'
+			&& (out.exposure.transport === 'tls' || out.exposure.transport === 'http')
         && typeof out.exposure.password_required === 'boolean'
         ? out.exposure
         : undefined;
@@ -480,14 +480,18 @@ type LocalDirectArtifactSourceCallbacks = Readonly<{
 }>;
 
 export type LocalDirectArtifactSourceOptions = LocalDirectArtifactSourceCallbacks & Readonly<{
-  transport: 'public_tls' | 'desktop_private_bridge_v2';
+  transport: 'public_tls' | 'public_http' | 'desktop_private_bridge_v2';
 }>;
+
+type LocalArtifactSourceFor<Transport> = Transport extends 'desktop_private_bridge_v2'
+  ? PrivateLoopbackArtifactSourceV1
+  : Transport extends 'public_http' ? HTTPDirectArtifactSourceV1 : ArtifactSource;
 
 export async function createLocalDirectArtifactSource<
   Transport extends LocalDirectArtifactSourceOptions['transport'],
 >(
   options: LocalDirectArtifactSourceCallbacks & Readonly<{ transport: Transport }>,
-): Promise<Transport extends 'desktop_private_bridge_v2' ? PrivateLoopbackArtifactSourceV1 : ArtifactSource> {
+): Promise<LocalArtifactSourceFor<Transport>> {
   const boot = await import('@floegence/floe-webapp-boot/artifact-source');
   const sourceOptions: PrivateLoopbackControlplaneArtifactSourceOptions = {
     baseUrl: window.location.origin,
@@ -544,8 +548,10 @@ export async function createLocalDirectArtifactSource<
   };
   const source = options.transport === 'desktop_private_bridge_v2'
     ? boot.createPrivateLoopbackControlplaneArtifactSource(sourceOptions)
-    : boot.createControlplaneArtifactSource(sourceOptions);
-  return source as Transport extends 'desktop_private_bridge_v2' ? PrivateLoopbackArtifactSourceV1 : ArtifactSource;
+    : options.transport === 'public_http'
+      ? boot.createHTTPDirectControlplaneArtifactSource(sourceOptions)
+      : boot.createControlplaneArtifactSource(sourceOptions);
+  return source as LocalArtifactSourceFor<Transport>;
 }
 
 export async function waitForLocalPluginSessionReady(

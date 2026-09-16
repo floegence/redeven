@@ -1,3 +1,4 @@
+import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { For, Show, createEffect, createSignal, onCleanup, untrack, createUniqueId } from 'solid-js';
 import {
   ArrowLeft,
@@ -147,7 +148,7 @@ export function GitTemplateImport(props: {
     discard();
     const activeController = new AbortController();
     controller = activeController;
-    operationID = crypto.randomUUID();
+    operationID = secureRandomUUID();
     const signal = activeController.signal;
     const source: GitSource = chosen ?? {
       repository: repository().trim(),
@@ -205,7 +206,7 @@ export function GitTemplateImport(props: {
         if (signal.aborted) return;
         setPreview(result);
         setToken('');
-        confirmationID = crypto.randomUUID();
+        confirmationID = secureRandomUUID();
       }
     } catch (failure) {
       if (!signal.aborted) setError(failure instanceof LocalApiError ? failure.code : 'TEMPLATE_SOURCE_UNAVAILABLE');

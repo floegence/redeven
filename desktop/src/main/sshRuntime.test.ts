@@ -6,6 +6,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildManagedRuntimeAuthorityCommand,
   buildManagedSSHActivatePreparedRuntimeScript,
   buildManagedSSHRemoteInstallScript,
   buildManagedSSHRuntimeProbeScript,
@@ -57,6 +58,38 @@ function createRuntimeArchive(root: string): string {
 }
 
 describe('sshRuntime', () => {
+  it('keeps authority arguments literal and sends access secrets only over stdin', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-authority-'));
+    const runtimeRoot = path.join(root, 'install with spaces $(never-run)');
+    const stateRoot = path.join(root, 'state with spaces');
+    const binary = path.join(runtimeRoot, 'runtime/managed/bin/redeven');
+    try {
+      fs.mkdirSync(path.dirname(binary), { recursive: true });
+      fs.writeFileSync(binary, '#!/bin/sh\nprintf "%s\\n" "$@"\ncat\n', { mode: 0o700 });
+      const argv = buildManagedRuntimeAuthorityCommand(runtimeRoot, stateRoot, ['access', 'set']);
+      const input = JSON.stringify({ local_ui_password: 'secret $(never-run)' });
+      const output = execFileSync(argv[0]!, argv.slice(1), { input, encoding: 'utf8' });
+      expect(output).toBe(`local-authority\naccess\nset\n--state-root\n${stateRoot}\n${input}`);
+      expect(argv.join(' ')).not.toContain('secret');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns a failed certificate report from the remote authority without hiding its status', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-authority-cert-'));
+    const binary = path.join(root, 'runtime/managed/bin/redeven');
+    try {
+      fs.mkdirSync(path.dirname(binary), { recursive: true });
+      fs.writeFileSync(binary, '#!/bin/sh\nprintf \'{"status":"failed","code":"local_ui_device_ca_missing"}\\n\' >&2\nexit 1\n', { mode: 0o700 });
+      const argv = buildManagedRuntimeAuthorityCommand(root, root, ['device-ca', 'status']);
+      const output = execFileSync(argv[0]!, argv.slice(1), { encoding: 'utf8' });
+      expect(JSON.parse(output)).toEqual({ status: 'failed', code: 'local_ui_device_ca_missing' });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('uses the shared ten-second default for SSH connection establishment', () => {
     const source = readSSHRuntimeSource();
     expect(source).toContain('const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 10;');

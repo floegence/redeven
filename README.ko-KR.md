@@ -88,7 +88,15 @@ Redeven은 파일, 터미널, Git, 브라우저 기반 개발, AI, 서비스, �
 # 1. 설치
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Local UI 기기 CA 생성(최초 1회)
+redeven run
+```
+
+새 환경은 HTTP의 `localhost:23998`에서 시작하며 런타임이 실행되는 기기에서만 접근할 수 있습니다. 인증서나 Redeven Cloud 설정은 필요하지 않습니다. 시작 후 출력된 실제 주소를 Desktop 또는 브라우저에서 여세요. 로컬 상태는 `~/.redeven/local-environment/`에 저장되며 Ctrl+C로 CLI 런타임을 중지할 수 있습니다.
+
+네트워크로 접근 가능한 기기의 연결을 허용하려면 수신 주소와 환경 접근 암호를 설정하세요. 각 Desktop과 브라우저는 독립적으로 로그인하며 페이지와 WS/WSS는 하나의 포트를 공유합니다. HTTP는 페이지나 로그인 정보의 전송을 암호화하지 않습니다. HTTPS는 선택 사항이며 인증서를 명시적으로 만들고 연결하는 모든 기기에서 신뢰해야 합니다:
+
+```bash
+# Local UI 기기 CA 생성(최초 1회)
 redeven local-authority device-ca generate --state-root ~/.redeven
 
 # macOS 또는 Windows: 현재 사용자의 신뢰 저장소에 설치
@@ -97,17 +105,10 @@ redeven local-authority device-ca install --state-root ~/.redeven --scope user
 # Linux: 공개 인증서를 내보낸 다음 수동으로 가져오기
 redeven local-authority device-ca export --state-root ~/.redeven --output ~/.redeven/local-ui-device-ca.pem
 
-# 3. 실행
-redeven run
-
-# 4. 브라우저에서 https://localhost:23998 열기
+redeven run --local-ui-protocol https
 ```
 
-Linux에서는 내보낸 공개 인증서를 실제로 사용하는 브라우저 또는 클라이언트의 신뢰 저장소에 가져오세요. Linux에서 `install --scope user`는 의도적으로 `manual_required`를 반환합니다. Redeven은 `sudo`를 실행하거나 시스템 전체의 신뢰 저장소를 변경하지 않습니다. 런타임은 HTTPS/WSS를 제공하기 전에 CA 식별 정보와 생성된 서버 인증서를 검증하지만, 클라이언트의 신뢰를 대신 설정할 수는 없습니다. 해당 브라우저나 클라이언트가 CA를 신뢰할 때까지 클라이언트 TLS는 안전하게 실패합니다.
-
-`redeven run`을 처음 실행하면 `~/.redeven/local-environment/`에 로컬 상태를 초기화하고 로컬 모드로 시작합니다. 부트스트랩이나 컨트롤 플레인 설정은 필요하지 않습니다. Local UI는 `localhost:23998`에서만 연결을 수신하므로 이 기기에서만 사용할 수 있습니다. LAN 또는 공용 네트워크를 통한 직접 접근은 지원하지 않습니다. Ctrl+C를 누르면 런타임이 중지됩니다.
-
-다른 실행 모드와 선택적 로컬 암호 보호에 관한 내용은 `redeven help run`에서 확인할 수 있습니다.
+Linux에서는 내보낸 공개 인증서를 클라이언트의 신뢰 저장소에 가져오세요. `install --scope user`는 `manual_required`를 반환합니다. Redeven은 `sudo`를 호출하거나 시스템 전체 신뢰 저장소를 변경하지 않습니다. 인증서가 없거나 유효하지 않거나 만료되었거나 신뢰되지 않으면 HTTPS는 실패하며 HTTP로 전환하지 않습니다. 프로토콜이 저장되지 않은 기존 환경에서는 HTTP 또는 HTTPS를 명시적으로 선택해야 합니다. 설정 옵션은 `redeven help run`으로 확인하세요.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

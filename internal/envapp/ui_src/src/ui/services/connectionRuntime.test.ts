@@ -25,6 +25,7 @@ const bootMocks = vi.hoisted(() => {
       source,
       lifecycle: createLifecycle(),
     })),
+    createHTTPDirectConnectionConfig: vi.fn(({ source, httpDirect }: { source: unknown; httpDirect: unknown }) => Object.freeze({ source, httpDirect, lifecycle: createLifecycle() })),
     createPrivateLoopbackDirectConnectionConfig: vi.fn(({ source, privateLoopback }: {
       source: unknown;
       privateLoopback: unknown;
@@ -50,6 +51,7 @@ const bootMocks = vi.hoisted(() => {
 
 vi.mock('@floegence/floe-webapp-boot', () => ({
   closeProxyBootstrap: bootMocks.closeProxyBootstrap,
+  createHTTPDirectConnectionConfig: bootMocks.createHTTPDirectConnectionConfig,
   createArtifactDirectConnectionConfig: bootMocks.createArtifactDirectConnectionConfig,
   createPrivateLoopbackDirectConnectionConfig: bootMocks.createPrivateLoopbackDirectConnectionConfig,
   createProxyBootstrapOwner: bootMocks.createProxyBootstrapOwner,
@@ -64,6 +66,7 @@ describe('createEnvAppConnectionRuntime', () => {
     bootMocks.lifecycles.length = 0;
     bootMocks.closeProxyBootstrap.mockClear();
     bootMocks.createArtifactDirectConnectionConfig.mockClear();
+    bootMocks.createHTTPDirectConnectionConfig.mockClear();
     bootMocks.createPrivateLoopbackDirectConnectionConfig.mockClear();
     bootMocks.createProxyBootstrapOwner.mockClear();
     bootMocks.createProxyRuntimeTunnelConnectionConfig.mockClear();
@@ -161,6 +164,27 @@ describe('createEnvAppConnectionRuntime', () => {
     await expect(runtime.createConfig('remote')).rejects.toThrow('config failed');
     expect(bootMocks.closeProxyBootstrap).toHaveBeenCalledTimes(1);
     expect(bootMocks.closeProxyBootstrap).toHaveBeenCalledWith(bootMocks.owners[0]);
+  });
+
+  it('connects public HTTP through the released HTTP profile and keeps TLS failures explicit', async () => {
+    const source = Object.freeze({ acquire: vi.fn() });
+    const runtime = createEnvAppConnectionRuntime({
+      local: { kind: 'public_http', origin: 'http://192.168.1.20:23998', source: () => source as never },
+      remoteSource: () => Object.freeze({ acquire: vi.fn() }), proxyBootstrap: () => ({}),
+    });
+    const lease = await runtime.createConfig('local');
+    expect(bootMocks.createHTTPDirectConnectionConfig).toHaveBeenCalledWith({ source, httpDirect: { origin: 'http://192.168.1.20:23998' } });
+    expect(bootMocks.createPrivateLoopbackDirectConnectionConfig).not.toHaveBeenCalled();
+    expect(bootMocks.createArtifactDirectConnectionConfig).not.toHaveBeenCalled();
+    lease.dispose();
+
+    bootMocks.createArtifactDirectConnectionConfig.mockImplementationOnce(() => { throw new Error('Untrusted certificate'); });
+    const tlsRuntime = createEnvAppConnectionRuntime({
+      local: { kind: 'public_tls', source: () => source },
+      remoteSource: () => source, proxyBootstrap: () => ({}),
+    });
+    await expect(tlsRuntime.createConfig('local')).rejects.toThrow('Untrusted certificate');
+    expect(bootMocks.createHTTPDirectConnectionConfig).toHaveBeenCalledTimes(1);
   });
 
   it('uses the dedicated private-loopback config only for the explicit Desktop transport', async () => {

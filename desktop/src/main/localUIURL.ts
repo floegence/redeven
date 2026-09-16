@@ -9,7 +9,7 @@ export function isLoopbackHost(hostname: string): boolean {
 
 export function isSupportedLocalHostname(hostname: string): boolean {
   const host = String(hostname ?? '').trim().toLowerCase();
-  return isLoopbackHost(host) || net.isIP(host) !== 0;
+  return isLoopbackHost(host) || net.isIP(host.replace(/^\[|\]$/g, '')) !== 0;
 }
 
 export function normalizeLocalUIBaseURL(rawURL: string): string {

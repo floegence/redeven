@@ -15,6 +15,7 @@ import type { DesktopSettingsDraft } from './settingsIPC';
 function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
   return {
     local_ui_bind: 'localhost:23998',
+    local_ui_protocol: 'http',
     local_ui_password: '',
     local_ui_password_mode: 'replace',
     auto_runtime_probe_enabled: false,
@@ -23,6 +24,19 @@ function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
 }
 
 describe('desktopAccessModel', () => {
+  it('requires an explicit protocol choice for legacy configuration', () => {
+    expect(validateDesktopAccessDraft(draft({ local_ui_protocol: undefined }))).toEqual({
+      valid: false, protocol_error_key: 'settings.protocolRequired',
+    });
+  });
+
+  it('keeps passwords and custom interfaces when editing scope and port', () => {
+    const original = draft({ local_ui_bind: '192.168.1.20:23998', local_ui_password: 'secret' });
+    expect(applyDesktopAccessFixedPortToDraft(original, '24000').local_ui_bind).toBe('192.168.1.20:24000');
+    expect(applyDesktopAccessModeToDraft(original, 'local_only').local_ui_password).toBe('secret');
+    expect(desktopSettingsDraftRequiresRuntimeRestart(original, { ...original, local_ui_protocol: 'https' })).toBe(true);
+  });
+
   it('treats a fixed loopback bind as local-only with a predictable localhost address', () => {
     const model = deriveDesktopAccessDraftModel(draft({
       local_ui_bind: 'localhost:23998',
@@ -33,7 +47,7 @@ describe('desktopAccessModel', () => {
     expect(model.fixed_port_value).toBe('23998');
     expect(model.next_start_address_display).toBe('localhost:23998');
     expect(model.next_start_address_kind).toBe('raw');
-    expect(model.password_state_id).toBe('not_required');
+    expect(model.password_state_id).toBe('optional');
   });
 
   it('keeps dynamic loopback binds in local-only mode but describes them as auto-select', () => {
@@ -74,7 +88,7 @@ describe('desktopAccessModel', () => {
     expect(model.network_exposure).toBe(true);
   });
 
-  it('treats a write-only kept password as custom exposure on loopback', () => {
+  it('keeps loopback scope when retaining an access password', () => {
     const sourceDraft = draft({
       local_ui_bind: 'localhost:23998',
       local_ui_password_mode: 'keep',
@@ -82,7 +96,7 @@ describe('desktopAccessModel', () => {
 
     expect(desktopAccessModeForDraft(sourceDraft, {
       local_ui_password_configured: true,
-    })).toBe('custom_exposure');
+    })).toBe('local_only');
 
     const model = deriveDesktopAccessDraftModel(sourceDraft, {
       local_ui_password_configured: true,
@@ -91,11 +105,11 @@ describe('desktopAccessModel', () => {
     expect(model.password_state_tone).toBe('success');
   });
 
-  it('falls back to custom exposure when loopback adds a password', () => {
+  it('keeps loopback scope when adding an access password', () => {
     expect(desktopAccessModeForDraft(draft({
       local_ui_bind: 'localhost:23998',
       local_ui_password: 'secret',
-    }))).toBe('custom_exposure');
+    }))).toBe('local_only');
   });
 
   it('switches from auto local-only to shared-local-network on the fixed shared baseline port', () => {
@@ -180,7 +194,7 @@ describe('desktopAccessModel', () => {
       }),
       expect.objectContaining({
         id: 'password_state',
-        value_key: 'settings.noPassword',
+        value_key: 'settings.optional',
       }),
     ]));
   });

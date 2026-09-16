@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createMemo, createResource } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -210,7 +211,7 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
     const v = String(value ?? '').trim();
     if (!v) return;
     try {
-      await navigator.clipboard.writeText(v);
+      await writeTextToClipboard(v);
       notify.success(i18n.t('uiCopy.audit.copiedTitle'), i18n.t('uiCopy.audit.copiedMessage', { label }));
     } catch {
       notify.error(i18n.t('uiCopy.audit.copyFailedTitle'), i18n.t('uiCopy.audit.copyFailedMessage'));

@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import {
   createEffect,
   createMemo,
@@ -969,12 +970,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       clipboardData.setData('text/plain', text);
       return { copied: true, source, textLength: text.length };
     }
-    if (!navigator.clipboard?.writeText) {
-      return source === 'copy_event'
-        ? { copied: false, source, reason: 'clipboard_unavailable' }
-        : copyResult(false, source);
+    try { await writeTextToClipboard(text); }
+    catch {
+      return source === 'copy_event' ? { copied: false, source, reason: 'clipboard_unavailable' } : copyResult(false, source);
     }
-    await navigator.clipboard.writeText(text);
     return source === 'copy_event'
       ? { copied: true, source, textLength: text.length }
       : copyResult(true, source, text.length);

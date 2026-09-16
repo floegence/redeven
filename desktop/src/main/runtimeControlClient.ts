@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
+import { parseLocalUIProtocol, type DesktopSettingsDraft } from '../shared/settingsIPC';
 import {
   normalizeRuntimeServiceSnapshot,
   type RuntimeServiceProviderLinkBinding,
@@ -32,7 +33,46 @@ type RuntimeControlServiceRoute =
 	| 'v2/provider-link'
 	| 'v2/provider-link/connect'
 	| 'v2/provider-link/disconnect'
-	| 'v2/code-workspace-engine/status';
+	| 'v2/code-workspace-engine/status'
+  | 'v2/runtime/access';
+
+export type RuntimeAccessSettings = Readonly<{
+  local_ui_bind: string;
+  local_ui_protocol?: 'http' | 'https';
+  local_ui_password_configured: boolean;
+  restart_required?: boolean;
+  runtime_started_at_unix_ms?: number;
+}>;
+
+export function parseRuntimeAccessSettings(data: unknown): RuntimeAccessSettings {
+  const value = data as Partial<RuntimeAccessSettings> | null;
+  if (!value || typeof value.local_ui_bind !== 'string' || typeof value.local_ui_password_configured !== 'boolean') {
+    throw new RuntimeControlError('RUNTIME_ACCESS_INVALID_RESPONSE', 'Runtime did not return its access settings.');
+  }
+  return {
+    local_ui_bind: value.local_ui_bind,
+    local_ui_protocol: value.local_ui_protocol ? parseLocalUIProtocol(value.local_ui_protocol) : undefined,
+    local_ui_password_configured: value.local_ui_password_configured,
+    ...(typeof value.restart_required === 'boolean' ? { restart_required: value.restart_required } : {}),
+    ...(typeof value.runtime_started_at_unix_ms === 'number' ? { runtime_started_at_unix_ms: value.runtime_started_at_unix_ms } : {}),
+  };
+}
+
+export async function getRuntimeAccessSettings(endpoint: DesktopRuntimeControlEndpoint): Promise<RuntimeAccessSettings> {
+  return parseRuntimeAccessSettings((await requestRuntimeControl(endpoint, 'v2/runtime/access', { method: 'GET' })).data);
+}
+
+export async function saveRuntimeAccessSettings(endpoint: DesktopRuntimeControlEndpoint, draft: DesktopSettingsDraft): Promise<RuntimeAccessSettings> {
+  return parseRuntimeAccessSettings((await requestRuntimeControl(endpoint, 'v2/runtime/access', {
+    method: 'PUT',
+    body: {
+      local_ui_bind: draft.local_ui_bind,
+      local_ui_protocol: parseLocalUIProtocol(draft.local_ui_protocol),
+      local_ui_password_mode: draft.local_ui_password_mode,
+      local_ui_password: draft.local_ui_password,
+    },
+  })).data);
+}
 
 export type RuntimeControlProviderLinkStatus = Readonly<{
   linked?: boolean;

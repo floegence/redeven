@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
@@ -2839,7 +2840,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const copyLogs = async () => {
     try {
-      await navigator.clipboard.writeText(filteredLogs().map((line) => line.message).join('\n'));
+      await writeTextToClipboard(filteredLogs().map((line) => line.message).join('\n'));
       notify.success(i18n.t('uiCopy.audit.copiedTitle'), i18n.t('uiCopy.audit.copiedMessage', { label: i18n.t('containers.inspector.logs') }));
     } catch {
       notify.error(i18n.t('uiCopy.audit.copyFailedTitle'), i18n.t('uiCopy.audit.copyFailedMessage'));
@@ -3206,7 +3207,7 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
 
   const copyImageLayerDigest = async (digest: string) => {
     try {
-      await navigator.clipboard.writeText(digest);
+      await writeTextToClipboard(digest);
       notify.success(i18n.t('uiCopy.audit.copiedTitle'), i18n.t('uiCopy.audit.copiedMessage', { label: i18n.t('containers.detail.layerDigest') }));
     } catch {
       notify.error(i18n.t('uiCopy.audit.copyFailedTitle'), i18n.t('uiCopy.audit.copyFailedMessage'));

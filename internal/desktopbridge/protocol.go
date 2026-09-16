@@ -36,9 +36,11 @@ type Hello struct {
 }
 
 type HelloLocalUI struct {
-	Available   bool   `json:"available"`
-	BasePath    string `json:"base_path"`
-	BridgeToken string `json:"bridge_token,omitempty"`
+	URLs             []string `json:"urls"`
+	PasswordRequired bool     `json:"password_required"`
+	Available        bool     `json:"available"`
+	BasePath         string   `json:"base_path"`
+	BridgeToken      string   `json:"bridge_token,omitempty"`
 }
 
 type GatewayProtocol struct {

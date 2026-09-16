@@ -1,3 +1,4 @@
+import type { LocalUIProtocol } from './settingsIPC';
 import { DEFAULT_DESKTOP_LOCAL_UI_BIND } from './desktopAccessModel';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import type { DesktopProviderEnvironmentRecord } from './desktopProviderEnvironment';
@@ -7,6 +8,7 @@ import type { LocalUIExposure } from './localUIExposure';
 
 export type DesktopLocalEnvironmentAccess = Readonly<{
   local_ui_bind: string;
+  local_ui_protocol?: LocalUIProtocol;
   local_ui_password: string;
   local_ui_password_configured: boolean;
 }>;
@@ -15,6 +17,7 @@ export type DesktopLocalEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 
 
 export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   local_ui_url: string;
+  local_ui_urls?: readonly string[];
   effective_run_mode: string;
   remote_enabled: boolean;
   controlplane_base_url?: string;
@@ -96,6 +99,7 @@ export function desktopProviderEnvironmentStateID(providerOrigin: string, envPub
 export function defaultDesktopLocalEnvironmentAccess(): DesktopLocalEnvironmentAccess {
   return {
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
+    local_ui_protocol: 'http',
     local_ui_password: '',
     local_ui_password_configured: false,
   };
@@ -112,13 +116,11 @@ function normalizeRuntimeState(
     return undefined;
   }
   const localUIURL = compact(value.local_ui_url);
-  if (localUIURL === '') {
-    return undefined;
-  }
   const pid = Number(value.pid);
   const startedAtUnixMS = Number(value.started_at_unix_ms);
   return {
     local_ui_url: localUIURL,
+    local_ui_urls: value.local_ui_urls?.map(compact).filter(Boolean),
     effective_run_mode: compact(value.effective_run_mode),
     remote_enabled: value.remote_enabled === true,
     controlplane_base_url: compact(value.controlplane_base_url) || undefined,

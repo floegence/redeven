@@ -49,3 +49,39 @@ func TestLocalAuthorityRotateKeyRejectsActiveRuntime(t *testing.T) {
 		t.Fatalf("code = %q, want runtime_active", report.Code)
 	}
 }
+
+func TestDeviceCAGenerationDoesNotStopAnActiveRuntimeOrReplaceItsIdentity(t *testing.T) {
+	stateRoot := t.TempDir()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(layout.StateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := lockfile.Acquire(layout.LockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Release() }()
+	code, stdout, stderr := runCLITest(t, "local-authority", "device-ca", "generate", "--state-root", stateRoot)
+	if code != 0 {
+		t.Fatalf("generate while Runtime owns its lock: exit=%d, stderr=%s", code, stderr)
+	}
+	var report localAuthorityReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(report.CertificatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, _, _ = runCLITest(t, "local-authority", "device-ca", "generate", "--state-root", stateRoot)
+	if code == 0 {
+		t.Fatal("generation replaced an existing certificate")
+	}
+	after, err := os.ReadFile(report.CertificatePath)
+	if err != nil || string(before) != string(after) {
+		t.Fatal("existing certificate changed")
+	}
+}

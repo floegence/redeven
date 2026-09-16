@@ -22,7 +22,7 @@ export { desktopAccessModeForDraft };
 type LocalEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Readonly<{
   environment_id: string;
   environment_label: string;
-  environment_kind: 'local' | 'controlplane';
+  environment_kind: 'local' | 'controlplane' | 'runtime_target';
   auto_runtime_probe_configurable?: boolean;
 }>;
 
@@ -122,7 +122,8 @@ export function buildDesktopSettingsSurfaceSnapshot(
     next_start_address_display: accessModel.next_start_address_display,
     next_start_address_kind: accessModel.next_start_address_kind,
     current_runtime_url: accessModel.current_runtime_url,
-    current_runtime_transport: accessModel.current_runtime_transport,
+    current_runtime_running: accessModel.current_runtime_running,
+    current_runtime_urls: accessModel.current_runtime_urls,
     password_state_id: accessModel.password_state_id,
     password_state_tone: accessModel.password_state_tone,
     local_ui_password_configured: localUIPasswordConfigured,

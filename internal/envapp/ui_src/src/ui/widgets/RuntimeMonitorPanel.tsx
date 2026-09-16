@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Copy, Trash } from '@floegence/floe-webapp-core/icons';
@@ -159,7 +160,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     const v = String(value ?? '').trim();
     if (!v) return;
     try {
-      await navigator.clipboard.writeText(v);
+      await writeTextToClipboard(v);
       notify.success(i18n.t('runtimeMonitor.copiedTitle'), i18n.t('runtimeMonitor.copiedMessage', { label }));
     } catch {
       notify.error(i18n.t('runtimeMonitor.copyFailedTitle'), i18n.t('runtimeMonitor.clipboardPermissionDenied'));

@@ -31,8 +31,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"targets     Inspect Redeven targets for local automation.",
 			"Start the Local UI on this device:",
 			"redeven run",
-			"Generate and trust the Local UI device CA once, then open https://localhost:23998:",
-			"redeven local-authority device-ca generate",
+			"Open http://localhost:23998 after startup. No certificate is needed.",
 			"No bootstrap or control-plane configuration is required.",
 			"Local UI stays on loopback and is available only from this device.",
 		)
@@ -60,7 +59,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"--presentation <auto|rich|plain|machine>",
 			"Loopback examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, [::1]:24000",
 			"Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998",
-			"Every Local UI bind uses trusted HTTPS; Flowersec uses an independent runtime-assigned WSS listener.",
+			"Public pages and WS/WSS connections share the configured port.",
 			"Network binds additionally require a fixed port and password authentication.",
 		)
 	})
@@ -273,7 +272,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"invalid value for `--local-ui-bind`: host must be localhost or an IP literal",
 			"Accepted examples: localhost:23998, 127.0.0.1:0, 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998.",
-			"Non-loopback binds require a fixed port, a Local UI password, and a trusted Local UI device CA.",
+			"Non-loopback binds require a fixed port and an environment access password. HTTPS also requires a valid Local UI device CA.",
 		)
 	})
 

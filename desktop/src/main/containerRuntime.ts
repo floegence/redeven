@@ -673,9 +673,9 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
     '  report_path="${session_dir}/startup-report.json"',
     '  mkdir -p "$session_dir"',
     '  rm -f "$report_path"',
-    '  exec "$runtime_binary_path" run --mode desktop --presentation machine --state-root "$state_root" --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
+    '  exec "$runtime_binary_path" run --mode desktop --presentation machine --state-root "$state_root" --startup-report-file "$report_path"',
     'fi',
-    'exec "$runtime_binary_path" run --mode desktop --presentation machine --state-root "$state_root" --local-ui-bind 127.0.0.1:0',
+    'exec "$runtime_binary_path" run --mode desktop --presentation machine --state-root "$state_root"',
   ].join('\n');
   return containerRuntimeExecCommandWithMode({
     engine: input.engine,

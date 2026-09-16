@@ -38,7 +38,7 @@ function normalizeAbsolutePath(value: unknown): string {
 export function createFileBrowserSurfaceController(params: Readonly<{
   createRequestId?: () => string;
 }> = {}) {
-  const createRequestId = params.createRequestId ?? (() => createClientId('file-browser-surface'));
+  const createRequestId = params.createRequestId ?? (() => createClientId());
   const [surface, setSurface] = createSignal<FileBrowserSurfaceState | null>(null);
   let returnFocusTo: HTMLElement | null = null;
 

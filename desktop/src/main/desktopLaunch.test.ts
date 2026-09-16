@@ -42,6 +42,8 @@ describe('desktopLaunch', () => {
       'machine',
       '--local-ui-bind',
       '0.0.0.0:24000',
+      '--local-ui-protocol',
+      'http',
       '--startup-secrets-stdin',
     ]);
   });
@@ -57,7 +59,7 @@ describe('desktopLaunch', () => {
     expect(buildDesktopRuntimeArgs(environment)).toContain('--startup-secrets-stdin');
   });
 
-  it('still rejects a configured-but-empty password for network access', () => {
+  it('uses the Runtime-owned password when Desktop does not hold its plaintext', () => {
     const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
@@ -66,7 +68,7 @@ describe('desktopLaunch', () => {
       }),
     });
 
-    expect(() => buildDesktopRuntimeArgs(environment)).toThrow('requires a configured password');
+    expect(buildDesktopRuntimeArgs(environment)).not.toContain('--password-clear');
   });
 
   it('adds one-shot bootstrap metadata and a private stdin envelope to the spawn plan', () => {
@@ -105,6 +107,8 @@ describe('desktopLaunch', () => {
       'machine',
       '--local-ui-bind',
       '127.0.0.1:0',
+      '--local-ui-protocol',
+      'http',
       '--state-root',
       '/Users/tester/.redeven',
       '--startup-secrets-stdin',
@@ -168,6 +172,9 @@ describe('desktopLaunch', () => {
       'machine',
       '--local-ui-bind',
       '127.0.0.1:0',
+      '--local-ui-protocol',
+      'http',
+      '--password-clear',
       '--state-root',
       '/Users/tester/.redeven',
       '--startup-secrets-stdin',
@@ -210,6 +217,9 @@ describe('desktopLaunch', () => {
       'machine',
       '--local-ui-bind',
       '127.0.0.1:0',
+      '--local-ui-protocol',
+      'http',
+      '--password-clear',
       '--state-root',
       '/Users/tester/.redeven',
       '--startup-secrets-stdin',
@@ -237,7 +247,9 @@ describe('desktopLaunch', () => {
     });
 
     expect(plan.args).toContain('localhost:24147');
-    expect(plan.args).not.toContain('localhost:23998');
+    expect(plan.args).toContain('localhost:23998');
+    expect(plan.args.slice(plan.args.indexOf('--local-ui-bind-override'), plan.args.indexOf('--local-ui-bind-override') + 2))
+      .toEqual(['--local-ui-bind-override', 'localhost:24147']);
     expect(plan.state_layout.stateRoot).toBe('/tmp/redeven-dev-checkout');
     expect(environment.local_hosting?.access.local_ui_bind).toBe('localhost:23998');
   });

@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { once } from 'node:events';
+import { build } from 'esbuild';
 
 import { describe, expect, it } from 'vitest';
 
@@ -289,6 +291,9 @@ process.stdin.on('end', () => {
 
 const reportFile = argValue('--startup-report-file');
 const mode = process.env.REDEVEN_TEST_RUNTIME_MODE || 'openable';
+if (mode === 'survive_parent_exit') {
+  setInterval(() => process.stdout.write('runtime remains online\\n'), 50);
+}
 if (mode === 'stderr_exit') {
   process.stderr.write('runtime stderr detail that should stay diagnostic\\n');
   process.exit(42);
@@ -355,6 +360,33 @@ process.on('SIGTERM', stopRuntime);
 }
 
 describe('runtimeProcess', () => {
+  it('keeps a logging Runtime alive after the initiating Desktop process exits', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-independent-'));
+    let runtimePID = 0;
+    try {
+      const executablePath = await writeFakeRuntimeExecutable(dir);
+      const modulePath = path.join(dir, 'runtime-process.cjs');
+      await build({ entryPoints: [path.resolve('src/main/runtimeProcess.ts')], outfile: modulePath, bundle: true, platform: 'node', format: 'cjs' });
+      const resultPath = path.join(dir, 'parent-result.json');
+      const parentSource = `const {startManagedRuntime}=require(${JSON.stringify(modulePath)});
+        startManagedRuntime(${JSON.stringify({executablePath, runtimeArgs: [], tempRoot: dir, env: {REDEVEN_TEST_RUNTIME_MODE: 'survive_parent_exit'}})})
+        .then(result => { if (result.kind !== 'ready') throw new Error('Runtime did not start'); require('node:fs').writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify({pid: result.managedRuntime.startup.pid, url: result.managedRuntime.startup.local_ui_url})); process.exit(0); })
+        .catch(error => { console.error(error); process.exit(1); });`;
+      const parent = spawn(process.execPath, ['-e', parentSource], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let errors = '';
+      parent.stderr.on('data', (chunk) => { errors += String(chunk); });
+      const [code] = await once(parent, 'exit');
+      expect(code, errors).toBe(0);
+      const result = JSON.parse(await fs.readFile(resultPath, 'utf8')) as { pid: number; url: string };
+      runtimePID = result.pid;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect((await fetch(result.url, { signal: AbortSignal.timeout(2_000) })).status).toBe(200);
+    } finally {
+      if (runtimePID) { try { process.kill(runtimePID, 'SIGTERM'); } catch { /* The fixture may already have exited. */ } }
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  }, 10_000);
+
   it('keeps runtime inventory scope distinct from the persisted state root', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-scope-'));
     const runtimeRoot = path.join(dir, 'runtime-root');

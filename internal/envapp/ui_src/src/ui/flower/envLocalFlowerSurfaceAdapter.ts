@@ -1,3 +1,5 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { withFlowerWebSearchAvailability } from '../../../../../flower_ui/src/webSearchCapability';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
@@ -136,12 +138,11 @@ function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function hexDigest(bytes: ArrayBuffer): string {
-  return Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
-}
-
 async function sha256Hex(bytes: BufferSource): Promise<string> {
-  return hexDigest(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+  const view = ArrayBuffer.isView(bytes)
+    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    : new Uint8Array(bytes);
+  return bytesToHex(sha256(view));
 }
 
 async function uploadEnvLocalFlowerAttachment(input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> {

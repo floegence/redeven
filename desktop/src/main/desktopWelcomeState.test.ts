@@ -2118,6 +2118,7 @@ describe('desktopWelcomeState', () => {
       }),
     ]));
     expect(snapshot.settings_surface.draft).toEqual({
+      local_ui_protocol: 'http',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
@@ -2149,8 +2150,28 @@ describe('desktopWelcomeState', () => {
     });
 
     expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
-    expect(snapshot.settings_surface.current_runtime_transport).toBe('desktop_bridge');
+    expect(snapshot.settings_surface.current_runtime_running).toBe(true);
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
+  });
+
+  it('clears stale public addresses when presence confirms the Runtime has stopped', () => {
+    const local = testLocalEnvironment({ currentRuntime: {
+      local_ui_url: 'http://localhost:23998/', local_ui_urls: ['http://localhost:23998/'], pid: 123,
+    } });
+    const presence = localRuntimePresence({ running: false, local_ui_url: '', openable: false });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+      managedRuntimePresenceByTargetID: { [presence.target_id]: presence },
+      openSessions: [testLocalEnvironmentSession(local, 'http://localhost:23998/', 'open')],
+      surface: 'environment_settings', selectedEnvironmentID: local.id,
+    });
+    const entry = snapshot.environments.find((item) => item.kind === 'local_environment');
+    expect(entry?.local_environment_runtime_state).toBe('not_running');
+    expect(entry?.local_ui_url).toBe('');
+    expect(entry?.local_ui_urls).toEqual([]);
+    expect(snapshot.settings_surface.current_runtime_url).toBe('');
+    expect(snapshot.settings_surface.current_runtime_urls).toEqual([]);
+    expect(snapshot.settings_surface.current_runtime_running).toBe(false);
   });
 
   it('threads a verified managed Runtime url into settings without requiring an open environment window', () => {
@@ -2272,7 +2293,6 @@ describe('desktopWelcomeState', () => {
         source: 'provider_batch_probe',
       }),
     }));
-    expect(providerEntry?.local_environment_runtime_plan).toBeUndefined();
     expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
     expect(providerEntry?.provider_environment_candidates).toBeUndefined();
     expect(providerEntry?.managed_runtime_target_id).toBeUndefined();
@@ -2567,7 +2587,6 @@ describe('desktopWelcomeState', () => {
       provider_linked_runtime_summary: undefined,
       local_ui_url: '',
     }));
-    expect(providerEntry?.local_environment_runtime_plan).toBeUndefined();
     expect(providerEntry?.provider_runtime_link_target).toBeUndefined();
     expect(providerEntry?.provider_environment_candidates).toBeUndefined();
 

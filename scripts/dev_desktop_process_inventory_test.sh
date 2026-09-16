@@ -48,7 +48,7 @@ OWN_PID=$!
 OTHER_PID=$!
 other_output=$(HOME="$TEST_HOME" "$FAKE_SCRIPTS/dev_desktop.sh" --dry-run --stop-only)
 other_state_root=$(printf '%s\n' "$other_output" | sed -n 's/^Development state root: //p' | head -n 1)
-other_local_ui_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development Local UI: .*://p' | head -n 1)
+other_local_ui_port=$(printf '%s\n' "$other_output" | sed -n 's/^Runtime bind override (not yet listening): .*://p' | head -n 1)
 other_cdp_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development CDP port: //p' | head -n 1)
 other_inspect_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development inspect port: //p' | head -n 1)
 mkdir -p "$other_state_root"
@@ -58,7 +58,7 @@ node -e '
   const net = require("node:net");
   const server = net.createServer();
   server.listen(Number(process.argv[1]), "127.0.0.1");
-' "$other_local_ui_port" &
+' "$other_cdp_port" &
 OTHER_PORT_PID=$!
 mkdir -p "$state_root/desktop"
 printf '%s\n' "$OWN_PID" > "$state_root/desktop/dev-electron-v1.pid"
@@ -130,10 +130,10 @@ if [ "$second_state_root" != "$state_root" ]; then
   exit 1
 fi
 
-local_ui_port=$(printf '%s\n' "$output" | sed -n 's/^Development Local UI: .*://p' | head -n 1)
+local_ui_port=$(printf '%s\n' "$output" | sed -n 's/^Runtime bind override (not yet listening): .*://p' | head -n 1)
 cdp_port=$(printf '%s\n' "$output" | sed -n 's/^Development CDP port: //p' | head -n 1)
 inspect_port=$(printf '%s\n' "$output" | sed -n 's/^Development inspect port: //p' | head -n 1)
-second_local_ui_port=$(printf '%s\n' "$second_output" | sed -n 's/^Development Local UI: .*://p' | head -n 1)
+second_local_ui_port=$(printf '%s\n' "$second_output" | sed -n 's/^Runtime bind override (not yet listening): .*://p' | head -n 1)
 second_cdp_port=$(printf '%s\n' "$second_output" | sed -n 's/^Development CDP port: //p' | head -n 1)
 second_inspect_port=$(printf '%s\n' "$second_output" | sed -n 's/^Development inspect port: //p' | head -n 1)
 if [ "$local_ui_port/$cdp_port/$inspect_port" != "$second_local_ui_port/$second_cdp_port/$second_inspect_port" ]; then
@@ -142,7 +142,11 @@ if [ "$local_ui_port/$cdp_port/$inspect_port" != "$second_local_ui_port/$second_
     "$second_local_ui_port" "$second_cdp_port" "$second_inspect_port" >&2
   exit 1
 fi
-for port in "$local_ui_port" "$cdp_port" "$inspect_port"; do
+if [ -n "$local_ui_port$second_local_ui_port$other_local_ui_port" ]; then
+  printf 'default development launches must keep the saved Runtime bind unchanged\n' >&2
+  exit 1
+fi
+for port in "$cdp_port" "$inspect_port"; do
   case "$port" in
     ''|*[!0-9]*)
       printf 'expected numeric checkout-derived port, got %s\n' "$port" >&2
@@ -163,12 +167,12 @@ node -e '
   const net = require("node:net");
   const server = net.createServer();
   server.listen(Number(process.argv[1]), "127.0.0.1");
-' "$local_ui_port" &
+' "$cdp_port" &
 BUSY_PORT_PID=$!
 sleep 0.2
 collision_output=$(HOME="$TEST_HOME" "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
-collision_local_ui_port=$(printf '%s\n' "$collision_output" | sed -n 's/^Development Local UI: .*://p' | head -n 1)
-if [ "$collision_local_ui_port" = "$local_ui_port" ]; then
+collision_cdp_port=$(printf '%s\n' "$collision_output" | sed -n 's/^Development CDP port: //p' | head -n 1)
+if [ "$collision_cdp_port" = "$cdp_port" ]; then
 	printf '%s\n' "$collision_output" >&2
 	printf 'an occupied preferred port must allocate a different window\n' >&2
 	exit 1
@@ -181,8 +185,8 @@ kill "$BUSY_PORT_PID" >/dev/null 2>&1 || true
 wait "$BUSY_PORT_PID" >/dev/null 2>&1 || true
 BUSY_PORT_PID=""
 
-for own_port in "$local_ui_port" "$cdp_port" "$inspect_port"; do
-  for other_port in "$other_local_ui_port" "$other_cdp_port" "$other_inspect_port"; do
+for own_port in "$cdp_port" "$inspect_port"; do
+  for other_port in "$other_cdp_port" "$other_inspect_port"; do
     if [ "$own_port" = "$other_port" ]; then
       printf 'different checkouts must use non-overlapping port windows: %s/%s/%s vs %s/%s/%s\n' \
         "$local_ui_port" "$cdp_port" "$inspect_port" \
@@ -198,7 +202,7 @@ explicit_port_output=$(HOME="$TEST_HOME" \
   REDEVEN_DESKTOP_INSPECT_PORT=32142 \
   "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
 case "$explicit_port_output" in
-  *'Development Local UI: localhost:32140'*'Development CDP port: 32141'*'Development inspect port: 32142'*) ;;
+  *'Runtime bind override (not yet listening): localhost:32140'*'Development CDP port: 32141'*'Development inspect port: 32142'*) ;;
   *)
     printf '%s\n' "$explicit_port_output" >&2
     printf 'expected explicit development port overrides to win\n' >&2
@@ -249,8 +253,8 @@ if [ -z "$override_instance_id" ] || [ "$override_instance_id" = "$second_overri
 		"$override_instance_id" "$second_override_instance_id" >&2
 	exit 1
 fi
-override_ports=$(printf '%s\n' "$override_output" | sed -n -e 's/^Development Local UI: .*://p' -e 's/^Development CDP port: //p' -e 's/^Development inspect port: //p' | tr '\n' ' ')
-second_override_ports=$(printf '%s\n' "$second_override_output" | sed -n -e 's/^Development Local UI: .*://p' -e 's/^Development CDP port: //p' -e 's/^Development inspect port: //p' | tr '\n' ' ')
+override_ports=$(printf '%s\n' "$override_output" | sed -n -e 's/^Runtime bind override (not yet listening): .*://p' -e 's/^Development CDP port: //p' -e 's/^Development inspect port: //p' | tr '\n' ' ')
+second_override_ports=$(printf '%s\n' "$second_override_output" | sed -n -e 's/^Runtime bind override (not yet listening): .*://p' -e 's/^Development CDP port: //p' -e 's/^Development inspect port: //p' | tr '\n' ' ')
 if [ "$override_ports" = "$second_override_ports" ]; then
 	printf 'two explicit instances from one checkout must have independent ports: %s\n' "$override_ports" >&2
 	exit 1

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/floegence/redeven/internal/accessgate"
 	"golang.org/x/term"
 )
 
@@ -24,13 +23,6 @@ type terminalSecretReader struct {
 	isTerminal   func(int) bool
 	readPassword func(int) ([]byte, error)
 	promptWriter io.Writer
-}
-
-func newAccessGate(password string) *accessgate.Gate {
-	if password == "" {
-		return nil
-	}
-	return accessgate.New(accessgate.Options{Password: password})
 }
 
 func promptForLocalUIPassword() (string, error) {
