@@ -3155,7 +3155,7 @@ describe('EnvWorkbenchPage', () => {
       }),
     }));
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(existingWidget, { centerViewport: false });
-    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(existingWidget.id, 'Preview · demo.txt');
+    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(existingWidget.id, 'demo.txt');
     expect(contextMocks.consumeWorkbenchFilePreviewActivation).toHaveBeenCalledWith('request-preview-existing');
   });
 
@@ -3292,7 +3292,7 @@ describe('EnvWorkbenchPage', () => {
       }),
     }));
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(newWidget, { centerViewport: true });
-    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(newWidget.id, 'Preview · other.txt');
+    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(newWidget.id, 'other.txt');
     expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids')).toBe(
       'widget-preview-existing,widget-preview-new',
     );
@@ -3419,7 +3419,7 @@ describe('EnvWorkbenchPage', () => {
       }),
     }));
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(latestWidget, { centerViewport: false });
-    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(latestWidget.id, 'Preview · other.txt');
+    expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(latestWidget.id, 'other.txt');
   });
 
   it('starts terminal widget session cleanup without blocking widget removal', async () => {

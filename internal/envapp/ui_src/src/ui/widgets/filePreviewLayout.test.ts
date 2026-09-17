@@ -84,13 +84,13 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain("profile: 'preview_basic'");
     expect(textPaneSrc).toContain("profile: 'editor_full'");
     expect(textPaneSrc).toContain('runtimeOptions={editorRuntimeOptions()}');
-    expect(actionsSrc).toContain("i18n.t('filePreview.copyPath')");
+    expect(actionsSrc).toContain("i18n.t(pathCopied() ? 'filePreview.pathCopied' : 'filePreview.copyPath')");
     expect(actionsSrc).toContain("i18n.t('filePreview.editFile')");
     expect(actionsSrc).toContain("i18n.t('filePreview.saveFile')");
     expect(actionsSrc).toContain("i18n.t('filePreview.discardChanges')");
     expect(actionsSrc).toContain("i18n.t('filePreview.askFlower')");
     expect(actionsSrc).toContain("import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';");
-    expect(actionsSrc).toContain('<FlowerNavigationIcon class="size-5" />');
+    expect(actionsSrc).toContain('icon: FlowerNavigationIcon');
     expect(actionsSrc).not.toContain('Sparkles');
     expect(actionsSrc).toContain("i18n.t('filePreview.downloadFile')");
     expect(contentSrc).toContain('title={resolvedPath()');

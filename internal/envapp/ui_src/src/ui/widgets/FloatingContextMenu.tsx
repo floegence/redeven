@@ -44,6 +44,8 @@ export interface FloatingContextMenuProps {
   y: number;
   ariaLabel: string;
   focusAnchor?: HTMLElement | null;
+  /** A toggle button shares the menu's pointer and focus boundary. */
+  toggleAnchor?: HTMLElement | null;
   boundarySize?: Readonly<{ width: number; height: number }>;
   width?: number;
   focusDisabledItems?: boolean;
@@ -105,10 +107,14 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
       viewportDismissalArmed = true;
     });
     const onPointerDown = (event: PointerEvent) => {
-      if (!eventOccursWithin(event, menuEl)) dismiss('outside-pointer');
+      if (!eventOccursWithin(event, menuEl) && !eventOccursWithin(event, props.toggleAnchor ?? null)) {
+        dismiss('outside-pointer');
+      }
     };
     const onFocusIn = (event: FocusEvent) => {
-      if (focusDismissalArmed && !eventOccursWithin(event, menuEl)) dismiss('outside-focus');
+      if (focusDismissalArmed && !eventOccursWithin(event, menuEl) && !eventOccursWithin(event, props.toggleAnchor ?? null)) {
+        dismiss('outside-focus');
+      }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !eventOccursWithin(event, menuEl)) dismiss('escape');

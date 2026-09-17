@@ -1566,6 +1566,7 @@
     "unknownPath": "(chemin inconnu)",
     "pathCopied": "Chemin copié",
     "copyPath": "Copier le chemin",
+    "moreActions": "Autres actions sur le fichier",
     "editFile": "Modifier le fichier",
     "discardChanges": "Annuler les modifications",
     "saveFile": "Enregistrer le fichier",

@@ -1566,6 +1566,7 @@
     "unknownPath": "(ruta desconocida)",
     "pathCopied": "Ruta copiada",
     "copyPath": "Copiar ruta",
+    "moreActions": "Más acciones de archivo",
     "editFile": "Editar archivo",
     "discardChanges": "Descartar cambios",
     "saveFile": "Guardar archivo",

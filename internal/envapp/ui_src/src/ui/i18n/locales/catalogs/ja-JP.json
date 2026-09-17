@@ -1566,6 +1566,7 @@
     "unknownPath": "(不明なパス)",
     "pathCopied": "パスをコピーしました",
     "copyPath": "パスをコピー",
+    "moreActions": "その他のファイル操作",
     "editFile": "ファイルを編集",
     "discardChanges": "変更を破棄",
     "saveFile": "ファイルを保存",
