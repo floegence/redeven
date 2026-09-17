@@ -49,6 +49,7 @@ type playwrightTargetClient struct {
 }
 
 type playwrightTargetRequest struct {
+	FullAccess      bool           `json:"full_access"`
 	AllowedOrigins  []string       `json:"allowed_origins"`
 	ScriptOperation bool           `json:"script_operation,omitempty"`
 	SessionID       string         `json:"session_id,omitempty"`
@@ -149,7 +150,7 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	request := playwrightTargetRequest{AllowedOrigins: call.allowedOrigins, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
+	request := playwrightTargetRequest{FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
 	if call.ThreadID != "" && call.TurnID != "" {
 		// Canonical turn identity survives input continuation runs. Model args
 		// cannot select a private browser session or end another turn's takeover.
@@ -328,7 +329,7 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_missing"}
 	case line := <-readyCh:
 		var handshake playwrightTargetReady
-		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 2 {
+		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 3 {
 			return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_invalid"}
 		}
 		if handshake.Error != "" {

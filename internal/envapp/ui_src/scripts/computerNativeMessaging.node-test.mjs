@@ -14,7 +14,9 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
   const directory = await mkdtemp('/tmp/flower-native-');
   const extension = path.join(directory, 'extension'); stageBrowserExtension(extension);
   const socket = path.join(directory, 'bridge');
-  const server = net.createServer(); server.listen(socket); await once(server, 'listening');
+  const peers = new Set();
+  const server = net.createServer(peer => { peers.add(peer); peer.once('close', () => peers.delete(peer)); });
+  server.listen(socket); await once(server, 'listening');
   const registrationRoot = path.join(directory, 'profile', 'NativeMessagingHosts');
   const name = `dev.floegence.redeven.r${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
   const registration = path.join(registrationRoot, name + '.json');
@@ -52,9 +54,9 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
     });
     const receive = async () => { if (!messages.length) await new Promise(resolve => waiters.push(resolve)); return messages.shift(); };
     const send = value => { const body = Buffer.from(JSON.stringify(value)), header = Buffer.alloc(4); header.writeUInt32LE(body.length); peer.write(Buffer.concat([header, body])); };
-    assert.deepEqual(await receive(), { type: 'native_host', protocol_version: 2, extension_id: extensionID });
+    assert.deepEqual(await receive(), { type: 'native_host', protocol_version: 3, extension_id: extensionID });
     const hello = await receive(); assert.equal(hello.type, 'hello'); assert.equal(hello.profile_name, 'Native fixture');
-    send({ type: 'ready', protocol_version: 2 });
+    send({ type: 'ready', protocol_version: 3 });
     await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ command: 'status' })).connected === true);
     send({ id: '1', command: 'inventory' });
     const inventory = await receive(); assert.equal(inventory.id, '1'); assert.ok(Array.isArray(inventory.result));
@@ -63,6 +65,7 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
     peer.end();
     await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ command: 'status' })).connected === false);
   } finally {
+    for (const connection of peers) connection.destroy();
     peer?.destroy(); await context?.close(); server.close();
     if (await readFile(registration, 'utf8').catch(() => '') === manifest) await rm(registration);
     await rm(directory, { recursive: true, force: true });

@@ -41,19 +41,6 @@ func (s *Service) SetComputerAccess(ctx context.Context, meta *session.Meta, thr
 	return nil
 }
 
-func (r *ComputerUseRuntime) computerAccess(ctx context.Context, threadID string) (ComputerAccess, error) {
-	r.mu.RLock()
-	bindings := r.bindings
-	r.mu.RUnlock()
-	store, ok := bindings.(interface {
-		GetComputerAccess(context.Context, string) (ComputerAccess, error)
-	})
-	if !ok {
-		return ComputerAccess{}, errors.New("computer access store is unavailable")
-	}
-	return store.GetComputerAccess(ctx, threadID)
-}
-
 func (r *ComputerUseRuntime) authorizeComputerCall(ctx context.Context, call *TargetToolCall) error {
 	if call.revalidate != nil {
 		if err := call.revalidate(ctx); err != nil {
@@ -63,7 +50,32 @@ func (r *ComputerUseRuntime) authorizeComputerCall(ctx context.Context, call *Ta
 	if call.ThreadID == "" || r.targetBindings() == nil {
 		return ctx.Err()
 	}
-	access, err := r.computerAccess(ctx, call.ThreadID)
+	store, ok := r.targetBindings().(interface {
+		GetThreadSettingsByCanonicalThreadID(context.Context, string) (*threadstore.ThreadSettings, error)
+		GetComputerAccess(context.Context, string) (ComputerAccess, error)
+	})
+	if !ok {
+		return errors.New("computer access store is unavailable")
+	}
+	settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, call.ThreadID)
+	if err != nil {
+		return err
+	}
+	if settings == nil {
+		return errors.New("computer thread settings are unavailable")
+	}
+	permission, err := parsePermissionType(settings.PermissionType)
+	if err != nil {
+		return err
+	}
+	// Full access is the existing task authorization. Per-resource grants only
+	// constrain other modes; never persist synthetic grants for full access.
+	call.fullAccess = permission == FlowerPermissionFullAccess
+	call.allowedOrigins, call.allowedApps, call.allowForeground = nil, nil, call.fullAccess
+	if call.fullAccess {
+		return ctx.Err()
+	}
+	access, err := store.GetComputerAccess(ctx, call.ThreadID)
 	if err != nil {
 		return err
 	}

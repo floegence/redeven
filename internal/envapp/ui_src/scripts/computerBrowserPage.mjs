@@ -47,6 +47,7 @@ export class BrowserComputerPage {
   constructor(transport, { allowedOrigins = [], onTakeover = () => {} } = {}) {
     this.transport = transport;
     this.allowedOrigins = new Set(allowedOrigins);
+    this.fullAccess = false;
     this.onTakeover = onTakeover;
     this.references = new Map();
     this.revision = 0;
@@ -68,6 +69,8 @@ export class BrowserComputerPage {
 
   }
 
+  allowsOrigin(origin) { return this.allowedOrigins.has(origin) || (this.fullAccess && (origin.startsWith('https://') || origin.startsWith('http://'))); }
+
   invalidate() { this.revision++; this.references.clear(); this.observedFrames.clear(); this.changed(); }
   changed() { for (const listener of this.listeners) listener(); }
   close() { this.invalid = true; this.invalidate(); }
@@ -85,7 +88,7 @@ export class BrowserComputerPage {
         // A popup is a separate target. Never follow it or reuse this page's
         // node references, even when its origin is already permitted.
         this.newTarget = true; this.stopped = true;
-        try { const origin = new URL(event.url).origin; if (!this.allowedOrigins.has(origin)) this.requiredOrigin = origin; } catch { /* Selection still requires the user. */ }
+        try { const origin = new URL(event.url).origin; if (!this.allowsOrigin(origin)) this.requiredOrigin = origin; } catch { /* Selection still requires the user. */ }
         this.invalidate(); this.onTakeover();
       });
       session.on('Page.downloadWillBegin', event => {
@@ -105,7 +108,7 @@ export class BrowserComputerPage {
         void (async () => {
           let allowed = this.privateInput;
           let origin;
-          try { const url = new URL(event.request.url); origin = url.origin; allowed ||= ['http:', 'https:'].includes(url.protocol) && this.allowedOrigins.has(origin); }
+          try { const url = new URL(event.request.url); origin = url.origin; allowed ||= ['http:', 'https:'].includes(url.protocol) && this.allowsOrigin(origin); }
           catch { /* Unsupported navigation has no ambient authority. */ }
           if (allowed) await session.send('Fetch.continueRequest', { requestId: event.requestId });
           else {
@@ -194,7 +197,7 @@ export class BrowserComputerPage {
     for (const frame of frames) {
       const url = frame.frame.url;
       if (url !== 'about:blank' && !url.startsWith('about:srcdoc')) {
-        try { if (!this.allowedOrigins.has(new URL(url).origin)) { reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin; } }
+        try { if (!this.allowsOrigin(new URL(url).origin)) { reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin; } }
         catch { reasons.add('unknown'); }
       }
       try {

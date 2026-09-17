@@ -47,7 +47,7 @@ sequence = 0
 def action(process, tool, target='desktop-main', args=None):
     global sequence
     sequence += 1
-    request = {'protocol_version': 2, 'request_id': str(sequence), 'target_id': target,
+    request = {'protocol_version': 3, 'request_id': str(sequence), 'target_id': target,
                'tool_name': tool, 'args': args or {}, 'allowed_apps': ['dev.floegence.redeven.capture-fixture'],
                'allow_foreground': False, 'script_operation': True}
     process.stdin.write((json.dumps(request)+'\n').encode()); process.stdin.flush()

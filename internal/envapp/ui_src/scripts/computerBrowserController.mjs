@@ -51,6 +51,7 @@ export class BrowserComputerController {
     const args = request.args || {};
     const privateInput = request.user_control === true;
     const page = this.page;
+    page.fullAccess = request.full_access === true;
     page.allowedOrigins = new Set(Array.isArray(request.allowed_origins) ? request.allowed_origins : []);
     page.privateInput = privateInput;
     const initialEffects = page.effectCount;
@@ -91,7 +92,7 @@ export class BrowserComputerController {
         else throw new Error('INVALID_REQUEST');
         const parsed = new URL(url);
         if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('INVALID_REQUEST');
-        if (!privateInput && !page.allowedOrigins.has(parsed.origin)) return this.pause({ level: 'takeover', reason_codes: ['site_permission'], required_origin: parsed.origin, safe_to_capture: false, safe_to_send_to_model: false }, false);
+        if (!privateInput && !page.allowsOrigin(parsed.origin)) return this.pause({ level: 'takeover', reason_codes: ['site_permission'], required_origin: parsed.origin, safe_to_capture: false, safe_to_send_to_model: false }, false);
         const command = tool === 'browser.back' ? 'Page.navigateToHistoryEntry' : tool === 'browser.reload' ? 'Page.reload' : 'Page.navigate';
         result = await page.navigate(command, entryId !== undefined ? { entryId } : tool === 'browser.reload' ? {} : { url }) || {};
       } else {

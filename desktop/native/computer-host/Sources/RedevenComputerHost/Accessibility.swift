@@ -91,12 +91,12 @@ final class NativeWindow {
         return false
     }
 
-    func safety(allowedApps: [String], privateInput: Bool = false) throws -> [String: Any] {
+    func safety(allowedApps: [String], fullAccess: Bool = false, privateInput: Bool = false) throws -> [String: Any] {
         try validate()
         var reasons: Set<String> = []
         if !privateInput {
             if userInControl { reasons.insert("user_control") }
-            if !allowedApps.contains(app.bundleIdentifier ?? "") { reasons.insert("app_permission") }
+            if !fullAccess && !allowedApps.contains(app.bundleIdentifier ?? "") { reasons.insert("app_permission") }
             // Inspect roles before reading any values. Secure fields never
             // contribute their labels, values or pixels to model observations.
             var queue = [element], visited = 0

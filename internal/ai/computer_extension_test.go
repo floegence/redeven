@@ -35,8 +35,8 @@ func extensionFixture(t *testing.T, owners ...*ComputerUseRuntime) (*computerExt
 	}
 	t.Cleanup(func() { _ = peer.Close() })
 	for _, message := range []map[string]any{
-		{"type": "native_host", "protocol_version": 2, "extension_id": browserbridge.ExtensionID},
-		{"type": "hello", "protocol_version": 2, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
+		{"type": "native_host", "protocol_version": 3, "extension_id": browserbridge.ExtensionID},
+		{"type": "hello", "protocol_version": 3, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
 	} {
 		if err := browserbridge.WriteMessage(peer, message, 1<<20); err != nil {
 			t.Fatal(err)

@@ -78,7 +78,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await popup.locator('#profile').fill('Fixture profile'); await popup.locator('#bridge').fill('dev.floegence.redeven.r123456789abcdef0');
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
-    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 2 }));
+    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 3 }));
     let sequence = 0;
     const call = async (command, args = {}) => {
       const id = String(++sequence);
@@ -96,7 +96,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await user.bringToFront();
     assert.equal(await task.evaluate(() => document.hasFocus()), false);
     await call('bind', { tab_id: selected.id, tab_title: selected.title, tab_url: selected.url });
-    const execute = async (tool_name, args = {}) => call('execute', { tab_id: selected.id, request: { tool_name, args, allowed_origins: origins, script_operation: true } });
+    const execute = async (tool_name, args = {}) => call('execute', { tab_id: selected.id, request: { tool_name, args, full_access: true, script_operation: true } });
     // OOP frame attachment can invalidate an initial read. Follow the explicit
     // observation contract without repeating any effect or selecting a new tab.
     let observed;

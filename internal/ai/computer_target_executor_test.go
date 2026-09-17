@@ -26,7 +26,7 @@ func newPlaywrightProtocolFixture(t *testing.T) *PlaywrightTargetExecutor {
 		t.Skip("JSONL shell fixture requires POSIX")
 	}
 	helper := filepath.Join(t.TempDir(), "helper.sh")
-	content := `printf '{"type":"ready","protocol_version":2}\n'
+	content := `printf '{"type":"ready","protocol_version":3}\n'
 while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
   target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')
@@ -263,7 +263,7 @@ func TestPlaywrightSafetyResponseDropsImageBeforeDecoding(t *testing.T) {
 	executor := newPlaywrightProtocolFixture(t)
 	// Deliberately invalid image text proves the safety boundary runs before
 	// decode, storage, and model attachment construction, without logging bytes.
-	helper := `printf '{"type":"ready","protocol_version":2}\n'
+	helper := `printf '{"type":"ready","protocol_version":3}\n'
 while IFS= read -r line; do
  id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
  target=$(printf '%s' "$line" | sed -n 's/.*"target_id":"\([^"]*\)".*/\1/p')

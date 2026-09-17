@@ -122,6 +122,7 @@ type TargetToolAttachmentResolver interface {
 }
 
 type TargetToolCall struct {
+	fullAccess           bool
 	progress             func(mode, reason string)
 	allowedApps          []string
 	allowForeground      bool

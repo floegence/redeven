@@ -59,7 +59,7 @@ try:
     def action(tool, args):
         global sequence
         sequence += 1
-        request = {'protocol_version':2,'request_id':str(sequence),'target_id':target_id,'tool_name':tool,'args':args, 'allowed_apps':['dev.floegence.redeven.computer-fixture'], 'allow_foreground':True, 'script_operation':True}
+        request = {'protocol_version':3,'request_id':str(sequence),'target_id':target_id,'tool_name':tool,'args':args, 'full_access':True, 'script_operation':True}
         helper.stdin.write((json.dumps(request)+'\n').encode())
         helper.stdin.flush()
         deadline = time.monotonic() + 15

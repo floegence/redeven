@@ -321,3 +321,29 @@ func TestManagedBrowserPrivateRecoverySharesProfileOwner(t *testing.T) {
 		t.Fatal("profile owner changed during continuation")
 	}
 }
+
+func TestComputerFullAccessManagedBrowserUsesTaskPermission(t *testing.T) {
+	if os.Getenv("REDEVEN_BROWSER_INTEGRATION") != "1" {
+		t.Skip("requires the pinned browser")
+	}
+	runtime, _, _, _ := computerBindingFixture(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper, err := filepath.Abs("../envapp/ui_src/scripts/redevenComputerHost.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.executors["browser-main"] = NewPlaywrightTargetExecutor(node, helper, t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<h1>Full access fixture</h1>"))
+	}))
+	defer server.Close()
+	args, _ := json.Marshal(map[string]string{"url": server.URL})
+	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", ToolCallID: "navigate", TargetID: "browser-main", ToolName: "browser.navigate", Arguments: args, scriptOperation: true})
+	if err != nil || result.Safety == nil || result.Safety.Level != "routine" {
+		t.Fatalf("full access navigation failed: %+v %v", result, err)
+	}
+}

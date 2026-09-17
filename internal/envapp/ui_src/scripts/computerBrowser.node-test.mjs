@@ -47,7 +47,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
   };
   try {
     const ready = await next();
-    assert.equal(ready.protocol_version, 2);
+    assert.equal(ready.protocol_version, 3);
     assert.equal(ready.error, undefined, JSON.stringify(ready));
     assert.ok((await send('browser.navigate', { url: origin })).screenshot);
     const observed = await send('computer.observe');
@@ -134,7 +134,7 @@ test('inventory and explicit tab attachment preserve the browser, other tabs and
       try { return JSON.parse((await Promise.race([lines.next(), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('helper timed out')), 10000); })])).value); }
       finally { clearTimeout(timeout); }
     };
-    assert.equal((await next()).protocol_version, 2);
+    assert.equal((await next()).protocol_version, 3);
     helper.stdin.write(JSON.stringify({ id: 'observe', target_id: 'connected', session_id: 'turn', tool_name: 'computer.observe', args: {}, allowed_origins: [origin] }) + '\n');
     const observed = await next();
     assert.equal(observed.result.title, 'Signed-in task');
@@ -269,7 +269,7 @@ test('nested cross-site frames use semantic actions and downloads survive helper
     assert.equal(result.safety?.level, 'routine', JSON.stringify(result)); return result.result;
   };
   try {
-    assert.equal((await next()).protocol_version, 2);
+    assert.equal((await next()).protocol_version, 3);
     await call('browser.navigate', { url: origins[0] });
     const selector = { role: 'textbox', name: 'Deep entry' };
     assert.equal((await call('computer.action', { action: 'wait', selector, timeout_ms: 5000 })).state, 'visible');
@@ -429,4 +429,43 @@ test('navigation during a safety read preserves the confirmed action without exp
     assert.equal(failed.result.action_executed, false);
     assert.equal(failed.screenshot, undefined);
   } finally { await browser.close(); server.close(); }
+});
+
+
+test('full access permits new sites and redirects while preserving private input and revocation', async () => {
+  const { chromium } = await import('playwright');
+  const { BrowserComputerController } = await import('./computerBrowserController.mjs');
+  const destination = http.createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html'); response.end('<h1>Search results</h1>');
+  });
+  destination.listen(0, '127.0.0.1'); await once(destination, 'listening');
+  const destinationOrigin = `http://127.0.0.1:${destination.address().port}`;
+  const source = http.createServer((_request, response) => {
+    response.writeHead(302, { location: destinationOrigin }); response.end();
+  });
+  source.listen(0, '127.0.0.1'); await once(source, 'listening');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const controller = new BrowserComputerController(await page.context().newCDPSession(page));
+    await controller.initialize();
+    const execute = (tool_name, args = {}, fields = {}) => controller.execute({ tool_name, args, full_access: true, script_operation: true, ...fields });
+    const navigated = await execute('browser.navigate', { url: `http://127.0.0.1:${source.address().port}` });
+    assert.equal(navigated.safety?.level, 'routine', JSON.stringify(navigated));
+    assert.equal(page.url(), destinationOrigin + '/');
+    assert.equal((await execute('browser.navigate', { url: 'file:///private/example' })).error, 'INVALID_REQUEST');
+    const observation = await execute('computer.observe');
+    assert.ok(observation.result.observation.nodes.some(node => node.name === 'Search results'));
+    await page.setContent('<input type="password" value="private-fixture">');
+    const sensitive = await execute('computer.screenshot');
+    assert.ok(sensitive.safety.reason_codes.includes('secret_input'));
+    assert.equal(sensitive.screenshot, undefined);
+    assert.equal(JSON.stringify(sensitive).includes('private-fixture'), false);
+    await page.setContent('<h1>Signed in</h1>');
+    assert.equal((await execute('computer.observe')).safety.level, 'takeover', 'full access must not reclaim explicit user control');
+    assert.equal((await execute('computer.screenshot', {}, { return_control: true })).safety.level, 'routine');
+    const revoked = await execute('computer.observe', {}, { full_access: false });
+    assert.equal(revoked.safety.required_origin, destinationOrigin);
+    assert.equal(revoked.result.observation, undefined);
+  } finally { await browser.close(); source.close(); destination.close(); }
 });

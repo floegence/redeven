@@ -57,7 +57,8 @@ the restored physical pointer as a hidden scroll target.
 Capture is limited to the target window and retains existing excluded-window and
 sensitive-content rules. Filtered capture failure never falls back to the whole
 screen. Screen Recording and Accessibility readiness remain distinct from task
-app and foreground grants. Secret fields enter the existing private takeover
+app and foreground authorization. Full access covers both product permissions;
+other modes use the saved grants. Secret fields enter the existing private takeover
 channel rather than model observations.
 
 ## Linux private desktop
