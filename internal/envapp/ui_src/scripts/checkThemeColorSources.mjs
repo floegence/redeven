@@ -247,7 +247,7 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     'internal/envapp/ui_src/src/ui/file-preview/rendererRegistry.tsx',
     'media',
     'Video preview letterboxing stays black for faithful media presentation.',
-    ({ value, lineSource }) => value === 'bg-black' && lineSource.includes('min-h-[18rem]'),
+    ({ value, source, offset }) => value === 'bg-black' && isInsideNamedFunction(source, offset, 'renderVideoPreview'),
   ),
   exception(
     'internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx',
