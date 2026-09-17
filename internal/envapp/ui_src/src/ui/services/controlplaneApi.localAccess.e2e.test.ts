@@ -368,7 +368,7 @@ describe('controlplaneApi local access flow', () => {
     );
     await expect(actualSource.acquire({ signal: new AbortController().signal })).resolves.toEqual({
       kind: 'failure',
-      code: 'access_password_required',
+      code: 'connection_failed',
       disposition: { kind: 'terminal' },
     });
   });

@@ -51,6 +51,35 @@ describe('controlplaneApi controlplane helper usage', () => {
     expect(fetchMock).toHaveBeenCalledTimes(renewed ? 2 : 1);
   });
 
+  it.each([401, 403, 429, 502, 503])('preserves ticket HTTP failure status for the artifact source (%s)', async (status) => {
+    window.redevenDesktopSessionContext = {
+      getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
+      renewProviderSession: async () => false,
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: status === 401 ? 'INVALID_ENV_SESSION' : 'REQUEST_FAILED' } }), { status })));
+    const mod = await import('./controlplaneApi');
+    await mod.createEnvProxyArtifactSource({ endpointId: () => 'env_demo', floeApp: 'com.floegence.redeven.agent', codeSpaceId: 'env-ui' });
+    const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as { fetch: typeof globalThis.fetch };
+    const response = await sourceOptions.fetch('https://localhost/v1/connect/artifact/entry', { signal: new AbortController().signal });
+    expect(response.status).toBe(status);
+    const actualBoot = await vi.importActual<typeof import('@floegence/floe-webapp-boot/artifact-source')>('@floegence/floe-webapp-boot/artifact-source');
+    const source = actualBoot.createControlplaneArtifactSource(sourceOptions as Parameters<typeof actualBoot.createControlplaneArtifactSource>[0]);
+    await expect(source.acquire({ signal: new AbortController().signal })).resolves.toMatchObject({
+      kind: 'failure', disposition: { kind: status === 401 || status === 403 ? 'terminal' : 'retryable' },
+    });
+  });
+
+  it.each([[503, 'retryable'], [403, 'terminal']] as const)('classifies uppercase artifact API errors (%s)', async (status, kind) => {
+    vi.stubGlobal('fetch', vi.fn(async (input) => String(input).endsWith('/floeproxy/entry')
+      ? Response.json({ data: { entry_ticket: 'fresh' } })
+      : Response.json({ error: { code: 'AGENT_OFFLINE' } }, { status })));
+    const mod = await import('./controlplaneApi');
+    await mod.createEnvProxyArtifactSource({ endpointId: () => 'env_demo', floeApp: 'com.floegence.redeven.agent', codeSpaceId: 'env-ui' });
+    const actualBoot = await vi.importActual<typeof import('@floegence/floe-webapp-boot/artifact-source')>('@floegence/floe-webapp-boot/artifact-source');
+    const source = actualBoot.createControlplaneArtifactSource(createControlplaneArtifactSource.mock.calls[0]?.[0] as Parameters<typeof actualBoot.createControlplaneArtifactSource>[0]);
+    await expect(source.acquire({ signal: new AbortController().signal })).resolves.toMatchObject({ kind: 'failure', disposition: { kind } });
+  });
+
   it('returns one stable registered source and redeems a fresh entry ticket inside each acquire fetch', async () => {
     const controller = new AbortController();
     const prepareAcquire = vi.fn();

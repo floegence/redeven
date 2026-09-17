@@ -726,6 +726,22 @@ export type EnvProxyArtifactSourceOptions = Readonly<{
   prepareAcquire?: (context: Readonly<{ endpointId: string; signal: AbortSignal }>) => void | Promise<void>;
 }>;
 
+// Portal's API codes are uppercase; Floe's classifier consumes lowercase codes.
+// Successful acquisition bytes still pass through the normal integrity checks.
+async function normalizeArtifactErrorResponse(response: Response): Promise<Response> {
+  if (response.ok) return response;
+  try {
+    const body = await response.clone().json() as { error?: { code?: unknown } };
+    if (typeof body.error?.code !== 'string') return response;
+    const headers = new Headers({ 'content-type': 'application/json' });
+    const retryAfter = response.headers.get('retry-after');
+    if (retryAfter !== null) headers.set('retry-after', retryAfter);
+    return new Response(JSON.stringify({ error: { code: body.error.code.toLowerCase() } }), { status: response.status, headers });
+  } catch {
+    return response;
+  }
+}
+
 export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceOptions): Promise<ArtifactSource> {
   const floeApp = args.floeApp.trim();
   const codeSpaceId = args.codeSpaceId.trim();
@@ -747,16 +763,27 @@ export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceO
       const signal = init?.signal ?? new AbortController().signal;
       const endpointId = args.endpointId().trim();
       if (!endpointId) throw new Error('Missing environment context');
-      await args.prepareAcquire?.({ endpointId, signal });
-      const entryTicket = await mintEnvProxyEntryTicket({
-        endpointId,
-        floeApp,
-        codeSpaceId,
-        signal,
-      });
+      let entryTicket: string;
+      try {
+        await args.prepareAcquire?.({ endpointId, signal });
+        entryTicket = await mintEnvProxyEntryTicket({ endpointId, floeApp, codeSpaceId, signal });
+      } catch (error) {
+        if (signal.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+        // Preserve ticket authorization failures at the HTTP source boundary;
+        // they must not become retryable transport exceptions in Floe.
+        if (!(error instanceof APIError) && !(error instanceof AccessUnlockError)
+          && !(error instanceof EnvSessionRecoveryError)) throw error;
+        const status = error instanceof EnvSessionRecoveryError ? 401
+          : error.status >= 400 && error.status <= 599 ? error.status : 400;
+        const headers = new Headers({ 'content-type': 'application/json' });
+        if (error instanceof AccessUnlockError && error.retryAfterMs > 0) {
+          headers.set('retry-after', String(Math.ceil(error.retryAfterMs / 1_000)));
+        }
+        return new Response(JSON.stringify({ error: { code: error.code.toLowerCase() || 'request_failed' } }), { status, headers });
+      }
       const headers = new Headers(init?.headers);
       headers.set('authorization', `Bearer ${entryTicket}`);
-      return fetchImpl(artifactEndpoint, {
+      return normalizeArtifactErrorResponse(await fetchImpl(artifactEndpoint, {
         ...init,
         headers,
         signal,
@@ -765,7 +792,7 @@ export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceO
           payload: { floe_app: floeApp },
           ...(args.traceId === undefined ? {} : { correlation: { trace_id: args.traceId } }),
         }),
-      });
+      }));
     },
     commitSpend: commitRemoteArtifactSpend,
     validateSpendBinding: (binding) => validateTrustedEnvSpendBinding(binding, {
