@@ -137,6 +137,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Computer use safety pauses and user control](ai/computer-use-takeover.md) - Pause canonical tool execution, keep private browser input out of history, and require fresh observation on handback.
 - [Computer use media and visual requests](ai/computer-use-media.md) - Separate durable keyframes from live samples and verify decoded Stage pixels and visual request budgets.
 - [Computer use qualification](ai/computer-use-qualification.md) - Verify real pixels, input, handback, target scope and isolated cleanup.
+- [Computer use qualification evidence](ai/computer-use-qualification-evidence.md) - Assess measured native, browser and private-recovery outcomes within their tested scope.
 - [Computer use paired model measurements](ai/computer-use-performance.md) - Compare semantic scripts with visual primitives and reject incomplete performance evidence.
 - [Codex design evidence](ai/computer-use-design-evidence.md) - Trace command-first, AX, batching and background-control decisions to official guidance and version-scoped packaged behavior.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
