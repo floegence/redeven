@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Native Desktop CodeSpace access
 description: Bind a Desktop editor origin to one authorized CodeSpace through the current environment transport.
 tags: [desktop, codespace, security, transport]
-timestamp: 2026-09-09T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
@@ -11,9 +11,17 @@ Desktop owns each built-in CodeSpace window, persistent browser profile, protect
 
 # Contract
 
-## Window and profile identity
+## Trusted opening requests
 
-The trusted environment root frame submits `loading` or `open` with a DNS-safe CodeSpace ID. Open may carry an ephemeral access password for the separately authorized remote Code App session. It accepts no URL, host, port, route, or legacy navigation request. Env App starts the editor first; Desktop resolves the route from the sender's existing EnvironmentSession. Loading is a scriptless local document. Late setup completion cannot recreate a closed window, and reopening a ready window only focuses it.
+The trusted environment root frame submits `loading` or `open` with a DNS-safe CodeSpace ID. Open may carry an ephemeral access password for the separately authorized remote Code App session. It accepts no URL, host, port, route, or legacy navigation request. Env App starts the editor first; Desktop resolves the route from the sender's existing EnvironmentSession. Loading is a scriptless local document.
+
+## Window navigation and recovery
+
+One native-window owner controls the loading document, editor navigation, readiness, and connection resources. Desktop defers automatic window loading and finishes the initial document before acknowledging the loading request or navigating to the editor. Product-triggered document and editor navigations are serialized; pending theme documents are discarded once editor opening starts. Background theme refreshes never present or focus the window. An editor is ready only after its own navigation completes within its bound gateway origin, never merely because a gateway exists or an earlier document emits a completion event.
+
+Concurrent opens share the same pending result. An opening failure releases connection resources and allows explicit retry from Codespaces. Closing cancels and drains the current operation; its late result cannot install request authority, report readiness, or show an error in a replacement window. Late setup completion cannot recreate a closed window, and reopening a ready window only focuses it. Opening-failure diagnostics retain only the CodeSpace ID, transport, bounded stage and error code/number. Page-navigation failures have distinct localized copy from route unavailability; credentials, raw exception messages, and error URLs do not enter these diagnostics.
+
+## Window and profile identity
 
 Each profile hashes the stable environment/resource identity, including control-plane and user identity where present. Gateway session IDs and transport ports are not profile identity. The dedicated persistent Electron partition has no Desktop preload and retains editor storage. `codespace-profiles.json` version 1 records the exact numeric-loopback port through atomic file replacement. Invalid or future state is rejected read-only. An occupied port reports an actionable error; Desktop never contacts its occupant or allocates a replacement origin for that profile.
 
@@ -41,10 +49,12 @@ Compatibility epoch 14 introduced isolated system-browser presentation origins w
 
 # Boundaries
 
-The opt-in Electron fixture exercises document, Worker and Service Worker requests and unauthenticated loopback rejection. The real editor fixture uses an explicitly selected installed code-server binary and task-owned state/ports to open a workspace, read and edit a file in Monaco, save it to disk, and execute terminal input. The native remote fixture uses a real TLS Flowersec Go peer with fixture control-plane acquisition and spend responses to exercise Node session startup, strict target binding, password authorization, and binary HTTP. These fixtures do not certify a deployed SSH placement or Redeven Cloud environment. It is separate from ordinary source CI and does not start or stop a user's environment. Focused HTTP tests cover authorization, generation rejection, raw bytes, upgrade heads, cookies, and origin conflicts.
+The opt-in Electron fixture exercises the production window owner through loading-document handoff, editor readiness, same-origin redirects, document, Worker, Service Worker and WebSocket requests, and unauthenticated loopback rejection. The real editor fixture uses an explicitly selected installed code-server binary and task-owned state/ports to open a workspace, read and edit a file in Monaco, save it to disk, execute terminal input through a fixture-owned shell profile, and reopen the editor at its saved origin. The native remote fixture uses a real TLS Flowersec Go peer with fixture control-plane acquisition and spend responses to exercise Node session startup, strict target binding, password authorization, and binary HTTP. These fixtures do not certify a deployed SSH placement or Redeven Cloud environment. It is separate from ordinary source CI and does not start or stop a user's environment. Focused HTTP tests cover authorization, generation rejection, raw bytes, upgrade heads, cookies, and origin conflicts.
 
 # Evidence
 
+- `redeven:desktop/src/main/codespaceNativeWindows.ts` - Single-window navigation, readiness, cancellation, and bounded failure diagnostics.
+- `redeven:desktop/src/main/codespaceNativeWindows.test.ts` - Deterministic document-ordering, retry, concurrent-open, and late-close regression coverage.
 - `redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts` - ID-only trusted shell request contract.
 - `redeven:desktop/src/main/codespaceNativeProfiles.ts` - Persistent origin identity and read-only corruption rejection.
 - `redeven:desktop/src/main/codespaceNativeSession.ts` - Chromium request provenance and capability injection.

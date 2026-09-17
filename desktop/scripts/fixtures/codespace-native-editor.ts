@@ -1,11 +1,11 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app } from 'electron';
+import assert from 'node:assert/strict';
 import net from 'node:net';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createNativeCodeSpaceGateway } from '../../src/main/codespaceNativeGateway';
-import { installNativeCodeSpaceSession } from '../../src/main/codespaceNativeSession';
+import { createNativeFixtureWindow } from './codespace-native-window';
 app.on('window-all-closed', () => {});
 void app
   .whenReady()
@@ -33,47 +33,27 @@ void app
         );
       },
     );
-    const gateway = await createNativeCodeSpaceGateway({
-      pathPrefix: '',
-      authority: '',
-      headers: {},
-      openConnection: async () => net.connect(ready.port, '127.0.0.1'),
-      close: async () => {},
+    const createWindow = () => createNativeFixtureWindow({
+      identity: 'b'.repeat(64), profileFile: path.join(app.getPath('userData'), 'codespace-profiles.json'), show: true,
+      route: async () => ({ pathPrefix: '', authority: '', headers: {}, openConnection: async () => net.connect(ready.port, '127.0.0.1'), close: async () => {} }),
     });
-    const partition = 'persist:native-real-editor';
-    const webSession = session.fromPartition(partition);
-    await webSession.setProxy({ mode: 'direct' });
-    const window = new BrowserWindow({
-      show: true,
-      width: 1440,
-      height: 1000,
-      webPreferences: {
-        partition,
-        backgroundThrottling: false,
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
-    const dispose = installNativeCodeSpaceSession(
-      webSession,
-      gateway,
-      window.webContents.id,
-    );
+    const native = createWindow();
+    const { window, owner } = native;
     window.webContents.on('console-message', (event) => {
       if (event.level === 'error') console.error('renderer:', event.message);
     });
     try {
+      await owner.showLoading({});
+      await owner.open();
+      assert.equal(native.ready, true);
+      console.log('Owned editor fixture:', JSON.stringify({ ...ready, fixture_pid: fixture.pid }));
       console.log(
         'Native real editor origin:',
-        gateway.origin,
+        native.gateway.origin,
         'workspace:',
         ready.workspace,
         'fixture PID:',
         fixture.pid,
-      );
-      await window.loadURL(
-        gateway.origin + '/?folder=' + encodeURIComponent(ready.workspace),
       );
       await window.webContents.executeJavaScript(
         `new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('workbench timed out: '+document.body.innerText.slice(0,1000))),25000);const check=()=>{if(document.querySelector('.monaco-workbench')){clearTimeout(timer);resolve(true)}else setTimeout(check,100)};check()})`,
@@ -102,6 +82,17 @@ void app
       await window.webContents.executeJavaScript(
         `new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('editor text not opened')),10000);const check=()=>{if(document.querySelector('.monaco-editor .view-lines')?.textContent.replaceAll(String.fromCharCode(160),' ').includes('native editor smoke')){clearTimeout(timeout);resolve(true)}else setTimeout(check,100)};check()})`,
       );
+      app.focus({ steal: true });
+      window.focus();
+      window.webContents.focus();
+      const editorPoint = await window.webContents.executeJavaScript(
+        `(()=>{const r=document.querySelector('.monaco-editor .view-lines').getBoundingClientRect();return {x:Math.round(r.x+10),y:Math.round(r.y+10)}})()`,
+      );
+      window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...editorPoint });
+      window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...editorPoint });
+      assert.equal(await window.webContents.executeJavaScript(
+        `Boolean(document.activeElement?.closest('.monaco-editor'))`,
+      ), true);
       await window.webContents.insertText('saved through native forwarding ');
       window.webContents.sendInputEvent({
         type: 'keyDown',
@@ -139,14 +130,16 @@ void app
         modifiers: ['control'],
       });
       await window.webContents.executeJavaScript(
-        `new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('terminal not opened')),10000);const check=()=>{for(const b of document.querySelectorAll('button,[role=button]'))if(b.textContent.includes('Trust Folder & Continue'))b.click();const input=document.querySelector('.xterm-helper-textarea');if(input && !document.body.innerText.includes('Trust Folder & Continue')){input.focus();clearTimeout(timer);resolve(true)}else setTimeout(check,100)};check()})`,
+        `new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('terminal prompt not ready')),10000);const check=()=>{for(const b of document.querySelectorAll('button,[role=button]'))if(b.textContent.includes('Trust Folder & Continue'))b.click();if(document.querySelector('.xterm-accessibility-tree')?.textContent.includes('redeven-smoke$')){clearTimeout(timer);resolve(true)}else setTimeout(check,100)};check()})`,
       );
-      await window.webContents.executeJavaScript(
-        `new Promise(r=>setTimeout(r,1000))`,
-      );
-      await window.webContents.insertText(
-        'printf native-terminal-ok > native-terminal.txt\r',
-      );
+      window.focus();
+      window.webContents.focus();
+      assert.equal(await window.webContents.executeJavaScript(
+        `(()=>{const input=document.querySelector('.xterm-helper-textarea');input.focus();return document.activeElement===input})()`,
+      ), true);
+      for (const keyCode of 'printf native-terminal-ok > native-terminal.txt') {
+        window.webContents.sendInputEvent({ type: 'char', keyCode });
+      }
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
       const terminalDeadline = Date.now() + 5000;
@@ -171,14 +164,26 @@ void app
         path.join(process.env.REDEVEN_NATIVE_EDITOR_SMOKE_STATE!, 'editor.png'),
         (await window.webContents.capturePage()).toPNG(),
       );
+      const originalOrigin = native.gateway.origin;
+      await owner.close();
+      const reopened = createWindow();
+      try {
+        await reopened.owner.showLoading({});
+        await reopened.owner.open();
+        assert.equal(reopened.gateway.origin, originalOrigin);
+        await reopened.window.webContents.executeJavaScript(
+          `new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('reopened workbench timed out')),20000);const check=()=>{if(document.querySelector('.monaco-workbench') && document.body.innerText.includes('native-smoke.txt')){clearTimeout(timer);resolve(true)}else setTimeout(check,100)};check()})`,
+        );
+        console.log('Native real editor: closed and reopened through the same saved origin');
+      } finally { await reopened.owner.close(); }
     } catch (error) {
       console.error(
         error,
-        await window.webContents.executeJavaScript(
+        window.isDestroyed() ? 'original editor window closed' : await window.webContents.executeJavaScript(
           'document.body.innerText.slice(0,2500)',
         ),
       );
-      await fs.writeFile(
+      if (!window.isDestroyed()) await fs.writeFile(
         path.join(
           process.env.REDEVEN_NATIVE_EDITOR_SMOKE_STATE!,
           'editor-failure.png',
@@ -187,9 +192,7 @@ void app
       );
       throw error;
     } finally {
-      dispose();
-      window.destroy();
-      await gateway.close();
+      await owner.close();
       fixture.kill('SIGTERM');
       await once(fixture, 'exit');
     }

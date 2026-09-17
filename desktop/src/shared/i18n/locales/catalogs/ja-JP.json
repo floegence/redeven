@@ -2458,6 +2458,7 @@
     "preflightFailedDetail": "Redeven はこの環境を確認できませんでした。もう一度お試しください。"
   },
   "codespaceNative": {
+    "openFailed": "CodeSpace ウィンドウを開けませんでした。Codespaces に戻って、もう一度お試しください。",
     "portInUse": "この CodeSpace に保存されたローカルポートは使用中です。そのポートを使用しているアプリを閉じてから、もう一度お試しください。",
     "unavailable": "CodeSpace に接続できません。環境への接続を確認し、もう一度開いてください。",
     "profileInvalid": "保存された CodeSpace のブラウザープロファイルを読み取れません。codespace-profiles.json を復元してから、この CodeSpace を開き直してください。"

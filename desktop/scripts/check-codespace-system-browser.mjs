@@ -106,7 +106,7 @@ try {
   );
   const raw = await fetch(ready.bridge_url + '/cs/native-smoke/');
   assert.equal(raw.status, 401);
-  assert.match(await raw.text(), /Local UI bridge authorization required/);
+  assert.match(await raw.text(), /Desktop-only Local UI bridge; open this Environment from Desktop/);
   sessions = new CodeSpaceBrowserSessions();
   let entry;
   await sessions.open('native-smoke', {

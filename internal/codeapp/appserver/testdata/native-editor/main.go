@@ -37,6 +37,16 @@ func run() error {
 	if err := os.Remove(filepath.Join(workspace, "native-terminal.txt")); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	// Keep terminal acceptance independent of the user's interactive shell setup.
+	userDir := filepath.Join(root, "runtime", "apps", "code", "spaces", "native-smoke", "codeserver", "user-data", "User")
+	if err := os.MkdirAll(userDir, 0700); err != nil {
+		return err
+	}
+	settings := []byte(`{"security.workspace.trust.enabled":false,"editor.accessibilitySupport":"on","terminal.integrated.shellIntegration.enabled":false,"terminal.integrated.profiles.osx":{"Smoke":{"path":"/bin/sh","args":["-i"]}},"terminal.integrated.profiles.linux":{"Smoke":{"path":"/bin/sh","args":["-i"]}},"terminal.integrated.defaultProfile.osx":"Smoke","terminal.integrated.defaultProfile.linux":"Smoke","terminal.integrated.env.osx":{"ENV":null,"PS1":"redeven-smoke$ "},"terminal.integrated.env.linux":{"ENV":null,"PS1":"redeven-smoke$ "}}`)
+	if err := os.WriteFile(filepath.Join(userDir, "settings.json"), settings, 0600); err != nil {
+		return err
+	}
+
 	runner := codeserver.NewRunner(codeserver.RunnerOptions{StateDir: filepath.Join(root, "runtime"), StateRoot: filepath.Join(root, "runtime"), PortMin: 43000, PortMax: 49000})
 	instance, err := runner.EnsureRunning("native-smoke", workspace, 0)
 	if err != nil {

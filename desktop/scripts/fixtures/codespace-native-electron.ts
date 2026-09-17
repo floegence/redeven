@@ -1,10 +1,12 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app } from 'electron';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 import { once } from 'node:events';
+import type { Socket } from 'node:net';
 import assert from 'node:assert/strict';
-import { createNativeCodeSpaceGateway } from '../../src/main/codespaceNativeGateway';
-import { installNativeCodeSpaceSession } from '../../src/main/codespaceNativeSession';
+import { createNativeFixtureWindow } from './codespace-native-window';
 
 app.on('window-all-closed', () => {});
 
@@ -13,6 +15,7 @@ void app
   .then(async () => {
     let authenticated = 0;
     const upstream = http.createServer((req, res) => {
+      if (req.url === '/') { res.writeHead(302, { Location: '/editor' }); res.end(); return; }
       if (req.url === '/worker.js') {
         res.setHeader('Content-Type', 'application/javascript');
         res.end(
@@ -37,35 +40,31 @@ void app
         '<!doctype html><title>Native editor fixture</title><body>CodeSpace</body>',
       );
     });
+    const upstreamSockets = new Set<Socket>();
+    upstream.on('connection', (socket) => { upstreamSockets.add(socket); socket.once('close', () => upstreamSockets.delete(socket)); });
+    upstream.on('upgrade', (request, socket) => {
+      const accept = createHash('sha1').update(String(request.headers['sec-websocket-key']) + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+      socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+      socket.once('data', () => {
+        const text = Buffer.from('native-websocket-ok');
+        socket.write(Buffer.concat([Buffer.from([0x81, text.length]), text]));
+      });
+      socket.on('error', () => socket.destroy());
+    });
     upstream.listen(0, '127.0.0.1');
     await once(upstream, 'listening');
     const port = (upstream.address() as AddressInfo).port;
-    const gateway = await createNativeCodeSpaceGateway({
-      pathPrefix: '',
-      authority: `127.0.0.1:${port}`,
-      headers: {},
-      openConnection: async () => net.connect(port, '127.0.0.1'),
-      close: async () => {},
+    const fixture = createNativeFixtureWindow({
+      identity: 'a'.repeat(64), profileFile: path.join(app.getPath('userData'), 'codespace-profiles.json'),
+      route: async () => ({ pathPrefix: '', authority: `127.0.0.1:${port}`, headers: {}, openConnection: async () => net.connect(port, '127.0.0.1'), close: async () => {} }),
     });
-    const partition = 'persist:native-electron-smoke';
-    const webSession = session.fromPartition(partition);
-    await webSession.setProxy({ mode: 'direct' });
-    const window = new BrowserWindow({
-      show: false,
-      webPreferences: {
-        partition,
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
-    const dispose = installNativeCodeSpaceSession(
-      webSession,
-      gateway,
-      window.webContents.id,
-    );
+    const { window, owner } = fixture;
     try {
-      await window.loadURL(gateway.origin + '/');
+      const loading = owner.showLoading({});
+      const opening = owner.open();
+      await Promise.all([loading, opening]);
+      assert.equal(fixture.ready, true);
+      assert.equal(window.webContents.getURL(), fixture.gateway.origin + '/editor');
       assert.equal(
         await window.webContents.executeJavaScript(
           `fetch('/echo').then(r=>r.text())`,
@@ -90,16 +89,18 @@ void app
         ),
         'native-ok',
       );
-      const response = await fetch(gateway.origin + '/echo');
+      assert.equal(await window.webContents.executeJavaScript(
+        `new Promise((resolve,reject)=>{const socket=new WebSocket(location.origin.replace('http:', 'ws:')+'/socket');socket.onopen=()=>socket.send('hello');socket.onmessage=e=>{resolve(e.data);socket.close()};socket.onerror=reject})`,
+      ), 'native-websocket-ok');
+      const response = await fetch(fixture.gateway.origin + '/echo');
       assert.equal(response.status, 401);
       assert.equal(authenticated, 4);
       console.log(
-        'Native Electron: document, fetch, Worker, Service Worker, and unauthenticated loopback rejection passed',
+        'Native Electron: loading handoff, redirect, document, fetch, Worker, Service Worker, WebSocket, and unauthenticated loopback rejection passed',
       );
     } finally {
-      dispose();
-      window.destroy();
-      await gateway.close();
+      await owner.close();
+      for (const socket of upstreamSockets) socket.destroy();
       await new Promise<void>((resolve) => upstream.close(() => resolve()));
     }
     app.exit(0);
