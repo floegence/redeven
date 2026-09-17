@@ -1481,6 +1481,22 @@
   justify-content: center;
 }
 
+.flower-composer-context-sample-label {
+  margin-inline-start: 0.4rem;
+  max-width: 6rem;
+  font-size: 0.625rem;
+  line-height: 1.2;
+  color: var(--muted-foreground);
+}
+
+.flower-composer-context-estimate-help {
+  margin: 0.3rem 0 0.4rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  max-width: 21rem;
+}
+
 .flower-composer-context-progress {
   --flower-composer-context-ring: color-mix(in srgb, var(--primary) 68%, var(--foreground) 16%);
   --flower-composer-context-track: color-mix(in srgb, var(--flower-chat-surface-border) 78%, var(--flower-chat-surface) 22%);
@@ -1535,7 +1551,7 @@
   bottom: calc(100% + 0.55rem);
   z-index: 20;
   width: max-content;
-  max-width: min(19rem, calc(100vw - 2rem));
+  max-width: min(24rem, calc(100vw - 2rem));
   pointer-events: none;
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
   border-radius: 0.5rem;

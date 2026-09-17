@@ -1102,3 +1102,7 @@ find, source-link, and missing-details presentation across Flower surfaces.
 * **Breaking**: Advanced Runtime Service compatibility epoch to 7 with matched Desktop and Runtime minimum versions at `v0.9.0`.
 * **Update**: Documented published Floret title ownership and typed lifecycle-reason contracts.
 * **Update**: Added persistent Flower thread deletion coordination, fixed replay order, restart recovery, and DELETE operation outcomes.
+
+## 2026-09-18
+
+Document published Floret v7.15.1 canonical calibration, tokenizer estimates, and Flower confirmation/estimate presentation with shared live and reconnect mapping.

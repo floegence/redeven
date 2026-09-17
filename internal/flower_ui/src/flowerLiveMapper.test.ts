@@ -9,140 +9,37 @@ import {
 } from './flowerLiveMapper';
 
 describe('Flower context usage contract', () => {
-  it('maps canonical thread token totals without changing current context usage', () => {
-    expect(mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      input_tokens: 900,
-      context_window_tokens: 1000,
-      used_ratio: 0.9,
-      updated_at_ms: 10,
-      thread_usage: {
-        input_tokens: 50,
-        output_tokens: 20,
-        cache_read_tokens: 45,
-        cache_write_tokens: 5,
-      },
-    })).toMatchObject({
-      input_tokens: 900,
-      used_ratio: 0.9,
-      thread_usage: {
-        input_tokens: 50,
-        output_tokens: 20,
-        cache_read_tokens: 45,
-        cache_write_tokens: 5,
-      },
-    });
+  const confirmed = { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, updated_at_ms: 10 };
+  const estimate = { ...confirmed, phase: 'projected_request', input_tokens: 82346, updated_at_ms: 11 };
+  const thread_usage = { input_tokens: 50, output_tokens: 20, cache_read_tokens: 45, cache_write_tokens: 5 };
+
+  it('maps the same confirmed and estimated samples for live and reconnect', () => {
+    const wire = { confirmed, estimate, thread_usage };
+    expect(mapContextUsage(wire)).toEqual(wire);
+    expect(mapContextUsage(JSON.parse(JSON.stringify(wire)))).toEqual(mapContextUsage(wire));
   });
-
-  it('rejects malformed canonical thread token totals', () => {
-    expect(() => mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      updated_at_ms: 10,
-      thread_usage: {
-        input_tokens: 10,
-        output_tokens: 2,
-        cache_read_tokens: -1,
-        cache_write_tokens: 0,
-      },
-    })).toThrow('context_usage.thread_usage.cache_read_tokens must be a non-negative integer');
+  it('retains canonical cache totals when a live snapshot omits them', () => {
+    const previous = mapContextUsage({ confirmed, thread_usage })!;
+    const incoming = mapContextUsage({ confirmed, estimate })!;
+    expect(mergeFlowerContextUsage(previous, incoming)).toEqual({ ...incoming, thread_usage });
   });
-
-  it('keeps the latest confirmed totals when a live adjunct omits them', () => {
-    const previous = mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      input_tokens: 800,
-      updated_at_ms: 10,
-      thread_usage: {
-        input_tokens: 10,
-        output_tokens: 2,
-        cache_read_tokens: 90,
-        cache_write_tokens: 0,
-      },
-    })!;
-    const incoming = mapContextUsage({
-      phase: 'projected_request',
-      pressure_status: 'stable',
-      input_tokens: 950,
-      updated_at_ms: 11,
-    })!;
-
-    expect(mergeFlowerContextUsage(previous, incoming)).toEqual({
-      ...incoming,
-      thread_usage: previous.thread_usage,
-    });
+  it('clears obsolete samples on model changes and successful compaction', () => {
+    const previous = mapContextUsage({ confirmed, estimate, thread_usage })!;
+    expect(mergeFlowerContextUsage(previous, mapContextUsage({})!)).toEqual({ thread_usage });
+    const next = mapContextUsage({ estimate })!;
+    expect(mergeFlowerContextUsage(previous, next).confirmed).toBeUndefined();
   });
-
-  it('accepts an explicitly empty previous context snapshot', () => {
-    const incoming = mapContextUsage({
-      phase: 'projected_request',
-      pressure_status: 'stable',
-      input_tokens: 950,
-      updated_at_ms: 11,
-    })!;
-
-    expect(mergeFlowerContextUsage(null, incoming)).toBe(incoming);
+  it('updates totals from a final measurement and accepts the first snapshot', () => {
+    const next = mapContextUsage({ confirmed, thread_usage })!;
+    expect(mergeFlowerContextUsage(null, next)).toBe(next);
+    expect(mergeFlowerContextUsage(mapContextUsage({ estimate }), next)).toBe(next);
   });
-
-  it('accepts the first confirmed totals while the first turn is still running', () => {
-    const previous = mapContextUsage({
-      phase: 'projected_request',
-      pressure_status: 'stable',
-      input_tokens: 60_000,
-      updated_at_ms: 10,
-    })!;
-    const incoming = mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      input_tokens: 61_024,
-      updated_at_ms: 11,
-      thread_usage: {
-        input_tokens: 44_896,
-        output_tokens: 4_365,
-        cache_read_tokens: 16_128,
-        cache_write_tokens: 0,
-      },
-    })!;
-
-    expect(mergeFlowerContextUsage(previous, incoming)).toBe(incoming);
-    expect(incoming.thread_usage?.cache_read_tokens).toBe(16_128);
-  });
-
-  it('replaces confirmed totals when a newer canonical snapshot includes them', () => {
-    const previous = mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      updated_at_ms: 10,
-      thread_usage: { input_tokens: 10, output_tokens: 1, cache_read_tokens: 0, cache_write_tokens: 0 },
-    })!;
-    const incoming = mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      updated_at_ms: 11,
-      thread_usage: { input_tokens: 10, output_tokens: 2, cache_read_tokens: 90, cache_write_tokens: 0 },
-    })!;
-
-    expect(mergeFlowerContextUsage(previous, incoming)).toBe(incoming);
-  });
-
-  it('converges to the confirmed detail snapshot after reconnect', () => {
-    const live = mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      updated_at_ms: 10,
-      thread_usage: { input_tokens: 44_896, output_tokens: 4_365, cache_read_tokens: 16_128, cache_write_tokens: 0 },
-    })!;
-    const restored = mapContextUsage({
-      phase: 'provider_usage',
-      pressure_status: 'stable',
-      updated_at_ms: 20,
-      thread_usage: { input_tokens: 44_896, output_tokens: 4_365, cache_read_tokens: 16_128, cache_write_tokens: 0 },
-    })!;
-
-    expect(mergeFlowerContextUsage(live, restored)).toBe(restored);
-    expect(restored.thread_usage).toEqual(live.thread_usage);
+  it('rejects malformed canonical totals and obsolete mixed samples', () => {
+    expect(() => mapContextUsage({ thread_usage: { ...thread_usage, cache_read_tokens: -1 } })).toThrow('context_usage.thread_usage.cache_read_tokens must be a non-negative integer');
+    expect(() => mapContextUsage(confirmed)).toThrow('requires a measurement/estimate snapshot');
+    expect(() => mapContextUsage({ confirmed: estimate })).toThrow('requires model usage');
+    expect(() => mapContextUsage({ estimate: { ...estimate, phase: 'unknown' } })).toThrow('invalid phase');
+    expect(() => mapContextUsage({ estimate: { ...estimate, pressure_status: 'unknown' } })).toThrow('invalid pressure status');
   });
 });
 

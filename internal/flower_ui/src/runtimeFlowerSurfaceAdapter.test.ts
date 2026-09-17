@@ -396,10 +396,10 @@ describe('runtime Flower surface adapter read state', () => {
 							updated_at_ms: 4,
 						},
 					}],
-					context_usage: {
+					context_usage: { confirmed: {
 						run_id: 'run_stream', phase: 'provider_usage', input_tokens: 500,
 						context_window_tokens: 1000, used_ratio: 0.5, pressure_status: 'stable', updated_at_ms: 5,
-					},
+					} },
 					current: {
 						thread_id: 'thread_stream',
 						view_version: 3,
@@ -452,7 +452,7 @@ describe('runtime Flower surface adapter read state', () => {
 			});
 			expect(frames[1]).toMatchObject({
 				kind: 'thread.batch',
-				context_usage: { input_tokens: 500, used_ratio: 0.5 },
+				context_usage: { confirmed: { input_tokens: 500, used_ratio: 0.5 } },
 				context_compactions: [{ operation_id: 'compact_stream', status: 'noop' }],
 				timeline_decorations: [{ decoration_id: 'context-compaction:compact_stream' }],
 				current: {

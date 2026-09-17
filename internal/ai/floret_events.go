@@ -82,7 +82,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.applyFloretStreamObservation(ev.Stream)
 	}
 	r.applyFloretSourceObservation(ev.Sources)
-	r.applyFloretContextStatus(ev.ContextStatus, ev.ThreadUsageTotals)
+	r.applyFloretContextStatus(ev.ContextUsage, ev.ThreadUsageTotals)
 	r.applyFloretCompaction(ev.Compaction)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
@@ -239,7 +239,7 @@ func (r *run) expectFloretRuntimeEventIdentity(runID string, threadID string, tu
 	r.muFloretIdentity.Unlock()
 }
 
-func (r *run) applyFloretContextStatus(status *observation.ContextStatus, totals *flruntime.ThreadTokenUsageTotals) {
+func (r *run) applyFloretContextStatus(status *flruntime.ThreadContextUsage, totals *flruntime.ThreadTokenUsageTotals) {
 	if r == nil || status == nil {
 		return
 	}
@@ -444,12 +444,38 @@ func flowerBlockHasVisibleContent(block any) bool {
 	}
 }
 
-func flowerContextUsageFromFloret(status *observation.ContextStatus, totals *flruntime.ThreadTokenUsageTotals) (FlowerContextUsage, error) {
+func flowerContextUsageFromFloret(usage *flruntime.ThreadContextUsage, totals *flruntime.ThreadTokenUsageTotals) (FlowerContextUsage, error) {
+	out := FlowerContextUsage{}
+	var err error
+	out.ThreadUsage, err = flowerThreadTokenUsageFromFloret(totals)
+	if err != nil {
+		return out, err
+	}
+	if usage == nil {
+		return out, nil
+	}
+	for _, item := range []struct {
+		source *observation.ContextStatus
+		target **FlowerContextSample
+	}{{usage.Confirmed, &out.Confirmed}, {usage.Estimate, &out.Estimate}} {
+		if item.source == nil {
+			continue
+		}
+		sample, err := flowerContextSampleFromFloret(item.source)
+		if err != nil {
+			return FlowerContextUsage{}, err
+		}
+		*item.target = &sample
+	}
+	return out, nil
+}
+
+func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerContextSample, error) {
 	if status == nil {
-		return FlowerContextUsage{}, nil
+		return FlowerContextSample{}, nil
 	}
 	if err := status.Validate(); err != nil {
-		return FlowerContextUsage{}, err
+		return FlowerContextSample{}, err
 	}
 	pressure := status.ContextPressure
 	usage := status.Usage
@@ -473,21 +499,17 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, totals *flr
 	}
 	runID := strings.TrimSpace(string(status.RunID))
 	if runID == "" {
-		return FlowerContextUsage{}, errors.New("floret context status missing run id")
+		return FlowerContextSample{}, errors.New("floret context status missing run id")
 	}
 	phase, err := normalizeFlowerContextUsagePhase(status.Phase)
 	if err != nil {
-		return FlowerContextUsage{}, err
+		return FlowerContextSample{}, err
 	}
 	pressureStatus, err := normalizeFlowerContextPressureStatus(status.Status)
 	if err != nil {
-		return FlowerContextUsage{}, err
+		return FlowerContextSample{}, err
 	}
-	threadUsage, err := flowerThreadTokenUsageFromFloret(totals)
-	if err != nil {
-		return FlowerContextUsage{}, err
-	}
-	return FlowerContextUsage{
+	return FlowerContextSample{
 		RunID:                  runID,
 		StepIndex:              status.Step,
 		Phase:                  phase,
@@ -501,7 +523,6 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, totals *flr
 		PressureStatus:         pressureStatus,
 		Source:                 source,
 		UpdatedAtMs:            updatedAt,
-		ThreadUsage:            threadUsage,
 	}, nil
 }
 

@@ -14,6 +14,7 @@ import type {
   FlowerChatMessage,
   FlowerContextCompaction,
   FlowerContextUsage,
+  FlowerContextSample,
   FlowerTimelineAnchor,
   FlowerTimelineDecoration,
   FlowerThreadReadStatus,
@@ -174,17 +175,18 @@ function optionalZeroBasedInteger(raw: unknown): number | undefined {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
 }
 
-function mapContextUsagePhase(raw: unknown): FlowerContextUsage['phase'] {
+function mapContextUsagePhase(raw: unknown): FlowerContextSample['phase'] {
   switch (trim(raw)) {
     case 'provider_usage':
       return 'provider_usage';
     case 'projected_request':
-    default:
       return 'projected_request';
+    default:
+      throw new Error('context sample has an invalid phase');
   }
 }
 
-function mapContextPressureStatus(raw: unknown): FlowerContextUsage['pressure_status'] {
+function mapContextPressureStatus(raw: unknown): FlowerContextSample['pressure_status'] {
   switch (trim(raw)) {
     case 'near_threshold':
       return 'near_threshold';
@@ -195,8 +197,9 @@ function mapContextPressureStatus(raw: unknown): FlowerContextUsage['pressure_st
     case 'estimated':
       return 'estimated';
     case 'stable':
-    default:
       return 'stable';
+    default:
+      throw new Error('context sample has an invalid pressure status');
   }
 }
 
@@ -237,6 +240,27 @@ function mapContextCompactionStatus(raw: unknown): FlowerContextCompaction['stat
 export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   const record = recordValue(raw);
   if (!record) return null;
+  if ('phase' in record) throw new Error('context_usage requires a measurement/estimate snapshot');
+  const threadUsageRecord = plainRecordValue(record.thread_usage);
+  const threadUsage = threadUsageRecord ? {
+    input_tokens: nonNegativeInteger(threadUsageRecord.input_tokens, 'context_usage.thread_usage.input_tokens'),
+    output_tokens: nonNegativeInteger(threadUsageRecord.output_tokens, 'context_usage.thread_usage.output_tokens'),
+    cache_read_tokens: nonNegativeInteger(threadUsageRecord.cache_read_tokens, 'context_usage.thread_usage.cache_read_tokens'),
+    cache_write_tokens: nonNegativeInteger(threadUsageRecord.cache_write_tokens, 'context_usage.thread_usage.cache_write_tokens'),
+  } : undefined;
+  const confirmed = mapContextSample(record.confirmed);
+  const estimate = mapContextSample(record.estimate);
+  if (confirmed && confirmed.phase !== 'provider_usage') throw new Error('confirmed context requires model usage');
+  return {
+    ...(confirmed ? { confirmed } : {}),
+    ...(estimate ? { estimate } : {}),
+    ...(threadUsage ? { thread_usage: threadUsage } : {}),
+  };
+}
+
+function mapContextSample(raw: unknown): FlowerContextSample | null {
+  const record = recordValue(raw);
+  if (!record) return null;
   const phase = mapContextUsagePhase(record.phase);
   const pressureStatus = mapContextPressureStatus(record.pressure_status);
   const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
@@ -248,13 +272,6 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   const outputHeadroomTokens = optionalInteger(record.output_headroom_tokens);
   const usedRatio = clampRatio(record.used_ratio);
   const thresholdRatio = clampRatio(record.threshold_ratio);
-  const threadUsageRecord = plainRecordValue(record.thread_usage);
-  const threadUsage = threadUsageRecord ? {
-    input_tokens: nonNegativeInteger(threadUsageRecord.input_tokens, 'context_usage.thread_usage.input_tokens'),
-    output_tokens: nonNegativeInteger(threadUsageRecord.output_tokens, 'context_usage.thread_usage.output_tokens'),
-    cache_read_tokens: nonNegativeInteger(threadUsageRecord.cache_read_tokens, 'context_usage.thread_usage.cache_read_tokens'),
-    cache_write_tokens: nonNegativeInteger(threadUsageRecord.cache_write_tokens, 'context_usage.thread_usage.cache_write_tokens'),
-  } : undefined;
   return {
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
@@ -269,7 +286,6 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
     pressure_status: pressureStatus,
     ...(trim(record.source) ? { source: trim(record.source) } : {}),
     updated_at_ms: updatedAt,
-    ...(threadUsage ? { thread_usage: threadUsage } : {}),
   };
 }
 

@@ -45,7 +45,17 @@ export function FlowerComposerContextIndicator(props: {
         style={progressStyle()}
         onFocus={() => setTooltipOpen(true)}
         onBlur={() => setTooltipOpen(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setTooltipOpen(false);
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setTooltipOpen((open) => !open);
+          }
+        }}
       />
+      <Show when={view().sampleLabel}>
+        <span class="flower-composer-context-sample-label">{view().sampleLabel}</span>
+      </Show>
       <div
         id={tooltipID}
         role="tooltip"
@@ -58,6 +68,13 @@ export function FlowerComposerContextIndicator(props: {
           <span>{view().usedLabel}</span>
           <strong>{view().usedValue}</strong>
         </div>
+        <Show when={view().estimateValue}>
+          <div class="flower-composer-context-tooltip-row">
+            <span>{view().estimateLabel}</span>
+            <strong>{view().estimateValue}</strong>
+          </div>
+          <p class="flower-composer-context-estimate-help">{view().estimateHelp}</p>
+        </Show>
         <div class="flower-composer-context-tooltip-row">
           <span>{view().ratioLabel}</span>
           <strong>{view().ratioValue}</strong>

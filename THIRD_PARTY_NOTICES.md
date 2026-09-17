@@ -49,6 +49,32 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Bundled DeepSeek V4 Tokenizer
+
+Published Floret includes the offline DeepSeek V4 tokenizer vocabulary from the official API tokenizer archive, under MIT. Its source tokenizer.json SHA-256 is 89085f12ef79460ac5f66d1119325ddfc694b4ab209d80bbd81d35f081dc9614. Notice generation reads and verifies the license from the exact published Go module.
+
+MIT License
+
+Copyright (c) 2023 DeepSeek
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ## Go Modules
 
 | Component | Version | License | Used by | Source | Notes |
@@ -60,12 +86,13 @@ SOFTWARE.
 | github.com/bodgit/windows | v1.0.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/windows@v1.0.1 | Detected from LICENSE. |
 | github.com/coder/websocket | v1.8.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/coder/websocket@v1.8.15 | coder/websocket is distributed under a BSD-style license. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
+| github.com/dlclark/regexp2 | v1.12.0 | MIT | Runtime | https://pkg.go.dev/github.com/dlclark/regexp2@v1.12.0 | Detected from LICENSE. |
 | github.com/dsnet/compress | v0.0.2-0.20230904184137-39efe44ab707 | BSD-style | Runtime | https://pkg.go.dev/github.com/dsnet/compress@v0.0.2-0.20230904184137-39efe44ab707 | Detected from LICENSE.md. |
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.14.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.14.0 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.15.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.15.1 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.2.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.2.2 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.32 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.32 | Floegence first-party dependency. |
@@ -90,6 +117,7 @@ SOFTWARE.
 | github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
 | github.com/pelletier/go-toml/v2 | v2.4.3 | MIT | Runtime | https://pkg.go.dev/github.com/pelletier/go-toml/v2@v2.4.3 | Detected from LICENSE. |
 | github.com/pierrec/lz4/v4 | v4.1.22 | BSD-style | Runtime | https://pkg.go.dev/github.com/pierrec/lz4/v4@v4.1.22 | Detected from LICENSE. |
+| github.com/pkoukk/tiktoken-go | v0.1.8 | MIT | Runtime | https://pkg.go.dev/github.com/pkoukk/tiktoken-go@v0.1.8 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
 | github.com/quic-go/qpack | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/qpack@v0.6.0 | Detected from LICENSE.md. |
 | github.com/quic-go/quic-go | v0.62.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.62.0 | Detected from LICENSE. |

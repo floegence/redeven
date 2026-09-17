@@ -1,4 +1,4 @@
-import type { FlowerContextCompaction, FlowerContextUsage } from '../contracts/flowerSurfaceContracts';
+import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { trimString } from '../flowerSurfaceModel';
@@ -8,6 +8,10 @@ export type FlowerComposerContextUsageFreshness = 'current' | 'last_known';
 
 export type FlowerComposerContextIndicatorView = Readonly<{
   ariaLabel: string;
+  sampleLabel: string;
+  estimateLabel: string;
+  estimateValue: string;
+  estimateHelp: string;
   ariaValueText: string;
   percentLabel: string;
   tone: FlowerContextTone;
@@ -36,7 +40,7 @@ export function formatContextTokenCount(tokens: number | undefined): string {
   return String(value);
 }
 
-export function contextUsageRatio(usage: FlowerContextUsage): number | null {
+export function contextUsageRatio(usage: FlowerContextSample): number | null {
   const direct = Number(usage.used_ratio);
   if (Number.isFinite(direct) && direct >= 0) return Math.min(1, direct);
   const input = Number(usage.input_tokens ?? 0);
@@ -45,7 +49,7 @@ export function contextUsageRatio(usage: FlowerContextUsage): number | null {
   return Math.min(1, input / windowTokens);
 }
 
-export function contextUsagePercent(usage: FlowerContextUsage): number | null {
+export function contextUsagePercent(usage: FlowerContextSample): number | null {
   const ratio = contextUsageRatio(usage);
   return ratio === null ? null : Math.max(0, Math.round(ratio * 100));
 }
@@ -105,21 +109,22 @@ export function buildFlowerComposerContextIndicatorView(
 ): FlowerComposerContextIndicatorView {
   const labels = copy.chat.contextIndicator ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
   const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
-  const currentLabel = trimString(labels.label) || fallback.label;
-  const label = freshness === 'last_known'
-    ? trimString(labels.lastKnownLabel) || fallback.lastKnownLabel
-    : currentLabel;
-  const ratio = contextUsageRatio(usage);
+  const sample = usage.confirmed ?? usage.estimate;
+  const pressure = usage.estimate ?? usage.confirmed;
+  const sampleLabel = !usage.confirmed ? labels.estimated
+    : freshness === 'last_known' || usage.estimate ? labels.lastKnownLabel : '';
+  const label = [labels.label, sampleLabel].filter(Boolean).join(' · ');
+  const ratio = sample ? contextUsageRatio(sample) : null;
   const progressValue = ratio === null ? null : Math.max(0, Math.min(100, Math.round(ratio * 100)));
   const unknownPercent = trimString(labels.unknownPercent) || fallback.unknownPercent;
   const percentLabel = progressValue === null ? unknownPercent : formatCompactContextPercent(progressValue);
   const ratioValue = progressValue === null ? unknownPercent : labels.percent(progressValue);
-  const used = formatFullContextTokenCount(usage.input_tokens);
-  const total = formatFullContextTokenCount(usage.context_window_tokens);
-  const threshold = formatFullContextTokenCount(usage.threshold_tokens);
-  const safeLimit = formatFullContextTokenCount(usage.request_safe_limit_tokens);
+  const used = formatFullContextTokenCount(usage.confirmed?.input_tokens);
+  const total = formatFullContextTokenCount(sample?.context_window_tokens);
+  const threshold = formatFullContextTokenCount(pressure?.threshold_tokens);
+  const safeLimit = formatFullContextTokenCount(pressure?.request_safe_limit_tokens);
   const statusValue = (() => {
-    switch (trimString(usage.pressure_status)) {
+    switch (trimString(pressure?.pressure_status)) {
       case 'near_threshold': return trimString(labels.nearThreshold) || fallback.nearThreshold;
       case 'will_compact': return trimString(labels.willCompact) || fallback.willCompact;
       case 'hard_limit': return trimString(labels.hardLimit) || fallback.hardLimit;
@@ -131,18 +136,24 @@ export function buildFlowerComposerContextIndicatorView(
   const unavailable = trimString(labels.unavailable) || fallback.unavailable;
   const cacheHitLabel = trimString(labels.cacheHitLabel) || fallback.cacheHitLabel;
   const cacheHitValue = formatThreadCacheHitPercent(usage, unavailable);
+  const predicted = formatFullContextTokenCount(usage.estimate?.input_tokens);
+  const estimateValue = predicted && total ? labels.usage(predicted, total) : '';
   const ariaValueText = progressValue === null
     ? `${label}: ${unknownPercent}, ${cacheHitLabel}: ${cacheHitValue}`
     : `${label}: ${ratioValue}, ${usedValue}, ${cacheHitLabel}: ${cacheHitValue}`;
   return {
     ariaLabel: label,
-    ariaValueText,
+    sampleLabel,
+    estimateLabel: labels.estimateLabel,
+    estimateValue,
+    estimateHelp: labels.estimateHelp,
+    ariaValueText: `${ariaValueText}${estimateValue ? `, ${labels.estimateLabel}: ${estimateValue}` : ''}`,
     percentLabel,
-    tone: contextPressureTone(usage.pressure_status),
+    tone: contextPressureTone(pressure?.pressure_status ?? 'estimated'),
     ratio,
     progressValue,
-    tooltipTitle: label,
-    usedLabel: trimString(labels.usedLabel) || fallback.usedLabel,
+    tooltipTitle: labels.label,
+    usedLabel: labels.confirmedLabel,
     usedValue,
     ratioLabel: trimString(labels.ratioLabel) || fallback.ratioLabel,
     ratioValue,

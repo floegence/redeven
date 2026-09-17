@@ -6355,11 +6355,10 @@ webSearch: model.web_search,
     const thread = selectedThread();
     const usage = thread?.context_usage ?? null;
     if (!thread || !usage) return null;
-    const activeRunID = trimString(thread.active_run_id);
-    if (!activeRunID || trimString(usage.run_id) === activeRunID) {
-      return retainEqualValue(previous, { usage, freshness: 'current' });
-    }
-    return retainEqualValue(previous, { usage, freshness: 'last_known' });
+    if (!usage.confirmed && !usage.estimate) return null;
+    const active = Boolean(trimString(thread.active_run_id));
+    const freshness = usage.confirmed && (active || usage.estimate) ? 'last_known' : 'current';
+    return retainEqualValue(previous, { usage, freshness });
   });
   const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
   const showScrollToLatestButton = createMemo(() => (
