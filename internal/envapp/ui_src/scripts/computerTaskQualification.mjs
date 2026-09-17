@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 // Create only the empty canonical conversation through the public API. Target
 // selection, access, model work and private handoff use the real product UI.
-export async function createComputerTask({ page, request, ownedThreads, origin, targetID = 'browser-main', newBrowserTab = false }) {
+export async function createComputerTask({ page, request, ownedThreads, origin, targetID = 'browser-main' }) {
   const view = await request('POST', '/_redeven_proxy/api/ai/threads', {
     client_request_id: crypto.randomUUID(), title: 'Computer qualification', permission_type: 'full_access',
   });
@@ -13,22 +13,6 @@ export async function createComputerTask({ page, request, ownedThreads, origin, 
   await page.locator('.flower-thread-refresh-button').click();
   await page.locator(`[data-flower-thread-id="${id}"] .flower-thread-card-select-button`).click();
   await page.waitForFunction(id => document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-id') === id, id);
-  if (newBrowserTab) {
-    // A fresh test tab must not inherit the previous scenario's current site
-    // or private-control state. Create it through the real connection UI.
-    const before = await request('GET', '/_redeven_proxy/api/ai/computer/targets');
-    await page.getByRole('button', { name: 'Computer connections', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Computer connections', exact: true });
-    const managed = dialog.locator('section').filter({ has: page.getByRole('button', { name: 'Create profile', exact: true }) });
-    await managed.getByRole('combobox', { name: /^Browser profile/ }).selectOption('browser-main');
-    await managed.getByRole('button', { name: 'New background tab', exact: true }).click();
-    await dialog.getByRole('radio').nth(before.length).waitFor();
-    const after = await request('GET', '/_redeven_proxy/api/ai/computer/targets');
-    const created = after.filter(target => target.kind === 'browser.managed' && !before.some(previous => previous.id === target.id));
-    assert.equal(created.length, 1, 'new-tab action must create one explicit target');
-    targetID = created[0].id;
-    await dialog.getByLabel('Close', { exact: true }).click();
-  }
   await configureComputerTask({ page, request, threadID: id, origin, targetID });
   return id;
 }
