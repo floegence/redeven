@@ -8,7 +8,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.13.0
-	github.com/floegence/flowersec/flowersec-go/v5 v5.2.0
+	github.com/floegence/flowersec/flowersec-go/v5 v5.2.1
 	github.com/floegence/redeven-service-templates v0.6.0
 	github.com/floegence/redevplugin/v3 v3.0.32
 	github.com/godbus/dbus/v5 v5.2.2

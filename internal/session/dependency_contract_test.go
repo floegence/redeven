@@ -22,9 +22,9 @@ import (
 
 const (
 	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v5"
-	flowersecGoVersion   = "v5.2.0"
+	flowersecGoVersion   = "v5.2.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
-	flowersecCoreVersion = "5.2.0"
+	flowersecCoreVersion = "5.2.1"
 	floeWebappVersion    = "0.56.6"
 )
 
@@ -414,27 +414,27 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"\"@floegence/floe-webapp-core\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floe-webapp-protocol\": \"" + floeWebappVersion + "\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.19.2\"",
-			"\"@floegence/flowersec-core\": \"5.2.0\"",
+			"\"@floegence/flowersec-core\": \"5.2.1\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-" + floeWebappVersion + ".tgz",
 			"floe-webapp-core-" + floeWebappVersion + ".tgz",
 			"floe-webapp-protocol-" + floeWebappVersion + ".tgz",
 			"floeterm-terminal-web-0.19.2.tgz",
-			"flowersec-core-5.2.0.tgz",
+			"flowersec-core-5.2.1.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@" + floeWebappVersion,
 			"@floegence/floe-webapp-core@" + floeWebappVersion,
 			"@floegence/floe-webapp-protocol@" + floeWebappVersion,
 			"@floegence/floeterm-terminal-web@0.19.2",
-			"@floegence/flowersec-core@5.2.0",
+			"@floegence/flowersec-core@5.2.1",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"5.2.0\"",
+			"\"@floegence/flowersec-core\": \"5.2.1\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-5.2.0.tgz",
+			"flowersec-core-5.2.1.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | " + floeWebappVersion,
@@ -443,18 +443,18 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"@floegence/floe-webapp-core | " + floeWebappVersion,
 			"@floegence/floe-webapp-protocol | " + floeWebappVersion,
 			"@floegence/floeterm-terminal-web | 0.19.2",
-			"@floegence/flowersec-core | 5.2.0",
+			"@floegence/flowersec-core | 5.2.1",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.19.2",
-			"Flowersec Go v5.2.0",
-			"Runtime and browser surfaces consume Flowersec v5.2.0",
+			"Flowersec Go v5.2.1",
+			"Runtime and browser surfaces consume Flowersec v5.2.1",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.19.2",
 			"semantic Presentation",
 			"Floe Webapp Boot, Core, and Protocol v" + floeWebappVersion,
-			"Flowersec Core v5.2.0",
+			"Flowersec Core v5.2.1",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -660,7 +660,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"github.com/floegence/floret/v7 v7.13.0",
 			"removes terminal forked Effect Attempt history only when source-thread ancestry and execution identity are verified",
 			"desktop-placement-http2-v1",
-			"published Flowersec Go and Core v5.2.0 plus Floe Webapp v" + floeWebappVersion,
+			"published Flowersec Go and Core v5.2.1 plus Floe Webapp v" + floeWebappVersion,
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
@@ -1656,7 +1656,28 @@ func assertOnlyCurrentNPMDependency(t *testing.T, root string, file string, pack
 		t.Fatalf("parse %s: %v", file, err)
 	}
 	found := 0
-	validateExactNPMNode(t, file, packageName, packageVersion, document, &found)
+	if filepath.Base(file) == "package-lock.json" {
+		// npm retains published transitive declarations even when an override
+		// changes their resolution. Check root declarations and every installed
+		// copy, including nested copies, against the required release instead.
+		lock, ok := document.(map[string]any)
+		if !ok {
+			t.Fatalf("%s must contain an npm lock object", file)
+		}
+		entries, ok := lock["packages"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s must contain npm package entries", file)
+		}
+		validateExactNPMNode(t, file, packageName, packageVersion, entries[""], &found)
+		for packagePath, entry := range entries {
+			if packagePath == "node_modules/"+packageName || strings.HasSuffix(packagePath, "/node_modules/"+packageName) {
+				validateExactNPMNode(t, file, packageName, packageVersion,
+					map[string]any{"node_modules/" + packageName: entry}, &found)
+			}
+		}
+	} else {
+		validateExactNPMNode(t, file, packageName, packageVersion, document, &found)
+	}
 	if found == 0 {
 		t.Fatalf("%s does not declare or resolve %s", file, packageName)
 	}
