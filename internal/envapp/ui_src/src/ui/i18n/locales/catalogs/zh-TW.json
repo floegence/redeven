@@ -5601,6 +5601,8 @@
       "allFinished": "全部下載完畢。"
     },
     "preview": {
+      "zoomOptions": "預覽縮放：{mode} · {percent}",
+      "manualZoom": "手動縮放",
       "fitWindow": "符合視窗",
       "fitWidth": "符合寬度",
       "actualSize": "實際大小",

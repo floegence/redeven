@@ -21,9 +21,18 @@ an error. A genuine PDF page failure stays local to that page and can be retried
 
 Sizing uses local CSS pixels, excluding padding and scrollbars. Ancestor CSS
 transforms, including Workbench projection, must not change intrinsic document
-size. Toolbars occupy normal layout space above the scroll viewport, wrap in
-narrow windows, and never cover document content. Fixed minimum media heights must
-not push controls beyond a small preview surface.
+size. The reading viewport fills the preview surface. Compact zoom controls float
+at its upper right without a separate layout row or reserved padding. Their
+position stays fixed while content scrolls. Only the visible controls intercept
+pointer input; the remaining overlay area passes through to the reading surface.
+The strip stays on one line in narrow surfaces: zoom buttons flank a percentage
+menu containing fit-to-window, fit-to-width for documents, and actual size. PDF
+page counts remain available in that menu. Controls retain keyboard and touch
+access and expose localized labels and tooltips. The trigger shows the active
+mode icon and actual percentage, with an explicit accessible mode label; the menu
+marks the selected mode. Published Floe dropdowns and the existing tooltip adapter
+over Floe floating layers preserve Workbench projection, focus, and input routing.
+Fixed minimum media heights must not push controls beyond a small preview surface.
 
 The initial mode is fit-to-window. PDF and DOCX also offer fit-to-width and actual
 size; images offer actual size. Automatic fit may enlarge or shrink beyond the
@@ -77,6 +86,7 @@ or native attachment PDF behavior.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts` - Shared product zoom policy over published Floe geometry.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx` - Compact floating controls shared by the three sized preview renderers.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx` - Stable page instances, serialized render lifetime and raster limits.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/DocxPreviewPane.tsx` - Source-owned DOM and intrinsic section measurement.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/ImagePreviewPane.tsx` - Container-responsive image geometry and resource guards.

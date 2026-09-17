@@ -5590,6 +5590,8 @@
       "allFinished": "Tous les téléchargements sont terminés."
     },
     "preview": {
+      "zoomOptions": "Zoom de l’aperçu : {mode} · {percent}",
+      "manualZoom": "Zoom manuel",
       "fitWindow": "Ajuster à la fenêtre",
       "fitWidth": "Ajuster à la largeur",
       "actualSize": "Taille réelle",

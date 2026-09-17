@@ -5601,6 +5601,8 @@
       "allFinished": "全部下载完毕。"
     },
     "preview": {
+      "zoomOptions": "预览缩放：{mode} · {percent}",
+      "manualZoom": "手动缩放",
       "fitWindow": "适应窗口",
       "fitWidth": "适应宽度",
       "actualSize": "实际大小",

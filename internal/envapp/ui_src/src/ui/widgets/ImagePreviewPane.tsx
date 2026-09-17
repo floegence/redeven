@@ -42,8 +42,8 @@ export function ImagePreviewPane(props: ImagePreviewPaneProps) {
   const width = () => (naturalSize()?.width ?? 0) * (zoom.scale() ?? 0);
   const height = () => (naturalSize()?.height ?? 0) * (zoom.scale() ?? 0);
   return (
-    <div class={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : 'bg-muted/20')}>
-      <div class="image-preview-controls flex shrink-0 justify-end border-b border-border/60 px-3 py-2"><FilePreviewZoomControls zoom={zoom} kind="Image" /></div>
+    <div class={cn('relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : 'bg-muted/20')}>
+      <FilePreviewZoomControls zoom={zoom} kind="Image" />
       <div ref={setViewport} {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} onWheel={handleWheel} onKeyDown={handleKeyDown}
         class="image-preview-viewport relative min-h-0 min-w-0 flex-1 overflow-auto p-3 [overflow-anchor:none]" tabindex="0" role="region" aria-label={i18n.t('uiCopy.preview.imageViewport')}>
         <Show when={!failed()} fallback={<FilePreviewErrorState errorType="render_error" />}>
