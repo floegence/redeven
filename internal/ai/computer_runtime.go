@@ -189,11 +189,11 @@ func (r *ComputerUseRuntime) BindThreadTarget(ctx context.Context, threadID, tar
 	}
 	return bindings.SetComputerTarget(ctx, threadID, targetID)
 }
-func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
+
+// prepareInitialManagedTarget is shared by ordinary tool preparation and explicit
+// private-control recovery. Only the Runtime may launch a managed profile.
+func (r *ComputerUseRuntime) prepareInitialManagedTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
 	var readinessErr error
-	if err := ctx.Err(); err != nil {
-		return target, err
-	}
 	// Only the initial managed target may create its first page lazily. A lost
 	// bound tab never selects a replacement or revives its old references.
 	if target.ID == "browser-main" {
@@ -216,6 +216,15 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 		}
 		r.connectMu.Unlock()
 	}
+	return target, readinessErr
+}
+
+func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
+	var readinessErr error
+	if err := ctx.Err(); err != nil {
+		return target, err
+	}
+	target, readinessErr = r.prepareInitialManagedTarget(ctx, target)
 	control := r.controlForTarget(target.ID)
 	select {
 	case <-ctx.Done():

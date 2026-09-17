@@ -88,6 +88,10 @@ cannot silently drive local user Chrome.
 
 # Boundaries
 
+Private control recovery after Runtime restart uses the same initial managed
+profile preparation as ordinary tools. The private input helper cannot create a
+second owner of the default profile; passive sampling never launches resources.
+
 The current invocation supplies exact allowed origins. Document requests,
 including frame navigation and redirects, are checked before continuation.
 New origins require user authorization. OOP and nested frames are addressed via

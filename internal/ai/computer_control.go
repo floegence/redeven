@@ -40,6 +40,17 @@ func (r *ComputerUseRuntime) controlForTarget(targetID string) *computerTargetCo
 var errComputerCaptureBusy = errors.New("computer capture is busy")
 
 func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call TargetToolCall) (*computerTargetControl, func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	// A recovered pending interaction may be the first browser operation after
+	// restart. Prepare its Runtime-owned profile before acquiring the target gate.
+	// Passive samples never launch resources or wait on connection ownership.
+	if !call.passiveCapture && (call.userInput || call.controlReturn) {
+		if _, err := r.prepareInitialManagedTarget(ctx, TargetDescriptor{ID: call.TargetID}); err != nil {
+			return nil, nil, err
+		}
+	}
 	control := r.controlForTarget(call.TargetID)
 	if call.passiveCapture {
 		select {

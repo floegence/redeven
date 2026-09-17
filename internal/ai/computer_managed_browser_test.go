@@ -252,3 +252,72 @@ if (process.argv[3] === 'closed_tab') {
 		})
 	}
 }
+
+func TestManagedBrowserPrivateRecoverySharesProfileOwner(t *testing.T) {
+	if os.Getenv("REDEVEN_BROWSER_INTEGRATION") != "1" {
+		t.Skip("set REDEVEN_BROWSER_INTEGRATION=1 with the pinned browser installed")
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper, err := filepath.Abs("../envapp/ui_src/scripts/redevenComputerHost.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := NewTargetRegistry()
+	target := TargetDescriptor{ID: "browser-main", Kind: "browser.managed", DisplayName: "Fixture"}
+	if err := registry.Register(target); err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{target.ID: NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
+	t.Cleanup(func() { _ = runtime.Close() })
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	frames := make(chan FlowerComputerFrame, 1)
+	call := TargetToolCall{TargetID: target.ID, ThreadID: "thread", TurnID: "turn", RunID: "run"}
+	stop, err := runtime.startComputerLiveFrames(ctx, computerLiveRequest{
+		ComputerViewerRequest: ComputerViewerRequest{ObserverID: "observer", ThreadID: call.ThreadID, TargetID: target.ID, InteractionID: "pending", Revision: 1},
+		privateCall:           call, validate: func(context.Context) error { return nil },
+	}, func(frame FlowerComputerFrame) {
+		select {
+		case frames <- frame:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	select {
+	case frame := <-frames:
+		if frame.ErrorCode != "" {
+			t.Fatalf("private recovery: %+v", frame)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	stop()
+	runtime.connectMu.Lock()
+	owner := runtime.managedProfiles["browser-main"]
+	runtime.connectMu.Unlock()
+	if owner == nil {
+		t.Fatal("private recovery bypassed the managed profile owner")
+	}
+	if err := runtime.ReobserveComputerTarget(ctx, call); err != nil {
+		t.Fatal(err)
+	}
+	target, err = runtime.PrepareTarget(ctx, target)
+	if err != nil || !target.Ready {
+		t.Fatalf("subsequent task could not reuse profile: %+v %v", target, err)
+	}
+	call.ToolName = "computer.observe"
+	if _, err := runtime.ExecuteTargetTool(ctx, call); err != nil {
+		t.Fatal(err)
+	}
+	runtime.connectMu.Lock()
+	defer runtime.connectMu.Unlock()
+	if runtime.managedProfiles["browser-main"] != owner {
+		t.Fatal("profile owner changed during continuation")
+	}
+}
