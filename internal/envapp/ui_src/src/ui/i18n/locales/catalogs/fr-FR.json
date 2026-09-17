@@ -3913,12 +3913,14 @@
     "title": {
       "recovering": "Restauration de la connexion",
       "recovered": "Connexion restaurée",
-      "failed": "Impossible de restaurer la connexion"
+      "failed": "Impossible de restaurer la connexion",
+      "offline": "Vous êtes hors ligne"
     },
     "summary": {
-      "recovering": "Redeven rétablit la connexion à cet environnement. Vous retrouverez le même espace de travail dès que toutes les étapes requises seront achevées.",
-      "recovered": "Toutes les étapes de connexion requises sont terminées. Retour à votre espace de travail.",
-      "failed": "La session d'exécution d'origine n'est plus utilisable. L'état précédent de votre espace de travail est conservé, mais aucune requête ne peut être envoyée."
+      "recovering": "Votre espace de travail reste ouvert. La connexion sera rétablie automatiquement.",
+      "recovered": "La connexion est rétablie. Retour à votre espace de travail.",
+      "failed": "Cette page est en pause. Rouvrez la connexion pour continuer.",
+      "offline": "La reconnexion sera automatique dès le retour du réseau. Vous pouvez laisser cette page ouverte."
     },
     "steps": {
       "interrupted": "Connexion interrompue",
@@ -3928,8 +3930,6 @@
       "secureSession": "Restauration de la session sécurisée",
       "completed": "Connexion rétablie"
     },
-    "progressLabel": "Progression de la restauration de la connexion",
-    "progress": "Étapes terminées : {complete} sur {total}",
     "timelineLabel": "Étapes de restauration de la connexion",
     "attempts": {
       "one": "{count} tentative",
@@ -3945,7 +3945,7 @@
       "runtimeOffline": "L'environnement d'exécution est hors ligne et n'est pas redevenu disponible pendant la restauration.",
       "runtimeUnavailable": "La restauration s'est arrêtée avant que l'environnement d'exécution ne soit prêt.",
       "transportUnavailable": "Le transport de connexion n'est plus disponible pour cette session.",
-      "authenticationFailed": "Desktop n'a pas pu authentifier la connexion d'origine à l'environnement d'exécution.",
+      "authenticationFailed": "Votre session doit être autorisée à nouveau. Rouvrez l’environnement pour continuer.",
       "missingEnvironmentContext": "L'identité de l'environnement requise pour cette session est manquante.",
       "secureSessionFailed": "La session sécurisée n'a pas pu être reprise.",
       "remoteCommandEnded": "La commande d'origine assurant le pont avec l'environnement d'exécution distant s'est terminée.",

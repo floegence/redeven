@@ -3928,12 +3928,14 @@
     "title": {
       "recovering": "正在恢復連線",
       "recovered": "連線已恢復",
-      "failed": "無法恢復連線"
+      "failed": "無法恢復連線",
+      "offline": "等待網路恢復"
     },
     "summary": {
-      "recovering": "Redeven 正在重新連線此環境。所有必要步驟就緒後，將返回原本的工作區。",
-      "recovered": "所有必要的連線步驟均已完成。正在返回工作區。",
-      "failed": "原本連至執行階段的工作階段已無法使用。先前的工作區仍會保留，但無法再傳送請求。"
+      "recovering": "工作區已保留，正在自動重新連線。連線恢復後即可繼續。",
+      "recovered": "連線已恢復，正在返回工作區。",
+      "failed": "此頁面已暫停連線，請重新開啟連線以繼續。",
+      "offline": "網路恢復後會自動重新連線，請保持此頁面開啟。"
     },
     "steps": {
       "interrupted": "連線已中斷",
@@ -3943,8 +3945,6 @@
       "secureSession": "恢復安全工作階段",
       "completed": "連線完成"
     },
-    "progressLabel": "連線恢復進度",
-    "progress": "已完成 {complete}/{total} 個步驟",
     "timelineLabel": "連線恢復步驟",
     "attempts": {
       "one": "已嘗試 {count} 次",
@@ -3960,7 +3960,7 @@
       "runtimeOffline": "執行階段處於離線狀態，且在恢復期間未重新上線。",
       "runtimeUnavailable": "連線恢復程序停止前，執行階段仍未就緒。",
       "transportUnavailable": "此工作階段的連線傳輸已無法使用。",
-      "authenticationFailed": "Desktop 無法驗證原執行階段連線。",
+      "authenticationFailed": "此工作階段需要重新授權，請重新開啟環境以繼續。",
       "missingEnvironmentContext": "缺少此工作階段所需的環境身分資訊。",
       "secureSessionFailed": "無法恢復安全工作階段。",
       "remoteCommandEnded": "原本用於橋接遠端執行階段的命令已結束。",

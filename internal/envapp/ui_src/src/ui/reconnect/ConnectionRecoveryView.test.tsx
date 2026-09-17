@@ -196,6 +196,25 @@ describe('ConnectionRecoveryView', () => {
     }
   });
 
+  it('waits for network restoration and keeps recovery details collapsed', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const retry = vi.fn(async () => undefined);
+    const dispose = render(() => <I18nProvider><ConnectionRecoveryView environmentName="Dev Local" onRetry={retry}
+      snapshot={{ ...failedSnapshot(), state: 'recovering', phase: 'protocol_connect', desktop_transport: undefined }} /></I18nProvider>, host);
+    try {
+      expect(host.querySelector('h1')?.textContent).toContain("You're offline");
+      expect(host.querySelector('details')?.open).toBe(false);
+      expect(host.querySelector('[role="progressbar"]')).toBeNull();
+      expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Retry now'))).toBe(false);
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+      window.dispatchEvent(new Event('online'));
+      expect(host.querySelector('h1')?.textContent).toBe('Restoring connection');
+      expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Retry now'))).toBe(true);
+    } finally { dispose(); Object.defineProperty(navigator, 'onLine', { configurable: true, value: true }); }
+  });
+
   it('focuses the terminal failure, preserves technical details collapsed, and opens Connection Center', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

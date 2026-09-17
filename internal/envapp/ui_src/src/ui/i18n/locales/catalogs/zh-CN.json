@@ -3928,12 +3928,14 @@
     "title": {
       "recovering": "正在恢复连接",
       "recovered": "连接已恢复",
-      "failed": "无法恢复连接"
+      "failed": "无法恢复连接",
+      "offline": "等待网络恢复"
     },
     "summary": {
-      "recovering": "Redeven 正在重新连接此环境。所有必要步骤就绪后，将返回原来的工作区。",
-      "recovered": "所有必要的连接步骤均已完成。正在返回工作区。",
-      "failed": "原运行时会话已无法继续使用。之前的工作区状态仍会保留，但无法再发送请求。"
+      "recovering": "工作区已保留，正在自动重新连接。连接恢复后即可继续。",
+      "recovered": "连接已恢复，正在返回工作区。",
+      "failed": "此页面已暂停连接，请重新打开连接以继续。",
+      "offline": "网络恢复后会自动重新连接，请保持此页面打开。"
     },
     "steps": {
       "interrupted": "连接已中断",
@@ -3943,8 +3945,6 @@
       "secureSession": "恢复安全会话",
       "completed": "连接完成"
     },
-    "progressLabel": "连接恢复进度",
-    "progress": "已完成 {complete}/{total} 个步骤",
     "timelineLabel": "连接恢复步骤",
     "attempts": {
       "one": "已尝试 {count} 次",
@@ -3960,7 +3960,7 @@
       "runtimeOffline": "运行时处于离线状态，且在恢复期间未重新上线。",
       "runtimeUnavailable": "恢复停止前，运行时仍未就绪。",
       "transportUnavailable": "此会话的连接通道已不可用。",
-      "authenticationFailed": "Desktop 无法完成原运行时连接的身份验证。",
+      "authenticationFailed": "此会话需要重新授权，请重新打开环境以继续。",
       "missingEnvironmentContext": "此会话所需的环境身份信息缺失。",
       "secureSessionFailed": "无法恢复安全会话。",
       "remoteCommandEnded": "原远程运行时桥接命令已经结束。",

@@ -3913,12 +3913,14 @@
     "title": {
       "recovering": "연결 복구 중",
       "recovered": "연결이 복구됨",
-      "failed": "연결을 복구할 수 없음"
+      "failed": "연결을 복구할 수 없음",
+      "offline": "네트워크 연결 대기 중"
     },
     "summary": {
-      "recovering": "Redeven이 이 환경에 다시 연결하고 있습니다. 필요한 단계가 모두 준비되면 기존 작업 공간으로 돌아갑니다.",
-      "recovered": "필요한 연결 단계가 모두 완료되었습니다. 작업 공간으로 돌아갑니다.",
-      "failed": "기존 런타임 세션을 더 이상 사용할 수 없습니다. 이전 작업 공간은 그대로 유지되지만 요청을 보낼 수 없습니다."
+      "recovering": "작업 공간이 유지되어 있습니다. 자동으로 다시 연결하고 준비가 되면 돌아갑니다.",
+      "recovered": "다시 연결되었습니다. 작업 공간으로 돌아갑니다.",
+      "failed": "이 페이지의 연결이 일시 중지되었습니다. 연결을 다시 열어 계속하세요.",
+      "offline": "네트워크가 복구되면 자동으로 다시 연결합니다. 이 페이지를 열어 두세요."
     },
     "steps": {
       "interrupted": "연결 중단됨",
@@ -3928,8 +3930,6 @@
       "secureSession": "보안 세션 복구",
       "completed": "연결 완료"
     },
-    "progressLabel": "연결 복구 진행률",
-    "progress": "{total}단계 중 {complete}단계 완료",
     "timelineLabel": "연결 복구 단계",
     "attempts": {
       "one": "{count}회 시도",
@@ -3945,7 +3945,7 @@
       "runtimeOffline": "런타임이 오프라인 상태이며 복구 중에 다시 사용 가능해지지 않았습니다.",
       "runtimeUnavailable": "복구가 중단되기 전에 런타임이 준비되지 않았습니다.",
       "transportUnavailable": "이 세션의 연결 채널을 더 이상 사용할 수 없습니다.",
-      "authenticationFailed": "Desktop이 기존 런타임 연결을 인증하지 못했습니다.",
+      "authenticationFailed": "세션에 다시 권한을 부여해야 합니다. 환경을 다시 열어 계속하세요.",
       "missingEnvironmentContext": "이 세션에 필요한 환경 식별 정보가 없습니다.",
       "secureSessionFailed": "보안 세션을 재개하지 못했습니다.",
       "remoteCommandEnded": "기존 원격 런타임 브리지 명령이 종료되었습니다.",

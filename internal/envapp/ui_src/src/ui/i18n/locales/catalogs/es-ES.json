@@ -3913,12 +3913,14 @@
     "title": {
       "recovering": "Restaurando la conexión",
       "recovered": "Conexión restaurada",
-      "failed": "No se pudo restaurar la conexión"
+      "failed": "No se pudo restaurar la conexión",
+      "offline": "Sin conexión a la red"
     },
     "summary": {
-      "recovering": "Redeven está restableciendo la conexión con este entorno. El mismo espacio de trabajo volverá a mostrarse cuando todos los pasos necesarios estén listos.",
-      "recovered": "Se completaron todos los pasos de conexión necesarios. Volviendo al espacio de trabajo.",
-      "failed": "La sesión original del entorno de ejecución ya no se puede utilizar. El espacio de trabajo anterior se conserva, pero ya no permite enviar solicitudes."
+      "recovering": "Tu espacio de trabajo sigue abierto. Volverás a él cuando la conexión se restablezca automáticamente.",
+      "recovered": "La conexión se ha restablecido. Volviendo a tu espacio de trabajo.",
+      "failed": "Esta página está en pausa. Vuelve a abrir la conexión para continuar.",
+      "offline": "La conexión se restablecerá cuando vuelva la red. Puedes dejar esta página abierta."
     },
     "steps": {
       "interrupted": "Conexión interrumpida",
@@ -3928,8 +3930,6 @@
       "secureSession": "Recuperación de la sesión segura",
       "completed": "Conexión completada"
     },
-    "progressLabel": "Progreso de recuperación de la conexión",
-    "progress": "{complete} de {total} pasos completados",
     "timelineLabel": "Pasos de recuperación de la conexión",
     "attempts": {
       "one": "{count} intento",
@@ -3945,7 +3945,7 @@
       "runtimeOffline": "El entorno de ejecución está sin conexión y no volvió a estar disponible durante la recuperación.",
       "runtimeUnavailable": "El entorno de ejecución no llegó a estar listo antes de que se detuviera la recuperación.",
       "transportUnavailable": "El transporte de conexión ya no está disponible para esta sesión.",
-      "authenticationFailed": "Desktop no pudo autenticar la conexión original al entorno de ejecución.",
+      "authenticationFailed": "Tu sesión necesita autorización. Vuelve a abrir el entorno para continuar.",
       "missingEnvironmentContext": "Falta la identidad del entorno necesaria para esta sesión.",
       "secureSessionFailed": "No se pudo reanudar la sesión segura.",
       "remoteCommandEnded": "Finalizó el comando original del puente del entorno de ejecución remoto.",

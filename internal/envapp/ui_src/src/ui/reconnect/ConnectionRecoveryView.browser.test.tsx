@@ -158,6 +158,7 @@ afterEach(async () => {
 describe('ConnectionRecoveryView rendered layout', () => {
   it('keeps real recovery states readable across themes, locales, and desktop or mobile viewports', async () => {
     const cases: readonly RecoveryFixture[] = [
+      { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: recoveringSnapshot(false) },
       {
         locale: 'en-US',
         theme: 'light',
@@ -191,7 +192,8 @@ describe('ConnectionRecoveryView rendered layout', () => {
       const progress = host.querySelector<HTMLElement>('[role="progressbar"]');
       expect(view).not.toBeNull();
       expect(heading).not.toBeNull();
-      expect(progress).not.toBeNull();
+      expect(progress).toBeNull();
+      expect(host.querySelector<HTMLDetailsElement>('details')?.open).toBe(false);
       expect(view!.scrollWidth).toBeLessThanOrEqual(view!.clientWidth + 1);
       expect(heading!.scrollWidth).toBeLessThanOrEqual(heading!.clientWidth + 1);
       const diagnostic = host.querySelector<HTMLElement>('details pre');
@@ -203,7 +205,11 @@ describe('ConnectionRecoveryView rendered layout', () => {
         expect(host.textContent).not.toContain('HTTP 502');
       }
       expect(view!.querySelectorAll('li').length).toBe(testCase.snapshot.desktop_transport ? 6 : 5);
-      expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+      if (import.meta.env.VITE_CONNECTION_RECOVERY_SCREENSHOTS === '1') {
+        await page.screenshot({ path: `__screenshots__/connection-${testCase.locale}-${testCase.theme}-${testCase.snapshot.state}.png` });
+      } else {
+        expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+      }
 
       disposers.pop()?.();
       host.remove();

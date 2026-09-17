@@ -2632,12 +2632,6 @@ export function EnvAppShell() {
     handoffFlowerTurn(handoffContext, threadId);
   };
 
-  const RECENT_AGENT_RX_MS = 10_000;
-  const PROBE_TIMEOUT_MS = 1_200;
-
-  let lastAgentRxAtMs = 0;
-
-  let ensureInFlight: Promise<void> | null = null;
   let accessResumeClient: unknown = null;
   let accessRecoverySeq = 0;
   let accessResumeInFlight: { key: number; promise: Promise<void> } | null = null;
@@ -3528,81 +3522,11 @@ export function EnvAppShell() {
     });
   });
 
-  const probe = async (): Promise<boolean> => {
-    const startedAt = Date.now();
-
-    const p = rpc.sys.ping();
-    // If we timeout and then close the client (by reconnecting), the original ping promise
-    // might reject later; attach a handler to avoid unhandled rejections.
-    p.catch(() => {
-    });
-
-    let timer: number | undefined;
-    try {
-      await Promise.race([
-        p,
-        new Promise<never>((_, reject) => {
-          timer = window.setTimeout(() => reject(new Error('timeout')), PROBE_TIMEOUT_MS);
-        }),
-      ]);
-      console.debug('[envapp] health probe ok', { ms: Date.now() - startedAt });
-      return true;
-    } catch (e) {
-      console.debug('[envapp] health probe failed', {
-        ms: Date.now() - startedAt,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return false;
-    } finally {
-      if (typeof timer !== 'undefined') window.clearTimeout(timer);
-    }
-  };
-
-  const ensureHealthy = (reason: string) => {
-    if (ensureInFlight) return ensureInFlight;
-
-    ensureInFlight = (async () => {
-      if (accessGateVisible()) return;
-      if (connecting()) return;
-      if (manualError() && !classifyReconnectFailure(manualError()).retryable) return;
-      if (recoverySnapshot().state === 'recovering') {
-        console.debug('[envapp] ensureHealthy: nudge waiting reconnect', { reason });
-        await reconnectController.requestImmediateRetry();
-        return;
-      }
-
-      const st = protocol.status();
-      const client = protocol.session?.();
-      if (st !== 'connected' || !client) {
-        console.debug('[envapp] ensureHealthy: connect', { reason, status: st });
-        await connect();
-        return;
-      }
-
-      const now = Date.now();
-      const lastRxAgeMs = lastAgentRxAtMs > 0 ? now - lastAgentRxAtMs : Number.POSITIVE_INFINITY;
-      if (lastRxAgeMs <= RECENT_AGENT_RX_MS) {
-        console.debug('[envapp] ensureHealthy: recent rx; skip', { reason, lastRxAgeMs });
-        return;
-      }
-
-      console.debug('[envapp] ensureHealthy: probing', { reason, lastRxAgeMs });
-      const ok = await probe();
-      if (ok) return;
-
-      const rxAgeAfterProbe = lastAgentRxAtMs > 0 ? Date.now() - lastAgentRxAtMs : Number.POSITIVE_INFINITY;
-      if (rxAgeAfterProbe <= RECENT_AGENT_RX_MS) {
-        console.debug('[envapp] ensureHealthy: rx during probe; skip reconnect', { reason, rxAgeAfterProbe });
-        return;
-      }
-
-      console.debug('[envapp] ensureHealthy: reconnect', { reason });
-      await reconnect();
-    })().finally(() => {
-      ensureInFlight = null;
-    });
-
-    return ensureInFlight;
+  // Floe's acquisition lifecycle owns session liveness, including browser wake.
+  // Only nudge an existing retry here; terminal failures need an explicit action.
+  const resumeWaitingConnection = () => {
+    if (accessGateVisible() || accessRecoveryBusy() || protocol.snapshot().state !== 'waiting') return;
+    void reconnectController.requestImmediateRetry();
   };
 
   onMount(() => {
@@ -3745,21 +3669,23 @@ export function EnvAppShell() {
     });
   });
 
-  // Ensure the tunnel is healthy after common browser lifecycle transitions.
+  // Let the existing controller react promptly when the browser becomes available.
   onMount(() => {
-    const onOnline = () => void ensureHealthy('online');
-    const onFocus = () => void ensureHealthy('focus');
+    const onOnline = resumeWaitingConnection;
+    const onFocus = resumeWaitingConnection;
     const onVisibility = () => {
-      if (!document.hidden) void ensureHealthy('visibility');
+      if (!document.hidden) resumeWaitingConnection();
     };
 
     window.addEventListener('online', onOnline);
     window.addEventListener('focus', onFocus);
+    window.addEventListener('pageshow', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
 
     onCleanup(() => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pageshow', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     });
   });
