@@ -19,11 +19,11 @@ existing workspace summary stream or one explicit post-command read.
 
 ## Selection and navigation
 
-The selected conversation has a theme-tinted background stronger than hover, a
-3px inset left marker and a semibold title. The marker does not consume layout
-space. Selection retains `aria-current`, visible keyboard focus, forced-color
-support and reduced-motion behavior. All built-in themes must provide at least
-4.5:1 selected-title contrast and 3:1 marker contrast against the selected row.
+The selected conversation has a theme-tinted background stronger than hover and
+a semibold title, without a left-edge marker. Selection retains `aria-current`,
+visible keyboard focus, forced-color support and reduced-motion behavior. All
+built-in themes must provide at least 4.5:1 selected-title contrast against the
+selected row.
 Light-theme title luminance is bounded using the current foreground token;
 product CSS does not introduce a second palette.
 
