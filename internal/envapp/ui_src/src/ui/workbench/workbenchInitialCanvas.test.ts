@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import type { WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
 

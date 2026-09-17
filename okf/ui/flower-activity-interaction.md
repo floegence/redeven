@@ -55,7 +55,7 @@ multi-file reads, skills and saved sources retain meaningful content. Computer
 and browser activities use this common path, with authorized target/frame refs
 as supplemental controls. Text is never an attachment capability.
 
-Expanded inputs and results preserve literal whitespace. Floe Webapp v0.56.7's
+Expanded inputs and results preserve literal whitespace. Floe Webapp v0.56.9's
 public `CodeBlock` owns highlighting, clipboard writes and accessible copy
 feedback; Flower owns bounded layout and stable disclosure. Scripts start as one
 compact command-style preview with a copy action; clicking expands the complete

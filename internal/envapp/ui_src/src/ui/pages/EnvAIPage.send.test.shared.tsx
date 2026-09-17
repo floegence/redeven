@@ -867,8 +867,8 @@ export function registerEnvAIPageSendTests() {
         expect(host.textContent).not.toContain('#dcbdf9b8c27f');
         (host.querySelector('[data-flower-activity-item-id="tool-file-read"] .flower-activity-inline-button') as HTMLButtonElement).click();
         await flush();
-        const browse = host.querySelector('button[aria-label="Browse folder for app.ts"]') as HTMLButtonElement | null;
-        const preview = host.querySelector('button[aria-label="Preview app.ts"]') as HTMLButtonElement | null;
+        const browse = host.querySelector('button[aria-label="Browse folder: app.ts"]') as HTMLButtonElement | null;
+        const preview = host.querySelector('button[aria-label="Preview file: app.ts"]') as HTMLButtonElement | null;
         expect(browse).toBeTruthy();
         expect(preview).toBeTruthy();
         browse?.click();
@@ -955,8 +955,8 @@ export function registerEnvAIPageSendTests() {
         expect(host.textContent).toContain('src/app.ts');
         (host.querySelector('[data-flower-activity-item-id="tool-patch"] .flower-activity-inline-button') as HTMLButtonElement).click();
         await flush();
-        const browse = host.querySelector('button[aria-label="Browse folder for src/app.ts"]') as HTMLButtonElement | null;
-        const preview = host.querySelector('button[aria-label="Preview src/app.ts"]') as HTMLButtonElement | null;
+        const browse = host.querySelector('button[aria-label="Browse folder: src/app.ts"]') as HTMLButtonElement | null;
+        const preview = host.querySelector('button[aria-label="Preview file: src/app.ts"]') as HTMLButtonElement | null;
         expect(browse).toBeTruthy();
         expect(preview).toBeTruthy();
         browse?.click();

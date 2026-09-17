@@ -49,10 +49,10 @@ const npmLicenseOverrides = new Map([
 ]);
 
 const npmCoordinateLicenseOverrides = new Map([
-  ['@floegence/flowersec-node-native-darwin-arm64@5.2.1', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
-  ['@floegence/flowersec-node-native-darwin-x64@5.2.1', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
-  ['@floegence/flowersec-node-native-linux-arm64-gnu@5.2.1', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
-  ['@floegence/flowersec-node-native-linux-x64-gnu@5.2.1', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@floegence/flowersec-node-native-darwin-arm64@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@floegence/flowersec-node-native-darwin-x64@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@floegence/flowersec-node-native-linux-arm64-gnu@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
+  ['@floegence/flowersec-node-native-linux-x64-gnu@5.2.2', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-android-arm64@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-darwin-arm64@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-darwin-x64@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
