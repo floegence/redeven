@@ -635,15 +635,13 @@ export async function getControlplaneAgentLatestVersion(envId: string): Promise<
   const id = envId.trim();
   if (!id) return null;
 
-  const out = await fetchJSONWithEnvSessionAutoRecover<AgentLatestVersion>(
+  // Background update metadata must not navigate or renew the active workspace.
+  // Connection acquisition owns session recovery when it is actually needed.
+  const out = await fetchJSON<AgentLatestVersion>(
     `/api/srv/v1/floeproxy/environments/${encodeURIComponent(id)}/agent/version/latest`,
     {
       method: 'GET',
       credentials: 'include',
-    },
-    {
-      envPublicID: id,
-      envSessionAutoRecover: true,
     },
   );
   return out ?? null;
