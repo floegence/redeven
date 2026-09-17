@@ -925,12 +925,18 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 	}
 	var releaseCandidate *cachedReleaseCandidate
 	var updatePlan *cachedUpdatePlan
+	acceptedNotices := req.AcceptedNoticeRevisions
 	if req.Action == ActionUpdate {
 		updatePlan, err = m.resolveUpdatePlan(ctx, service, req.UpdatePlanID)
 		if err != nil {
 			return nil, err
 		}
-		if err := validateAcceptedNotices(Template{Notices: updatePlan.Release.Notices}, req.AcceptedNoticeRevisions); err != nil {
+		configuration, err := decodeServiceConfiguration(service.ConfigurationJSON)
+		if err != nil {
+			return nil, err
+		}
+		acceptedNotices, err = resolveUpdateNoticeRevisions(updatePlan.Release.Notices, configuration.AcceptedNoticeRevisions, req.AcceptedNoticeRevisions)
+		if err != nil {
 			return nil, err
 		}
 		releaseCandidate = &updatePlan.Release
@@ -949,7 +955,7 @@ func (m *Manager) Operate(ctx context.Context, serviceID string, req OperationRe
 					m.consumeUpdatePlan(req.UpdatePlanID)
 				}
 				m.mu.Unlock()
-				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, DeleteWorkspace: req.DeleteWorkspace, ManagementPlan: managementPlan, SkipHooks: req.SkipHooks, AcceptedNoticeRevisions: cloneNoticeRevisions(req.AcceptedNoticeRevisions), Reconfigure: reconfigure, Release: releaseCandidate})
+				m.launch(*service, op, operationInputs{DeleteData: req.DeleteData, DeleteWorkspace: req.DeleteWorkspace, ManagementPlan: managementPlan, SkipHooks: req.SkipHooks, AcceptedNoticeRevisions: cloneNoticeRevisions(acceptedNotices), Reconfigure: reconfigure, Release: releaseCandidate})
 				return &op, nil
 			}
 		}

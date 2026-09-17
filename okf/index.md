@@ -26,6 +26,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Service resource ownership](architecture/service-resource-ownership.md) - Allocate isolated instance resources and preserve unverified legacy or externally referenced data.
 - [Managed Service operation progress](architecture/managed-service-operation-progress.md) - Persist and stream bounded, redacted command output without losing user-controlled disclosure state.
 - [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md) - Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
+- [Managed Service version interaction](architecture/managed-service-version-interaction.md) - Select and verify a version in one drawer, confirm only changed notices, and stop or submit without losing context.
 - [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine current template definitions with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.

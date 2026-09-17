@@ -1869,7 +1869,7 @@ describe('EnvPortForwardsPage', () => {
     }
   });
 
-  it('updates through a reviewed plan while keeping release risks advisory', async () => {
+  it('prepares an update inline without replacing the version list or submitting before confirmation', async () => {
     const updateNotice = {
       id: 'interactive-desktop-root-and-network', revision: 2, severity: 'warning',
       acknowledgement_required: true,
@@ -1896,7 +1896,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/release-candidates' && init?.method === 'POST') return { schema_version: 2, current_release: currentRelease, recommended_release: currentRelease, latest_stable_release: candidate, candidates: [candidate], catalog_status: 'complete', has_more: false, loaded_count: 1, check_status: 'fresh', checked_at_unix_ms: Date.now() };
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/update-plans' && init?.method === 'POST') {
         updatePlanBody = JSON.parse(String(init.body));
-        return { schema_version: 3, update_plan_id: 'upl-reviewed', current_release: currentRelease, target_release: targetRelease, notices: [updateNotice], risk_ids: ['non_recommended_release'], expires_at_unix_ms: Date.now() + 60_000 };
+        return { schema_version: 4, update_plan_id: 'upl-reviewed', current_release: currentRelease, target_release: targetRelease, notices: [updateNotice], risk_ids: ['non_recommended_release'], expires_at_unix_ms: Date.now() + 60_000 };
       }
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/operations' && init?.method === 'POST') {
         operationBody = JSON.parse(String(init.body));
@@ -1922,18 +1922,13 @@ describe('EnvPortForwardsPage', () => {
     expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
     host.querySelector<HTMLButtonElement>('[data-release-id="candidate-new"]')?.click();
     await flushPage();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review update plan')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy());
     expect(updatePlanBody).toEqual({ target_candidate_id: 'candidate-new' });
-    expect(host.querySelector('[data-testid="managed-release-drawer-body"]')?.getAttribute('data-view')).toBe('plan');
-    expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeNull();
+    expect(operationBody).toBeNull();
+    expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy();
     expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Back to versions')?.click();
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy());
-    expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeNull();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Review update plan')?.click();
-    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy());
-    const update = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Update');
+    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Review update plan'))).toBe(false);
+    const update = host.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]');
     expect(update?.disabled).toBe(true);
     const planChecks = host.querySelectorAll<HTMLInputElement>('[data-testid="managed-update-plan"] input[type="checkbox"]');
     expect(planChecks).toHaveLength(1);
@@ -2126,7 +2121,8 @@ describe('EnvPortForwardsPage', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
     await flushPage();
     expect(host.querySelector('[data-testid="managed-release-keep-current"]')).toBeNull();
-    expect(host.textContent).toContain('The selected application version is already installed.');
+    expect(host.textContent).toContain('Choose a different version to update this service.');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]')?.disabled).toBe(true);
   });
 
   it('searches the catalog using localized built-in identity copy', async () => {

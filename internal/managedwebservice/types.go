@@ -280,14 +280,15 @@ type UpdatePlanRequest struct {
 }
 
 type UpdatePlan struct {
-	SchemaVersion   int              `json:"schema_version"`
-	UpdatePlanID    string           `json:"update_plan_id"`
-	CurrentRelease  ReleaseIdentity  `json:"current_release"`
-	TargetRelease   ReleaseIdentity  `json:"target_release"`
-	Notices         []TemplateNotice `json:"notices,omitempty"`
-	RiskIDs         []string         `json:"risk_ids,omitempty"`
-	RequiresStopped bool             `json:"requires_stopped,omitempty"`
-	ExpiresAtUnixMs int64            `json:"expires_at_unix_ms"`
+	SchemaVersion           int              `json:"schema_version"`
+	UpdatePlanID            string           `json:"update_plan_id"`
+	CurrentRelease          ReleaseIdentity  `json:"current_release"`
+	TargetRelease           ReleaseIdentity  `json:"target_release"`
+	Notices                 []TemplateNotice `json:"notices,omitempty"`
+	AcceptedNoticeRevisions map[string]int64 `json:"accepted_notice_revisions,omitempty"`
+	RiskIDs                 []string         `json:"risk_ids,omitempty"`
+	RequiresStopped         bool             `json:"requires_stopped,omitempty"`
+	ExpiresAtUnixMs         int64            `json:"expires_at_unix_ms"`
 }
 
 type ServiceMetadataPatch struct {
