@@ -2894,7 +2894,7 @@
         "title": "Computer use media and visual requests",
         "type": "Media Contract"
       },
-      "body_length": 9281,
+      "body_length": 9628,
       "summary": "Redeven owns screenshot bytes and authorized media resolution; Floret owns opaque\nattachment history and provider rendering. Flower displays decoded pixels in a\nmedia-only Stage. Durable keyframes and ephemeral viewing samples have distinct\nlifetimes. A missing, changed or unauthorized reference fails explicitly and\ncannot fall back to an unrestricted image URL. Successful tool metadata alone\ndoes not prove the user can see a frame.",
       "sections": [
         {
@@ -2908,8 +2908,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The media viewer does not authorize target actions, own lifecycle state, or expose private takeover pixels to model history.",
-          "char_count": 124
+          "body": "The media viewer does not authorize target actions, own lifecycle state, or expose private takeover pixels to model history.\n\nRuntime media route encoding belongs to the host adapters, outside the shared UI\nsource tree. Env App and Desktop share the pure path encoder; each host retains\nits existing authenticated transport and byte validation.",
+          "char_count": 344
         }
       ],
       "evidence": [
@@ -2932,6 +2932,11 @@
           "id": "redeven:internal/flower_ui/src/FlowerComputerStage.tsx:0:decoded blob url viewing.",
           "source": "redeven:internal/flower_ui/src/FlowerComputerStage.tsx",
           "description": "decoded Blob URL viewing."
+        },
+        {
+          "id": "redeven:internal/flower_ui/host/computerFramePath.ts:0:host-owned media route encoding without transport or authorization.",
+          "source": "redeven:internal/flower_ui/host/computerFramePath.ts",
+          "description": "host-owned media route encoding without transport or authorization."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerLifecycle.browser.test.tsx:0:history, canonical result identity and interrupted recovery.",
@@ -18610,5 +18615,5 @@
       ]
     }
   ],
-  "source_sha256": "5f8a03f4ac58e2cada3fb4e96fda4416a6f2ca3a380ccabf8890e2dace4fc51f"
+  "source_sha256": "e1b8632a0fb0c7e5b4fc8240396747481ae946061f0c28a9b4c41323abcaa1a1"
 }

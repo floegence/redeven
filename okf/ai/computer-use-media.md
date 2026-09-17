@@ -116,6 +116,10 @@ fixture results alone must not be presented as complete product qualification.
 
 The media viewer does not authorize target actions, own lifecycle state, or expose private takeover pixels to model history.
 
+Runtime media route encoding belongs to the host adapters, outside the shared UI
+source tree. Env App and Desktop share the pure path encoder; each host retains
+its existing authenticated transport and byte validation.
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerComputerStage.window.browser.test.tsx` - real published Floe window and launcher interaction, geometry retention, status, and safe boundaries.
@@ -123,6 +127,7 @@ The media viewer does not authorize target actions, own lifecycle state, or expo
 - `redeven:internal/ai/computer_live_frames.go` - bounded observer-owned samples.
 - `redeven:internal/ai/computer_media.go` - host keyframe storage and validation.
 - `redeven:internal/flower_ui/src/FlowerComputerStage.tsx` - decoded Blob URL viewing.
+- `redeven:internal/flower_ui/host/computerFramePath.ts` - host-owned media route encoding without transport or authorization.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerLifecycle.browser.test.tsx` - history, canonical result identity and interrupted recovery.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - live-to-durable transition and reopening.
 - `redeven:scripts/check_computer_use_webtop.sh` - container-only real Linux Flower qualification and cleanup.

@@ -40,7 +40,7 @@ export default [
     },
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'host/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

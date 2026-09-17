@@ -1,4 +1,5 @@
-import { COMPUTER_FRAME_RATE_KEY, computerFrameRate, computerFramePath } from '../../../../internal/flower_ui/src/computerViewer';
+import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
+import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../internal/flower_ui/src/computerViewer';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../../shared/desktopCertificate';
 import { withFlowerWebSearchAvailability } from '../../../../internal/flower_ui/src/webSearchCapability';
 import { hydrateFlowerProviderCatalog, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../internal/flower_ui/src/settings/modelSelection';
