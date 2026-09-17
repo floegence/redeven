@@ -5703,6 +5703,8 @@
       "allFinished": "Все загрузки завершены."
     },
     "preview": {
+      "zoomOptions": "Масштаб предпросмотра: {mode} · {percent}",
+      "manualZoom": "Ручной масштаб",
       "fitWindow": "По размеру окна",
       "fitWidth": "По ширине",
       "actualSize": "Фактический размер",

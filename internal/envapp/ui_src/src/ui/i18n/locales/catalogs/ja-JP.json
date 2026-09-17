@@ -5586,6 +5586,8 @@
       "allFinished": "すべてのダウンロードが終了しました。"
     },
     "preview": {
+      "zoomOptions": "プレビューのズーム：{mode} · {percent}",
+      "manualZoom": "手動ズーム",
       "fitWindow": "ウィンドウに合わせる",
       "fitWidth": "幅に合わせる",
       "actualSize": "実際のサイズ",

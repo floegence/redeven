@@ -1,5 +1,5 @@
 import '../../index.css';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -20,6 +20,7 @@ import { createPreviewPDF, previewImageURL } from './filePreviewFixtures.test-su
 import docxURL from './__fixtures__/preview-pages.docx?url';
 
 const disposers: Array<() => void> = [];
+const touchCommands = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren(); removeUIStorageItem(floatingWindowStorageKey('file-preview')); });
 
 function mount(view: () => JSX.Element, width = 1000, height = 700, projection = 1) {
@@ -38,6 +39,17 @@ function assertContained(viewport: HTMLElement, content: HTMLElement) {
   expect(rect.top).toBeGreaterThanOrEqual(view.top - 1);
   expect(rect.bottom).toBeLessThanOrEqual(view.bottom + 1);
 }
+function zoomMenuTrigger(host: ParentNode) {
+  return host.querySelector<HTMLElement>('[data-floe-dropdown-trigger]')!;
+}
+async function selectZoomMode(host: ParentNode, label: string) {
+  const trigger = zoomMenuTrigger(host);
+  await vi.waitFor(() => expect(trigger.getAttribute('aria-disabled')).not.toBe('true'));
+  await userEvent.click(trigger);
+  await userEvent.click(page.getByRole('menuitem', { name: label, exact: true }));
+  await vi.waitFor(() => expect(trigger.getAttribute('aria-label')).toContain(`${label} ·`));
+}
+
 async function renderedPDF(host: HTMLElement) {
   await vi.waitFor(() => {
     const canvas = host.querySelector<HTMLCanvasElement>('canvas');
@@ -47,6 +59,47 @@ async function renderedPDF(host: HTMLElement) {
 }
 
 describe('File preview sizing with real renderers', () => {
+  it.each(['image', 'pdf', 'docx'] as const)('gives the %s reading viewport the full surface height', async kind => {
+    await page.viewport(1200, 900);
+    const bytes = kind === 'docx' ? new Uint8Array(await (await fetch(docxURL)).arrayBuffer()) : createPreviewPDF([{ width: 600, height: 800 }]);
+    const host = mount(() => kind === 'image' ? <ImagePreviewPane descriptor={{ mode: 'image' }} objectUrl={previewImageURL} />
+      : kind === 'pdf' ? <PdfPreviewPane bytes={bytes} /> : <DocxPreviewPane bytes={bytes} />, 380, 300);
+    const viewport = host.querySelector<HTMLElement>(kind === 'image' ? '.image-preview-viewport' : `.${kind}-preview-pane`)!;
+    await vi.waitFor(() => expect(viewport.clientHeight).toBe(host.clientHeight));
+    expect(viewport.getBoundingClientRect().top).toBe(host.getBoundingClientRect().top);
+    const trigger = zoomMenuTrigger(host);
+    await vi.waitFor(() => expect(trigger.getAttribute('aria-disabled')).not.toBe('true'));
+    const controls = host.querySelector<HTMLElement>('.preview-zoom-controls')!;
+    assertContained(viewport, controls);
+    for (const button of controls.querySelectorAll<HTMLElement>('button,[role=button]')) assertContained(viewport, button);
+    // The empty part of the overlay must remain available to the reading surface.
+    const view = viewport.getBoundingClientRect();
+    expect(viewport.contains(document.elementFromPoint(view.left + 12, view.top + 18))).toBe(true);
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{End}{Enter}');
+    await vi.waitFor(() => expect(trigger.getAttribute('aria-label')).toContain('Actual size · 100%'));
+    const controlsTop = controls.getBoundingClientRect().top;
+    viewport.scrollTop = viewport.scrollHeight;
+    viewport.scrollLeft = viewport.scrollWidth;
+    await vi.waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(0));
+    expect(controls.getBoundingClientRect().top).toBe(controlsTop);
+    // The compact strip stays on one line without reserving reading space.
+    host.style.width = '220px'; host.style.height = '100px';
+    await vi.waitFor(() => {
+      expect(viewport.clientHeight).toBe(100);
+      expect(controls.getBoundingClientRect().height).toBeLessThanOrEqual(44);
+      for (const button of controls.querySelectorAll<HTMLElement>('button,[role=button]')) {
+        assertContained(viewport, button);
+        expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+      }
+    });
+    await selectZoomMode(host, 'Fit to window');
+    const zoomIn = controls.querySelector<HTMLButtonElement>(`button[aria-label="Zoom in ${kind === 'image' ? 'image' : kind.toUpperCase()} preview"]`)!;
+    await userEvent.hover(zoomIn);
+    await vi.waitFor(() => expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(zoomIn.getAttribute('aria-label')));
+  });
+
   it.each([1, 0.65, 1.5])('fits PDF content and keeps the canvas stable under a %s projection', async projection => {
     await page.viewport(1600, 1100);
     const host = mount(() => <PdfPreviewPane bytes={createPreviewPDF([{ width: 600, height: 400 }])} />, 900, 620, projection);
@@ -64,12 +117,13 @@ describe('File preview sizing with real renderers', () => {
     expect(host.querySelector('canvas')).toBe(canvas);
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
     const controls = host.querySelector<HTMLElement>('.pdf-preview-controls')!;
-    expect(controls.getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().top + 1);
+    assertContained(viewport, controls);
+    expect(viewport.clientHeight).toBe(host.clientHeight);
     for (let index = 0; index < 12; index++) {
       (host.querySelector('button[aria-label="Zoom in PDF preview"]') as HTMLButtonElement).click();
       (host.querySelector('button[aria-label="Zoom out PDF preview"]') as HTMLButtonElement).click();
     }
-    await userEvent.click(host.querySelector<HTMLButtonElement>('button[aria-label="Fit to window"]')!);
+    await selectZoomMode(host, 'Fit to window');
     await renderedPDF(host); assertContained(viewport, frame());
     expect(host.textContent).not.toContain('Unable to render');
   });
@@ -115,7 +169,7 @@ describe('File preview sizing with real renderers', () => {
     assertContained(viewport, image);
     host.style.width = '380px'; host.style.height = '320px';
     await vi.waitFor(() => assertContained(viewport, image));
-    await userEvent.click(host.querySelector<HTMLButtonElement>('button[aria-label="Actual size"]')!);
+    await selectZoomMode(host, 'Actual size');
     viewport.scrollTop = 0; viewport.scrollLeft = 0;
     expect(image.getBoundingClientRect().left).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().left);
     expect(image.getBoundingClientRect().top).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().top);
@@ -179,7 +233,12 @@ it('refits inside the real floating window after resizing, maximizing and restor
   await renderedPDF(root);
   const viewport = root.querySelector<HTMLElement>('.pdf-preview-pane')!;
   const frame = root.querySelector<HTMLElement>('.pdf-preview-pane__page-frame')!;
-  const verify = async () => { await renderedPDF(root); await vi.waitFor(() => assertContained(viewport, frame)); };
+  const verify = async () => {
+    await renderedPDF(root);
+    await vi.waitFor(() => assertContained(viewport, frame));
+    expect(viewport.clientHeight).toBe(viewport.parentElement!.clientHeight);
+    assertContained(viewport, root.querySelector<HTMLElement>('.preview-zoom-controls')!);
+  };
   const handle = [...root.querySelectorAll<HTMLElement>('div')].find(el => el.classList.contains('cursor-nwse-resize') && el.classList.contains('bottom-0') && el.classList.contains('right-0'))!;
   const bounds = handle.getBoundingClientRect();
   Object.defineProperty(root, 'setPointerCapture', { configurable: true, value: () => {} });
@@ -197,16 +256,23 @@ it('refits inside the real floating window after resizing, maximizing and restor
   await verify();
 });
 
-it('fits in the mobile dialog without toolbar overlap', async () => {
+it('fits in the mobile dialog with floating controls inside the reading area', async () => {
   await page.viewport(390, 844);
-  mount(() => <FilePreviewSurface open onOpenChange={() => {}} item={{ id: 'fixture', name: 'geometry.pdf', path: '/geometry.pdf', type: 'file' }} descriptor={{ mode: 'pdf' }} bytes={createPreviewPDF([{ width: 600, height: 400 }])} />);
-  await vi.waitFor(() => expect(document.querySelector('.pdf-preview-pane')).toBeTruthy());
-  await renderedPDF(document.body);
-  const viewport = document.querySelector<HTMLElement>('.pdf-preview-pane')!;
-  assertContained(viewport, document.querySelector<HTMLElement>('.pdf-preview-pane__page-frame')!);
-  expect(document.querySelector('.file-preview-floating-window')).toBeNull();
-  const controls = document.querySelector<HTMLElement>('.pdf-preview-controls')!;
-  expect(controls.scrollWidth).toBeLessThanOrEqual(controls.clientWidth + 1);
+  await touchCommands.emulateTouchInput(true);
+  try {
+    expect(matchMedia('(pointer: coarse)').matches).toBe(true);
+    mount(() => <FilePreviewSurface open onOpenChange={() => {}} item={{ id: 'fixture', name: 'geometry.pdf', path: '/geometry.pdf', type: 'file' }} descriptor={{ mode: 'pdf' }} bytes={createPreviewPDF([{ width: 600, height: 400 }])} />);
+    await vi.waitFor(() => expect(document.querySelector('.pdf-preview-pane')).toBeTruthy());
+    await renderedPDF(document.body);
+    const viewport = document.querySelector<HTMLElement>('.pdf-preview-pane')!;
+    assertContained(viewport, document.querySelector<HTMLElement>('.pdf-preview-pane__page-frame')!);
+    expect(document.querySelector('.file-preview-floating-window')).toBeNull();
+    const controls = document.querySelector<HTMLElement>('.pdf-preview-controls')!;
+    expect(controls.scrollWidth).toBeLessThanOrEqual(controls.clientWidth + 1);
+    expect(viewport.clientHeight).toBe(viewport.parentElement!.clientHeight);
+    for (const button of controls.querySelectorAll('button')) assertContained(viewport, button);
+    await selectZoomMode(controls, 'Actual size');
+  } finally { await touchCommands.emulateTouchInput(false); }
 });
 
 it('preserves local sizing and wheel ownership inside the real Workbench surface', async () => {
@@ -229,7 +295,26 @@ it('preserves local sizing and wheel ownership inside the real Workbench surface
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   expect(image().style.width).toBe(originalWidth);
   assertContained(viewport, image());
+  expect(viewport.clientHeight).toBe(viewport.parentElement!.clientHeight);
+  const controls = host.querySelector<HTMLElement>('.preview-zoom-controls')!;
+  assertContained(viewport, controls);
+  const trigger = zoomMenuTrigger(controls);
+  trigger.focus();
+  await userEvent.keyboard('{ArrowDown}');
+  const menu = document.getElementById(trigger.getAttribute('aria-controls')!)!;
+  await vi.waitFor(() => assertContained(viewport, menu));
+  expect(menu.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+  expect(menu.querySelector('[data-floe-selected="true"]')?.textContent).toBe('Fit to window');
+  await userEvent.keyboard('{Escape}');
+  await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  await selectZoomMode(controls, 'Actual size');
+  expect(state().viewport.scale).toBe(1.3);
+  await selectZoomMode(controls, 'Fit to window');
   const originalCanvasScale = state().viewport.scale;
+  controls.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -100, ctrlKey: true }));
+  expect(state().viewport.scale).toBe(originalCanvasScale);
+  expect(image().style.width).toBe(originalWidth);
   viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -100, ctrlKey: true }));
   expect(state().viewport.scale).toBe(originalCanvasScale);
   expect(image().style.width).not.toBe(originalWidth);
@@ -244,7 +329,7 @@ it('keeps the same reading point when zooming a later PDF page', async () => {
   await page.viewport(1400, 1000);
   const host = mount(() => <PdfPreviewPane bytes={createPreviewPDF(Array.from({ length: 10 }, () => ({ width: 600, height: 400 })))} />, 900, 620);
   await renderedPDF(host);
-  await userEvent.click(host.querySelector<HTMLButtonElement>('button[aria-label="Actual size"]')!);
+  await selectZoomMode(host, 'Actual size');
   const viewport = host.querySelector<HTMLElement>('.pdf-preview-pane')!;
   viewport.scrollTop = 3 * 440 + 24 + 200 + 12 - viewport.clientHeight / 2;
   await vi.waitFor(() => expect(host.querySelector('[data-page-number="4"]')).toBeTruthy());

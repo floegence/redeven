@@ -5,6 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DocxPreviewPane } from './DocxPreviewPane';
+import { selectPreviewZoomMode } from './previewZoom.test-support';
 
 const renderAsyncMock = vi.hoisted(() => vi.fn());
 const resizeObserverState = vi.hoisted(() => ({
@@ -18,7 +19,8 @@ vi.mock('docx-preview', () => ({
   renderAsync: renderAsyncMock,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -189,13 +191,13 @@ describe('DocxPreviewPane', () => {
       setViewportWidth(viewport, 1224); triggerResizeObservers();
       const content = () => host.querySelector('.docx-preview-pane__content') as HTMLElement;
       await waitFor(() => content()?.style.transform === 'scale(0.5)', 'Page must fit height');
-      (host.querySelector('button[aria-label="Fit to width"]') as HTMLButtonElement).click();
+      await selectPreviewZoomMode(host, 'Fit to width');
       expect(content().style.transform).toBe('scale(1.5)');
       (host.querySelector('button[aria-label="Zoom in DOCX preview"]') as HTMLButtonElement).click();
       expect(content().style.transform).toBe('scale(1.6)');
       setViewportWidth(viewport, 424); triggerResizeObservers();
       expect(content().style.transform).toBe('scale(1.6)');
-      (host.querySelector('button[aria-label="Fit to window"]') as HTMLButtonElement).click();
+      await selectPreviewZoomMode(host, 'Fit to window');
       expect(content().style.transform).toBe('scale(0.5)');
     } finally { dispose(); }
   });

@@ -5,6 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PdfPreviewPane } from './PdfPreviewPane';
+import { selectPreviewZoomMode } from './previewZoom.test-support';
 
 const loadPDFDocumentMock = vi.hoisted(() => vi.fn());
 const isPDFRenderCancelledMock = vi.hoisted(() => vi.fn((_error?: unknown) => false));
@@ -28,7 +29,8 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   ),
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -215,7 +217,7 @@ describe('PdfPreviewPane', () => {
 
     expect(loadPDFDocumentMock).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
     expect(pdfDocument.getPage).toHaveBeenCalledTimes(4);
-    expect(host.textContent).toContain('2 pages');
+    expect(await selectPreviewZoomMode(host, 'Fit to window')).toContain('2 pages');
     expect(host.textContent).toContain('50%');
 
     const firstFrame = host.querySelector('.pdf-preview-pane__page-frame') as HTMLDivElement | null;
@@ -256,7 +258,7 @@ describe('PdfPreviewPane', () => {
     triggerResizeObservers();
 
     await waitFor(() => pages[0]!.render.mock.calls.length > 0, 'First visible page did not render');
-    (host.querySelector('button[aria-label="Fit to width"]') as HTMLButtonElement).click();
+    await selectPreviewZoomMode(host, 'Fit to width');
     await flushAsyncWork();
     for (const page of pages) page.render.mockClear();
 
@@ -288,7 +290,6 @@ describe('PdfPreviewPane', () => {
 
     const frame = () => host.querySelector('.pdf-preview-pane__page-frame') as HTMLDivElement | null;
     const zoomInButton = () => host.querySelector('button[aria-label="Zoom in PDF preview"]') as HTMLButtonElement | null;
-    const fitButton = () => host.querySelector('button[aria-label="Fit to window"]') as HTMLButtonElement | null;
 
     await waitFor(() => frame()?.style.width === '430px', 'PDF preview did not settle into fit mode');
 
@@ -297,7 +298,7 @@ describe('PdfPreviewPane', () => {
 
     expect(host.textContent).toContain('60%');
 
-    fitButton()?.click();
+    await selectPreviewZoomMode(host, 'Fit to window');
     await waitFor(() => frame()?.style.width === '430px', 'PDF preview did not return to fit mode');
 
     expect(host.textContent).toContain('50%');

@@ -187,11 +187,8 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
     });
   });
   return (
-    <div class={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
-      <div class="pdf-preview-controls flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
-        <span class="text-xs text-muted-foreground"><span>PDF</span> · {loaded()?.pages.length ? i18n.tn('uiCopy.preview.pageCount', loaded()!.pages.length) : i18n.t('uiCopy.preview.noPages')}</span>
-        <FilePreviewZoomControls zoom={zoom} kind="Pdf" />
-      </div>
+    <div class={cn('relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
+      <FilePreviewZoomControls zoom={zoom} kind="Pdf" metadata={<><span>PDF</span> · {loaded()?.pages.length ? i18n.tn('uiCopy.preview.pageCount', loaded()!.pages.length) : i18n.t('uiCopy.preview.noPages')}</>} />
       <div ref={setViewport} {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
         onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
         class="pdf-preview-pane relative min-h-0 min-w-0 flex-1 overflow-auto p-3 [overflow-anchor:none]">

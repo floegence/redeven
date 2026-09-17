@@ -776,6 +776,8 @@ export const enUS = defineDictionary({
       allFinished: 'All downloads are finished.',
     },
     preview: {
+      zoomOptions: 'Preview zoom: {mode} · {percent}',
+      manualZoom: 'Manual zoom',
       fitToWidth: 'Fit preview to width',
       zoomInDocx: 'Zoom in DOCX preview',
       zoomOutDocx: 'Zoom out DOCX preview',

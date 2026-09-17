@@ -73,8 +73,8 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
   const width = () => (layout()?.width ?? 0) * (zoom.scale() ?? 0);
   const height = () => (layout()?.height ?? 0) * (zoom.scale() ?? 0);
   return (
-    <div class={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
-      <div class="docx-preview-controls flex shrink-0 justify-end border-b border-border/60 px-3 py-2"><FilePreviewZoomControls zoom={zoom} kind="Docx" /></div>
+    <div class={cn('relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
+      <FilePreviewZoomControls zoom={zoom} kind="Docx" />
       <div ref={setViewport} {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS} class="docx-preview-pane relative min-h-0 min-w-0 flex-1 overflow-auto p-3 [overflow-anchor:none]">
         <Show when={!error()} fallback={<FilePreviewErrorState errorType="render_error" message={error()} />}>
           <div class="relative grid place-items-center" style={{ width: `${Math.max(width(), zoom.viewportSize()?.width ?? 0)}px`, height: `${Math.max(height(), zoom.viewportSize()?.height ?? 0)}px` }}>

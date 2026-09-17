@@ -20,7 +20,7 @@ describe('ImagePreviewPane', () => {
     try {
       const controls = host.querySelector('.image-preview-controls')!;
       expect(controls.parentElement).not.toBe(host.querySelector('.image-preview-viewport'));
-      expect(controls.className).not.toContain('absolute');
+      expect(controls.className).toContain('absolute');
       expect(host.textContent).toContain('--');
       expect((host.querySelector('button[aria-label="uiCopy.preview.zoomInImage"]') as HTMLButtonElement).disabled).toBe(true);
     } finally { dispose(); }

@@ -5586,6 +5586,8 @@
       "allFinished": "모든 다운로드가 완료되었습니다."
     },
     "preview": {
+      "zoomOptions": "미리보기 확대/축소: {mode} · {percent}",
+      "manualZoom": "수동 확대/축소",
       "fitWindow": "창에 맞추기",
       "fitWidth": "너비에 맞추기",
       "actualSize": "실제 크기",
