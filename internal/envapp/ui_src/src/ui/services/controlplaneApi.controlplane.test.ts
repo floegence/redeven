@@ -22,6 +22,20 @@ describe('controlplaneApi controlplane helper usage', () => {
     delete window.redevenDesktopSessionContext;
   });
 
+  it('does not renew or navigate an active workspace for expired background version metadata', async () => {
+    const renew = vi.fn(async () => false);
+    window.redevenDesktopSessionContext = {
+      getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
+      renewProviderSession: renew,
+    };
+    const fetchMock = vi.fn(async () => Response.json({ error: { code: 'INVALID_ENV_SESSION' } }, { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const mod = await import('./controlplaneApi');
+    await expect(mod.getControlplaneAgentLatestVersion('env_demo')).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(renew).not.toHaveBeenCalled();
+  });
+
   it('renews an expired Desktop Cloud sandbox session once without navigating the workspace', async () => {
     const renew = vi.fn(async () => true);
     window.redevenDesktopSessionContext = {
