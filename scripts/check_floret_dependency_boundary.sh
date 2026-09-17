@@ -72,7 +72,7 @@ fi
 
 echo "[INFO] checking one workspace live transport and bounded UI state"
 require_source internal/ai/flower_live_stream.go 'FlowerLiveStreamReady'
-require_source desktop/src/main/main.ts "{ path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'] }"
+require_source desktop/src/main/runtimeFlowerRoutes.ts "{ path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'] }"
 require_source internal/flower_ui/src/threadCache.ts 'createThreadCache'
 require_source internal/flower_ui/src/liveTransport.ts 'connectionEpoch'
 require_source internal/flower_ui/src/transportOutbox.ts 'createTransportOutbox'
