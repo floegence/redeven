@@ -75,6 +75,8 @@ function sample() {
       name: el.dataset.floeProgressShimmer,
       base,
       peak,
+      luminanceGain: luminance(peak) - luminance(base),
+      lightnessGain: b[0] - a[0],
       minimumContrast,
       deltaEOK: Math.hypot(...a.map((v, i) => v - b[i])),
       duration: animation?.effect.getTiming().duration,
@@ -96,7 +98,12 @@ try {
       await page.evaluate(value => window.progressFixture.theme.selectShellTheme(value.mode, value.name), theme);
       const primary = page.locator('.redeven-split-action-primary button').first();
       await primary.hover();
-      await page.waitForTimeout(150);
+      await page.evaluate(async () => {
+        await new Promise(requestAnimationFrame);
+        await Promise.all(document.getAnimations()
+          .filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+          .map(animation => animation.finished.catch(() => {})));
+      });
       const result = await primary.evaluate(button => {
         const before = getComputedStyle(button, '::before');
         return { disabled: button.disabled, cursor: getComputedStyle(button).cursor, animation: before.animationName, pointerEvents: before.pointerEvents, background: before.backgroundImage, width: button.getBoundingClientRect().width };
@@ -110,6 +117,7 @@ try {
       assert.deepEqual(paint, { background: 'rgba(0, 0, 0, 0)', clip: 'text', animation: 'floe-progress-shimmer' });
       const measurements = await page.evaluate(sample);
       for (const value of measurements) {
+        assert.ok(value.luminanceGain > 0 && value.lightnessGain > 0, `${theme.name}/${value.name}: shimmer must brighten its carrier`);
         assert.ok(value.minimumContrast >= 4.5, `${theme.name}/${value.name}: contrast ${value.minimumContrast}`);
         assert.ok(value.deltaEOK >= 0.08, `${theme.name}/${value.name}: color separation ${value.deltaEOK}`);
       }
@@ -123,8 +131,15 @@ try {
       assert.equal(frames[0].equals(frames[1]), false, `${theme.name}: actual button pixels move`);
       await page.evaluate(() => document.getAnimations().forEach(animation => animation.play()));
       report.cases.push({ material, ...theme, result, paint, measurements });
-      if (['classic-light', 'classic-dark', 'porcelain-light', 'nord'].includes(theme.name)) {
+      if (['classic-light', 'classic-dark', 'github-light', 'nord'].includes(theme.name)) {
         await page.waitForTimeout(2450);
+        if (theme.name === 'github-light') {
+          await page.evaluate(() => document.getAnimations().forEach(animation => {
+            if (animation.animationName === 'floe-progress-shimmer') { animation.pause(); animation.currentTime = 1200; }
+          }));
+          await page.locator('.redeven-environment-card').screenshot({ path: `${output}/${material}-blue-peak.png`, animations: 'allow' });
+          await page.evaluate(() => document.getAnimations().forEach(animation => animation.play()));
+        }
         await page.screenshot({ path: `${output}/${material}-${theme.name}.png` });
       }
     }

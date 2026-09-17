@@ -128,20 +128,29 @@ export default mergeConfig(viteConfig, defineConfig({
             const second = PNG.sync.read(await target.screenshot({ animations: 'allow' }));
             if (first.width !== second.width || first.height !== second.height) throw new Error('Progress motion changed text geometry');
             let changed = 0;
+            let brightened = 0;
+            let darkened = 0;
+            const luminance = (data: Uint8Array, offset: number) => [0.2126, 0.7152, 0.0722].reduce((sum, weight, channel) => {
+              const value = data[offset + channel] / 255;
+              return sum + weight * (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+            }, 0);
             let backgroundChanged = 0;
             for (let i = 0; i < first.data.length; i += 4) {
               const difference = Math.abs(first.data[i] - second.data[i]) + Math.abs(first.data[i + 1] - second.data[i + 1]) + Math.abs(first.data[i + 2] - second.data[i + 2]);
               if (difference > 15) changed++;
+              const gain = luminance(second.data, i) - luminance(first.data, i);
+              if (gain > 0.003) brightened++;
+              if (gain < -0.003) darkened++;
               if (difference > 6 && first.data[i] === first.data[0] && first.data[i + 1] === first.data[1] && first.data[i + 2] === first.data[2]) backgroundChanged++;
             }
-            regions.push({ selector, changed, backgroundChanged, width: first.width, height: first.height });
+            regions.push({ selector, changed, brightened, darkened, backgroundChanged, width: first.width, height: first.height });
           }
           const output = path.resolve(__dirname, '.cache/progress-shimmer');
           await mkdir(output, { recursive: true });
           if (/classic-light|classic-dark|nord|solarized-light/u.test(name)) {
             await frame.locator('body').screenshot({ path: path.join(output, `${name}.png`), animations: 'allow' });
           }
-          const result = { changed: Math.min(...regions.map(region => region.changed)), backgroundChanged: regions.reduce((sum, region) => sum + region.backgroundChanged, 0), regions, measurements };
+          const result = { brightened: Math.min(...regions.map(region => region.brightened)), darkened: regions.reduce((sum, region) => sum + region.darkened, 0), changed: Math.min(...regions.map(region => region.changed)), backgroundChanged: regions.reduce((sum, region) => sum + region.backgroundChanged, 0), regions, measurements };
           await writeFile(path.join(output, `${name}.json`), JSON.stringify(result, null, 2));
           await frame.evaluate(() => document.getAnimations().forEach(animation => animation.play()));
           return result;
