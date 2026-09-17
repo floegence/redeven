@@ -17,6 +17,8 @@ import (
 
 func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing.T) {
 	liveUsage := make(chan FlowerContextUsage, 8)
+	liveSnapshots := make(chan FlowerContextUsage, 16)
+	release := make(chan struct{})
 	gateway := florettest.NewScriptedGateway(
 		flprovider.Identity{Provider: "test", Model: "cache-usage", StateCompatibilityKey: "test:cache-usage:v1"},
 		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
@@ -28,7 +30,7 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 			{Type: flprovider.EventDelta, Text: "done"},
 			{Type: flprovider.EventDone, Reason: "stop"},
 		}},
-		florettest.Step{Events: []flprovider.Event{
+		florettest.Step{BlockUntil: release, Events: []flprovider.Event{
 			{Type: flprovider.EventUsage, Usage: flprovider.Usage{
 				InputTokens: 40, OutputTokens: 10, CacheReadTokens: 50,
 				WindowInputTokens: 90, TotalTokens: 100, Source: "native", Available: true,
@@ -49,6 +51,7 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
 	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(_ context.Context, request flruntime.AgentRequest) (*flruntime.Agent, error) {
 		adapterRun := &run{threadID: request.ThreadID.String(), host: runHostCapabilities{publishContextUsage: func(usage FlowerContextUsage) {
+			liveSnapshots <- usage
 			if usage.ThreadUsage != nil {
 				liveUsage <- usage
 			}
@@ -80,6 +83,31 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	if err := gateway.WaitForRequests(t.Context(), 2); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := reader.Context(t.Context(), created.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected, err := flowerThreadContextProjection(pending, flruntime.ThreadView{ThreadID: created.ThreadID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projected.Usage == nil || projected.Usage.Confirmed == nil || projected.Usage.Confirmed.InputTokens != 100 || projected.Usage.Estimate == nil {
+		t.Fatalf("pending context=%+v", projected.Usage)
+	}
+	var latest FlowerContextUsage
+	for len(liveSnapshots) > 0 {
+		latest = <-liveSnapshots
+	}
+	canonicalJSON, _ := json.Marshal([]*FlowerContextSample{projected.Usage.Confirmed, projected.Usage.Estimate})
+	liveJSON, _ := json.Marshal([]*FlowerContextSample{latest.Confirmed, latest.Estimate})
+	if string(canonicalJSON) != string(liveJSON) {
+		t.Fatalf("canonical=%s live=%s", canonicalJSON, liveJSON)
+	}
+	close(release)
 	secondLive := waitForFlowerLiveUsage(t, liveUsage)
 	secondWant := FlowerThreadTokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 85, CacheWriteTokens: 5}
 	if secondLive.ThreadUsage == nil || *secondLive.ThreadUsage != secondWant {
@@ -296,13 +324,13 @@ func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *te
 func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 	observedAt := time.Unix(1_723_800_000, 0).UTC()
 	projection, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
-		Usage: &observation.ContextStatus{
+		ContextUsage: &flruntime.ThreadContextUsage{Confirmed: &observation.ContextStatus{
 			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-context", Step: 2,
 			Phase: observation.ContextPhaseProviderUsage, ObservedAt: observedAt,
 			Usage:           observation.ProviderUsage{WindowInputTokens: 500},
 			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000},
 			UsedRatio:       0.5, Status: observation.ContextStatusStable,
-		},
+		}},
 		UsageTotals: &flruntime.ThreadTokenUsageTotals{
 			InputTokens: 120, OutputTokens: 30, CacheReadTokens: 75, CacheWriteTokens: 5,
 		},
@@ -310,7 +338,7 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if projection.Usage == nil || projection.Usage.InputTokens != 500 || projection.Usage.ContextWindowTokens != 1000 || projection.Usage.UpdatedAtMs != observedAt.UnixMilli() {
+	if projection.Usage == nil || projection.Usage.Confirmed.InputTokens != 500 || projection.Usage.Confirmed.ContextWindowTokens != 1000 || projection.Usage.Confirmed.UpdatedAtMs != observedAt.UnixMilli() {
 		t.Fatalf("usage=%#v", projection.Usage)
 	}
 	if projection.Usage.ThreadUsage == nil || *projection.Usage.ThreadUsage != (FlowerThreadTokenUsage{
@@ -322,11 +350,11 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 
 func TestFlowerThreadContextProjectionRejectsNegativeCanonicalUsageTotals(t *testing.T) {
 	_, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
-		Usage: &observation.ContextStatus{
+		ContextUsage: &flruntime.ThreadContextUsage{Confirmed: &observation.ContextStatus{
 			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-context",
 			Phase: observation.ContextPhaseProviderUsage, ObservedAt: time.Now(),
 			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000}, Status: observation.ContextStatusStable,
-		},
+		}},
 		UsageTotals: &flruntime.ThreadTokenUsageTotals{CacheReadTokens: -1},
 	}, flruntime.ThreadView{ThreadID: "thread-context"})
 	if err == nil {

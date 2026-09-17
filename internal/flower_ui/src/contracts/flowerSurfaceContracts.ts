@@ -246,6 +246,12 @@ export type FlowerThreadTokenUsage = Readonly<{
 }>;
 
 export type FlowerContextUsage = Readonly<{
+  confirmed?: FlowerContextSample;
+  estimate?: FlowerContextSample;
+  thread_usage?: FlowerThreadTokenUsage;
+}>;
+
+export type FlowerContextSample = Readonly<{
   run_id?: string;
   step_index?: number;
   phase: FlowerContextUsagePhase;
@@ -259,7 +265,6 @@ export type FlowerContextUsage = Readonly<{
   pressure_status: FlowerContextPressureStatus;
   source?: string;
   updated_at_ms: number;
-  thread_usage?: FlowerThreadTokenUsage;
 }>;
 
 export type FlowerContextCompactionPhase = 'start' | 'complete' | 'failed' | 'cancelled' | 'noop' | 'checkpoint';

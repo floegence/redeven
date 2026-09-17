@@ -103,7 +103,7 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 	t.Run("manual slash command compacts and preserves context", func(t *testing.T) {
 		threadID := createDeepSeekCompactionThread(t, ctx, svc, &meta, manualModelID, "Manual context compaction")
 		oldestMarker := deepSeekManualContextMarker
-		var before FlowerContextUsage
+		var before FlowerContextSample
 		for index := 1; index <= 4; index++ {
 			seed := sendDeepSeekCompactionTurn(t, ctx, svc, &meta, fmt.Sprintf("deepseek-compaction-manual-seed-%d", index), threadID, manualModelID,
 				deepSeekCompactionPrompt("manual", oldestMarker, 12_000, "Reply with ACK_"+oldestMarker+" and finish normally without calling tools."))
@@ -143,8 +143,8 @@ func TestE2E_FlowerDeepSeekV4FlashContextCompaction(t *testing.T) {
 				"Reply with the oldest remembered marker and finish normally without calling tools.")
 			detail = sendDeepSeekCompactionTurn(t, ctx, svc, &meta, requestID, threadID, modelID, prompt)
 			currentInput := int64(0)
-			if detail.Thread.ContextUsage != nil {
-				currentInput = detail.Thread.ContextUsage.InputTokens
+			if detail.Thread.ContextUsage != nil && detail.Thread.ContextUsage.Confirmed != nil {
+				currentInput = detail.Thread.ContextUsage.Confirmed.InputTokens
 			}
 			t.Logf("automatic seed_input=%d safe_limit=%d trigger_attempt=%d trigger_tokens=%d current_input=%d compactions=%d", before.InputTokens, before.RequestSafeLimitTokens, attempt+1, triggerTokens, currentInput, len(detail.Thread.ContextCompactions))
 			for _, item := range detail.Thread.ContextCompactions {
@@ -221,12 +221,12 @@ func createDeepSeekCompactionThread(t *testing.T, ctx context.Context, svc *Serv
 	return thread.ThreadID
 }
 
-func requireDeepSeekContextUsage(t *testing.T, detail *FlowerThreadDetail, label string, contextWindow int64) FlowerContextUsage {
+func requireDeepSeekContextUsage(t *testing.T, detail *FlowerThreadDetail, label string, contextWindow int64) FlowerContextSample {
 	t.Helper()
-	if detail == nil || detail.Thread.ContextUsage == nil {
+	if detail == nil || detail.Thread.ContextUsage == nil || detail.Thread.ContextUsage.Confirmed == nil {
 		t.Fatalf("%s omitted canonical context usage", label)
 	}
-	usage := *detail.Thread.ContextUsage
+	usage := *detail.Thread.ContextUsage.Confirmed
 	if usage.ContextWindowTokens != contextWindow || usage.OutputHeadroomTokens != deepSeekCompactionE2EMaxOutput {
 		t.Fatalf("%s policy=(window:%d headroom:%d), want (%d,%d)", label,
 			usage.ContextWindowTokens, usage.OutputHeadroomTokens,

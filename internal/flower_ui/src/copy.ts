@@ -485,7 +485,9 @@ export type FlowerSurfaceCopy = Readonly<{
       lastKnownLabel: string;
       unknownPercent: string;
       unavailable: string;
-      usedLabel: string;
+      confirmedLabel: string;
+      estimateLabel: string;
+      estimateHelp: string;
       ratioLabel: string;
       cacheHitLabel: string;
       thresholdLabel: string;
@@ -815,10 +817,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hardLimit: 'At limit',
       estimated: 'Estimated',
       unknown: 'Tracking',
-      lastKnownLabel: 'Last known context',
+      lastKnownLabel: 'Previous request',
       unknownPercent: '--%',
       unavailable: 'Not available',
-      usedLabel: 'Used',
+      confirmedLabel: 'Model-confirmed usage',
+      estimateLabel: 'Current request estimate',
+      estimateHelp: 'Estimates include safety margins. Actual usage may differ.',
       ratioLabel: 'Usage',
       cacheHitLabel: 'Conversation cache hit rate',
       thresholdLabel: 'Compaction threshold',

@@ -203,7 +203,7 @@ func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T
 	}
 	defer prepared.Close()
 	estimate := prepared.TokenEstimate()
-	if estimate.EstimatedInputTokens < 1024 || estimate.EstimatedInputTokens > 200000 || estimate.Source != "deepseek_responses_text_bytes_image_tokens_v2" {
+	if estimate.EstimatedInputTokens < 1024 || estimate.EstimatedInputTokens > 200000 || estimate.Source != "deepseek_v4_tokenizer_image_tokens_v3" {
 		t.Fatalf("desktop image did not use upstream visual estimate: %+v", estimate)
 	}
 	if admissions != 0 || resolutions != 1 {

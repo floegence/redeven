@@ -7,7 +7,7 @@ require (
 	github.com/bodgit/sevenzip v1.6.1
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.19.2
-	github.com/floegence/floret/v7 v7.14.0
+	github.com/floegence/floret/v7 v7.15.1
 	github.com/floegence/flowersec/flowersec-go/v5 v5.2.2
 	github.com/floegence/redeven-service-templates v0.6.0
 	github.com/floegence/redevplugin/v3 v3.0.32
@@ -38,6 +38,7 @@ require (
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
+	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dunglas/httpsfv v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -55,6 +56,7 @@ require (
 	github.com/minio/minlz v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pkoukk/tiktoken-go v0.1.8 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.62.0 // indirect

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower interactions and context state
 description: Typed pending interactions, automatic context compression, and unlocked composer behavior.
 tags: [ui, flower, approval, input, context]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 # Summary
 
@@ -33,7 +33,7 @@ One pure presenter owns operation classification, title, description, command, t
 
 ## Context and recovery
 
-Runtime restart recovery is quiet unless content cannot be recovered, in which case the affected row offers a nonblocking retry. Context usage, automatic compression, and the pure `/compact` mapping are owned by [AI model and context runtime](../ai/model-context-runtime.md), not by the approval surface.
+Runtime restart recovery is quiet unless content cannot be recovered, in which case the affected row offers a nonblocking retry. Context usage, automatic compression, and the pure `/compact` mapping are owned by [AI model and context runtime](../ai/model-context-runtime.md), not by the approval surface. The composer circle prioritizes model-confirmed usage, separately labels current estimates, and preserves current-pressure warnings. All shipped locales provide the same distinction; keyboard users can focus the circle and dismiss its details with Escape.
 
 # Boundaries
 

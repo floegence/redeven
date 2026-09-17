@@ -796,6 +796,17 @@ function renderTerminalFontLicenses() {
   }).join('\n\n');
 }
 
+function renderDeepSeekTokenizerNotice() {
+  const requirement = goModRequirements().filter((item) => item.Path === 'github.com/floegence/floret/v7');
+  const [moduleInfo] = downloadGoModules(requirement);
+  const license = fs.readFileSync(path.join(moduleInfo.Dir, 'internal/deepseektokenizer/LICENSE'), 'utf8');
+  const digest = crypto.createHash('sha256').update(license).digest('hex');
+  if (digest !== 'f2c6c602815669d292889e5be8c802f2ed950653b77999b1584e8e6aed25d040') {
+    throw new Error('Bundled DeepSeek tokenizer license changed; review the published source notice.');
+  }
+  return license.replace(/\r\n/gu, '\n').trim();
+}
+
 function renderNotices(goEntries, npmEntries, terminalAgentIcons, containerServiceIcons, floetermThemeNotices) {
   return `# Third-Party Notices
 
@@ -824,6 +835,12 @@ Redeven downloads the following generic Host runtime only after an authorized us
 Redeven derives its offline Agent model metadata from [models.dev](https://github.com/anomalyco/models.dev), under MIT. The compact source snapshot and reviewed provider corrections live in \`scripts/model-catalog/\`; the generated catalog is bundled in the Runtime and Flower UI. The snapshot records the SHA-256 of the upstream API response used for the update.
 
 ${fs.readFileSync(path.join(repoRoot, 'scripts/model-catalog/models-dev.LICENSE'), 'utf8').trim()}
+
+## Bundled DeepSeek V4 Tokenizer
+
+Published Floret includes the offline DeepSeek V4 tokenizer vocabulary from the official API tokenizer archive, under MIT. Its source tokenizer.json SHA-256 is 89085f12ef79460ac5f66d1119325ddfc694b4ab209d80bbd81d35f081dc9614. Notice generation reads and verifies the license from the exact published Go module.
+
+${renderDeepSeekTokenizerNotice()}
 
 ## Go Modules
 
