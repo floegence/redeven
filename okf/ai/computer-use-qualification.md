@@ -36,32 +36,10 @@ The disposable extension fixture separately verifies virtual focus without tab
 activation, release before reattachment, rejection of stale URL/title selection,
 and refusal to operate an unbound popup. Chrome is attached with `noDefaults`
 so Playwright cannot manufacture a passing background-focus result.
-After the user unlocked the console and explicitly continued,
-macOS background and foreground fixtures passed. The background scope checks
-AX labels, occluded target-only pixels, excluded-owner filtering and unchanged
-foreground/pointer. The native action scope checks AX values/buttons, canvas
-double-click, Enter, actual scrolling and restoration of the original application,
-window and pointer after every operation. The built Desktop private-flow fixture
-also passes ordinary/private preview, every frame rate, native IME, rejected and
-successful handback, single navigation, narrow layout and preference persistence.
-The 2026-09-17 model-driven native Desktop scope passes three turns with 21
-actual provider requests. It confirms exact click counts of 2 then 4, canvas
-double-click, text/Enter, actual wheel scrolling, canonical target references,
-and final screenshots. The three turns decode 13/76/13 live frames, with
-13/75/13 distinct images. Incidental input no longer interrupts the sequence.
-The complete Desktop browser scope passes with 43 actual provider requests after
-private-control restart on the same Runtime: semantic and visual input, navigation,
-Stage layout and hidden execution, computer settings, private ASCII/IME, handback
-and explicit Stop. Stopping dispatched navigation records an unknown outcome
-without replay; both cancellation paths allow a new same-thread visual task.
-Browser turns decode 56/65/412 frames with 38/38/189 distinct images. Recovery and
-ordinary tool preparation share one managed profile owner; the real Chromium
-regression also verifies that passive sampling cannot launch another browser.
-The task-owned Desktop and Runtime processes, ports and temporary state are
-removed after qualification, with source credential files unchanged.
-Earlier failed startup, scroll-region and input-pause runs remain failed
-historical evidence; they are not counted as successes. Lock-screen operation
-remains outside the supported scope.
+macOS fixtures separately verify background AX/window capture and authorized
+foreground AX/canvas/key/wheel actions. The measured results and their limits
+belong to [qualification evidence](computer-use-qualification-evidence.md).
+Lock-screen operation remains outside the supported scope.
 
 Performance acceptance requires paired runs with the same model, model settings,
 task set, initial application state and authorization. Record model round trips,
@@ -74,23 +52,11 @@ incidental focus changes do not fail capability acceptance. See
 measurement limits and current evidence. Deterministic fixtures cannot stand in
 for model-based paired evidence.
 
-The current paired managed-browser run passes all three efficiency thresholds
-with both variants completing 9/9 tasks. The latest pair after Codex design
-comparison measures 46.2% fewer model requests, 92.7% fewer image bytes and 41.9%
-lower median duration. These managed-browser measurements are separate from
-native or extension capability evidence. Product UI fixtures choose the target and
-save site/application access through Computer connections before model work.
-They open Stage through its visible entry and verify that a fork inherits no
-site grant before authorizing its own follow-up task.
-The 2026-09-17 complete Linux Webtop browser/X11 scope passes with 82 real
-provider requests: private handback, cancellation, media isolation, fork,
-Runtime restart and cleanup are verified. Browser turns decode 8/4/29 live
-frames and X11 turns decode 18/54, all distinct within each turn. No error frames
-or failed public viewer/media responses were recorded. This qualifies the
-tested worktree build; the exact-main pre-push gate separately qualifies integration. Semantic target
-and requested-access references survive the real public Activity projection.
-Native protocol coverage separately proves short and split JSONL responses with
-stdin still open; it needs no window capture or system input.
+Product UI fixtures choose the target and save site/application access through
+Computer connections before model work. They open Stage through its visible
+entry and verify that a fork inherits no site grant. Native protocol coverage
+checks short and split JSONL responses with stdin still open, without capture
+or system input.
 `REDEVEN_COMPUTER_UI_SCENARIO=native` limits Desktop model qualification to
 three native-window turns with real effects, canonical target references and
 continuous decoded frames. It does not qualify browser or private-input flows.
@@ -124,11 +90,10 @@ private D-Bus, fixtures and input remain inside the owned container. Desktop
 environment addresses come only from children of the verified Runtime, never
 from a guessed durable storage path or another user's session.
 
-Setup has a ten-minute deadline. A supplied `REDEVEN_NODE_ARCHIVE` must match
-`.node-version`, architecture and the official checksum. An explicit HTTPS
-`REDEVEN_COMPUTER_WEBTOP_DEBIAN_MIRROR` is recorded and retains APT signature
-checks; there is no automatic mirror fallback. Unused image repositories do not
-participate. Runtime sockets and credential copies remain in container storage.
+Setup has a ten-minute deadline. Supplied Node archives must match the pinned
+version, architecture and official checksum. Explicit Debian mirrors retain
+APT signature checks, without automatic fallback. Runtime sockets and credential
+copies remain in container storage.
 
 The complete scope requires managed-browser and X11 effects, decoded frames in
 every turn, hidden-viewer persistence, settings and private ASCII/IME handback.
@@ -181,10 +146,9 @@ remain production implementations. It verifies ordinary preview after unchanged
 samples, a 600ms delayed private page change at default 3 FPS, all FPS choices,
 client persistence, narrow header placement, native text insertion and Chromium
 IME, rejected handback and one safe continuation without navigation replay.
-The 2026-09-17 current-worktree Desktop run passes this scope, with delayed
-private pixels decoded in 386ms. Resize checks wait for the visible control's
-actual bounds after the native window updates. The earlier failed route and
-immediate-layout assertions are not passing product evidence.
+Resize checks wait for the visible control's actual bounds after the native
+window updates. Failed route and immediate-layout assertions are not passing
+product evidence.
 The isolated headless Stage browser test separately verifies clipboard paste
 through the native paste shortcut; the Desktop script does not alter the user's
 system clipboard.
