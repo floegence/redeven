@@ -1,12 +1,37 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestControlChannelAcceptsPlatformTrustRoots(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := providerLinkRemoteConfig(t, configPath)
+	// Exhaustion terminates acquisition without making any network request.
+	cfg.ControlArtifactPool.Entries = nil
+	if err := cfg.ValidateRemoteStrict(); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	a := &Agent{
+		cfg: cfg, configPath: configPath, stateDir: t.TempDir(),
+		log:           slog.New(slog.NewTextHandler(&logs, nil)),
+		controlCancel: func() {},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a.runControlLoop(ctx)
+	if !strings.Contains(logs.String(), "control channel failed") || strings.Contains(logs.String(), "control channel not started") {
+		t.Fatalf("control channel did not reach artifact acquisition with platform trust: %s", logs.String())
+	}
+}
 
 func TestStartControlChannelWaitsForPreviousOwner(t *testing.T) {
 	previousDone := make(chan struct{})

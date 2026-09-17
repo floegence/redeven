@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
@@ -683,11 +682,6 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		a.log.Warn("control channel not started: invalid remote config", "error", err)
 		return
 	}
-	trustRoots, err := x509.SystemCertPool()
-	if err != nil || trustRoots == nil {
-		a.log.Error("control channel not started: system trust roots are unavailable")
-		return
-	}
 	handlers := flowersec.NewRPCHandlers()
 	if err := handlers.HandleNotification(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) error {
 		a.handleGrantNotify(handlerCtx, payload)
@@ -698,7 +692,7 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 	}
 	controller, err := flowersec.NewConnectionController(&controlArtifactSource{agent: a}, flowersec.ConnectionControllerOptions{
 		Connector: flowersec.ConnectorOptions{
-			TrustRoots:     trustRoots,
+			// Nil selects platform trust, including macOS Keychain roots.
 			Origin:         strings.TrimSuffix(cfg.ControlplaneBaseURL, "/"),
 			ConnectTimeout: 15 * time.Second,
 			RPCHandlers:    handlers,
@@ -1292,12 +1286,8 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 		}
 		defer remotePlan.cleanup()
 	}
-	trustRoots, err := x509.SystemCertPool()
-	if err != nil || trustRoots == nil {
-		return errors.New("system trust roots are unavailable")
-	}
 	connectorOptions := flowersec.ConnectorOptions{
-		TrustRoots:     trustRoots,
+		// Do not enumerate platform roots: macOS verifies them natively.
 		Origin:         strings.TrimSuffix(a.cfg.ControlplaneBaseURL, "/"),
 		ConnectTimeout: 15 * time.Second,
 		RPCHandlers:    flowersec.NewRPCHandlers(),
