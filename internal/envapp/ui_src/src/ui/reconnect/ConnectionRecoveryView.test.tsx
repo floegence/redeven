@@ -9,7 +9,10 @@ import type { ConnectionRecoverySnapshot } from './createRuntimeReconnectControl
 
 const bridgeMocks = vi.hoisted(() => ({
   openConnectionCenter: vi.fn(async () => undefined),
+  reopenEnvironmentPage: vi.fn(),
 }));
+
+vi.mock('../utils/windowNavigation', () => ({ reopenEnvironmentPage: bridgeMocks.reopenEnvironmentPage }));
 
 vi.mock('../services/desktopShellBridge', () => ({
   openConnectionCenter: bridgeMocks.openConnectionCenter,
@@ -60,6 +63,22 @@ afterEach(() => {
 });
 
 describe('ConnectionRecoveryView', () => {
+  it('offers a fresh environment session when automatic recovery has stopped', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const retry = vi.fn(async () => undefined);
+    const dispose = render(() => <I18nProvider><ConnectionRecoveryView environmentName="Dev Local" onRetry={retry}
+      snapshot={{ ...failedSnapshot(), desktop_transport: undefined }} /></I18nProvider>, host);
+    try {
+      const reopen = Array.from(host.querySelectorAll('button')).find(button => button.textContent === 'Reopen environment');
+      expect(reopen).toBeDefined();
+      reopen!.click();
+      expect(bridgeMocks.reopenEnvironmentPage).toHaveBeenCalledWith(window);
+      expect(retry).not.toHaveBeenCalled();
+      expect(host.querySelector('[data-recovery-activity]')).toBeNull();
+    } finally { dispose(); }
+  });
+
   it('renders a real Desktop recovery attempt and retry action without exposing technical HTTP text', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -236,7 +255,7 @@ describe('ConnectionRecoveryView', () => {
 
     try {
       const heading = host.querySelector('h1[role="alert"]') as HTMLHeadingElement | null;
-      expect(heading?.textContent).toContain('Connection could not be restored');
+      expect(heading?.textContent).toContain('Connection paused');
       expect(document.activeElement).toBe(heading);
       const details = host.querySelector('details');
       expect(details?.open).toBe(false);

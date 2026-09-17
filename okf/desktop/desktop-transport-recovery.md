@@ -3,13 +3,25 @@ type: Desktop Contract
 title: Desktop transport recovery
 description: Bridge registry, recovery snapshots, generation fencing, and session disposal.
 tags: [desktop, runtime, transport, recovery]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 # Summary
 
 Each Desktop placement bridge owns one HTTP/2 session, an immutable-generation recovery snapshot, and one exact registry identity. Recovery replaces the stdio exec and HTTP/2 session once through that owner, validates process and Runtime identity, rejects stale callbacks, and disposes transport and model resources through one terminal settlement path. Health observers and individual streams cannot independently recreate the bridge lifecycle.
 
 # Contract
+
+## Recovery presentation
+
+Terminal failure uses one opaque recovery surface with generous whitespace,
+a disconnected companion drawn from the Redeven mark, the environment identity,
+a clear next action, and collapsed diagnostics. The illustration is bundled
+inline so a failed connection cannot prevent it from rendering. It does not show a
+completion percentage or imply that automatic recovery is still running.
+Desktop identity failures retain the existing Connection Center action.
+For Cloud windows, Reopen environment reloads the same-origin parent bootstrap
+that owns the connection, rather than only reloading its iframe through an
+expired proxy. Unrelated or cross-origin parents are never navigated.
 
 ## Mechanism
 

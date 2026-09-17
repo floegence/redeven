@@ -1,13 +1,14 @@
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { Check, AlertCircle, Copy, Loader2, Refresh, Cloud, WifiOffIcon } from '@floegence/floe-webapp-core/icons';
+import { Check, Copy, Loader2, Refresh, WifiOffIcon } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
 import { openConnectionCenter } from '../services/desktopShellBridge';
-import { reloadCurrentPage } from '../utils/windowNavigation';
+import { reopenEnvironmentPage } from '../utils/windowNavigation';
 import { createConnectionRecoveryPresentation, type ConnectionRecoveryStepID } from './createConnectionRecoveryPresentation';
+import { ConnectionPausedIllustration } from './ConnectionPausedIllustration';
 import type { ConnectionRecoverySnapshot } from './createRuntimeReconnectController';
 
 export type ConnectionRecoveryViewProps = Readonly<{
@@ -103,34 +104,32 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
 
   return (
     <section
-      class="absolute inset-0 z-20 flex overflow-auto bg-background/85 px-5 py-8 backdrop-blur-sm sm:p-10"
+      class={`absolute inset-0 z-20 flex overflow-auto px-5 py-8 sm:p-10 ${props.snapshot.state === 'failed' ? 'bg-background' : 'bg-background/85 backdrop-blur-sm'}`}
       data-testid="connection-recovery-view"
       data-recovery-state={props.snapshot.state}
     >
-      <div class="m-auto w-full max-w-[440px] overflow-hidden rounded-2xl border border-border bg-background shadow-xl">
-        <div class="px-6 pb-6 pt-7 sm:px-8 sm:pt-8">
-          <div class="mb-7 flex min-w-0 items-center gap-2 text-xs font-medium text-muted-foreground">
-            <Cloud class="h-4 w-4 shrink-0" />
-            <span class="min-w-0 break-words">{props.environmentName}</span>
-          </div>
-          <div class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-muted/50" aria-hidden="true">
-            {props.snapshot.state === 'succeeded' ? <Check class="h-6 w-6 text-success" />
-              : props.snapshot.state === 'failed' ? <AlertCircle class="h-6 w-6 text-warning" />
+      <div class="m-auto w-full max-w-[420px] text-center" data-recovery-content>
+        <div>
+          <Show when={props.snapshot.state === 'failed'} fallback={(
+            <div class="mx-auto mb-7 flex h-12 w-12 items-center justify-center rounded-full bg-muted/50" aria-hidden="true">
+              {props.snapshot.state === 'succeeded' ? <Check class="h-6 w-6 text-success" />
                 : offline() ? <WifiOffIcon class="h-6 w-6 text-muted-foreground" />
                   : <Refresh class="h-6 w-6 text-primary motion-safe:animate-[spin_3s_linear_infinite]" />}
-          </div>
+            </div>
+          )}>
+            <div class="mb-4"><ConnectionPausedIllustration /></div>
+          </Show>
+          <p class="mx-auto mb-3 max-w-[340px] break-words text-xs font-medium leading-5 text-muted-foreground">{props.environmentName}</p>
           <div role={props.snapshot.state === 'failed' ? undefined : 'status'} aria-live="polite" aria-atomic="true">
-            <h1 ref={failedHeading} class="text-xl font-semibold leading-7 tracking-tight text-foreground outline-none"
+            {/* This heading receives announcement focus; keyboard indicators remain on the actions. */}
+            <h1 ref={failedHeading} class="text-2xl font-semibold leading-8 tracking-tight text-foreground outline-none" style={{ 'box-shadow': 'none' }}
               role={props.snapshot.state === 'failed' ? 'alert' : undefined} tabindex={props.snapshot.state === 'failed' ? -1 : undefined}>
               {title()}
             </h1>
-            <p class="mt-2 text-[13px] leading-6 text-muted-foreground">{summary()}</p>
+            <p class="mx-auto mt-3 max-w-[340px] text-[13px] leading-6 text-muted-foreground">{summary()}</p>
           </div>
-          <Show when={props.snapshot.state === 'failed'}>
-            <p class="mt-4 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs leading-5 text-foreground">{failureReason()}</p>
-          </Show>
           <Show when={props.snapshot.state === 'recovering' && !offline()}>
-            <div class="mt-5 flex items-center gap-2 text-xs text-muted-foreground" data-recovery-activity>
+            <div class="mt-5 flex items-center justify-center gap-2 text-xs text-muted-foreground" data-recovery-activity>
               <Loader2 class="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" />
               <span>{retryRemainingSeconds() > 0
                 ? i18n.t('connectionRecovery.retryIn', { seconds: retryRemainingSeconds() })
@@ -138,26 +137,27 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
             </div>
           </Show>
           <Show when={canRetry() || props.snapshot.state === 'failed'}>
-            <div class="mt-6 flex flex-wrap items-center gap-2">
+            <div class="mt-6 flex flex-wrap items-center justify-center gap-2" data-recovery-actions>
               <Show when={canRetry()}>
                 <Button class="cursor-pointer" size="sm" variant="outline" icon={Refresh} disabled={retrying()} onClick={() => void retry()}>
                   {i18n.t('connectionRecovery.retryNow')}
                 </Button>
               </Show>
               <Show when={canOpenConnectionCenter()}>
-                <Button class="cursor-pointer" size="sm" onClick={() => void openConnectionCenter()}>{i18n.t('connectionRecovery.openConnectionCenter')}</Button>
+                <Button class="min-h-10 cursor-pointer rounded-full px-5" size="sm" onClick={() => void openConnectionCenter()}>{i18n.t('connectionRecovery.openConnectionCenter')}</Button>
               </Show>
               <Show when={props.snapshot.state === 'failed' && !canOpenConnectionCenter()}>
-                <Button class="cursor-pointer" size="sm" icon={Refresh} onClick={() => reloadCurrentPage(window)}>{i18n.t('accessGate.reloadPageAction')}</Button>
+                <Button class="min-h-10 cursor-pointer rounded-full px-5" size="sm" icon={Refresh} onClick={() => reopenEnvironmentPage(window)}>{i18n.t('connectionRecovery.reopenEnvironment')}</Button>
               </Show>
             </div>
           </Show>
         </div>
-        <details class="border-t border-border bg-muted/20 text-xs text-muted-foreground">
-          <summary class="cursor-pointer select-none px-6 py-3.5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-8">
+        <details class="mx-auto mt-6 text-xs text-muted-foreground">
+          <summary class="mx-auto w-fit cursor-pointer select-none rounded px-1 py-1.5 text-[11px] transition-colors hover:text-foreground">
             {i18n.t('connectionRecovery.technicalDetails')}
           </summary>
-          <div class="px-6 pb-6 sm:px-8">
+          <div class="mt-4 rounded-xl border border-border/60 bg-muted/20 p-4 text-left">
+            <Show when={props.snapshot.state === 'failed'}><p class="mb-4 text-xs leading-5 text-foreground">{failureReason()}</p></Show>
             <ol class="space-y-3" aria-label={i18n.t('connectionRecovery.timelineLabel')}>
               <For each={presentation().steps}>{(step) => (
                 <li class="flex items-center gap-2.5">

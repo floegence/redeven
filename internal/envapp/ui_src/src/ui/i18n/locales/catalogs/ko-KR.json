@@ -3913,13 +3913,13 @@
     "title": {
       "recovering": "연결 복구 중",
       "recovered": "연결이 복구됨",
-      "failed": "연결을 복구할 수 없음",
+      "failed": "연결 일시 중지",
       "offline": "네트워크 연결 대기 중"
     },
     "summary": {
       "recovering": "작업 공간이 유지되어 있습니다. 자동으로 다시 연결하고 준비가 되면 돌아갑니다.",
       "recovered": "다시 연결되었습니다. 작업 공간으로 돌아갑니다.",
-      "failed": "이 페이지의 연결이 일시 중지되었습니다. 연결을 다시 열어 계속하세요.",
+      "failed": "자동 복구가 중지되었습니다. 작업을 계속하려면 새로 연결하세요.",
       "offline": "네트워크가 복구되면 자동으로 다시 연결합니다. 이 페이지를 열어 두세요."
     },
     "steps": {
@@ -3937,6 +3937,7 @@
     },
     "retryIn": "{seconds}초 후 다시 시도",
     "retryNow": "지금 다시 시도",
+    "reopenEnvironment": "환경 다시 열기",
     "openConnectionCenter": "연결 센터 열기",
     "technicalDetails": "기술 세부 정보",
     "copyDiagnostic": "진단 정보 복사",

@@ -1366,7 +1366,7 @@ vi.mock('./utils/askFlowerPath', () => ({
   },
   resolveSuggestedWorkingDirAbsolute: () => '',
 }));
-vi.mock('./utils/windowNavigation', () => ({ reloadCurrentPage: reloadCurrentPageMock }));
+vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), reloadCurrentPage: reloadCurrentPageMock }));
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: fetchLocalApiJSONMock,
   localApiRequestCredentials: () => 'same-origin',
@@ -5009,6 +5009,9 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(retryNowMock).not.toHaveBeenCalled();
       expect(replaceConnectionMock).not.toHaveBeenCalled();
       expect(connectMock).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('[data-recovery-state="failed"]')).not.toBeNull();
+      expect(host.textContent).toContain('Connection paused');
+      expect(host.textContent).not.toContain('Reconnecting');
     } finally { dispose(); }
   });
 

@@ -3913,13 +3913,13 @@
     "title": {
       "recovering": "Restaurando a conexão",
       "recovered": "Conexão restaurada",
-      "failed": "Não foi possível restaurar a conexão",
+      "failed": "Conexão pausada",
       "offline": "Você está offline"
     },
     "summary": {
       "recovering": "Seu espaço de trabalho continua aberto. A reconexão é automática e você voltará assim que estiver tudo pronto.",
       "recovered": "A conexão foi restabelecida. Voltando ao seu espaço de trabalho.",
-      "failed": "Esta página está pausada. Abra a conexão novamente para continuar.",
+      "failed": "A recuperação automática foi interrompida. Inicie uma nova conexão para continuar trabalhando.",
       "offline": "A conexão será restabelecida quando a rede voltar. Você pode manter esta página aberta."
     },
     "steps": {
@@ -3937,6 +3937,7 @@
     },
     "retryIn": "Nova tentativa em {seconds} s",
     "retryNow": "Tentar novamente agora",
+    "reopenEnvironment": "Reabrir ambiente",
     "openConnectionCenter": "Abrir o Centro de Conexão",
     "technicalDetails": "Detalhes técnicos",
     "copyDiagnostic": "Copiar diagnóstico",
