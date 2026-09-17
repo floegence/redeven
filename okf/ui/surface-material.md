@@ -116,9 +116,17 @@ feedback takes 120ms, content changes 180ms, floating entry 220ms with at most
 6px travel, and floating exit 160ms. Theme colors update immediately. The
 existing 90/100/140ms selection-control motion and reversible 360ms Flower
 companion geometry keep their component owners. Reduced motion enters the
-final state while preserving status and completion feedback. Brand icons,
-ordinary status text, cards, and action buttons have no breathing, sweep, or
-colored halo. Only genuine progress may animate a small local symbol. Do not animate
+final state while preserving status and completion feedback. Brand icons, ordinary status text, and cards have no breathing, sweep, or
+colored halo. Genuine progress may animate a small local symbol and explicitly
+opt into the published Floe progress shimmer. Welcome environment actions use
+`data-floe-progress-shimmer="surface"` only while submitting or presenting a
+running, canceling, or cleanup operation. The progress disclosure remains
+clickable; failure and confirmation use static attention. Flower running tool
+titles and the exact-run composer progress label use the `text` variant: paint
+is clipped to glyphs, with no row background, extra plate, or text duplicate.
+State and placement belong to Redeven; cadence, paint, theme contrast, native
+selection, reduced motion, and forced colors belong to Floe. Removing active
+progress removes the opt-in without a second lifecycle or timer. Do not animate
 container shadows, add pointer-following decoration, or promote entire reading
 subtrees into compositor layers. Dense prose, files, terminal output, and editor
 content remain flat; material is never injected into third-party frames or
@@ -159,3 +167,7 @@ component gallery alone is not downstream acceptance evidence.
 
 - `redeven:internal/envapp/ui_src/src/styles/groupedSelectionVisual.browser.test.tsx` - Shared and product compact selection contrast and interaction.
 - `redeven:internal/envapp/ui_src/src/styles/desktopGroupedSelectionVisual.browser.test.tsx` - Welcome and SSH form selection cascade across presets.
+
+- `redeven:desktop/scripts/check-progress-shimmer.mjs` - Published-package Welcome theme matrix, progress disclosure, cancellation, menu access, and settled states.
+- `redeven:desktop/scripts/check-progress-shimmer-electron.mjs` - Isolated Electron rendering of the production progress controls.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.progressShimmer.browser.test.tsx` - Running-only tool and status glyph paint across every preset and material.

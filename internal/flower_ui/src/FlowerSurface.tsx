@@ -9178,7 +9178,7 @@ webSearch: model.web_search,
           </Show>
         </span>
         <span class="flower-activity-inline-copy">
-          <span class="flower-activity-inline-title">{activityTitle(displayTitle())}</span>
+          <span class="flower-activity-inline-title" data-floe-progress-shimmer={displayStatus() === 'running' ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
           <Show when={presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
           </Show>

@@ -9777,7 +9777,7 @@ function localizedPrimaryProgressPresentation(
   };
 }
 
-function EnvironmentSplitActionButton(
+export function EnvironmentSplitActionButton(
   props: Readonly<{
     i18n: DesktopI18n;
     presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
@@ -9992,6 +9992,7 @@ function EnvironmentSplitActionButton(
       class={primaryButtonClass()}
       style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
       loading={primaryActionLoading()}
+      data-floe-progress-shimmer={primaryActionLoading() ? 'surface' : undefined}
       disabled={!props.presentation.primary_action.enabled}
       onClick={() => {
         closeMenu();
@@ -10211,6 +10212,7 @@ function EnvironmentSplitActionButton(
                     size="sm"
                     variant={props.presentation.primary_action.variant}
                     class={cn(primaryButtonClass(), progressTriggerClassName(presentation()))}
+                    data-floe-progress-shimmer={presentation().kind === 'progress_trigger' ? 'surface' : undefined}
                     style={{
                       'min-width': 'var(--redeven-split-action-primary-min-width)',
                     }}

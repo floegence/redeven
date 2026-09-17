@@ -3,13 +3,14 @@ import solid from 'vite-plugin-solid';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import welcomeConfig from '../vite.welcome.config.mjs';
 
 export async function createSSHSettingsPreviewServer(port) {
   const server = await createServer({
     configFile: false,
     root: fileURLToPath(new URL('./fixtures/', import.meta.url)),
     plugins: [solid(), tailwindcss()],
-    resolve: { dedupe: ['solid-js'] },
+    resolve: welcomeConfig.resolve,
     server: {
       host: '127.0.0.1',
       port,

@@ -43,7 +43,7 @@ function cssRuleStartingWith(css: string, selector: string): string {
 }
 
 describe('Flower progress indicator', () => {
-  it('keeps localized dock text steady beside a small progress symbol', () => {
+  it('uses upstream glyph-only shimmer beside a small progress symbol', () => {
     const css = flowerStyles();
     const laneRule = cssRule(css, '.flower-model-status-lane');
     const indicatorRule = cssRule(css, '.flower-model-status-indicator');
@@ -53,7 +53,7 @@ describe('Flower progress indicator', () => {
     const src = progressIndicatorSource();
     const indicatorMarkupIndex = src.indexOf('class="flower-model-status-indicator"');
     const flowerMarkupIndex = src.indexOf('class="flower-model-status-flower"', indicatorMarkupIndex);
-    const textMarkupIndex = src.indexOf('class="flower-model-status-text"', flowerMarkupIndex);
+    const textMarkupIndex = src.indexOf('class="flower-model-status-text" data-floe-progress-shimmer="text"', flowerMarkupIndex);
 
     expect(laneRule).toContain('min-height: 1.35rem');
     expect(laneRule).toContain('flex-wrap: wrap');
