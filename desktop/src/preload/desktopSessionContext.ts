@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   DESKTOP_SESSION_APP_READY_CHANNEL,
   DESKTOP_SESSION_CONTEXT_GET_CHANNEL,
+  DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL,
@@ -20,6 +21,7 @@ export interface DesktopSessionContextBridge {
   getTransportRecoverySnapshot: () => DesktopSessionTransportRecoverySnapshot | null;
   subscribeTransportRecovery: (listener: (snapshot: DesktopSessionTransportRecoverySnapshot) => void) => () => void;
   requestTransportRecoveryNow: () => Promise<boolean>;
+  renewProviderSession: () => Promise<boolean>;
   notifyAppReady: (payload: DesktopSessionAppReadyPayload) => void;
 }
 
@@ -58,6 +60,9 @@ export function bootstrapDesktopSessionContextBridge(): void {
   });
 
   const bridge: DesktopSessionContextBridge = {
+    renewProviderSession: async () => (
+      await ipcRenderer.invoke(DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL)
+    ) === true,
     getSnapshot: () => {
       const value = ipcRenderer.sendSync(DESKTOP_SESSION_CONTEXT_GET_CHANNEL);
       if (!value || typeof value !== 'object') {

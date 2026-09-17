@@ -1,6 +1,7 @@
 import type { LocalUIExposure } from './localUIExposure';
 
 export const DESKTOP_SESSION_CONTEXT_GET_CHANNEL = 'redeven-desktop:session-context-get';
+export const DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL = 'redeven-desktop:provider-session-renew';
 export const DESKTOP_SESSION_APP_READY_CHANNEL = 'redeven-desktop:session-app-ready';
 export const DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL = 'redeven-desktop:session-transport-recovery-get';
 export const DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL = 'redeven-desktop:session-transport-recovery-updated';

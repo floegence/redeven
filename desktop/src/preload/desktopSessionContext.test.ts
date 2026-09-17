@@ -31,6 +31,13 @@ vi.mock('electron', () => ({
 }));
 
 describe('bootstrapDesktopSessionContextBridge', () => {
+  it('requests native Cloud renewal without exposing account or environment arguments', async () => {
+    const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
+    bootstrapDesktopSessionContextBridge();
+    ipcRendererInvoke.mockResolvedValue(true);
+    expect(await exposedBridge().renewProviderSession()).toBe(true);
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:provider-session-renew');
+  });
   beforeEach(() => {
     vi.resetModules();
     exposeInMainWorld.mockReset();
