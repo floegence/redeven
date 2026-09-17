@@ -49,7 +49,16 @@ actual provider requests. It confirms exact click counts of 2 then 4, canvas
 double-click, text/Enter, actual wheel scrolling, canonical target references,
 and final screenshots. The three turns decode 13/76/13 live frames, with
 13/75/13 distinct images. Incidental input no longer interrupts the sequence.
-The complete Desktop browser scope also passes with 43 actual provider requests: semantic and visual input, navigation, Stage layout and hidden execution, computer settings, private ASCII/IME, handback and explicit Stop. Stopping dispatched navigation records an unknown outcome without replay; both cancellation paths allow a new same-thread visual task. Browser turns decode 6/15/80 frames with 6/15/69 distinct images.
+The complete Desktop browser scope passes with 43 actual provider requests after
+private-control restart on the same Runtime: semantic and visual input, navigation,
+Stage layout and hidden execution, computer settings, private ASCII/IME, handback
+and explicit Stop. Stopping dispatched navigation records an unknown outcome
+without replay; both cancellation paths allow a new same-thread visual task.
+Browser turns decode 56/65/412 frames with 38/38/189 distinct images. Recovery and
+ordinary tool preparation share one managed profile owner; the real Chromium
+regression also verifies that passive sampling cannot launch another browser.
+The task-owned Desktop and Runtime processes, ports and temporary state are
+removed after qualification, with source credential files unchanged.
 Earlier failed startup, scroll-region and input-pause runs remain failed
 historical evidence; they are not counted as successes. Lock-screen operation
 remains outside the supported scope.
@@ -173,7 +182,7 @@ samples, a 600ms delayed private page change at default 3 FPS, all FPS choices,
 client persistence, narrow header placement, native text insertion and Chromium
 IME, rejected handback and one safe continuation without navigation replay.
 The 2026-09-17 current-worktree Desktop run passes this scope, with delayed
-private pixels decoded in 363ms. Resize checks wait for the visible control's
+private pixels decoded in 386ms. Resize checks wait for the visible control's
 actual bounds after the native window updates. The earlier failed route and
 immediate-layout assertions are not passing product evidence.
 The isolated headless Stage browser test separately verifies clipboard paste

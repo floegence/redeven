@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Verify ordinary browser work after private recovery
+
+The built Desktop passes private takeover, Runtime restart and safe handback,
+then the complete real-model browser flow on that same Runtime. The flow uses 43 model
+requests and completes its declared scenarios, including hidden execution, native
+IME, explicit Stop and unknown-effect non-replay. This closes the managed
+profile ownership regression exposed by the earlier failed follow-up. Exact
+process, port and temporary-state cleanup passes; source configuration and
+credential files remain byte-identical. Final integration remains the separate
+exact-main pre-push gate.
+
 ## 2026-09-17 — Keep private browser recovery under the managed profile owner
 
 A real Desktop follow-up after private-control restart exposed a duplicate
