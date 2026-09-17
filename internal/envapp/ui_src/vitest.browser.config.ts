@@ -4,11 +4,12 @@ import axe from 'axe-core';
 import { PNG } from 'pngjs';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import type { Frame, Page } from 'playwright';
+import type { CDPSession, Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
 import { qualifyComputerLauncherTouch, qualifyComputerViewer } from './scripts/computerViewerInteraction.mjs';
 
 const configuredBrowserPort = Number.parseInt(process.env.REDEVEN_VITEST_BROWSER_PORT ?? '', 10);
+const touchSessions = new WeakMap<Page, CDPSession>();
 
 async function readinessFrame(page: Page): Promise<Frame> {
   for (const frame of page.frames()) {
@@ -363,6 +364,19 @@ export default mergeConfig(viteConfig, defineConfig({
             (nextSize) => window.innerWidth === nextSize.width && window.innerHeight === nextSize.height,
             size,
           );
+        },
+        emulateTouchInput: async ({ page }, enabled: boolean) => {
+          if (enabled) {
+            const session = touchSessions.get(page) ?? await page.context().newCDPSession(page);
+            touchSessions.set(page, session);
+            await session.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+          } else {
+            const session = touchSessions.get(page);
+            if (!session) return;
+            await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+            touchSessions.delete(page);
+            await session.detach();
+          }
         },
         emulateMediaPreferences: async (
           { page },

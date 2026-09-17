@@ -4746,7 +4746,7 @@
       "days": "{count}일",
       "statusIdle": "대기",
       "statusRunning": "실행 중",
-      "statusWaitingUser": "입력 대기",
+      "statusWaitingUser": "응답 대기",
       "statusWaitingApproval": "승인 대기",
       "statusFailed": "실패",
       "statusSuccess": "완료",

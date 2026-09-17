@@ -49,7 +49,10 @@ async function setup(options: { request?: FlowerInputRequest; canMutate?: boolea
 
 it('guards repeated submission and keeps edits made while a failed request is pending', async () => {
   const s = await setup();
+  const badge = () => s.runtime.querySelector(`[data-thread-id="${s.waiting.thread_id}"] .flower-thread-card-action-badge`);
+  expect(badge()?.textContent).toBe('Reply needed');
   s.type('first secret'); s.submit(); s.submit();
+  expect(badge()?.textContent).toBe('Reply needed');
   s.input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
   expect(s.submitInput).toHaveBeenCalledTimes(1);
   expect((s.runtime.querySelector('.flower-composer-stop') as HTMLButtonElement).disabled).toBe(false);
@@ -58,6 +61,26 @@ it('guards repeated submission and keeps edits made while a failed request is pe
   await waitFor(() => !(s.runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).disabled);
   expect(s.input().value).toBe('new secret');
   expect(s.input().placeholder).not.toBe('Provide the requested value.');
+  expect(badge()?.textContent).toBe('Reply needed');
+});
+
+it('updates a background reply label from the workspace stream and agrees with the selected question', async () => {
+  const s = await setup();
+  await s.select(s.other.thread_id);
+  const row = s.runtime.querySelector(`[data-thread-id="${s.waiting.thread_id}"]`)!;
+  s.emit(runtimeCurrentView(thread({ ...s.waiting, status: 'running', input_request: undefined }), 2));
+  await waitFor(() => row.getAttribute('data-flower-thread-status') === 'running');
+  expect(row.querySelector('.flower-thread-card-action-badge')).toBeNull();
+  s.emit(runtimeCurrentView(s.waiting, 3));
+  await waitFor(() => row.querySelector('.flower-thread-card-action-badge')?.textContent === 'Reply needed');
+  expect(row.getAttribute('data-flower-thread-active')).toBe('false');
+  await s.select(s.waiting.thread_id);
+  await waitFor(() => !!s.runtime.querySelector('.flower-composer-continue'));
+  expect(s.runtime.querySelector(`[data-thread-id="${s.waiting.thread_id}"]`)).toBe(row);
+  expect(s.runtime.querySelector('.flower-decision-surface')?.textContent).toContain('Provide the requested value.');
+  s.emit(runtimeCurrentView({ ...s.waiting, status: 'success', input_request: undefined }, 4));
+  await waitFor(() => row.getAttribute('data-flower-thread-status') === 'success');
+  expect(row.querySelector('.flower-thread-card-action-badge')).toBeNull();
 });
 
 it.each(['success', 'failure'] as const)('preserves the next question and ordinary draft after a late %s', async (outcome) => {

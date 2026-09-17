@@ -438,7 +438,7 @@
       "days": "{count} d",
       "statusIdle": "Leerlauf",
       "statusRunning": "Läuft",
-      "statusWaitingUser": "Wartet auf Eingabe",
+      "statusWaitingUser": "Antwort ausstehend",
       "statusWaitingApproval": "Wartet auf Freigabe",
       "statusFailed": "Fehlgeschlagen",
       "statusSuccess": "Fertig",

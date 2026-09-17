@@ -4849,7 +4849,7 @@
       "days": "{count} дн",
       "statusIdle": "Ожидание",
       "statusRunning": "Выполняется",
-      "statusWaitingUser": "Ожидает ввода",
+      "statusWaitingUser": "Ожидает ответа",
       "statusWaitingApproval": "Ожидает подтверждения",
       "statusFailed": "Ошибка",
       "statusSuccess": "Готово",
