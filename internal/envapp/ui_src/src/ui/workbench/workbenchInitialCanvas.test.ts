@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
 
-import { createTestI18nHelpers, dictionaries } from '../i18n/locales/testDictionaries';
-import { SUPPORTED_LOCALES } from '../i18n';
 import { createRedevenWorkbenchInitialLayout } from './workbenchInitialCanvas';
 import { createRedevenWorkbenchCanvasPreset } from './workbenchInitialCanvasPreset';
 import { createWorkbenchOverviewViewport } from './runtimeWorkbenchLayout';
@@ -14,7 +12,7 @@ const widgetDefinitions: WorkbenchWidgetDefinition[] = [
   defaultSize: { width: Number(width), height: Number(height) },
 }));
 const initialWidgetTypes = widgetDefinitions.map((widget) => widget.type);
-const options = { widgetDefinitions, initialWidgetTypes, typeOrder: initialWidgetTypes, createdAtUnixMs: 1_700_000_000_000, t: createTestI18nHelpers('en-US').t };
+const options = { widgetDefinitions, initialWidgetTypes, typeOrder: initialWidgetTypes, createdAtUnixMs: 1_700_000_000_000 };
 
 describe('workbenchInitialCanvas', () => {
   it('keeps the complete welcome scene readable and inside a laptop overview', () => {
@@ -60,17 +58,6 @@ describe('workbenchInitialCanvas', () => {
     expect(new Set(layout.sticky_notes.map((note) => note.material)).size).toBe(2);
     expect(new Set(layout.background_layers.map((region) => region.material)).size).toBe(3);
     expect(layout.background_layers.every((region) => region.name === '')).toBe(true);
-  });
-
-  it('seeds localized editable content once in every supported language', () => {
-    for (const locale of SUPPORTED_LOCALES) {
-      const preset = createRedevenWorkbenchCanvasPreset({ ...options, t: createTestI18nHelpers(locale).t });
-      const copy = dictionaries[locale].workbench.welcome;
-      expect(preset.title).toBe(copy.title);
-      expect(preset.canvas.annotations.some((annotation) => annotation.text === copy.title)).toBe(true);
-      expect(preset.canvas.sticky_notes[0].body).toBe(copy.noteBody);
-      expect(preset.canvas.sticky_notes[1].body).toBe(copy.guideBody);
-    }
   });
 
   it('skips unavailable or unrequested widgets and never creates contextual previews', () => {

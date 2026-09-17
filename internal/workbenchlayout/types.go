@@ -1051,23 +1051,21 @@ func normalizeEnum(value string, allowed map[string]struct{}, fallback string) s
 }
 
 func normalizeAnnotationFont(fontFamily string, fontWeight int) (string, int) {
+	family, fallbackWeight := DefaultAnnotationFontFamily, DefaultAnnotationFontWeight
 	switch strings.TrimSpace(fontFamily) {
-	case DefaultAnnotationFontFamily:
-		return DefaultAnnotationFontFamily, DefaultAnnotationFontWeight
 	case "ui-serif, Georgia, serif":
-		return "ui-serif, Georgia, serif", 760
+		family, fallbackWeight = "ui-serif, Georgia, serif", 760
 	case `ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", ui-sans-serif, sans-serif`:
-		return `ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", ui-sans-serif, sans-serif`, 800
+		family = `ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", ui-sans-serif, sans-serif`
 	case `ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace`:
-		return `ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace`, 800
+		family = `ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace`
 	case `Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`:
-		return `Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`, 700
-	default:
-		if fontWeight >= 100 && fontWeight <= 1000 {
-			return DefaultAnnotationFontFamily, fontWeight
-		}
-		return DefaultAnnotationFontFamily, DefaultAnnotationFontWeight
+		family, fallbackWeight = `Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`, 700
 	}
+	if fontWeight >= 100 && fontWeight <= 1000 {
+		return family, fontWeight
+	}
+	return family, fallbackWeight
 }
 
 func stickyNoteMaterials() map[string]struct{} {

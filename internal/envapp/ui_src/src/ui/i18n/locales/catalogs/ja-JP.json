@@ -708,20 +708,6 @@
     "moreActions": "その他の操作"
   },
   "workbench": {
-    "welcome": {
-      "title": "次のアイデアのための場所。",
-      "subtitle": "ファイル、ターミナル、リアルタイムの状態を、ひとつの自由な空間に。",
-      "ideasTitle": "考える・計画する",
-      "ideasDescription": "ひらめきを残して、次の一歩へ。",
-      "filesTitle": "探す・つくる",
-      "filesDescription": "ファイルを開いて、細部まで見渡す。",
-      "runtimeTitle": "実行する・見守る",
-      "runtimeDescription": "ターミナルを使いながら、環境の状態を把握。",
-      "noteTitle": "自分らしい使い方で",
-      "noteBody": "ここをクリックしてアイデアを記録。\nハンドルでウィンドウを移動。\n必要なものだけを残しましょう。",
-      "guideTitle": "空間を整える",
-      "guideBody": "構成モードでテキストや領域を編集。\n\n作業モードに戻ると、付箋やツールを使えます。\n\n作業に合わせて、自由に配置を変えられます。"
-    },
     "composition": {
       "dragSticky": "付箋をドラッグ",
       "stickyBody": "付箋の本文",

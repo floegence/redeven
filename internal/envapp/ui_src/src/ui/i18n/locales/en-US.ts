@@ -1554,20 +1554,6 @@ export const enUS = defineDictionary({
     moreActions: 'More actions',
   },
   workbench: {
-    welcome: {
-      title: 'Make room for your next idea.',
-      subtitle: 'Files, terminals, and live signals. One space to make them yours.',
-      ideasTitle: 'Think & plan',
-      ideasDescription: 'Keep a thought. Find your next step.',
-      filesTitle: 'Explore & build',
-      filesDescription: 'Your files, with room to see the details.',
-      runtimeTitle: 'Run & observe',
-      runtimeDescription: 'A terminal and a clear view of your environment.',
-      noteTitle: 'Make it yours',
-      noteBody: 'Click here to capture an idea.\nMove windows by their handles.\nKeep only what you need.',
-      guideTitle: 'Shape your space',
-      guideBody: 'Use Composition mode to edit text and regions.\n\nReturn to Work mode for notes and tools.\n\nEverything here can move with your work.',
-    },
     composition: {
       stickyTitle: 'Sticky note title',
       edit: 'Edit text',
