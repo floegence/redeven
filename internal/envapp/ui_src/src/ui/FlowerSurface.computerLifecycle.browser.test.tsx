@@ -1,6 +1,7 @@
 import '../index.css';
 import './flower-feature.css';
 import { expect, it, vi } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
 import type { FlowerSurfaceAdapter, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { adapter, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
@@ -61,6 +62,94 @@ async function openStage(surface: HTMLElement) {
   surface.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
   await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
 }
+
+it('preserves script intent, disclosure, selection and copy through a live failure', async () => {
+  await page.viewport(1100, 850);
+  const code = '  const page = await ui.observe();\nlog("Search field found");\n' + '// Inspect the search field before clicking.\n'.repeat(38);
+  const scriptView = (failed: boolean): FlowerRuntimeCurrentView => ({
+    ...current(failed ? 'completed' : undefined), view_version: failed ? 2 : 1,
+    items: [{ id: 'script', kind: 'tool', ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
+      item_id: 'script', tool_id: 'script', tool_name: 'computer.exec', status: failed ? 'error' : 'running',
+      presentation: { label: 'Locate the search field and verify the page', renderer: 'structured', target_refs: [
+        { kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' },
+        ...(failed ? [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: frameRef }] : []),
+      ], payload: { inputs: [{ content: code, format: 'code', language: 'javascript' }], ...(failed ? {
+        rows_provided: true, rows: [{ content: 'Search field found\nClick could not complete', format: 'code', language: 'text' }], error: { message: 'Computer script stopped before completion' },
+      } : {}) } },
+    } }],
+  });
+  const f = fixture(scriptView(false));
+  await waitFor(() => Boolean(f.surface.querySelector('[data-flower-activity-item-id="script"]')));
+  const row = f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="script"]')!;
+  const trigger = row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+  trigger.focus();
+  await userEvent.keyboard('{Enter}');
+  await waitFor(() => Boolean(row.querySelector('[data-activity-section="inputs"] .chat-code-copy-btn')));
+  const input = row.querySelector<HTMLElement>('[data-activity-section="inputs"]')!;
+  await waitFor(() => Boolean(input.querySelector('.shiki')));
+  const expand = input.querySelector<HTMLButtonElement>('.flower-activity-script-toggle')!;
+  expect(input.getBoundingClientRect().height).toBeLessThan(65);
+  expect(input.querySelector('h4')).toBeNull();
+  expand.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(expand.getAttribute('aria-expanded')).toBe('true');
+  expect(getComputedStyle(expand).cursor).toBe('pointer');
+  const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+  input.querySelector<HTMLButtonElement>('.chat-code-copy-btn')!.click();
+  await waitFor(() => write.mock.calls.length === 1);
+  expect(write).toHaveBeenCalledWith(code);
+  await waitFor(() => input.querySelector('[role="status"]')?.textContent === 'Copied');
+  const range = document.createRange();
+  range.selectNodeContents(input.querySelector('code')!);
+  window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+  const selected = window.getSelection()!.toString();
+  const codeViewport = input.querySelector<HTMLElement>('.chat-code-content')!;
+  codeViewport.scrollTop = 100;
+  const scrollTop = codeViewport.scrollTop;
+  f.update(scriptView(true));
+  await waitFor(() => row.getAttribute('data-flower-activity-status') === 'error');
+  expect(row.querySelector('[data-activity-section="inputs"]')).toBe(input);
+  expect(trigger.getAttribute('aria-expanded')).toBe('true');
+  expect(expand.getAttribute('aria-expanded')).toBe('true');
+  expect(window.getSelection()!.toString()).toBe(selected);
+  expect(codeViewport.scrollTop).toBe(scrollTop);
+  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Locate the search field and verify the page');
+  expect(row.textContent).toContain('Computer script stopped before completion');
+  expect(row.textContent).toContain('Search field found');
+  window.getSelection()!.removeAllRanges();
+  const outputCopy = row.querySelector<HTMLButtonElement>('[data-activity-section="results"] .chat-code-copy-btn')!;
+  write.mockRejectedValueOnce(new Error('Clipboard unavailable'));
+  outputCopy.focus();
+  await userEvent.keyboard('{Enter}');
+  await waitFor(() => outputCopy.getAttribute('aria-label') === 'Could not copy. Try again.');
+  expect(document.activeElement).toBe(outputCopy);
+  expand.click();
+  const screenshotButton = row.querySelector<HTMLButtonElement>('.flower-activity-computer-block button')!;
+  expect(screenshotButton.getBoundingClientRect().width).toBeGreaterThan(90);
+  row.querySelector<HTMLElement>('.flower-activity-inline-details-content')!.scrollTop = 0;
+  await settle();
+  await page.screenshot({ path: '__screenshots__/tool-activity-details.png' });
+  expand.click();
+  codeViewport.scrollTop = 0;
+  await settle();
+  await page.screenshot({ path: '__screenshots__/tool-activity-expanded.png' });
+  write.mockRestore();
+});
+
+it('explains absent historical script details without reconstructing them', async () => {
+  const history = current('completed');
+  const f = fixture({ ...history, items: [{ id: 'old-script', kind: 'tool', ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
+    item_id: 'old-script', tool_id: 'old-script', tool_name: 'computer.exec', status: 'success', presentation: { renderer: 'structured', label: 'Managed browser',
+      target_refs: [{ kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' }], payload: { operation: 'execute' } },
+  } }] });
+  await waitFor(() => Boolean(f.surface.querySelector('[data-flower-activity-item-id="old-script"]')));
+  const row = f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="old-script"]')!;
+  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Run script');
+  row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+  await waitFor(() => row.textContent?.includes('This record did not save the script.') === true);
+  expect(row.textContent).toContain('This record did not save result details.');
+  expect(row.querySelector('.chat-code-block')).toBeNull();
+});
 
 it.each([['completed', 'completed'], ['cancelled', 'stopped'], ['failed', 'failed']] as const)('loads %s history without opening or sampling and exposes only an explicit historical image', async (outcome, state) => {
   const f = fixture(current(outcome));

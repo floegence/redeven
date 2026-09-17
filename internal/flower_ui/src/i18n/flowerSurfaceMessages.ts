@@ -1,3 +1,4 @@
+import { toolActivityEnUS } from '../toolActivityCopy';
 import { computerUseEnUS } from '../computerUseCopy';
 import { reasoningControlEnUS } from './reasoningControlMessages';
 import { filesystemPickerEnUS } from './filesystemPickerMessages';
@@ -91,6 +92,7 @@ export const flowerSurfaceEnUS = {
     terminalLiveOutputUnavailable: "Could not refresh output: {error}",
     terminalTimedOut: "Command timed out.",
     terminalNoNewOutput: "No new output.",
+    toolActivity: toolActivityEnUS,
     toolActivityDetailsPending: 'Waiting for tool details',
     toolActivityNoAdditionalDetails: 'No additional details',
     toolActivityRunCommand: 'Run command',

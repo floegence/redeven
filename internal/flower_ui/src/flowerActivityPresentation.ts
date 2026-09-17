@@ -1,3 +1,4 @@
+import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import type {
   FlowerApprovalAction,
   FlowerActivityFileAction as FlowerActivityFileActionRecord,
@@ -20,6 +21,8 @@ export type FlowerActivityStructuredRow = Readonly<{
   meta: string;
   content: string;
   format: 'text' | 'markdown' | 'code';
+  language?: string;
+  truncated?: boolean;
 }>;
 
 export type FlowerActivityTodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
@@ -206,6 +209,8 @@ export type FlowerActivityDetailBlock =
   }>
   | Readonly<{
     kind: 'structured_rows';
+    section?: 'inputs' | 'results';
+    notice?: string;
     rows: readonly FlowerActivityStructuredRow[];
   }>
   | Readonly<{
@@ -244,10 +249,7 @@ export type FlowerActivityDetailBlock =
     kind: 'computer';
     target_id?: string;
     target: string;
-    action: string;
-    location: string;
     frame?: string;
-    safety?: string;
   }>
   | Readonly<{
     kind: 'file_read';
@@ -277,6 +279,7 @@ export type FlowerActivityPresentation = Readonly<{
 }>;
 
 type FlowerActivityPresentationCopy = Readonly<{
+  tools?: FlowerToolActivityCopy;
   webSearch?: FlowerWebSearchCopy;
   statuses?: Readonly<Record<FlowerActivityItem['status'], string>>;
   subagents?: FlowerSubagentsCopy;
@@ -418,8 +421,6 @@ function todoItemsFromPayload(payload: Readonly<Record<string, unknown>> | undef
 
 function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
   if (trimString(item.tool_name).startsWith('terminal.')) return 'terminal';
-  const toolName = trimString(item.tool_name);
-  if (toolName.startsWith('computer.') || toolName.startsWith('browser.')) return toolName.startsWith('browser.') ? 'browser' : 'computer';
   return item.renderer ?? 'structured';
 }
 
@@ -626,15 +627,15 @@ function uniqueDetailLines(lines: readonly FlowerActivityDetailLine[]): readonly
   return out;
 }
 
-function structuredRowsFromPayload(payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityStructuredRow[] {
-  return asArray(payload?.rows).flatMap((value) => {
+function structuredRowsFromPayload(payload: Readonly<Record<string, unknown>> | undefined, field: 'inputs' | 'rows' = 'rows'): readonly FlowerActivityStructuredRow[] {
+  return asArray(payload?.[field]).flatMap((value) => {
     const record = asRecord(value);
     const title = typeof record.title === 'string' ? trimString(record.title) : '';
     const meta = typeof record.meta === 'string' ? trimString(record.meta) : '';
-    const content = typeof record.content === 'string' ? trimString(record.content) : '';
+    const content = typeof record.content === 'string' ? record.content : '';
     const format = typeof record.format === 'string' ? trimString(record.format) : 'text';
     if ((!title && !meta && !content) || (format !== 'text' && format !== 'markdown' && format !== 'code')) return [];
-    return [{ title, meta, content, format }];
+    return [{ title, meta, content, format, ...(typeof record.language === 'string' ? { language: record.language } : {}), ...(record.truncated === true ? { truncated: true } : {}) }];
   });
 }
 
@@ -1459,48 +1460,86 @@ type FlowerActivityRendererHandler = (
   context: FlowerActivityRendererContext,
 ) => FlowerActivityPresentation;
 
-function presentationForStructured(item: FlowerActivityItem): FlowerActivityPresentation {
-  const title = titleForGenericItem(item, 'structured');
-  const errorBlock = errorDetailBlockForItem(item, item.payload);
-  const rows = structuredRowsFromPayload(item.payload);
-  const detailLines = rows.length > 0 ? [] : meaningfulStructuredSummary(item, title);
-  const detailBlocks: FlowerActivityDetailBlock[] = [];
-  if (errorBlock) detailBlocks.push(errorBlock);
-  if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', rows });
-  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
-  return {
-    label: titleText(title),
-    title,
-    meta: metaWithError(item, metaForItem(item)),
-    detailLines,
-    detailBlocks,
-  };
+const TOOL_ACTIONS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
+  'computer.exec': 'execute', 'computer.observe': 'observe', 'computer.screenshot': 'screenshot',
+  'computer.click': 'click', 'computer.double_click': 'doubleClick', 'computer.type': 'type',
+  'computer.key': 'key', 'computer.scroll': 'scroll', 'computer.drag': 'drag', 'computer.wait': 'wait',
+  'browser.navigate': 'navigate', 'browser.back': 'back', 'browser.reload': 'reload',
+  rgrep: 'searchFiles', find: 'findFiles', read_files: 'readFiles', use_skill: 'skill',
+  'okf.index': 'knowledgeIndex', 'okf.search': 'knowledgeSearch', 'okf.open': 'knowledgeOpen',
+  sources: 'sources', ask_user: 'question', write_todos: 'todos', web_fetch: 'fetch',
+};
+
+const TOOL_INPUT_LABELS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
+  query: 'inputQuery', paths: 'inputPaths', path: 'inputPaths', root: 'inputPaths', name: 'inputName',
+  limit: 'inputLimit', max_results: 'inputLimit', max_matches: 'inputLimit', body_limit: 'inputLimit',
+  glob: 'inputGlob', context_lines: 'inputContext', max_depth: 'inputDepth', type: 'inputType',
+  tags: 'inputTags', section: 'inputSection', include_evidence: 'inputEvidence', body_offset: 'inputOffset',
+  reason: 'inputReason', screenshot: 'inputScreenshot', key: 'inputKey', url: 'inputURL',
+  x: 'inputX', y: 'inputY', delta_x: 'inputDeltaX', delta_y: 'inputDeltaY',
+  from_x: 'inputFromX', from_y: 'inputFromY', to_x: 'inputToX', to_y: 'inputToY',
+  duration_ms: 'inputDuration', milliseconds: 'inputDuration',
+};
+
+function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy): FlowerActivityTitle {
+  const tool = trimString(item.tool_name);
+  const action = TOOL_ACTIONS[tool];
+  const target = item.target_refs?.find(ref => ref.kind === 'computer_target' || ref.kind === 'computer_control' || ref.kind === 'computer_frame');
+  const label = trimString(item.label);
+  if (tool.startsWith('computer.') || tool.startsWith('browser.')) {
+    const intent = label && label !== tool && label !== target?.label && label !== target?.resource_ref
+      && label !== payloadValue(item.payload, 'operation') && !isApprovalLifecycleText(label) ? label : '';
+    const input = structuredRowsFromPayload(item.payload, 'inputs');
+    const object = input.find(row => row.title === 'url' || row.title === 'key')?.content;
+    return { kind: 'plain', text: intent || payloadValue(item.payload, 'action_summary') || [words[action ?? 'called'], object].filter(Boolean).join(' ') };
+  }
+  if (action) {
+    const object = label && label !== tool && !isApprovalLifecycleText(label) ? label : '';
+    return { kind: 'plain', text: [words[action], object].filter(Boolean).join(' ') };
+  }
+  return { kind: 'plain', text: label && label !== tool && !isApprovalLifecycleText(label) ? label : [words.called, tool.replace(/[._:-]+/g, ' ')].filter(Boolean).join(' ') };
 }
 
-function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresentation {
-  const payload = asRecord(item.payload);
-  const frameTarget = item.target_refs?.find((ref) => ref.kind === 'computer_frame');
-  const controlTarget = item.target_refs?.find((ref) => ref.kind === 'computer_control');
-  const targetRef = item.target_refs?.find((ref) => ref.kind === 'computer_target');
-  const frame = frameTarget?.resource_ref;
-  const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || controlTarget?.resource_ref || targetRef?.resource_ref;
-  const target = targetRef?.label || controlTarget?.label || frameTarget?.label || item.label || trimString(item.tool_name);
-  const action = item.chips?.some(chip => chip.kind === 'computer_assistance') ? defaultLabelForItem(item) : payloadValue(payload, 'action_summary', 'operation') || defaultLabelForItem(item);
-  const location = item.chips?.find((chip) => chip.kind === 'execution_location')?.value ?? '';
-  const safetyRecord = asRecord(payload.safety);
-  const safety = payloadValue(safetyRecord, 'level', 'reason_codes');
-  const title: FlowerActivityTitle = { kind: 'plain', text: action };
-  return {
-    label: action,
-    title,
-    meta: metaWithError(item, targetRef?.label || controlTarget?.label || ''),
-    detailLines: [],
-    detailBlocks: [{ kind: 'computer', ...(targetID ? { target_id: targetID } : {}), target, action, location, ...(frame ? { frame } : {}), ...(safety ? { safety } : {}) }],
-  };
+function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
+  const words = copy?.tools ?? toolActivityEnUS;
+  const title = structuredTitle(item, words);
+  const errorBlock = errorDetailBlockForItem(item, item.payload);
+  const rows = structuredRowsFromPayload(item.payload);
+  const inputs = structuredRowsFromPayload(item.payload, 'inputs').map(row => ({
+    ...row, title: TOOL_INPUT_LABELS[row.title] ? words[TOOL_INPUT_LABELS[row.title]] : row.title,
+  }));
+  const active = item.status === 'running' || item.status === 'pending' || item.status === 'waiting';
+  const detailLines = rows.length > 0 ? [] : meaningfulStructuredSummary(item, title).map(line => ({ ...line, label: words.summary }));
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  const computer = trimString(item.tool_name).startsWith('computer.') || trimString(item.tool_name).startsWith('browser.');
+  if (inputs.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: inputs });
+  else if (item.tool_name === 'computer.exec' && !active) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
+  if (errorBlock) detailBlocks.push(errorBlock);
+  if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows, ...(!errorBlock && (item.status === 'error' || item.status === 'canceled') ? { notice: words.partialOutput } : {}) });
+  else if (!active) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
+  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  let meta = trimString(item.description) !== titleText(title) ? trimString(item.description) : '';
+  if (computer) {
+    const frameTarget = item.target_refs?.find(ref => ref.kind === 'computer_frame');
+    const controlTarget = item.target_refs?.find(ref => ref.kind === 'computer_control');
+    const targetRef = item.target_refs?.find(ref => ref.kind === 'computer_target');
+    const frame = frameTarget?.resource_ref;
+    const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || controlTarget?.resource_ref || targetRef?.resource_ref;
+    const target = targetRef?.label || controlTarget?.label || frameTarget?.label || '';
+    meta = [target !== titleText(title) ? target : '', meta].filter(Boolean).join(' · ');
+    if (targetID || frame) detailBlocks.push({ kind: 'computer', ...(targetID ? { target_id: targetID } : {}), target, ...(frame ? { frame } : {}) });
+    if (item.tool_name === 'computer.screenshot' && !active && !frame) {
+      const index = detailBlocks.findIndex(block => block.kind === 'structured_rows' && block.section === 'results');
+      const notice = { kind: 'structured_rows' as const, section: 'results' as const, rows, notice: words.screenshotUnavailable };
+      if (index >= 0) detailBlocks[index] = notice;
+      else detailBlocks.push(notice);
+    }
+  }
+  return { label: titleText(title), title, meta, detailLines, detailBlocks };
 }
 
 const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerActivityRendererHandler>> = {
-  structured: (item) => presentationForStructured(item),
+  structured: (item, context) => presentationForStructured(item, context.copy),
   terminal: (item, context) => presentationForTerminal(item, context.copy),
   file: (item, context) => presentationForFile(item, context.fileActions),
   patch: (item, context) => presentationForPatch(item, context.fileActions),
@@ -1510,11 +1549,25 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   question: (item) => presentationForQuestion(item),
   subagent: (item, context) => presentationForSubagents(item, context.copy),
   subagent_operation: (item, context) => presentationForSubagents(item, context.copy),
-  computer: (item) => presentationForComputer(item),
-  browser: (item) => presentationForComputer(item),
+  computer: (item, context) => presentationForStructured(item, context.copy),
+  browser: (item, context) => presentationForStructured(item, context.copy),
 };
 
 export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const renderer = rendererForItem(item);
-  return FLOWER_ACTIVITY_RENDERERS[renderer](item, { fileActions, copy });
+  const result = FLOWER_ACTIVITY_RENDERERS[renderer](item, { fileActions, copy });
+  const words = copy?.tools ?? toolActivityEnUS;
+  if (result.title.kind === 'file') {
+    const verb = words[result.title.verb === 'Read' ? 'read' : result.title.verb === 'Delete' ? 'delete' : 'edit'];
+    const count = result.detailBlocks.find(block => block.kind === 'file_diff')?.files.length;
+    const name = count && count > 1 ? words.fileCount.replace('{count}', String(count)) : result.title.display_name === 'files' ? words.files : result.title.display_name;
+    return { ...result, title: { ...result.title, display_name: name }, label: [verb, name].filter(Boolean).join(' ') };
+  }
+  if (renderer === 'todos' || renderer === 'question' || renderer === 'web_fetch' || item.tool_name === 'sources') {
+    const action = renderer === 'todos' ? words.todos : renderer === 'question' ? words.question : item.tool_name === 'sources' ? words.sources : words.fetch;
+    const label = result.title.kind === 'web_fetch' ? `${action} ${result.title.url}` : action;
+    return { ...result, label, title: result.title.kind === 'web_fetch' ? result.title : { kind: 'plain', text: label } };
+  }
+  if (renderer === 'patch' && result.title.kind === 'plain') return { ...result, label: words.patch, title: { kind: 'plain', text: words.patch } };
+  return result;
 }

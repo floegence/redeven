@@ -44,7 +44,7 @@ func TestComputerAssistanceSurvivesCanonicalActivityProjection(t *testing.T) {
 				t.Fatal(err)
 			}
 			public := publicActivityItem(observation.ActivityItem{ItemID: "step", ToolID: "inspect", ToolName: "computer.observe", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: presentation})
-			if public.Presentation == nil || public.Presentation.Label != execution.inputRequired.Summary {
+			if public.Presentation == nil || public.Presentation.Description != execution.inputRequired.Questions[0].Prompt {
 				t.Fatal("required step disappeared from public activity")
 			}
 			found := false

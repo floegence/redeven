@@ -121,7 +121,7 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			toolName:          "use_skill",
 			operation:         "use_skill",
 			labelFields:       []string{"name"},
-			callPayloadFields: []string{"name"},
+			callPayloadFields: []string{"name", "reason"},
 		},
 		{
 			toolName:            "subagents",

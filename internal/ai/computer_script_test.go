@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -66,8 +67,9 @@ func TestComputerScriptNamespaceLifetimeAndPartialResult(t *testing.T) {
 		t.Fatalf("observation: %+v %v", first, err)
 	}
 	second, err := executeTestScript(t.Context(), runtime, call, `ui.assert(count === 10); count++; await ui.click(1, 2); try { await ui.ref('old').click(); } catch {} await ui.click(3, 4);`)
-	if err != nil {
-		t.Fatal(err)
+	var scriptErr *computerScriptExecutionError
+	if !errors.As(err, &scriptErr) {
+		t.Fatalf("partial script must fail execution: %v", err)
 	}
 	payload := second.Result.(map[string]any)
 	if calls != 3 || payload["completed"] != false || payload["script_error"] != "STALE_REFERENCE" || payload["action_executed"] != true {
@@ -155,8 +157,25 @@ func TestComputerScriptRevalidatesBeforeEveryOperation(t *testing.T) {
 		return nil
 	}
 	result, err := executeTestScript(t.Context(), runtime, call, `await ui.click(1, 2); await ui.click(3, 4);`)
-	if err != nil || dispatched != 1 || result.Result.(map[string]any)["completed"] != false {
+	var scriptErr *computerScriptExecutionError
+	if !errors.As(err, &scriptErr) || dispatched != 1 || result.Result.(map[string]any)["completed"] != false {
 		t.Fatalf("revocation: calls=%d result=%+v err=%v", dispatched, result, err)
+	}
+}
+
+func TestComputerScriptFailureRetainsSafePartialOutput(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
+		return TargetToolResult{Result: map[string]any{"action_executed": true}}, nil
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, `await ui.click(1, 2); log('Clicked first button'); throw new Error('private exception contents');`)
+	var scriptErr *computerScriptExecutionError
+	if !errors.As(err, &scriptErr) || strings.Contains(err.Error(), "private exception") {
+		t.Fatalf("execution failure was lost or leaked: %v", err)
+	}
+	payload := result.Result.(map[string]any)
+	body, _ := json.Marshal(payload)
+	if payload["completed"] != false || !strings.Contains(string(body), "Clicked first button") || strings.Contains(string(body), "private exception") {
+		t.Fatalf("partial logs missing or unsafe: %s", body)
 	}
 }
 

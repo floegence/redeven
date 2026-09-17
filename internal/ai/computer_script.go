@@ -300,7 +300,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			if msg.ID != call.ToolCallID {
 				return result, errors.New("computer script response identity mismatch")
 			}
-			result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": effectCompleted, "operations": operations, "logs": msg.Result["logs"], "observation": lastObservation, "completed": stopped == nil && msg.Type == "result"}
+			result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": effectCompleted, "operations": operations, "logs": msg.Result["logs"], "truncated": msg.Result["truncated"] == true, "observation": lastObservation, "completed": stopped == nil && msg.Type == "result"}
 			if observationInvalidated {
 				result.Result.(map[string]any)["observation_invalidated"] = true
 			}
@@ -320,7 +320,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					code = strings.ToUpper(failure.code)
 				}
 				result.Result.(map[string]any)["script_error"] = code
-				return result, nil
+				return result, &computerScriptExecutionError{code: code}
 			}
 			healthy = true
 			if lastObservation != nil {
@@ -377,4 +377,11 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	body, err := json.Marshal(args)
 	call.Arguments = body
 	return call, err
+}
+
+// Execution failures may follow effects. They are never argument-regeneration feedback.
+type computerScriptExecutionError struct{ code string }
+
+func (e *computerScriptExecutionError) Error() string {
+	return "Computer script stopped before completion (" + e.code + ")"
 }

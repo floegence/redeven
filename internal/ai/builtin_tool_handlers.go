@@ -177,6 +177,9 @@ func extractStringSlice(v any) []string {
 
 func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 	toolName = strings.TrimSpace(toolName)
+	if isComputerUseTool(toolName) {
+		return normalizeJSONCompatibleToolPayload(payload)
+	}
 	switch toolName {
 	case "terminal.exec", "terminal.read", "terminal.terminate":
 		m, _ := payload.(map[string]any)
@@ -209,7 +212,9 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		return normalizeTodosPayload(payload)
 	case "subagents":
 		return normalizeSubagentsPayload(payload)
-	case "okf.index", "okf.search", "okf.open":
+	case "okf.index", "okf.search", "okf.open", "rgrep", "find", "read_files", "use_skill", "sources":
+		// These executors already bound their content. Keep the typed shape;
+		// truncating an entire JSON object destroys every usable result field.
 		return normalizeJSONCompatibleToolPayload(payload)
 	default:
 		if payload == nil {

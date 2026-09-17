@@ -102,7 +102,7 @@ func cleanStringList(values []string) []string {
 var builtinDefinitions = map[string]Definition{
 	"computer.observe": {
 		Name: "computer.observe", Mutating: false, RequiresApproval: false,
-		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("observe"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("observe"), labelFields("target_name", "target_id"), callPayloadFields("root_ref", "limit", "screenshot"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"computer.exec": {
 		Name: "computer.exec", Mutating: true, RequiresApproval: true,
@@ -196,7 +196,7 @@ var builtinDefinitions = map[string]Definition{
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
-			presentation(ToolPresentationContext, "readonly", "file", "context", "args", "result"),
+			presentation(ToolPresentationContext, "readonly", "structured", "context", "args", "result"),
 			operation("read_files"),
 			callPayloadFields("paths", "limit"),
 			resultPayloadFields("files", "summary", "truncated"),
@@ -432,8 +432,8 @@ var builtinDefinitions = map[string]Definition{
 			presentation(ToolPresentationContext, "readonly", "structured", "context", "args", "result"),
 			operation("use_skill"),
 			labelFields("name"),
-			callPayloadFields("name"),
-			resultPayloadFields("name", "truncated"),
+			callPayloadFields("name", "reason"),
+			resultPayloadFields("name", "reason", "content", "truncated"),
 			chipFields("truncated"),
 		),
 	},

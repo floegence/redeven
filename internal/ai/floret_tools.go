@@ -853,6 +853,10 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 		Renderer: renderer,
 		Payload:  activityPayloadForRenderer(renderer, payload),
 	}
+	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
+		structured.Inputs = structuredToolInputs(toolName, args, spec)
+		activity.Payload = structured
+	}
 	if renderer == fltools.ActivityRendererTerminal {
 		description := activityPresentationDescription(anyToString(args["description"]))
 		if description != activity.Label {
@@ -1142,6 +1146,9 @@ func activityTodoCountValue(source map[string]any, field string) (any, bool) {
 }
 
 func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, args map[string]any, payload map[string]any) string {
+	if isComputerUseTool(toolName) {
+		return activityPresentationLabel(anyToString(args["description"]))
+	}
 	if renderer == fltools.ActivityRendererTerminal {
 		return terminalActivityLabel(spec.Operation, args)
 	}
@@ -1153,6 +1160,9 @@ func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSp
 }
 
 func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, payload map[string]any) string {
+	if isComputerUseTool(toolName) {
+		return "" // Result metadata must never replace the invocation intent.
+	}
 	if renderer == fltools.ActivityRendererTerminal {
 		if strings.TrimSpace(anyToString(payload["description"])) == "" {
 			return ""
@@ -1239,7 +1249,18 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		TargetRefs: activityFileActionTargetRefs(payload),
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
-	if strings.HasPrefix(toolName, "computer.") || strings.HasPrefix(toolName, "browser.") {
+	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
+		structured.Inputs = structuredToolInputs(toolName, result.activityInput, spec)
+		structured.Rows = structuredToolResults(toolName, result.Data, structured.Rows)
+		structured.RowsProvided = true
+		activity.Payload = structured
+	}
+	if isComputerUseTool(toolName) {
+		activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))
+		activity.Chips = nil
+		if status != toolResultStatusSuccess && len(toAnySlice(rawPayload["completed_actions"])) > 0 {
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "partial_execution", Label: "partial", Value: "true"})
+		}
 		if targetID := strings.TrimSpace(anyToString(rawPayload["target_id"])); targetID != "" {
 			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_target", ResourceRef: targetID, Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), targetID)})
 		}
@@ -1247,7 +1268,6 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
 		}
 		if result.inputRequired != nil {
-			activity.Label = result.inputRequired.Summary
 			if len(result.inputRequired.Questions) > 0 {
 				activity.Description = result.inputRequired.Questions[0].Prompt
 			}
@@ -1619,14 +1639,17 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 		}
 	case fltools.ActivityRendererWebSearch:
 		results := make([]fltools.WebSearchActivityResult, 0)
-		for _, item := range toAnySlice(payload["results"]) {
+		source, provided := payload["results"]
+		if !provided {
+			source, provided = payload["sources"]
+		}
+		for _, item := range toAnySlice(source) {
 			record, _ := item.(map[string]any)
 			title, url := strings.TrimSpace(anyToString(record["title"])), strings.TrimSpace(anyToString(record["url"]))
 			if title != "" || url != "" {
 				results = append(results, fltools.WebSearchActivityResult{Title: title, URL: url, Snippet: strings.TrimSpace(anyToString(record["snippet"]))})
 			}
 		}
-		_, provided := payload["results"]
 		return fltools.WebSearchActivityPayload{Operation: strings.TrimSpace(anyToString(payload["operation"])), Query: strings.TrimSpace(anyToString(payload["query"])), Status: status, Results: results, ResultsProvided: provided, Error: activityError()}
 	case fltools.ActivityRendererTodos:
 		items := make([]fltools.TodoActivityItem, 0)
@@ -1833,21 +1856,6 @@ func subAgentOperationTargets(payload map[string]any, requestedIDs []string) []f
 
 func structuredActivityRowsForTool(toolName string, payload map[string]any) []map[string]any {
 	switch strings.TrimSpace(toolName) {
-	case "computer.exec":
-		progress := make(map[string]any)
-		for _, key := range []string{"completed_actions", "operations", "script_error"} {
-			if value, ok := payload[key]; ok {
-				progress[key] = value
-			}
-		}
-		if len(progress) == 0 {
-			return nil
-		}
-		body, err := json.MarshalIndent(progress, "", "  ")
-		if err != nil {
-			return nil
-		}
-		return appendStructuredActivityRow(nil, "", "", string(body), fltools.StructuredActivityRowFormatCode)
 	case "okf.index":
 		rows := make([]map[string]any, 0)
 		for _, value := range toAnySlice(payload["sections"]) {
@@ -1900,11 +1908,14 @@ func appendStructuredActivityRow(rows []map[string]any, title string, meta strin
 	}
 	title, _ = contractSafeString(strings.TrimSpace(title), activityPayloadStringLimit)
 	meta, _ = contractSafeString(strings.TrimSpace(meta), activityPayloadStringLimit)
-	content, _ = contractSafeString(strings.TrimSpace(content), activityPayloadStringLimit)
+	content, truncated := contractSafeString(content, activityPayloadStringLimit)
 	if title == "" && meta == "" && content == "" {
 		return rows
 	}
 	row := map[string]any{"format": string(format)}
+	if truncated {
+		row["truncated"] = true
+	}
 	if title != "" {
 		row["title"] = title
 	}
@@ -1952,7 +1963,8 @@ func structuredActivityRowsFromValue(value any) []fltools.StructuredActivityRow 
 		}
 		row := fltools.StructuredActivityRow{
 			Title: strings.TrimSpace(anyToString(record["title"])), Meta: strings.TrimSpace(anyToString(record["meta"])),
-			Content: strings.TrimSpace(anyToString(record["content"])), Format: format,
+			Content: anyToString(record["content"]), Format: format,
+			Language: strings.TrimSpace(anyToString(record["language"])), Truncated: readBoolField(record, "truncated"),
 		}
 		if row.Title == "" && row.Meta == "" && row.Content == "" {
 			continue

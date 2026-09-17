@@ -1,3 +1,4 @@
+import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import { computerUseEnUS, type FlowerComputerCopy } from './computerUseCopy';
 import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasoningControlMessages';
 import { modelCatalogCopy, type ModelCatalogCopy } from './settings/modelCatalogCopy';
@@ -364,6 +365,7 @@ export type FlowerSurfaceCopy = Readonly<{
     terminalLiveOutputUnavailable: (error: string) => string;
     terminalTimedOut: string;
     terminalNoNewOutput: string;
+    toolActivity: FlowerToolActivityCopy;
     toolActivityDetailsPending: string;
     toolActivityNoAdditionalDetails: string;
     toolActivityRunCommand: string;
@@ -675,6 +677,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     terminalLiveOutputUnavailable: (error) => `Could not refresh output: ${error}`,
     terminalTimedOut: "Command timed out.",
     terminalNoNewOutput: "No new output.",
+    toolActivity: toolActivityEnUS,
     toolActivityDetailsPending: "Waiting for tool details",
     toolActivityNoAdditionalDetails: "No additional details",
     toolActivityRunCommand: 'Run command',

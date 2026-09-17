@@ -31,7 +31,7 @@ for (const projected of [false, true]) {
         <div ref={setBoundary} class="flower-chat-transcript" style={{ position: 'absolute', top: '50px', bottom: `${dockHeight()}px`, left: '0', right: '0' }} />
         <div class="flower-chat-bottom-dock" style={{ position: 'absolute', bottom: '0', width: '100%', height: `${dockHeight()}px` }} />
         <FlowerComputerStage threadID={owner()} boundary={boundary()} open={open()} sessionState={state()}
-          snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'running', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'running', targetID: 'browser-main', target: 'Browser', action: 'Browse', location: 'local', safety: '' }}
+          snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'running', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'running', targetID: 'browser-main', target: 'Browser', action: 'Browse' }}
           frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={input} onClose={() => setOpen(false)} onRestore={() => setOpen(true)}
           copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer (arrow keys)', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
       </div>
@@ -103,7 +103,7 @@ it('returns focus to each restore entry and offers actual-size viewing without c
     <div ref={setBoundary} style={{ width: '800px', height: '600px' }} />
     <FlowerComputerStage threadID="focus-thread" boundary={boundary()} open={open()} sessionState="failed"
       restoreFocus={source()} onRestore={restore} onClose={() => setOpen(false)} frame={{ thread_id: "fixture", target_id: "browser-main", resource_ref: `computer://browser-main/${"a".repeat(64)}`, sha256: "a".repeat(64) }} loadFrame={async () => blob} onInput={takeover() ? input : undefined}
-      snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Browser', action: 'Browse', location: 'local', safety: '' }}
+      snapshot={{ item: { item_id: 'frame', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false }, status: 'success', targetID: 'browser-main', target: 'Browser', action: 'Browse' }}
       copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close viewer', maximize: 'Maximize viewer', restoreSize: 'Restore viewer size', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: states }} />
   </LayoutProvider></FloeConfigProvider>, host);
   try {
