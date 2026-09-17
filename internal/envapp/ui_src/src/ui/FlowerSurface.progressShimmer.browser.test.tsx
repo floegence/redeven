@@ -42,7 +42,7 @@ function textContrast(element: HTMLElement) {
     return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
   };
   const a = lab(base), b = lab(peak);
-  return { contrast, luminanceGain: luminance(peak) - luminance(base), deltaEOK: Math.hypot(...a.map((v, i) => v - b[i])) };
+  return { base, peak, contrast, luminanceGain: luminance(peak) - luminance(base), deltaEOK: Math.hypot(...a.map((v, i) => v - b[i])) };
 }
 
 describe('Flower progress shimmer', () => {
@@ -88,6 +88,8 @@ describe('Flower progress shimmer', () => {
     const status = runtime.querySelector<HTMLElement>('.flower-model-status-text')!;
     expect(status.getAttribute('data-floe-progress-shimmer')).toBe('text');
     expect(runtime.querySelector('[data-floe-progress-shimmer="surface"]')).toBeNull();
+    const progressNodes = [titles[0], titles[1], status];
+    const progressAnimations = progressNodes.map(text => text.getAnimations().find(animation => (animation as CSSAnimation).animationName === 'floe-progress-shimmer'));
     const root = document.documentElement;
     const originalClass = root.className;
     const originalPreset = root.getAttribute('data-floe-shell-theme');
@@ -100,7 +102,8 @@ describe('Flower progress shimmer', () => {
           root.classList.toggle('light', theme.mode === 'light');
           root.dataset.floeShellTheme = theme.name;
           const measurements = [];
-          for (const text of [titles[0], titles[1], status]) {
+          for (const [index, text] of progressNodes.entries()) {
+            expect(text.getAnimations().find(animation => (animation as CSSAnimation).animationName === 'floe-progress-shimmer'), `${theme.name}: theme switches preserve animation identity`).toBe(progressAnimations[index]);
             const style = getComputedStyle(text);
             expect(style.backgroundClip, theme.name).toBe('text');
             expect(style.backgroundColor, theme.name).toBe('rgba(0, 0, 0, 0)');
@@ -110,7 +113,9 @@ describe('Flower progress shimmer', () => {
             const measurement = textContrast(text);
             expect(measurement.luminanceGain, theme.name).toBeGreaterThan(0);
             expect(measurement.contrast, theme.name).toBeGreaterThanOrEqual(4.5);
-            expect(measurement.deltaEOK, theme.name).toBeGreaterThanOrEqual(0.08);
+            expect(measurement.deltaEOK, theme.name).toBeGreaterThanOrEqual(0.2);
+            expect(measurement.peak.slice(0, 3).every((channel, index) => channel >= measurement.base[index]), theme.name).toBe(true);
+            if (theme.mode === 'dark') expect(measurement.peak.slice(0, 3), theme.name).toEqual([1, 1, 1]);
             measurements.push(measurement);
           }
           for (const row of runtime.querySelectorAll('.flower-activity-inline-button')) {

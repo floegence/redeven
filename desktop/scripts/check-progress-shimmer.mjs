@@ -118,6 +118,11 @@ try {
       const measurements = await page.evaluate(sample);
       for (const value of measurements) {
         assert.ok(value.luminanceGain > 0 && value.lightnessGain > 0, `${theme.name}/${value.name}: shimmer must brighten its carrier`);
+        assert.ok(value.peak.slice(0, 3).every((channel, index) => channel >= value.base[index]), `${theme.name}/${value.name}: reflection only adds white`);
+        if (value.name === 'text') {
+          assert.ok(value.deltaEOK >= 0.2, `${theme.name}: text has a clearly separated bright core`);
+          if (theme.mode === 'dark') assert.deepEqual(value.peak.slice(0, 3), [255, 255, 255]);
+        }
         assert.ok(value.minimumContrast >= 4.5, `${theme.name}/${value.name}: contrast ${value.minimumContrast}`);
         assert.ok(value.deltaEOK >= 0.08, `${theme.name}/${value.name}: color separation ${value.deltaEOK}`);
       }
