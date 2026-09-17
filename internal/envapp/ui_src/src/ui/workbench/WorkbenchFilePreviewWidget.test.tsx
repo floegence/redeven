@@ -41,11 +41,17 @@ const downloadManagerStore = vi.hoisted(() => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  useResizeObserver: () => () => ({ width: 900, height: 600 }),
+  cn: (...values: unknown[]) => values.filter(Boolean).join(' '),
   useNotification: () => ({
     error: vi.fn(),
     success: vi.fn(),
     info: vi.fn(),
   }),
+}));
+
+vi.mock('@floegence/floe-webapp-core/workbench', () => ({
+  WorkbenchWidgetHeader: (props: any) => <header data-testid="preview-header">{props.actions}</header>,
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({

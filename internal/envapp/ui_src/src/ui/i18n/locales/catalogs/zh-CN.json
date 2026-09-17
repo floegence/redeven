@@ -1566,6 +1566,7 @@
     "unknownPath": "(未知路径)",
     "pathCopied": "路径已复制",
     "copyPath": "复制路径",
+    "moreActions": "更多文件操作",
     "editFile": "编辑文件",
     "discardChanges": "放弃更改",
     "saveFile": "保存文件",

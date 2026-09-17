@@ -76,7 +76,7 @@ describe('workbenchInstanceState', () => {
       name: 'notes.md',
       path: '/workspace/notes.md',
       size: 42,
-    })).toBe('Preview · notes.md');
+    })).toBe('notes.md');
     expect(buildWorkbenchFilePreviewTitle(null)).toBe('Preview');
   });
 

@@ -2178,6 +2178,7 @@ export const enUS = defineDictionary({
     unknownPath: '(unknown path)',
     pathCopied: 'Path copied',
     copyPath: 'Copy path',
+    moreActions: 'More file actions',
     editFile: 'Edit file',
     discardChanges: 'Discard changes',
     saveFile: 'Save file',

@@ -936,7 +936,7 @@
             "path": "ui/file-preview-window-actions.md",
             "type": "UI Contract",
             "title": "File preview window actions",
-            "description": "Read files in a compact floating window with one set of product actions in the title bar.",
+            "description": "Read files in Activity and Workbench with one set of product actions in the existing title bar.",
             "tags": [
               "files",
               "floating-windows",
@@ -944,7 +944,7 @@
               "selection",
               "ui"
             ],
-            "summary": "Redeven owns file-preview actions and document state; published Floe Webapp owns\nthe floating window and its title-bar action slot. Desktop previews show the file\nname on the left and compact file actions on the right, before the window\ncontrols. The separate path row is absent. Moving actions must preserve file\npermissions, the current draft, preview-local text selection, download behavior,\nand the existing unsaved-change confirmation boundary.",
+            "summary": "Redeven owns file-preview actions and document state; published Floe Webapp owns\nthe floating window and Workbench widget title-bar action slots. Activity previews\non desktop and Workbench previews show the file name on the left and compact file\nactions on the right, before the trailing window controls. The separate path row is absent. Moving actions must preserve file\npermissions, the current draft, preview-local text selection, download behavior,\nand the existing unsaved-change confirmation boundary.",
             "section_count": 2
           },
           {
@@ -14991,7 +14991,7 @@
       "concept_id": "ui.file-preview-window-actions",
       "type": "UI Contract",
       "title": "File preview window actions",
-      "description": "Read files in a compact floating window with one set of product actions in the title bar.",
+      "description": "Read files in Activity and Workbench with one set of product actions in the existing title bar.",
       "tags": [
         "files",
         "floating-windows",
@@ -14999,9 +14999,9 @@
         "selection",
         "ui"
       ],
-      "timestamp": "2026-09-15T00:00:00Z",
+      "timestamp": "2026-09-18T00:00:00Z",
       "frontmatter": {
-        "description": "Read files in a compact floating window with one set of product actions in the title bar.",
+        "description": "Read files in Activity and Workbench with one set of product actions in the existing title bar.",
         "tags": [
           "files",
           "floating-windows",
@@ -15009,26 +15009,26 @@
           "selection",
           "ui"
         ],
-        "timestamp": "2026-09-15T00:00:00Z",
+        "timestamp": "2026-09-18T00:00:00Z",
         "title": "File preview window actions",
         "type": "UI Contract"
       },
-      "body_length": 3478,
-      "summary": "Redeven owns file-preview actions and document state; published Floe Webapp owns\nthe floating window and its title-bar action slot. Desktop previews show the file\nname on the left and compact file actions on the right, before the window\ncontrols. The separate path row is absent. Moving actions must preserve file\npermissions, the current draft, preview-local text selection, download behavior,\nand the existing unsaved-change confirmation boundary.",
+      "body_length": 5618,
+      "summary": "Redeven owns file-preview actions and document state; published Floe Webapp owns\nthe floating window and Workbench widget title-bar action slots. Activity previews\non desktop and Workbench previews show the file name on the left and compact file\nactions on the right, before the trailing window controls. The separate path row is absent. Moving actions must preserve file\npermissions, the current draft, preview-local text selection, download behavior,\nand the existing unsaved-change confirmation boundary.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Title bar and reading space\n\nThe desktop preview passes its actions through `FloatingWindow.headerActions`\nusing the product's `PreviewWindow` and `PersistentFloatingWindow` adapters.\nFloe owns the separator, title truncation, window controls, and exclusion of the\naction region from title-bar dragging and double-click maximization. Redeven\nuses 28px action buttons inside the existing 32px title bar. Document content\nbegins directly below the title bar without a second path-and-actions row.\n\nThe action order is copy path, edit, Ask Flower, and download. While editing,\ndiscard and save replace edit in the same group. Availability follows the\ncurrent file, renderer, write permission, loading, dirty, and saving state.\nCopying still copies the complete path and briefly confirms success even though\nthe path is no longer displayed in the floating window.\n\n## One action implementation\n\n`FilePreviewActions` owns action presentation and temporary copy feedback. It\ninvokes the existing controller and product callbacks without owning another\ndraft or save lifecycle. The desktop surface renders it once in the title bar\nand suppresses the content header. Mobile dialogs and Workbench previews keep\ntheir inline header and use the same action implementation.\n\nAsk Flower prioritizes the controller's editor selection, then reads a DOM\nselection contained by the current preview body. A selection in another surface\ndoes not become preview context. Header button input must preserve the selected\nreading text. Downloads keep the current file and draft mapping owned by the\nproduct download command builder.",
-          "char_count": 1611
+          "body": "## Title bar and reading space\n\nThe desktop preview passes its actions through `FloatingWindow.headerActions`\nusing the product's `PreviewWindow` and `PersistentFloatingWindow` adapters.\nFloe owns the separator, title truncation, window controls, and exclusion of the\naction region from title-bar dragging and double-click maximization. Redeven\nuses 28px action buttons inside the existing 32px title bar. Document content\nbegins directly below the title bar without a second path-and-actions row.\n\nThe action order is copy path, edit, Ask Flower, and download. While editing,\ndiscard and save replace edit in the same group. Availability follows the\ncurrent file, renderer, write permission, loading, dirty, and saving state.\nCopying still copies the complete path and briefly confirms success even though\nthe path is no longer displayed in the floating window.\n\n## Workbench reading space and narrow widgets\n\nWorkbench shows the file name in its existing header and exposes the full path\nthrough the title tooltip and copy action. Its body starts directly below the\nheader, except when an existing pending-sync notice is present. Header actions\nretain the current theme height and remain separate from window controls.\n\nAt widget layout widths below 480 CSS pixels, file actions use a single More\nfile actions button. Wider widgets show compact icons. Canvas zoom does not\nchange that breakpoint. Both presentations use the same action definitions,\npermissions, disabled states, and feedback. Resizing across the breakpoint\ncloses any open menu without remounting the document or losing its draft.\n\nThe menu uses the existing local `FloatingContextMenu` and `SurfaceFloatingLayer`\ncontract. Opening captures the owning preview's selection before menu focus\nmoves. The snapshot lasts only for that menu session and is cleared on dismissal\nor file changes. Clicking the toggle again closes the menu; its pointer and focus\nevents belong to the menu boundary. Keyboard navigation, Escape/Tab dismissal, and focus restoration\nmust not activate canvas gestures or reclaim focus through the widget shell.\n\n## One action implementation\n\n`FilePreviewActions` owns action presentation and temporary copy feedback. It\ninvokes the existing controller and product callbacks without owning another\ndraft or save lifecycle. The desktop surface renders it once in the title bar\nand suppresses the content header. Workbench uses the same actions through\n`WorkbenchWidgetHeader`, supplied by its body without moving the controller or\nremounting document content. Mobile dialogs keep the inline header.\n\nAsk Flower prioritizes the controller's editor selection, then reads a DOM\nselection contained by the current preview body. A selection in another surface\ndoes not become preview context. Header button input must preserve the selected\nreading text. The existing Ask Flower intent builder remains authoritative for outbound\ncontext: it sends file paths, without inlining selected file text. Downloads keep\nthe current file and draft mapping owned by the product download command builder.",
+          "char_count": 3073
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Preview loading and error presentation remain in the body. Save errors and\nunsaved-close confirmation retain their existing controller and local modal\nownership. A title-bar layout change must not add a second close policy or\nbypass discard confirmation. The [floating layer contract](env-app-floating-layer-order.md)\nowns stacking and modal placement; [Workbench input ownership](workbench-input-ownership.md)\nowns reading-surface selection and scrolling.\n\nPreview scale, content bounds, and asynchronous renderer ownership follow the\n[viewport and rendering contract](file-preview-viewport-and-rendering.md).",
-          "char_count": 610
+          "body": "Preview loading and error presentation remain in the body. Save errors and\nunsaved-close confirmation retain their existing controller and local modal\nownership. A title-bar layout change must not add a second close policy or\nbypass discard confirmation. A Workbench removal request must publish its pending\nremoval flag and confirmation state together. Confirmed discard must publish\nconfirmation dismissal and preview closure together, so observers cannot\nmistake either transition for cancellation. The [floating layer contract](env-app-floating-layer-order.md)\nowns stacking and modal placement; [Workbench input ownership](workbench-input-ownership.md)\nowns reading-surface selection and scrolling.\n\nPreview scale, content bounds, and asynchronous renderer ownership follow the\n[viewport and rendering contract](file-preview-viewport-and-rendering.md).",
+          "char_count": 857
         }
       ],
       "evidence": [
@@ -15056,9 +15056,19 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.test.tsx:0:preserves inline action behavior and editing availability.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.test.tsx",
           "description": "Preserves inline action behavior and editing availability."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.tsx:0:supplies header actions from the existing controller and suppresses the body toolbar.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.tsx",
+          "description": "Supplies header actions from the existing controller and suppresses the body toolbar."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.browser.test.tsx:0:verifies reading space, responsive actions, selection, and local menu input on the published workbench.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.browser.test.tsx",
+          "description": "Verifies reading space, responsive actions, selection, and local menu input on the published Workbench."
         }
       ],
-      "snippet": "Redeven owns file-preview actions and document state; published Floe Webapp owns the floating window and its title-bar action slot. Desktop previews show the file name on the left and compact file actions on the right, before the window",
+      "snippet": "Redeven owns file-preview actions and document state; published Floe Webapp owns the floating window and Workbench widget title-bar action slots. Activity previews on desktop and Workbench previews show the file name on the left and compact",
       "links": [
         {
           "label": "floating layer contract",
@@ -19699,5 +19709,5 @@
       ]
     }
   ],
-  "source_sha256": "fbb106ddbc26856bbd353326657efafd0654c37247b5f04dc1f52e9ed74a2188"
+  "source_sha256": "86684af7ac7a7e27054c6b7b09431b7b2ddb4deba2c4fce11bbb5da8ba0e1613"
 }

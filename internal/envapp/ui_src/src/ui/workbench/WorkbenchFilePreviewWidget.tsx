@@ -1,7 +1,7 @@
-import { Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
-import { useNotification } from '@floegence/floe-webapp-core';
+import { Show, batch, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
+import { useNotification, useResizeObserver } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import type { WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
+import { WorkbenchWidgetHeader, type WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
@@ -11,6 +11,7 @@ import { useDownloadManager } from '../downloads/DownloadContext';
 import { buildFilePreviewDownloadCommand } from '../downloads/downloadCommands';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { buildFilePreviewFlowerTurnLauncherIntent } from '../utils/filePreviewAskFlower';
+import { FilePreviewActions } from '../widgets/FilePreviewActions';
 import { FilePreviewPanel } from '../widgets/FilePreviewPanel';
 import { createFilePreviewController } from '../widgets/createFilePreviewController';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
@@ -111,6 +112,10 @@ function appendRequestId(requestIds: readonly string[], requestId: string | unde
 
 export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   const notification = useNotification();
+  const [bodyElement, setBodyElement] = createSignal<HTMLDivElement>();
+  const [contentElement, setContentElement] = createSignal<HTMLDivElement>();
+  const bodySize = useResizeObserver(bodyElement);
+  const narrowHeader = () => (props.surfaceMetrics?.()?.rect.worldWidth ?? bodySize()?.width ?? 480) < 480;
   const i18n = useI18n();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -341,8 +346,10 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       if (!controller.dirty()) {
         return true;
       }
-      setPendingWidgetRemoval(true);
-      controller.handleOpenChange(false);
+      batch(() => {
+        setPendingWidgetRemoval(true);
+        controller.handleOpenChange(false);
+      });
       return false;
     });
   });
@@ -368,7 +375,31 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   });
 
   return (
-    <div class="redeven-workbench-body-surface flex h-full min-h-0 flex-col overflow-hidden">
+    <div ref={setBodyElement} class="redeven-workbench-body-surface flex h-full min-h-0 flex-col overflow-hidden">
+      <WorkbenchWidgetHeader
+        titleTooltip={controller.item()?.path}
+        actions={
+          <FilePreviewActions
+            compact
+            presentation={narrowHeader() ? 'menu' : 'icons'}
+            item={controller.item()}
+            descriptor={controller.descriptor()}
+            canEdit={controller.canEdit()}
+            editing={controller.editing()}
+            dirty={controller.dirty()}
+            saving={controller.saving()}
+            loading={controller.loading()}
+            selectedText={controller.selectedText()}
+            contentElement={contentElement()}
+            onCopyPath={handleCopyPath}
+            onStartEdit={controller.beginEditing}
+            onDiscard={controller.revertCurrent}
+            onSave={() => void controller.saveCurrent()}
+            onAskFlower={handleAskFlower}
+            onDownload={handleDownload}
+          />
+        }
+      />
       <Show when={pendingSyncedItem()}>
         {(item) => (
           <div class="shrink-0 border-b border-warning/25 bg-warning/10 px-3 py-2 text-xs text-foreground">
@@ -410,6 +441,8 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       <div class="min-h-0 flex-1 overflow-hidden">
       <FilePreviewPanel
         surface="main"
+        showHeader={false}
+        contentRef={setContentElement}
         allowLocalWheel={props.selected === true}
         item={controller.item()}
         descriptor={controller.descriptor()}

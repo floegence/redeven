@@ -265,7 +265,7 @@ export function buildWorkbenchFilePreviewTitle(
   const path = normalizeAbsolutePath(item?.path ?? '');
   const name = compact(item?.name) || (path ? basenameFromAbsolutePath(path) : '');
   if (name) {
-    return `${normalizedPrefix} · ${name}`;
+    return name;
   }
   return normalizedPrefix;
 }

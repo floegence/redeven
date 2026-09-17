@@ -1,4 +1,4 @@
-import { type Accessor, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
+import { type Accessor, batch, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { Session } from '@floegence/flowersec-core';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
@@ -482,14 +482,18 @@ export function createFilePreviewController(params: {
 
   const confirmDiscardAndContinue = async () => {
     const action = pendingAction;
-    clearPendingAction();
     if (!action) return;
 
     if (action.type === 'close') {
-      forceClosePreview();
+      // The owning window must observe confirmation dismissal and closure together.
+      batch(() => {
+        clearPendingAction();
+        forceClosePreview();
+      });
       return;
     }
 
+    clearPendingAction();
     await loadPreview(action.item);
   };
 
