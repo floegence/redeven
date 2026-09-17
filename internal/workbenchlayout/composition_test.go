@@ -60,7 +60,7 @@ func createCompositionV4Database(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := migrateToV4(tx); err != nil {
 		t.Fatal(err)
 	}

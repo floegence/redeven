@@ -44,7 +44,7 @@ func withDeviceIdentityLock(stateDir string, create bool, action func() error) e
 	if err != nil {
 		return err
 	}
-	defer lock.Release()
+	defer func() { _ = lock.Release() }()
 	target := localUIDeviceCADir(stateDir)
 	previous := target + ".previous"
 	// A process interruption before the new directory was committed restores the

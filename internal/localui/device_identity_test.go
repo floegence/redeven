@@ -257,7 +257,9 @@ func TestCertificateOperationsRejectConcurrentMutationAndUnsafeTargets(t *testin
 	if _, err := RegenerateLocalUIDeviceCA(dir); !errors.Is(err, lockfile.ErrAlreadyLocked) {
 		t.Fatalf("concurrent mutation: %v", err)
 	}
-	lock.Release()
+	if err := lock.Release(); err != nil {
+		t.Fatal(err)
+	}
 	current, err := InspectLocalUIDeviceCA(dir)
 	if err != nil || current.Fingerprint != original.Fingerprint {
 		t.Fatal("concurrent mutation changed identity")
