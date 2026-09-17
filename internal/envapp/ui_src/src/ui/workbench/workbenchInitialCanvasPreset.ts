@@ -8,7 +8,6 @@ import {
   type WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 
-import type { I18nHelpers } from '../i18n';
 import type { RuntimeWorkbenchLayoutWidget } from './runtimeWorkbenchLayout';
 
 export type RedevenWorkbenchCanvasPresetID = 'redeven.first_run.welcome.v2';
@@ -30,7 +29,6 @@ export type CreateRedevenWorkbenchCanvasPresetOptions = Readonly<{
   widgetDefinitions: readonly WorkbenchWidgetDefinition[];
   initialWidgetTypes: readonly WorkbenchWidgetType[];
   createdAtUnixMs: number;
-  t: I18nHelpers['t'];
 }>;
 
 // Give real widget content room to breathe; overview scales the scene, not its internal layout.
@@ -43,7 +41,9 @@ const WIDGET_SPECS = [
 export function createRedevenWorkbenchCanvasPreset(
   options: CreateRedevenWorkbenchCanvasPresetOptions,
 ): RedevenWorkbenchCanvasPreset {
-  const { t } = options;
+  // Seed copy is editable English user content, independent of the interface language.
+  const title = 'Make room for your next idea.';
+  const description = 'Files, terminals, and live signals. One space to make them yours.';
   const time = Number.isFinite(options.createdAtUnixMs) ? Math.max(0, Math.trunc(options.createdAtUnixMs)) : 0;
   const geometry = (id: string, x: number, y: number, width: number, height: number, order: number) => ({
     id, x, y, width, height, z_index: order,
@@ -65,8 +65,8 @@ export function createRedevenWorkbenchCanvasPreset(
   return {
     preset_id: 'redeven.first_run.welcome.v2',
     schema_version: 1,
-    title: t('workbench.welcome.title'),
-    description: t('workbench.welcome.subtitle'),
+    title,
+    description,
     canvas: {
       widgets,
       background_layers: [
@@ -76,23 +76,23 @@ export function createRedevenWorkbenchCanvasPreset(
       ],
       annotations: [
         text('annotation-initial-brand', 'Redeven', 82, 52, 600, 40, 24, 600),
-        text('annotation-initial-welcome-title', t('workbench.welcome.title'), 80, 120, 2496, 108, 68, 600),
-        text('annotation-initial-welcome-subtitle', t('workbench.welcome.subtitle'), 84, 254, 2488, 56, 26),
-        text('annotation-initial-ideas-title', t('workbench.welcome.ideasTitle'), 112, 380, 352, 56, 36, 600),
-        text('annotation-initial-ideas-description', t('workbench.welcome.ideasDescription'), 112, 456, 352, 56, 22),
-        text('annotation-initial-build-title', t('workbench.welcome.filesTitle'), 560, 380, 848, 56, 36, 600),
-        text('annotation-initial-build-description', t('workbench.welcome.filesDescription'), 560, 456, 848, 56, 22),
-        text('annotation-initial-runtime-title', t('workbench.welcome.runtimeTitle'), 1504, 380, 1040, 56, 36, 600),
-        text('annotation-initial-runtime-description', t('workbench.welcome.runtimeDescription'), 1504, 456, 1040, 56, 22),
+        text('annotation-initial-welcome-title', title, 80, 120, 2496, 108, 68, 600),
+        text('annotation-initial-welcome-subtitle', description, 84, 254, 2488, 56, 26),
+        text('annotation-initial-ideas-title', 'Think & plan', 112, 380, 352, 56, 36, 600),
+        text('annotation-initial-ideas-description', 'Keep a thought. Find your next step.', 112, 456, 352, 56, 22),
+        text('annotation-initial-build-title', 'Explore & build', 560, 380, 848, 56, 36, 600),
+        text('annotation-initial-build-description', 'Your files, with room to see the details.', 560, 456, 848, 56, 22),
+        text('annotation-initial-runtime-title', 'Run & observe', 1504, 380, 1040, 56, 36, 600),
+        text('annotation-initial-runtime-description', 'A terminal and a clear view of your environment.', 1504, 456, 1040, 56, 22),
       ],
       sticky_notes: [
         {
           ...geometry('sticky-initial-capture', 112, 552, 352, 400, 10), kind: 'sticky_note',
-          title: t('workbench.welcome.noteTitle'), body: t('workbench.welcome.noteBody'), color: 'amber', material: 'tab',
+          title: 'Make it yours', body: 'Click here to capture an idea.\nMove windows by their handles.\nKeep only what you need.', color: 'amber', material: 'tab',
         },
         {
           ...geometry('sticky-initial-guide', 112, 984, 352, 462, 11), kind: 'sticky_note',
-          title: t('workbench.welcome.guideTitle'), body: t('workbench.welcome.guideBody'), color: 'graphite', material: 'ruled',
+          title: 'Shape your space', body: 'Use Composition mode to edit text and regions.\n\nReturn to Work mode for notes and tools.\n\nEverything here can move with your work.', color: 'graphite', material: 'ruled',
         },
       ],
     },

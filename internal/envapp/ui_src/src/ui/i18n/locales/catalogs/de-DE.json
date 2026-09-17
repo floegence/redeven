@@ -708,20 +708,6 @@
     "moreActions": "Weitere Aktionen"
   },
   "workbench": {
-    "welcome": {
-      "title": "Platz für Ihre nächste Idee.",
-      "subtitle": "Dateien, Terminals und Live-Daten. Ein Raum für Ihre Arbeit.",
-      "ideasTitle": "Denken & planen",
-      "ideasDescription": "Gedanken festhalten. Den nächsten Schritt finden.",
-      "filesTitle": "Erkunden & gestalten",
-      "filesDescription": "Ihre Dateien, mit Raum für die Details.",
-      "runtimeTitle": "Starten & beobachten",
-      "runtimeDescription": "Ein Terminal und ein klarer Blick auf Ihre Umgebung.",
-      "noteTitle": "Ihr eigener Platz",
-      "noteBody": "Hier klicken und eine Idee notieren.\nFenster an den Griffen verschieben.\nNur das behalten, was Sie brauchen.",
-      "guideTitle": "Raum gestalten",
-      "guideBody": "Im Gestaltungsmodus bearbeiten Sie Text und Bereiche.\n\nIm Arbeitsmodus nutzen Sie Notizen und Werkzeuge.\n\nAlles lässt sich passend zur Arbeit anordnen."
-    },
     "composition": {
       "dragSticky": "Haftnotiz ziehen",
       "stickyBody": "Inhalt der Haftnotiz",

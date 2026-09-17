@@ -49,6 +49,39 @@ func TestServiceCompositionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestServicePersistsAnnotationFontWeight(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		family string
+		weight int
+	}{
+		{"body", DefaultAnnotationFontFamily, 400},
+		{"heading", DefaultAnnotationFontFamily, 600},
+		{"serif", "ui-serif, Georgia, serif", 400},
+		{"rounded", `ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", ui-sans-serif, sans-serif`, 600},
+		{"monospace", `ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace`, 500},
+		{"display", `Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`, 600},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := openTestService(t)
+			ctx := context.Background()
+			_, err := svc.Replace(ctx, PutLayoutRequest{Annotations: []TextAnnotation{{
+				ID: "welcome-text", Text: "A space for your next idea", FontFamily: tt.family, FontWeight: tt.weight,
+			}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := svc.Snapshot(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := snapshot.Annotations[0]; got.FontFamily != tt.family || got.FontWeight != tt.weight {
+				t.Fatalf("saved font = %q / %d, want %q / %d", got.FontFamily, got.FontWeight, tt.family, tt.weight)
+			}
+		})
+	}
+}
+
 // Build the historical v4 shape without invoking the current initializer.
 func createCompositionV4Database(t *testing.T) string {
 	t.Helper()
