@@ -15,6 +15,11 @@ effects stop subsequent work without automatically selecting a replacement.
 
 # Contract
 
+Connecting an explicitly chosen tab or creating a new tab in Computer connections
+also selects that target for the current conversation. Site access remains a
+separate saved grant. Delayed connection results cannot select a different
+conversation after navigation.
+
 ## Managed profiles
 
 The Runtime owns one persistent headless Chromium process per profile. A new tab

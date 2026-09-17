@@ -52,6 +52,16 @@ export function FlowerComputerConnections(props: {
     catch { if (current === generation) setFailed(true); }
     finally { if (current === generation) setSaving(false); }
   };
+  const connectBrowser: NonNullable<FlowerSurfaceAdapter['connectComputerBrowser']> = async connection => {
+    const current = generation, thread = props.threadID;
+    const management = props.adapter.computerManagement, connect = props.adapter.connectComputerBrowser;
+    if (!management || !connect || !available()) throw new Error('computer connections unavailable');
+    const target = await connect(connection);
+    if (!target.ready || current !== generation) throw new Error('computer connection changed');
+    // Connecting an explicitly chosen tab also selects it for this conversation.
+    await management.selectTarget(thread, target.id);
+    return target;
+  };
   const disconnect = async (id: string) => {
     if (!available() || !props.adapter.computerManagement?.disconnectBrowser) return;
     const current = generation; setSaving(true); setFailed(false);
@@ -110,12 +120,12 @@ export function FlowerComputerConnections(props: {
         <Button size="sm" variant="ghost" disabled={!available()} onClick={() => { change({ origins: [], apps: [], allow_foreground: false }); void save(); }}>{props.copy.revokeAll}</Button>
       </>}</Show>
       <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement?.listManagedProfiles && props.adapter.computerManagement.createManagedProfile && props.adapter.computerManagement.listManagedTabs}>
-        <FlowerProfileConnection managed management={props.adapter.computerManagement!} connect={props.adapter.connectComputerBrowser!} copy={props.copy} onConnected={() => void load()} />
+        <FlowerProfileConnection managed management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => void load()} />
       </Show>
       <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement?.setupExtension && props.adapter.computerManagement.listExtensionProfiles && props.adapter.computerManagement.listExtensionTabs}>
-        <FlowerProfileConnection management={props.adapter.computerManagement!} connect={props.adapter.connectComputerBrowser!} copy={props.copy} onConnected={() => void load()} />
+        <FlowerProfileConnection management={props.adapter.computerManagement!} connect={connectBrowser} copy={props.copy} onConnected={() => void load()} />
       </Show>
-      <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement}><details class="rounded-md border border-border p-3"><summary class="cursor-pointer text-xs font-medium">{props.copy.advanced}</summary><div class="pt-3"><FlowerBrowserConnection copy={props.copy} listTabs={props.adapter.computerManagement!.listBrowserTabs} connect={props.adapter.connectComputerBrowser!} onConnected={() => void load()} /></div></details></Show>
+      <Show when={props.adapter.canMutate !== false && props.adapter.connectComputerBrowser && props.adapter.computerManagement}><details class="rounded-md border border-border p-3"><summary class="cursor-pointer text-xs font-medium">{props.copy.advanced}</summary><div class="pt-3"><FlowerBrowserConnection copy={props.copy} listTabs={props.adapter.computerManagement!.listBrowserTabs} connect={connectBrowser} onConnected={() => void load()} /></div></details></Show>
       <Show when={failed()}><p role="alert" class="text-xs text-destructive">{props.copy.failed}</p></Show>
       <Show when={saved()}><p role="status" class="text-xs">{props.copy.saved}</p></Show>
     </div>

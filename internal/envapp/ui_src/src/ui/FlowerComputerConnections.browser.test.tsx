@@ -132,6 +132,8 @@ it('loads managed profiles, requires an explicit tab, creates a background tab, 
   button(computerUseEnUS.newTab).focus(); await userEvent.keyboard('{Enter}');
   await waitFor(() => connect.mock.calls.length === 2);
   expect(connect).toHaveBeenLastCalledWith({ managed_profile_id: 'default', new_tab: true });
+  await waitFor(() => management.selectTarget.mock.calls.length === 2);
+  expect(management.selectTarget).toHaveBeenLastCalledWith('managed-thread', 'managed-tab');
   const name = document.querySelector<HTMLInputElement>(`input[aria-label="${computerUseEnUS.profileName}"]`)!;
   name.value = 'Work'; name.dispatchEvent(new Event('input', { bubbles: true }));
   button(computerUseEnUS.createProfile).focus(); await userEvent.keyboard('{Enter}');
