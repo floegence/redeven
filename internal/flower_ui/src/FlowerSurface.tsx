@@ -5775,7 +5775,7 @@ webSearch: model.web_search,
   const selectedComputerAssistance = createMemo(() => {
     const recheck = computerRecheck();
     return computerAssistance(selectedComputerStage()?.item, copy().computer,
-      recheck?.threadID === selectedThreadID() && recheck.promptID === selectedInputRequest()?.prompt_id ? recheck.observation : undefined);
+      recheck?.threadID === selectedThreadID() && recheck.promptID === selectedInputRequest()?.prompt_id ? recheck.observation : undefined, selectedThread()?.permission_type === 'full_access');
   });
   const requestedComputerAccess = createMemo<FlowerRequestedComputerAccess>(() => selectedComputerAssistance().requested);
   const computerExecutionMode = () => {
@@ -7846,7 +7846,7 @@ webSearch: model.web_search,
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
               <Show when={props.adapter.computerManagement && (selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'target')}><Button variant="secondary" disabled={inputRequestIsSubmitting()} onClick={() => setComputerConnectionsOpen(true)}>{copy().computer.title}</Button></Show>
-              <Show when={selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'target'}>
+              <Show when={selectedComputerAssistance().kind !== 'access' && selectedComputerAssistance().kind !== 'authorized' && selectedComputerAssistance().kind !== 'target'}>
               <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               </Show>
               <Button variant="primary" data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
@@ -7855,7 +7855,7 @@ webSearch: model.web_search,
                 if (!question || !choice) return;
                 selectInputChoice(question, choice);
                 void submitInputRequest(selectedComputerAssistance().kind === 'access' ? requestedComputerAccess() : undefined);
-              }}>{selectedComputerAssistance().kind === 'access' ? copy().computer.allowContinue : copy().chat.computerReturnControl}</Button>
+              }}>{selectedComputerAssistance().kind === 'access' ? copy().computer.allowContinue : selectedComputerAssistance().kind === 'authorized' ? copy().computer.continueTask : copy().chat.computerReturnControl}</Button>
               </div>
             </div>
           </Show>
@@ -11199,7 +11199,7 @@ webSearch: model.web_search,
       </div>
       <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
       <FlowerComputerConnections open={computerConnectionsOpen()} onOpenChange={setComputerConnectionsOpen}
-        threadID={selectedThreadID()} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
+        threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
       <FlowerChatContextPreview
         preview={contextSnapshotPreview()}
         open={contextSnapshotPreview() !== null}

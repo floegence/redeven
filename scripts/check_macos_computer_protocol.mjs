@@ -13,7 +13,7 @@ const iterator = lines[Symbol.asyncIterator]();
 try {
   for (const split of [false, true]) {
     const request_id = split ? 'split-frame' : 'short-frame';
-    const body = JSON.stringify({ protocol_version: 1, request_id, target_id: 'desktop-main', tool_name: 'computer.targets', args: {} }) + '\n';
+    const body = JSON.stringify({ protocol_version: 2, request_id, target_id: 'desktop-main', tool_name: 'computer.targets', args: {} }) + '\n';
     if (split) {
       helper.stdin.write(body.slice(0, 20));
       await new Promise(resolve => setImmediate(resolve));

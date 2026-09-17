@@ -276,3 +276,15 @@ func TestComputerScriptTimeoutPreservesConfirmedPrefix(t *testing.T) {
 		t.Fatal("cancelled namespace survived")
 	}
 }
+
+func TestComputerScriptCannotSupplyHostAuthorization(t *testing.T) {
+	for _, key := range []string{"full_access", "allowed_origins", "allowed_apps", "allow_foreground"} {
+		t.Run(key, func(t *testing.T) {
+			_, err := computerScriptOperation(TargetToolCall{}, map[string]any{"action": "observe", key: true})
+			var denied *targetToolPolicyError
+			if !errors.As(err, &denied) || denied.code != "target_not_allowed" {
+				t.Fatalf("script supplied host authorization: %v", err)
+			}
+		})
+	}
+}

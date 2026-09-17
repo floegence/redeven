@@ -300,7 +300,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	}
 	if call.controlReturn {
 		control.mu.Lock()
-		missing := (control.requiredOrigin != "" && !slices.Contains(call.allowedOrigins, control.requiredOrigin)) || (control.requiredApp != "" && !slices.Contains(call.allowedApps, control.requiredApp)) || (control.requireForeground && !call.allowForeground)
+		missing := !call.fullAccess && ((control.requiredOrigin != "" && !slices.Contains(call.allowedOrigins, control.requiredOrigin)) || (control.requiredApp != "" && !slices.Contains(call.allowedApps, control.requiredApp)) || (control.requireForeground && !call.allowForeground))
 		safety := &InteractionSafetyDecision{Level: "takeover", RequiredOrigin: control.requiredOrigin, RequiredApp: control.requiredApp}
 		if control.requireForeground {
 			safety.ReasonCodes = []string{"foreground_permission"}

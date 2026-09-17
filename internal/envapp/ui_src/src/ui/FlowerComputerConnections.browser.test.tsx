@@ -147,3 +147,26 @@ it('loads managed profiles, requires an explicit tab, creates a background tab, 
   expect(management.disconnectBrowser).toHaveBeenCalledWith('managed-tab');
   expect(management.saveAccess).not.toHaveBeenCalled();
 });
+
+
+it('explains full access without redundant grant controls and keeps target selection available', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const [fullAccess, setFullAccess] = createSignal(true);
+  const management = {
+    listTargets: vi.fn().mockResolvedValue([{ id: 'managed', kind: 'browser.managed', display_name: 'Task browser', ready: true }]),
+    loadTarget: vi.fn().mockResolvedValue({ target_id: 'managed' }), selectTarget: vi.fn(),
+    loadAccess: vi.fn().mockResolvedValue({ origins: ['https://saved.test'], apps: [], allow_foreground: false }), saveAccess: vi.fn(),
+    listBrowserTabs: vi.fn().mockResolvedValue([]),
+  };
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open onOpenChange={() => undefined}
+    fullAccess={fullAccess()} threadID="full-task" adapter={{ ...adapter(true), computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!document.querySelector('input[type="radio"]:not(:disabled)'));
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(computerUseEnUS.fullAccessHint);
+  expect(document.querySelector('input[type="url"]')).toBeNull();
+  expect([...document.querySelectorAll('button')].some(button => button.textContent === computerUseEnUS.save)).toBe(false);
+  setFullAccess(false);
+  await waitFor(() => !!document.querySelector('input[type="url"]'));
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('https://saved.test');
+  expect(management.saveAccess).not.toHaveBeenCalled();
+});

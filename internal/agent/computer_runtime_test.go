@@ -86,7 +86,7 @@ func TestComputerUseRuntimeRegistersOnlyDiscoveredNativeWindows(t *testing.T) {
 	}
 	if err := os.WriteFile(native, []byte(`#!/bin/sh
 if [ "$1" = "--capabilities" ]; then
-  printf '%s\n' '{"protocol_version":2,"screen_recording":true,"accessibility":true}'
+  printf '%s\n' '{"protocol_version":3,"screen_recording":true,"accessibility":true}'
   exit 0
 fi
 while IFS= read -r line; do

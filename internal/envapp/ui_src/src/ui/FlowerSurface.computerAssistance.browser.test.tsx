@@ -5,7 +5,7 @@ import { page } from 'vitest/browser';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-async function setup(kind: 'site' | 'captcha' | 'unknown' = 'site') {
+async function setup(kind: 'site' | 'captcha' | 'unknown' = 'site', permission: 'approval_required' | 'full_access' = 'approval_required') {
   const threadID = 'assistance-fixture';
   const item = activityItem({ item_id: 'step', tool_id: 'navigate', tool_name: 'browser.navigate', renderer: 'structured', status: 'success',
     target_refs: [{ kind: 'computer_control', label: 'Task browser', resource_ref: 'browser-main' },
@@ -13,7 +13,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' = 'site') {
     chips: kind === 'site' ? [] : [{ kind: 'computer_assistance', label: 'Required step', value: kind === 'captcha' ? 'captcha' : 'inspection' }],
     payload: { operation: 'navigate', status: 'success' },
   });
-  const snapshot = thread({ thread_id: threadID, status: 'waiting_user', active_run_id: 'run-control', messages: [{
+  const snapshot = thread({ thread_id: threadID, permission_type: permission, status: 'waiting_user', active_run_id: 'run-control', messages: [{
     id: 'message', turn_id: 'turn-control', run_id: 'run-control', role: 'assistant', content: '', status: 'complete', created_at_ms: 10,
     blocks: [activityTimeline({ thread_id: threadID, turn_id: 'turn-control', run_id: 'run-control', status: 'success', items: [item] })],
   }] });
@@ -148,4 +148,25 @@ it('shows a newly observed site scope and grants only that scope on the next exp
   s.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="grant"]')!.click();
   await waitFor(() => s.saveAccess.mock.calls.length === 2);
   expect(s.saveAccess).toHaveBeenLastCalledWith('assistance-fixture', { origins: ['https://existing.test', 'https://www.google.com', 'https://identity.test'], apps: ['dev.Notes'], allow_foreground: false });
+});
+
+
+it('continues an existing full-access pause without granting the same operation again', async () => {
+  const s = await setup('site', 'full_access');
+  expect(s.surface.querySelector('.flower-computer-control-title')?.textContent).toBe('Full access is enabled');
+  expect(s.surface.querySelector('[data-computer-control-action="grant"]')).toBeNull();
+  expect(s.surface.querySelector('[data-computer-control-action="take"]')).toBeNull();
+  const resume = s.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="return"]')!;
+  expect(resume.textContent).toBe('Continue task');
+  resume.click(); resume.click();
+  await waitFor(() => s.submitInput.mock.calls.length === 1);
+  expect(s.loadAccess).not.toHaveBeenCalled();
+  expect(s.saveAccess).not.toHaveBeenCalled();
+});
+
+it('keeps actual CAPTCHA instructions in full access mode', async () => {
+  const s = await setup('captcha', 'full_access');
+  expect(s.surface.querySelector('.flower-computer-control-title')?.textContent).toBe('Complete the CAPTCHA');
+  expect(s.surface.querySelector('[data-computer-control-action="take"]')?.textContent).toBe('Open page');
+  expect(s.submitInput).not.toHaveBeenCalled();
 });

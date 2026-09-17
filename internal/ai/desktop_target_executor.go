@@ -60,7 +60,7 @@ func (e *NativeDesktopTargetExecutor) EnsureTargetReady(ctx context.Context, _ s
 		ScreenRecording bool `json:"screen_recording"`
 		Accessibility   bool `json:"accessibility"`
 	}
-	if err != nil || json.Unmarshal(output, &capabilities) != nil || capabilities.ProtocolVersion != 2 {
+	if err != nil || json.Unmarshal(output, &capabilities) != nil || capabilities.ProtocolVersion != 3 {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "native_handshake_failed"}
 	}
 	if !capabilities.ScreenRecording || !capabilities.Accessibility {
@@ -139,7 +139,7 @@ func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, cal
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	payload, err := json.Marshal(map[string]any{"protocol_version": 2, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args, "allowed_apps": call.allowedApps, "allow_foreground": call.allowForeground, "script_operation": call.scriptOperation, "user_control": userControl, "return_control": call.controlReturn})
+	payload, err := json.Marshal(map[string]any{"protocol_version": 3, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_apps": call.allowedApps, "allow_foreground": call.allowForeground, "script_operation": call.scriptOperation, "user_control": userControl, "return_control": call.controlReturn})
 	if err != nil {
 		return TargetToolResult{}, err
 	}
@@ -270,7 +270,7 @@ func (e *NativeDesktopTargetExecutor) startLocked() error {
 		return nil
 	}
 	// The executor owns this session across tool calls and turns.
-	cmd := exec.Command(e.HelperPath, "--protocol-version", "2")
+	cmd := exec.Command(e.HelperPath, "--protocol-version", "3")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err

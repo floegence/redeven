@@ -56,7 +56,7 @@ func handle(_ line: String) {
               let tool = request["tool_name"] as? String,
               let args = request["args"] as? [String: Any] else { throw NativeInput.invalid("Expected a versioned JSONL request.") }
         envelope["request_id"] = id; envelope["target_id"] = target
-        guard request["protocol_version"] as? Int == 2 else { throw HostFailure(code: "PROTOCOL_VERSION_MISMATCH", message: "Computer host protocol version 2 is required.") }
+        guard request["protocol_version"] as? Int == 3 else { throw HostFailure(code: "PROTOCOL_VERSION_MISMATCH", message: "Computer host protocol version 3 is required.") }
         if tool == "computer.targets" && target == "desktop-main" {
             emit(["type": "result", "request_id": id, "target_id": target, "payload": ["targets": try accessibility.inventory()]])
             return
@@ -65,6 +65,8 @@ func handle(_ line: String) {
         window = selected; foreground.target = selected
         let privateInput = request["user_control"] as? Bool == true
         let returning = request["return_control"] as? Bool == true
+        let fullAccess = request["full_access"] as? Bool == true
+        let allowForeground = fullAccess || request["allow_foreground"] as? Bool == true
         let allowedApps = request["allowed_apps"] as? [String] ?? []
         if returning {
             guard tool == "computer.screenshot" else { throw NativeInput.invalid("Handback requires a fresh observation.") }
@@ -78,7 +80,7 @@ func handle(_ line: String) {
             emit(["type": "result", "request_id": id, "target_id": target, "safety": safety,
                   "payload": ["code": "TAKEOVER_REQUIRED", "action_executed": effectStarted]])
         }
-        let before = try selected.safety(allowedApps: allowedApps, privateInput: privateInput)
+        let before = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess, privateInput: privateInput)
         if before["level"] as? String == "takeover" { pause(before); return }
         func number(_ key: String, default fallback: Double? = nil) throws -> Double {
             guard let value = args[key] as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID() else {
@@ -115,7 +117,7 @@ func handle(_ line: String) {
                 // AX permission does not promise that an application will stay
                 // in the background. Announce and authorize that possibility
                 // before dispatch; do not activate the app merely to use AX.
-                try foreground.post([], window: selected, allowed: request["allow_foreground"] as? Bool == true, privateInput: privateInput, activate: false, started: {
+                try foreground.post([], window: selected, allowed: allowForeground, privateInput: privateInput, activate: false, started: {
                     emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground", "reason": "application_may_activate"])
                 }, prepare: {
                     payload = try selected.action(args, willMutate: { effectStarted = true })
@@ -150,7 +152,7 @@ func handle(_ line: String) {
         }
         if !events.isEmpty {
             mode = "foreground"
-            try foreground.post(events, window: selected, allowed: request["allow_foreground"] as? Bool == true, privateInput: privateInput, started: {
+            try foreground.post(events, window: selected, allowed: allowForeground, privateInput: privateInput, started: {
                 emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground", "reason": "native_input_required"])
             }, prepare: {
                 if let node = focusElement {
@@ -173,12 +175,12 @@ func handle(_ line: String) {
         payload["user_input_events"] = userEvents
         payload["background_interference"] = interference
         if interference { mode = "foreground" }
-        let after = try selected.safety(allowedApps: allowedApps)
+        let after = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess)
         if after["level"] as? String == "takeover" { pause(after); return }
         if tool == "computer.screenshot" || (tool == "computer.observe" ? args["screenshot"] as? Bool == true : request["script_operation"] as? Bool != true) {
             payload.merge(try screenshot(selected)) { _, new in new }
             CFRunLoopRunInMode(.defaultMode, 0, true)
-            let captured = try selected.safety(allowedApps: allowedApps)
+            let captured = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess)
             if captured["level"] as? String == "takeover" { pause(captured); return }
         }
         payload["summary"] = tool; payload["action_executed"] = effectStarted
@@ -200,7 +202,7 @@ func handle(_ line: String) {
 }
 
 if CommandLine.arguments.contains("--capabilities") {
-    emit(["protocol_version": 2, "screen_recording": CGPreflightScreenCaptureAccess(), "accessibility": AXIsProcessTrusted(),
+    emit(["protocol_version": 3, "screen_recording": CGPreflightScreenCaptureAccess(), "accessibility": AXIsProcessTrusted(),
           "input_monitoring": foreground.available, "execution_location": "macos_desktop"])
 } else {
     // stdin is decoded off the main thread; AXObserver and the event tap retain
@@ -228,7 +230,7 @@ if CommandLine.arguments.contains("--capabilities") {
                       let requestID = request["request_id"] as? String, !requestID.isEmpty else {
                     execution.cancel(); return
                 }
-                if request["type"] as? String == "cancel" && request["protocol_version"] as? Int == 2 {
+                if request["type"] as? String == "cancel" && request["protocol_version"] as? Int == 3 {
                     execution.cancel(requestID); continue
                 }
                 guard execution.begin(requestID) else {

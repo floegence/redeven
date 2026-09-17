@@ -27,7 +27,7 @@ step. Unknown inspection failures must not invent a login requirement. URL
 keywords and ordinary text such as a search for password managers do not prove
 that a secret field needs input; adapters inspect actual controls.
 
-For site, application or foreground permission, show the exact requested scope
+Outside full access, for site, application or foreground permission, show the exact requested scope
 and **Allow and continue**. This explicit user command reads existing task
 grants, adds only the displayed access and then requests canonical continuation.
 It does not open a private viewer. Saving failure leaves the interaction pending;
@@ -42,6 +42,14 @@ for example, an access grant can reveal a CAPTCHA, or another origin can require
 a separate explicit grant. This transient feedback grants nothing and does not
 replace the canonical pending interaction. No page contents or private values
 are returned in the error.
+
+Full access already authorizes sites, applications and foreground use on the
+selected target, so new operations never pause for these grants. An existing
+canonical permission pause shows **Full access is enabled** and **Continue task**;
+continuation rechecks the page without saving another grant or replaying the
+original action. Opening a conversation never resumes a paused task on its own.
+The target selector explains full access and hides redundant grant editing;
+switching back to a mode with approval reveals the existing saved grants.
 
 Only a real manual step offers **Open page** and **Done, continue**. The browser
 and desktop selector lives under **Browser and desktop**; it is not the primary

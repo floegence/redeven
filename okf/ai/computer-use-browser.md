@@ -16,8 +16,8 @@ effects stop subsequent work without automatically selecting a replacement.
 # Contract
 
 Connecting an explicitly chosen tab or creating a new tab in Browser and desktop
-also selects that target for the current conversation. Site access remains a
-separate saved grant. Delayed connection results cannot select a different
+also selects that target for the current conversation. Full access already permits
+HTTP/HTTPS sites; other modes use separate saved grants. Delayed connection results cannot select a different
 conversation after navigation.
 
 ## Managed profiles
@@ -48,7 +48,7 @@ a later authorized file/command tool handles data processing.
 
 The MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact
 tab. Setup registers a native host for the current machine; the relay forwards
-framed protocol-2 messages over a private local Unix socket to the Runtime.
+framed protocol-3 messages over a private local Unix socket to the Runtime.
 Only the packaged extension origin and its own popup UI may establish this
 connection. Setup does not create a thread grant or attach any tab.
 

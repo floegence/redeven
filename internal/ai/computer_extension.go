@@ -472,7 +472,7 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 			outErr = errComputerEffectUnknown
 		}
 	}()
-	raw, err := e.client.call(ctx, "execute", map[string]any{"tab_id": e.tabID, "request": map[string]any{"tool_name": call.ToolName, "args": args, "allowed_origins": call.allowedOrigins, "script_operation": call.scriptOperation, "return_control": call.controlReturn, "user_control": private}})
+	raw, err := e.client.call(ctx, "execute", map[string]any{"tab_id": e.tabID, "request": map[string]any{"tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_origins": call.allowedOrigins, "script_operation": call.scriptOperation, "return_control": call.controlReturn, "user_control": private}})
 	if err != nil {
 		return out, err
 	}

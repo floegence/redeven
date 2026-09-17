@@ -61,10 +61,25 @@ screenshots and visual primitives return checked keyframes. Stage viewing uses
 its independent bounded sampler; those samples never enter model history. See
 [Computer media](computer-use-media.md).
 
+## Task access
+
+The thread's existing permission mode is the authority for computer access.
+`full_access` includes HTTP/HTTPS origins, applications and temporary foreground
+use on the selected target. Other modes continue to use saved resource grants.
+Runtime reads the current policy after acquiring the target gate for every
+operation, including script host calls and handback. Guest code cannot set this
+authorization. Changing modes does not create or delete resource grants.
+
+Full access does not change target ownership, OS capabilities, explicit Stop,
+private-input handling or unknown-effect settlement. Target selection chooses
+where work runs; it is not another confirmation of an already authorized action.
+
 ## Packaging and compatibility
 
-Helper JSONL and Native Messaging use protocol 2. Desktop and Runtime negotiate
-compatibility epoch 19 and minimum version v0.13.0. Protocol 1 helpers and older
+Browser/native execution JSONL and Native Messaging use protocol 3, carrying
+host-owned `full_access` authorization. Inventory and isolated JavaScript helpers
+retain protocol 2. Desktop and Runtime negotiate compatibility epoch 20 and
+minimum version v0.13.0. Older execution helpers and
 resource inventories are rejected instead of used as a silent substitute. The
 compatibility JSON remains the release authority, independently of this document.
 

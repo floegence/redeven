@@ -1,5 +1,21 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Apply full access to browser and desktop operations
+
+- Full access now covers site, application and foreground permissions on the
+  selected target. Runtime derives authority from existing thread settings for
+  every operation; scoped grants remain available in other modes.
+- Existing permission pauses continue without saving redundant grants. The
+  browser/desktop selector explains full access and hides inactive grant controls.
+  Actual private-input steps and explicit pauses retain their canonical handling.
+- Execution helper and Native Messaging protocol 3 carry host-owned authorization;
+  Desktop/Runtime epoch 20 rejects mismatched execution adapters. Inventory and
+  isolated script protocols, product schema and published Floret APIs are unchanged.
+- Validation covers full-access navigation and redirects, mode changes, target
+  control, sensitive fields, native AX/input, UI continuation and all locale catalogs.
+  See [Computer runtime](ai/computer-use-runtime.md) and
+  [assistance](ai/computer-use-takeover.md).
+
 ## 2026-09-17 — Explain browser assistance and grant task access directly
 
 Replace the generic takeover card with reason-specific access, sign-in,

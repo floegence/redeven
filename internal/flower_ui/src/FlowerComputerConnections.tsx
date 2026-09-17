@@ -10,6 +10,7 @@ export function FlowerComputerConnections(props: {
   open: boolean; onOpenChange: (open: boolean) => void;
   threadID: string; adapter: FlowerSurfaceAdapter; copy: FlowerComputerCopy;
   requested?: FlowerRequestedComputerAccess;
+  fullAccess?: boolean;
 }) {
   const [targets, setTargets] = createSignal<readonly FlowerTargetDescriptor[]>([]);
   const [targetID, setTargetID] = createSignal('');
@@ -38,7 +39,7 @@ export function FlowerComputerConnections(props: {
   const change = (value: FlowerComputerAccess) => { setAccess(value); setSaved(false); };
   const save = async () => {
     const value = access(), management = props.adapter.computerManagement, current = generation;
-    if (!value || !management || !available()) return;
+    if (!value || !management || !available() || props.fullAccess) return;
     setSaving(true); setFailed(false); setSaved(false);
     try { await management.saveAccess(props.threadID, value); if (current === generation) setSaved(true); }
     catch { if (current === generation) setFailed(true); }
@@ -80,7 +81,7 @@ export function FlowerComputerConnections(props: {
   const requested = () => Boolean(props.requested?.origin || props.requested?.app || props.requested?.foreground);
   return <Dialog open={props.open} onOpenChange={props.onOpenChange} title={props.copy.title} class="w-[min(42rem,94vw)]"
     footer={<div class="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => props.onOpenChange(false)}>{props.copy.close}</Button>
-      <Button size="sm" disabled={!available()} onClick={() => void save()}>{saving() ? props.copy.saving : props.copy.save}</Button></div>}>
+      <Show when={!props.fullAccess}><Button size="sm" disabled={!available()} onClick={() => void save()}>{saving() ? props.copy.saving : props.copy.save}</Button></Show></div>}>
     <div class="space-y-5 text-sm" aria-busy={loading() || saving()}>
       <p class="text-muted-foreground">{props.copy.description}</p>
       <section class="space-y-2">
@@ -99,7 +100,8 @@ export function FlowerComputerConnections(props: {
           }}</For>
         </div>
       </section>
-      <Show when={access()}>{value => <>
+      <Show when={props.fullAccess}><section class="space-y-1 rounded-md border border-border p-3" role="status"><p class="font-medium">{props.copy.fullAccessTitle}</p><p class="text-xs text-muted-foreground">{props.copy.fullAccessHint}</p></section></Show>
+      <Show when={!props.fullAccess && access()}>{value => <>
         <Show when={requested()}><div class="space-y-2 rounded-md border border-border p-3">
           <p class="font-medium">{props.copy.requestedAccess}</p>
           <p class="break-all text-xs">{[props.requested?.origin, props.requested?.app, props.requested?.foreground ? props.copy.foreground : ''].filter(Boolean).join(' · ')}</p>

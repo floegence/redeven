@@ -24,7 +24,7 @@ export function computerAssistanceFromError(error: unknown): ComputerAssistanceO
 
 // Derive presentation from canonical tool facts. There is no separate waiting
 // state: the current InputRequired interaction still owns continuation.
-export function computerAssistance(item: FlowerActivityItem | undefined, copy: FlowerComputerCopy, observed?: ComputerAssistanceObservation) {
+export function computerAssistance(item: FlowerActivityItem | undefined, copy: FlowerComputerCopy, observed?: ComputerAssistanceObservation, fullAccess = false) {
   const refs = item?.target_refs ?? [];
   const requested = observed ? { origin: observed.origin, app: observed.app, foreground: observed.foreground } : {
     origin: refs.find(ref => ref.kind === 'computer_origin')?.resource_ref,
@@ -32,8 +32,10 @@ export function computerAssistance(item: FlowerActivityItem | undefined, copy: F
     foreground: refs.some(ref => ref.kind === 'computer_foreground'),
   };
   const reason = observed?.kind ?? item?.chips?.find(chip => chip.kind === 'computer_assistance')?.value;
-  const kind = reason === 'target' ? 'target' : requested.origin || requested.app || requested.foreground ? 'access' : reason ?? 'inspection';
+  const reasonKind = reason === 'target' ? 'target' : requested.origin || requested.app || requested.foreground ? 'access' : reason ?? 'inspection';
+  const kind = reasonKind === 'access' && fullAccess ? 'authorized' : reasonKind;
   const messages: Record<string, readonly [string, string]> = {
+    authorized: [copy.fullAccessTitle, copy.authorizedHint],
     access: [requested.origin ? copy.siteTitle : copy.accessTitle, copy.accessHint],
     target: [copy.targetTitle, copy.targetHint],
     captcha: [copy.captchaTitle, copy.captchaHint],
