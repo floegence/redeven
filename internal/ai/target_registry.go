@@ -22,6 +22,12 @@ func NewTargetRegistry() *TargetRegistry {
 	return &TargetRegistry{targets: make(map[string]TargetDescriptor)}
 }
 
+func (r *TargetRegistry) remove(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.targets, id)
+}
+
 func (r *TargetRegistry) Register(target TargetDescriptor) error {
 	if r == nil {
 		return errors.New("target registry is unavailable")
@@ -66,6 +72,9 @@ func (r *TargetRegistry) ResolveTarget(_ context.Context, alias string) (TargetD
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if alias == "" || alias == "current" {
+		if target, exists := r.targets["browser-main"]; exists {
+			return target, nil
+		}
 		alias = "browser.managed"
 	}
 	target, ok := r.targets[alias]

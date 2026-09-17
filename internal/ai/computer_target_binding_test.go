@@ -108,7 +108,7 @@ func TestComputerTargetBindingRestoresWithoutRestoringReadiness(t *testing.T) {
 }
 
 func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
-	for _, reason := range []string{"policy", "readiness", "takeover", "storage", "cancel"} {
+	for _, reason := range []string{"missing", "policy", "readiness", "takeover", "storage", "cancel"} {
 		t.Run(reason, func(t *testing.T) {
 			runtime, executor, store, _ := computerBindingFixture(t)
 			r := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
@@ -118,6 +118,8 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 			}
 			ctx := t.Context()
 			switch reason {
+			case "missing":
+				runtime.registry.remove("desktop-main")
 			case "policy":
 				r.toolTargetPolicy.AllowedTargetIDs = []string{"browser-main"}
 			case "readiness":

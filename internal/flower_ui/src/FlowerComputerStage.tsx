@@ -43,6 +43,7 @@ export type FlowerComputerStageSessionState = 'running' | 'awaiting_user' | 'com
 export type FlowerComputerStageProps = Readonly<{
   snapshot: FlowerComputerStageSnapshot;
   frame?: FlowerComputerFrameSource;
+  retainLiveFrame?: boolean;
   privateInteractionID?: string;
   frameRate?: number;
   receivedFrameRate?: number;
@@ -72,6 +73,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
   const targetID = createMemo(() => props.snapshot.targetID || '');
   const threadID = createMemo(() => props.threadID || '');
   let currentURL = '';
+  let currentFrame: FlowerComputerFrameSource | undefined;
   let currentThread = '';
   let currentTarget = '';
   let keyboard: HTMLTextAreaElement | undefined;
@@ -121,6 +123,7 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
           if (request.signal.aborted || generation !== frameGeneration) { URL.revokeObjectURL(nextURL); continue; }
           const previous = currentURL;
           currentURL = nextURL;
+          currentFrame = frame;
           setResolvedURL(nextURL); setFailed(false);
           if (previous) URL.revokeObjectURL(previous);
           props.onFrameReady?.(frame);
@@ -139,14 +142,22 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
     const thread = threadID(), target = targetID(), privacy = props.privateInteractionID ?? '';
     if (thread !== currentThread || target !== currentTarget || privacy !== currentPrivacy) {
       currentThread = thread; currentTarget = target; currentPrivacy = privacy; lastOfferedFrame = '';
+      currentFrame = undefined;
       frameGeneration++; pendingFrame = undefined; controller?.abort();
       setResolvedURL(undefined);
       if (currentURL) URL.revokeObjectURL(currentURL);
       currentURL = '';
     }
-    if (!props.open) { lastOfferedFrame = ''; frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
+    if (!props.open) { currentFrame = undefined; lastOfferedFrame = ''; frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
     const frame = props.frame;
     if (!frame || !props.loadFrame) { frameGeneration++; pendingFrame = undefined; controller?.abort(); return; }
+    // Retired live references cannot be loaded again, but their decoded public
+    // pixels remain valid until the viewer closes. Do not rewind them to an
+    // earlier model keyframe merely because the task completed.
+    if (props.retainLiveFrame && !privacy && currentURL && currentFrame && !currentFrame.private_frame
+      && currentFrame.viewer_revision !== undefined && !frame.private_frame && frame.viewer_revision === undefined) {
+      frameGeneration++; pendingFrame = undefined; controller?.abort(); return;
+    }
     const key = JSON.stringify(frame);
     if (key === lastOfferedFrame) return;
     lastOfferedFrame = key;

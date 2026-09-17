@@ -60,7 +60,7 @@ func (e *NativeDesktopTargetExecutor) EnsureTargetReady(ctx context.Context, _ s
 		ScreenRecording bool `json:"screen_recording"`
 		Accessibility   bool `json:"accessibility"`
 	}
-	if err != nil || json.Unmarshal(output, &capabilities) != nil || capabilities.ProtocolVersion != 1 {
+	if err != nil || json.Unmarshal(output, &capabilities) != nil || capabilities.ProtocolVersion != 2 {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "native_handshake_failed"}
 	}
 	if !capabilities.ScreenRecording || !capabilities.Accessibility {
@@ -70,6 +70,46 @@ func (e *NativeDesktopTargetExecutor) EnsureTargetReady(ctx context.Context, _ s
 }
 
 func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	return e.executeTargetTool(ctx, call, false)
+}
+
+func (e *NativeDesktopTargetExecutor) ExecuteComputerUserInput(ctx context.Context, call TargetToolCall) ([]byte, error) {
+	result, err := e.executeTargetTool(ctx, call, true)
+	return result.frameBytes, err
+}
+
+func (e *NativeDesktopTargetExecutor) ListTargets(ctx context.Context) ([]TargetDescriptor, error) {
+	if err := e.EnsureTargetReady(ctx, "desktop-main"); err != nil {
+		return nil, err
+	}
+	result, err := e.executeTargetTool(ctx, TargetToolCall{TargetID: "desktop-main", ToolName: "computer.targets"}, false)
+	if err != nil {
+		return nil, err
+	}
+	payload, ok := result.Result.(map[string]any)
+	if !ok {
+		return nil, errors.New("invalid native target inventory")
+	}
+	body, err := json.Marshal(payload["targets"])
+	if err != nil {
+		return nil, err
+	}
+	var targets []TargetDescriptor
+	if err := json.Unmarshal(body, &targets); err != nil {
+		return nil, err
+	}
+	if len(targets) > 128 {
+		return nil, errors.New("native target inventory exceeds its limit")
+	}
+	for _, target := range targets {
+		if !strings.HasPrefix(target.ID, "macos-window-") || target.Kind != "desktop.window" || target.AppBundleID == "" {
+			return nil, errors.New("invalid native window target")
+		}
+	}
+	return targets, nil
+}
+
+func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, call TargetToolCall, userControl bool) (out TargetToolResult, outErr error) {
 	if e == nil || e.HelperPath == "" {
 		return TargetToolResult{}, errors.New("desktop target helper is unavailable")
 	}
@@ -99,10 +139,15 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	payload, err := json.Marshal(map[string]any{"protocol_version": 1, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args})
+	payload, err := json.Marshal(map[string]any{"protocol_version": 2, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args, "allowed_apps": call.allowedApps, "allow_foreground": call.allowForeground, "script_operation": call.scriptOperation, "user_control": userControl, "return_control": call.controlReturn})
 	if err != nil {
 		return TargetToolResult{}, err
 	}
+	defer func() {
+		if outErr != nil && !userControl && computerCallMutates(call) && !computerKnownRejection(outErr) {
+			outErr = errComputerEffectUnknown
+		}
+	}()
 	if _, err := e.stdin.Write(append(payload, '\n')); err != nil {
 		return TargetToolResult{}, err
 	}
@@ -112,49 +157,65 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 	}
 	readCh := make(chan []byte, 1)
 	errCh := make(chan error, 1)
+	readerDone := make(chan struct{})
+	defer close(readerDone)
 	reader := e.reader
 	go func() {
 		for {
-			line, readErr := reader.ReadBytes('\n')
-			if readErr != nil {
-				errCh <- readErr
+			line, err := readComputerLine(reader, 24<<20)
+			if err != nil {
+				errCh <- err
 				return
 			}
-			line = bytes.TrimSpace(line)
+			select {
+			case readCh <- bytes.TrimSpace(line):
+			case <-readerDone:
+				return
+			}
 			var envelope struct {
 				Type string `json:"type"`
 			}
-			if json.Unmarshal(line, &envelope) == nil && (envelope.Type == "result" || envelope.Type == "error") {
-				readCh <- line
+			if json.Unmarshal(line, &envelope) != nil || envelope.Type != "started" {
 				return
 			}
 		}
 	}()
 	timer := time.NewTimer(deadline)
 	defer timer.Stop()
-	var line []byte
-	select {
-	case <-ctx.Done():
-		return TargetToolResult{}, ctx.Err()
-	case <-timer.C:
-		return TargetToolResult{}, context.DeadlineExceeded
-	case err := <-errCh:
-		return TargetToolResult{}, err
-	case line = <-readCh:
-	}
 	var event struct {
-		RequestID string         `json:"request_id"`
-		Type      string         `json:"type"`
-		TargetID  string         `json:"target_id"`
-		Error     string         `json:"error"`
-		ErrorCode string         `json:"error_code"`
-		Payload   map[string]any `json:"payload"`
+		RequestID     string                     `json:"request_id"`
+		Type          string                     `json:"type"`
+		TargetID      string                     `json:"target_id"`
+		Error         string                     `json:"error"`
+		ErrorCode     string                     `json:"error_code"`
+		ExecutionMode string                     `json:"execution_mode"`
+		Reason        string                     `json:"reason"`
+		Payload       map[string]any             `json:"payload"`
+		Safety        *InteractionSafetyDecision `json:"safety"`
 	}
-	if err := json.Unmarshal(line, &event); err != nil {
-		return TargetToolResult{}, err
-	}
-	if event.RequestID != requestID || event.TargetID != call.TargetID {
-		return TargetToolResult{}, errors.New("desktop helper response provenance mismatch")
+	for {
+		var line []byte
+		select {
+		case <-ctx.Done():
+			return TargetToolResult{}, ctx.Err()
+		case <-timer.C:
+			return TargetToolResult{}, context.DeadlineExceeded
+		case err := <-errCh:
+			return TargetToolResult{}, err
+		case line = <-readCh:
+		}
+		if err := json.Unmarshal(line, &event); err != nil {
+			return TargetToolResult{}, err
+		}
+		if event.RequestID != requestID || event.TargetID != call.TargetID {
+			return TargetToolResult{}, errors.New("desktop helper response provenance mismatch")
+		}
+		if event.Type != "started" {
+			break
+		}
+		if call.progress != nil && event.ExecutionMode == "foreground" && event.Reason == "native_input_required" {
+			call.progress("foreground", event.Reason)
+		}
 	}
 	if event.Type == "error" || strings.TrimSpace(event.Error) != "" {
 		healthy = true
@@ -163,13 +224,29 @@ func (e *NativeDesktopTargetExecutor) ExecuteTargetTool(ctx context.Context, cal
 	if event.Type != "result" {
 		return TargetToolResult{}, errors.New("desktop target helper returned no result")
 	}
-	result := TargetToolResult{TargetID: event.TargetID, ExecutionLocation: "macos_desktop", Result: event.Payload}
+	result := TargetToolResult{TargetID: event.TargetID, ExecutionLocation: "macos_desktop", Result: event.Payload, Safety: event.Safety}
 	result.ActionSummary = strings.TrimSpace(anyToString(event.Payload["summary"]))
+	if !userControl && result.Safety != nil && !result.Safety.SafeToSendToModel {
+		healthy = true
+		return result, nil
+	}
+	if userControl && call.ToolName != "computer.screenshot" {
+		if event.Payload["acknowledged"] != true || event.Payload["screenshot_base64"] != nil {
+			return TargetToolResult{}, errors.New("invalid native private input acknowledgement")
+		}
+		healthy = true
+		return TargetToolResult{}, nil
+	}
 	if mime := strings.TrimSpace(anyToString(event.Payload["screenshot_mime"])); mime != "" {
 		if raw := strings.TrimSpace(anyToString(event.Payload["screenshot_base64"])); raw != "" {
 			body, decodeErr := base64.StdEncoding.DecodeString(raw)
 			if decodeErr != nil {
 				return TargetToolResult{}, decodeErr
+			}
+			if userControl {
+				result.frameBytes = body
+				healthy = true
+				return result, nil
 			}
 			sum := sha256.Sum256(body)
 			hash := hex.EncodeToString(sum[:])
@@ -193,7 +270,7 @@ func (e *NativeDesktopTargetExecutor) startLocked() error {
 		return nil
 	}
 	// The executor owns this session across tool calls and turns.
-	cmd := exec.Command(e.HelperPath, "--protocol-version", "1")
+	cmd := exec.Command(e.HelperPath, "--protocol-version", "2")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
@@ -235,12 +312,20 @@ func (e *NativeDesktopTargetExecutor) stopLocked() {
 	if e.stdin != nil {
 		_ = e.stdin.Close()
 	}
+	if e.cmd != nil && e.cmd.Process != nil {
+		// EOF cancels the active request. Give the helper time to release its
+		// own held inputs before forcing process retirement.
+		stopped := make(chan struct{})
+		go func() { _ = e.cmd.Wait(); close(stopped) }()
+		select {
+		case <-stopped:
+		case <-time.After(2 * time.Second):
+			_ = e.cmd.Process.Kill()
+			<-stopped
+		}
+	}
 	if e.stdout != nil {
 		_ = e.stdout.Close()
-	}
-	if e.cmd != nil && e.cmd.Process != nil {
-		_ = e.cmd.Process.Kill()
-		_ = e.cmd.Wait()
 	}
 	e.cmd, e.stdin, e.stdout, e.reader = nil, nil, nil, nil
 }

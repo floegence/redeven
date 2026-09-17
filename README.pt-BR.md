@@ -128,6 +128,8 @@ No Linux, importe o certificado público exportado para o repositório de confia
 
 O Flower mantém na conversa as referências e a seleção de dispositivo enviadas, para que as perguntas seguintes preservem o contexto. O dispositivo selecionado e a máquina que executa as ferramentas são identificados separadamente. Dados secretos fornecidos temporariamente não são salvos no histórico.
 
+O Flower permite combinar operações semânticas do navegador e da área de trabalho em scripts com limites de execução. Selecione um perfil de navegador gerenciado, uma aba autorizada do Chrome ou uma janela de aplicativo, com permissões explícitas para sites e aplicativos em cada tarefa. As capturas de tela são solicitadas quando necessárias, e o visualizador é aberto sob demanda. A execução em segundo plano depende do destino e da ação; a automação do Windows e do Safari não está incluída.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

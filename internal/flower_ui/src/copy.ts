@@ -1,3 +1,4 @@
+import { computerUseEnUS, type FlowerComputerCopy } from './computerUseCopy';
 import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasoningControlMessages';
 import { modelCatalogCopy, type ModelCatalogCopy } from './settings/modelCatalogCopy';
 import type { FilesystemPickerCopy } from './filePicker/filesystemPicker';
@@ -279,6 +280,7 @@ export type FlowerSubagentsCopy = Readonly<{
 }>;
 
 export type FlowerSurfaceCopy = Readonly<{
+  computer: FlowerComputerCopy;
   reasoningControl: ReasoningControlCopy;
   filesystemPicker: FilesystemPickerCopy;
   attachments: Readonly<{
@@ -589,6 +591,7 @@ export type FlowerSurfaceCopy = Readonly<{
 }>;
 
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
+  computer: computerUseEnUS,
   reasoningControl: reasoningControlEnUS,
   filesystemPicker: { ...filesystemPickerEnUS, selectedCount: (count) => filesystemPickerEnUS.selectedCount.replace('{count}', String(count)) },
   attachments: {

@@ -5,6 +5,7 @@
 export function observeDesktopComputerFrames() {
   const frames = [];
   const decoded = [];
+  const viewerResponses = [];
   const visibility = [{ at: Date.now(), state: document.visibilityState }];
   const streams = new Map();
   const pending = new Set();
@@ -22,12 +23,18 @@ export function observeDesktopComputerFrames() {
       try { envelope = JSON.parse(line.slice(5)); } catch { continue; }
       if (envelope.kind !== 'computer.frame' || frames.length >= 2000) continue;
       const frame = envelope.computer_frame;
-      frames.push({ target: frame.target_id, thread: envelope.thread_id, sequence: frame.sequence, sha256: frame.sha256, at: Date.now() });
+      frames.push({ target: frame.target_id, thread: envelope.thread_id, sequence: frame.sequence, sha256: frame.sha256,
+        revision: frame.viewer_revision, error: frame.error_code, at: Date.now() });
     }
   };
   // Browser qualification feeds CDP's passive copy of the existing HTTP
   // stream here. Neither path creates or replaces the product transport.
   window.__recordComputerStreamChunk = receive;
+  window.__recordComputerViewerResponse = (response) => {
+    if (!stopped && viewerResponses.length < 2000) viewerResponses.push({ ...response,
+      state: document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state'),
+      run_status: document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-status') });
+  };
   const unsubscribe = window.redevenDesktopSettings?.subscribeRuntimeFlowerStream(receive) ?? (() => undefined);
   const load = (event) => {
     const image = event.target;
@@ -52,7 +59,8 @@ export function observeDesktopComputerFrames() {
     await Promise.allSettled([...pending]);
     delete window.__stopComputerLiveEvidence;
     delete window.__recordComputerStreamChunk;
-    return { frames, decoded, visibility, streamCount: streams.size };
+    delete window.__recordComputerViewerResponse;
+    return { frames, decoded, visibility, viewerResponses, streamCount: streams.size };
   };
 }
 

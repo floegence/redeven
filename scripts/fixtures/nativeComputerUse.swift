@@ -14,6 +14,9 @@ final class FixtureState {
     var wheelDelta = 0.0
     var geometry: [String: Double] = [:]
     var actions: [[String: Any]] = []
+    var initialFrontmostPID: pid_t = 0
+    var initialPointer = CGPoint.zero
+    var initialFocusedWindow: CFTypeRef?
     var onChange: (() -> Void)?
     init(_ path: String) { resultPath = path }
     // Each qualification turn checks its exact requested click count separately.
@@ -29,11 +32,20 @@ final class FixtureState {
         actions.append(entry)
         if actions.count > 64 { actions.removeFirst(actions.count - 64) }
     }
-    func save() {
-        let result: [String: Any] = ["clicks": clicks, "doubleClicked": doubleClicked,
+    func snapshot() -> [String: Any] {
+        var focusedWindow: CFTypeRef?
+        AXUIElementCopyAttributeValue(AXUIElementCreateApplication(initialFrontmostPID), kAXFocusedWindowAttribute as CFString, &focusedWindow)
+        return ["clicks": clicks, "doubleClicked": doubleClicked,
             "entered": entered, "scrolled": scrolled, "scrollOffset": scrollOffset,
-            "wheelEvents": wheelEvents, "wheelDelta": wheelDelta, "complete": complete, "geometry": geometry, "actions": actions]
-        if let bytes = try? JSONSerialization.data(withJSONObject: result) {
+            "wheelEvents": wheelEvents, "wheelDelta": wheelDelta, "complete": complete, "geometry": geometry, "actions": actions,
+            "initial_frontmost_pid": initialFrontmostPID, "frontmost_pid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0,
+            "original_window_available": initialFocusedWindow != nil,
+            "original_window_focused": initialFocusedWindow != nil && focusedWindow != nil && CFEqual(initialFocusedWindow!, focusedWindow!),
+            "initial_pointer_x": initialPointer.x, "initial_pointer_y": initialPointer.y,
+            "pointer_x": CGEvent(source: nil)?.location.x ?? 0, "pointer_y": CGEvent(source: nil)?.location.y ?? 0]
+    }
+    func save() {
+        if let bytes = try? JSONSerialization.data(withJSONObject: snapshot()) {
             try? bytes.write(to: URL(fileURLWithPath: resultPath), options: .atomic)
         }
         onChange?()
@@ -73,11 +85,14 @@ final class Delegate: NSObject, NSApplicationDelegate {
         return view
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        state.initialFrontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+        state.initialPointer = CGEvent(source: nil)?.location ?? .zero
+        AXUIElementCopyAttributeValue(AXUIElementCreateApplication(state.initialFrontmostPID), kAXFocusedWindowAttribute as CFString, &state.initialFocusedWindow)
         guard let screen = NSScreen.screens.first else { NSApp.terminate(nil); return }
         window = NSWindow(contentRect: NSRect(x: 30, y: screen.frame.maxY - 650, width: 720, height: 550),
             styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Flower Native Fixture"
-        window.level = .floating
+        window.level = CommandLine.arguments.contains("--background") ? .normal : .floating
         window.backgroundColor = NSColor(calibratedRed: 0.93, green: 0.95, blue: 0.99, alpha: 1)
         let content = window.contentView!
         let liveMarker = NSView(frame: NSRect(x: 680, y: 500, width: 20, height: 20))
@@ -99,6 +114,7 @@ final class Delegate: NSObject, NSApplicationDelegate {
         content.addSubview(double)
         content.addSubview(label("Enter Flower, then press Enter:", NSRect(x: 25, y: 360, width: 600, height: 30)))
         input = NSTextField(frame: NSRect(x: 25, y: 310, width: 650, height: 40))
+        input.setAccessibilityLabel("Query")
         input.font = NSFont.systemFont(ofSize: 20)
         input.target = self; input.action = #selector(enter)
         content.addSubview(input)
@@ -134,8 +150,8 @@ final class Delegate: NSObject, NSApplicationDelegate {
             state.geometry[name + "Y"] = screen.frame.maxY - bounds.midY
         }
         state.save()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if CommandLine.arguments.contains("--background") { window.orderBack(nil) }
+        else { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             self?.state.wheelEvents += 1
             self?.state.wheelDelta = event.scrollingDeltaY
@@ -147,6 +163,18 @@ final class Delegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--park-pointer") {
             CGWarpMouseCursorPosition(CGPoint(x: frame.minX + 30, y: screen.frame.maxY - frame.maxY + 50))
         }
+        if CommandLine.arguments.contains("--status-pipe") {
+            DispatchQueue.global().async {
+                while let command = readLine() {
+                    guard command == "status" else { exit(2) }
+                    DispatchQueue.main.async {
+                        let data = try! JSONSerialization.data(withJSONObject: self.state.snapshot())
+                        print(String(data: data, encoding: .utf8)!); fflush(stdout)
+                    }
+                }
+                DispatchQueue.main.async { NSApp.terminate(nil) }
+            }
+        }
     }
     @objc func click() { state.clicks += 1; state.record("click"); state.save() }
     @objc func enter() { state.entered = input.stringValue == "Flower"; state.record("enter"); state.save() }
@@ -157,7 +185,7 @@ let app = NSApplication.shared
 // The fixture uses fixed pale backgrounds; fix its appearance as well so
 // system dark mode cannot produce white labels on those backgrounds.
 app.appearance = NSAppearance(named: .aqua)
-app.setActivationPolicy(.regular)
+app.setActivationPolicy(CommandLine.arguments.contains("--background") ? .accessory : .regular)
 guard CommandLine.arguments.count >= 2 else { exit(2) }
 let delegate = Delegate(path: CommandLine.arguments[1])
 app.delegate = delegate

@@ -10,13 +10,18 @@ import (
 // The canonical terminal view releases it. Each target serializes observations,
 // actions and handback so screenshots cannot race a different thread's input.
 type computerTargetControl struct {
-	gate     chan struct{}
-	mu       sync.Mutex
-	threadID string
-	turnID   string
-	runID    string
-	user     bool
+	gate              chan struct{}
+	mu                sync.Mutex
+	threadID          string
+	turnID            string
+	runID             string
+	user              bool
+	requiredOrigin    string
+	requiredApp       string
+	requireForeground bool
 }
+
+type computerProgressKey struct{}
 
 func (r *ComputerUseRuntime) controlForTarget(targetID string) *computerTargetControl {
 	r.mu.Lock()
@@ -103,18 +108,27 @@ func (r *ComputerUseRuntime) continueComputerControl(threadID, turnID, runID str
 }
 
 func (r *ComputerUseRuntime) releaseComputerControl(threadID, runID string) {
+	released := false
 	r.mu.RLock()
-	controls := make([]*computerTargetControl, 0, len(r.controls))
-	for _, control := range r.controls {
-		controls = append(controls, control)
-	}
-	r.mu.RUnlock()
-	for _, control := range controls {
+	for targetID, control := range r.controls {
 		control.mu.Lock()
 		if control.threadID == threadID && control.runID == runID {
+			// Retire observation with its resource owner. Normal completion must
+			// not race the next capture into a spurious viewer failure.
+			for _, sampler := range r.liveFrames {
+				if sampler.request.ThreadID == threadID && sampler.request.TargetID == targetID {
+					sampler.cancel()
+				}
+			}
 			control.threadID, control.turnID, control.runID, control.user = "", "", "", false
+			control.requiredOrigin, control.requiredApp, control.requireForeground = "", "", false
+			released = true
 		}
 		control.mu.Unlock()
+	}
+	r.mu.RUnlock()
+	if released {
+		r.releaseScripts(func(key computerScriptKey) bool { return key.thread == threadID })
 	}
 }
 
@@ -130,6 +144,7 @@ func (r *ComputerUseRuntime) releasePreviousComputerTarget(call TargetToolCall) 
 	if call.liveFrame || call.ThreadID == "" {
 		return
 	}
+	r.releaseScripts(func(key computerScriptKey) bool { return key.thread == call.ThreadID && key.target != call.TargetID })
 	r.mu.RLock()
 	controls := make([]*computerTargetControl, 0, len(r.controls))
 	for id, control := range r.controls {

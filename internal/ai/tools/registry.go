@@ -100,6 +100,14 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
+	"computer.observe": {
+		Name: "computer.observe", Mutating: false, RequiresApproval: false,
+		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("observe"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
+	},
+	"computer.exec": {
+		Name: "computer.exec", Mutating: true, RequiresApproval: true,
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("execute"), labelFields("description", "target_name"), callPayloadFields("description", "code"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "completed_actions", "operations", "script_error", "after_frame"), chipFields("target_name", "execution_location")),
+	},
 	"computer.screenshot": {
 		Name: "computer.screenshot", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("screenshot"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "before_frame", "after_frame", "screenshot"), chipFields("target_name", "execution_location")),
@@ -122,7 +130,7 @@ var builtinDefinitions = map[string]Definition{
 	},
 	"computer.scroll": {
 		Name: "computer.scroll", Mutating: true, RequiresApproval: true,
-		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("scroll"), labelFields("target_name", "target_id"), callPayloadFields("delta_x", "delta_y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("scroll"), labelFields("target_name", "target_id"), callPayloadFields("x", "y", "delta_x", "delta_y"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
 	"computer.drag": {
 		Name: "computer.drag", Mutating: true, RequiresApproval: true,

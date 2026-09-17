@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 )
@@ -10,6 +11,8 @@ import (
 func computerTargetFailure(call TargetToolCall, wireCode string) error {
 	failure := &targetToolPolicyError{tool: call.ToolName, target: call.TargetID}
 	switch strings.TrimSpace(wireCode) {
+	case "EFFECT_OUTCOME_UNKNOWN":
+		return errComputerEffectUnknown
 	case "TARGET_PERMISSION_REQUIRED":
 		failure.code, failure.targetState, failure.repairAction = "target_permission_required", "permission_required", "grant_target_permission"
 	case "TARGET_CONNECTION_REQUIRED":
@@ -24,12 +27,29 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 		failure.code = "interaction_takeover_required"
 	case "FRAME_UNAVAILABLE":
 		failure.code, failure.repairAction = "frame_unavailable", "observe_target"
-	case "INVALID_REQUEST":
+	case "STALE_REFERENCE", "AMBIGUOUS_ELEMENT", "ELEMENT_NOT_FOUND", "CONDITION_TIMEOUT", "TARGET_CAPABILITY_UNAVAILABLE":
+		failure.code = strings.ToLower(strings.TrimSpace(wireCode))
+	case "INVALID_REQUEST", "INVALID_ARGUMENT":
 		failure.code = "invalid_computer_arguments"
 	default:
 		failure.code = "target_action_failed"
 	}
 	return failure
+}
+
+func computerCallMutates(call TargetToolCall) bool {
+	switch call.ToolName {
+	case "computer.screenshot", "computer.observe", "computer.wait", "computer.targets", "browser.wait_for_download":
+		return false
+	case "computer.action":
+		var operation map[string]any
+		if json.Unmarshal(call.Arguments, &operation) != nil {
+			return false
+		}
+		return computerOperationMutates(operation)
+	default:
+		return true
+	}
 }
 
 // ComputerControlErrorCode exposes only a closed, non-secret UI classification.
@@ -39,4 +59,17 @@ func ComputerControlErrorCode(err error) string {
 		return "computer_control_not_ready"
 	}
 	return "computer_control_unavailable"
+}
+
+func computerKnownRejection(err error) bool {
+	var failure *targetToolPolicyError
+	if !errors.As(err, &failure) {
+		return false
+	}
+	switch failure.code {
+	case "stale_reference", "ambiguous_element", "element_not_found", "condition_timeout", "target_capability_unavailable", "invalid_computer_arguments", "target_not_allowed", "interaction_takeover_required", "target_permission_required":
+		return true
+	default:
+		return false
+	}
 }

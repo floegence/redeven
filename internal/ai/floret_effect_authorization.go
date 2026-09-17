@@ -177,6 +177,23 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 		releaseAuthorization()
 		return err
 	}
+	if isComputerUseTool(req.ToolName) {
+		var targetID string
+		for _, resource := range req.Resources {
+			if resource.Kind == "computer_target" {
+				if targetID != "" {
+					releaseAuthorization()
+					return errors.New("ambiguous computer effect target")
+				}
+				targetID = resource.Value
+			}
+		}
+		if targetID == "" {
+			releaseAuthorization()
+			return errors.New("computer effect target is missing")
+		}
+		executionContext = context.WithValue(executionContext, computerAuthorizedTargetKey{}, targetID)
+	}
 	dispatchErr := dispatch(executionContext, proof)
 	releaseAuthorization()
 	return dispatchErr

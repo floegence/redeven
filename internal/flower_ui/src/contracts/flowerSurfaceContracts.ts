@@ -1180,6 +1180,32 @@ export type FlowerTargetDescriptor = Readonly<{
   display_name: string;
   state?: string;
   ready: boolean;
+  locality?: string;
+  app_bundle_id?: string;
+}>;
+
+export type FlowerComputerAccess = Readonly<{
+  origins: readonly string[];
+  apps: readonly string[];
+  allow_foreground: boolean;
+}>;
+export type FlowerBrowserConnection = Readonly<{ managed_profile_id?: string; cdp_url?: string; tab_id?: string; tab_title?: string; tab_url?: string; profile_id?: string; extension_profile_id?: string; new_tab?: boolean }>;
+export type FlowerBrowserTab = Readonly<{ id: string; profile_id: string; title: string; url: string }>;
+export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string }>;
+export type FlowerComputerManagement = Readonly<{
+  listManagedProfiles?: () => Promise<readonly Readonly<{ id: string; name: string }>[]>;
+  createManagedProfile?: (name: string) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
+  listManagedTabs?: (profileID: string) => Promise<readonly FlowerBrowserTab[]>;
+  disconnectBrowser?: (targetID: string) => Promise<void>;
+  setupExtension?: () => Promise<FlowerComputerExtensionSetup>;
+  listExtensionProfiles?: () => Promise<readonly Readonly<{ id: string; name: string }>[]>;
+  listExtensionTabs?: (profileID: string) => Promise<readonly FlowerBrowserTab[]>;
+  listTargets: () => Promise<readonly FlowerTargetDescriptor[]>;
+  listBrowserTabs: (cdpURL: string) => Promise<readonly FlowerBrowserTab[]>;
+  loadAccess: (threadID: string) => Promise<FlowerComputerAccess>;
+  saveAccess: (threadID: string, access: FlowerComputerAccess) => Promise<void>;
+  loadTarget: (threadID: string) => Promise<Readonly<{ target_id: string }>>;
+  selectTarget: (threadID: string, targetID: string) => Promise<void>;
 }>;
 
 export type FlowerComputerUserInput = Readonly<{
@@ -1234,7 +1260,8 @@ export type FlowerSurfaceAdapter = Readonly<{
     observer_id: string; revision: number; thread_id?: string; target_id?: string; resource_ref?: string;
     interaction_id?: string; fps?: number;
   }>) => Promise<void>;
-  connectComputerBrowser?: (cdpURL: string) => Promise<FlowerTargetDescriptor>;
+  computerManagement?: FlowerComputerManagement;
+  connectComputerBrowser?: (connection: FlowerBrowserConnection) => Promise<FlowerTargetDescriptor>;
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;

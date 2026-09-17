@@ -5,6 +5,30 @@ import ScreenCaptureKit
 // All capture paths apply the same Desktop-owner exclusion. A failed filtered
 // capture must never fall back to an unrestricted screenshot.
 enum NativeScreenCapture {
+    static func captureWindow(windowID: CGWindowID, owner: pid_t, excludedOwner: pid_t?) throws -> CGImage {
+        guard owner != excludedOwner, CGPreflightScreenCaptureAccess() else { throw unavailable() }
+        if #available(macOS 14.0, *) {
+            let completion = DispatchSemaphore(value: 0)
+            let result = CaptureResult()
+            SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, _ in
+                guard let window = content?.windows.first(where: { $0.windowID == windowID && $0.owningApplication?.processID == owner }) else {
+                    completion.signal(); return
+                }
+                let filter = SCContentFilter(desktopIndependentWindow: window)
+                let configuration = SCStreamConfiguration()
+                configuration.width = max(1, Int(window.frame.width))
+                configuration.height = max(1, Int(window.frame.height))
+                configuration.showsCursor = false
+                SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) { image, _ in
+                    result.set(image); completion.signal()
+                }
+            }
+            guard completion.wait(timeout: .now() + 5) == .success, let image = result.get() else { throw unavailable() }
+            return image
+        }
+        guard let image = CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, [.boundsIgnoreFraming, .bestResolution]) else { throw unavailable() }
+        return image
+    }
     static func excludedOwner(environment: [String: String]) throws -> pid_t? {
         guard let raw = environment["REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID"] else { return nil }
         guard let pid = Int32(raw), pid > 0 else {

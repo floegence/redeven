@@ -53,7 +53,7 @@ try {
       } finally { clearTimeout(timeout); }
     };
     const send = async (id, tool_name, args = {}, control = {}) => {
-      child.stdin.write(`${JSON.stringify({ id, target_id: 'browser-main', session_id: 'first-canonical-turn', tool_name, args, ...control })}\n`);
+      child.stdin.write(`${JSON.stringify({ id, target_id: 'browser-main', session_id: 'first-canonical-turn', allowed_origins: [`http://127.0.0.1:${server.address().port}`], tool_name, args, ...control })}\n`);
       const result = await next();
       assert.equal(result.id, id);
       assert.equal(result.target_id, 'browser-main');

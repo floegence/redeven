@@ -369,8 +369,24 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 		if resource := activityMapString(ref, "resource_ref"); kind == "computer_frame" && computerFrameResourcePattern.MatchString(resource) {
 			next["resource_ref"] = resource
 		}
-		if resource := activityMapString(ref, "resource_ref"); kind == "computer_control" && resource != "" && len(resource) <= 128 && !strings.ContainsAny(resource, "/\\: \t\n\r") {
-			next["resource_ref"] = resource
+		if resource := activityMapString(ref, "resource_ref"); resource != "" {
+			// These are closed product display facts. They identify an observed
+			// target or a requested grant; the Runtime still authorizes viewing
+			// and every action. Other opaque references remain private.
+			allowed := false
+			switch kind {
+			case "computer_target", "computer_control":
+				allowed = len(resource) <= 128 && !strings.ContainsAny(resource, "/\\: \x00\t\n\r")
+			case "computer_origin":
+				allowed = len(resource) <= 2048 && (ComputerAccess{Origins: []string{resource}}).Validate() == nil
+			case "computer_app":
+				allowed = (ComputerAccess{Apps: []string{resource}}).Validate() == nil
+			case "computer_foreground":
+				allowed = resource == "foreground"
+			}
+			if allowed {
+				next["resource_ref"] = resource
+			}
 		}
 		if line, ok := activityPublicLineNumber(ref["line"]); ok {
 			next["line"] = line

@@ -3392,21 +3392,213 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settingsUpdateView{Settings: g.toSettingsView(updated, aiSvc)}})
 		return
 
+	case (r.Method == http.MethodGet || r.Method == http.MethodPost) && r.URL.Path == "/_redeven_proxy/api/ai/computer/managed/profiles":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if r.Method == http.MethodPost {
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+			dec.DisallowUnknownFields()
+			if dec.Decode(&body) != nil || strings.TrimSpace(body.Name) == "" || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+		}
+		profiles, err := aiSvc.ManagedBrowserProfiles(r.Context(), meta, body.Name)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "managed_browser_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: profiles})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/managed/tabs":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		tabs, err := aiSvc.ManagedBrowserTabs(r.Context(), meta, r.URL.Query().Get("profile_id"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "managed_browser_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: tabs})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/extension/setup":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		setup, err := aiSvc.SetupComputerExtension(r.Context(), meta)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_extension_setup_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: setup})
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/extension/profiles":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		profiles, err := aiSvc.ComputerExtensionProfiles(r.Context(), meta)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_extension_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: profiles})
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/extension/tabs":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		tabs, err := aiSvc.ComputerExtensionTabs(r.Context(), meta, r.URL.Query().Get("profile_id"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_tabs_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: tabs})
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/targets":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		targets, err := aiSvc.ListComputerTargets(r.Context(), meta)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_targets_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: targets})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/tabs":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body struct {
+			CDPURL string `json:"cdp_url"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		tabs, err := aiSvc.ComputerBrowserTabs(r.Context(), meta, body.CDPURL)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_tabs_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: tabs})
+		return
+
+	case (r.Method == http.MethodGet || r.Method == http.MethodPut) && r.URL.Path == "/_redeven_proxy/api/ai/computer/access":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
+		if r.Method == http.MethodPut {
+			var access ai.ComputerAccess
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32768))
+			dec.DisallowUnknownFields()
+			if dec.Decode(&access) != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := aiSvc.SetComputerAccess(r.Context(), meta, threadID, access); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_access_update_failed"})
+				return
+			}
+		}
+		access, err := aiSvc.ComputerAccess(r.Context(), meta, threadID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_access_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: access})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/target":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		target, err := aiSvc.ComputerTarget(r.Context(), meta, r.URL.Query().Get("thread_id"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_target_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]string{"target_id": target}})
+		return
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/computer/target":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body struct {
+			ThreadID string `json:"thread_id"`
+			TargetID string `json:"target_id"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := aiSvc.SelectComputerTarget(r.Context(), meta, body.ThreadID, body.TargetID); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_target_selection_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/disconnect":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body struct {
+			TargetID string `json:"target_id"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := aiSvc.DisconnectComputerBrowser(r.Context(), meta, body.TargetID); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser_disconnect_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		return
+
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/connect":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {
 			return
 		}
-		dec := json.NewDecoder(r.Body)
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384))
 		dec.DisallowUnknownFields()
-		var body struct {
-			CDPURL string `json:"cdp_url"`
-		}
-		if err := dec.Decode(&body); err != nil || strings.TrimSpace(body.CDPURL) == "" {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "browser connection endpoint is required"})
+		var body ai.ComputerBrowserConnection
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid browser connection"})
 			return
 		}
-		target, err := aiSvc.ConnectComputerBrowser(r.Context(), body.CDPURL)
+		if dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		target, err := aiSvc.ConnectComputerBrowser(r.Context(), meta, body)
 		if err != nil {
 			g.appendAudit(meta, "ai_computer_browser_connect", "failure", map[string]any{"target_kind": target.Kind}, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})

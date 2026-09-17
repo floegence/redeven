@@ -70,6 +70,7 @@ SOFTWARE.
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.32 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.32 | Floegence first-party dependency. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
+| github.com/godbus/dbus/v5 | v5.2.2 | BSD-style | Runtime | https://pkg.go.dev/github.com/godbus/dbus/v5@v5.2.2 | Detected from LICENSE. |
 | github.com/google/uuid | v1.6.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/google/uuid@v1.6.0 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
 | github.com/hashicorp/golang-lru/v2 | v2.0.7 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/hashicorp/golang-lru/v2@v2.0.7 | Detected from LICENSE. |
@@ -263,6 +264,11 @@ SOFTWARE.
 | @iconify/utils | 3.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.3 | License verified from the exact registry package manifest. |
 | @iconify/utils | 3.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.4 |  |
 | @isaacs/fs-minipass | 4.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/%40isaacs%2Ffs-minipass/v/4.0.1 |  |
+| @jitl/quickjs-ffi-types | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-ffi-types/v/0.32.0 |  |
+| @jitl/quickjs-wasmfile-debug-asyncify | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-wasmfile-debug-asyncify/v/0.32.0 |  |
+| @jitl/quickjs-wasmfile-debug-sync | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-wasmfile-debug-sync/v/0.32.0 |  |
+| @jitl/quickjs-wasmfile-release-asyncify | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-wasmfile-release-asyncify/v/0.32.0 |  |
+| @jitl/quickjs-wasmfile-release-sync | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/%40jitl%2Fquickjs-wasmfile-release-sync/v/0.32.0 |  |
 | @jridgewell/gen-mapping | 0.3.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Fgen-mapping/v/0.3.13 |  |
 | @jridgewell/remapping | 2.3.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Fremapping/v/2.3.5 |  |
 | @jridgewell/resolve-uri | 3.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Fresolve-uri/v/3.1.2 |  |
@@ -974,6 +980,8 @@ SOFTWARE.
 | pvutils | 1.1.5 | MIT | Desktop shell | https://www.npmjs.com/package/pvutils/v/1.1.5 |  |
 | qrcode-generator | 2.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/qrcode-generator/v/2.0.4 |  |
 | quick-lru | 5.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/quick-lru/v/5.1.1 |  |
+| quickjs-emscripten-core | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/quickjs-emscripten-core/v/0.32.0 |  |
+| quickjs-emscripten | 0.32.0 | MIT | Env App UI | https://www.npmjs.com/package/quickjs-emscripten/v/0.32.0 |  |
 | react-dom | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react-dom/v/18.3.1 |  |
 | react | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react/v/18.3.1 |  |
 | react | 19.2.8 | MIT | Desktop shell | https://www.npmjs.com/package/react/v/19.2.8 | License verified from the exact registry package manifest. |

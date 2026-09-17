@@ -1,5 +1,136 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Qualify native and browser capability, preserve preview recovery
+
+Real model Desktop qualification passes the native scope with 21 requests and
+browser scope with 43 requests. The isolated private fixture also passes IME,
+all frame rates, handback and cleanup. Incidental input no longer pauses work;
+explicit Stop and private control remain authoritative. Earlier failed runs
+remain historical evidence, superseded only for their exact tested scopes.
+
+Integrate persistent pin ordering before task access: product schema 8 remains
+the released pin-rank edge and schema 9 appends computer grants. Preserve
+canonical preview status, terminal collapse, reconnect ordering and private
+recovery. Stage opens on demand, semantic target observations support live
+viewing, and a clicked historical screenshot stays bound to its exact capture.
+The exact-main pre-push gate qualifies the integrated source and packaged assets.
+
+## 2026-09-17 — Prioritize computer task capability
+
+Preserve native popup, form and WindowProxy behavior instead of rewriting pages
+to prevent focus changes. Incidental keyboard/mouse input no longer pauses
+Agent work. Explicit Stop, private takeover, exact target/site authorization,
+wrong-window input checks and terminal unknown-effect handling remain enforced.
+Real browser regression tests cover cached openers, forms, popup target isolation,
+incidental input, cancellation and lost action acknowledgement. The previous
+strict popup focus requirement is superseded by the authorized capability-first
+policy; previous failed or partial native runs remain historical evidence only.
+
+
+## 2026-09-17 — Semantic Computer execution and explicit browser connections
+
+Compare current official Computer Use/browser guidance with installed app
+26.908.40834 and Chrome extension 1.26.901.11451. Add local-only AX reads,
+bounded observation diffs and explicit full snapshots, top-level virtual browser
+focus, and URL/title validation for existing tab selection. Tests use an
+independently launched disposable Chrome with no Playwright page defaults.
+Record the separate external-extension and internal-browser popup boundaries;
+withdraw the proposed forced-reload/CSP direction. See
+[design evidence](ai/computer-use-design-evidence.md).
+The fifth paired managed-browser run succeeds on all 18 samples and measures
+46.2% fewer model requests, 92.7% fewer image bytes and 41.9% lower median time.
+This does not close native/Desktop or external popup qualification. Include the
+cached-opener counterexample in the final integration gate rather than hiding it
+behind the ordinary-popup pass.
+
+The real Desktop model flow exposed an executable native inventory root that
+could replace the user's selected window before failing. Remove that root from
+the target registry and retain only discovered windows. Focused tests verify
+invalid targets cannot mutate the binding. Add a native-only model scenario
+so subsequent fixes can be qualified without repeating unrelated browser flows.
+The focused run completed its first native turn, then exposed a script process
+silently exiting through macOS temporary-directory symlinks. Use Node's native
+entrypoint identity and cover actual JSONL startup through a symlink. Add paired
+scroll coordinates to the shared primitive so restored physical mouse position
+cannot choose an unrelated region. Browser and private Linux checks pass; the
+native run paused for user input before completion and requires continuation.
+
+Add bounded QuickJS scripts, compact accessibility observations, explicit managed
+profiles and Chrome tab bindings, macOS window AX and private Linux AT-SPI.
+Product schema 9 appends task access without changing Floret storage. Protocol 2
+and compatibility epoch 19 require matching Desktop/Runtime v0.13.0 resources.
+Stage starts closed and may view a current semantic target without adding model
+images. Downloads, partial results and cancellation remain within the existing
+execution boundary. See [runtime](ai/computer-use-runtime.md),
+[scripts](ai/computer-use-scripts.md), [browser](ai/computer-use-browser.md) and
+[desktop](ai/computer-use-desktop.md).
+
+Queue popup creation after the originating click acknowledgement and recheck
+admission at the creation command. Cancelled/revoked requests do not create tabs;
+an unknown click or create result retires the binding without replay. Ordinary
+Chrome popup focus preservation and nearby browser tests pass. A new cached-
+native-opener test still bypasses page interception, so strict background popup
+acceptance remains incomplete. A native-function debugger experiment could not
+prevent this effect and was removed. Complete Desktop qualification and exact-
+main integration also remain pending. The latest explicitly authorized native
+model run completes two AX clicks and a canvas double-click before user-input
+priority pauses the batch; no later script operation runs.
+The fourth paired managed-browser run meets the 40/70/30 efficiency thresholds
+with both variants completing 9/9 tasks, after navigation invalidation and script
+guidance fixes. See [paired measurements](ai/computer-use-performance.md), which
+also retain the first three unsuccessful runs. These boundaries
+remain visible in [qualification](ai/computer-use-qualification.md).
+
+Real Linux UI qualification exposed and fixed stripped semantic target/access
+references and delayed wheel events being mistaken for user takeover. Public
+viewers retain already decoded pixels at semantic-only completion and clear
+private pixels at handback. Native short JSONL requests now use available pipe
+bytes instead of waiting for a full Foundation buffer. Stop and same-thread
+follow-up qualification passes. macOS qualification initially stopped for a
+locked console and user input; no locked-screen result counts as acceptance.
+After unlocking and explicit continuation, background occluded-window capture
+and native AX/canvas/key/wheel fixtures pass, including original app/window and
+pointer restoration after each operation. Accessory windows now use the same
+exact AX/WindowServer matching and owner exclusion as regular apps. A real wheel
+failure exposed construction-time pointer coordinates; wheel and move events
+now bind to the same selected control. Fixture discovery waits only for new
+windows to appear in both APIs, and color verification reads raw sRGB PNG samples.
+The built Desktop private-flow fixture exposed missing IPC route admissions for
+the new target/access UI. The single route allowlist now covers the new product
+endpoints, with behavior tests rejecting wrong methods and ambiguous queries.
+The built Desktop private-flow scope passes after that fix: continuous preview,
+all frame rates, native IME, rejected/successful handback, one navigation, narrow
+layout and persistence. The resize assertion waits for actual control bounds.
+The full model-driven native Desktop flow remains separate qualification.
+Delayed-input coverage also rejects the old one-second provenance expiry: the
+bounded timestamp tokens now survive renderer delay while unrelated physical
+events still yield control. The Linux UI fixture identifies its private display
+through the verified Runtime's children after active sockets moved to a short
+ephemeral directory.
+Historical screenshot selection now resolves the clicked canonical frame even
+after newer image-free observations, without opening a live sampler. The Linux
+product fixture exposed this gap after its browser, X11 and floating-viewer
+action checks passed; those partial results do not qualify the full scope.
+An open completed public viewer also keeps its last decoded live image when an
+older saved capture exists, so completion cannot rewind the displayed outcome.
+Closing ends this local preservation; reopening resolves the saved capture.
+A deterministic viewer regression also prevents a failed preview from blocking
+a later run's new sampler. The ninth complete Linux attempt passed task effects,
+private handback, cancellation, cross-thread media, fork and Runtime restart but
+failed the second X11 turn's continuous-frame requirement; that run remains
+failed evidence while bounded viewer diagnostics identify the missing delivery.
+The tenth attempt captured a normal target release becoming a viewer error just
+before completion. Runtime ownership release now cancels matching samplers, and
+public startup rechecks ownership atomically with registration. Focused tests cover
+normal completion, release during startup and stale cleanup after a new run.
+The twelfth Linux attempt passes the complete browser/X11 UI scope with 82 real
+provider requests, continuous decoded frames in every turn, private input and
+handback, cancellation, cross-thread media rejection, fork and Runtime restart.
+Container, credential-copy and port cleanup passed. The eleventh attempt stopped
+at an official Node download timeout; the successful run used a locally cached
+official archive verified against the published checksum. Chrome popup and
+macOS qualification remain open, so this is not final integration acceptance.
+
 ## 2026-09-17 — Computer preview history and explicit reconnection
 
 - Document canonical turn/run result projection, automatic terminal collapse and

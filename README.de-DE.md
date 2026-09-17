@@ -128,6 +128,8 @@ Importieren Sie unter Linux das exportierte öffentliche Zertifikat in den Vertr
 
 Flower speichert übermittelte Referenzen und die Geräteauswahl im Gespräch, damit Folgefragen ihren Kontext behalten. Das ausgewählte Gerät und der Rechner, auf dem die Werkzeuge laufen, werden getrennt ausgewiesen. Vorübergehende geheime Eingaben werden nicht im Verlauf gespeichert.
 
+Flower kann semantische Browser- und Desktop-Aktionen in Skripten mit festen Ausführungsgrenzen kombinieren. Wähle ein verwaltetes Browserprofil, einen autorisierten Chrome-Tab oder ein Anwendungsfenster und lege Website- und App-Berechtigungen für jede Aufgabe ausdrücklich fest. Screenshots werden bei Bedarf angefordert, und der Betrachter öffnet sich auf Wunsch. Ob Aktionen im Hintergrund möglich sind, hängt vom Ziel und der Aktion ab; die Automatisierung von Windows und Safari ist nicht enthalten.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

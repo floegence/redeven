@@ -1,7 +1,9 @@
+import { computerUseEnUS } from '../computerUseCopy';
 import { reasoningControlEnUS } from './reasoningControlMessages';
 import { filesystemPickerEnUS } from './filesystemPickerMessages';
 
 export const flowerSurfaceEnUS = {
+  computer: computerUseEnUS,
   reasoningControl: reasoningControlEnUS,
   filesystemPicker: filesystemPickerEnUS,
   runtime: {

@@ -1,3 +1,4 @@
+import { computerManagementAdapter } from '../../../../internal/flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../internal/flower_ui/src/computerViewer';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../../shared/desktopCertificate';
@@ -846,7 +847,8 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       await runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/input', input);
     },
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
-    connectComputerBrowser: async (cdpURL): Promise<FlowerTargetDescriptor> => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/connect', { cdp_url: cdpURL }),
+    computerManagement: computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body)),
+    connectComputerBrowser: async (connection): Promise<FlowerTargetDescriptor> => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/connect', connection),
     saveModelProfile: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return loadSettingsSnapshot(bridge);

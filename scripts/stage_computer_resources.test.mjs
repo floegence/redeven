@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { mkdtempSync, readFileSync, rmSync, renameSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,6 +47,20 @@ test('immutable computer bundle starts without source, PATH, NODE_PATH or browse
     assert.ok(Buffer.from(screenshot.screenshot.data, 'base64').length > 1000);
     child.stdin.end();
     await exited;
+    const script = await promisify(execFile)(path.join(resources, 'node'), ['--input-type=module', '-e', `
+      const {createComputerScript} = await import(process.argv[1]);
+      const guest = await createComputerScript();
+      try {
+        const result = await guest.execute('const result = await ui.observe(); log(result.marker, typeof process, typeof fetch);', async () => ({marker: 'relocated'}));
+        process.stdout.write(JSON.stringify(result));
+      } finally { guest.dispose(); }
+    `, pathToFileURL(path.join(resources, 'redevenComputerScript.mjs')).href], {
+      cwd: os.tmpdir(), env: { HOME: root, PATH: '/usr/bin:/bin', NODE_PATH: '', PLAYWRIGHT_BROWSERS_PATH: path.join(root, 'absent-cache') }, timeout: 10000,
+    });
+    assert.deepEqual(JSON.parse(script.stdout).logs, [['relocated', 'undefined', 'undefined']]);
+    for (const name of ['background.mjs', 'manifest.json', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'input-focus.css']) {
+      assert.ok(manifest.files.some(file => file.path === `extension/${name}`), `missing extension resource: ${name}`);
+    }
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     if (exited) await exited;

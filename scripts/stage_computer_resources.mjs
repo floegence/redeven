@@ -1,3 +1,4 @@
+import { stageBrowserExtension } from './stage_browser_extension.mjs';
 import { cpSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -23,6 +24,7 @@ export function stageComputerResources(destination, platform = process.platform,
   const browserExecutable = chromium.executablePath();
   if (!existsSync(browserExecutable)) throw new Error('Playwright Chromium is missing. Run pnpm exec playwright install chromium in the Env App workspace before building.');
   mkdirSync(destination, { recursive: true });
+  stageBrowserExtension(path.join(destination, "extension"));
   function copyTree(source, target) {
     const resolved = realpathSync(source);
     if (lstatSync(resolved).isDirectory()) {
@@ -45,7 +47,30 @@ export function stageComputerResources(destination, platform = process.platform,
     copy(path.join(downloadRoot, prefix, 'LICENSE'), 'NODE_LICENSE');
     if (execFileSync(path.join(destination, 'node'), ['--version'], { encoding: 'utf8' }).trim() !== `v${expectedNode}`) throw new Error('Bundled Node version mismatch.');
   } finally { rmSync(downloadRoot, { recursive: true, force: true }); }
-  copy(path.join(repo, 'internal/envapp/ui_src/scripts/redevenComputerHost.mjs'), 'redevenComputerHost.mjs');
+  for (const file of ['redevenComputerHost.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'redevenComputerScript.mjs']) {
+    copy(path.join(repo, 'internal/envapp/ui_src/scripts', file), file);
+  }
+  const copiedPackages = new Map();
+  function copyRuntimePackage(name, resolveFrom) {
+    // Several QuickJS packages intentionally do not export package.json.
+    // Resolve their public entry, then locate that exact package's metadata.
+    let directory = path.dirname(realpathSync(resolveFrom.resolve(name)));
+    while (!existsSync(path.join(directory, 'package.json')) || JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8')).name !== name) {
+      const parent = path.dirname(directory);
+      if (parent === directory) throw new Error(`Runtime package metadata missing: ${name}`);
+      directory = parent;
+    }
+    const packageFile = path.join(directory, 'package.json');
+    const metadata = JSON.parse(readFileSync(packageFile, 'utf8'));
+    if (copiedPackages.has(name)) {
+      if (copiedPackages.get(name) !== metadata.version) throw new Error(`Conflicting runtime dependency: ${name}`);
+      return;
+    }
+    copiedPackages.set(name, metadata.version);
+    copy(path.dirname(packageFile), `node_modules/${name}`);
+    for (const dependency of Object.keys(metadata.dependencies || {})) copyRuntimePackage(dependency, createRequire(packageFile));
+  }
+  copyRuntimePackage('quickjs-emscripten', requireUI);
   for (const name of ['playwright', 'playwright-core']) {
     const packageFile = name === 'playwright'
       ? requireUI.resolve(`${name}/package.json`)

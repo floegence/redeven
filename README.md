@@ -128,6 +128,8 @@ On Linux, import the exported public certificate into the trust store used by th
 
 Flower keeps the references and device selection you submit with the conversation, so follow-up questions retain their context. The selected device and the machine running tools are identified separately. Temporary secret inputs stay out of saved history.
 
+Flower can combine semantic browser and desktop operations in bounded scripts. Select a managed browser profile, an authorized Chrome tab, or an application window, with explicit site and app permissions for each task. Screenshots are requested when needed, and the viewer opens on demand. Background operation depends on the target and action; Windows and Safari automation are not included.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

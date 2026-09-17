@@ -65,6 +65,13 @@ func TestXvfbTargetExecutorRealDisplay(t *testing.T) {
 	if err != nil || string(entered) != "Flower X11 complete" {
 		t.Fatalf("GUI input did not reach the fixture: %q, %v", entered, err)
 	}
+	if _, err := e.ExecuteTargetTool(ctx, TargetToolCall{TargetID: "xvfb-main", ToolName: "computer.scroll", Arguments: json.RawMessage(`{"x":200,"y":220,"delta_y":120}`)}); err != nil {
+		t.Fatal(err)
+	}
+	pointer, err := e.command(ctx, e.paths.input, nil, 4096, "getmouselocation", "--shell")
+	if err != nil || !strings.Contains(string(pointer), "X=200\nY=220\n") {
+		t.Fatalf("scroll did not target the requested point: %q, %v", pointer, err)
+	}
 	processes := append([]*x11Process(nil), e.processes...)
 	sessionDirectory := e.sessionDirectory
 	if err := e.Close(); err != nil {

@@ -1,3 +1,4 @@
+import { computerManagementAdapter } from '../../../../../flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../../flower_ui/host/computerFramePath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../../flower_ui/src/computerViewer';
 import type { FlowerComputerFrameSource } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -833,6 +834,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
+    computerManagement: computerManagementAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })),
+    connectComputerBrowser: (connection) => fetchLocalApiJSON('/_redeven_proxy/api/ai/computer/connect', { method: 'POST', body: JSON.stringify(connection) }),
     saveComputerUseEnabled: async (enabled) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
         method: 'PUT',

@@ -123,6 +123,9 @@ func (s *Service) InputComputerControl(ctx context.Context, meta *session.Meta, 
 }
 
 func (r *ComputerUseRuntime) executeComputerUserInputLocked(ctx context.Context, call TargetToolCall) ([]byte, error) {
+	if err := r.authorizeComputerCall(ctx, &call); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	executor := r.executors[call.TargetID]
 	r.mu.RUnlock()

@@ -186,14 +186,17 @@ type Service struct {
 
 // ConnectComputerBrowser exposes the explicit user-authorized browser bridge
 // without creating a second executor owner in the HTTP layer.
-func (s *Service) ConnectComputerBrowser(ctx context.Context, cdpURL string) (TargetDescriptor, error) {
+func (s *Service) ConnectComputerBrowser(ctx context.Context, meta *session.Meta, connection ComputerBrowserConnection) (TargetDescriptor, error) {
+	if err := requireRWX(meta); err != nil {
+		return TargetDescriptor{}, err
+	}
 	resolver, ok := s.targetResolver.(interface {
-		ConnectBrowser(context.Context, string) (TargetDescriptor, error)
+		ConnectBrowser(context.Context, ComputerBrowserConnection) (TargetDescriptor, error)
 	})
 	if !ok {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_unavailable"}
 	}
-	return resolver.ConnectBrowser(ctx, cdpURL)
+	return resolver.ConnectBrowser(ctx, connection)
 }
 
 // ResolveTargetToolAttachment exposes a short-lived target screenshot to the
