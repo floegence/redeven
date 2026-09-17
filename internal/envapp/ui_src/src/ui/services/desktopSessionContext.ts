@@ -48,6 +48,7 @@ export interface DesktopSessionContextBridge {
   getTransportRecoverySnapshot?: () => DesktopTransportRecoverySnapshot | null;
   subscribeTransportRecovery?: (listener: (snapshot: DesktopTransportRecoverySnapshot) => void) => () => void;
   requestTransportRecoveryNow?: () => Promise<boolean>;
+  renewProviderSession?: () => Promise<boolean>;
   notifyAppReady?: (payload: {
     state: 'access_gate_interactive' | 'runtime_connected';
     timings?: Readonly<{
@@ -256,6 +257,14 @@ export async function requestDesktopTransportRecoveryNow(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function renewDesktopProviderSession(envPublicID: string): Promise<boolean | null> {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  if (!bridge || typeof bridge.renewProviderSession !== 'function') return null;
+  const context = bridge.getSnapshot();
+  if (context?.session_source !== 'provider_environment' || context.env_public_id !== envPublicID) return false;
+  try { return await bridge.renewProviderSession() === true; } catch { return false; }
 }
 
 export function desktopRendererStorageScopeID(): string {

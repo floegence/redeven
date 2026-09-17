@@ -636,6 +636,7 @@ import {
 import {
   DESKTOP_SESSION_APP_READY_CHANNEL,
   DESKTOP_SESSION_CONTEXT_GET_CHANNEL,
+  DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL,
   DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL,
@@ -750,6 +751,9 @@ import {
 } from '../shared/providerRuntimeLinkTarget';
 import { desktopProviderEnvironmentOpenRoute } from '../shared/environmentManagementPrinciples';
 import { loadDesktopSSHConfigHosts } from './sshConfigHosts';
+import { createProviderSessionRenewal, isProviderSessionRenewalDocument } from './providerSessionRenewal';
+
+const providerSessionRenewals = new WeakMap<DesktopSessionRecord, () => Promise<boolean>>();
 
 type OpenDesktopWelcomeOptions = Readonly<{
   surface?: DesktopLauncherSurface;
@@ -17993,6 +17997,34 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL, (event) => {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
     return sessionRecord?.transport_recovery_session?.requestRecoveryNow() ?? false;
+  });
+  ipcMain.handle(DESKTOP_PROVIDER_SESSION_RENEW_CHANNEL, async (event) => {
+    const record = sessionRecordForWebContentsID(event.sender.id);
+    if (!record || record.closing || record.transport.kind !== 'provider_remote'
+      || record.target.kind !== 'local_environment' || record.target.local_environment_kind !== 'controlplane'
+      || record.root_window.webContentsID !== event.sender.id || event.senderFrame !== event.sender.mainFrame) return false;
+    const origin = new URL(record.allowed_base_url).origin;
+    if (!isProviderSessionRenewalDocument(event.senderFrame.url, origin)) return false;
+    let renew = providerSessionRenewals.get(record);
+    if (!renew) {
+      const target = record.target;
+      renew = createProviderSessionRenewal({
+        origin, envPublicID: target.env_public_id ?? '',
+        isCurrent: () => !record.closing && liveSession(record.session_key) === record && !event.sender.isDestroyed(),
+        requestOpenSession: async () => {
+          const preferences = await loadDesktopPreferencesCached();
+          const environment = findProviderEnvironmentByID(preferences, target.environment_id);
+          if (!environment || environment.provider_origin !== target.provider_origin
+            || environment.provider_id !== target.provider_id || environment.env_public_id !== target.env_public_id) {
+            throw new Error('The Cloud environment is no longer authorized.');
+          }
+          return (await prepareProviderRemoteOpenSession(preferences, environment)).remoteSessionURL;
+        },
+        fetch: (url, init) => event.sender.session.fetch(url, init),
+      });
+      providerSessionRenewals.set(record, renew);
+    }
+    return renew();
   });
   ipcMain.on(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL, (event) => {
     event.returnValue = desktopRendererThemeSnapshot(desktopThemeState().getSnapshot());

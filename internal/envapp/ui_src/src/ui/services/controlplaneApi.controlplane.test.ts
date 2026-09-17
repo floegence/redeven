@@ -19,6 +19,36 @@ describe('controlplaneApi controlplane helper usage', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete window.redevenDesktopSessionContext;
+  });
+
+  it('renews an expired Desktop Cloud sandbox session once without navigating the workspace', async () => {
+    const renew = vi.fn(async () => true);
+    window.redevenDesktopSessionContext = {
+      getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
+      renewProviderSession: renew,
+    };
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'INVALID_ENV_SESSION' } }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { entry_ticket: 'fresh-ticket' } })));
+    vi.stubGlobal('fetch', fetchMock);
+    const mod = await import('./controlplaneApi');
+    expect(await mod.mintEnvProxyEntryTicket({ endpointId: 'env_demo', floeApp: 'com.floegence.redeven.agent', codeSpaceId: 'env-ui' })).toBe('fresh-ticket');
+    expect(renew).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([false, true])('preserves rejected Cloud authority after bounded renewal (%s)', async (renewed) => {
+    const renew = vi.fn(async () => renewed);
+    window.redevenDesktopSessionContext = {
+      getSnapshot: () => ({ local_environment_id: 'cloud', renderer_storage_scope_id: 'cloud', target_route: 'remote_desktop', session_source: 'provider_environment', env_public_id: 'env_demo' }),
+      renewProviderSession: renew,
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: { code: 'INVALID_ENV_SESSION' } }), { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const mod = await import('./controlplaneApi');
+    await expect(mod.mintEnvProxyEntryTicket({ endpointId: 'env_demo', floeApp: 'com.floegence.redeven.agent', codeSpaceId: 'env-ui' })).rejects.toMatchObject({ status: 401 });
+    expect(renew).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(renewed ? 2 : 1);
   });
 
   it('returns one stable registered source and redeems a fresh entry ticket inside each acquire fetch', async () => {
