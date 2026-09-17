@@ -2812,8 +2812,11 @@
 .flower-message-bubble-user {
   max-width: min(78%, var(--flower-chat-user-bubble-width));
   background: color-mix(in srgb, var(--primary) 15%, var(--flower-chat-surface-elevated));
-  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
   color: color-mix(in srgb, var(--foreground) 95%, var(--primary) 5%);
+}
+
+.flower-message-bubble-framed.flower-message-bubble-user {
+  border: 0;
 }
 
 .flower-input-response-receipt {

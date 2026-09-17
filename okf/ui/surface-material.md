@@ -78,6 +78,12 @@ outline. The [input focus contract](input-focus-boundaries.md) continues to
 require border-color-only focus with stable geometry and decoration. Debug
 Console settings consume the native shared Switch instead of a product knob.
 
+Flower user message bubbles use a tinted background and rounded corners without
+a perimeter border. The shared product style applies to ordinary messages,
+reference groups, queued messages, and submitted input receipts in every Flower
+placement. Message selection, copy actions, and attachment controls retain their
+existing behavior; assistant error surfaces keep their explicit error treatment.
+
 Flower's empty-state suggestions use the available panel width to choose one
 or two columns. A narrow Workbench widget retains readable text even when the
 outer browser viewport is wide; this changes neither widget geometry nor
@@ -169,6 +175,7 @@ component gallery alone is not downstream acceptance evidence.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Published mode artwork integration.
 - `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Bounded authored-palette exception.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Composer and floating menu roles.
+- `redeven:internal/flower_ui/src/styles/flower.css` - Shared borderless user message treatment.
 - `redeven:scripts/check_soft_surface_integration.test.mjs` - Shared ownership guard.
 - `redeven:internal/envapp/ui_src/src/styles/softSurfacesVisual.browser.test.tsx` - Real control and scoped overlay checks.
 - `redeven:internal/envapp/ui_src/src/styles/settingsThemeHierarchyVisual.browser.test.tsx` - Full preset hierarchy coverage.
