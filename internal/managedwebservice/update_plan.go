@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	updatePlanSchemaVersion = 3
+	updatePlanSchemaVersion = 4
 	updatePlanTTL           = 15 * time.Minute
 
 	releaseRiskNonRecommended = "non_recommended_release"
@@ -82,7 +82,8 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 	plan := UpdatePlan{
 		SchemaVersion: updatePlanSchemaVersion, UpdatePlanID: id, CurrentRelease: *current, TargetRelease: targetIdentity,
 		Notices: append([]TemplateNotice(nil), targetTemplate.Notices...), RiskIDs: riskHints,
-		RequiresStopped: requiresStopped, ExpiresAtUnixMs: expiresAt.UnixMilli(),
+		AcceptedNoticeRevisions: matchingNoticeRevisions(targetTemplate.Notices, resolved.Configuration.AcceptedNoticeRevisions),
+		RequiresStopped:         requiresStopped, ExpiresAtUnixMs: expiresAt.UnixMilli(),
 	}
 	release := cachedReleaseCandidate{
 		Scope: "service:" + service.ServiceID, TemplateID: service.TemplateID,
@@ -92,6 +93,10 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 	templateSpecSHA256 = templateSourceRuntimeDigest(templateSpecSHA256, targetTemplate.SourceSHA256)
 	cached := cachedUpdatePlan{Plan: plan, ServiceID: service.ServiceID, TemplateID: service.TemplateID, TemplateSpecSHA256: templateSpecSHA256, SelectedCandidateID: selectedCandidateID, Release: release, ExpiresAt: expiresAt}
 	m.releaseMu.Lock()
+	if err := ctx.Err(); err != nil {
+		m.releaseMu.Unlock()
+		return nil, err
+	}
 	for key, existing := range m.updatePlans {
 		if existing.ServiceID == service.ServiceID || time.Now().After(existing.ExpiresAt) {
 			delete(m.updatePlans, key)
@@ -100,6 +105,28 @@ func (m *Manager) CreateUpdatePlan(ctx context.Context, serviceID string, reques
 	m.updatePlans[id] = cached
 	m.releaseMu.Unlock()
 	return &plan, nil
+}
+
+// Only the service's saved confirmation of this exact notice revision can be reused.
+func matchingNoticeRevisions(notices []TemplateNotice, saved map[string]int64) map[string]int64 {
+	accepted := make(map[string]int64)
+	for _, notice := range notices {
+		if revision, ok := saved[notice.ID]; ok && revision == notice.Revision {
+			accepted[notice.ID] = revision
+		}
+	}
+	return accepted
+}
+
+func resolveUpdateNoticeRevisions(notices []TemplateNotice, saved, submitted map[string]int64) (map[string]int64, error) {
+	accepted := matchingNoticeRevisions(notices, saved)
+	for id, revision := range submitted {
+		accepted[id] = revision
+	}
+	if err := validateAcceptedNotices(Template{Notices: notices}, accepted); err != nil {
+		return nil, err
+	}
+	return accepted, nil
 }
 
 func materializeReleaseSpec(base TemplateSpec, identity ReleaseIdentity) (TemplateSpec, error) {

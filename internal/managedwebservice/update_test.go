@@ -485,3 +485,93 @@ func slicesContain(values []string, target string) bool {
 	}
 	return false
 }
+
+func TestUpdateNoticesReuseOnlyExactSavedRevisions(t *testing.T) {
+	notices := []TemplateNotice{
+		{ID: "unchanged", Revision: 1, AcknowledgementRequired: true},
+		{ID: "changed", Revision: 2, AcknowledgementRequired: true},
+		{ID: "new", Revision: 1, AcknowledgementRequired: true},
+	}
+	saved := map[string]int64{"unchanged": 1, "changed": 1, "removed": 1}
+	for _, tc := range []struct {
+		name      string
+		submitted map[string]int64
+		code      string
+	}{
+		{"missing new notices", nil, "NOTICE_ACKNOWLEDGEMENT_REQUIRED"},
+		{"changed and new confirmed", map[string]int64{"changed": 2, "new": 1}, ""},
+		{"stale explicit confirmation", map[string]int64{"unchanged": 2, "changed": 2, "new": 1}, "NOTICE_ACKNOWLEDGEMENT_STALE"},
+		{"unknown explicit confirmation", map[string]int64{"changed": 2, "new": 1, "removed": 1}, "NOTICE_ACKNOWLEDGEMENT_UNKNOWN"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			accepted, err := resolveUpdateNoticeRevisions(notices, saved, tc.submitted)
+			if managedErrorCode(err) != tc.code {
+				t.Fatalf("acceptance error = %v, want %q", err, tc.code)
+			}
+			if err == nil && (len(accepted) != 3 || accepted["unchanged"] != 1 || accepted["changed"] != 2 || accepted["new"] != 1) {
+				t.Fatalf("accepted revisions = %v", accepted)
+			}
+			if len(saved) != 3 || saved["changed"] != 1 {
+				t.Fatalf("saved confirmations were mutated: %v", saved)
+			}
+		})
+	}
+	if _, err := resolveUpdateNoticeRevisions(notices, nil, map[string]int64{"changed": 2, "new": 1}); managedErrorCode(err) != "NOTICE_ACKNOWLEDGEMENT_REQUIRED" {
+		t.Fatalf("another service inherited a confirmation: %v", err)
+	}
+}
+
+func TestUpdatePlanProjectsServiceScopedNoticeConfirmations(t *testing.T) {
+	fixture := newUpdatePlanFixture(t)
+	ctx := context.Background()
+	record, err := fixture.registry.GetManagedTemplate(ctx, fixture.service.TemplateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition := catalogTemplate{
+		TemplateID: fixture.service.TemplateID, ServiceFamilyID: "family-release-plan", Deployment: DeploymentHost,
+		Spec: json.RawMessage(record.SpecJSON), SupportedPlatforms: []string{currentPlatformKey()},
+		Notices: []TemplateNotice{{ID: "same", Revision: 1, AcknowledgementRequired: true}, {ID: "changed", Revision: 2, AcknowledgementRequired: true}},
+	}
+	fixture.manager.catalog = &BuiltinCatalog{templates: []catalogTemplate{definition}, byID: map[string]catalogTemplate{definition.TemplateID: definition}}
+	configurationJSON, configurationSHA256, err := canonicalServiceConfiguration(newServiceConfiguration(nil, map[string]int64{"same": 1, "changed": 1, "removed": 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.registry.UpdateManagedService(ctx, fixture.service.ServiceID, pfregistry.ManagedServicePatch{ConfigurationJSON: &configurationJSON, ConfigurationSHA256: &configurationSHA256}); err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := fixture.manager.ServiceReleaseCandidates(ctx, fixture.service.ServiceID, ReleaseCandidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := fixture.manager.CreateUpdatePlan(ctx, fixture.service.ServiceID, UpdatePlanRequest{TargetCandidateID: candidateByVersion(t, candidates, "2.0.0").CandidateID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.SchemaVersion != 4 || len(plan.AcceptedNoticeRevisions) != 1 || plan.AcceptedNoticeRevisions["same"] != 1 {
+		t.Fatalf("projected confirmations = %+v", plan)
+	}
+	stored, err := fixture.registry.GetManagedService(ctx, fixture.service.ServiceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.ConfigurationJSON != configurationJSON {
+		t.Fatal("preparation changed persisted confirmations")
+	}
+	accepted, err := resolveUpdateNoticeRevisions(plan.Notices, plan.AcceptedNoticeRevisions, map[string]int64{"changed": 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, _, err := fixture.manager.releaseUpdateTarget(ctx, stored, plan.TargetRelease, accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration, err := decodeServiceConfiguration(target.ConfigurationJSON)
+	if err != nil || len(configuration.AcceptedNoticeRevisions) != 2 || configuration.AcceptedNoticeRevisions["same"] != 1 || configuration.AcceptedNoticeRevisions["changed"] != 2 {
+		t.Fatalf("target confirmations = %+v, error = %v", configuration, err)
+	}
+	if stored.ConfigurationJSON != configurationJSON {
+		t.Fatal("staging overwrote the rollback configuration")
+	}
+}

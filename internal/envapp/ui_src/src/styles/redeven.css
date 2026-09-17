@@ -110,7 +110,7 @@
 }
 
 [data-floe-dialog-panel].env-app-drawer-panel.managed-service-version-drawer {
-  width: min(62rem, calc(100vw - 4rem));
+  width: min(46rem, calc(100vw - 4rem));
 }
 
 [data-floe-dialog-overlay-root][data-floe-dialog-mode="surface"] [data-floe-dialog-panel].env-app-drawer-panel {
@@ -5588,4 +5588,42 @@ html.dark .git-content-skeleton__block {
   :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) .redeven-surface-segmented__item {
     transition: none;
   }
+}
+
+.managed-release-compact-row {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 3.75rem;
+}
+.managed-release-compact-row > div:nth-child(3) {
+  grid-column: 2;
+  max-width: min(14rem, 45vw);
+  align-self: center;
+}
+.managed-release-change {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+.managed-release-submit {
+  max-width: min(24rem, 52vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.managed-release-details summary {
+  width: fit-content;
+}
+
+.managed-release-browser[data-compact='true'] .managed-release-list-status {
+  flex-basis: 40px;
+  height: 40px;
+  padding: 0 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.managed-release-browser[data-compact='true'] .managed-release-list-status[data-error='true'] {
+  color: var(--destructive);
 }

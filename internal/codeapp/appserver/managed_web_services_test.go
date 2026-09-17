@@ -367,7 +367,7 @@ func (b *managedBackendStub) ServiceReleaseCandidates(_ context.Context, _ strin
 func (b *managedBackendStub) CreateUpdatePlan(_ context.Context, _ string, request managedwebservice.UpdatePlanRequest) (*managedwebservice.UpdatePlan, error) {
 	b.updatePlanCalls++
 	b.lastUpdatePlanRequest = request
-	return &managedwebservice.UpdatePlan{SchemaVersion: 1, UpdatePlanID: "upl_one", ExpiresAtUnixMs: 1}, nil
+	return &managedwebservice.UpdatePlan{SchemaVersion: 4, UpdatePlanID: "upl_one", ExpiresAtUnixMs: 1}, nil
 }
 func (b *managedBackendStub) Settings(_ context.Context, serviceID string) (*managedwebservice.ServiceSettingsView, error) {
 	b.settingsCalls++
