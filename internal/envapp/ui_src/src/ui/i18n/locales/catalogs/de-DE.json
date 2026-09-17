@@ -3913,12 +3913,14 @@
     "title": {
       "recovering": "Verbindung wird wiederhergestellt",
       "recovered": "Verbindung wiederhergestellt",
-      "failed": "Verbindung konnte nicht wiederhergestellt werden"
+      "failed": "Verbindung konnte nicht wiederhergestellt werden",
+      "offline": "Sie sind offline"
     },
     "summary": {
-      "recovering": "Redeven stellt die Verbindung zu dieser Umgebung wieder her. Sobald alle erforderlichen Schritte abgeschlossen sind, kehren Sie zum selben Arbeitsbereich zurück.",
-      "recovered": "Alle erforderlichen Verbindungsschritte sind abgeschlossen. Sie kehren jetzt zum Arbeitsbereich zurück.",
-      "failed": "Die ursprüngliche Laufzeitsitzung kann nicht mehr verwendet werden. Der vorherige Arbeitsbereich bleibt erhalten, kann aber keine Anfragen mehr senden."
+      "recovering": "Ihr Arbeitsbereich bleibt geöffnet. Die Verbindung wird automatisch wiederhergestellt.",
+      "recovered": "Die Verbindung steht wieder. Sie kehren zu Ihrem Arbeitsbereich zurück.",
+      "failed": "Diese Seite ist pausiert. Öffnen Sie die Verbindung erneut, um fortzufahren.",
+      "offline": "Sobald das Netzwerk wieder verfügbar ist, verbinden wir Sie automatisch. Lassen Sie diese Seite geöffnet."
     },
     "steps": {
       "interrupted": "Verbindung unterbrochen",
@@ -3928,8 +3930,6 @@
       "secureSession": "Sichere Sitzung wiederherstellen",
       "completed": "Verbindung hergestellt"
     },
-    "progressLabel": "Fortschritt der Verbindungswiederherstellung",
-    "progress": "{complete} von {total} Schritten abgeschlossen",
     "timelineLabel": "Schritte zur Verbindungswiederherstellung",
     "attempts": {
       "one": "{count} Versuch",
@@ -3945,7 +3945,7 @@
       "runtimeOffline": "Die Laufzeit ist offline und blieb während der Wiederherstellung nicht verfügbar.",
       "runtimeUnavailable": "Die Laufzeit war noch nicht bereit, als die Wiederherstellung beendet wurde.",
       "transportUnavailable": "Der Verbindungstransport ist für diese Sitzung nicht mehr verfügbar.",
-      "authenticationFailed": "Desktop konnte die ursprüngliche Laufzeitverbindung nicht authentifizieren.",
+      "authenticationFailed": "Ihre Sitzung muss erneut autorisiert werden. Öffnen Sie die Umgebung erneut, um fortzufahren.",
       "missingEnvironmentContext": "Die für diese Sitzung erforderliche Umgebungsidentität fehlt.",
       "secureSessionFailed": "Die sichere Sitzung konnte nicht fortgesetzt werden.",
       "remoteCommandEnded": "Der ursprüngliche Remote-Laufzeit-Bridge-Befehl wurde beendet.",

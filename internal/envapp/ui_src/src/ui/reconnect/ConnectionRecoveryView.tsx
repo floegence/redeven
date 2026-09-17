@@ -1,22 +1,13 @@
 import { writeTextToClipboard } from '../utils/clipboard';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import {
-  Check,
-  AlertCircle,
-  Copy,
-  Loader2,
-  Refresh,
-} from '@floegence/floe-webapp-core/icons';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { Check, AlertCircle, Copy, Loader2, Refresh, Cloud, WifiOffIcon } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
 import { openConnectionCenter } from '../services/desktopShellBridge';
-import {
-  createConnectionRecoveryPresentation,
-  type ConnectionRecoveryStep,
-  type ConnectionRecoveryStepID,
-} from './createConnectionRecoveryPresentation';
+import { reloadCurrentPage } from '../utils/windowNavigation';
+import { createConnectionRecoveryPresentation, type ConnectionRecoveryStepID } from './createConnectionRecoveryPresentation';
 import type { ConnectionRecoverySnapshot } from './createRuntimeReconnectController';
 
 export type ConnectionRecoveryViewProps = Readonly<{
@@ -34,57 +25,45 @@ const STEP_TRANSLATION_KEYS = {
   completed: 'connectionRecovery.steps.completed',
 } as const satisfies Readonly<Record<ConnectionRecoveryStepID, EnvAppTranslationKey>>;
 
-function StepStatusIcon(props: Readonly<{ status: ConnectionRecoveryStep['status'] }>) {
-  return (
-    <span
-      class={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-        props.status === 'complete'
-          ? 'border-success/50 bg-success/10 text-success'
-          : props.status === 'failed'
-            ? 'border-error/50 bg-error/10 text-error'
-            : props.status === 'active'
-              ? 'border-primary/50 bg-primary/10 text-primary motion-safe:animate-pulse'
-              : 'border-border bg-background text-muted-foreground/60'
-      }`}
-      aria-hidden="true"
-    >
-      {props.status === 'complete' ? (
-        <Check class="h-3 w-3" />
-      ) : props.status === 'failed' ? (
-        <AlertCircle class="h-3 w-3" />
-      ) : props.status === 'active' ? (
-        <Loader2 class="h-3 w-3 motion-safe:animate-spin" />
-      ) : (
-        <span class="h-2 w-2 rounded-full border border-current" />
-      )}
-    </span>
-  );
-}
-
 export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
   const i18n = useI18n();
   const presentation = createMemo(() => createConnectionRecoveryPresentation(props.snapshot));
+  const [online, setOnline] = createSignal(navigator.onLine);
   const [nowMs, setNowMs] = createSignal(Date.now());
   const [copied, setCopied] = createSignal(false);
+  const [retrying, setRetrying] = createSignal(false);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
   let failedHeading: HTMLHeadingElement | undefined;
+  const offline = () => !online() && props.snapshot.state === 'recovering';
 
+  onMount(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    onCleanup(() => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+      clearTimeout(copyTimer);
+    });
+  });
   createEffect(() => {
-    if (!presentation().steps.some((step) => step.next_retry_at_unix_ms)) return;
-    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
+    if (!props.snapshot.next_retry_at_unix_ms) return;
+    setNowMs(Date.now());
+    const interval = window.setInterval(() => setNowMs(Date.now()), 1_000);
     onCleanup(() => window.clearInterval(interval));
   });
-
   createEffect(() => {
-    if (props.snapshot.state !== 'failed') return;
-    queueMicrotask(() => failedHeading?.focus());
+    if (props.snapshot.state === 'failed') queueMicrotask(() => failedHeading?.focus());
   });
 
   const title = createMemo(() => {
+    if (offline()) return i18n.t('connectionRecovery.title.offline');
     if (props.snapshot.state === 'succeeded') return i18n.t('connectionRecovery.title.recovered');
     if (props.snapshot.state === 'failed') return i18n.t('connectionRecovery.title.failed');
     return i18n.t('connectionRecovery.title.recovering');
   });
   const summary = createMemo(() => {
+    if (offline()) return i18n.t('connectionRecovery.summary.offline');
     if (props.snapshot.state === 'succeeded') return i18n.t('connectionRecovery.summary.recovered');
     if (props.snapshot.state === 'failed') return i18n.t('connectionRecovery.summary.failed');
     return i18n.t('connectionRecovery.summary.recovering');
@@ -102,138 +81,105 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
       default: return i18n.t('connectionRecovery.failure.transportUnavailable');
     }
   });
-  const retryRemainingSeconds = (step: ConnectionRecoveryStep) => {
-    if (!step.next_retry_at_unix_ms) return null;
-    return Math.max(0, Math.ceil((step.next_retry_at_unix_ms - nowMs()) / 1_000));
-  };
+  const retryRemainingSeconds = () => Math.max(0, Math.ceil(((props.snapshot.next_retry_at_unix_ms ?? 0) - nowMs()) / 1_000));
   const copyDiagnostic = async () => {
     await writeTextToClipboard(presentation().diagnostic_text);
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1_500);
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => setCopied(false), 1_500);
   };
   const canRetry = createMemo(() => {
-    if (props.snapshot.state !== 'recovering') return false;
-    if (props.snapshot.phase === 'desktop_transport') {
-      return props.snapshot.desktop_transport?.actions.includes('retry_now') ?? false;
-    }
+    if (offline() || props.snapshot.state !== 'recovering') return false;
+    if (props.snapshot.phase === 'desktop_transport') return props.snapshot.desktop_transport?.actions.includes('retry_now') ?? false;
     return props.snapshot.phase === 'runtime_probe' || props.snapshot.phase === 'protocol_connect';
   });
-  const canOpenConnectionCenter = createMemo(() => (
-    props.snapshot.state === 'failed'
-    && props.snapshot.desktop_transport?.actions.includes('open_connection_center')
-  ));
+  const canOpenConnectionCenter = () => props.snapshot.state === 'failed'
+    && props.snapshot.desktop_transport?.actions.includes('open_connection_center');
+  const retry = async () => {
+    if (retrying()) return;
+    setRetrying(true);
+    try { await props.onRetry(); } finally { setRetrying(false); }
+  };
 
   return (
     <section
-      class="absolute inset-0 z-20 flex overflow-auto bg-background px-5 py-8 sm:px-8 sm:py-10"
-      aria-live={props.snapshot.state === 'failed' ? undefined : 'polite'}
-      aria-busy={props.snapshot.state === 'recovering'}
+      class="absolute inset-0 z-20 flex overflow-auto bg-background/85 px-5 py-8 backdrop-blur-sm sm:p-10"
       data-testid="connection-recovery-view"
       data-recovery-state={props.snapshot.state}
     >
-      <div class="m-auto w-full max-w-[640px]">
-        <div class="mb-7">
-          <h1
-            ref={failedHeading}
-            class="text-[18px] font-semibold leading-7 tracking-normal text-foreground outline-none"
-            role={props.snapshot.state === 'failed' ? 'alert' : undefined}
-            tabindex={props.snapshot.state === 'failed' ? -1 : undefined}
-          >
-            {title()}
-          </h1>
-          <p class="mt-1 text-[13px] leading-5 tracking-normal text-muted-foreground">{props.environmentName}</p>
-          <p class="mt-3 max-w-[560px] text-[13px] leading-5 tracking-normal text-muted-foreground">{summary()}</p>
+      <div class="m-auto w-full max-w-[440px] overflow-hidden rounded-2xl border border-border bg-background shadow-xl">
+        <div class="px-6 pb-6 pt-7 sm:px-8 sm:pt-8">
+          <div class="mb-7 flex min-w-0 items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Cloud class="h-4 w-4 shrink-0" />
+            <span class="min-w-0 break-words">{props.environmentName}</span>
+          </div>
+          <div class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-muted/50" aria-hidden="true">
+            {props.snapshot.state === 'succeeded' ? <Check class="h-6 w-6 text-success" />
+              : props.snapshot.state === 'failed' ? <AlertCircle class="h-6 w-6 text-warning" />
+                : offline() ? <WifiOffIcon class="h-6 w-6 text-muted-foreground" />
+                  : <Refresh class="h-6 w-6 text-primary motion-safe:animate-[spin_3s_linear_infinite]" />}
+          </div>
+          <div role={props.snapshot.state === 'failed' ? undefined : 'status'} aria-live="polite" aria-atomic="true">
+            <h1 ref={failedHeading} class="text-xl font-semibold leading-7 tracking-tight text-foreground outline-none"
+              role={props.snapshot.state === 'failed' ? 'alert' : undefined} tabindex={props.snapshot.state === 'failed' ? -1 : undefined}>
+              {title()}
+            </h1>
+            <p class="mt-2 text-[13px] leading-6 text-muted-foreground">{summary()}</p>
+          </div>
           <Show when={props.snapshot.state === 'failed'}>
-            <p class="mt-2 max-w-[560px] text-[13px] leading-5 tracking-normal text-error">{failureReason()}</p>
+            <p class="mt-4 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs leading-5 text-foreground">{failureReason()}</p>
           </Show>
-        </div>
-
-        <div class="mb-7" aria-label={i18n.t('connectionRecovery.progressLabel')}>
-          <div class="mb-2 flex items-center justify-between gap-4 text-[11px] leading-4 tracking-normal text-muted-foreground">
-            <span>{i18n.t('connectionRecovery.progress', {
-              complete: presentation().completed_step_count,
-              total: presentation().steps.length,
-            })}</span>
-            <span>{presentation().progress_percent}%</span>
-          </div>
-          <div class="h-1.5 overflow-hidden rounded-[3px] bg-muted" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={presentation().progress_percent}>
-            <div
-              class="h-full rounded-[3px] bg-primary transition-[width] duration-300 motion-reduce:transition-none"
-              style={{ width: `${presentation().progress_percent}%` }}
-            />
-          </div>
-        </div>
-
-        <ol class="relative space-y-0" aria-label={i18n.t('connectionRecovery.timelineLabel')}>
-          <For each={presentation().steps}>{(step, index) => {
-            const remainingSeconds = createMemo(() => retryRemainingSeconds(step));
-            return (
-              <li class="relative flex min-h-[54px] gap-3 pb-3 last:min-h-0 last:pb-0">
-                <Show when={index() < presentation().steps.length - 1}>
-                  <span class="absolute bottom-0 left-[9px] top-5 w-px bg-border" aria-hidden="true" />
-                </Show>
-                <StepStatusIcon status={step.status} />
-                <div class="min-w-0 flex-1 pt-px">
-                  <div class={`text-[13px] leading-5 tracking-normal ${
-                    step.status === 'failed'
-                      ? 'font-medium text-error'
-                      : step.status === 'active'
-                        ? 'font-medium text-foreground'
-                        : step.status === 'complete'
-                          ? 'text-foreground'
-                          : 'text-muted-foreground'
-                  }`}>
-                    {i18n.t(STEP_TRANSLATION_KEYS[step.id])}
-                  </div>
-                  <Show when={step.attempt_count > 0 || remainingSeconds() !== null}>
-                    <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] leading-4 tracking-normal text-muted-foreground">
-                      <Show when={step.attempt_count > 0}>
-                        <span>{i18n.tn('connectionRecovery.attempts', step.attempt_count)}</span>
-                      </Show>
-                      <Show when={remainingSeconds() !== null}>
-                        <span>{i18n.t('connectionRecovery.retryIn', { seconds: remainingSeconds() ?? 0 })}</span>
-                      </Show>
-                    </div>
-                  </Show>
-                </div>
-              </li>
-            );
-          }}</For>
-        </ol>
-
-        <div class="mt-7 flex flex-wrap items-center gap-2">
-          <Show when={canRetry()}>
-            <Button class="cursor-pointer" size="sm" icon={Refresh} onClick={() => void props.onRetry()}>
-              {i18n.t('connectionRecovery.retryNow')}
-            </Button>
-          </Show>
-          <Show when={canOpenConnectionCenter()}>
-            <Button class="cursor-pointer" size="sm" onClick={() => void openConnectionCenter()}>
-              {i18n.t('connectionRecovery.openConnectionCenter')}
-            </Button>
-          </Show>
-        </div>
-
-        <Show when={props.snapshot.state === 'failed'}>
-          <details class="mt-7 border-t border-border pt-4 text-[11px] leading-4 tracking-normal text-muted-foreground">
-            <summary class="cursor-pointer select-none font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-              {i18n.t('connectionRecovery.technicalDetails')}
-            </summary>
-            <div class="mt-3 flex items-start gap-2">
-              <pre class="min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-muted-foreground">{presentation().diagnostic_text}</pre>
-              <Tooltip content={copied() ? i18n.t('connectionRecovery.copiedDiagnostic') : i18n.t('connectionRecovery.copyDiagnostic')} placement="top" delay={0}>
-                <button
-                  type="button"
-                  class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-[5px] border border-border bg-background text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  aria-label={copied() ? i18n.t('connectionRecovery.copiedDiagnostic') : i18n.t('connectionRecovery.copyDiagnostic')}
-                  onClick={() => void copyDiagnostic()}
-                >
-                  <Copy class="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
+          <Show when={props.snapshot.state === 'recovering' && !offline()}>
+            <div class="mt-5 flex items-center gap-2 text-xs text-muted-foreground" data-recovery-activity>
+              <Loader2 class="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" />
+              <span>{retryRemainingSeconds() > 0
+                ? i18n.t('connectionRecovery.retryIn', { seconds: retryRemainingSeconds() })
+                : i18n.t(STEP_TRANSLATION_KEYS[presentation().active_step])}</span>
             </div>
-          </details>
-        </Show>
+          </Show>
+          <Show when={canRetry() || props.snapshot.state === 'failed'}>
+            <div class="mt-6 flex flex-wrap items-center gap-2">
+              <Show when={canRetry()}>
+                <Button class="cursor-pointer" size="sm" variant="outline" icon={Refresh} disabled={retrying()} onClick={() => void retry()}>
+                  {i18n.t('connectionRecovery.retryNow')}
+                </Button>
+              </Show>
+              <Show when={canOpenConnectionCenter()}>
+                <Button class="cursor-pointer" size="sm" onClick={() => void openConnectionCenter()}>{i18n.t('connectionRecovery.openConnectionCenter')}</Button>
+              </Show>
+              <Show when={props.snapshot.state === 'failed' && !canOpenConnectionCenter()}>
+                <Button class="cursor-pointer" size="sm" icon={Refresh} onClick={() => reloadCurrentPage(window)}>{i18n.t('accessGate.reloadPageAction')}</Button>
+              </Show>
+            </div>
+          </Show>
+        </div>
+        <details class="border-t border-border bg-muted/20 text-xs text-muted-foreground">
+          <summary class="cursor-pointer select-none px-6 py-3.5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-8">
+            {i18n.t('connectionRecovery.technicalDetails')}
+          </summary>
+          <div class="px-6 pb-6 sm:px-8">
+            <ol class="space-y-3" aria-label={i18n.t('connectionRecovery.timelineLabel')}>
+              <For each={presentation().steps}>{(step) => (
+                <li class="flex items-center gap-2.5">
+                  <span class={`h-1.5 w-1.5 shrink-0 rounded-full ${step.status === 'complete' ? 'bg-success' : step.status === 'active' ? 'bg-primary' : step.status === 'failed' ? 'bg-error' : 'bg-muted-foreground/30'}`} aria-hidden="true" />
+                  <span class="min-w-0 flex-1">{i18n.t(STEP_TRANSLATION_KEYS[step.id])}</span>
+                  <Show when={step.attempt_count > 0}><span>{i18n.tn('connectionRecovery.attempts', step.attempt_count)}</span></Show>
+                </li>
+              )}</For>
+            </ol>
+            <Show when={props.snapshot.state === 'failed'}>
+              <div class="mt-5 flex items-start gap-2 border-t border-border pt-4">
+                <pre class="min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-4">{presentation().diagnostic_text}</pre>
+                <Tooltip content={copied() ? i18n.t('connectionRecovery.copiedDiagnostic') : i18n.t('connectionRecovery.copyDiagnostic')} placement="top" delay={0}>
+                  <button type="button" class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                    aria-label={copied() ? i18n.t('connectionRecovery.copiedDiagnostic') : i18n.t('connectionRecovery.copyDiagnostic')} onClick={() => void copyDiagnostic()}>
+                    <Copy class="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
+              </div>
+            </Show>
+          </div>
+        </details>
       </div>
     </section>
   );

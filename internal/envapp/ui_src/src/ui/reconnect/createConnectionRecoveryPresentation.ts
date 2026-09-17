@@ -17,8 +17,6 @@ export type ConnectionRecoveryStep = Readonly<{
 
 export type ConnectionRecoveryPresentation = Readonly<{
   steps: readonly ConnectionRecoveryStep[];
-  completed_step_count: number;
-  progress_percent: number;
   active_step: ConnectionRecoveryStepID;
   failure?: ReconnectFailure;
   diagnostic_text: string;
@@ -107,11 +105,8 @@ export function createConnectionRecoveryPresentation(
       ? { next_retry_at_unix_ms: snapshot.next_retry_at_unix_ms }
       : {}),
   } satisfies ConnectionRecoveryStep));
-  const completedStepCount = steps.filter((step) => step.status === 'complete').length;
   return Object.freeze({
     steps: Object.freeze(steps),
-    completed_step_count: completedStepCount,
-    progress_percent: Math.round((completedStepCount / steps.length) * 100),
     active_step: activeStepID(snapshot),
     ...(snapshot.failure ? { failure: snapshot.failure } : {}),
     diagnostic_text: JSON.stringify({

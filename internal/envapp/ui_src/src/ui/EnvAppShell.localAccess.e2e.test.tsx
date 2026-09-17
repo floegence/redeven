@@ -4973,6 +4973,45 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
+  it('nudges the existing waiting controller on browser wake without replacing its authority', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      publishProtocolWaiting({ code: 'AGENT_OFFLINE', message: 'Runtime is offline' });
+      await flushAsync();
+      window.dispatchEvent(new Event('online'));
+      await flushAsync();
+      expect(retryNowMock).toHaveBeenCalledTimes(1);
+      expect(replaceConnectionMock).not.toHaveBeenCalled();
+      expect(connectMock).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  });
+
+  it('does not recreate a terminal connection when the browser wakes', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      publishProtocolSnapshot({ state: 'failed', attempt: 1,
+        failure: { phase: 'artifact', code: 'UNAUTHORIZED' }, retryDisposition: { kind: 'terminal' } });
+      await flushAsync();
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('focus'));
+      window.dispatchEvent(new Event('pageshow'));
+      await flushAsync();
+      expect(retryNowMock).not.toHaveBeenCalled();
+      expect(replaceConnectionMock).not.toHaveBeenCalled();
+      expect(connectMock).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  });
+
   it('starts plugin requests only after the newest local session binding is ready', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: true });
     const firstReady = deferred<void>();

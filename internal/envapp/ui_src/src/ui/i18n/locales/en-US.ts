@@ -1462,14 +1462,16 @@ export const enUS = defineDictionary({
   },
   connectionRecovery: {
     title: {
+      offline: "You're offline",
       recovering: 'Restoring connection',
       recovered: 'Connection restored',
       failed: 'Connection could not be restored',
     },
     summary: {
-      recovering: 'Redeven is reconnecting this environment and will return you to the same workspace when every required step is ready.',
-      recovered: 'Every required connection step completed. Returning to your workspace.',
-      failed: 'The original runtime session is no longer usable. Your previous workspace remains preserved but cannot send requests.',
+      offline: "We’ll reconnect when your network is back. You can keep this page open.",
+      recovering: "Your workspace is still here. We’ll reconnect automatically and bring you back when it’s ready.",
+      recovered: "You’re connected again. Returning to your workspace.",
+      failed: "This page is paused. Reopen the connection to continue.",
     },
     steps: {
       interrupted: 'Connection interrupted',
@@ -1479,8 +1481,6 @@ export const enUS = defineDictionary({
       secureSession: 'Secure session recovery',
       completed: 'Connection complete',
     },
-    progressLabel: 'Connection recovery progress',
-    progress: '{complete} of {total} steps complete',
     timelineLabel: 'Connection recovery steps',
     attempts: {
       one: '{count} attempt',
@@ -1496,7 +1496,7 @@ export const enUS = defineDictionary({
       runtimeOffline: 'The runtime is offline and did not become available during recovery.',
       runtimeUnavailable: 'The runtime did not become ready before recovery stopped.',
       transportUnavailable: 'The connection transport is no longer available for this session.',
-      authenticationFailed: 'Desktop could not authenticate the original runtime connection.',
+      authenticationFailed: "Your session needs authorization. Reopen the environment to continue.",
       missingEnvironmentContext: 'The environment identity required for this session is missing.',
       secureSessionFailed: 'The secure session could not be resumed.',
       remoteCommandEnded: 'The original remote runtime bridge command ended.',

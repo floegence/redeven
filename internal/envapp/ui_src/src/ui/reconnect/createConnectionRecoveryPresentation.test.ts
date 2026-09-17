@@ -34,8 +34,7 @@ describe('createConnectionRecoveryPresentation', () => {
       status: 'active',
       attempt_count: 1,
     });
-    expect(presentation.completed_step_count).toBe(1);
-    expect(presentation.progress_percent).toBe(20);
+    expect(presentation.steps.filter((step) => step.status === 'complete')).toHaveLength(1);
   });
 
   it('uses only real completed steps and exact attempt counts for Desktop recovery', () => {
@@ -60,7 +59,7 @@ describe('createConnectionRecoveryPresentation', () => {
       attempt_count: 3,
       next_retry_at_unix_ms: 5_000,
     });
-    expect(presentation.completed_step_count).toBe(1);
+    expect(presentation.steps.filter((step) => step.status === 'complete')).toHaveLength(1);
   });
 
   it('marks every required step complete only after secure session recovery succeeds', () => {
@@ -76,6 +75,5 @@ describe('createConnectionRecoveryPresentation', () => {
     }));
 
     expect(presentation.steps.every((step) => step.status === 'complete')).toBe(true);
-    expect(presentation.progress_percent).toBe(100);
   });
 });
