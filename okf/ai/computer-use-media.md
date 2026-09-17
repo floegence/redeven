@@ -3,7 +3,7 @@ type: Media Contract
 title: Computer use media and visual requests
 description: Resolve authenticated keyframes and bounded live samples into decoded Flower pixels without persisting image bytes in model history.
 tags: [ai, computer-use, media, attachments]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
@@ -16,7 +16,13 @@ does not prove the user can see a frame.
 
 # Contract
 
-Each safe completed action returns target ID and name, execution location, summary, safety decision, and an after-frame attachment. Descriptors contain an opaque `computer://` reference, MIME, byte size, and SHA-256. Providers resolve bytes at request time; durable state stores descriptor and hash, never base64. Resolution failure, unknown references, changed bytes, and unsupported model capabilities fail explicitly.
+Safe results return target identity, execution location, summary and safety.
+Semantic observations and script operations omit images unless explicitly
+requested. Visual primitives and screenshots return checked after-frame
+attachments. Descriptors contain an opaque `computer://` reference, MIME, byte
+size and SHA-256. Providers resolve bytes at request time; durable state stores
+descriptors and hashes, never base64. Resolution failure, changed bytes and
+unsupported model image capabilities fail explicitly.
 
 The Stage uses the published Floe `FloatingWindow` for its title bar, drag,
 resize, maximize, and close controls. Its body contains decoded pixels only.
@@ -50,15 +56,12 @@ Floe keeps preferred geometry separate from viewport constraints, so composer
 growth and narrowing do not permanently reduce the saved window size. Below a
 560px content boundary the viewer fills the safe region and hides desktop drag,
 resize and maximize controls. Narrow transcripts reserve a launcher gutter.
-Thread selection resets presentation and clears old pixels. History never opens
-automatically. The current execution's first public frame opens live viewing;
-manual close stays closed through frames and reconnection in that conversation.
-Terminal execution stops sampling and collapses the viewer, allowing a later
-task's first frame to open it again after automatic collapse. Activity and the
-header expose View last screenshot only when a public keyframe exists. Historical
-viewing is titled Historical screenshot, has no FPS, input carrier or launcher,
-and retains zoom, close, keyboard and window geometry controls. Close returns
-focus to the restoring entry. Live viewing retains its launcher and header entry.
+Thread selection resets presentation and clears old pixels. The viewer starts
+closed; a frame or semantic target Activity enables its entry. Activity, the header Computer entry,
+and the launcher can restore it; close returns focus to the restoring entry.
+Terminal execution stops sampling and collapses the viewer. Historical viewing
+has no FPS, input carrier or launcher, and retains zoom, close, keyboard and
+window geometry controls. Reopening resolves a durable public screenshot.
 The viewer offers fit-to-window and scrollable actual-size pixels outside user
 takeover. Takeover retains its existing image coordinate, native IME, paste and
 remote scroll semantics and keeps fit mode.
@@ -66,15 +69,23 @@ Closing removes private input controls and retires the viewing subscription,
 without pausing execution, relinquishing user control, or recreating a target.
 Later actions cannot reopen an explicitly hidden viewer.
 
-A viewer may start only when the frame Activity belongs to the currently active
-canonical run. An explicitly opened historical image can remain visible during preparation but cannot
-start capture; the first current-run frame activates viewing without retries.
+A viewer may start only when its frame or semantic `computer_target` Activity
+belongs to the active canonical RunID and TurnID. A semantic target reference
+authorizes current-run viewing under the existing active target lease; it is not
+a durable image capability. Historical pixels remain readable but cannot start
+capture or acquire target control. Explicitly opening the current target starts
+viewing without manufacturing a model screenshot.
 After the first successful action, Runtime publishes live metadata through the
 existing workspace stream. The header offers 3, 5, 10, 15 and 30 FPS (default 3),
 using existing client storage in Env App and Desktop Welcome. One setting applies
 to every thread and both ordinary and private viewing. This is a sampling ceiling;
 the header explains bandwidth cost and shows actual reception rate in its detail.
 The native selector supports keyboard input without dragging the window.
+
+A preview failure belongs to its thread, run and target. A later run needs its
+own target observation before opening a fresh sampler. Releasing run ownership
+cancels matching samplers before making the target idle; sampler startup
+rechecks active ownership before registration.
 
 One target gate serializes input, safety observation and sampling. Input has
 priority; busy ticks are skipped. Samplers retain at most two frames and await
@@ -94,7 +105,23 @@ retains the last decoded pixels and requires the observer-bound recovery in the
 [takeover contract](computer-use-takeover.md). Both kinds of viewing share the
 sampler, authenticated workspace channel and decoding path.
 
-Screenshot identity uses Floret v7.12.0's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. The public timeline sanitizer preserves only hash-addressed references of this kind. Env App and Desktop Welcome resolve them through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
+Screenshot identity uses Floret v7.12.0's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. Public projection preserves hash-addressed frame references, bounded Computer target identities, and validated requested-access facts. Other opaque references remain private. A target reference enables semantic-only viewing; it does not grant site, application or media authority. Env App and Desktop Welcome resolve frames through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
+
+Opening a screenshot from Activity selects that canonical frame, including when
+newer semantic observations have no image. Historical viewing starts no live
+sampler and retains the chosen frame across minimize/restore. The selection is
+local presentation state scoped to the thread and current run; a new run, thread
+change, explicit live-view request or private takeover releases it.
+Without an explicit selection, completed viewing resolves the last saved capture
+of the latest observed run and target. An image-free observation must not hide
+that capture's viewer entry.
+
+When a turn completes or fails, an already open public viewer retains its last
+decoded live pixels while sampling stops, even when an older model screenshot
+exists. Closing the viewer ends that preservation; reopening loads its durable
+capture. Thread, target and privacy changes clear the decoded image. This does
+not create a durable screenshot. Private takeover pixels are cleared on handback
+and do not use this completion behavior.
 
 Live capture requires the target's currently active thread lease at sampler
 startup and before every observation. A historical keyframe permits reading

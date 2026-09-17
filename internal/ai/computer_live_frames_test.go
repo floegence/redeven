@@ -133,6 +133,87 @@ func TestComputerLiveFramesRejectClosedRuntime(t *testing.T) {
 	}
 }
 
+func TestComputerRunCompletionRetiresSamplerWithoutFailure(t *testing.T) {
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": newLiveFrameExecutor(t)}, t.TempDir())
+	t.Cleanup(func() { _ = runtime.Close() })
+	acquireLiveFrameTestTarget(t, runtime, "thread")
+	frames := make(chan FlowerComputerFrame, 8)
+	start := func() func() {
+		stop, err := runtime.startComputerLiveFrames(t.Context(), computerLiveRequest{ComputerViewerRequest: ComputerViewerRequest{
+			ThreadID: "thread", ObserverID: "viewer", TargetID: "target", Revision: 1, FPS: 30,
+		}}, func(frame FlowerComputerFrame) { frames <- frame })
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(stop)
+		return stop
+	}
+	read := func() {
+		t.Helper()
+		select {
+		case frame := <-frames:
+			if frame.ErrorCode != "" {
+				t.Fatalf("unexpected viewer failure: %s", frame.ErrorCode)
+			}
+			if _, err := runtime.ResolveComputerLiveFrame(t.Context(), "thread", "target", frame.ResourceRef); err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("live frame missing")
+		}
+	}
+	start()
+	read()
+	runtime.mu.RLock()
+	done := runtime.liveFrames["viewer"].done
+	runtime.mu.RUnlock()
+	runtime.releaseComputerControl("thread", "run")
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("completed run retained its sampler")
+	}
+	for len(frames) != 0 {
+		if frame := <-frames; frame.ErrorCode != "" {
+			t.Fatalf("normal completion was reported as %s", frame.ErrorCode)
+		}
+	}
+	_, release, err := runtime.acquireComputerControl(t.Context(), TargetToolCall{ThreadID: "thread", RunID: "next-run", TargetID: "target", ToolName: "computer.screenshot"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	start()
+	runtime.releaseComputerControl("thread", "run")
+	read()
+	read()
+}
+
+func TestComputerSamplerStartupRejectsReleasedOwner(t *testing.T) {
+	executor := newLiveFrameExecutor(t)
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())
+	t.Cleanup(func() { _ = runtime.Close() })
+	acquireLiveFrameTestTarget(t, runtime, "thread")
+	stop, err := runtime.startComputerLiveFrames(t.Context(), computerLiveRequest{
+		ComputerViewerRequest: ComputerViewerRequest{ThreadID: "thread", ObserverID: "viewer", TargetID: "target", Revision: 1},
+		validate: func(context.Context) error {
+			runtime.releaseComputerControl("thread", "run")
+			return nil
+		},
+	}, func(FlowerComputerFrame) { t.Error("released owner published a frame") })
+	if stop != nil {
+		stop()
+	}
+	if err == nil || executor.calls.Load() != 0 {
+		t.Fatal("sampler started after its owner completed")
+	}
+	runtime.mu.RLock()
+	defer runtime.mu.RUnlock()
+	if len(runtime.liveFrames) != 0 {
+		t.Fatal("released owner retained a sampler")
+	}
+}
+
 func TestComputerLiveFrameRequiresMatchingThreadAndStaysEphemeral(t *testing.T) {
 	executor := newLiveFrameExecutor(t)
 	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, t.TempDir())

@@ -1,3 +1,4 @@
+import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from './FlowerComputerConnections';
 import { computerFrameRate, computerControlErrorCode } from './computerViewer';
 import type { FlowerComputerFrameSource, FlowerComputerInputCommand, FlowerThreadPinMetadata, FlowerThreadPinPosition } from './contracts/flowerSurfaceContracts';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
@@ -5617,11 +5618,15 @@ webSearch: model.web_search,
   });
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
+  const [computerConnectionsOpen, setComputerConnectionsOpen] = createSignal(false);
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
-  let computerStageManuallyHidden = false;
+  const [computerFrameSelection, setComputerFrameSelection] = createSignal<{ frame: string; threadID: string; runID?: string }>();
+  const selectedComputerFrame = createMemo(() => {
+    const selection = computerFrameSelection();
+    return selection?.threadID === selectedThreadID() && selection.runID === selectedThread()?.active_run_id ? selection.frame : undefined;
+  });
   const [computerStageRestoreFocus, setComputerStageRestoreFocus] = createSignal<HTMLElement>();
   const restoreComputerStage = (source: HTMLElement) => {
-    computerStageManuallyHidden = false;
     if (!computerStageOpen()) setComputerStageRestoreFocus(source);
     setComputerStageOpen(true);
   };
@@ -5653,6 +5658,7 @@ webSearch: model.web_search,
     setComputerControlReady(false); setComputerViewerRetry(value => value + 1);
   });
   const takeComputerControl = (source: HTMLElement) => batch(() => {
+    setComputerFrameSelection(undefined);
     restoreComputerStage(source); setPrivateControlRequested(true); resumeComputerViewer();
   });
   const [computerControlError, setComputerControlError] = createSignal(false);
@@ -5742,13 +5748,19 @@ webSearch: model.web_search,
       const control = candidates.find(candidate => candidate.turnID === execution?.turn_id && candidate.runID === execution?.run_id && candidate.item.tool_id === pending?.tool_call_id);
       if (control) return control;
     }
+    const chosenFrame = selectedComputerFrame();
+    const chosen = chosenFrame && candidates.find(candidate => candidate.frame === chosenFrame);
+    if (chosen) return chosen;
     const execution = selectedThread()?.current_execution;
     const active = candidates.find(candidate => candidate.turnID === execution?.turn_id
-      && candidate.runID === execution?.run_id && Boolean(candidate.frame));
-    if (active) return active;
-    return candidates.find((candidate) => Boolean(candidate.frame))
-      ?? candidates[0]
-      ?? null;
+      && candidate.runID === execution?.run_id && Boolean(candidate.targetID));
+    if (active && (execution?.status === 'running' || execution?.status === 'waiting_user' || execution?.status === 'waiting_approval')) return active;
+    const latest = candidates.find(candidate => Boolean(candidate.targetID)) ?? candidates[0] ?? null;
+    if (latest?.runID === selectedThread()?.active_run_id && selectedThread()?.status === 'running') return latest;
+    // A later semantic observation has no image of its own. Completed viewing
+    // resolves the last canonical capture of this run and target, not live media.
+    return candidates.find(candidate => candidate.frame && candidate.runID === latest?.runID && candidate.targetID === latest?.targetID)
+      ?? latest;
   });
   const computerStageExecution = createMemo(() => {
     const stage = selectedComputerStage(), execution = selectedThread()?.current_execution;
@@ -5756,8 +5768,21 @@ webSearch: model.web_search,
   });
   const computerStageHistorical = createMemo(() => {
     const status = computerStageExecution()?.status;
-    return status !== 'running' && status !== 'waiting_user' && status !== 'waiting_approval';
+    return Boolean(selectedComputerFrame()) || (status !== 'running' && status !== 'waiting_user' && status !== 'waiting_approval');
   });
+  const requestedComputerAccess = createMemo<FlowerRequestedComputerAccess>(() => {
+    const refs = selectedComputerStage()?.item.target_refs ?? [];
+    return {
+      origin: refs.find(ref => ref.kind === 'computer_origin')?.resource_ref,
+      app: refs.find(ref => ref.kind === 'computer_app')?.resource_ref,
+      foreground: refs.some(ref => ref.kind === 'computer_foreground'),
+    };
+  });
+  const computerExecutionMode = () => {
+    if (isComputerInput(selectedInputRequest())) return copy().computer.waitingControl;
+    const mode = selectedComputerStage()?.item.chips?.find(chip => chip.kind === 'execution_mode')?.value;
+    return mode === 'foreground' ? copy().computer.usingDesktop : mode === 'background' ? copy().computer.background : '';
+  };
   const computerStageSessionState = createMemo<FlowerComputerStageSessionState>(() => {
     if (computerStageHistorical()) {
       switch (computerStageExecution()?.status) {
@@ -5776,26 +5801,33 @@ webSearch: model.web_search,
   });
   createEffect(() => {
     selectedThreadID();
-    computerStageManuallyHidden = false;
     setComputerLiveFrame(undefined);
+    setComputerFrameSelection(undefined);
     setComputerStageRestoreFocus(undefined);
     setComputerStageOpen(false);
   });
   let previousComputerThread = '';
   let previousComputerLive = false;
   createEffect(() => {
-    const thread = selectedThreadID(), live = !computerStageHistorical();
+    const thread = selectedThreadID(), status = selectedThread()?.current_execution?.status;
+    const live = status === 'running' || status === 'waiting_user' || status === 'waiting_approval';
     if (thread === previousComputerThread && previousComputerLive && !live) {
       setComputerStageOpen(false); setComputerViewFailed(false);
     }
     previousComputerThread = thread; previousComputerLive = live;
-    if (live && selectedComputerStage()?.frame && !computerStageManuallyHidden) setComputerStageOpen(true);
+  });
+  const computerViewScope = createMemo(() => JSON.stringify([selectedThreadID(), selectedThread()?.active_run_id, selectedComputerStage()?.targetID]));
+  createEffect(() => {
+    computerViewScope();
+    // A failed preview pauses this execution only. A later run still waits for
+    // its own observation before starting a fresh sampler.
+    setComputerViewFailed(false);
   });
   const computerViewerKey = createMemo(() => {
     const stage = selectedComputerStage();
-    if (!computerCurrentVerified() || computerStageHistorical() || computerControlDisconnected() || !computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerHandbackCommitting() || computerViewFailed()) return '';
+    if (!computerCurrentVerified() || computerStageHistorical() || computerControlDisconnected() || selectedComputerFrame() || !computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerHandbackCommitting() || computerViewFailed()) return '';
     const interaction = privateControlRequested() && isComputerInput(selectedInputRequest()) ? selectedInputRequest()?.prompt_id : '';
-    if (!interaction && (!stage.frame || !stage.runID || stage.runID !== selectedThread()?.active_run_id || selectedThread()?.status !== 'running')) return '';
+    if (!interaction && (!stage.runID || stage.runID !== selectedThread()?.active_run_id || selectedThread()?.status !== 'running')) return '';
     return JSON.stringify([computerObserverID(), selectedThreadID(), stage.targetID, interaction || '', viewerFPS(), computerViewerRetry()]);
   });
   createEffect(() => {
@@ -5835,7 +5867,10 @@ webSearch: model.web_search,
     const sha256 = /^computer:\/\/[^/]+\/([a-f0-9]{64})$/u.exec(resource_ref ?? '')?.[1];
     return resource_ref && sha256 ? { thread_id, target_id, resource_ref, sha256, ...(computerViewerKey() && live ? { viewer_revision: live.viewer_revision, sequence: live.sequence } : {}) } : undefined;
   });
-  const computerStageAvailable = createMemo(() => Boolean(selectedComputerStage()?.frame || privateControlRequested()) && Boolean(selectedComputerStage()));
+  const computerStageAvailable = createMemo(() => {
+    const stage = selectedComputerStage();
+    return Boolean(stage?.targetID && (stage.frame || privateControlRequested() || !computerStageHistorical()));
+  });
   createEffect(() => {
     const preview = contextSnapshotPreview();
     if (!preview) return;
@@ -7770,7 +7805,7 @@ webSearch: model.web_search,
               <span class="flower-computer-control-icon" aria-hidden="true"><MonitorPointer class="h-4 w-4" /></span>
               <div class="flower-computer-control-copy">
                 <div class="flower-computer-control-title">{copy().chat.computerStageStatus[computerStageSessionState()]}</div>
-                <p class="flower-computer-control-hint">{copy().chat.computerControlHint}</p>
+                <p class="flower-computer-control-hint">{requestedComputerAccess().origin || requestedComputerAccess().app || requestedComputerAccess().foreground ? copy().computer.requestedAccess : copy().chat.computerControlHint}</p>
               </div>
             </div>
             <Show when={computerControlError() || computerViewFailed() || computerHandbackError()}>
@@ -7788,6 +7823,7 @@ webSearch: model.web_search,
               </Show>
               <Show when={selectedThreadReadOnly()}><span class="flower-decision-readonly-status" role="status">{selectedThreadReadOnlyDisplay()}</span></Show>
               <div class="flower-computer-control-actions">
+              <Show when={props.adapter.computerManagement && (requestedComputerAccess().origin || requestedComputerAccess().app || requestedComputerAccess().foreground)}><Button variant="secondary" onClick={() => setComputerConnectionsOpen(true)}>{copy().computer.title}</Button></Show>
               <Button variant="secondary" data-computer-control-action="take" disabled={computerReturning() || !computerObserverID() || !computerCurrentVerified() || !props.adapter.inputComputerControl || (privateControlRequested() && computerStageOpen() && computerControlReady() && !computerControlError() && !computerViewFailed())} onClick={(event) => takeComputerControl(event.currentTarget)}>{computerControlDisconnected() ? copy().chat.computerResumeControl : privateControlRequested() && computerControlReady() && !computerControlError() && !computerViewFailed() ? copy().chat.computerControlTaken : copy().chat.computerTakeControl}</Button>
               <Button variant="primary" data-computer-control-action="return" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
@@ -8322,8 +8358,13 @@ webSearch: model.web_search,
         <div class="flower-activity-computer-meta">{[block().location, block().safety].filter(Boolean).join(' · ')}</div>
       </Show>
       <Show when={block().frame}>
-        <button type="button" class="flower-activity-inline-button" aria-expanded={computerStageOpen()} onClick={(event) => restoreComputerStage(event.currentTarget)}>
-          {computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}
+        <button type="button" class="flower-activity-inline-button" aria-expanded={computerStageOpen()} onClick={(event) => {
+          const frame = block().frame;
+          if (frame) setComputerFrameSelection({ frame, threadID: selectedThreadID(), runID: selectedThread()?.active_run_id });
+          setComputerViewFailed(false);
+          restoreComputerStage(event.currentTarget);
+        }}>
+          {copy().chat.computerViewLastScreenshot}
         </button>
       </Show>
     </div>
@@ -11059,13 +11100,20 @@ webSearch: model.web_search,
             <Show when={!companionCollapsed()}>{companionHeaderIdentity()}</Show>
           </Show>
           <div class="flower-chat-header-actions">
+            <Show when={selectedThreadID() && props.adapter.computerManagement}>
+              <button type="button" class="flower-header-icon-button" aria-label={copy().computer.title} title={copy().computer.title}
+                aria-haspopup="dialog" aria-expanded={computerConnectionsOpen()} onClick={() => setComputerConnectionsOpen(true)}><MonitorPointer class="h-4 w-4" /></button>
+            </Show>
             <Show when={computerStageAvailable() && selectedComputerStage()}>
               <button type="button" class="flower-computer-entry" aria-expanded={computerStageOpen()}
                 title={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore} — ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
                 aria-label={`${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`}
-                onClick={(event) => restoreComputerStage(event.currentTarget)}>
+                onClick={(event) => {
+                  if (selectedThread()?.status === 'running') setComputerFrameSelection(undefined);
+                  restoreComputerStage(event.currentTarget);
+                }}>
                 <MonitorPointer size={15} aria-hidden="true" />
-                <span>{computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageTitle}</span>
+                <span>{computerStageHistorical() ? copy().chat.computerViewLastScreenshot : (computerExecutionMode() || copy().chat.computerStageTitle)}</span>
                 <Show when={computerStageSessionState() !== 'historical'}><span class="flower-computer-state" role="status" data-session-state={computerStageSessionState()}>{copy().chat.computerStageStatus[computerStageSessionState()]}</span></Show>
               </button>
             </Show>
@@ -11120,6 +11168,8 @@ webSearch: model.web_search,
         </div>
       </div>
       <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
+      <FlowerComputerConnections open={computerConnectionsOpen()} onOpenChange={setComputerConnectionsOpen}
+        threadID={selectedThreadID()} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
       <FlowerChatContextPreview
         preview={contextSnapshotPreview()}
         open={contextSnapshotPreview() !== null}
@@ -12024,7 +12074,9 @@ webSearch: model.web_search,
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}
                 onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
-                onConnectComputerBrowser={props.adapter.connectComputerBrowser}
+                computerCopy={copy().computer}
+                onListComputerBrowserTabs={props.adapter.computerManagement?.listBrowserTabs}
+                onConnectComputerBrowser={props.adapter.canMutate !== false ? props.adapter.connectComputerBrowser : undefined}
                 onSaveModelProfile={saveModelProfile}
                 saveError={saveError()}
                 savedAt={savedAt()}
@@ -12073,6 +12125,7 @@ webSearch: model.web_search,
               snapshot={stage()}
               historical={computerStageHistorical()}
               frame={computerStageFrame()}
+              retainLiveFrame={!selectedComputerFrame() && (computerStageSessionState() === 'completed' || computerStageSessionState() === 'failed')}
               privateInteractionID={privateControlRequested() ? selectedInputRequest()?.prompt_id : undefined}
               frameRate={viewerFPS()} receivedFrameRate={receivedComputerFPS()} onFrameRateChange={changeComputerFrameRate}
               onFrameReady={(frame) => {
@@ -12109,7 +12162,7 @@ webSearch: model.web_search,
                 noFrame: copy().chat.toolActivityDetailsPending,
                 retry: copy().chat.handlerRetry,
               }}
-              onClose={() => { computerStageManuallyHidden = true; setComputerStageOpen(false); }}
+              onClose={() => { setComputerStageOpen(false); }}
             />
           );
         }}

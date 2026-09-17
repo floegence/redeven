@@ -13,7 +13,7 @@ import (
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
 	threadstoreMinimumSchemaVersion = 1
-	threadstoreCurrentSchemaVersion = 8
+	threadstoreCurrentSchemaVersion = 9
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -43,6 +43,7 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 			{FromVersion: 5, ToVersion: 6, Apply: migrateThreadstoreV5ToV6},
 			{FromVersion: 6, ToVersion: 7, Apply: migrateThreadstoreV6ToV7},
 			{FromVersion: 7, ToVersion: 8, Apply: migrateThreadstoreV7ToV8},
+			{FromVersion: 8, ToVersion: 9, Apply: migrateThreadstoreV8ToV9},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -114,6 +115,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		createFlowerExecutionAuthorityTableTx,
 		addComputerTargetColumnTx,
 		addPinRankColumnTx,
+		addComputerAccessColumnTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {
@@ -535,4 +537,18 @@ func verifyProductSchemaVersion(tx *sql.Tx, version int) error {
 		return fmt.Errorf("product threadstore schema v%d contract mismatch: %w", version, err)
 	}
 	return nil
+}
+
+func addComputerAccessColumnTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE ai_thread_settings ADD COLUMN computer_access_json TEXT NOT NULL DEFAULT '{}'`)
+	return err
+}
+func migrateThreadstoreV8ToV9(tx *sql.Tx) error {
+	if err := verifyProductSchemaVersion(tx, 8); err != nil {
+		return err
+	}
+	if err := addComputerAccessColumnTx(tx); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 9)
 }

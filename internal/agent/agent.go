@@ -72,16 +72,21 @@ func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolv
 	}
 	executors := make(map[string]ai.TargetToolExecutor)
 	if helper != "" {
+		target.State, target.PermissionState = "stopped", "not_checked"
+		_ = registry.Update(target)
 		executors["browser-main"] = ai.NewPlaywrightTargetExecutor(computerNodePath(helper), helper, filepath.Join(stateDir, "computer", "profiles"))
 		if connected := strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_CONNECTED_CDP_URL")); connected != "" {
 			connectedExecutor := ai.NewPlaywrightTargetExecutor(computerNodePath(helper), helper, filepath.Join(stateDir, "computer", "profiles"))
 			connectedExecutor.CDPURL = connected
+			connectedExecutor.TabID = strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_CONNECTED_TAB_ID"))
+			connectedExecutor.BrowserContextID = strings.TrimSpace(os.Getenv("REDEVEN_COMPUTER_CONNECTED_PROFILE_ID"))
 			_ = registry.Register(ai.TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "stopped", PermissionState: "not_checked", Ready: false})
 			executors["browser-connected"] = connectedExecutor
 		}
 	}
 	if nativeHelper := firstRegularFile(nativeComputerHelperCandidates(os.Args[0])); nativeHelper != "" && runtime.GOOS == "darwin" {
-		_ = registry.Register(ai.TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen", DisplayName: "macOS Desktop", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "stopped", PermissionState: "not_checked", Ready: false})
+		// The inventory adapter is internal. Only its discovered application
+		// windows become selectable and executable target identities.
 		executors["desktop-main"] = ai.NewNativeDesktopTargetExecutor(nativeHelper)
 	}
 	registerVirtualDesktop(stateDir, registry, executors)

@@ -129,11 +129,16 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower historical writer acceptance](ai/flower-upgrade-compatibility.md) - Add immutable writer samples and prove upgrade, continued use and restart at final integration.
 - [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.
 - [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
-- [Computer and browser use runtime](ai/computer-use-runtime.md) - Route typed actions to browser, virtual desktop, and host desktop targets with screenshot provenance and opaque image attachments.
+- [Computer and browser use runtime](ai/computer-use-runtime.md) - Keep authorization, execution, observation and packaged helper compatibility under one Runtime owner.
+- [Computer script execution](ai/computer-use-scripts.md) - Compose bounded semantic operations and preserve partial results without replaying effects.
+- [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md) - Select profiles and exact tabs, preserve user settings, and qualify background control.
+- [Semantic desktop operations](ai/computer-use-desktop.md) - Use window AX and isolated AT-SPI with explicit foreground authority and user input priority.
 - [Computer target selection across threads](ai/computer-use-target-selection.md) - Preserve authorized target choices across turns and restart without inheriting control on fork.
 - [Computer use safety pauses and user control](ai/computer-use-takeover.md) - Pause canonical tool execution, keep private browser input out of history, and require fresh observation on handback.
 - [Computer use media and visual requests](ai/computer-use-media.md) - Separate durable keyframes from live samples and verify decoded Stage pixels and visual request budgets.
 - [Computer use qualification](ai/computer-use-qualification.md) - Verify real pixels, input, handback, target scope and isolated cleanup.
+- [Computer use paired model measurements](ai/computer-use-performance.md) - Compare semantic scripts with visual primitives and reject incomplete performance evidence.
+- [Codex design evidence](ai/computer-use-design-evidence.md) - Trace command-first, AX, batching and background-control decisions to official guidance and version-scoped packaged behavior.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.

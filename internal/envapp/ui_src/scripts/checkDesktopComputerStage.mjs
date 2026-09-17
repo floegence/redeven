@@ -1,6 +1,6 @@
 /* global window, document, getComputedStyle */
 import assert from 'node:assert/strict';
-import { readFile, readdir, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ import { qualifyComputerStop } from './computerLifecycleQualification.mjs';
 import { qualifyComputerRecovery } from './computerRecoveryQualification.mjs';
 import { webtopRuntimeQualification } from './webtopRuntimeQualification.mjs';
 import { forwardQualificationResponse } from '../../../../scripts/qualification_response_stream.mjs';
+import { createComputerTask, configureComputerTask, openComputerStage } from './computerTaskQualification.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -22,7 +23,7 @@ assert.equal(process.env.REDEVEN_COMPUTER_USE_E2E, '1');
 const cdp = process.env.REDEVEN_DESKTOP_CDP;
 const webtopURL = process.env.REDEVEN_COMPUTER_WEBTOP_URL;
 const scenario = process.env.REDEVEN_COMPUTER_UI_SCENARIO ?? 'complete';
-assert(['complete', 'lifecycle', 'recovery'].includes(scenario), 'unknown UI qualification scenario');
+assert(['complete', 'lifecycle', 'recovery', 'native'].includes(scenario), 'unknown UI qualification scenario');
 assert(scenario !== 'recovery' || webtopURL, 'recovery qualification requires the isolated Linux container');
 assert(Boolean(cdp) !== Boolean(webtopURL), 'identify exactly one task-owned Desktop or Linux Webtop');
 if (webtopURL) assert.equal(process.platform, 'linux', 'Webtop qualification must execute inside Linux');
@@ -39,18 +40,40 @@ const browser = cdp ? await chromium.connectOverCDP(cdp) : await chromium.launch
 const page = webtopURL ? await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   : browser.contexts()[0].pages().find((entry) => entry.url() === new URL('desktop/dist/welcome/index.html', `file://${root}`).href);
 assert(page, 'CDP does not belong to this checkout built Desktop');
+// Qualification selectors use the canonical English copy in this isolated app.
+if (cdp) {
+  await page.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
+  await page.waitForFunction(() => document.documentElement.lang === 'en-US');
+}
 const streamErrors = [];
 if (webtopURL) {
   try {
   const session = await page.context().newCDPSession(page);
   const streams = new Set();
+  const viewerRequests = new Map();
   const forward = async (id, data) => {
     if (!data) return;
     await page.evaluate(({ id, data }) => window.__recordComputerStreamChunk?.({ kind: 'chunk', stream_id: id,
       chunk: Uint8Array.from(atob(data), (value) => value.charCodeAt(0)) }), { id, data });
   };
   await session.send('Network.enable');
+  session.on('Network.requestWillBeSent', (event) => {
+    if (new URL(event.request.url).pathname !== '/_redeven_proxy/api/ai/computer/view' || !event.request.postData) return;
+    const { revision, thread_id, target_id, interaction_id } = JSON.parse(event.request.postData);
+    if (!interaction_id && viewerRequests.size < 64) viewerRequests.set(event.requestId, { revision, thread_id, target_id, at: Date.now() });
+  });
   session.on('Network.responseReceived', (event) => {
+    const viewer = viewerRequests.get(event.requestId);
+    if (viewer) {
+      viewerRequests.delete(event.requestId);
+      void page.evaluate(response => window.__recordComputerViewerResponse?.(response), { kind: 'viewer', ...viewer, status: event.response.status })
+        .catch(() => streamErrors.push('viewer_response_observation_failed'));
+    }
+    const mediaPath = new URL(event.response.url).pathname;
+    if (mediaPath.includes('/computer-media/')) {
+      void page.evaluate(response => window.__recordComputerViewerResponse?.(response), { kind: 'media', path: mediaPath, at: Date.now(), status: event.response.status })
+        .catch(() => streamErrors.push('media_response_observation_failed'));
+    }
     if (new URL(event.response.url).pathname !== '/_redeven_proxy/api/ai/flower/stream') return;
     streams.add(event.requestId);
     void session.send('Network.streamResourceContent', { requestId: event.requestId })
@@ -81,11 +104,20 @@ const lifecycleFixture = { navigationStarted: 0, recovered: new Set(), releaseNa
   pendingNavigations.clear();
 } };
 const controls = { double: false, entered: false, scrolled: false, loads: 0, second: false };
+const controlInputEvents = [];
 // A moving pixel fixture distinguishes live sampling from repeated static
 // keyframes without requiring extra model actions or changing control layout.
 const liveMarker = '<style>@keyframes live-marker{from{background:#dc3020}to{background:#205cdd}}#live-marker{position:fixed;right:20px;top:20px;width:24px;height:24px;animation:live-marker .6s linear infinite alternate;pointer-events:none}</style><div id="live-marker" aria-hidden="true"></div>';
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
+  if (url.pathname === '/control-input-event') {
+    const type = url.searchParams.get('type');
+    const time = Number(url.searchParams.get('time'));
+    if (['pointerdown', 'pointerup', 'pointermove', 'keydown', 'keyup', 'wheel'].includes(type) && Number.isFinite(time)) {
+      if (controlInputEvents.length < 100) controlInputEvents.push({ type, time });
+    }
+    response.writeHead(204); response.end(); return;
+  }
   if (url.pathname === '/slow-navigation') {
     lifecycleFixture.navigationStarted++;
     response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
@@ -142,7 +174,8 @@ const server = http.createServer((request, response) => {
       <button ondblclick="report('double')">Double click me</button>
       <label>Enter Flower, then press Enter<input onkeydown="if(event.key==='Enter')report('enter',this.value)"></label>
       <output>${JSON.stringify(controls)}</output><footer>Bottom of page</footer>
-      <script>function report(event,value=''){fetch('/control-event?event='+event+'&value='+encodeURIComponent(value)).then(r=>r.json()).then(r=>document.querySelector('output').textContent=JSON.stringify(r))}addEventListener('scroll',()=>report('scroll'))</script>`);
+      <script>function report(event,value=''){fetch('/control-event?event='+event+'&value='+encodeURIComponent(value)).then(r=>r.json()).then(r=>document.querySelector('output').textContent=JSON.stringify(r))}addEventListener('scroll',()=>report('scroll'));
+      for(const type of ['pointerdown','pointerup','pointermove','keydown','keyup','wheel'])addEventListener(type,event=>{if(event.isTrusted)fetch('/control-input-event?type='+event.type+'&time='+event.timeStamp)},true)</script>`);
     return;
   }
   if (request.url === '/complete' && request.method === 'POST') {
@@ -225,10 +258,29 @@ async function waitForProgress(predicate, label, timeout = 180_000, requireActiv
       throw new Error(`${label}: thread ${id} ${status} (${root.thread?.run_error_code ?? 'unknown'})`);
     }
     if (await predicate()) return;
+    if (requireActiveTurn && status === 'waiting_user') throw new Error(`${label}: automation yielded control; explicit user continuation is required`);
     if (requireActiveTurn && status === 'success') throw new Error(`${label}: model turn completed without the required fixture outcome`);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`${label} timed out`);
+}
+function collectComputerActivities(detail) {
+  const activities = [];
+  const collect = (value) => {
+    if (!value || typeof value !== 'object') return;
+    if (value.presentation && /^(computer|browser)\./u.test(value.tool_name ?? '')) activities.push({ tool: value.tool_name, toolID: value.tool_id, targetRefs: value.presentation.target_refs });
+    for (const child of Object.values(value)) if (typeof child === 'object') collect(child);
+  };
+  collect(detail);
+  return activities;
+}
+function verifyDecodedTargetFrames(liveEvidence, target, turns) {
+  for (const [index, turn] of turns.entries()) {
+    const live = decodedLiveFramesForTarget({ ...liveEvidence, frames: liveEvidence.frames.filter(frame => frame.at >= turn.startedAt && frame.at <= turn.finishedAt) }, target);
+    assert(live.length >= 3 && new Set(live.map(frame => frame.sha256)).size >= 2,
+      `${target} turn ${index + 1}: continuous workspace frames did not reach decoded Stage pixels`);
+    turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map(frame => frame.sha256)).size };
+  }
 }
 const stageHasImage = () => page.evaluate(() => {
   const image = document.querySelector('.flower-computer-stage-frame');
@@ -242,10 +294,12 @@ let nativeDirectory;
 let nativeProcess;
 let nativeExit;
 let nativeEvidence;
+let nativeTargetID;
 let liveEvidence;
 const nativeRequested = process.env.REDEVEN_COMPUTER_NATIVE_E2E === '1';
 const linuxRequested = process.env.REDEVEN_COMPUTER_X11_E2E === '1';
 assert(!linuxRequested || (webtopURL && !nativeRequested), 'X11 qualification requires Linux Webtop');
+assert(scenario !== 'native' || (nativeRequested && cdp), 'native qualification requires the identified macOS Desktop');
 let linuxEvidence;
 try {
   await page.bringToFront();
@@ -276,12 +330,14 @@ try {
     assert.deepEqual(protocolErrors, [], 'provider protocol assertions failed');
     await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'computer-isolation-fork-restart-ui', recoveryEvidence, model, protocol }, null, 2));
     console.log('Focused recovery UI qualification passed; this does not cover other product scenarios.');
-  } else {
-  for (const [index, prompt] of [
+  } else qualification: {
+  const nativeOnly = scenario === 'native';
+  threadID = await createComputerTask({ page, request, ownedThreads, origin: fixtureURL });
+  for (const [index, prompt] of (nativeOnly ? [] : [
     `Open ${fixtureURL} in a browser, click Complete step once, and tell me the completed number shown on the page. Let me watch what you are doing.`,
     'On the current page, use computer.screenshot and computer.click to click Complete step once more. Take a screenshot and report the completed number. Use only computer tools; do not navigate or use terminal or HTTP fetch.',
     `Open ${fixtureURL}/controls using browser.navigate. Inspect it with computer.screenshot. Use computer.double_click on Double click me. Click the text input, use computer.type to enter Flower, and computer.key to press Enter. Use computer.scroll to scroll down and computer.wait to wait for the page. Use browser.reload to reload it. Navigate to ${fixtureURL}/second, then use browser.back to return to /controls. Take a final screenshot and report the result. Use only browser and computer tools; do not use terminal or HTTP fetch.`,
-  ].entries()) {
+  ]).entries()) {
     const startedAt = Date.now();
     const composer = page.locator('.flower-surface textarea').first();
     await composer.fill(prompt);
@@ -291,6 +347,7 @@ try {
     threadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
     ownedThreads.add(threadID);
     console.log(`Turn ${index + 1} submitted through Flower Composer.`);
+    if (index === 0) await openComputerStage(page);
     await waitForProgress(stageHasImage, 'Stage image');
     if (index < 2) {
       await waitForProgress(() => completed >= index + 1, 'fixture click');
@@ -325,15 +382,26 @@ try {
   if (nativeRequested) {
     assert.equal(process.platform, 'darwin', 'native qualification requires macOS');
     nativeDirectory = await mkdtemp(path.join(output, 'native-fixture-'));
-    const executable = path.join(nativeDirectory, 'Fixture');
+    const appContents = path.join(nativeDirectory, 'Fixture.app/Contents');
+    await mkdir(path.join(appContents, 'MacOS'), { recursive: true });
+    await writeFile(path.join(appContents, 'Info.plist'), '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>dev.floegence.redeven.computer-fixture</string><key>CFBundleExecutable</key><string>Fixture</string><key>CFBundleName</key><string>Flower Native Fixture</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>');
+    const executable = path.join(appContents, 'MacOS/Fixture');
     const resultFile = path.join(nativeDirectory, 'result.json');
     await promisify(execFile)('swiftc', [path.join(root, 'scripts/fixtures/nativeComputerUse.swift'), '-o', executable, '-framework', 'AppKit']);
-    nativeProcess = spawn(executable, [resultFile], { stdio: 'ignore' });
+    nativeProcess = spawn(executable, [resultFile, '--background'], { stdio: 'ignore' });
     nativeExit = once(nativeProcess, 'exit');
     await waitForProgress(() => readFile(resultFile).then(() => true, () => false), 'native fixture readiness', 15_000);
+    let windows;
+    await waitForProgress(async () => {
+      windows = (await request('GET', '/_redeven_proxy/api/ai/computer/targets')).filter(target => target.app_bundle_id === 'dev.floegence.redeven.computer-fixture');
+      return windows.length > 0;
+    }, 'native AX and WindowServer discovery', 15000);
+    assert.equal(windows.length, 1, 'native fixture must expose one exact window');
+    nativeTargetID = windows[0].id;
+    await configureComputerTask({ page, request, threadID, targetID: nativeTargetID, app: 'dev.floegence.redeven.computer-fixture', foreground: true });
     const nativeTurns = [];
     for (const [index, prompt] of [
-      'In the macOS Flower Native Fixture application, click Complete native step exactly twice and confirm that Clicks is 2. Let me watch the application as you work.',
+      'In the macOS Flower Native Fixture application, click Complete native step exactly twice and confirm that Clicks is 2. Let me watch the application as you work. Use only computer tools on the selected native application.',
       'Continue in the macOS Flower Native Fixture application. Double click the blue area. Enter Flower in the text field and press Enter. Click inside the Scroll area and scroll down. Wait for the app to settle, then take a fresh screenshot to verify all four indicators are complete. Use only computer tools on the native desktop.',
       'In the same macOS Flower Native Fixture application, click Complete native step exactly two more times. Take a fresh screenshot after each click and confirm Clicks is 4, with the other indicators still complete. Use only computer tools on the native desktop.',
     ].entries()) {
@@ -343,6 +411,7 @@ try {
       await composer.fill(prompt); await composer.press('Enter');
       await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
       console.log(`Native application turn ${index + 1} submitted through Flower Composer.`);
+      if (nativeOnly && index === 0) await openComputerStage(page);
       await waitForProgress(async () => {
         const state = JSON.parse(await readFile(resultFile, 'utf8'));
         return state.clicks === expectedClicks && (index === 0 || state.complete && state.scrollOffset > 0 && state.wheelEvents > 0);
@@ -358,39 +427,46 @@ try {
       const state = JSON.parse(await readFile(resultFile, 'utf8'));
       assert.equal(state.clicks, expectedClicks, 'native action count changed after reaching the intermediate success state');
       if (index > 0) assert(state.complete && state.scrollOffset > 0 && state.wheelEvents > 0, 'native final state regressed before turn completion');
-      assert.equal(frame.target, 'desktop-main', 'Stage is showing another target');
-      assert.equal(frame.width, state.geometry.displayWidth);
-      assert.equal(frame.height, state.geometry.displayHeight);
+      assert.equal(frame.target, nativeTargetID, 'Stage is showing another target');
+      assert.equal(frame.width, state.geometry.width);
+      assert.equal(frame.height, state.geometry.height);
       const screenshot = path.join(output, `native-turn-${index + 1}.png`);
       await page.screenshot({ path: screenshot });
       nativeTurns.push({ startedAt, finishedAt: Date.now(), frame, state, screenshot });
       console.log(JSON.stringify({ nativeTurn: index + 1, frame, state }));
     }
-    nativeEvidence = { turns: nativeTurns };
+    nativeEvidence = { targetID: nativeTargetID, turns: nativeTurns };
     nativeProcess.kill('SIGTERM');
     await nativeExit;
     nativeProcess = undefined;
     await rm(nativeDirectory, { recursive: true, force: true });
     nativeDirectory = undefined;
   }
+  if (nativeOnly) {
+    liveEvidence = await page.evaluate(() => window.__stopComputerLiveEvidence?.());
+    verifyDecodedTargetFrames(liveEvidence, nativeTargetID, nativeEvidence.turns);
+    const activities = collectComputerActivities(await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`));
+    assert(activities.some(item => item.targetRefs?.some(ref => ref.resource_ref === nativeTargetID)), 'native window has no canonical tool evidence');
+    assert(protocol.some(entry => entry.imageToolOutput), 'native provider received no tool-result image');
+    assert.deepEqual(protocolErrors, []);
+    assert.deepEqual(streamErrors, []);
+    await writeFile(path.join(output, 'live-evidence.json'), JSON.stringify(liveEvidence, null, 2));
+    await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'native-desktop-ui', nativeEvidence, model, protocol, activities }, null, 2));
+    console.log('Focused native Desktop qualification passed; other product scenarios remain separate.');
+    break qualification;
+  }
   if (linuxRequested) {
+    await configureComputerTask({ page, request, threadID, targetID: 'xvfb-main' });
     const composer = page.locator('.flower-surface textarea').first();
     await composer.fill('Show me the Linux virtual desktop. Take a screenshot and describe what is currently visible.');
     await composer.press('Enter');
     await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
     await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'Linux desktop preparation');
-    const sessionsRoot = path.join(source, 'computer/x11');
-    const sessions = (await readdir(sessionsRoot)).filter((name) => name.startsWith('session-'));
-    assert.equal(sessions.length, 1, 'expected this Runtime to own exactly one X11 display');
-    const authority = path.join(sessionsRoot, sessions[0], 'Xauthority');
-    // The Xauthority cookie stays in memory and is never included in evidence.
-    const { stdout } = await promisify(execFile)('/usr/bin/xauth', ['-f', authority, 'list']);
-    const display = /:(\d+)\s/u.exec(stdout)?.[1];
-    assert(display, 'Runtime display identity is unavailable');
+    const desktopEnvironment = await webtopRuntime.desktopEnvironment();
     nativeDirectory = await mkdtemp(path.join(output, 'linux-fixture-'));
     const resultFile = path.join(nativeDirectory, 'result.json');
     nativeProcess = spawn('/usr/bin/python3', [path.join(root, 'scripts/fixtures/linuxComputerUse.py'), resultFile], {
-      env: { ...process.env, DISPLAY: `:${display}`, XAUTHORITY: authority }, stdio: 'ignore',
+      env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', ...desktopEnvironment }, stdio: 'ignore',
     });
     nativeExit = once(nativeProcess, 'exit');
     await waitForProgress(() => readFile(resultFile).then(() => true, () => false), 'Linux fixture readiness', 15000);
@@ -490,18 +566,19 @@ try {
     return toggle?.getAttribute('aria-checked') === 'true' && !toggle.disabled;
   });
   await page.locator('.flower-settings-back-button').click();
-  await page.locator('.flower-new-chat-button').click();
+  await createComputerTask({ page, request, ownedThreads, origin: fixtureURL });
   const enabledRequestStart = protocol.length;
   await composer.fill(`Open ${fixtureURL} using browser.navigate, inspect it with computer.screenshot, and report the button label. Do not click it or use terminal or HTTP fetch.`);
   await composer.press('Enter');
   await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
   ownedThreads.add(await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id'));
+  await openComputerStage(page);
   await page.waitForFunction(() => document.querySelector('.flower-computer-stage-frame')?.naturalWidth === 1280, null, { timeout: 180_000 });
   await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'turn completion');
   assert(protocol.slice(enabledRequestStart).some((entry) => entry.imageToolOutput), 're-enabled setting did not restore visual tool execution');
   assert.equal(completed, 2, 'observation-only turn unexpectedly mutated the fixture');
   console.log('Settings disabled and re-enabled through Flower; starting a separate sign-in thread.');
-  await page.locator('.flower-new-chat-button').click();
+  await createComputerTask({ page, request, ownedThreads, origin: fixtureURL });
   await composer.fill(`Open ${fixtureURL}/signin in the managed browser. Pause for me to sign in, then report the heading after I return control. Use only browser and computer tools.`);
   await composer.press('Enter');
   const takeControl = page.locator('[data-computer-control-action="take"]');
@@ -556,31 +633,21 @@ try {
   if (webtopRuntime) await qualifyComputerRecovery({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress, restart: webtopRuntime.restart, output, results: recoveryEvidence });
   assert(threadID, 'Composer did not expose the actual selected thread');
   const detail = await request('GET', `/_redeven_proxy/api/ai/threads/${threadID}`);
-  const activities = [];
-  const collect = (value) => {
-    if (!value || typeof value !== 'object') return;
-    if (value.presentation && /^(computer|browser)\./u.test(value.tool_name ?? '')) activities.push({ tool: value.tool_name, toolID: value.tool_id, targetRefs: value.presentation.target_refs });
-    for (const child of Object.values(value)) if (typeof child === 'object') collect(child);
-  };
-  collect(detail);
+  const activities = collectComputerActivities(detail);
+
   const expectedTools = ['browser.navigate', 'browser.back', 'browser.reload', 'computer.screenshot', 'computer.click', 'computer.double_click', 'computer.type', 'computer.key', 'computer.scroll', 'computer.wait'];
   for (const tool of expectedTools) assert(activities.some((item) => item.tool === tool), `actual thread did not execute ${tool}`);
   assert(activities.some((item) => item.targetRefs?.some((ref) => ref.resource_ref?.startsWith('computer://'))), 'public thread lost media provenance');
   if (nativeRequested) {
-    const nativeTools = activities.filter((item) => item.targetRefs?.some((ref) => ref.resource_ref?.startsWith('computer://desktop-main/'))).map((item) => item.tool);
-    for (const tool of expectedTools.filter((name) => name.startsWith('computer.'))) assert(nativeTools.includes(tool), `native desktop did not complete ${tool}`);
+    const nativeTools = activities.filter((item) => item.targetRefs?.some((ref) => ref.resource_ref === nativeTargetID || ref.resource_ref?.startsWith(`computer://${nativeTargetID}/`))).map((item) => item.tool);
+    assert(nativeTools.length > 0, 'native window has no canonical tool evidence');
   }
   assert(protocol.some((entry) => entry.imageToolOutput), 'the actual provider never received a tool-result image');
   assert.equal(protocolErrors.length, 0, 'provider protocol assertions failed');
   assert.deepEqual(streamErrors, [], 'passive workspace stream observation failed');
-  for (const target of ['browser-main', ...(nativeRequested ? ['desktop-main'] : []), ...(linuxRequested ? ['xvfb-main'] : [])]) {
+  for (const target of ['browser-main', ...(nativeRequested ? [nativeTargetID] : []), ...(linuxRequested ? ['xvfb-main'] : [])]) {
     const turns = target === 'browser-main' ? evidence : target === 'xvfb-main' ? linuxEvidence.turns : nativeEvidence.turns;
-    for (const [index, turn] of turns.entries()) {
-      const live = decodedLiveFramesForTarget({ ...liveEvidence, frames: liveEvidence.frames.filter((frame) => frame.at >= turn.startedAt && frame.at <= turn.finishedAt) }, target);
-      assert(live.length >= 3 && new Set(live.map((frame) => frame.sha256)).size >= 2,
-        `${target} turn ${index + 1}: continuous workspace frames did not reach decoded Stage pixels`);
-      turn.live = { decodedFrames: live.length, distinctImages: new Set(live.map((frame) => frame.sha256)).size };
-    }
+    verifyDecodedTargetFrames(liveEvidence, target, turns);
   }
   await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: webtopURL ? (linuxRequested ? 'linux-webtop-browser-and-x11-ui' : 'linux-webtop-browser-ui') : nativeRequested ? 'managed-browser-and-native-desktop-ui' : 'managed-browser-desktop-ui', nativeEvidence, linuxEvidence, takeoverEvidence, viewerInteraction, lifecycleEvidence, recoveryEvidence, model, fixtureURL, evidence, protocol, threadID, settingsThreadIDs: [...ownedThreads].filter((id) => id !== threadID), activities, stageReopened: true, stageCloseHonoredAcrossTurn: true, settingsToggle: 'on-off-on', disabledToolsAbsent: true, reenabledVisualExecution: true }, null, 2));
   console.log(`${webtopURL ? 'Linux Webtop' : 'Desktop'} requested UI qualification passed; login takeover passed; other target and safety scenarios require separate qualification.`);
@@ -592,7 +659,7 @@ try {
   const nativeState = nativeDirectory ? await readFile(path.join(nativeDirectory, 'result.json'), 'utf8').then(JSON.parse, () => null) : null;
   const failedThreadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id').catch(() => null);
   const current = failedThreadID ? await request('GET', `/_redeven_proxy/api/ai/threads/${failedThreadID}`).catch(() => null) : null;
-  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, evidence, nativeEvidence, nativeState, takeoverEvidence, viewerInteraction, lifecycleEvidence, recoveryEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
+  await writeFile(path.join(output, 'failure.json'), JSON.stringify({ threadID: failedThreadID, completed, controls, controlInputEvents, evidence, nativeEvidence, linuxEvidence, nativeState, takeoverEvidence, viewerInteraction, lifecycleEvidence, recoveryEvidence, protocol, protocolErrors, current, failure: String(error).split('\n')[0] }, null, 2));
   throw error;
 } finally {
   if (nativeProcess) { nativeProcess.kill('SIGKILL'); await nativeExit; }

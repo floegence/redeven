@@ -92,7 +92,13 @@ func TestBrowserToolsNeverExecuteAgainstDesktopTarget(t *testing.T) {
 		},
 	}
 	bindTargetTestRun(t, run)
-	if _, err := run.execTargetTool(context.Background(), "call-browser", "browser.navigate", map[string]any{"target": "desktop-main", "url": "https://example.test"}); err != nil {
+	if _, err := run.execTargetTool(context.Background(), "call-desktop", "browser.navigate", map[string]any{"target": "desktop-main", "url": "https://example.test"}); err == nil {
+		t.Fatal("browser operation silently switched away from the selected desktop")
+	}
+	if len(executor.calls) != 0 {
+		t.Fatalf("rejected desktop route dispatched an action: %#v", executor.calls)
+	}
+	if _, err := run.execTargetTool(context.Background(), "call-browser", "browser.navigate", map[string]any{"target": "browser-main", "url": "https://example.test"}); err != nil {
 		t.Fatalf("browser route failed: %T %v", err, err)
 	}
 	if len(executor.calls) != 1 || executor.calls[0].TargetID != "browser-main" {

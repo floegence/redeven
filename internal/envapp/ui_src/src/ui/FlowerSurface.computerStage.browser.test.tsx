@@ -138,6 +138,9 @@ describe('Flower computer stage', () => {
       loadThread: vi.fn(async () => computerBootstrap(current)),
     }, { focusThreadRequest: { request_id: 'focus-computer-stage', thread_id: threadID }, layout: true });
 
+    await waitFor(() => Boolean(document.querySelector('.flower-computer-entry')));
+    expect(document.querySelector('.flower-computer-stage')).toBeNull();
+    document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
     await waitFor(() => document.querySelector('.flower-computer-stage') !== null);
     await waitFor(() => loadComputerFrame.mock.calls.length === 1);
     await waitFor(() => document.querySelector('.flower-computer-stage-no-frame button') !== null);
@@ -232,10 +235,31 @@ describe('Flower computer stage', () => {
     } });
     await waitFor(() => setComputerViewer.mock.calls.length === viewerCommandsBeforeNextRun + 1);
     expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
+    // A failed sampler belongs to this run. A later, explicitly started run
+    // can watch its own confirmed observation without retrying the old sampler.
+    deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+      ...frame, viewer_revision: setComputerViewer.mock.calls.at(-1)![0].revision, sequence: 1, error_code: 'computer_view_unavailable',
+    } });
+    await waitFor(() => document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state') === 'paused');
+    const viewerCommandsAfterFailure = setComputerViewer.mock.calls.length;
+    const laterRun = { ...nextRun, view_version: 5, run_id: 'later-run', turn_id: 'later-turn' };
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: laterRun });
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    expect(setComputerViewer).toHaveBeenCalledTimes(viewerCommandsAfterFailure);
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...laterRun, view_version: 6,
+      items: [...laterRun.items!, { ...observed, id: 'later-observation', ordinal: 100, run_id: 'later-run', turn_id: 'later-turn',
+        activity: { ...observed.activity, item_id: 'later-observation', tool_id: 'later-observation', status: 'success', presentation: {
+          label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
+          target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: nextFrame }],
+        } },
+      }],
+    } });
+    await waitFor(() => setComputerViewer.mock.calls.length === viewerCommandsAfterFailure + 1);
+    expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
     (document.querySelector('[data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
-    await waitFor(() => setComputerViewer.mock.calls.length === viewerCommandsBeforeNextRun + 2);
-    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 5,
-      items: [...nextRun.items!, { ...observed, id: 'hidden-observation', ordinal: 101, run_id: 'next-run', turn_id: 'next-turn',
+    await waitFor(() => setComputerViewer.mock.calls.length === viewerCommandsAfterFailure + 2);
+    deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...laterRun, view_version: 7,
+      items: [...laterRun.items!, { ...observed, id: 'hidden-observation', ordinal: 101, run_id: 'later-run', turn_id: 'later-turn',
         activity: { ...observed.activity, item_id: 'hidden-observation', tool_id: 'hidden-observation', status: 'success', presentation: {
           label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
           target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: nextFrame }],
@@ -244,7 +268,7 @@ describe('Flower computer stage', () => {
     } });
     await waitFor(() => runtime.querySelector('[data-flower-activity-item-id="hidden-observation"]') !== null);
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
-    expect(setComputerViewer).toHaveBeenCalledTimes(viewerCommandsBeforeNextRun + 2);
+    expect(setComputerViewer).toHaveBeenCalledTimes(viewerCommandsAfterFailure + 2);
   });
 
   it('keeps a provider failure attached to the Computer session after its active run clears', async () => {
@@ -408,4 +432,126 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   handback.click();
   await waitFor(() => submitInput.mock.calls.length === 2);
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
+});
+
+it('opens the chosen historical screenshot after a newer semantic observation without starting live capture', async () => {
+  const threadID = 'historical-computer-frame';
+  const newerFrame = `computer://browser-main/${'b'.repeat(64)}`;
+  const current = thread({ thread_id: threadID, status: 'success', active_run_id: 'history-run', messages: [{
+    id: 'history-message', role: 'assistant', content: '', status: 'complete', created_at_ms: 10,
+    turn_id: 'history-turn', run_id: 'history-run', blocks: [activityTimeline({
+      thread_id: threadID, turn_id: 'history-turn', run_id: 'history-run', status: 'success', items: [
+        ...[FRAME_REF, newerFrame].map((frame, index) => activityItem({
+          item_id: `history-frame-${index}`, tool_id: `history-frame-${index}`, tool_name: 'computer.screenshot',
+          status: 'success', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
+          target_refs: [{ kind: 'computer_frame', label: 'Managed browser', resource_ref: frame }],
+        })),
+        activityItem({ item_id: 'latest-observation', tool_id: 'latest-observation', tool_name: 'computer.observe',
+          status: 'success', renderer: 'structured', payload: { operation: 'observe', status: 'success' },
+          target_refs: [{ kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' }],
+        }),
+      ],
+    })],
+  }] });
+  const loadComputerFrame = vi.fn(async () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), value => value.charCodeAt(0))], { type: 'image/png' }));
+  const setComputerViewer = vi.fn(async () => undefined);
+  renderSurfaceWithAdapterProps({ ...adapter(true), loadComputerFrame, setComputerViewer,
+    listThreads: vi.fn(async () => [current]), loadThread: vi.fn(async () => computerBootstrap(current)),
+  }, { focusThreadRequest: { request_id: 'history-focus', thread_id: threadID }, layout: true });
+  await waitFor(() => Boolean(document.querySelector('.flower-computer-entry')));
+  document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+  await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage-frame')?.naturalWidth === 1);
+  expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: newerFrame }));
+  document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
+  await waitFor(() => document.querySelector('.flower-computer-stage') === null);
+  const row = (index: number) => document.querySelector<HTMLElement>(`[data-flower-activity-item-id="history-frame-${index}"]`);
+  for (const [index, frame] of [FRAME_REF, newerFrame].entries()) {
+    await waitFor(() => Boolean(row(index)));
+    row(index)!.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!.click();
+    await waitFor(() => Boolean(row(index)!.querySelector('.flower-activity-computer-block button')));
+    row(index)!.querySelector<HTMLButtonElement>('.flower-activity-computer-block button')!.click();
+    await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage-frame')?.naturalWidth === 1);
+    expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame }));
+    expect(document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state')).toBe('completed');
+    document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
+    await waitFor(() => document.querySelector('.flower-computer-stage') === null);
+    expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+    document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+    await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage-frame')?.naturalWidth === 1);
+    expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame }));
+    document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
+    await waitFor(() => document.querySelector('.flower-computer-stage') === null);
+  }
+  expect(setComputerViewer).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('retires semantic viewing at completion and reopens only saved captures (saved capture: %s)', async (savedCapture) => {
+  const threadID = 'semantic-view';
+  const earlierCapture = `computer://browser-main/${'b'.repeat(64)}`;
+  const current = thread({ thread_id: threadID, status: 'running', active_run_id: 'semantic-run', messages: [{
+    id: 'semantic-message', role: 'assistant', content: '', status: 'streaming', created_at_ms: 10,
+    turn_id: 'semantic-turn', run_id: 'semantic-run', blocks: [activityTimeline({
+      thread_id: threadID, turn_id: 'semantic-turn', run_id: 'semantic-run', status: 'running', items: [
+        ...(savedCapture ? [activityItem({ item_id: 'earlier-capture', tool_id: 'earlier-capture', tool_name: 'computer.screenshot',
+          status: 'success', renderer: 'structured', payload: { operation: 'screenshot' },
+          target_refs: [{ kind: 'computer_frame', label: 'Work tab', resource_ref: earlierCapture }],
+        })] : []), activityItem({
+        item_id: 'semantic-call', tool_id: 'semantic-call', tool_name: 'computer.exec', status: 'success', renderer: 'structured',
+        label: 'Fill search and verify results', target_refs: [{ kind: 'computer_target', label: 'Work tab', resource_ref: 'browser-main' }],
+        chips: [{ kind: 'execution_mode', label: 'Execution mode', value: 'background' }], payload: { operation: 'exec' },
+      })],
+    })],
+  }] });
+  let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
+  const view = vi.fn(async (request: { observer_id: string; revision: number; target_id?: string; resource_ref?: string }) => {
+    if (request.target_id) setTimeout(() => deliver({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+      session_id: request.observer_id, viewer_revision: request.revision, target_id: 'browser-main', resource_ref: FRAME_REF,
+      sha256: 'a'.repeat(64), mime_type: 'image/png', sequence: 1,
+    } }), 10);
+  });
+  const stop = vi.fn();
+  const loadComputerFrame = vi.fn(async () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), value => value.charCodeAt(0))], { type: 'image/png' }));
+  renderSurfaceWithAdapterProps({ ...adapter(true), setComputerViewer: view, stopThread: stop,
+    loadComputerFrame,
+    listThreads: async () => [current], loadThread: async () => computerBootstrap(current),
+    connectLiveStream: async function* ({ signal }) {
+      yield { schema_version: 1, kind: 'ready', observer_id: 'semantic-observer', summaries: [current] };
+      while (!signal.aborted) {
+        const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>(resolve => {
+          const abort = () => resolve(undefined);
+          deliver = value => { signal.removeEventListener('abort', abort); resolve(value); };
+          signal.addEventListener('abort', abort, { once: true });
+        });
+        if (envelope) yield envelope;
+      }
+    },
+  }, { focusThreadRequest: { request_id: 'semantic-focus', thread_id: threadID }, layout: true });
+  await waitFor(() => Boolean(document.querySelector('.flower-computer-entry')));
+  expect(view).not.toHaveBeenCalled();
+  expect(document.querySelector('.flower-computer-stage')).toBeNull();
+  expect(document.querySelector('.flower-computer-entry')?.textContent).toContain('Running in background');
+  document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+  await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
+  expect(view).toHaveBeenCalledWith(expect.objectContaining({ target_id: 'browser-main', resource_ref: undefined }));
+  const finished = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
+  deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...finished, items: finished.items?.map(item => {
+    if (!item.activity) return item;
+    const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity;
+    return { ...item, activity: { ...facts, status: 'success', presentation: { label, description, renderer, payload, chips, target_refs } } };
+  }) } });
+  await waitFor(() => document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-status') === 'success');
+  await waitFor(() => !view.mock.calls.at(-1)?.[0].target_id);
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(loadComputerFrame).toHaveBeenCalledTimes(1);
+  await waitFor(() => document.querySelector('.flower-computer-stage') === null);
+  expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+  if (savedCapture) {
+    expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
+    document.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+    await waitFor(() => loadComputerFrame.mock.calls.length === 2);
+    expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: earlierCapture }));
+  } else {
+    expect(document.querySelector('.flower-computer-entry')).toBeNull();
+  }
+  expect(stop).not.toHaveBeenCalled();
 });

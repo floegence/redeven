@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"image/png"
 	"io"
 	"math"
@@ -36,9 +37,11 @@ type XvfbTargetExecutor struct {
 	environment      []string
 	processes        []*x11Process
 	paths            x11Paths
+	atspi            *atspiClient
+	ready            bool
 }
 
-type x11Paths struct{ xvfb, windowManager, input, capture, auth, properties string }
+type x11Paths struct{ xvfb, windowManager, input, capture, auth, properties, dbus, atspi string }
 type x11Process struct {
 	cmd  *exec.Cmd
 	done chan struct{}
@@ -48,11 +51,12 @@ func NewXvfbTargetExecutor(stateDirectory string) *XvfbTargetExecutor {
 	paths := x11Paths{
 		xvfb: "/usr/bin/Xvfb", windowManager: "/usr/bin/openbox", input: "/usr/bin/xdotool",
 		capture: "/usr/bin/import", auth: "/usr/bin/xauth", properties: "/usr/bin/xprop",
+		dbus: "/usr/bin/dbus-daemon", atspi: "/usr/libexec/at-spi-bus-launcher",
 	}
 	// Packaged Linux runtimes may ship these binaries beside the Runtime. An
 	// explicit absolute override keeps that bundle deterministic while avoiding
 	// PATH-dependent discovery in production.
-	for key, destination := range map[string]*string{"X": &paths.xvfb, "WM": &paths.windowManager, "INPUT": &paths.input, "CAPTURE": &paths.capture, "AUTH": &paths.auth, "XPROP": &paths.properties} {
+	for key, destination := range map[string]*string{"X": &paths.xvfb, "WM": &paths.windowManager, "INPUT": &paths.input, "CAPTURE": &paths.capture, "AUTH": &paths.auth, "XPROP": &paths.properties, "DBUS": &paths.dbus, "ATSPI": &paths.atspi} {
 		if value := strings.TrimSpace(os.Getenv("REDEVEN_X11_" + key)); filepath.IsAbs(value) {
 			*destination = value
 		}
@@ -73,8 +77,8 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	if e.closed {
 		return &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "x11_closed"}
 	}
-	if len(e.processes) == 2 {
-		alive := true
+	if len(e.processes) > 0 {
+		alive := e.ready && e.atspi != nil && e.atspi.connection.Connected()
 		for _, process := range e.processes {
 			select {
 			case <-process.done:
@@ -92,6 +96,7 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	for _, dependency := range []struct{ name, path string }{
 		{"xvfb", e.paths.xvfb}, {"window_manager", e.paths.windowManager}, {"x11_input", e.paths.input},
 		{"x11_capture", e.paths.capture}, {"xauth", e.paths.auth}, {"x11_properties", e.paths.properties},
+		{"private_dbus", e.paths.dbus}, {"atspi", e.paths.atspi},
 	} {
 		info, err := os.Stat(dependency.path)
 		if !filepath.IsAbs(dependency.path) || err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
@@ -104,7 +109,10 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	if err := os.MkdirAll(e.directory, 0700); err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp(e.directory, "session-")
+	// Unix socket paths have a small fixed limit. Active display resources
+	// are ephemeral and use a private short directory, independent of the
+	// configured persistent state path.
+	dir, err := os.MkdirTemp("/tmp", "redeven-x11-")
 	if err != nil {
 		return err
 	}
@@ -129,7 +137,9 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	if _, err := rand.Read(cookie); err != nil {
 		return err
 	}
-	e.environment = x11Environment(os.Environ(), map[string]string{"XAUTHORITY": authority})
+	e.environment = x11Environment(privateDesktopEnvironment(os.Environ()), map[string]string{"XAUTHORITY": authority,
+		"XDG_RUNTIME_DIR": dir, "XDG_CACHE_HOME": filepath.Join(dir, "cache"), "XDG_DATA_HOME": filepath.Join(dir, "data"),
+		"NO_AT_BRIDGE": "0", "GTK_A11Y": "atspi", "QT_LINUX_ACCESSIBILITY_ALWAYS_ON": "1"})
 	addAuthorization := func(display string) error {
 		// The cookie is sent over stdin and never appears in process arguments.
 		input := strings.NewReader("add " + display + " MIT-MAGIC-COOKIE-1 " + hex.EncodeToString(cookie) + "\n")
@@ -174,6 +184,47 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 	}
 	// Skip user autostart scripts: only this Runtime's explicit GUI clients may
 	// be launched on its display. Openbox itself is an owned process group.
+	address := "unix:path=" + filepath.Join(dir, "session-bus")
+	configuration := `<busconfig><type>session</type><listen>` + html.EscapeString(address) + `</listen><auth>EXTERNAL</auth><policy context="default"><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>`
+	configPath := filepath.Join(dir, "dbus.conf")
+	if err := os.WriteFile(configPath, []byte(configuration), 0600); err != nil {
+		return err
+	}
+	e.environment = x11Environment(e.environment, map[string]string{"DBUS_SESSION_BUS_ADDRESS": address})
+	bus, err := e.startProcess(exec.Command(e.paths.dbus, "--nofork", "--nopidfile", "--config-file="+configPath))
+	if err != nil {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "private_dbus_start_failed"}
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "session-bus")); err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-bus.done:
+			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "private_dbus_exited"}
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	launcher, err := e.startProcess(exec.Command(e.paths.atspi, "--launch-immediately"))
+	if err != nil {
+		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "atspi_start_failed"}
+	}
+	for {
+		client, err := connectATSPIDesktop(ctx, address, dir)
+		if err == nil {
+			e.atspi = client
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "atspi_connection_failed"}
+		case <-launcher.done:
+			return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "atspi_exited"}
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
 	wm, err := e.startProcess(exec.Command(e.paths.windowManager, "--sm-disable"))
 	if err != nil {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "window_manager_start_failed"}
@@ -190,7 +241,21 @@ func (e *XvfbTargetExecutor) ensureLocked(ctx context.Context) error {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "x11_capture_failed"}
 	}
 	ok = true
+	e.ready = true
 	return nil
+}
+
+func privateDesktopEnvironment(base []string) []string {
+	result := make([]string, 0, len(base))
+	for _, entry := range base {
+		key, _, _ := strings.Cut(entry, "=")
+		switch key {
+		case "DISPLAY", "WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS", "DBUS_STARTER_ADDRESS", "DBUS_STARTER_BUS_TYPE", "AT_SPI_BUS_ADDRESS", "XAUTHORITY", "SESSION_MANAGER":
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result
 }
 
 func x11Environment(base []string, updates map[string]string) []string {
@@ -256,40 +321,169 @@ func (e *XvfbTargetExecutor) capture(ctx context.Context, targetID string) ([]by
 }
 
 func (e *XvfbTargetExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	return e.execute(ctx, call, false)
+}
+
+func (e *XvfbTargetExecutor) ExecuteComputerUserInput(ctx context.Context, call TargetToolCall) ([]byte, error) {
+	result, err := e.execute(ctx, call, true)
+	return result.frameBytes, err
+}
+
+func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, private bool) (out TargetToolResult, outErr error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if !computerFrameResourcePattern.MatchString("computer://" + call.TargetID + "/" + strings.Repeat("0", 64)) {
-		return TargetToolResult{}, errors.New("invalid X11 target")
+	if call.TargetID != "xvfb-main" {
+		return TargetToolResult{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 	}
 	args := map[string]any{}
 	if len(call.Arguments) > 0 && json.Unmarshal(call.Arguments, &args) != nil {
-		return TargetToolResult{}, errors.New("invalid X11 arguments")
-	}
-	// Validate before starting a display or sending any input.
-	action, err := x11Action(call.ToolName, args)
-	if err != nil {
-		return TargetToolResult{}, err
+		return TargetToolResult{}, computerTargetFailure(call, "INVALID_REQUEST")
 	}
 	if err := e.ensureLocked(ctx); err != nil {
 		return TargetToolResult{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := action(ctx, e); err != nil {
-		if ctx.Err() != nil {
-			return TargetToolResult{}, ctx.Err()
+	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: "linux_xvfb_desktop", ActionSummary: call.ToolName}
+	if !private {
+		safety, err := e.atspi.safety(ctx)
+		if err != nil {
+			return result, computerTargetFailure(call, "TARGET_NOT_READY")
 		}
-		return TargetToolResult{}, computerTargetFailure(call, "TARGET_ACTION_FAILED")
+		result.Safety = safety
+		if safety.Level == "takeover" {
+			result.Result = map[string]any{"action_executed": false}
+			return result, nil
+		}
+	} else {
+		switch call.ToolName {
+		case "computer.screenshot", "computer.click", "computer.type", "computer.key", "computer.scroll":
+		default:
+			return result, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
+		}
 	}
-	body, attachment, err := e.capture(ctx, call.TargetID)
-	if err != nil {
-		return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+	if call.controlReturn || private {
+		e.atspi.revision.Add(1)
+		clear(e.atspi.references)
 	}
-	geometry, _ := png.DecodeConfig(bytes.NewReader(body))
-	return TargetToolResult{TargetID: call.TargetID, ExecutionLocation: "linux_xvfb_desktop", ActionSummary: call.ToolName, frameBytes: body, Attachments: []TargetToolAttachment{attachment}, Result: map[string]any{
-		"summary": call.ToolName, "screenshot": attachment.ResourceRef, "after_frame": attachment.ResourceRef,
-		"width": geometry.Width, "height": geometry.Height, "device_pixel_ratio": 1,
-	}}, nil
+	payload := map[string]any{"summary": call.ToolName, "action_executed": false, "execution_mode": "background"}
+	tool := call.ToolName
+	dispatched := false
+	defer func() {
+		if outErr != nil && !private && dispatched && !computerKnownRejection(outErr) {
+			outErr = errComputerEffectUnknown
+		}
+	}()
+	if tool == "computer.observe" {
+		observation, err := e.atspi.observe(ctx, args)
+		if err != nil {
+			return result, computerTargetFailure(call, err.Error())
+		}
+		payload["observation"] = observation
+	} else if tool == "computer.action" && (args["action"] == "read" || args["action"] == "fill" || args["action"] == "click" || args["action"] == "wait") {
+		observed, err := e.atspi.action(ctx, args)
+		if err != nil {
+			if errors.Is(err, errComputerEffectUnknown) {
+				return result, err
+			}
+			return result, computerTargetFailure(call, err.Error())
+		}
+		for key, value := range observed {
+			payload[key] = value
+		}
+		dispatched = payload["action_executed"] == true
+	} else {
+		if tool == "computer.action" {
+			switch args["action"] {
+			case "pointer_click":
+				tool = "computer.click"
+			case "drag":
+				tool = "computer.drag"
+			case "key":
+				tool = "computer.key"
+			case "scroll":
+				tool = "computer.scroll"
+			default:
+				return result, computerTargetFailure(call, "INVALID_REQUEST")
+			}
+		}
+		action, err := x11Action(tool, args)
+		if err != nil {
+			return result, computerTargetFailure(call, "INVALID_REQUEST")
+		}
+		if selector, ok := args["selector"].(map[string]any); ok {
+			element, err := e.atspi.resolve(ctx, selector)
+			if err != nil {
+				return result, computerTargetFailure(call, err.Error())
+			}
+			if tool == "computer.key" {
+				dispatched = true
+				var focused bool
+				if err := e.atspi.call(ctx, element.object, "org.a11y.atspi.Component.GrabFocus").Store(&focused); err != nil || !focused {
+					return result, errComputerEffectUnknown
+				}
+			}
+			if tool == "computer.scroll" {
+				var rect struct{ X, Y, Width, Height int32 }
+				if err := e.atspi.call(ctx, element.object, "org.a11y.atspi.Component.GetExtents", uint32(0)).Store(&rect); err != nil {
+					return result, computerTargetFailure(call, "STALE_REFERENCE")
+				}
+				if rect.Width <= 0 || rect.Height <= 0 {
+					return result, computerTargetFailure(call, "ELEMENT_NOT_FOUND")
+				}
+				dispatched = true
+				if _, err := e.command(ctx, e.paths.input, nil, 4096, "mousemove", "--sync", strconv.Itoa(int(rect.X+rect.Width/2)), strconv.Itoa(int(rect.Y+rect.Height/2))); err != nil {
+					return result, computerTargetFailure(call, "TARGET_ACTION_FAILED")
+				}
+			}
+		}
+		dispatched = tool != "computer.screenshot" && tool != "computer.wait"
+		if err := action(ctx, e); err != nil {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+			return result, computerTargetFailure(call, "TARGET_ACTION_FAILED")
+		}
+		payload["action_executed"] = dispatched
+	}
+	if !private {
+		safety, err := e.atspi.safety(ctx)
+		if err != nil {
+			return result, computerTargetFailure(call, "TARGET_NOT_READY")
+		}
+		result.Safety = safety
+		if safety.Level == "takeover" {
+			result.Result = map[string]any{"action_executed": dispatched}
+			return result, nil
+		}
+	}
+	if tool == "computer.screenshot" || (!private && ((tool == "computer.observe" && args["screenshot"] == true) || (tool != "computer.observe" && !call.scriptOperation))) {
+		body, attachment, err := e.capture(ctx, call.TargetID)
+		if err != nil {
+			return result, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+		}
+		if private {
+			result.frameBytes = body
+			return result, nil
+		}
+		safety, err := e.atspi.safety(ctx)
+		if err != nil {
+			return result, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+		}
+		result.Safety = safety
+		if safety.Level == "takeover" {
+			result.Result = map[string]any{"action_executed": dispatched}
+			return result, nil
+		}
+		geometry, _ := png.DecodeConfig(bytes.NewReader(body))
+		result.frameBytes, result.Attachments = body, []TargetToolAttachment{attachment}
+		payload["screenshot"], payload["after_frame"] = attachment.ResourceRef, attachment.ResourceRef
+		payload["width"], payload["height"], payload["device_pixel_ratio"] = geometry.Width, geometry.Height, 1
+	}
+	if !private {
+		result.Result = payload
+	}
+	return result, nil
 }
 
 func (e *XvfbTargetExecutor) ResolveTargetToolAttachment(ctx context.Context, ref string) ([]byte, error) {
@@ -297,6 +491,11 @@ func (e *XvfbTargetExecutor) ResolveTargetToolAttachment(ctx context.Context, re
 }
 
 func (e *XvfbTargetExecutor) stopLocked() error {
+	e.ready = false
+	if e.atspi != nil {
+		e.atspi.close()
+		e.atspi = nil
+	}
 	for i := len(e.processes) - 1; i >= 0; i-- {
 		process := e.processes[i]
 		select {
@@ -407,7 +606,19 @@ func x11Action(tool string, args map[string]any) (x11ActionFunc, error) {
 		if err != nil {
 			return nil, err
 		}
+		var position []string
+		if args["x"] != nil || args["y"] != nil {
+			position, err = point("x", "y")
+			if err != nil {
+				return nil, err
+			}
+		}
 		return func(ctx context.Context, e *XvfbTargetExecutor) error {
+			if position != nil {
+				if err := command(append([]string{"mousemove", "--sync"}, position...)...)(ctx, e); err != nil {
+					return err
+				}
+			}
 			for _, axis := range []struct {
 				delta              float64
 				negative, positive int

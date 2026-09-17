@@ -1481,9 +1481,10 @@ function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresen
   const payload = asRecord(item.payload);
   const frameTarget = item.target_refs?.find((ref) => ref.kind === 'computer_frame');
   const controlTarget = item.target_refs?.find((ref) => ref.kind === 'computer_control');
+  const targetRef = item.target_refs?.find((ref) => ref.kind === 'computer_target');
   const frame = frameTarget?.resource_ref;
-  const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || controlTarget?.resource_ref;
-  const target = frameTarget?.label || item.label || trimString(item.tool_name);
+  const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || controlTarget?.resource_ref || targetRef?.resource_ref;
+  const target = targetRef?.label || frameTarget?.label || item.label || trimString(item.tool_name);
   const action = payloadValue(payload, 'action_summary', 'operation') || defaultLabelForItem(item);
   const location = item.chips?.find((chip) => chip.kind === 'execution_location')?.value ?? '';
   const safetyRecord = asRecord(payload.safety);

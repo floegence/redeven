@@ -3,7 +3,7 @@ type: Acceptance Contract
 title: Computer use product qualification
 description: Establish scope-specific evidence for decoded frames, real target input, control handback and isolated cleanup.
 tags: [ai, computer-use, desktop, testing]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
@@ -16,6 +16,89 @@ manufacture a passing result.
 
 # Contract
 
+## Semantic execution acceptance
+
+Browser and desktop belong to one delivery scope. Neither may substitute for
+the other. Current focused evidence covers real Chromium semantic operations,
+same-profile login and cross-profile isolation, explicit CDP selection, nested
+cross-site frames, event waits, downloads surviving managed-browser shutdown,
+real Native Messaging, nested extension frames, request cancellation, closed-tab
+and managed-process loss, and QuickJS resource limits. Swift
+unit tests and real GTK/AT-SPI/Xvfb fixtures provide separate native evidence.
+
+Native popup tests cover links, targeted forms, WindowProxy callers, cached
+openers and other-site windows. Creation preserves web behavior, while the
+opener stops and the child remains unbound until explicitly selected and
+authorized. Cancellation and revocation before the click prevent dispatch;
+unknown click acknowledgements remain terminal. Occasional focus changes are
+accepted, with task completion taking priority over simultaneous human use.
+The disposable extension fixture separately verifies virtual focus without tab
+activation, release before reattachment, rejection of stale URL/title selection,
+and refusal to operate an unbound popup. Chrome is attached with `noDefaults`
+so Playwright cannot manufacture a passing background-focus result.
+After the user unlocked the console and explicitly continued,
+macOS background and foreground fixtures passed. The background scope checks
+AX labels, occluded target-only pixels, excluded-owner filtering and unchanged
+foreground/pointer. The native action scope checks AX values/buttons, canvas
+double-click, Enter, actual scrolling and restoration of the original application,
+window and pointer after every operation. The built Desktop private-flow fixture
+also passes ordinary/private preview, every frame rate, native IME, rejected and
+successful handback, single navigation, narrow layout and preference persistence.
+The 2026-09-17 model-driven native Desktop scope passes three turns with 21
+actual provider requests. It confirms exact click counts of 2 then 4, canvas
+double-click, text/Enter, actual wheel scrolling, canonical target references,
+and final screenshots. The three turns decode 13/76/13 live frames, with
+13/75/13 distinct images. Incidental input no longer interrupts the sequence.
+The complete Desktop browser scope also passes with 43 actual provider requests: semantic and visual input, navigation, Stage layout and hidden execution, computer settings, private ASCII/IME, handback and explicit Stop. Stopping dispatched navigation records an unknown outcome without replay; both cancellation paths allow a new same-thread visual task. Browser turns decode 6/15/80 frames with 6/15/69 distinct images.
+Earlier failed startup, scroll-region and input-pause runs remain failed
+historical evidence; they are not counted as successes. Lock-screen operation
+remains outside the supported scope.
+
+Performance acceptance requires paired runs with the same model, model settings,
+task set, initial application state and authorization. Record model round trips,
+observed tokens, image bytes, action waiting, total duration, success and user
+interference. Targets are at least 40% fewer model round trips, 70% fewer model
+image bytes and 30% lower median task time, with no lower success rate. Record
+foreground operations and interference;
+incidental focus changes do not fail capability acceptance. See
+[paired model measurements](computer-use-performance.md) for the runner,
+measurement limits and current evidence. Deterministic fixtures cannot stand in
+for model-based paired evidence.
+
+The current paired managed-browser run passes all three efficiency thresholds
+with both variants completing 9/9 tasks. The latest pair after Codex design
+comparison measures 46.2% fewer model requests, 92.7% fewer image bytes and 41.9%
+lower median duration. These managed-browser measurements are separate from
+native or extension capability evidence. Product UI fixtures choose the target and
+save site/application access through Computer connections before model work.
+They open Stage through its visible entry and verify that a fork inherits no
+site grant before authorizing its own follow-up task.
+The 2026-09-17 complete Linux Webtop browser/X11 scope passes with 82 real
+provider requests: private handback, cancellation, media isolation, fork,
+Runtime restart and cleanup are verified. Browser turns decode 8/4/29 live
+frames and X11 turns decode 18/54, all distinct within each turn. No error frames
+or failed public viewer/media responses were recorded. This qualifies the
+tested worktree build; the exact-main pre-push gate separately qualifies integration. Semantic target
+and requested-access references survive the real public Activity projection.
+Native protocol coverage separately proves short and split JSONL responses with
+stdin still open; it needs no window capture or system input.
+`REDEVEN_COMPUTER_UI_SCENARIO=native` limits Desktop model qualification to
+three native-window turns with real effects, canonical target references and
+continuous decoded frames. It does not qualify browser or private-input flows.
+A control pause ends the scenario and requires explicit user continuation;
+the runner never resumes or replays an interrupted action automatically.
+
+The exact-main integration gate invokes `check_computer_execution.sh` for real
+browser, extension, Native Messaging, QuickJS, relocated bundle, managed profile
+and Swift unit coverage. Native popup and incidental-input regression tests
+verify capability without weakening explicit target or takeover boundaries.
+`check_computer_private_desktop.sh` builds a Linux test
+binary and runs GTK/AT-SPI/Xvfb in a disposable pinned container. Neither script
+uses the host desktop. Foreground macOS and credentialed model qualification
+remain explicit runs; the integration gate cannot substitute for their evidence.
+
+## Existing product fixtures
+
 Desktop qualification observes the preload workspace stream; Linux Webtop uses
 CDP's passive HTTP workspace stream copy. Both run the same Composer scenarios
 and hash decoded Stage Blob bytes, requiring matching thread, target and image
@@ -24,68 +107,61 @@ pixels change without more model actions. Observation stops before private
 takeover; reports exclude image bytes and private input. A missing native or
 browser live-frame match fails that scope.
 
-`scripts/check_computer_use_webtop.sh` is an opt-in Linux browser and X11 UI
-qualification entrypoint. It requires the local DeepSeek configuration and an
-explicit verified Linux plugin runtime artifact directory. It builds with
-`GOWORK=off`, stages the production browser bundle in Debian Webtop, imports
-the isolated Runtime CA into the container browser, and drives Flower through
-visible navigation and Composer controls. Runtime sockets and credentials live
-in the container filesystem. The desktop, browser, fixtures, and all input stay
-inside the task-owned container; cleanup removes that container, temporary
-bundles, and credential copies and verifies source secrets and port release.
-Cleanup waits for exact container-ID absence because Docker stop and removal
-acknowledgements can precede automatic deletion. Inventory failure or timeout
-fails the run. The report retains the Runtime, computer bundle, and plugin
-verification descriptor hashes after temporary binaries are removed.
-An optional `REDEVEN_NODE_ARCHIVE` reuses a downloaded Linux archive; it must
-match the current `.node-version`, architecture, and official SHA-256 before
-execution. Network downloads are bounded and unused source-package indexes
-are excluded from this binary-only fixture environment. Setup has a ten-minute
-deadline. An explicit `REDEVEN_COMPUTER_WEBTOP_DEBIAN_MIRROR` may select an HTTPS
-Debian mirror origin; it is recorded in the manifest and retains APT signature
-verification. There is no automatic mirror fallback. Unused Docker and
-NodeSource repositories from the base image do not participate in setup.
-Its scope includes managed-browser actions, X11 GUI control effects, per-turn
-decoded live frames, hidden-viewer persistence, settings and login handback with
-rapid ASCII and native Chromium IME submission. It does not qualify native
-macOS, connected Chrome, every OS input method, or every sensitive-page and approval scenario.
-The shared UI runner also stops canonical takeover and an outstanding browser
-navigation through Flower's Stop button. Ordinary cancellation requires no
-appended Stop message or error card. Dispatched navigation instead requires
-`floret_effect_outcome_unknown`, a visible safety warning and no replay action;
-the fixture must receive exactly one navigation. Both retain the cancellation
-fact, restore the composer and allow an explicit visual follow-up in the same
-thread. `REDEVEN_COMPUTER_UI_SCENARIO=lifecycle` runs only this focused UI scope
-and records it separately; it cannot qualify the complete browser/X11 matrix.
-The Linux fixture publishes its observable JSON state atomically so readers
-never accept or skip a partial write. The held navigation fixture makes
-the interruption observable without injecting model calls or bypassing the
-production adapter. Each scenario records its own result; an earlier passing
-browser turn cannot substitute for a failed cancellation or follow-up.
+`scripts/check_computer_use_webtop.sh` runs the actual Flower UI and configured
+DeepSeek model in disposable Debian Webtop. It builds with `GOWORK=off`, consumes
+an explicitly verified published Linux plugin runtime, stages the production
+browser bundle and installs the isolated Runtime CA. Browser, X11 display,
+private D-Bus, fixtures and input remain inside the owned container. Desktop
+environment addresses come only from children of the verified Runtime, never
+from a guessed durable storage path or another user's session.
 
-The Linux runner additionally checks isolation and recovery through Composer,
-the visible Fork menu and public media APIs. An unrelated thread must receive
-404 for the parent's keyframe and show no stale Stage. A fork must inherit the
-authorized keyframe and support a new visual task. A verified container Runtime
-PID is gracefully restarted against the same state; media hashes, decoded Blob
-pixels and cross-thread rejection must survive, followed by a real browser
-turn. No test reads Floret-owned storage. `REDEVEN_COMPUTER_UI_SCENARIO=recovery`
-runs this focused scope, and the complete Linux suite includes it. Replacement
-Runtime shutdown and container cleanup remain mandatory on failure as well as
-success.
+Setup has a ten-minute deadline. A supplied `REDEVEN_NODE_ARCHIVE` must match
+`.node-version`, architecture and the official checksum. An explicit HTTPS
+`REDEVEN_COMPUTER_WEBTOP_DEBIAN_MIRROR` is recorded and retains APT signature
+checks; there is no automatic mirror fallback. Unused image repositories do not
+participate. Runtime sockets and credential copies remain in container storage.
 
-After cleanup the runner writes `acceptance-summary.json`. Scope, frozen commit,
-artifact hashes, real provider/image evidence, required scenario results and
-cleanup must all match before that scope passes. A focused report cannot satisfy
-the complete Linux matrix. Missing evidence, provider rejection, retained
-programs or ports, and private-data exposure fail closed even if earlier UI
-steps succeeded. The summary names the other product scopes it does not qualify.
-The observing proxy drains response streams through an awaited pipeline. An
-upstream disconnect propagates to Flower and records a sanitized interruption;
-it must not crash the harness before thread evidence is captured. Downstream
-user cancellation closes the upstream body without pretending the provider
-failed. HTTP 200 alone does not prove a completed stream, and the proxy never
-replays a request to turn transport failure into success.
+The complete scope requires managed-browser and X11 effects, decoded frames in
+every turn, hidden-viewer persistence, settings and private ASCII/IME handback.
+It also verifies these independent lifecycle outcomes:
+
+- Flower Stop cancels ordinary work without appending a Stop message or error
+  card. Stopping a dispatched navigation instead produces terminal
+  `floret_effect_outcome_unknown`, a visible warning and no replay action. The
+  fixture receives exactly one navigation. Both cases restore the composer and
+  allow an explicit visual follow-up in the same thread.
+- An unrelated thread receives 404 for another thread's media and shows no stale
+  Stage. A fork retains authorized historical media but needs its own site grant
+  for a new action. No test reads Floret-owned storage.
+- A graceful restart of the verified Runtime against the same state preserves
+  historical media hashes and decoded pixels, retains cross-thread rejection,
+  and supports a new browser turn.
+
+`REDEVEN_COMPUTER_UI_SCENARIO=lifecycle` and `recovery` isolate those respective
+scopes. A focused report cannot qualify the complete browser/X11 matrix. The
+held-navigation fixture makes interruption observable without injecting model
+calls or replacing the production adapter. Observable fixture state is published
+atomically; a partial write is never accepted as an outcome.
+
+Diagnostics retain bounded public command identities, status codes, revisions
+and event times. They stop before private input and retain no private text or
+image bytes. The provider proxy drains streams through an awaited pipeline;
+upstream failure propagates without crashing evidence collection, downstream
+cancellation closes the upstream body, and no request is replayed to conceal a
+transport failure. HTTP 200 alone does not prove completed model output.
+
+Cleanup removes the exact container, temporary bundles and credential copies,
+checks source configurations remain byte-identical, and verifies port release.
+It waits for exact container-ID absence because stop/removal acknowledgements
+can precede deletion. Inventory failure or timeout fails the run. Cleanup is
+mandatory after failures and after Runtime replacement as well as on success.
+
+`acceptance-summary.json` binds the declared scope, frozen source commit,
+Runtime/computer/plugin artifact hashes, provider/image evidence, scenario
+outcomes and cleanup. Missing evidence, provider rejection, retained resources
+or private-data exposure fail acceptance even if earlier turns passed. The
+report names the native macOS, connected Chrome and other scopes it does not
+qualify.
 
 ## Private preview and handback
 
@@ -96,6 +172,10 @@ remain production implementations. It verifies ordinary preview after unchanged
 samples, a 600ms delayed private page change at default 3 FPS, all FPS choices,
 client persistence, narrow header placement, native text insertion and Chromium
 IME, rejected handback and one safe continuation without navigation replay.
+The 2026-09-17 current-worktree Desktop run passes this scope, with delayed
+private pixels decoded in 363ms. Resize checks wait for the visible control's
+actual bounds after the native window updates. The earlier failed route and
+immediate-layout assertions are not passing product evidence.
 The isolated headless Stage browser test separately verifies clipboard paste
 through the native paste shortcut; the Desktop script does not alter the user's
 system clipboard.

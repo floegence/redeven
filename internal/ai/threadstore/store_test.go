@@ -32,6 +32,7 @@ ORDER BY name
 	}
 
 	wantThreadSettingsColumns := []string{
+		"computer_access_json",
 		"computer_target_id",
 		"endpoint_id",
 		"model_id",

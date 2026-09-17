@@ -91,7 +91,7 @@ docker exec -e "NODE_VERSION=$NODE_VERSION" -e "NODE_ARCH=$ARCH" -e "NODE_ARCHIV
   rm -f /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/nodesource.sources
   printf "%s\n" "Acquire::http::Timeout \"30\";" "Acquire::https::Timeout \"30\";" "Acquire::Retries \"1\";" > /etc/apt/apt.conf.d/99-redeven-qualification
   apt-get update --error-on=any -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates libnss3-tools openbox xdotool imagemagick xauth x11-utils xterm python3-tk
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates libnss3-tools openbox xdotool imagemagick xauth x11-utils xterm python3-tk dbus at-spi2-core python3-gi gir1.2-gtk-3.0
   archive="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz"
   cd /tmp
   if [[ -n "$NODE_ARCHIVE_OVERRIDE" ]]; then cp "$NODE_ARCHIVE_OVERRIDE" "$archive";

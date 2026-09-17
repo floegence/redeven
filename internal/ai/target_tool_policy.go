@@ -51,6 +51,8 @@ type InteractionSafetyDecision struct {
 	Confidence        float64  `json:"confidence,omitempty"`
 	SafeToCapture     bool     `json:"safe_to_capture"`
 	SafeToSendToModel bool     `json:"safe_to_send_to_model"`
+	RequiredOrigin    string   `json:"required_origin,omitempty"`
+	RequiredApp       string   `json:"required_app,omitempty"`
 	ConfirmationScope string   `json:"confirmation_scope,omitempty"`
 }
 
@@ -140,6 +142,12 @@ type TargetToolAttachmentResolver interface {
 }
 
 type TargetToolCall struct {
+	progress             func(mode, reason string)
+	allowedApps          []string
+	allowForeground      bool
+	allowedOrigins       []string
+	revalidate           func(context.Context) error
+	scriptOperation      bool
 	liveFrame            bool
 	controlReturn        bool
 	userInput            bool
@@ -177,7 +185,7 @@ func toolRequiresTarget(toolName string) bool {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
 	case "file.read", "read_file", "file.edit", "file.write", "apply_patch",
-		"computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
+		"computer.observe", "computer.exec", "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
 		"browser.navigate", "browser.back", "browser.reload":
 		return true
 	}
@@ -186,7 +194,7 @@ func toolRequiresTarget(toolName string) bool {
 
 func isComputerUseTool(toolName string) bool {
 	switch strings.TrimSpace(toolName) {
-	case "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait", "browser.navigate", "browser.back", "browser.reload":
+	case "computer.observe", "computer.exec", "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait", "browser.navigate", "browser.back", "browser.reload":
 		return true
 	default:
 		return false
@@ -199,9 +207,9 @@ func requiredTargetCapabilities(toolName string) []string {
 		return []string{"read"}
 	case "file.edit", "file.write", "apply_patch":
 		return []string{"write"}
-	case "computer.screenshot":
+	case "computer.screenshot", "computer.observe", "browser.wait_for_download":
 		return []string{"observe"}
-	case "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
+	case "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
 		"browser.navigate", "browser.back", "browser.reload":
 		return []string{"interaction"}
 	default:

@@ -26,6 +26,12 @@ pause must not claim the action was unexecuted. Floret persists the result and
 interaction through its public runtime and schema v12 migration. Redeven does
 not keep a pending-interaction table or replay the original action.
 
+A semantic script ends at this boundary too. It returns confirmed progress and
+removes logs, semantic content and images on a sensitive pause. A new invocation
+after handback observes again; the host never resumes a saved JavaScript program
+counter. New site, target, application or foreground requirements use the same
+existing interaction, with task grants owned by product settings.
+
 The canonical computer tool Activity binds `computer_control` to the actual
 target. Handback authorizes the endpoint/thread and matches the unresolved
 interaction's thread, turn, run and tool call against that Activity. A question
@@ -62,10 +68,18 @@ canonical provenance before accepting a private command.
 
 ## Browser observation and private input
 
-The Playwright helper checks visible password fields, `one-time-code`, CAPTCHA
-and instruction-override signals per frame before input, after actions and after
-capture. Unreadable frames are unknown; unsafe captures are discarded. These
-bounded checks do not claim complete injection detection or atomic observation.
+The shared browser controller examines visible password fields, `one-time-code` input
+semantics, CAPTCHA text and explicit instruction-override signals in each frame.
+CDP DOM snapshots include rendered password and OTP inputs inside closed shadow
+roots. Isolated-world mutation observers cover the document and open shadow roots.
+An unreadable frame is unknown. It inspects before input, after an action, and
+after capture. Secret DOM transitions are latched during observation so removing
+a field before the final check cannot expose the already captured image.
+Document changes during capture discard pixels and require a fresh observation;
+an otherwise safe navigation does not require user takeover. An unsafe result discards
+all captured bytes. These deterministic
+signals are bounded protections, not a claim of complete injection detection or
+atomic observation of all dynamic web content.
 
 The authenticated `POST /_redeven_proxy/api/ai/computer/input` accepts bounded
 click/type/key/scroll commands and returns only an acknowledgement. It requires
@@ -137,12 +151,11 @@ Service/browser fixtures cover pause, private and stale input, handback, safety,
 no replay and restart. UI tests cover decoded pixels and separation from chat.
 Built Desktop acceptance follows the [qualification contract](computer-use-qualification.md).
 
-Native Accessibility safety, complete app/window takeover, extension-authorized
-Chrome, remote input and full live-view qualification remain unaccepted until
-their product scenarios pass. The existing metadata safety gate remains for
-adapters that do not yet provide equivalent page/Accessibility protections; it
-must be removed when that replacement is complete, not treated as evidence that
-those targets are safe.
+Native window AX, private Linux AT-SPI and extension Chrome now feed this same
+Runtime boundary; see [desktop execution](computer-use-desktop.md) and
+[browser connections](computer-use-browser.md). Their full product scenarios
+remain separate acceptance obligations. Browser fixtures and permission metadata
+alone do not prove arbitrary app safety or atomic observation of dynamic content.
 
 # Evidence
 

@@ -40,7 +40,7 @@ function suiteSHA256(runtimeSuite: Array<Record<string, unknown>>): string {
 
 function computerFixture(root: string, platform = 'linux', architecture = 'amd64'): string {
   const resources = path.join(root,'computer');
-  const names = ['node', 'NODE_LICENSE', 'browser.json', 'redevenComputerHost.mjs', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
+  const names = ['node', 'NODE_LICENSE', 'browser.json', 'redevenComputerHost.mjs', 'redevenComputerScript.mjs', 'redevenBrowserInventory.mjs', 'redevenManagedBrowser.mjs', 'computerBrowserPage.mjs', 'computerBrowserController.mjs', 'computerBrowserKeys.mjs', 'node_modules/quickjs-emscripten/package.json', 'extension/manifest.json', 'extension/background.mjs', 'extension/computerBrowserController.mjs', 'extension/computerBrowserPage.mjs', 'extension/computerBrowserKeys.mjs', 'extension/popup.html', 'extension/popup.css', 'extension/popup.mjs', 'extension/messages.mjs', 'extension/input-focus.css', 'node_modules/playwright/package.json', 'node_modules/playwright-core/package.json'];
   if (platform === 'darwin') names.push('redeven-computer-host');
   const files=names.map(name=>{
     const absolute=path.join(resources,name);

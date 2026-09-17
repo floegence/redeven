@@ -104,7 +104,12 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 		tool := fltools.Define[map[string]any](
 			toolDef,
 			nil,
-			floretToolResources,
+			func(inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
+				if isComputerUseTool(inv.Name) {
+					return floretComputerResources(r, inv)
+				}
+				return floretToolResources(inv)
+			},
 			func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 				call := ToolCall{
 					ID:   strings.TrimSpace(inv.CallID),
@@ -697,7 +702,7 @@ func stripRedevenTargetFieldsFromFloretToolSchema(_ string, inputSchema map[stri
 func floretToolEffects(def ToolDef) []fltools.Effect {
 	name := strings.TrimSpace(def.Name)
 	switch name {
-	case "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "browser.navigate", "browser.back", "browser.reload":
+	case "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "browser.navigate", "browser.back", "browser.reload":
 		return []fltools.Effect{fltools.EffectWrite}
 	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
 		return []fltools.Effect{fltools.EffectShell}
@@ -1235,11 +1240,35 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
 	if strings.HasPrefix(toolName, "computer.") || strings.HasPrefix(toolName, "browser.") {
+		if targetID := strings.TrimSpace(anyToString(rawPayload["target_id"])); targetID != "" {
+			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_target", ResourceRef: targetID, Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), targetID)})
+		}
+		if mode := anyToString(rawPayload["execution_mode"]); mode == "foreground" || mode == "background" {
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
+		}
 		if result.inputRequired != nil {
 			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
 				Kind: "computer_control", ResourceRef: strings.TrimSpace(anyToString(rawPayload["target_id"])),
 				Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), "Computer"),
 			})
+			// These refs are display facts from the completed tool. Only an
+			// authenticated user command can turn them into product grants.
+			var safety InteractionSafetyDecision
+			body, _ := json.Marshal(rawPayload["safety"])
+			if json.Unmarshal(body, &safety) == nil {
+				if safety.RequiredOrigin != "" {
+					activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_origin", ResourceRef: safety.RequiredOrigin, Label: safety.RequiredOrigin})
+				}
+				if safety.RequiredApp != "" {
+					activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_app", ResourceRef: safety.RequiredApp, Label: safety.RequiredApp})
+				}
+				for _, reason := range safety.ReasonCodes {
+					if reason == "foreground_permission" {
+						activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_foreground", ResourceRef: "foreground", Label: "Temporary foreground access"})
+						break
+					}
+				}
+			}
 		}
 		// Only typed executor attachments grant media authority. A ref appearing
 		// in arbitrary result text or payload is not an attachment capability.
@@ -1799,6 +1828,21 @@ func subAgentOperationTargets(payload map[string]any, requestedIDs []string) []f
 
 func structuredActivityRowsForTool(toolName string, payload map[string]any) []map[string]any {
 	switch strings.TrimSpace(toolName) {
+	case "computer.exec":
+		progress := make(map[string]any)
+		for _, key := range []string{"completed_actions", "operations", "script_error"} {
+			if value, ok := payload[key]; ok {
+				progress[key] = value
+			}
+		}
+		if len(progress) == 0 {
+			return nil
+		}
+		body, err := json.MarshalIndent(progress, "", "  ")
+		if err != nil {
+			return nil
+		}
+		return appendStructuredActivityRow(nil, "", "", string(body), fltools.StructuredActivityRowFormatCode)
 	case "okf.index":
 		rows := make([]map[string]any, 0)
 		for _, value := range toAnySlice(payload["sections"]) {

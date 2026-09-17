@@ -23,17 +23,23 @@ import (
 // helper owns Playwright and browser profiles; this process owns target policy
 // and opaque screenshot attachment bytes.
 type PlaywrightTargetExecutor struct {
-	NodeBinary string
-	HelperPath string
-	ProfileDir string
-	CDPURL     string
-	Timeout    time.Duration
+	ManagedAttachment bool
+	DownloadDir       string
+	NodeBinary        string
+	HelperPath        string
+	ProfileDir        string
+	CDPURL            string
+	TabID             string
+	BrowserContextID  string
+	Timeout           time.Duration
 
-	mu      sync.Mutex
-	closed  bool
-	clients map[string]*playwrightTargetClient
-	mediaMu sync.RWMutex
-	media   map[string][]byte
+	shutdown chan struct{}
+	stopOnce sync.Once
+	mu       sync.Mutex
+	closed   bool
+	clients  map[string]*playwrightTargetClient
+	mediaMu  sync.RWMutex
+	media    map[string][]byte
 }
 
 type playwrightTargetClient struct {
@@ -43,13 +49,15 @@ type playwrightTargetClient struct {
 }
 
 type playwrightTargetRequest struct {
-	SessionID     string         `json:"session_id,omitempty"`
-	UserControl   bool           `json:"user_control,omitempty"`
-	ReturnControl bool           `json:"return_control,omitempty"`
-	ID            string         `json:"id"`
-	TargetID      string         `json:"target_id"`
-	ToolName      string         `json:"tool_name"`
-	Args          map[string]any `json:"args"`
+	AllowedOrigins  []string       `json:"allowed_origins"`
+	ScriptOperation bool           `json:"script_operation,omitempty"`
+	SessionID       string         `json:"session_id,omitempty"`
+	UserControl     bool           `json:"user_control,omitempty"`
+	ReturnControl   bool           `json:"return_control,omitempty"`
+	ID              string         `json:"id"`
+	TargetID        string         `json:"target_id"`
+	ToolName        string         `json:"tool_name"`
+	Args            map[string]any `json:"args"`
 }
 
 type playwrightTargetResponse struct {
@@ -74,7 +82,7 @@ type playwrightTargetReady struct {
 }
 
 func NewPlaywrightTargetExecutor(nodeBinary, helperPath, profileDir string) *PlaywrightTargetExecutor {
-	return &PlaywrightTargetExecutor{NodeBinary: nodeBinary, HelperPath: helperPath, ProfileDir: profileDir, Timeout: 30 * time.Second, clients: map[string]*playwrightTargetClient{}, media: map[string][]byte{}}
+	return &PlaywrightTargetExecutor{shutdown: make(chan struct{}), NodeBinary: nodeBinary, HelperPath: helperPath, ProfileDir: profileDir, Timeout: 30 * time.Second, clients: map[string]*playwrightTargetClient{}, media: map[string][]byte{}}
 }
 
 func (e *PlaywrightTargetExecutor) EnsureTargetReady(ctx context.Context, targetID string) error {
@@ -101,7 +109,7 @@ func (e *PlaywrightTargetExecutor) ExecuteComputerUserInput(ctx context.Context,
 	return result.frameBytes, err
 }
 
-func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call TargetToolCall, userControl bool) (TargetToolResult, error) {
+func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call TargetToolCall, userControl bool) (out TargetToolResult, outErr error) {
 	if e == nil || strings.TrimSpace(e.HelperPath) == "" {
 		return TargetToolResult{}, errors.New("browser target helper is unavailable")
 	}
@@ -141,7 +149,7 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	request := playwrightTargetRequest{ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
+	request := playwrightTargetRequest{AllowedOrigins: call.allowedOrigins, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, ReturnControl: call.controlReturn}
 	if call.ThreadID != "" && call.TurnID != "" {
 		// Canonical turn identity survives input continuation runs. Model args
 		// cannot select a private browser session or end another turn's takeover.
@@ -152,13 +160,20 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	if err != nil {
 		return TargetToolResult{}, err
 	}
+	// Once bytes may reach the adapter, a failed mutating exchange is uncertain.
+	// Never convert it into a retryable timeout at the outer tool boundary.
+	defer func() {
+		if outErr != nil && !userControl && computerCallMutates(call) && !computerKnownRejection(outErr) {
+			outErr = errComputerEffectUnknown
+		}
+	}()
 	if _, err := client.stdin.Write(append(payload, '\n')); err != nil {
 		return TargetToolResult{}, err
 	}
 	lineCh := make(chan []byte, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		line, readErr := client.reader.ReadBytes('\n')
+		line, readErr := readComputerLine(client.reader, 24<<20)
 		if readErr != nil {
 			errCh <- readErr
 			return
@@ -173,6 +188,8 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 	defer timer.Stop()
 	var line []byte
 	select {
+	case <-e.shutdown:
+		return TargetToolResult{}, errors.New("browser target disconnected")
 	case <-ctx.Done():
 		return TargetToolResult{}, ctx.Err()
 	case <-timer.C:
@@ -259,7 +276,10 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	// subsequent action fail with a broken pipe.
 	args := []string{e.HelperPath, "--profile", profile}
 	if strings.TrimSpace(e.CDPURL) != "" {
-		args = append(args, "--cdp-url", e.CDPURL)
+		args = append(args, "--cdp-url", e.CDPURL, "--tab-id", e.TabID, "--browser-context-id", e.BrowserContextID)
+	}
+	if e.ManagedAttachment {
+		args = append(args, "--managed-attachment", "--download-dir", e.DownloadDir)
 	}
 	cmd := exec.Command(e.NodeBinary, args...)
 	stdin, err := cmd.StdinPipe()
@@ -284,7 +304,7 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	readyCh := make(chan []byte, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		line, readErr := client.reader.ReadBytes('\n')
+		line, readErr := readComputerLine(client.reader, 24<<20)
 		if readErr != nil {
 			errCh <- readErr
 			return
@@ -298,6 +318,8 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 	timer := time.NewTimer(readyTimeout)
 	defer timer.Stop()
 	select {
+	case <-e.shutdown:
+		return nil, errors.New("browser target disconnected")
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-timer.C:
@@ -306,7 +328,7 @@ func (e *PlaywrightTargetExecutor) clientLocked(ctx context.Context, targetID st
 		return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_missing"}
 	case line := <-readyCh:
 		var handshake playwrightTargetReady
-		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 1 {
+		if err := json.Unmarshal(line, &handshake); err != nil || handshake.Type != "ready" || handshake.ProtocolVersion != 2 {
 			return nil, &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "browser_handshake_invalid"}
 		}
 		if handshake.Error != "" {
@@ -338,6 +360,11 @@ func (e *PlaywrightTargetExecutor) ResolveTargetToolAttachment(_ context.Context
 }
 
 func (e *PlaywrightTargetExecutor) Close() error {
+	e.stopOnce.Do(func() {
+		if e.shutdown != nil {
+			close(e.shutdown)
+		}
+	})
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.closed = true
@@ -351,9 +378,6 @@ func (e *PlaywrightTargetExecutor) Close() error {
 func stopPlaywrightClient(client *playwrightTargetClient) {
 	_ = client.stdin.Close()
 	// Give Playwright a chance to close its Chromium children and profile lock.
-	if err := client.cmd.Process.Signal(os.Interrupt); err != nil {
-		_ = client.cmd.Process.Kill()
-	}
 	done := make(chan struct{})
 	go func() { _ = client.cmd.Wait(); close(done) }()
 	select {

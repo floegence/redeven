@@ -18,6 +18,14 @@ func TestX11ActionRejectsUnsafeCoordinatesAndKeys(t *testing.T) {
 	if _, err := x11Action("computer.key", map[string]any{"key": "A;id"}); err == nil {
 		t.Fatal("shell metacharacter accepted")
 	}
+	for _, args := range []map[string]any{
+		{"x": float64(100), "delta_y": float64(120)},
+		{"x": float64(100), "y": float64(900), "delta_y": float64(120)},
+	} {
+		if _, err := x11Action("computer.scroll", args); err == nil {
+			t.Fatal("incomplete or out-of-bounds scroll coordinates accepted")
+		}
+	}
 }
 
 func TestX11ActionAcceptsTypedActions(t *testing.T) {
@@ -28,6 +36,7 @@ func TestX11ActionAcceptsTypedActions(t *testing.T) {
 		{"computer.click", map[string]any{"x": float64(1), "y": float64(2)}}, {"computer.double_click", map[string]any{"x": float64(1), "y": float64(2)}},
 		{"computer.type", map[string]any{"text": "Flower"}}, {"computer.key", map[string]any{"key": "Control+L"}},
 		{"computer.scroll", map[string]any{"delta_y": float64(120)}}, {"computer.wait", map[string]any{"milliseconds": float64(1)}},
+		{"computer.scroll", map[string]any{"x": float64(100), "y": float64(200), "delta_y": float64(120)}},
 		{"computer.drag", map[string]any{"from_x": float64(1), "from_y": float64(2), "to_x": float64(3), "to_y": float64(4)}},
 	} {
 		action, err := x11Action(tc.tool, tc.args)

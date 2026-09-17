@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -13,22 +14,28 @@ import (
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
-	connectMu  sync.Mutex
-	closed     bool
-	mu         sync.RWMutex
-	registry   *TargetRegistry
-	bindings   ComputerTargetBindingStore
-	media      computerMediaStore
-	executors  map[string]TargetToolExecutor
-	liveFrames map[string]*computerLiveSampler
-	liveWG     sync.WaitGroup
-	controls   map[string]*computerTargetControl
+	managedProfiles map[string]*managedBrowserProfile
+	extension       *computerExtensionHub
+	connectMu       sync.Mutex
+	closed          bool
+	mu              sync.RWMutex
+	registry        *TargetRegistry
+	bindings        ComputerTargetBindingStore
+	media           computerMediaStore
+	executors       map[string]TargetToolExecutor
+	liveFrames      map[string]*computerLiveSampler
+	liveWG          sync.WaitGroup
+	controls        map[string]*computerTargetControl
+	scripts         map[computerScriptKey]*computerScriptProcess
 }
 
 // ConnectBrowser registers an explicitly authorized Chrome CDP session. A
 // running system browser is never treated as connected implicitly; callers
 // must provide the bridge endpoint returned by the user-facing connect flow.
-func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) (TargetDescriptor, error) {
+func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, connection ComputerBrowserConnection) (TargetDescriptor, error) {
+	if err := connection.validate(); err != nil {
+		return TargetDescriptor{}, err
+	}
 	if r == nil || r.registry == nil {
 		return TargetDescriptor{}, errors.New("computer use runtime is unavailable")
 	}
@@ -40,12 +47,21 @@ func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) 
 	if closed {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
 	}
-	cdpURL = strings.TrimSpace(cdpURL)
+	if connection.ManagedProfileID != "" {
+		return r.connectManagedBrowserLocked(ctx, connection, "")
+	}
+	if connection.ExtensionProfileID != "" {
+		return r.connectExtensionBrowser(ctx, connection)
+	}
+	cdpURL := strings.TrimSpace(connection.CDPURL)
 	endpoint, err := url.Parse(cdpURL)
 	if err != nil || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https" && endpoint.Scheme != "ws" && endpoint.Scheme != "wss") {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_endpoint_invalid"}
 	}
-	base, err := r.registry.ResolveTarget(ctx, "browser.managed")
+	if strings.TrimSpace(connection.TabID) == "" || len(connection.TabID) > 256 || strings.TrimSpace(connection.ProfileID) == "" {
+		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_tab_selection_required"}
+	}
+	base, err := r.registry.ResolveTarget(ctx, "current")
 	if err != nil {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "managed_browser_unavailable"}
 	}
@@ -75,6 +91,7 @@ func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, cdpURL string) 
 	}
 	connected := NewPlaywrightTargetExecutor(managed.NodeBinary, managed.HelperPath, managed.ProfileDir)
 	connected.CDPURL = cdpURL
+	connected.TabID, connected.BrowserContextID = connection.TabID, connection.ProfileID
 	target := TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "starting", PermissionState: "not_checked"}
 	// Publish only a verified replacement. A failed connection must not retire
 	// the session the user already authorized.
@@ -173,6 +190,32 @@ func (r *ComputerUseRuntime) BindThreadTarget(ctx context.Context, threadID, tar
 	return bindings.SetComputerTarget(ctx, threadID, targetID)
 }
 func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
+	var readinessErr error
+	if err := ctx.Err(); err != nil {
+		return target, err
+	}
+	// Only the initial managed target may create its first page lazily. A lost
+	// bound tab never selects a replacement or revives its old references.
+	if target.ID == "browser-main" {
+		r.connectMu.Lock()
+		r.mu.RLock()
+		executor, ok := r.executors[target.ID].(*PlaywrightTargetExecutor)
+		needsPage := ok && executor.CDPURL == ""
+		closed := r.closed
+		r.mu.RUnlock()
+		if closed {
+			r.connectMu.Unlock()
+			return target, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
+		}
+		if needsPage {
+			var prepared TargetDescriptor
+			prepared, readinessErr = r.connectManagedBrowserLocked(ctx, ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}, target.ID)
+			if readinessErr == nil {
+				target = prepared
+			}
+		}
+		r.connectMu.Unlock()
+	}
 	control := r.controlForTarget(target.ID)
 	select {
 	case <-ctx.Done():
@@ -194,7 +237,10 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 	if !ok {
 		return target, errors.New("target adapter has no readiness handshake")
 	}
-	err := checker.EnsureTargetReady(ctx, target.ID)
+	err := readinessErr
+	if err == nil {
+		err = checker.EnsureTargetReady(ctx, target.ID)
+	}
 	if ctx.Err() != nil {
 		return target, ctx.Err()
 	}
@@ -228,11 +274,29 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 	if err != nil {
 		return TargetToolResult{}, err
 	}
+	if call.ToolName == "computer.exec" {
+		r.releasePreviousComputerTarget(call)
+		unlock()
+		return r.executeComputerScript(ctx, call)
+	}
 	defer unlock()
 	return r.executeComputerToolLocked(ctx, call, control)
 }
 
 func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call TargetToolCall, control *computerTargetControl) (TargetToolResult, error) {
+	// Re-read grants after gate admission, including live capture and handback.
+	// A queued operation must not retain permissions revoked while it waited.
+	if err := r.authorizeComputerCall(ctx, &call); err != nil {
+		return TargetToolResult{}, err
+	}
+	if call.controlReturn {
+		control.mu.Lock()
+		missing := (control.requiredOrigin != "" && !slices.Contains(call.allowedOrigins, control.requiredOrigin)) || (control.requiredApp != "" && !slices.Contains(call.allowedApps, control.requiredApp)) || (control.requireForeground && !call.allowForeground)
+		control.mu.Unlock()
+		if missing {
+			return TargetToolResult{}, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+		}
+	}
 	// Look up only after acquiring the gate: a queued action must use the
 	// admitted adapter, not one retired while it was waiting for control.
 	r.mu.RLock()
@@ -256,6 +320,10 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		control.mu.Lock()
 		if control.threadID == call.ThreadID && (call.liveFrame || control.runID == call.RunID) {
 			control.user = true
+			if result.Safety != nil {
+				control.requiredOrigin, control.requiredApp = result.Safety.RequiredOrigin, result.Safety.RequiredApp
+				control.requireForeground = slices.Contains(result.Safety.ReasonCodes, "foreground_permission")
+			}
 		}
 		control.mu.Unlock()
 	}
@@ -310,6 +378,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			return TargetToolResult{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 		}
 		control.user = false
+		control.requiredOrigin, control.requiredApp, control.requireForeground = "", "", false
 		control.mu.Unlock()
 	}
 	return result, err
@@ -326,7 +395,11 @@ func (r *ComputerUseRuntime) Close() error {
 		sampler.cancel()
 	}
 	r.mu.Unlock()
+	if r.extension != nil {
+		r.extension.close()
+	}
 	r.liveWG.Wait()
+	r.releaseScripts(func(computerScriptKey) bool { return true })
 	var failures []error
 	r.mu.RLock()
 	executors := make([]TargetToolExecutor, 0, len(r.executors))
@@ -339,5 +412,9 @@ func (r *ComputerUseRuntime) Close() error {
 			failures = append(failures, closer.Close())
 		}
 	}
+	for _, profile := range r.managedProfiles {
+		profile.close()
+	}
+	clear(r.managedProfiles)
 	return errors.Join(failures...)
 }

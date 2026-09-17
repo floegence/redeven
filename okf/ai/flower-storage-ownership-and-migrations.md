@@ -23,7 +23,7 @@ queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor
 repairs Floret tables.
 
 Product kind `ai_threadstore_product_v1` retains its entire contiguous v1-to-v8
-migration chain. Fresh version 8 has exactly seven tables: schema metadata,
+migration chain. Fresh version 9 has exactly seven tables: schema metadata,
 thread settings, execution authority, uploads, upload attempts, upload
 references and staging scopes. Version 7 adds a default-empty computer target
 selection to thread settings; it preserves all existing records and does not
@@ -33,6 +33,8 @@ an endpoint/rank/creation/ThreadID index. Its v7-to-v8 transaction initializes
 ranks in the previous pin-time, creation-time and ThreadID order without changing
 pin timestamps, settings revisions or other user records. The
 [sidebar contract](../ui/flower-thread-sidebar.md) owns relative reorder semantics.
+Version 9 appends bounded task computer access with empty grants; forks do not
+inherit those grants. No Floret schema or Agent lifecycle state changes.
 Historical rows and shapes are accepted only by
 the exact migration edge that owns them. The read-state owner retains its
 supported v0-to-v4 lineage and moves the former path using a complete SQLite

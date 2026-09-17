@@ -1512,11 +1512,12 @@ describe('main routing', () => {
   it('routes Welcome Flower through one selected Runtime API without provider-session shortcuts', () => {
     const mainSrc = readMainSource();
 
-    const routeStart = mainSrc.indexOf('const runtimeFlowerNoQuery');
-    const routeEnd = mainSrc.indexOf('function runtimeFlowerPath(', routeStart);
+    const routesSrc = readMainModuleSource('runtimeFlowerRoutes.ts');
+    const routeStart = routesSrc.indexOf('const runtimeFlowerNoQuery');
+    const routeEnd = routesSrc.indexOf('function runtimeFlowerPath(', routeStart);
     expect(routeStart).toBeGreaterThanOrEqual(0);
     expect(routeEnd).toBeGreaterThan(routeStart);
-    const routeSrc = mainSrc.slice(routeStart, routeEnd);
+    const routeSrc = routesSrc.slice(routeStart, routeEnd);
     expect(routeSrc).toContain("'/_redeven_proxy/api/settings'");
     expect(routeSrc).toContain("'/_redeven_proxy/api/fs/path_context'");
     expect(routeSrc).toContain("'/_redeven_proxy/api/fs/list'");
@@ -1531,7 +1532,7 @@ describe('main routing', () => {
     expect(routeSrc).toContain('/^\\/_redeven_proxy\\/api\\/ai\\/upload-staging-scopes\\/[^/]+$/u');
     expect(routeSrc).not.toContain('composer-drafts');
     expect(routeSrc).not.toContain('draft_id');
-    expect(mainSrc).toContain('runtimeFlowerDeleteQuery,');
+    expect(routesSrc).toContain('runtimeFlowerDeleteQuery');
     expect(routeSrc).toContain("methods: ['GET', 'PATCH']");
     expect(routeSrc).toContain("methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery");
     expect(routeSrc).not.toContain("methods: ['GET', 'PATCH', 'DELETE']");
@@ -1574,20 +1575,20 @@ describe('main routing', () => {
     expect(routeSrc).not.toContain("startsWith('/_redeven_proxy/api/ai/threads')");
     expect(routeSrc).not.toContain("startsWith('/_redeven_proxy/api/fs')");
 
-    const pathStart = mainSrc.indexOf('function runtimeFlowerPath(');
-    const pathEnd = mainSrc.indexOf('function runtimeFlowerMethod(', pathStart);
+    const pathStart = routesSrc.indexOf('function runtimeFlowerPath(');
+    const pathEnd = routesSrc.indexOf('function runtimeFlowerMethod(', pathStart);
     expect(pathStart).toBeGreaterThanOrEqual(0);
     expect(pathEnd).toBeGreaterThan(pathStart);
-    const pathSrc = mainSrc.slice(pathStart, pathEnd);
+    const pathSrc = routesSrc.slice(pathStart, pathEnd);
     expect(pathSrc).toContain("new URL(raw, 'http://runtime-flower.local')");
     expect(pathSrc).toContain('runtimeFlowerAllowedRoute(parsed)');
     expect(pathSrc).toContain("throw new Error('Flower runtime request path is not allowed.');");
 
-    const methodStart = mainSrc.indexOf('function runtimeFlowerMethodAllowed(');
-    const methodEnd = mainSrc.indexOf('async function requestRuntimeFlower(', methodStart);
+    const methodStart = routesSrc.indexOf('function runtimeFlowerMethodAllowed(');
+    const methodEnd = routesSrc.length;
     expect(methodStart).toBeGreaterThanOrEqual(0);
     expect(methodEnd).toBeGreaterThan(methodStart);
-    const methodSrc = mainSrc.slice(methodStart, methodEnd);
+    const methodSrc = routesSrc.slice(methodStart, methodEnd);
     expect(methodSrc).toContain('route.methods.includes(method)');
     expect(methodSrc).not.toContain('terminal\\/[^/]+\\/write');
     expect(methodSrc).not.toContain('terminal\\/[^/]+\\/terminate');

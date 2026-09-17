@@ -1,3 +1,4 @@
+import { localizedComputerCopy } from '../computerUseCopy';
 import { createLocalizedReasoningControlCopy } from './reasoningControlMessages';
 import { modelCatalogCopy } from '../settings/modelCatalogCopy';
 import { createLocalizedFilesystemPickerCopy } from './filesystemPickerMessages';
@@ -20,6 +21,7 @@ function t(i18n: FlowerSurfaceTranslator, key: string, params?: TranslationParam
 export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy {
   const k = (suffix: string) => `flowerSurface.${suffix}`;
   return {
+    computer: localizedComputerCopy(key => i18n.t(key)),
     reasoningControl: createLocalizedReasoningControlCopy(i18n),
     filesystemPicker: createLocalizedFilesystemPickerCopy(i18n),
     attachments: {

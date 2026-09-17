@@ -3,6 +3,36 @@ import CoreGraphics
 @testable import RedevenComputerHost
 
 final class InputTests: XCTestCase {
+    func testCancellationReleasesOnlyPostedInputAtCurrentPointer() throws {
+        var pending = NativePendingInput()
+        let clicks = try NativeInput.click(at: CGPoint(x: 30, y: 40), count: 1)
+        pending.posted(clicks[0]); pending.posted(clicks[1])
+        let chord = try NativeInput.key("Meta+a")
+        pending.posted(chord[0])
+        let releases = pending.takeReleases(at: CGPoint(x: 200, y: 210))
+        XCTAssertEqual(Set(releases.map { $0.type.rawValue }), Set([CGEventType.leftMouseUp.rawValue, CGEventType.keyUp.rawValue]))
+        XCTAssertEqual(releases.first(where: { $0.type == .leftMouseUp })?.location, CGPoint(x: 200, y: 210))
+        XCTAssertTrue(releases.allSatisfy { $0.flags.isEmpty })
+        XCTAssertTrue(pending.takeReleases(at: .zero).isEmpty)
+        for event in clicks + chord { pending.posted(event) }
+        XCTAssertTrue(pending.takeReleases(at: .zero).isEmpty)
+    }
+
+    func testCancellationIsScopedToAdmittedRequest() throws {
+        let execution = NativeExecution()
+        XCTAssertTrue(execution.begin("one"))
+        XCTAssertFalse(execution.begin("two"))
+        execution.cancel("two")
+        XCTAssertNoThrow(try execution.check())
+        execution.cancel("one")
+        XCTAssertThrowsError(try execution.check())
+        execution.finish("one")
+        XCTAssertTrue(execution.begin("two"))
+        XCTAssertNoThrow(try execution.check())
+        execution.cancel()
+        XCTAssertThrowsError(try execution.check())
+    }
+
     func testInvalidExclusionNeverBecomesUnrestrictedCapture() throws {
         let key = "REDEVEN_COMPUTER_EXCLUDED_WINDOW_OWNER_PID"
         for value in ["", "not-a-pid", "0", "-1", "2147483648"] {
@@ -43,14 +73,18 @@ final class InputTests: XCTestCase {
         XCTAssertEqual(decoded, text)
     }
     func testScrollUsesViewportDirectionAndRejectsOverflow() throws {
-        let event = try NativeInput.scroll(x: 10, y: 600, naturalScrolling: false)[0]
+        let point = CGPoint(x: 300, y: 400)
+        let events = try NativeInput.scroll(at: point, x: 10, y: 600, naturalScrolling: false)
+        XCTAssertEqual(events.map(\.type), [.mouseMoved, .scrollWheel])
+        XCTAssertTrue(events.allSatisfy { $0.location == point })
+        let event = events[1]
         XCTAssertLessThan(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), 0)
         XCTAssertLessThan(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
-        let natural = try NativeInput.scroll(x: 10, y: 600, naturalScrolling: true)[0]
+        let natural = try NativeInput.scroll(at: point, x: 10, y: 600, naturalScrolling: true)[1]
         XCTAssertGreaterThan(natural.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), 0)
         XCTAssertGreaterThan(natural.getIntegerValueField(.scrollWheelEventPointDeltaAxis2), 0)
-        XCTAssertThrowsError(try NativeInput.scroll(x: .infinity, y: 0, naturalScrolling: false))
-        XCTAssertThrowsError(try NativeInput.scroll(x: 0, y: 1e20, naturalScrolling: true))
+        XCTAssertThrowsError(try NativeInput.scroll(at: point, x: .infinity, y: 0, naturalScrolling: false))
+        XCTAssertThrowsError(try NativeInput.scroll(at: point, x: 0, y: 1e20, naturalScrolling: true))
     }
 
     func testDragProducesBalancedPath() throws {

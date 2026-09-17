@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { createComputerTask, openComputerStage } from './computerTaskQualification.mjs';
 
 // Use a task-owned built Desktop. Only the provider is scripted; Runtime,
 // browser helper, workspace stream, IPC, decoder and user input stay production.
@@ -15,6 +16,8 @@ const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const browser = await chromium.connectOverCDP(cdp);
 const page = browser.contexts()[0].pages().find(entry => entry.url() === new URL('desktop/dist/welcome/index.html', `file://${root}`).href);
 assert(page, 'CDP must identify this checkout Desktop');
+await page.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
+await page.waitForFunction(() => document.documentElement.lang === 'en-US');
 let navigations = 0, providerCalls = 0, changedAt = 0, privateText = '';
 const marker = 'private-fixture-\u79c1\u5bc6'; // Deliberately exercises native IME.
 const fixture = http.createServer(async (req, res) => {
@@ -81,9 +84,10 @@ try {
   await page.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
   await page.reload();
   if (!await page.locator('.flower-surface').count()) await page.getByRole('button', { name: /^Flower$/ }).click();
-  await page.locator('.flower-new-chat-button').click();
+  threadID = await createComputerTask({ page, request, origin: fixtureURL, newBrowserTab: true });
   const composer = page.locator('.flower-surface textarea').first();
   await composer.fill(`Open ${fixtureURL} and let me complete verification.`); await composer.press('Enter');
+  await openComputerStage(page);
   await wait(() => page.locator('.flower-computer-stage img').evaluateAll(images => images.some(img => {
     if (!img.naturalWidth) return false;
     const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 1;

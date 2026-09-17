@@ -1,8 +1,11 @@
+import { FlowerBrowserConnection } from '../FlowerBrowserConnection';
+import { computerUseEnUS, type FlowerComputerCopy } from '../computerUseCopy';
+import type { FlowerSurfaceAdapter } from '../contracts/flowerSurfaceContracts';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
-import type { FlowerModelCatalogDiscovery, FlowerTargetDescriptor } from '../contracts/flowerSurfaceContracts';
+import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -163,7 +166,9 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   onSaveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
-  onConnectComputerBrowser?: (cdpURL: string) => Promise<FlowerTargetDescriptor>;
+  onConnectComputerBrowser?: FlowerSurfaceAdapter['connectComputerBrowser'];
+  onListComputerBrowserTabs?: NonNullable<FlowerSurfaceAdapter['computerManagement']>['listBrowserTabs'];
+  computerCopy?: FlowerComputerCopy;
   onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   saveError?: string;
   savedAt?: number | null;
@@ -175,29 +180,6 @@ export type FlowerSettingsSurfaceProps = Readonly<{
 export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings;
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
-  const [browserConnectURL, setBrowserConnectURL] = createSignal('');
-  const [browserConnectError, setBrowserConnectError] = createSignal('');
-  const [browserConnecting, setBrowserConnecting] = createSignal(false);
-  const [connectedBrowser, setConnectedBrowser] = createSignal<FlowerTargetDescriptor | null>(null);
-  const connectBrowser = async () => {
-    if (!props.onConnectComputerBrowser || browserConnecting()) return;
-    const url = trim(browserConnectURL());
-    if (!url) { setBrowserConnectError(copy().connectBrowserEmpty); return; }
-    setBrowserConnecting(true); setBrowserConnectError('');
-    try {
-      const target = await props.onConnectComputerBrowser(url);
-      if (!target.ready || target.state !== 'ready') {
-        setBrowserConnectError(copy().connectBrowserFailed);
-        return;
-      }
-      setConnectedBrowser(target);
-      setBrowserConnectURL('');
-    } catch {
-      // Transport failures can include private endpoint or authorization data.
-      setBrowserConnectError(copy().connectBrowserFailed);
-    }
-    finally { setBrowserConnecting(false); }
-  };
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [permissionType, setPermissionType] = createSignal<FlowerPermissionType>('approval_required');
   const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<FlowerPermissionType>('approval_required');
@@ -706,15 +688,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </section>
           </Show>
 
-          <Show when={props.onConnectComputerBrowser}>
+          <Show when={props.onConnectComputerBrowser && props.onListComputerBrowserTabs}>
             <section class="flower-settings-section flower-settings-computer-connect-section">
-              <FlowerSubSectionHeader title={copy().connectBrowserTitle} />
-              <form class="flex gap-2" onSubmit={(event) => { event.preventDefault(); void connectBrowser(); }}>
-                <input aria-label={copy().connectBrowserTitle} disabled={browserConnecting()} aria-invalid={Boolean(browserConnectError())} class="flower-settings-text-input" type="url" value={browserConnectURL()} placeholder={copy().connectBrowserPlaceholder} onInput={(event) => setBrowserConnectURL(event.currentTarget.value)} />
-                <Button size="sm" variant="default" type="submit" disabled={browserConnecting()}>{browserConnecting() ? copy().connectingBrowser : copy().connectBrowser}</Button>
-              </form>
-              <Show when={connectedBrowser()}>{(target) => <p role="status" class="mt-2 text-xs">{target().display_name} · {copy().ready}</p>}</Show>
-              <Show when={browserConnectError()}><p role="alert" class="mt-2 text-xs text-destructive">{browserConnectError()}</p></Show>
+              <FlowerSubSectionHeader title={(props.computerCopy ?? computerUseEnUS).advanced} />
+              <FlowerBrowserConnection copy={props.computerCopy ?? computerUseEnUS} listTabs={props.onListComputerBrowserTabs!} connect={props.onConnectComputerBrowser!} />
             </section>
           </Show>
 

@@ -128,6 +128,8 @@ Sous Linux, importez le certificat public exporté dans le magasin de confiance 
 
 Flower conserve dans la conversation les références et le choix de l’appareil que vous transmettez, afin que les questions suivantes gardent leur contexte. L’appareil sélectionné et la machine qui exécute les outils sont identifiés séparément. Les données confidentielles saisies temporairement ne sont pas enregistrées dans l’historique.
 
+Flower peut combiner des opérations sémantiques du navigateur et du bureau dans des scripts aux limites d’exécution définies. Sélectionnez un profil de navigateur géré, un onglet Chrome autorisé ou une fenêtre d’application, avec des autorisations explicites pour les sites et les applications de chaque tâche. Les captures d’écran sont demandées au besoin et la visionneuse s’ouvre à la demande. L’exécution en arrière-plan dépend de la cible et de l’action ; l’automatisation de Windows et de Safari n’est pas incluse.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

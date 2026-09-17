@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -23,6 +24,10 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 		// Preserve whether the effect already happened; a safety observation after
 		// navigation must never invite replay of that navigation.
 		if payload, ok := observed[0].Result.(map[string]any); ok {
+			if completed, ok := payload["completed_actions"].([]string); ok && len(completed) <= 50 {
+				result.Result.(map[string]any)["completed_actions"] = append([]string(nil), completed...)
+				result.Result.(map[string]any)["operations"] = len(completed)
+			}
 			if executed, ok := payload["action_executed"].(bool); ok {
 				result.Result.(map[string]any)["action_executed"] = executed
 			}
@@ -31,9 +36,21 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 			result.ExecutionLocation = observed[0].ExecutionLocation
 		}
 	}
+	summary := "Flower needs you to complete a step in the browser or application."
+	prompt := "Complete sign-in or verification outside the conversation. Never enter passwords or verification codes here. Return control when you are ready."
+	if slices.Contains(safety.ReasonCodes, "target_permission") {
+		summary = "A new browser tab needs your selection."
+		prompt = "Open Computer connections, connect and select the new tab, then review its site access before returning control. Flower will not switch tabs automatically."
+	} else if safety.RequiredOrigin != "" || safety.RequiredApp != "" || slices.Contains(safety.ReasonCodes, "foreground_permission") {
+		summary = "Flower needs access to the selected target before continuing."
+		prompt = "Open Computer connections, review and save the requested task access, then return control. Completed actions will not be replayed."
+	} else if slices.Contains(safety.ReasonCodes, "user_control") {
+		summary = "Flower's computer actions are paused."
+		prompt = "Continue using the target for as long as you need. Return control explicitly when Flower may continue."
+	}
 	return targetToolExecution{TargetID: target.ID, Payload: targetToolResultPayload(result, target.ID), inputRequired: &fltools.InputRequest{
-		Summary:   "Flower needs you to complete a step in the browser or application.",
-		Questions: []fltools.InputQuestion{{ID: "computer_control", Prompt: "Complete sign-in or verification outside the conversation. Never enter passwords or verification codes here. Return control when you are ready.", Kind: "select", Options: []string{"Return control to Flower"}}},
+		Summary:   summary,
+		Questions: []fltools.InputQuestion{{ID: "computer_control", Prompt: prompt, Kind: "select", Options: []string{"Return control to Flower"}}},
 	}}
 }
 

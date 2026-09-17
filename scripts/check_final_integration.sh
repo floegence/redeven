@@ -94,6 +94,9 @@ check_shell_syntax() {
   bash -n scripts/check_docker_runtime_e2e.sh
   bash -n scripts/smoke_desktop_plugins.sh
   bash -n scripts/check_final_integration.sh
+  bash -n scripts/check_computer_execution.sh
+  bash -n scripts/check_computer_private_desktop.sh
+  bash -n scripts/check_macos_computer_background.sh
   bash -n scripts/integrate_service_template_update.sh
   bash -n scripts/prepare_service_template_update.sh
   bash -n scripts/check_quick_ci.sh
@@ -151,6 +154,8 @@ run_step "linting Go packages with the native terminal engine" env GOWORK=off CG
 run_step "linting UI packages" ./scripts/lint_ui.sh
 run_step "building embedded assets" ./scripts/build_assets.sh
 run_step "testing complete UI packages" ./scripts/check_ui_tests.sh
+run_step "checking isolated computer execution and packaged resources" ./scripts/check_computer_execution.sh
+run_step "checking Linux private desktop semantics and input" ./scripts/check_computer_private_desktop.sh
 run_step "testing release note generation" ./scripts/test_generate_release_notes.sh
 run_step "checking Runtime compatibility source" ./scripts/check_runtime_compatibility_contract.sh --source-only
 run_step "checking ReDevPlugin dependency boundary" ./scripts/check_redevplugin_dependency_boundary.sh --ci

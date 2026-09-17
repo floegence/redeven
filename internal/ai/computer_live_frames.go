@@ -55,14 +55,14 @@ func (r *ComputerUseRuntime) startComputerLiveFrames(ctx context.Context, reques
 		call = request.privateCall
 		call.ToolName, call.Arguments, call.userInput, call.liveFrame = "computer.screenshot", nil, true, true
 	}
-	_, release, err := r.acquireComputerControl(ctx, call)
+	control, release, err := r.acquireComputerControl(ctx, call)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 	if request.validate != nil {
 		err = request.validate(ctx)
 	}
-	release()
 	if err != nil {
 		return nil, err
 	}
@@ -71,6 +71,16 @@ func (r *ComputerUseRuntime) startComputerLiveFrames(ctx context.Context, reques
 	if r.closed || ctx.Err() != nil {
 		r.mu.Unlock()
 		return nil, errors.New("computer viewer unavailable")
+	}
+	// Run completion can release public ownership while startup holds the action
+	// gate. Private startup instead uses the canonical pending interaction and
+	// revalidates it before each capture, including after a Runtime restart.
+	control.mu.Lock()
+	owned := private || control.threadID == request.ThreadID
+	control.mu.Unlock()
+	if !owned {
+		r.mu.Unlock()
+		return nil, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 	}
 	if len(r.liveFrames) >= 8 || r.liveFrames[key] != nil {
 		r.mu.Unlock()

@@ -315,14 +315,52 @@ func TestComputerResultFrameSurvivesActivitySerialization(t *testing.T) {
 		if err := json.Unmarshal(body, &replay); err != nil {
 			t.Fatal(err)
 		}
-		if len(replay.TargetRefs) != 1 || replay.TargetRefs[0].Kind != "computer_frame" || replay.TargetRefs[0].ResourceRef != ref {
+		if len(replay.TargetRefs) != 2 || replay.TargetRefs[0].Kind != "computer_target" || replay.TargetRefs[0].ResourceRef != "browser-main" || replay.TargetRefs[1].Kind != "computer_frame" || replay.TargetRefs[1].ResourceRef != ref {
 			t.Fatalf("%s lost screenshot at public activity boundary: %s", name, body)
 		}
 		public := publicActivityItem(observation.ActivityItem{ItemID: "tool:frame-call", ToolID: "frame-call", ToolName: name,
 			Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: &replay})
-		if public.Presentation == nil || len(public.Presentation.TargetRefs) != 1 || public.Presentation.TargetRefs[0].ResourceRef != ref {
+		if public.Presentation == nil || len(public.Presentation.TargetRefs) != 2 || public.Presentation.TargetRefs[0].ResourceRef != "browser-main" || public.Presentation.TargetRefs[1].ResourceRef != ref {
 			t.Fatalf("%s lost screenshot in public timeline: %+v", name, public)
 		}
+	}
+}
+
+func TestComputerActivityPublicReferencesWithoutScreenshots(t *testing.T) {
+	for _, tc := range []struct {
+		kind, ref string
+		keep      bool
+	}{
+		{"computer_target", "browser-main", true},
+		{"computer_control", "macos-window-1234", true},
+		{"computer_origin", "https://example.com", true},
+		{"computer_origin", "http://localhost:1234", true},
+		{"computer_app", "dev.floegence.fixture", true},
+		{"computer_foreground", "foreground", true},
+		{"computer_target", "/private/target", false},
+		{"computer_target", "file:///private/target", false},
+		{"computer_origin", "https://user:password@example.com", false},
+		{"computer_origin", "https://example.com/private?token=secret", false},
+		{"computer_app", "/Applications/Private.app", false},
+		{"computer_foreground", "private-reference", false},
+		{"file", "private-reference", false},
+	} {
+		t.Run(tc.kind+"/"+tc.ref, func(t *testing.T) {
+			public := publicActivityItem(observation.ActivityItem{ItemID: "semantic", ToolID: "semantic", ToolName: "computer.observe",
+				Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
+				Presentation: &fltools.ActivityPresentation{Label: "Inspect target", Renderer: fltools.ActivityRendererStructured,
+					TargetRefs: []fltools.ActivityTargetRef{{Kind: tc.kind, Label: "Selected target", ResourceRef: tc.ref}}}})
+			if public.Presentation == nil || len(public.Presentation.TargetRefs) != 1 {
+				t.Fatal("public activity lost the reference label")
+			}
+			want := ""
+			if tc.keep {
+				want = tc.ref
+			}
+			if got := public.Presentation.TargetRefs[0].ResourceRef; got != want {
+				t.Fatalf("public resource=%q, want %q", got, want)
+			}
+		})
 	}
 }
 

@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { ensureFlowerSurface } from '../../../../scripts/smoke_flower_deepseek.mjs';
+import { createComputerTask, configureComputerTask, openComputerStage } from './computerTaskQualification.mjs';
 
 // Inspect only public current views and authenticated media endpoints. Never
 // read the Floret database or construct model responses to recover a thread.
@@ -23,6 +24,7 @@ export async function qualifyComputerRecovery({ page, request, fixtureURL, fixtu
     return { status, sha256: Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, '0')).join(''), mime: response.headers.get('content-type'), cache: response.headers.get('cache-control') };
   }, { threadID, ref });
   const frame = async () => {
+    await openComputerStage(page);
     await page.waitForFunction(() => document.querySelector('.flower-computer-stage-frame')?.naturalWidth >= 640);
     return page.evaluate(async () => {
       const img = document.querySelector('.flower-computer-stage-frame');
@@ -38,7 +40,7 @@ export async function qualifyComputerRecovery({ page, request, fixtureURL, fixtu
     await page.waitForFunction((id) => document.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-id') === id, threadID);
   };
 
-  await page.locator('.flower-new-chat-button').click();
+  await createComputerTask({ page, request, ownedThreads, origin: fixtureURL });
   const parent = await submit(`Open ${fixtureURL}/recovered?phase=parent in the managed browser, take a screenshot and report the heading. Use only browser and computer tools.`);
   assert(fixture.recovered.has('parent'));
   const parentView = await request('GET', `/_redeven_proxy/api/ai/threads/${parent}`);
@@ -68,6 +70,9 @@ export async function qualifyComputerRecovery({ page, request, fixtureURL, fixtu
   assert(refs(await request('GET', `/_redeven_proxy/api/ai/threads/${fork}`)).includes(ref), 'fork lost canonical keyframe history');
   assert.deepEqual(await media(fork, ref), original, 'fork could not resolve inherited media');
   assert.equal((await frame()).sha256, original.sha256, 'fork did not decode its inherited frame');
+  const access = await request('GET', `/_redeven_proxy/api/ai/computer/access?thread_id=${fork}`);
+  assert.deepEqual(access.origins ?? [], [], 'fork inherited the parent site grant');
+  await configureComputerTask({ page, request, threadID: fork, origin: fixtureURL, targetID: 'browser-main' });
   await submit(`Open ${fixtureURL}/recovered?phase=fork in the managed browser, take a screenshot and report the heading. Use only browser and computer tools.`);
   assert(fixture.recovered.has('fork'));
   await page.screenshot({ path: path.join(output, 'recovery-fork.png') });

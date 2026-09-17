@@ -1545,6 +1545,21 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	if len(activityUpdaters) > 0 {
 		activityUpdater = activityUpdaters[0]
 	}
+	if isComputerUseTool(toolName) && activityUpdater != nil {
+		ctx = context.WithValue(ctx, computerProgressKey{}, func(target TargetDescriptor, mode, reason string) {
+			activity := toolStartActivityPresentation(toolName, args)
+			if mode == "foreground" {
+				if reason == "application_may_activate" {
+					activity.Description = "The selected application may become active during this action"
+				} else {
+					activity.Description = "Using the selected application window for native input"
+				}
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_target", ResourceRef: target.ID, Label: target.DisplayName})
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
+				activityUpdater(activity, map[string]any{"execution_mode": mode})
+			}
+		})
+	}
 
 	if toolName == "terminal.exec" {
 		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, activityUpdater)
@@ -1561,12 +1576,21 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	defer endBusy()
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
+		var partial any
+		if target, ok := result.(targetToolExecution); ok {
+			partial = target.Payload
+		}
+		if errors.Is(toolErrRaw, errComputerEffectUnknown) {
+			outcome.dispatchErr = errComputerEffectUnknown
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: errComputerEffectUnknown.Error(), Retryable: false}, "", partial)
+			return outcome, nil
+		}
 		if errors.Is(toolErrRaw, context.Canceled) {
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "", nil)
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "", partial)
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.DeadlineExceeded) {
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: true}, "", nil)
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: !isComputerUseTool(toolName)}, "", partial)
 			return outcome, nil
 		}
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
@@ -1574,7 +1598,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if aitools.ShouldRetryWithNormalizedArgs(toolErr) {
 			recoveryAction = "retry_with_normalized_args"
 		}
-		setToolError(toolErr, recoveryAction, nil)
+		setToolError(toolErr, recoveryAction, partial)
 		return outcome, nil
 	}
 	if target, ok := result.(targetToolExecution); ok {
@@ -3072,6 +3096,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	}
 	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
 	targetID := targetIDFromToolArgs(args)
+	if frozen, ok := ctx.Value(computerAuthorizedTargetKey{}).(string); ok && isComputerUseTool(toolName) {
+		targetID = frozen
+	}
 	if strings.TrimSpace(targetID) == "" {
 		targetID = strings.TrimSpace(policy.DefaultTargetID)
 		if isComputerUseTool(toolName) && targetID == "" {
@@ -3114,24 +3141,17 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if !targetAllowedByPolicy(policy, targetID) {
 		return nil, &targetToolPolicyError{code: "target_not_allowed", tool: toolName, target: targetID}
 	}
-	// Browser commands require a browser adapter. A desktop target may be used
-	// to launch an application during an explicit handoff, but it must never be
-	// used to execute browser navigation or history commands. This keeps the
-	// browser/desktop boundary deterministic instead of silently degrading to
-	// screenshot and keyboard automation.
-	if strings.HasPrefix(strings.TrimSpace(toolName), "browser.") && target.Kind != "browser.managed" && target.Kind != "browser.connected" {
-		browserTarget, resolveErr := r.targetResolver.ResolveTarget(ctx, "browser.managed")
-		if resolveErr != nil {
-			return nil, &targetToolPolicyError{code: "target_connection_required", tool: toolName, target: targetID, targetKind: "browser.managed", targetState: "connection_required", repairAction: "start_managed_browser"}
-		}
-		target = browserTarget
-		targetID = strings.TrimSpace(browserTarget.ID)
+	if strings.HasPrefix(toolName, "browser.") && target.Kind != "browser.managed" && target.Kind != "browser.connected" {
+		return nil, computerTargetFailure(TargetToolCall{ToolName: toolName, TargetID: target.ID}, "TARGET_CAPABILITY_UNAVAILABLE")
 	}
 	gate := r.interactionSafetyGate
 	if gate == nil {
 		gate = defaultInteractionSafetyGate{}
 	}
 	call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: strings.TrimSpace(toolID), TargetID: targetID, ToolName: strings.TrimSpace(toolName), RequiredCapabilities: requiredTargetCapabilities(toolName)}
+	if progress, ok := ctx.Value(computerProgressKey{}).(func(TargetDescriptor, string, string)); ok {
+		call.progress = func(mode, reason string) { progress(target, mode, reason) }
+	}
 	if r.targetToolExecutor == nil {
 		code := "target_executor_unavailable"
 		if r.targetResolver != nil {
@@ -3165,6 +3185,27 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		return nil, errors.New("invalid args")
 	}
 	call.Arguments = rawArgs
+	if toolName == "computer.exec" {
+		call.revalidate = func(operationCtx context.Context) error {
+			if err := operationCtx.Err(); err != nil {
+				return err
+			}
+			if r.isDetached() {
+				return context.Canceled
+			}
+			if _, _, err := r.authorizeToolExecutionFromSnapshot(operationCtx, toolID, toolName); err != nil {
+				return err
+			}
+			current, err := r.sessionMetaForTool()
+			if err != nil {
+				return err
+			}
+			if current == nil || !current.CanRead || !current.CanWrite || !current.CanExecute {
+				return errors.New("computer permission was revoked")
+			}
+			return nil
+		}
+	}
 	decision, safetyErr := gate.AssessInteraction(ctx, call, target)
 	if safetyErr != nil {
 		if errors.Is(safetyErr, ErrInteractionTakeoverRequired) {
@@ -3188,6 +3229,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 				decision = *failure.safety
 			}
 			return computerTakeoverExecution(call, target, decision), nil
+		}
+		if result.Result != nil {
+			return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID)}, err
 		}
 		return nil, err
 	}
@@ -3330,7 +3374,7 @@ func (e *targetToolPolicyError) Error() string {
 	case "target_permission_required":
 		return "computer use requires target permissions"
 	case "target_connection_required":
-		return "a browser connection is required before computer use can continue"
+		return "the selected computer target is disconnected; select or reconnect it before continuing"
 	case "target_not_ready":
 		return "computer use target is not ready"
 	case "target_not_allowed":

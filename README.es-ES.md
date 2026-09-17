@@ -128,6 +128,8 @@ En Linux, importe el certificado público exportado al almacén de confianza del
 
 Flower conserva en la conversación las referencias y la selección del dispositivo que envías, para que las preguntas posteriores mantengan su contexto. El dispositivo seleccionado y el equipo que ejecuta las herramientas se identifican por separado. Los datos secretos introducidos temporalmente no se guardan en el historial.
 
+Flower permite combinar operaciones semánticas del navegador y del escritorio mediante scripts con límites de ejecución. Selecciona un perfil de navegador administrado, una pestaña de Chrome autorizada o una ventana de aplicación, con permisos explícitos para sitios y aplicaciones en cada tarea. Las capturas se solicitan cuando hacen falta y el visor se abre a petición. La ejecución en segundo plano depende del destino y de la acción; no se incluye la automatización de Windows ni de Safari.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

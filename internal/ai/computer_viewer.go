@@ -38,11 +38,35 @@ func (s *Service) SetComputerViewer(ctx context.Context, meta *session.Meta, req
 	} else if request.ThreadID != "" {
 		// A user may watch only a target already observed by this thread. Merely
 		// knowing a target ID never authorizes a new capture session.
-		if _, err := s.ResolveTargetToolAttachmentForThread(ctx, meta, request.ThreadID, request.TargetID, request.ResourceRef); err != nil {
-			return err
+		if request.ResourceRef == "" {
+			if err := s.requireObservedComputerTarget(ctx, meta, request.ThreadID, request.TargetID); err != nil {
+				return err
+			}
+		} else {
+			if _, err := s.ResolveTargetToolAttachmentForThread(ctx, meta, request.ThreadID, request.TargetID, request.ResourceRef); err != nil {
+				return err
+			}
 		}
 	}
 	return s.setComputerViewer(ctx, meta, request)
+}
+
+func (s *Service) requireObservedComputerTarget(ctx context.Context, meta *session.Meta, threadID, targetID string) error {
+	detail, err := s.GetFlowerThreadDetail(ctx, meta, threadID)
+	if err != nil || detail == nil {
+		return errors.New("computer observation thread is unavailable")
+	}
+	for _, item := range detail.Current.Items {
+		if item.RunID != detail.Current.RunID || item.TurnID != detail.Current.TurnID || item.Activity == nil || item.Activity.Presentation == nil {
+			continue
+		}
+		for _, ref := range item.Activity.Presentation.TargetRefs {
+			if ref.Kind == "computer_target" && ref.ResourceRef == targetID {
+				return nil
+			}
+		}
+	}
+	return errors.New("computer target has not been observed by this thread")
 }
 
 func (s *Service) setComputerViewer(ctx context.Context, meta *session.Meta, request ComputerViewerRequest) (resultErr error) {
