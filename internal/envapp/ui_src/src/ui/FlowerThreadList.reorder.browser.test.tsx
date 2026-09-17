@@ -35,14 +35,73 @@ function mount(seed = [item('first', 3), item('second', 2), item('third', 1)]) {
   const [query, setQuery] = createSignal('');
   const onMove = vi.fn((_id: string, _position: FlowerThreadPinPosition) => undefined);
   const onSelect = vi.fn();
+  const onMenuAction = vi.fn();
+  const [pinBusy, setPinBusy] = createSignal(false);
   disposers.push(render(() => <FlowerThreadList items={items()} query={query()} activeThreadID="first" copy={copy}
-    onQueryChange={setQuery} onSelect={onSelect} onRefresh={() => undefined} onMovePinned={onMove} canPin onMenuAction={() => undefined} />, host));
-  return { host, items, setItems, setQuery, onMove, onSelect,
+    onQueryChange={setQuery} onSelect={onSelect} onRefresh={() => undefined} onMovePinned={onMove} canPin canRename pinBusy={pinBusy()} onMenuAction={onMenuAction} />, host));
+  return { host, items, setItems, setQuery, setPinBusy, onMove, onSelect, onMenuAction,
     row: (id: string) => host.querySelector<HTMLElement>(`[data-thread-id="${id}"]`)!,
     order: () => Array.from(host.querySelectorAll<HTMLElement>('[data-thread-id]')).map((row) => row.dataset.threadId) };
 }
 
 describe('Flower pinned conversation interaction', () => {
+  it.each([224, 272])('gives pinned and ordinary titles the same space at %ipx width', async (width) => {
+    const ui = mount([item('first', 3), item('second', 2), item('ordinary', 0)]);
+    ui.host.style.width = `${width}px`;
+    await frame();
+    const pinned = ui.row('first').querySelector<HTMLElement>('.flower-thread-list-title')!;
+    const ordinary = ui.row('ordinary').querySelector<HTMLElement>('.flower-thread-list-title')!;
+    expect(pinned.getBoundingClientRect().left).toBe(ordinary.getBoundingClientRect().left);
+    expect(pinned.getBoundingClientRect().width).toBe(ordinary.getBoundingClientRect().width);
+    expect(pinned.draggable).toBe(true);
+    expect(pinned.title).toBe(copy.dragPinned);
+    expect(ordinary.draggable).toBe(false);
+    await userEvent.hover(pinned);
+    expect(pinned.getBoundingClientRect().left).toBe(ordinary.getBoundingClientRect().left);
+    if (import.meta.env.VITE_FLOWER_SIDEBAR_SCREENSHOTS === '1') {
+      ui.setItems(ui.items().map((entry) => ({ ...entry, title: 'Review conversation sidebar interactions' })));
+      await frame();
+      await page.screenshot({ element: ui.host, path: `__screenshots__/sidebar-title-drag-${width}.png` });
+    }
+  });
+
+  it('keeps title clicks, double clicks and keyboard activation available while pin saving blocks dragging', async () => {
+    const ui = mount();
+    await frame();
+    const title = ui.row('second').querySelector<HTMLElement>('.flower-thread-list-title')!;
+    await userEvent.click(title);
+    expect(ui.onSelect).toHaveBeenCalledExactlyOnceWith('second');
+    await userEvent.dblClick(title);
+    expect(ui.onMenuAction).toHaveBeenCalledExactlyOnceWith('rename', ui.items()[1]);
+    expect(ui.onMove).not.toHaveBeenCalled();
+    ui.setPinBusy(true);
+    await frame();
+    expect(title.draggable).toBe(false);
+    expect(title.title).toBe('');
+    ui.onSelect.mockClear();
+    await userEvent.click(title);
+    expect(ui.onSelect).toHaveBeenCalledExactlyOnceWith('second');
+    ui.onSelect.mockClear();
+    await userEvent.keyboard('{Enter}');
+    expect(ui.onSelect).toHaveBeenCalledExactlyOnceWith('second');
+  });
+
+  it.each(['pin', 'menu'])('keeps the %s button independent of title dragging', async (control) => {
+    const ui = mount();
+    await frame();
+    const button = ui.row('second').querySelector<HTMLButtonElement>(`.flower-thread-card-${control}-button`)!;
+    await userEvent.hover(ui.row('second'));
+    expect(button.closest('[draggable="true"]')).toBeNull();
+    await userEvent.dragAndDrop(button, ui.row('third'));
+    expect(ui.onMove).not.toHaveBeenCalled();
+    expect(ui.onSelect).not.toHaveBeenCalled();
+    await userEvent.hover(ui.row('second'));
+    await userEvent.click(button);
+    if (control === 'pin') expect(ui.onMenuAction).toHaveBeenCalledExactlyOnceWith('pin', ui.items()[1]);
+    else expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    expect(ui.onSelect).not.toHaveBeenCalled();
+  });
+
   it('moves a pin with keyboard menu activation without selecting it', async () => {
     const ui = mount();
     await frame();
@@ -76,15 +135,17 @@ describe('Flower pinned conversation interaction', () => {
     expect(document.querySelector('[role="menu"]')).toBe(menu);
     expect(menu?.contains(document.activeElement)).toBe(true);
   });
-  it('reorders with a real pointer drag from the reserved handle', async () => {
+  it('reorders with a real pointer drag from the title', async () => {
     const ui = mount();
     await frame();
     await userEvent.hover(ui.row('first'));
-    await userEvent.dragAndDrop(ui.row('first').querySelector('.flower-thread-drag-handle')!, ui.row('third'));
+    await userEvent.dragAndDrop(ui.row('first').querySelector('.flower-thread-list-title')!, ui.row('third'));
     expect(ui.onMove).toHaveBeenCalledTimes(1);
     expect(ui.onMove.mock.calls[0][0]).toBe('first');
     expect(ui.onMove.mock.calls[0][1].anchor_thread_id).toBe('third');
     expect(ui.onSelect).not.toHaveBeenCalled();
+    await userEvent.click(ui.row('second').querySelector('.flower-thread-list-title')!);
+    expect(ui.onSelect).toHaveBeenCalledExactlyOnceWith('second');
   });
 
   it('scrolls at the list edge and cancels a gesture with Escape', async () => {
@@ -94,7 +155,7 @@ describe('Flower pinned conversation interaction', () => {
     await frame();
     const scroll = ui.host.querySelector<HTMLElement>('.flower-scroll')!;
     const dataTransfer = new DataTransfer();
-    ui.row('first').querySelector('.flower-thread-drag-handle')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+    ui.row('first').querySelector('.flower-thread-list-title')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
     scroll.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientY: scroll.getBoundingClientRect().bottom - 1 }));
     await frame(8);
     expect(scroll.scrollTop).toBeGreaterThan(0);
@@ -163,7 +224,7 @@ describe('Flower pinned conversation interaction', () => {
     await frame();
     const first = ui.row('first');
     const dataTransfer = new DataTransfer();
-    first.querySelector('.flower-thread-drag-handle')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+    first.querySelector('.flower-thread-list-title')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
     ui.setItems(ui.items().map((entry) => ({ ...entry, title: 'Updated ' + entry.title, pin_rank: 4 - (entry.pin_rank ?? 0) })));
     await frame();
     expect(ui.order()).toEqual(['first', 'second', 'third']);
@@ -171,7 +232,7 @@ describe('Flower pinned conversation interaction', () => {
     third.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientY: third.getBoundingClientRect().bottom - 1 }));
     expect(third.dataset.flowerThreadDrop).toBe('after');
     third.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
-    first.querySelector('.flower-thread-drag-handle')!.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }));
+    first.querySelector('.flower-thread-list-title')!.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }));
     expect(ui.onMove).toHaveBeenCalledExactlyOnceWith('first', { anchor_thread_id: 'third', placement: 'after' });
     expect(ui.onSelect).not.toHaveBeenCalled();
     expect(ui.row('first')).toBe(first);
@@ -181,7 +242,7 @@ describe('Flower pinned conversation interaction', () => {
     const ui = mount();
     await frame();
     const dataTransfer = new DataTransfer();
-    ui.row('first').querySelector('.flower-thread-drag-handle')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+    ui.row('first').querySelector('.flower-thread-list-title')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
     const third = ui.row('third');
     third.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientY: third.getBoundingClientRect().bottom - 1 }));
     ui.setItems(ui.items().map((entry) => entry.thread_id === 'third' ? { ...entry, pinned: false, pin_rank: 0 } : entry));
@@ -196,7 +257,7 @@ describe('Flower pinned conversation interaction', () => {
     expect(ui.onMove).toHaveBeenCalledWith('first', { anchor_thread_id: 'second', placement: 'after' });
     ui.setQuery('first');
     await frame();
-    expect(ui.host.querySelector<HTMLButtonElement>('.flower-thread-drag-handle')?.disabled).toBe(true);
+    expect(ui.row('first').querySelector<HTMLElement>('.flower-thread-list-title')?.draggable).toBe(false);
     const clear = ui.host.querySelector<HTMLButtonElement>('.flower-thread-clear-sort-search')!;
     expect(clear.textContent).toBe(copy.clearSearchToReorder);
     clear.click();

@@ -2,7 +2,7 @@ import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, ArrowDown, GripVertical, Copy, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, Copy, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Input } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerThreadRows } from './FlowerThreadRows';
@@ -76,6 +76,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const indicator = createMemo(() => flowerThreadIndicator(props.item, props.active, copy()));
   const itemCanRename = createMemo(() => canRenameThreadItem(props.item));
   const itemCanPin = createMemo(() => canPinThreadItem(props.item));
+  const titleDraggable = () => Boolean(props.item.pinned && props.reorderable && props.onDragStart);
   const ariaLabel = () => [
     title(),
     indicator().ariaStatus,
@@ -105,19 +106,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         props.active && 'flower-thread-card-active',
       )}
     >
-      <Show when={props.item.pinned && props.onDragStart}>
-        <button
-          type="button"
-          class="flower-thread-drag-handle"
-          draggable={props.reorderable}
-          disabled={!props.reorderable}
-          aria-label={copy().dragPinned}
-          title={copy().dragPinned}
-          onClick={(event) => { event.stopPropagation(); props.onContextMenu?.(event, props.item); }}
-          onDragStart={(event) => props.onDragStart?.(event, props.item)}
-          onDragEnd={() => props.onDragEnd?.()}
-        ><GripVertical class="h-3.5 w-3.5" /></button>
-      </Show>
       <button
         type="button"
         class="flower-thread-card-select-button flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
@@ -148,7 +136,13 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">
-            <span class="flower-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
+            <span
+              class="flower-thread-list-title flex-1 truncate text-xs font-medium"
+              draggable={titleDraggable()}
+              title={titleDraggable() ? copy().dragPinned : undefined}
+              onDragStart={(event) => props.onDragStart?.(event, props.item)}
+              onDragEnd={() => props.onDragEnd?.()}
+            >{title()}</span>
           </div>
           <Show when={props.busyLabel || flowerThreadIsStopping(props.item)}>
             <span class="text-[10px] text-muted-foreground" role="status">{flowerThreadIsStopping(props.item) ? copy().stopping : props.busyLabel}</span>

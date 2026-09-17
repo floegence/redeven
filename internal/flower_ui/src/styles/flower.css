@@ -6610,31 +6610,10 @@
   margin-top: 0.75rem;
 }
 
-.flower-thread-card[data-pinned='true']:has(.flower-thread-drag-handle) .flower-thread-card-select-button {
-  padding-left: 1.875rem;
+.flower-thread-list-title[draggable='true'] {
+  user-select: none;
 }
 
-.flower-thread-drag-handle {
-  position: absolute;
-  left: 0.25rem;
-  top: 0.25rem;
-  z-index: 3;
-  display: flex;
-  width: 1.25rem;
-  height: 1.5rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.25rem;
-  color: var(--flower-thread-rail-muted);
-  opacity: 0;
-  cursor: grab;
-}
-
-.flower-thread-card:hover .flower-thread-drag-handle,
-.flower-thread-card:focus-within .flower-thread-drag-handle { opacity: 1; }
-.flower-thread-drag-handle:active { cursor: grabbing; }
-.flower-thread-drag-handle:disabled { cursor: not-allowed; opacity: 0; }
-.flower-thread-drag-handle:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .flower-thread-card-pin-button:disabled { cursor: not-allowed; opacity: 0.45; }
 .flower-thread-card[data-flower-thread-dragging='true'] { opacity: 0.55; }
 .flower-thread-card[data-flower-thread-drop]::after {
@@ -6662,10 +6641,6 @@
   .flower-thread-card-active .flower-thread-list-title { color: HighlightText; }
   .flower-thread-card-active::before { background: HighlightText; }
   .flower-thread-card[data-flower-thread-drop]::after { background: Highlight; }
-}
-@media (hover: none), (pointer: coarse) {
-  .flower-thread-drag-handle { display: none; }
-  .flower-thread-card[data-pinned='true']:has(.flower-thread-drag-handle) .flower-thread-card-select-button { padding-left: 0.625rem; }
 }
 
 .flower-thread-list-title {
