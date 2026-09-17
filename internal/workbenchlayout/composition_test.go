@@ -17,7 +17,7 @@ import (
 func TestServiceCompositionRoundTrip(t *testing.T) {
 	svc := openTestService(t)
 	var request PutLayoutRequest
-	if err := json.Unmarshal([]byte(`{"base_revision":0,"widgets":[],"sticky_notes":[{"id":"note","kind":"sticky_note","body":"","color":"graphite","material":"ruled","x":20,"y":40,"width":260,"height":190}],"background_layers":[{"id":"region","name":"","material":"frame","fill":"#8fa1aa","opacity":0.8,"x":0,"y":0,"width":400,"height":300}]}`), &request); err != nil {
+	if err := json.Unmarshal([]byte(`{"base_revision":0,"widgets":[],"sticky_notes":[{"id":"note","kind":"sticky_note","title":"Launch 🚀","body":"","color":"graphite","material":"ruled","x":20,"y":40,"width":260,"height":190}],"background_layers":[{"id":"region","name":"","material":"frame","fill":"#8fa1aa","opacity":0.8,"x":0,"y":0,"width":400,"height":300}]}`), &request); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.Replace(context.Background(), request); err != nil {
@@ -40,6 +40,9 @@ func TestServiceCompositionRoundTrip(t *testing.T) {
 	var note map[string]any
 	if err := json.Unmarshal(raw, &note); err != nil {
 		t.Fatal(err)
+	}
+	if note["title"] != "Launch 🚀" {
+		t.Fatalf("title did not persist: %s", raw)
 	}
 	if note["material"] != "ruled" {
 		t.Fatalf("material did not persist: %s", raw)
@@ -116,7 +119,7 @@ func TestCompositionV5MigrationPreservesLayoutAndEvents(t *testing.T) {
 	if beforeEvents != afterEvents {
 		t.Fatal("v5 migration rewrote existing events")
 	}
-	assertCompositionVersion(t, svc.store.db, 5, 5)
+	assertCompositionVersion(t, svc.store.db, currentSchemaVersion, currentSchemaVersion)
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}

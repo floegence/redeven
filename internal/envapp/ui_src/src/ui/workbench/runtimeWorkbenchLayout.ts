@@ -471,6 +471,7 @@ function normalizeWorkbenchStickyNote(value: unknown): WorkbenchStickyNoteItem |
   return {
     id,
     kind: 'sticky_note',
+    title: typeof value.title === 'string' ? value.title : undefined,
     body: stringValue(value.body),
     color: normalizeStickyNoteColor(value.color),
     material: value.material === 'tab' || value.material === 'ruled' ? value.material : 'tint',
@@ -916,6 +917,7 @@ export function runtimeWorkbenchStickyNotesEqual(
     const other = rightNotes[index];
     return note.id === other.id
       && note.kind === other.kind
+      && (note.title ?? '') === (other.title ?? '')
       && note.body === other.body
       && note.color === other.color
       && (note.material ?? 'tint') === (other.material ?? 'tint')

@@ -711,7 +711,7 @@ describe('runtimeWorkbenchLayout', () => {
 
   it('preserves blank composition content and material through runtime projection', () => {
     const snapshot = normalizeRuntimeWorkbenchLayoutSnapshot({
-      sticky_notes: [{ id: 'note', body: '', color: 'graphite', material: 'ruled', x: 20, y: 30, width: 260, height: 190 }],
+      sticky_notes: [{ id: 'note', title: 'Launch 🚀', body: '', color: 'graphite', material: 'ruled', x: 20, y: 30, width: 260, height: 190 }],
       background_layers: [{ id: 'region', name: '', material: 'frame', fill: WORKBENCH_DEFAULT_REGION_FILL, opacity: 0.8, x: 0, y: 0, width: 800, height: 500 }],
     });
     const projected = projectWorkbenchStateFromRuntimeLayout({
@@ -720,7 +720,12 @@ describe('runtimeWorkbenchLayout', () => {
       widgetDefinitions: [],
     });
     const extracted = extractRuntimeWorkbenchLayoutFromSurfaceState(projected);
-    expect(extracted.sticky_notes[0]).toMatchObject({ body: '', color: 'graphite', material: 'ruled' });
+    expect(extracted.sticky_notes[0]).toMatchObject({ title: 'Launch 🚀', body: '', color: 'graphite', material: 'ruled' });
+    expect(runtimeWorkbenchStickyNotesEqual(extracted.sticky_notes, [{ ...extracted.sticky_notes[0]!, title: 'Renamed' }])).toBe(false);
+    expect(runtimeWorkbenchStickyNotesEqual(
+      [{ ...extracted.sticky_notes[0]!, title: undefined }],
+      [{ ...extracted.sticky_notes[0]!, title: '' }],
+    )).toBe(true);
     expect(extracted.background_layers[0]).toMatchObject({ name: '', material: 'frame' });
     expect(runtimeWorkbenchStickyNotesEqual(extracted.sticky_notes, [{ ...extracted.sticky_notes[0]!, material: 'tab' }])).toBe(false);
     expect(runtimeWorkbenchStickyNotesEqual(

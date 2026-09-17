@@ -13,23 +13,68 @@ import (
 
 const (
 	schemaKind           = "workbench_layout_runtime"
-	currentSchemaVersion = 5
+	currentSchemaVersion = 6
 )
 
 func schemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
-		Kind:           schemaKind,
-		CurrentVersion: currentSchemaVersion,
-		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
+		Kind:             schemaKind,
+		CurrentVersion:   currentSchemaVersion,
+		Pragmas:          []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
+		ValidateExisting: validateExistingWorkbenchSchema,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateToV4},
 			{FromVersion: 4, ToVersion: 5, Apply: migrateToV5},
+			{FromVersion: 5, ToVersion: 6, Apply: migrateToV6},
 		},
 		Verify: verifySchema,
 	}
+}
+
+// Validate historical shapes before a writable connection can change journal metadata.
+func validateExistingWorkbenchSchema(tx *sql.Tx) error {
+	var version int
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	hasMeta, err := sqliteutil.TableExistsTx(tx, "__redeven_db_meta")
+	if err != nil {
+		return err
+	}
+	if hasMeta {
+		var kind string
+		if err := tx.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1`).Scan(&kind); err != nil {
+			return err
+		}
+		if kind != schemaKind {
+			return &sqliteutil.WrongDatabaseKindError{ExpectedKind: schemaKind, ActualKind: kind}
+		}
+	} else if version != 0 {
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: schemaKind}
+	}
+	if version > currentSchemaVersion {
+		return &sqliteutil.DatabaseTooNewError{Kind: schemaKind, Version: version, CurrentVersion: currentSchemaVersion}
+	}
+	if version < 0 {
+		return &sqliteutil.DatabaseTooOldError{Kind: schemaKind, Version: version, MinimumVersion: 0}
+	}
+	if version == 0 {
+		tables, err := sqliteutil.ListUserTablesTx(tx)
+		if err != nil {
+			return err
+		}
+		if len(tables) == 0 {
+			return nil
+		}
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: schemaKind, Existing: tables}
+	}
+	if err := verifyWorkbenchSchema(tx, version); err != nil {
+		return &sqliteutil.SchemaVerifyError{Kind: schemaKind, Err: err}
+	}
+	return nil
 }
 
 func migrateToV1(tx *sql.Tx) error {
@@ -230,8 +275,8 @@ func migrateToV4(tx *sql.Tx) error {
 	if !changed {
 		return nil
 	}
-	// This migration reads the frozen v3 note shape, before v5 adds material.
-	stickyNotes, err := queryStickyNotesTx(context.Background(), tx, `SELECT id, kind, body, color, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms, 'tint'
+	// This migration reads the frozen v3 note shape, before v5 adds material and v6 adds title.
+	stickyNotes, err := queryStickyNotesTx(context.Background(), tx, `SELECT id, kind, body, color, x, y, width, height, z_index, created_at_unix_ms, updated_at_unix_ms, 'tint', ''
 FROM workbench_layout_sticky_notes ORDER BY z_index ASC, created_at_unix_ms ASC, id ASC`)
 	if err != nil {
 		return err
@@ -271,6 +316,16 @@ func migrateToV5(tx *sql.Tx) error {
 		return err
 	}
 	return verifyWorkbenchSchema(tx, 5)
+}
+
+func migrateToV6(tx *sql.Tx) error {
+	if err := verifyWorkbenchSchema(tx, 5); err != nil {
+		return fmt.Errorf("verify workbench layout v5 schema: %w", err)
+	}
+	if _, err := tx.Exec(`ALTER TABLE workbench_layout_sticky_notes ADD COLUMN title TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	return verifyWorkbenchSchema(tx, 6)
 }
 
 func scrubLayoutEventPayload(raw []byte) ([]byte, bool, error) {
@@ -350,6 +405,9 @@ func verifyWorkbenchSchema(tx *sql.Tx, version int) error {
 	if version >= 5 {
 		expectedColumns["workbench_layout_sticky_notes"] = append(expectedColumns["workbench_layout_sticky_notes"], "material")
 	}
+	if version >= 6 {
+		expectedColumns["workbench_layout_sticky_notes"] = append(expectedColumns["workbench_layout_sticky_notes"], "title")
+	}
 	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
@@ -379,6 +437,16 @@ FROM pragma_table_xinfo('workbench_layout_sticky_notes') WHERE name = 'material'
 		}
 		if !validMaterial {
 			return fmt.Errorf("workbench layout v%d sticky material column definition mismatch", version)
+		}
+	}
+	if version >= 6 {
+		var validTitle bool
+		if err := tx.QueryRow(`SELECT type = 'TEXT' AND "notnull" = 1 AND dflt_value = ? AND pk = 0 AND hidden = 0
+FROM pragma_table_xinfo('workbench_layout_sticky_notes') WHERE name = 'title'`, "''").Scan(&validTitle); err != nil {
+			return fmt.Errorf("verify sticky title column: %w", err)
+		}
+		if !validTitle {
+			return fmt.Errorf("workbench layout v%d sticky title column definition mismatch", version)
 		}
 	}
 	indexes, err := sqliteutil.ListUserIndexesTx(tx)
