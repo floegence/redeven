@@ -131,11 +131,12 @@ export function createManagedServiceOperationController(options: ManagedOperatio
     const promise = (async () => {
       let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
       try {
-        const response = await fetchLocalApi(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/events`, {
+        const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
+        const response = await fetchLocalApi(`/_redeven_proxy/api/managed-web-service-operations/${encodeURIComponent(operation.operation_id)}/events`, createServerSentEventRequestInit({
           method: 'GET',
           headers: { Accept: 'text/event-stream' },
           signal: controller.signal,
-        });
+        }));
         if (!response.ok || !response.body) throw new Error(options.streamFailedMessage());
         reader = response.body.getReader();
         const decoder = new TextDecoder();

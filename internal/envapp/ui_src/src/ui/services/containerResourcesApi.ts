@@ -426,7 +426,8 @@ async function subscribeContainerSSE<T>(
 	onEvent: (event: T) => void,
 	signal: AbortSignal,
 ): Promise<void> {
-	const response = await fetchLocalApi(url, { method: 'GET', headers: { Accept: 'text/event-stream' }, signal });
+	const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
+	const response = await fetchLocalApi(url, createServerSentEventRequestInit({ method: 'GET', headers: { Accept: 'text/event-stream' }, signal }));
 	if (!response.ok || !response.body) throw new Error('The container stream is unavailable.');
 	const reader = response.body.getReader();
 	const decoder = new TextDecoder();
@@ -587,9 +588,10 @@ export async function subscribeContainerOperation(
   onEvent: (operation: ContainerOperation) => void,
   signal: AbortSignal,
 ): Promise<void> {
+  const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
   const response = await fetchLocalApi(
     `/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}/events`,
-    { method: 'GET', headers: { Accept: 'text/event-stream' }, signal },
+    createServerSentEventRequestInit({ method: 'GET', headers: { Accept: 'text/event-stream' }, signal }),
   );
   if (!response.ok || !response.body) throw new Error('Container operation stream is unavailable.');
   const reader = response.body.getReader();

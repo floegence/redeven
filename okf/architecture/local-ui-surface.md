@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Local UI surface
 description: Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.
 tags: [architecture, local-ui, runtime, security]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
@@ -28,6 +28,25 @@ The network server bounds request headers, request bodies, header-read time, rea
 Before returning a direct connect artifact, Local UI commits one SQLite transaction containing the encrypted `AuthorizationRecord`, immutable handler and access-session binding, artifact and projection digests, the actual validated request origin for launcher/runtime/app, the exact environment target binding, and an HMAC-protected browser spend receipt. The browser uses Floe Webapp's required `commitSpend` callback to commit that receipt through the same-origin spend endpoint before Flowersec sends credential-bearing network traffic. Raw artifacts, plaintext authorization records, receipts, and plugin credentials are not stored in the spend table.
 
 Local UI opens and exactly verifies the versioned store before it creates the Acceptor or starts a listener. Each process start atomically advances `boot_generation`, revokes older pending rows, burns older reservations, releases older leases, and revokes their unspent browser receipts; failure prevents startup. Authorization generates an independent random durable lease, performs an exact `pending -> reserved` CAS, decrypts and parses the row-bound record, calls Flowersec authorization, and commits `reserved -> leased` before allowing the session. Handler resolution reads the immutable binding from that same row. Parse, authorization, or leased-commit failures only burn the authority; Acceptor release is exact-lease scoped, while logout, access expiry, and shutdown may revoke an explicit access-session owner. In-process maps retain only active-session cleanup projections and never authorize a request.
+
+## Background event stream scheduling
+
+Published Floe Webapp Boot owns browser SSE request initialization. Its
+`createServerSentEventRequestInit` defaults persistent streams to low fetch
+priority, preserves explicit priorities and request options, and does not mutate
+caller input. Its `fetchServerSentEvents` reader applies the same policy. Redeven
+uses these released APIs for Notes, Workbench layout, plugin market, diagnostics,
+container and managed-service operation streams, and Flower in Env App and
+Desktop Welcome. Product adapters retain authentication, cursors, cancellation,
+event parsing, and existing reconnect ownership. Env App adapters load Boot
+lazily to preserve the initial bundle boundary.
+
+Under Chromium's 3G network-quality classification, three default-priority
+persistent requests can hold the scheduler budget and prevent native media from
+reaching the file endpoint. Background streams must leave that budget available
+while continuing to deliver events. This contract does not change HTTP connection
+limits, file permissions, or media decoding. Video and audio use native elements
+and the authorized file resource endpoint with Range support.
 
 # Boundaries
 
@@ -54,3 +73,5 @@ The private listener accepts only its canonical numeric-loopback Host or a valid
 - `redeven:cmd/redeven/desktop_launch_report.go:123` - The private Desktop launch/status report validates and carries the trusted bridge endpoint.
 - `redeven:desktop/src/main/desktopSessionTransport.ts:1` - Native Desktop transport requires the trusted bridge and never selects a public interface address.
 - `redeven:desktop/src/main/webServiceLoopbackGateway.ts:1` - Desktop owns the optional per-window local-compatibility Origin while preserving the Runtime route and credential boundary.
+- `redeven:internal/envapp/ui_src/src/ui/services/eventStreamRequestPolicy.test.ts` - Published request policy preserves authentication, event delivery, cancellation, and caller reconnect cursors across product adapters.
+- `redeven:internal/envapp/ui_src/scripts/checkFilePreviewMedia.mjs` - Isolated Chromium and Electron at 3G verify Activity and Workbench video playback, seek, reopen, audio, and continuing SSE delivery against the built Runtime.

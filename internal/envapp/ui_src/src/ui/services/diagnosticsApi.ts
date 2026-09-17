@@ -101,13 +101,14 @@ export async function connectDiagnosticsStream(args: {
 }): Promise<void> {
   const query = new URLSearchParams();
   query.set('limit', String(args.limit ?? 200));
+  const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
   const response = await fetch(
     `/_redeven_proxy/api/debug/diagnostics/stream?${query.toString()}`,
-    await prepareLocalApiRequestInit({
+    await prepareLocalApiRequestInit(createServerSentEventRequestInit({
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal: args.signal,
-    }),
+    })),
   );
   if (!response.ok) {
     const text = await response.text();

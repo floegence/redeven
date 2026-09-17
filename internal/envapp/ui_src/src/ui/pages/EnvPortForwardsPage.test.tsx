@@ -2467,8 +2467,10 @@ describe('EnvPortForwardsPage', () => {
           .find((button) => button.textContent?.trim() === 'Start')?.click();
       }
       await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="managed-service-operation-trigger"]')).toHaveLength(2));
-      expect(streamSignals.get('mop-first')?.aborted).toBe(false);
-      expect(streamSignals.get('mop-second')?.aborted).toBe(false);
+      await waitForAssertion(() => {
+        expect(streamSignals.get('mop-first')?.aborted).toBe(false);
+        expect(streamSignals.get('mop-second')?.aborted).toBe(false);
+      });
 
       operations.clear();
       for (const operation of [runningFirst, runningSecond]) {
@@ -2566,7 +2568,7 @@ describe('EnvPortForwardsPage', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Apply configuration')?.click();
     await waitForAssertion(() => expect(operationBody).toMatchObject({ action: 'reconfigure', reconfigure: { plan_digest: 'exact-plan', draft: { configuration_revision: 3 } } }));
     expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeNull();
-    expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-reconfigure/events'), expect.objectContaining({ method: 'GET' }));
+    await waitForAssertion(() => expect(localApiMocks.fetchLocalApi).toHaveBeenCalledWith(expect.stringContaining('mop-reconfigure/events'), expect.objectContaining({ method: 'GET', priority: 'low' })));
   });
 
   it('reports start failures with the start action title', async () => {

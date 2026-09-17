@@ -50,8 +50,11 @@ and uses the document stack height only for scrolling.
 
 Text, Markdown, and spreadsheets retain their reading layout and scrolling; they
 are not scaled into one screen. Video contains the complete frame. Audio controls
-remain reachable. Flower attachment windows retain native browser PDF controls
-and image containment; their document containers must shrink with the window.
+remain reachable. Native media retains authorized Range requests; the
+[Local UI stream scheduling contract](../architecture/local-ui-surface.md#background-event-stream-scheduling)
+keeps persistent background event streams from delaying playback. Flower attachment
+windows retain native browser PDF controls and image containment; their document
+containers must shrink with the window.
 
 ## Rendering ownership
 
