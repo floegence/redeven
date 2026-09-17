@@ -40,6 +40,7 @@ describe('shared Flower UI boundary', () => {
       'redevenDesktopSettings',
       '/_redeven_proxy',
       'electron',
+      '../host/',
     ];
 
     for (const file of listSourceFiles(flowerRoot)) {

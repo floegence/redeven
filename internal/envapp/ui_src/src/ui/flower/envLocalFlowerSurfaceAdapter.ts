@@ -1,4 +1,5 @@
-import { COMPUTER_FRAME_RATE_KEY, computerFrameRate, computerFramePath } from '../../../../../flower_ui/src/computerViewer';
+import { computerFramePath } from '../../../../../flower_ui/host/computerFramePath';
+import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../../flower_ui/src/computerViewer';
 import type { FlowerComputerFrameSource } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { sha256 } from '@noble/hashes/sha2.js';

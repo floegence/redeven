@@ -38,7 +38,7 @@ describe('Flower restrained selection and focus treatments', () => {
     expect(cardRule).toContain('border: 0');
     expect(activeRule).toContain('background: var(--flower-thread-rail-accent-strong)');
     expect(activeRule).not.toMatch(/border|outline|box-shadow|ring|inset/u);
-    expect(activeTitleRule).toContain('color: color-mix');
+    expect(activeTitleRule).toContain('color: var(--flower-thread-selected-foreground)');
   });
 
   it('leaves the custom composer independent of the upstream chat input skin', () => {
