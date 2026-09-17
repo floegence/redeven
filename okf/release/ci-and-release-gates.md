@@ -92,6 +92,16 @@ The gate builds the embedded UI assets from the exact main source before those
 browser steps; an ignored or previously generated `internal/envapp/ui/dist`
 tree is never accepted as carrier input.
 
+Env App's `pnpm build` owns one checkout-local kernel lock across cache cleanup,
+TypeScript, Vite output replacement, initial-budget validation, and gzip/Brotli
+generation. The Python 3 launcher uses `flock` on the supported Linux/macOS build
+hosts and passes the descriptor to the build shell and its children. Concurrent
+builds in the same checkout wait; separate worktrees remain independent. A failed
+or interrupted build releases ownership when its processes exit, without stale
+PID recovery or deleting another builder's lock file. `build_assets.sh` delegates
+to that package command and must not compress its output after the lock is
+released. Missing assets remain build failures and must not be silently skipped.
+
 Desktop and shared Flower tests that consume renderer-only Floe APIs run in the client Vitest suite with browser resolution and a DOM environment. Server-side test resolution must not replace or bypass published cryptographic tools to load those tests. UI mocks retain the real upstream utility exports unless the utility itself is the boundary under test.
 
 Headless UI tests keep browser scrollbars enabled so geometry assertions observe
@@ -354,6 +364,9 @@ Integration experiments may exist only on an unmerged feature branch and may
 not become a fallback, shim, or local artifact path.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/scripts/build.py` - Owns the complete Env App asset build under a checkout-local kernel lock.
+- `redeven:internal/envapp/ui_src/scripts/buildEnvApp.node-test.mjs` - Exercises overlapping builds, compression ownership, failure/signal release, and independent worktrees.
 
 - `redeven:.githooks/pre-commit:1` - Defines the fast staged gate.
 - `redeven:.githooks/pre-push:1` - Binds full validation to the exact main push.
