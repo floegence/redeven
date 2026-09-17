@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest';
+import { workbenchCompositionMessages } from '@floegence/floe-webapp-core/workbench';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -218,6 +219,13 @@ function expandDynamicTranslationKeys(keys: ReadonlyMap<string, readonly string[
 }
 
 describe('Env App i18n metadata', () => {
+  it('provides every published Workbench composition message in every locale', () => {
+    const keys = Object.keys(workbenchCompositionMessages).sort();
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(Object.keys(dictionaries[locale].workbench.composition).sort(), locale).toEqual(keys);
+    }
+  });
+
   it('keeps README locales aligned with the Env App language switcher', () => {
     expect(README_LOCALE_MANIFEST.locales.map((locale) => locale.locale)).toEqual([
       ...SUPPORTED_LOCALES,

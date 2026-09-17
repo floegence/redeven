@@ -94,6 +94,7 @@ type PutLayoutRequest struct {
 type StickyNote struct {
 	ID              string  `json:"id"`
 	Kind            string  `json:"kind"`
+	Title           string  `json:"title,omitempty"`
 	Body            string  `json:"body"`
 	Color           string  `json:"color"`
 	Material        string  `json:"material"`
@@ -532,6 +533,7 @@ func normalizeStickyNote(note StickyNote, nowUnixMs int64) (StickyNote, error) {
 	return StickyNote{
 		ID:              id,
 		Kind:            StickyNoteKind,
+		Title:           normalizeBoundedText(note.Title, "", 20_000),
 		Body:            normalizeBoundedText(note.Body, DefaultStickyNoteBody, 20_000),
 		Material:        normalizeEnum(note.Material, stickyNoteMaterials(), DefaultStickyNoteMaterial),
 		Color:           normalizeEnum(note.Color, stickyNoteColors(), DefaultStickyNoteColor),
