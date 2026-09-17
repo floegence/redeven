@@ -27,7 +27,18 @@ const notice = { id: 'root-access', revision: 2, severity: 'warning', acknowledg
 const base = {
   service_id: 'workspace', template_id: 'workspace-template', name: 'Workspace', description: 'Development workspace', template_source: 'builtin', deployment: 'container',
   workspace_path: '/Users/demo/Services/workspace', workspace_ownership: 'redeven_created', desired_state: 'running', observed_state: 'running', status: 'running', primary_action: 'stop', management_state: 'active', forward_id: 'pf-workspace', runtime_port: 3000,
-  localizations: { 'en-US': { name: 'Workspace', description: 'Development workspace', notices: { 'root-access': { title: 'Container access', description: 'This version can access the mounted workspace and connect to external services. Only give access to users you trust.' } } } },
+  localizations: {
+    'en-US': { name: 'Workspace', description: 'Development workspace', notices: {
+      'root-access': { title: 'Container access', description: 'This version can access the mounted workspace and connect to external services. Only give access to users you trust.' },
+      'community-image': { title: 'Community Docker image', description: 'This reviewed image is maintained by the community. Redeven only pulls the approved digest.' },
+      'credentials': { title: 'Keep API credentials in the service', description: 'Configure your API key inside the service. Redeven does not receive, copy, or record these secrets.' },
+    } },
+    'zh-CN': { name: 'Workspace', description: '开发工作区', notices: {
+      'root-access': { title: '容器访问权限', description: '此版本可以访问挂载的工作区并连接外部服务。请仅向您信任的用户授予访问权限。' },
+      'community-image': { title: '社区 Docker 镜像', description: '该审核镜像由社区维护，并非官方发行版。Redeven 只会拉取已批准的 digest。' },
+      'credentials': { title: '仅在服务内保存 API 凭据', description: '请在服务内部配置 API Key。Redeven 不会接收、复制或记录这些密钥。' },
+    } },
+  },
   release_status: { schema_version: 2, current_release: currentRelease, recommended_release: currentRelease, check_status: 'fresh' },
   actions: { open: { available: true }, inspect: { available: true }, start: { available: false }, stop: { available: true }, restart: { available: true }, uninstall: { available: true }, retry: { available: false } },
 };
@@ -70,7 +81,7 @@ describe('Managed service version drawer', () => {
       if (url.endsWith('/update-plans')) {
         if (pendingPlan) return new Promise((_resolve, reject) => options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }));
         const selected = candidates.find((item) => item.candidate_id === JSON.parse(String(options?.body)).target_candidate_id)!;
-        return { schema_version: 4, update_plan_id: `plan-${selected.candidate_id}`, current_release: currentRelease, target_release: { ...currentRelease, tag: selected.tag, digest: selected.digest }, notices, accepted_notice_revisions: accepted, risk_ids: selected.relation === 'older' ? ['downgrade'] : [], requires_stopped: ['older', 'unknown'].includes(selected.relation), expires_at_unix_ms: Date.now() + 60_000 };
+        return { schema_version: 4, update_plan_id: `plan-${selected.candidate_id}`, current_release: currentRelease, target_release: { ...currentRelease, tag: selected.tag, digest: selected.digest }, notices, accepted_notice_revisions: accepted, risk_ids: [...(selected.channel === 'preview' ? ['non_recommended_release', 'preview_release'] : []), ...(selected.relation === 'older' ? ['downgrade'] : [])], requires_stopped: ['older', 'unknown'].includes(selected.relation), expires_at_unix_ms: Date.now() + 60_000 };
       }
       if (url.endsWith('/operations')) {
         const request = JSON.parse(String(options?.body));
@@ -140,8 +151,13 @@ describe('Managed service version drawer', () => {
     expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
     expect(submit().getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
     expect(getComputedStyle(scroll).overflowY).toBe('auto');
+    if (window.innerWidth < 600) {
+      const search = body.querySelector<HTMLInputElement>('[data-testid="managed-release-candidates"] input')!;
+      expect(search.getBoundingClientRect().width).toBeGreaterThanOrEqual(scroll.getBoundingClientRect().width - 1);
+    }
   }
   async function screenshot(name: string) {
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-testid="managed-release-more-sentinel"]')?.dataset.phase).toBe('idle');
     await settle();
     const directory = import.meta.env.VITE_REDEVEN_VERSION_SCREENSHOTS;
     if (directory) await page.screenshot({ path: `${directory}/${name}.png` });
@@ -205,6 +221,79 @@ describe('Managed service version drawer', () => {
     expect(operations[0].accepted_notice_revisions).toEqual({ 'root-access': 2 });
   });
 
+  it('places the selected version above its notices without shifting earlier rows', async () => {
+    notices = [notice];
+    await mount();
+    const first = document.querySelector<HTMLElement>('[data-release-id="1.2.0"]')!;
+    const firstTop = first.getBoundingClientRect().top;
+    await select('1.1.0');
+    const selected = document.querySelector<HTMLElement>('[data-release-id="1.1.0"]')!;
+    const plan = document.querySelector<HTMLElement>('[data-testid="managed-update-plan"]')!;
+    expect(plan.getBoundingClientRect().top).toBeGreaterThanOrEqual(selected.getBoundingClientRect().bottom);
+    expect(first.getBoundingClientRect().top).toBe(firstTop);
+    expect(selected.nextElementSibling?.contains(plan)).toBe(true);
+    const checkbox = plan.querySelector<HTMLInputElement>('input')!;
+    checkbox.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(selected.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('keeps required notices reachable when search hides the selected version', async () => {
+    notices = [notice];
+    await mount(390); await select('1.1.0');
+    const search = document.querySelector<HTMLInputElement>('input[placeholder="Search versions or tags"]')!;
+    await userEvent.fill(search, '1.2.0');
+    expect(document.querySelector('[data-release-id="1.1.0"]')).toBeNull();
+    expect(document.querySelector('[data-release-id="1.2.0"]')?.getAttribute('tabindex')).toBe('0');
+    await userEvent.click(page.getByRole('button', { name: 'Review new safety notices' }));
+    const checkbox = document.querySelector<HTMLInputElement>('[data-testid="managed-update-plan"] input')!;
+    expect(document.activeElement).toBe(checkbox);
+    await userEvent.keyboard(' ');
+    expect(submit().disabled).toBe(false);
+    expect(search.value).toBe('1.2.0');
+    await userEvent.click(submit());
+    expect(operations[0]).toMatchObject({ update_plan_id: 'plan-1.1.0', accepted_notice_revisions: { 'root-access': 2 } });
+  });
+
+  for (const [width, dark, locale] of [[1440, false, 'zh-CN'], [1440, true, 'zh-CN'], [390, false, 'zh-CN'], [390, true, 'de-DE']] as const) it(`keeps long preview versions and their explanations connected at ${width}px in ${locale} ${dark ? 'dark' : 'light'}`, async () => {
+    notices = [
+      { id: 'community-image', revision: 1, severity: 'warning', acknowledgement_required: false },
+      { id: 'credentials', revision: 1, severity: 'info', acknowledgement_required: false },
+    ];
+    candidates[1] = candidate('1.1.0', 'older', { tag: '0.1.6-alpha.1-r1-market.1', channel: 'preview' });
+    await mount(width, dark, locale); await select('1.1.0');
+    assertGeometry();
+    const selected = document.querySelector<HTMLElement>('[data-release-id="1.1.0"]')!;
+    const plan = document.querySelector<HTMLElement>('[data-testid="managed-update-plan"]')!;
+    expect(selected.nextElementSibling?.contains(plan)).toBe(true);
+    expect(plan.querySelector('input')).toBeNull();
+    expect(plan.querySelectorAll('[data-notice-id]')).toHaveLength(2);
+    const buttonText = submit().querySelector<HTMLElement>('span span')!;
+    expect(buttonText.scrollWidth).toBeLessThanOrEqual(buttonText.clientWidth + 1);
+    await screenshot(`preview-${width}-${locale}-${dark ? 'dark' : 'light'}`);
+    await userEvent.click(submit());
+    await expect.poll(() => operations.map((item) => item.action)).toEqual(['stop']);
+    await expect.poll(() => submit().disabled).toBe(false);
+    expect(document.querySelector('[data-release-id="1.1.0"]')?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('keeps keyboard-operated version details in the local viewport with a fixed footer', async () => {
+    await mount(390); await select();
+    const footer = document.querySelector<HTMLElement>('[data-testid="managed-release-footer"]')!;
+    const footerTop = footer.getBoundingClientRect().top;
+    const details = document.querySelector<HTMLDetailsElement>('[data-testid="managed-update-plan"] details')!;
+    details.querySelector('summary')!.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(details.open).toBe(true);
+    await userEvent.keyboard('{End}');
+    expect(document.querySelector('[data-release-id="1.2.0"]')?.getAttribute('aria-checked')).toBe('true');
+    await userEvent.keyboard('{Home}');
+    await expect.poll(() => document.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!.scrollTop).toBe(0);
+    assertGeometry();
+    expect(footer.getBoundingClientRect().top).toBe(footerTop);
+    await screenshot('details-narrow');
+  });
+
   it('does not repeat a previously saved confirmation', async () => {
     notices = [notice]; accepted = { 'root-access': 2 };
     await mount(); await select();
@@ -216,7 +305,7 @@ describe('Managed service version drawer', () => {
 
   it('stops in place, retains the selection, and waits for an explicit downgrade', async () => {
     await mount(); await select('0.18.0');
-    expect(submit().textContent).toBe('Stop service');
+    expect(submit().textContent).toBe('Stop service and continue');
     await screenshot('stop-before-downgrade');
     await userEvent.click(submit());
     await expect.poll(() => submit().textContent).toBe('Downgrade to 0.18.0');
@@ -231,7 +320,7 @@ describe('Managed service version drawer', () => {
     stopFails = true;
     await mount(); await select('0.18.0');
     await userEvent.click(submit());
-    await expect.poll(() => submit().textContent).toBe('Stop service');
+    await expect.poll(() => submit().textContent).toBe('Stop service and continue');
     expect(document.querySelector('[data-testid="managed-release-footer"] [role="alert"]')).toBeTruthy();
     expect(operations.map((item) => item.action)).toEqual(['stop']);
   });
