@@ -84,7 +84,7 @@ try {
   await page.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
   await page.reload();
   if (!await page.locator('.flower-surface').count()) await page.getByRole('button', { name: /^Flower$/ }).click();
-  threadID = await createComputerTask({ page, request, origin: fixtureURL, newBrowserTab: true });
+  threadID = await createComputerTask({ page, request, origin: fixtureURL });
   const composer = page.locator('.flower-surface textarea').first();
   await composer.fill(`Open ${fixtureURL} and let me complete verification.`); await composer.press('Enter');
   await openComputerStage(page);

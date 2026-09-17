@@ -347,13 +347,15 @@ try {
     threadID = await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-id');
     ownedThreads.add(threadID);
     console.log(`Turn ${index + 1} submitted through Flower Composer.`);
-    if (index === 0) await openComputerStage(page);
+    await openComputerStage(page);
     await waitForProgress(stageHasImage, 'Stage image');
     if (index < 2) {
       await waitForProgress(() => completed >= index + 1, 'fixture click');
       assert.equal(completed, index + 1, 'the actual fixture click did not finish');
     }
     await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'turn completion');
+    await page.locator('.flower-computer-stage').waitFor({ state: 'detached' });
+    await openComputerStage(page);
     await page.waitForFunction(() => {
       const image = document.querySelector('.flower-computer-stage-frame');
       return image?.naturalWidth >= 640 && image.complete;
@@ -411,12 +413,14 @@ try {
       await composer.fill(prompt); await composer.press('Enter');
       await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
       console.log(`Native application turn ${index + 1} submitted through Flower Composer.`);
-      if (nativeOnly && index === 0) await openComputerStage(page);
+      await openComputerStage(page);
       await waitForProgress(async () => {
         const state = JSON.parse(await readFile(resultFile, 'utf8'));
         return state.clicks === expectedClicks && (index === 0 || state.complete && state.scrollOffset > 0 && state.wheelEvents > 0);
       }, 'native fixture effects', 180_000, true);
       await waitForProgress(async () => await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').count() === 0, 'native turn completion');
+      await page.locator('.flower-computer-stage').waitFor({ state: 'detached' });
+      await openComputerStage(page);
       await waitForProgress(stageHasImage, 'native Stage image');
       const frame = await page.evaluate(() => {
         const img = document.querySelector('.flower-computer-stage-frame');
@@ -479,11 +483,14 @@ try {
       await composer.fill(prompt); await composer.press('Enter');
       await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
       console.log(`Linux GUI turn ${index + 1} submitted through Flower Composer.`);
+      await openComputerStage(page);
       await waitForProgress(async () => {
         const state = JSON.parse(await readFile(resultFile, 'utf8'));
         return state.clicks === 2 && (index === 0 || (state.doubleClicked && state.entered && state.scrollEvents > 0));
       }, 'Linux GUI effects', 180000, true);
       await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'Linux GUI completion');
+      await page.locator('.flower-computer-stage').waitFor({ state: 'detached' });
+      await openComputerStage(page);
       await waitForProgress(stageHasImage, 'Linux GUI Stage image');
       const frame = await page.evaluate(() => {
         const img = document.querySelector('.flower-computer-stage-frame');
@@ -505,10 +512,8 @@ try {
     nativeProcess.kill('SIGTERM'); await nativeExit; nativeProcess = undefined;
     await rm(nativeDirectory, { recursive: true, force: true }); nativeDirectory = undefined;
   }
-  console.log('Requested task effects verified; checking viewer drag, minimize and restore.');
-  viewerInteraction = await qualifyComputerViewer({ page, output });
-  await writeFile(path.join(output, 'viewer-interaction.json'), JSON.stringify(viewerInteraction, null, 2));
-  console.log('Viewer interactions passed; checking execution while minimized.');
+  console.log('Requested task effects verified; checking execution with the viewer closed.');
+  viewerInteraction = {};
   await page.locator('[data-floe-floating-window-control="close"]').click();
   const minimizedComposer = page.locator('.flower-surface textarea').first();
   await minimizedComposer.fill('Take one screenshot of the current target using computer.screenshot and briefly describe it. Do not use other tools.');
@@ -516,8 +521,9 @@ try {
   await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
   await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', 'screenshot while minimized');
   assert.equal(await page.locator('.flower-computer-stage').count(), 0, 'an action restored the minimized viewer');
-  await page.locator('.flower-computer-stage-ball').click();
-  await waitForProgress(stageHasImage, 'latest image after restoring the ball');
+  assert.equal(await page.locator('.flower-computer-stage-ball').count(), 0, 'terminal history must not retain a live launcher');
+  await openComputerStage(page);
+  await waitForProgress(stageHasImage, 'latest historical image');
   viewerInteraction.continuedWhileMinimized = true;
   await writeFile(path.join(output, 'viewer-interaction.json'), JSON.stringify(viewerInteraction, null, 2));
   console.log('Minimized execution passed; checking Stage reopen and settings.');
@@ -596,6 +602,9 @@ try {
   console.log('Canonical computer takeover is visible; entering private fixture input through Stage.');
   await takeControl.click();
   await waitForProgress(stageHasImage, 'user takeover image');
+  // A waiting private task owns a live viewer; completed tasks expose history only.
+  viewerInteraction = { ...viewerInteraction, ...await qualifyComputerViewer({ page, output }) };
+  await writeFile(path.join(output, 'viewer-interaction.json'), JSON.stringify(viewerInteraction, null, 2));
   const userImage = page.locator('.flower-computer-stage-frame');
   await userImage.focus();
   // Desktop IPC acknowledges input separately from viewing. Observe a new
