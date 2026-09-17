@@ -41,6 +41,14 @@ Every certificate IPC request names the registered Environment management target
 
 Changing the selected Environment or closing the section invalidates outstanding UI results. Background snapshots preserve management confirmation, expanded details, scroll, and drafts. Certificate changes are saved immediately and survive canceling the settings dialog; restart is the separate step that applies them to Runtime. Saving next-start HTTPS settings remains possible with an unusable certificate, with an explicit startup warning.
 
+# Boundaries
+
+Runtime owns saved identity validation and replacement; Desktop owns explicit
+management presentation and private file acquisition. Client trust remains
+independent of saved identity and serving state. Certificate operations cannot
+silently restart Runtime, install system-wide trust, or expose private material
+to the renderer.
+
 # Evidence
 
 - `redeven:internal/localui/device_identity.go` - Validated imports, locked replacement, interruption recovery, explicit removal, and bind preflight.

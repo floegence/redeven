@@ -24,6 +24,7 @@ export type RedevenFilePreviewRendererId =
 
 export type RedevenFilePreviewRenderProps = Readonly<{
   surface?: FilePreviewSurface;
+  allowLocalWheel?: boolean;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;
@@ -81,13 +82,13 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 }
 
 function renderImagePreview(props: RedevenFilePreviewRenderProps): JSX.Element {
-  return <ImagePreviewPane item={props.item} descriptor={props.descriptor} objectUrl={props.objectUrl} surface={props.surface} />;
+  return <ImagePreviewPane item={props.item} descriptor={props.descriptor} objectUrl={props.objectUrl} surface={props.surface} allowLocalWheel={props.allowLocalWheel} />;
 }
 
 function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
   return (
-    <div class={`flex h-full min-h-[18rem] items-center justify-center p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ' bg-black'}`}>
+    <div class={`flex h-full min-h-0 min-w-0 items-center justify-center overflow-hidden p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ' bg-black'}`}>
       <video
         src={props.resourceUrl}
         controls
@@ -103,7 +104,7 @@ function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 function renderAudioPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
   return (
-    <div class={`flex h-full min-h-[12rem] items-center justify-center p-6${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
+    <div class={`flex h-full min-h-0 min-w-0 items-center justify-center overflow-auto p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
       <audio
         src={props.resourceUrl}
         controls

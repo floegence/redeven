@@ -12,6 +12,7 @@ import { useI18n } from '../i18n';
 
 export interface FilePreviewPanelProps {
   surface?: FilePreviewSurface;
+  allowLocalWheel?: boolean;
   showHeader?: boolean;
   contentRef?: (element: HTMLDivElement) => void;
   item?: FileItem | null;
@@ -72,6 +73,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
         <div class="min-h-0 flex-1 overflow-hidden">
           <FilePreviewContent
             surface={props.surface}
+            allowLocalWheel={props.allowLocalWheel}
             showHeader={props.showHeader}
             contentRef={props.contentRef}
             item={props.item}

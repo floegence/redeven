@@ -5590,6 +5590,10 @@
       "allFinished": "Tous les téléchargements sont terminés."
     },
     "preview": {
+      "fitWindow": "Ajuster à la fenêtre",
+      "fitWidth": "Ajuster à la largeur",
+      "actualSize": "Taille réelle",
+      "pageRenderFailed": "Impossible d’afficher la page {number}.",
       "fitToWidth": "Ajuster à la largeur",
       "fit": "Ajuster",
       "markdownControls": "Commandes de l’aperçu Markdown",

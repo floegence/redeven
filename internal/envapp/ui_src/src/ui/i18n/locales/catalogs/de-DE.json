@@ -5590,6 +5590,10 @@
       "allFinished": "Alle Downloads sind abgeschlossen."
     },
     "preview": {
+      "fitWindow": "An Fenster anpassen",
+      "fitWidth": "An Breite anpassen",
+      "actualSize": "Originalgröße",
+      "pageRenderFailed": "Seite {number} kann nicht dargestellt werden.",
       "fitToWidth": "An Breite anpassen",
       "fit": "Einpassen",
       "markdownControls": "Steuerelemente der Markdown-Vorschau",

@@ -5590,6 +5590,10 @@
       "allFinished": "Todos os downloads foram concluídos."
     },
     "preview": {
+      "fitWindow": "Ajustar à janela",
+      "fitWidth": "Ajustar à largura",
+      "actualSize": "Tamanho real",
+      "pageRenderFailed": "Não foi possível renderizar a página {number}.",
       "fitToWidth": "Ajustar à largura",
       "fit": "Ajustar",
       "markdownControls": "Controles da prévia de Markdown",

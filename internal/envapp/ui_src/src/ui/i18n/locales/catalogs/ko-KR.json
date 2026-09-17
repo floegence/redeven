@@ -5586,6 +5586,10 @@
       "allFinished": "모든 다운로드가 완료되었습니다."
     },
     "preview": {
+      "fitWindow": "창에 맞추기",
+      "fitWidth": "너비에 맞추기",
+      "actualSize": "실제 크기",
+      "pageRenderFailed": "{number}페이지를 렌더링할 수 없습니다.",
       "fitToWidth": "너비에 맞추기",
       "fit": "너비 맞춤",
       "markdownControls": "Markdown 미리보기 컨트롤",

@@ -5601,6 +5601,10 @@
       "allFinished": "全部下載完畢。"
     },
     "preview": {
+      "fitWindow": "符合視窗",
+      "fitWidth": "符合寬度",
+      "actualSize": "實際大小",
+      "pageRenderFailed": "無法繪製第 {number} 頁。",
       "fitToWidth": "符合寬度",
       "fit": "配合視窗",
       "markdownControls": "Markdown 預覽控制項",

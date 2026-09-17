@@ -1,4 +1,4 @@
-import { Show } from 'solid-js';
+import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';
@@ -14,6 +14,8 @@ import { FilePreviewActions } from './FilePreviewActions';
 export interface FilePreviewContentProps {
   /** Surface ownership for the preview shell. Window is reserved for desktop floating hosts. */
   surface?: FilePreviewSurface;
+  /** Workbench passes the selected widget's ownership; ordinary windows allow local input. */
+  allowLocalWheel?: boolean;
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   showHeader?: boolean;
@@ -51,6 +53,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const showHeader = () => props.showHeader !== false;
+  const ownsViewport = createMemo(() => ['pdf', 'docx', 'image', 'video', 'audio', 'text', 'markdown'].includes(props.descriptor.mode));
   let previewContentEl: HTMLDivElement | undefined;
 
   return (
@@ -76,7 +79,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           props.contentRef?.(element);
         }}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        class={cn('relative flex-1 min-h-0 overflow-auto', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}
+        class={cn('relative flex-1 min-h-0 min-w-0', ownsViewport() ? 'overflow-hidden' : 'overflow-auto', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}
       >
         <Show when={!resolvedError()}>
           {renderRedevenFilePreviewBody(props)}

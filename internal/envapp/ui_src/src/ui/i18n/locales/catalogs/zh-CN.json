@@ -5601,6 +5601,10 @@
       "allFinished": "全部下载完毕。"
     },
     "preview": {
+      "fitWindow": "适应窗口",
+      "fitWidth": "适应宽度",
+      "actualSize": "实际大小",
+      "pageRenderFailed": "无法渲染第 {number} 页。",
       "fitToWidth": "适合宽度",
       "fit": "适应窗口",
       "markdownControls": "Markdown 预览控件",

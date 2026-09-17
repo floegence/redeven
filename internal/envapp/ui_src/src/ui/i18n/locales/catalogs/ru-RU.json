@@ -5703,6 +5703,10 @@
       "allFinished": "Все загрузки завершены."
     },
     "preview": {
+      "fitWindow": "По размеру окна",
+      "fitWidth": "По ширине",
+      "actualSize": "Фактический размер",
+      "pageRenderFailed": "Не удалось отобразить страницу {number}.",
       "fitToWidth": "По ширине",
       "fit": "По ширине",
       "markdownControls": "Элементы управления предпросмотром Markdown",
