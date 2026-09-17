@@ -148,7 +148,7 @@
       "historical": "Historical screenshot",
       "stopped": "Computer task stopped",
       "disconnected": "Connection lost",
-      "awaiting_control": "Waiting for you to take control",
+      "awaiting_control": "A step needs your help",
       "running": "Computer running",
       "awaiting_user": "Waiting for your input or approval",
       "completed": "Computer task completed",
@@ -341,15 +341,15 @@
     "restoredInputTitle": "Input preserved after restore",
     "restoredInputDescription": "This input will not run automatically. Copy it into a new task to run it again.",
     "restoredInputCopy": "Copy input",
-    "computerTakeControl": "Take control",
-    "computerReturnControl": "Return to Flower",
+    "computerTakeControl": "Open page",
+    "computerReturnControl": "Done, continue",
     "computerControlHint": "Complete sign-in in the image using your mouse and keyboard. Passwords and codes stay out of the conversation.",
     "computerControlFailed": "Control could not be updated. Check the page before trying again.",
     "computerFrameRate": "Frame rate",
     "computerFrameRateHint": "Higher frame rates use more bandwidth. Actual updates depend on your device and connection.",
     "computerReceivedFrameRate": "Receiving {fps} FPS",
     "computerControlTaken": "You have control",
-    "computerControlNotReady": "The page still needs your attention. Complete sign-in or verification, then return control."
+    "computerControlNotReady": "The page is not ready yet. Complete the step described above, then try again."
   },
   "threadList": {
     "title": "Conversations",
@@ -732,8 +732,8 @@
     "budgetLabel": "{label} budget tokens"
   },
   "computer": {
-    "title": "Computer connections",
-    "description": "Choose where this task works and manage its access.",
+    "title": "Browser and desktop",
+    "description": "Choose the browser tab or application Flower uses for this conversation, and manage its access.",
     "target": "Task target",
     "refresh": "Refresh",
     "noTargets": "No computer targets are available.",
@@ -778,6 +778,27 @@
     "disconnect": "Disconnect",
     "managed": "Managed browser",
     "profileName": "Profile name",
-    "createProfile": "Create profile"
+    "createProfile": "Create profile",
+    "allowContinue": "Allow and continue",
+    "accessFailed": "Access could not be saved. Try again; Flower has not continued.",
+    "accessTitle": "Allow task access",
+    "siteTitle": "Allow website access",
+    "accessHint": "Flower needs the access listed below for this conversation. Allow it to continue automatically; no manual browser operation is needed.",
+    "targetTitle": "Choose the browser tab",
+    "targetHint": "The page opened another tab. Select it in Browser and desktop, review its site access, then continue.",
+    "loginTitle": "Sign in on the page",
+    "loginHint": "Open the page and finish signing in. Enter passwords there, not in this conversation. Then choose Done, continue.",
+    "verificationTitle": "Enter the verification code",
+    "verificationHint": "Open the page and enter the one-time code there. Do not send the code in this conversation. Then choose Done, continue.",
+    "captchaTitle": "Complete the CAPTCHA",
+    "captchaHint": "Open the page and complete its human verification challenge. Then choose Done, continue; Flower will check the page before resuming.",
+    "privateTitle": "Complete the private input",
+    "privateHint": "Open the page and finish the password or verification field there. Private input stays out of the conversation. Then choose Done, continue.",
+    "inspectionTitle": "Check the current page",
+    "inspectionHint": "Flower could not safely inspect the page. Open it to check its state; a sign-in requirement has not been confirmed. Then choose Done, continue to check again.",
+    "untrustedTitle": "Review unexpected page instructions",
+    "untrustedHint": "The page contains instructions aimed at the agent. Open the page and leave or dismiss that content before continuing.",
+    "pausedTitle": "Actions are paused",
+    "pausedHint": "Finish your changes on the page or application, then choose Done, continue when Flower may resume."
   }
 }

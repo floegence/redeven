@@ -179,7 +179,7 @@
         "historical": "Captura anterior",
         "stopped": "Tarefa do computador interrompida",
         "disconnected": "Conexão perdida",
-        "awaiting_control": "Aguardando você assumir o controle",
+        "awaiting_control": "Uma etapa precisa da sua ajuda",
         "running": "Tarefa no computador em andamento",
         "awaiting_user": "Aguardando sua resposta ou aprovação",
         "completed": "Tarefa no computador concluída",
@@ -373,15 +373,15 @@
       "restoredInputTitle": "Entrada preservada após a restauração",
       "restoredInputDescription": "Esta entrada não será executada automaticamente. Copie-a para uma nova tarefa para executá-la novamente.",
       "restoredInputCopy": "Copiar entrada",
-      "computerTakeControl": "Assumir o controle",
-      "computerReturnControl": "Devolver o controle ao Flower",
+      "computerTakeControl": "Abrir página",
+      "computerReturnControl": "Concluído, continuar",
       "computerControlHint": "Entre na conta pela imagem usando o mouse e o teclado. Senhas e códigos não são salvos na conversa.",
       "computerControlFailed": "Não foi possível atualizar o controle. Verifique a página antes de tentar novamente.",
       "computerFrameRate": "Taxa de quadros",
       "computerFrameRateHint": "Taxas mais altas consomem mais banda. A velocidade real depende do dispositivo e da conexão.",
       "computerReceivedFrameRate": "Recebendo {fps} FPS",
       "computerControlTaken": "Controle assumido",
-      "computerControlNotReady": "A página ainda precisa da sua intervenção. Conclua o login ou a verificação e devolva o controle."
+      "computerControlNotReady": "A página ainda não está pronta. Conclua a etapa indicada acima e tente novamente."
     },
     "threadList": {
       "title": "Conversas",
@@ -733,8 +733,8 @@
       "budgetLabel": "Orçamento de tokens de {label}"
     },
     "computer": {
-      "title": "Conexões do computador",
-      "description": "Escolha o destino desta tarefa e gerencie suas permissões.",
+      "title": "Navegador e área de trabalho",
+      "description": "Escolha a aba ou o aplicativo que o Flower usará nesta conversa e gerencie as permissões de acesso.",
       "target": "Destino da tarefa",
       "refresh": "Atualizar",
       "noTargets": "Nenhum destino disponível.",
@@ -779,7 +779,28 @@
       "disconnect": "Desconectar",
       "managed": "Navegador gerenciado",
       "profileName": "Nome do perfil",
-      "createProfile": "Criar perfil"
+      "createProfile": "Criar perfil",
+      "allowContinue": "Permitir e continuar",
+      "accessFailed": "Não foi possível salvar a permissão. Tente novamente; o Flower ainda não continuou.",
+      "accessTitle": "Permitir acesso para a tarefa",
+      "siteTitle": "Permitir acesso ao site",
+      "accessHint": "O Flower precisa das permissões abaixo para esta conversa. Ao permitir, ele continuará automaticamente; você não precisa operar o navegador.",
+      "targetTitle": "Escolher a aba do navegador",
+      "targetHint": "A página abriu outra aba. Selecione-a em “Navegador e área de trabalho”, confira o acesso ao site e continue.",
+      "loginTitle": "Entre na sua conta na página",
+      "loginHint": "Abra a página e entre na sua conta. Digite as senhas na página, não na conversa. Depois, escolha “Concluído, continuar”.",
+      "verificationTitle": "Digite o código de verificação",
+      "verificationHint": "Abra a página e digite o código de uso único nela. Não envie o código na conversa. Depois, escolha “Concluído, continuar”.",
+      "captchaTitle": "Conclua o CAPTCHA",
+      "captchaHint": "Abra a página e conclua a verificação humana. Depois, escolha “Concluído, continuar”. O Flower verificará a página antes de retomar a tarefa.",
+      "privateTitle": "Conclua a entrada de dados privados",
+      "privateHint": "Abra a página e preencha o campo de senha ou verificação. Os dados privados ficam fora da conversa. Depois, escolha “Concluído, continuar”.",
+      "inspectionTitle": "Confira a página atual",
+      "inspectionHint": "O Flower não conseguiu inspecionar a página com segurança. A necessidade de entrar na conta não foi confirmada. Confira a página e escolha “Concluído, continuar” quando estiver pronta.",
+      "untrustedTitle": "Confira as instruções inesperadas",
+      "untrustedHint": "A página contém instruções direcionadas ao agente. Abra a página e saia desse conteúdo ou feche-o antes de continuar.",
+      "pausedTitle": "Ações pausadas",
+      "pausedHint": "Conclua suas alterações na página ou no aplicativo e escolha “Concluído, continuar” quando o Flower puder retomar."
     }
   },
   "common": {

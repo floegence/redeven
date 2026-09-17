@@ -136,7 +136,7 @@ try {
   await take.waitFor();
   assert.equal(await page.locator('.flower-computer-stage textarea').count(), 0);
   assert.equal(await page.locator('.flower-computer-stage').count(), 0);
-  assert.equal(await page.locator('.flower-computer-control-title').innerText(), 'Waiting for you to take control');
+  assert.equal(await page.locator('.flower-computer-control-title').innerText(), 'Sign in on the page');
   await take.click();
   await wait(() => page.locator('.flower-computer-stage textarea').count().then(Boolean), 'new client explicit takeover');
   await clickPixel(100, 270);

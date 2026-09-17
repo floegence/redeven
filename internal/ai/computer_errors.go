@@ -61,6 +61,29 @@ func ComputerControlErrorCode(err error) string {
 	return "computer_control_unavailable"
 }
 
+// ComputerControlErrorDetails carries only the latest host-observed blocking
+// reason. It cannot authorize input or replace the canonical pending question.
+func ComputerControlErrorDetails(err error) map[string]any {
+	var failure *targetToolPolicyError
+	if !errors.As(err, &failure) || failure.code != "interaction_takeover_required" || failure.safety == nil {
+		return nil
+	}
+	safety := failure.safety
+	detail := map[string]any{"kind": computerAssistanceKind(*safety)}
+	if safety.RequiredOrigin != "" && (ComputerAccess{Origins: []string{safety.RequiredOrigin}}).Validate() == nil {
+		detail["origin"] = safety.RequiredOrigin
+	}
+	if safety.RequiredApp != "" && (ComputerAccess{Apps: []string{safety.RequiredApp}}).Validate() == nil {
+		detail["app"] = safety.RequiredApp
+	}
+	for _, reason := range safety.ReasonCodes {
+		if reason == "foreground_permission" {
+			detail["foreground"] = true
+		}
+	}
+	return map[string]any{"computer_assistance": detail}
+}
+
 func computerKnownRejection(err error) bool {
 	var failure *targetToolPolicyError
 	if !errors.As(err, &failure) {

@@ -301,9 +301,13 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	if call.controlReturn {
 		control.mu.Lock()
 		missing := (control.requiredOrigin != "" && !slices.Contains(call.allowedOrigins, control.requiredOrigin)) || (control.requiredApp != "" && !slices.Contains(call.allowedApps, control.requiredApp)) || (control.requireForeground && !call.allowForeground)
+		safety := &InteractionSafetyDecision{Level: "takeover", RequiredOrigin: control.requiredOrigin, RequiredApp: control.requiredApp}
+		if control.requireForeground {
+			safety.ReasonCodes = []string{"foreground_permission"}
+		}
 		control.mu.Unlock()
 		if missing {
-			return TargetToolResult{}, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+			return TargetToolResult{}, &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: safety}
 		}
 	}
 	// Look up only after acquiring the gate: a queued action must use the
@@ -376,7 +380,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			return TargetToolResult{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "control_observation_unavailable"}
 		}
 		if result.Safety.Level != "routine" || !result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel {
-			return TargetToolResult{}, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+			return TargetToolResult{}, &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: result.Safety}
 		}
 		if len(result.Attachments) != 1 || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil {
 			return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")

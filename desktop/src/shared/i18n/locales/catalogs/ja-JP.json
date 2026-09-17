@@ -179,7 +179,7 @@
         "historical": "過去のスクリーンショット",
         "stopped": "コンピューターのタスクを停止しました",
         "disconnected": "接続が切れました",
-        "awaiting_control": "操作の引き継ぎを待っています",
+        "awaiting_control": "必要な操作があります",
         "running": "コンピューターのタスクを実行中",
         "awaiting_user": "入力または承認を待っています",
         "completed": "コンピューターのタスクが完了しました",
@@ -373,15 +373,15 @@
       "restoredInputTitle": "復元後に保持された入力",
       "restoredInputDescription": "この入力は自動実行されません。再実行するには新しいタスクにコピーしてください。",
       "restoredInputCopy": "入力をコピー",
-      "computerTakeControl": "操作を引き継ぐ",
-      "computerReturnControl": "Flower に操作を戻す",
+      "computerTakeControl": "ページを開く",
+      "computerReturnControl": "完了して続行",
       "computerControlHint": "画像上でマウスとキーボードを使ってログインしてください。パスワードや認証コードは会話に保存されません。",
       "computerControlFailed": "操作状態を更新できませんでした。ページを確認してから再試行してください。",
       "computerFrameRate": "フレームレート",
       "computerFrameRateHint": "フレームレートを上げると帯域幅の使用量が増えます。実際の更新速度は端末と接続状況に左右されます。",
       "computerReceivedFrameRate": "受信中: {fps} FPS",
       "computerControlTaken": "操作権を取得済み",
-      "computerControlNotReady": "このページではまだ操作が必要です。ログインまたは認証を完了してから操作権を返してください。"
+      "computerControlNotReady": "ページの準備ができていません。上の説明に従って必要な手順を完了し、再試行してください。"
     },
     "threadList": {
       "title": "会話",
@@ -733,8 +733,8 @@
       "budgetLabel": "{label}のトークン予算"
     },
     "computer": {
-      "title": "コンピューター接続",
-      "description": "このタスクの操作対象を選び、アクセス権を管理します。",
+      "title": "ブラウザーとデスクトップ",
+      "description": "この会話で Flower が使うブラウザーのタブやアプリを選択し、アクセス権を管理します。",
       "target": "タスクの操作対象",
       "refresh": "更新",
       "noTargets": "利用できる操作対象がありません。",
@@ -779,7 +779,28 @@
       "disconnect": "接続を解除",
       "managed": "管理対象ブラウザー",
       "profileName": "プロファイル名",
-      "createProfile": "プロファイルを作成"
+      "createProfile": "プロファイルを作成",
+      "allowContinue": "許可して続行",
+      "accessFailed": "アクセス権を保存できませんでした。再試行してください。Flower はまだ続行していません。",
+      "accessTitle": "タスクのアクセスを許可",
+      "siteTitle": "このサイトへのアクセスを許可",
+      "accessHint": "Flower がこの会話を進めるには、以下のアクセス権が必要です。許可すると自動で続行します。ブラウザーの手動操作は不要です。",
+      "targetTitle": "ブラウザーのタブを選択",
+      "targetHint": "ページが新しいタブを開きました。「ブラウザーとデスクトップ」でそのタブを選択し、サイトへのアクセス権を確認してから続行してください。",
+      "loginTitle": "ページでログインしてください",
+      "loginHint": "ページを開いてログインしてください。パスワードは会話ではなくページに入力し、完了後に「完了して続行」を選択してください。",
+      "verificationTitle": "ページに確認コードを入力",
+      "verificationHint": "ページを開いてワンタイムコードを入力してください。コードを会話に送らず、完了後に「完了して続行」を選択してください。",
+      "captchaTitle": "人間であることを確認してください",
+      "captchaHint": "ページを開いて CAPTCHA を完了し、「完了して続行」を選択してください。Flower はページを再確認してから再開します。",
+      "privateTitle": "ページで機密情報の入力を完了",
+      "privateHint": "ページを開いてパスワードや確認コードの入力を完了してください。機密情報は会話に残りません。完了後に「完了して続行」を選択してください。",
+      "inspectionTitle": "現在のページを確認",
+      "inspectionHint": "Flower はページを安全に読み取れませんでした。ログインが必要かは未確認です。ページの状態を確認し、準備ができたら「完了して続行」で再確認してください。",
+      "untrustedTitle": "ページの予期しない指示を確認",
+      "untrustedHint": "ページにエージェント向けの指示が含まれています。ページを開き、その内容を閉じるか別のページに移動してから続行してください。",
+      "pausedTitle": "操作は一時停止中です",
+      "pausedHint": "ページやアプリでの操作を終え、Flower が再開してよい状態になったら「完了して続行」を選択してください。"
     }
   },
   "common": {

@@ -100,7 +100,7 @@ it('collapses a terminal run once and does not infer history success from a late
 it('requires explicit recovery and a newly decoded private frame after the workspace disconnects', async () => {
   const waiting = { ...current(), interactions: [{ id: 'takeover', kind: 'input' as const, turn_id: 'computer-turn', run_id: 'computer-run', tool_call_id: 'observe', input: { summary: 'Verification', questions: [{ id: 'computer_control', prompt: 'Return control', kind: 'select', options: ['Return control to Flower'] }] } }] };
   const f = fixture(waiting);
-  await waitFor(() => Array.from(f.surface.querySelectorAll('button')).some(b => b.textContent === 'Take control'));
+  await waitFor(() => Array.from(f.surface.querySelectorAll('button')).some(b => b.textContent === 'Open page'));
   f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')!.click();
   await waitFor(() => Boolean(f.setComputerViewer.mock.calls.at(-1)?.[0].interaction_id));
   const offerFrame = () => {

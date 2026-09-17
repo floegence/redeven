@@ -1247,6 +1247,10 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
 		}
 		if result.inputRequired != nil {
+			activity.Label = result.inputRequired.Summary
+			if len(result.inputRequired.Questions) > 0 {
+				activity.Description = result.inputRequired.Questions[0].Prompt
+			}
 			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
 				Kind: "computer_control", ResourceRef: strings.TrimSpace(anyToString(rawPayload["target_id"])),
 				Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), "Computer"),
@@ -1256,6 +1260,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			var safety InteractionSafetyDecision
 			body, _ := json.Marshal(rawPayload["safety"])
 			if json.Unmarshal(body, &safety) == nil {
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: computerAssistanceKind(safety), Tone: "warning"})
 				if safety.RequiredOrigin != "" {
 					activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_origin", ResourceRef: safety.RequiredOrigin, Label: safety.RequiredOrigin})
 				}
