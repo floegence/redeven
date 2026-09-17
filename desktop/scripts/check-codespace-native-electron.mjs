@@ -32,13 +32,17 @@ try {
       env: { ...process.env, REDEVEN_NATIVE_EDITOR_SMOKE_STATE: path.join(directory, 'editor'), ELECTRON_RUN_AS_NODE: undefined },
     },
   );
+  console.log('Owned native acceptance runtime:', JSON.stringify({ commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), electron_pid: child.pid, state: directory, marker: runMarker }));
+  let timedOut = false;
   const timer = setTimeout(() => {
     if (child.exitCode !== null || child.signalCode !== null) return;
+    timedOut = true;
     if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F']);
     else process.kill(-child.pid, 'SIGTERM');
   }, 60000);
   const code = await new Promise((resolve) => child.once('exit', resolve));
   clearTimeout(timer);
+  if (timedOut) throw new Error('Native Electron smoke timed out');
   if (code !== 0) throw new Error(`Native Electron smoke failed: ${code}`);
 } finally {
   await rm(directory, { recursive: true, force: true });

@@ -243,13 +243,13 @@ describe('main routing', () => {
       'function sessionCodespaceWindowStateKey(sessionKey: DesktopSessionKey, codeSpaceID: string): string {',
     );
     expect(mainSrc).toContain('function openSessionChildWindow(');
-    expect(mainSrc).toContain('async function prepareSessionNativeCodeSpace(');
+    expect(mainSrc).toContain('owner = new CodeSpaceNativeWindow({');
     expect(mainSrc).toContain('if (isAllowedSessionNavigation(sessionKey, nextURL)) {');
     expect(mainSrc).toContain(
-      'new URL(url).origin === state.gateway.origin',
+      'owner.allowsNavigation(url)',
     );
     expect(mainSrc).toContain('child_windows: Map<string, DesktopTrackedWindow>;');
-    expect(mainSrc).toContain('codespace_windows: Map<string, DesktopTrackedWindow>;');
+    expect(mainSrc).toContain('codespace_native: Map<string, CodeSpaceNativeWindow>;');
     expect(mainSrc).toContain('sessionKeyByWebContentsID.delete(closedWindow.webContentsID);');
     expect(mainSrc).not.toContain('sessionKeyByWebContentsID.delete(childWindow.webContents.id);');
   });
@@ -367,23 +367,24 @@ describe('main routing', () => {
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const helper = mainSrc.slice(start, end);
-    expect(helper).toContain('partition: `persist:redeven-code:${identity}`');
-    expect(helper).toContain('sessionPartition: state.partition');
+    expect(helper).toContain('const partition = `persist:redeven-code:${identity}`');
+    expect(helper).toContain('sessionPartition: partition');
+    expect(helper).toContain('deferInitialLoad: true');
+    expect(helper).toContain('await owner.showLoading(copy)');
     expect(helper).toContain("role: 'codespace_child'");
     expect(helper).toContain("chrome: 'native'");
     expect(helper).toContain("preload: 'none'");
     expect(helper).not.toContain('sessionKeyByWebContentsID.set(');
-    expect(helper).toContain('state.lifetime.abort()');
-    expect(helper).toContain('await gateway.close()');
+    expect(helper).toContain('owner.close(false)');
+    expect(helper).toContain('record.codespace_native.get(codeSpaceID) === owner');
     expect(helper).toContain('createSessionCodeSpaceRoute(record, codeSpaceID, signal, password)');
     const route = mainSrc.slice(mainSrc.indexOf('async function createSessionCodeSpaceRoute('), start);
     expect(route).toContain("record.transport.kind === 'provider_remote'");
     expect(route).toContain('createRemoteNativeCodeSpaceRoute(');
     expect(route).toContain('createLocalNativeCodeSpaceRoute(');
-    expect(helper.indexOf('const profile = codeSpaceProfiles();')).toBeLessThan(helper.indexOf('const route ='));
+    expect(helper).toContain('profiles: codeSpaceProfiles');
     const closing = mainSrc.slice(mainSrc.indexOf('async function finalizeSessionClosure('));
-    expect(closing.indexOf('const nativeCodeSpaces = Array.from')).toBeLessThan(closing.indexOf('for (const codespaceWindow'));
-    expect(closing).toContain('await state.opening?.catch(() => undefined)');
+    expect(closing).toContain('owner.close(options.closeWindows !== false)');
   });
 
   it('opens Web Services in a trusted browser shell with bridge-free target views', () => {
@@ -484,8 +485,8 @@ describe('main routing', () => {
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
     expect(mainSrc).toContain('refreshCodespaceLoadingDocuments();');
     expect(mainSrc).toContain('refreshWebServiceUnavailableDocuments();');
-    expect(helperSrc).toContain('for (const [codeSpaceID, copy] of sessionRecord.codespace_loading_documents)');
-    expect(helperSrc).toContain('buildCodespaceLoadingDocumentURL(codeSpaceID, themeSnapshot, copy)');
+    expect(helperSrc).toContain('for (const owner of record.codespace_native.values())');
+    expect(helperSrc).toContain('owner.refreshLoading()');
     expect(helperSrc).not.toContain('for (const [codeSpaceID, codespaceWindow] of sessionRecord.codespace_windows)');
   });
 
@@ -503,7 +504,8 @@ describe('main routing', () => {
     const helper = mainSrc.slice(helperStart, helperEnd);
     expect(helper).toContain('!record || record.closing');
     expect(helper).toContain('openSessionCodespaceLoadingWindow(record.session_key, request.code_space_id');
-    expect(helper).toContain('prepareSessionNativeCodeSpace(record, request.code_space_id, request.password)');
+    expect(helper).toContain('await owner.open(request.password)');
+    expect(helper).toContain("request.mode === 'open' && failure.code === 'codespace_closed'");
     expect(helper).not.toContain('request.url');
   });
 

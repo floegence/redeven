@@ -94,7 +94,7 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain("stateKey: sessionWindowStateKey(sessionKey)");
     expect(mainSrc).toContain('sessionChildWindowStateKey(sessionKey, childKey)');
     expect(mainSrc).toContain('child_windows: Map<string, DesktopTrackedWindow>;');
-    expect(mainSrc).toContain('codespace_windows: Map<string, DesktopTrackedWindow>;');
+    expect(mainSrc).toContain('codespace_native: Map<string, CodeSpaceNativeWindow>;');
     expect(mainSrc).toContain("setLauncherViewState({");
     expect(mainSrc).toContain("surface: 'connect_environment',");
     expect(mainSrc).not.toContain('handoffAskFlowerToOwningSession');

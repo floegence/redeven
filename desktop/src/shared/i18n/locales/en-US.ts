@@ -3,6 +3,7 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   codespaceNative: {
+    openFailed: 'The CodeSpace window could not finish opening. Return to Codespaces and try again.',
     portInUse: 'The saved local port for this CodeSpace is in use. Close the application using that port, then try again.',
     unavailable: 'The CodeSpace connection is unavailable. Check the environment connection and try opening it again.',
     profileInvalid: 'The saved CodeSpace browser profile could not be read. Restore codespace-profiles.json before reopening this CodeSpace.',
