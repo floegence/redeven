@@ -23,7 +23,7 @@ func createCompositionV5Database(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := migrateToV5(tx); err != nil {
 		t.Fatal(err)
 	}
