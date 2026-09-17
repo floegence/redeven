@@ -1065,24 +1065,24 @@ describe('EnvWorkbenchPage', () => {
         expect.objectContaining({
           widget_id: 'widget-initial-files',
           widget_type: 'redeven.files',
-          width: 720,
-          height: 520,
+          width: 848,
+          height: 918,
           z_index: 20,
           created_at_unix_ms: 1_778_976_000_000,
         }),
         expect.objectContaining({
           widget_id: 'widget-initial-terminal',
           widget_type: 'redeven.terminal',
-          width: 800,
-          height: 480,
+          width: 1040,
+          height: 440,
           z_index: 21,
           created_at_unix_ms: 1_778_976_000_001,
         }),
         expect.objectContaining({
           widget_id: 'widget-initial-monitor',
           widget_type: 'redeven.monitor',
-          width: 760,
-          height: 460,
+          width: 1040,
+          height: 446,
           z_index: 22,
           created_at_unix_ms: 1_778_976_000_002,
         }),
@@ -1091,27 +1091,28 @@ describe('EnvWorkbenchPage', () => {
         expect.objectContaining({
           id: 'sticky-initial-capture',
           color: 'amber',
-          body: expect.stringContaining('<strong>thought</strong>'),
+          title: 'Make it yours',
+          material: 'tab',
         }),
         expect.objectContaining({
-          id: 'sticky-initial-region',
-          color: 'sage',
-          body: expect.stringContaining('<em>intentional</em>'),
+          id: 'sticky-initial-guide',
+          color: 'graphite',
+          material: 'ruled',
         }),
       ]),
-      annotations: [
+      annotations: expect.arrayContaining([
         expect.objectContaining({
           id: 'annotation-initial-welcome-title',
-          text: '🚀 Welcome to Redeven',
+          text: 'Make room for your next idea.',
         }),
-      ],
-      background_layers: [
+      ]),
+      background_layers: expect.arrayContaining([
         expect.objectContaining({
-          id: 'region-initial-welcome-runtime',
-          name: 'Welcome Region',
-          material: 'glass',
+          id: 'region-initial-ideas',
+          name: '',
+          material: 'solid',
         }),
-      ],
+      ]),
     });
 
     const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
@@ -1228,8 +1229,8 @@ describe('EnvWorkbenchPage', () => {
       expect.arrayContaining([
         expect.objectContaining({
           widget_id: 'widget-initial-files',
-          width: 720,
-          height: 520,
+          width: 848,
+          height: 918,
         }),
       ]),
     );

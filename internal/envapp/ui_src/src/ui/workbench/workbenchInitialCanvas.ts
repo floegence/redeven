@@ -7,6 +7,7 @@ import type {
 } from '@floegence/floe-webapp-core/workbench';
 
 import type { RuntimeWorkbenchLayoutWidget } from './runtimeWorkbenchLayout';
+import type { I18nHelpers } from '../i18n';
 import { createRedevenWorkbenchCanvasPreset } from './workbenchInitialCanvasPreset';
 
 export type RedevenWorkbenchInitialLayout = Readonly<{
@@ -21,6 +22,7 @@ export type CreateRedevenWorkbenchInitialLayoutOptions = Readonly<{
   initialWidgetTypes: readonly WorkbenchWidgetType[];
   typeOrder: readonly WorkbenchWidgetType[];
   createdAtUnixMs: number;
+  t: I18nHelpers['t'];
   centerX?: number;
   centerY?: number;
 }>;
@@ -32,6 +34,7 @@ export function createRedevenWorkbenchInitialLayout(
     widgetDefinitions: options.widgetDefinitions,
     initialWidgetTypes: options.initialWidgetTypes,
     createdAtUnixMs: options.createdAtUnixMs,
+    t: options.t,
   });
 
   return {

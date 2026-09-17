@@ -708,6 +708,20 @@
     "moreActions": "更多操作"
   },
   "workbench": {
+    "welcome": {
+      "title": "给下一个想法，留一片空间。",
+      "subtitle": "文件、终端与实时状态，在同一片画布上从容展开。",
+      "ideasTitle": "思考与规划",
+      "ideasDescription": "记下灵感，让下一步更清晰。",
+      "filesTitle": "探索与构建",
+      "filesDescription": "从文件出发，把想法变成作品。",
+      "runtimeTitle": "运行与观察",
+      "runtimeDescription": "随时操作终端，掌握环境状态。",
+      "noteTitle": "从你的想法开始",
+      "noteBody": "点击这里，记下一个想法。\n用拖动手柄调整窗口位置。\n只留下你需要的内容。",
+      "guideTitle": "布置你的工作空间",
+      "guideBody": "在排版模式中编辑文字和区域。\n\n回到工作模式，使用便签和工具。\n\n这里的一切，都能随你的工作重新安排。"
+    },
     "composition": {
       "dragSticky": "拖动便签",
       "stickyBody": "便签内容",

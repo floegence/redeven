@@ -21,6 +21,8 @@ Selected-object tools stay anchored to the object during movement and viewport c
 
 ## Editing
 
+A pristine Runtime receives a localized welcome canvas once: two editable notes beside Files, Terminal, and Monitoring, organized by three unnamed regions. Preset windows reserve room for file navigation, terminal sessions, and monitoring content; their sizes do not change catalog Add sizes. Existing layouts, including intentionally empty layouts with an advanced revision, are never reseeded. Welcome copy becomes user content after creation. Overview includes notes, text, and regions as well as windows, with extra bottom padding for the Dock and a bounded scale that fits the complete scene while retaining useful widget content dimensions.
+
 Work mode edits sticky notes and business widgets. Composition mode edits only canvas text and regions; sticky notes and widget subtrees become dimmed and inert, preserving their state while blocking editing, dragging, and keyboard actions. Switching modes commits an active text draft. Editable text accepts a direct click, dragging selects text, and moving objects uses the designated handles or region surface. Entering an editor never pans or zooms the canvas. Text and its editor scale together with the canvas while tools keep a readable screen size. [Input ownership](workbench-input-ownership.md) remains authoritative for canvas and local scrolling.
 
 Region names are optional. Clearing the name produces a plain region, with no placeholder text forced into saved content. The selected region exposes Add name when blank and Clear name in its material menu. Clearing the name closes the popup before the toolbar moves, so reopening uses its new anchor. Add name places focus in the actual editor. Blank note bodies and canvas text also remain blank after persistence.
@@ -45,6 +47,7 @@ Migration atomicity, incompatible-schema rejection, and startup failure behavior
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/workbench/workbenchInitialCanvas.test.ts` - Localized first-run content, non-overlapping region placement, and complete-scene laptop framing.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.tsx` - Thin published-surface adapter and localized composition messages.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx` - Product CSS across themes and direct localized note/region editing in Chromium.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/runtimeWorkbenchLayout.test.ts` - Material-aware equality and blank-content projection round trip.
