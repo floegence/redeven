@@ -7,59 +7,71 @@ timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
-The Computer Use Runtime owns target selection over Redeven product settings.
-The registry owns target identities and readiness snapshots only. An unbound
-thread defaults to the managed browser, never to whichever adapter registered
-first. Selection cannot authorize an action, imply readiness or grant control
-of a shared desktop. Policy, readiness, safety and cancellation checks remain
-mandatory; unavailable stored targets fail rather than selecting another target.
+The Computer Use Runtime owns discovery and selection over Redeven product
+settings. Users describe work; Flower finds the browser page or application
+window. The current selection is a working position, not a requirement to bind
+resources in settings. Candidates never grant access. Stale, disconnected or
+occupied resources fail explicitly without changing the previous selection.
 
 # Contract
 
-## Resolution and execution
+## Discovery and selection
 
-A model may omit `target`, use `current`, or request an authorized logical kind.
-Resolution is read-only. For `current`, the Runtime reads that canonical thread's
-`computer_target_id`; an empty value resolves the permanent `browser-main`
-managed target. Explicit kinds
-resolve only registered, unambiguous targets. Concrete IDs remain internal
-compatibility inputs and execution provenance, not mandatory model parameters.
+`computer.targets` lists browser profiles/pages and application windows without
+a preselected target. It returns bounded Runtime-issued `candidate_ref` values,
+page titles, URLs, profile names, actual opener identities and availability.
+References are thread-scoped, expire after ten minutes and exist only in bounded
+Runtime memory. A native Chrome window is a desktop window, not a browser page.
 
-The existing tool boundary resolves identity, checks target policy, prepares the
-adapter and assesses safety. Only then does it persist selection, before sending
-the action to the adapter. A persistence failure executes nothing. A target or
-safety rejection leaves the previous selection intact. An action failure retains
-the selected target and follows existing effect-outcome rules; it does not
-silently send the next action to a previous target. Calls carry canonical thread,
-turn, run and tool identities from the host, never from model arguments.
+`computer.select_target` consumes one candidate. Resource resolution is read-only;
+connection and new-page creation occur after Floret authorization. Selection
+rechecks inventory identity, current permissions and resource occupancy, prepares
+the adapter, and binds the existing product setting under the target gate. The
+UI uses this same selection implementation. No model-supplied endpoint, window
+identity, origin grant or control ownership is accepted through the candidate API.
+A changed title/URL requires fresh discovery rather than a silent substitute.
 
-The user-facing connection panel may save an explicit target preference before
-readiness. This is selection only. It never grants a site, application, execution
-permission or control ownership. Managed profile/tab and native window inventories
-are user-visible management APIs, not model access to arbitrary browser targets.
+## Default work and explicit switching
 
-Missing managed-browser resources remain a browser setup error even when a native
-desktop helper exists. Persisted selection never skips the actual readiness
-handshake. Resolving one thread does not mutate any other thread or a global
-`current`. Store errors retain their own failure boundary rather than becoming
-target-unavailable errors.
+For `current`, the Runtime reads the thread's `computer_target_id`. An existing
+selection must still resolve to that exact resource. An unbound web task plans
+an independent background page in the single connected personal browser profile
+(extension or previously authorized CDP). With no personal connection it uses
+the default managed profile. Multiple personal profiles require a task-informed
+choice from inventory or one conversational clarification; there is no arbitrary
+profile selection. Read-only planning creates neither pages nor bindings.
+
+A profile participates in the default target identity. A connection change cannot
+silently replace an authorized resource. Preparation serializes page creation,
+so simultaneous operations for one task reuse its page while separate tasks
+receive distinct pages. Existing-page tasks select the matching inventory entry
+without reloading it or losing an unsaved form.
+
+Explicit switching releases prior execution resources and requires a new
+observation. Site/app permissions still apply at observation and action time.
+Selection cannot bypass Stop or private user control. `TARGET_IN_USE` denotes
+another active owner; it is distinct from insufficient permission. A rejected
+selection leaves the previous binding and ownership intact. Confirmed actions
+remain confirmed even if later work fails; no click or partial script is replayed.
+
+The connection panel shows the current page/application and connection state.
+Optional switching groups searchable browser pages and application windows;
+connection setup stays behind Manage connections. Real ambiguities are resolved
+in the conversation. Full access hides redundant per-resource grant controls.
 
 ## Persistence and fork
 
-The migrated product store is the only selection store; no in-memory binding
-mirror exists. The Service attaches that store before admitting turns. Schema
-version 7 appends a default-empty target column to version 6 thread settings.
-Version 8 adds `computer_access_json` with empty origins, apps and foreground
-permission by default. Both edges remain
-under the permanent product lineage. All previous migration edges remain intact;
-verification and data changes commit atomically. No Floret-owned tables are read.
+The migrated product store remains the only selection store. No schema change,
+Agent lifecycle mirror or durable candidate cache is introduced. The existing
+version 6-to-7 selection, 7-to-8 pin ranking and 8-to-9 access migrations remain
+intact. Floret storage is opaque and its published v7.14.0 authorization, results,
+Activity and interaction contracts require no upstream API expansion.
 
-Restart restores the chosen target identity, not helper liveness or control
-ownership. New and forked threads start unbound and resolve the managed browser.
-Forked history may contain parent keyframes; it does not grant control of the
-parent target. Forks also start with empty computer grants. Deleting product
-settings removes selection and grants. Setting a target for
-an unknown or deleted thread fails and never recreates that thread.
+Restart restores selection identity, not helper liveness or control. A lost task
+page fails until a fresh candidate is selected. New and forked threads start
+unbound, have independent task pages and inherit no parent resource authority.
+Forks start with empty computer grants. Deleting product settings removes the
+selection and grants; a later bind never recreates a deleted thread.
 
 # Boundaries
 
@@ -83,3 +95,7 @@ prove readiness, foreground safety or platform qualification.
 - `redeven:internal/ai/threadstore/computer_target_test.go` - migration, rollback and restart.
 - `redeven:internal/ai/threadstore/computer_access_test.go` - contiguous access migration and fork isolation.
 - `redeven:internal/ai/computer_access.go` - current authorization and active-script revocation.
+
+- `redeven:internal/ai/computer_candidates.go` - bounded candidate identities and shared selection.
+- `redeven:internal/ai/computer_autonomous_integration_test.go` - real Chromium through the production Floret tool loop.
+- `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - optional grouped target switcher.

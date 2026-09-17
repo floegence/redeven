@@ -100,6 +100,14 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
+	"computer.targets": {
+		Name: "computer.targets", Mutating: false, RequiresApproval: false,
+		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("discover"), resultPayloadFields("current_target_id", "default_candidate_ref", "candidates")),
+	},
+	"computer.select_target": {
+		Name: "computer.select_target", Mutating: true, RequiresApproval: true,
+		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "computer", "computer", "args", "result"), operation("select"), resultPayloadFields("target_id", "target_name", "target_kind")),
+	},
 	"computer.observe": {
 		Name: "computer.observe", Mutating: false, RequiresApproval: false,
 		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "computer", "computer", "args", "result"), operation("observe"), labelFields("target_name", "target_id"), callPayloadFields("root_ref", "limit", "screenshot"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),

@@ -3465,6 +3465,41 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: tabs})
 		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/candidates":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		inventory, err := aiSvc.ComputerCandidates(r.Context(), meta, r.URL.Query().Get("thread_id"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_targets_unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: inventory})
+		return
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/computer/select":
+		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		var body struct {
+			ThreadID     string `json:"thread_id"`
+			CandidateRef string `json:"candidate_ref"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		target, err := aiSvc.SelectComputerCandidate(r.Context(), meta, body.ThreadID, body.CandidateRef)
+		if err != nil {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer_target_selection_failed", ErrorCode: ai.ComputerSelectionErrorCode(err)})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: target})
+		return
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/computer/targets":
 		meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 		if !ok || !g.requireAIService(w, aiSvc) {
@@ -3555,7 +3590,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := aiSvc.SelectComputerTarget(r.Context(), meta, body.ThreadID, body.TargetID); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "computer_target_selection_failed"})
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "computer_target_selection_failed", ErrorCode: ai.ComputerSelectionErrorCode(err)})
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true})

@@ -20,6 +20,9 @@ func runtimeFixture(t *testing.T, handshake string) (*ComputerUseRuntime, *Playw
 	if err := os.WriteFile(helper, []byte("printf '%s\\n' '"+handshake+"'\nwhile IFS= read -r line; do :; done\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(helper), "redevenBrowserInventory.mjs"), []byte(`printf '%s\n' '{"protocol_version":2,"tabs":[{"id":"tab-one","profile_id":"default","title":"Fixture","url":"about:blank"}]}'`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	executor := NewPlaywrightTargetExecutor("/bin/sh", helper, t.TempDir())
 	// This fixture exercises the tab helper's handshake. Managed profile
 	// launch and exact-tab isolation have their own real-browser fixture.
@@ -30,7 +33,7 @@ func runtimeFixture(t *testing.T, handshake string) (*ComputerUseRuntime, *Playw
 }
 
 func TestComputerRuntimeRequiresRealHandshake(t *testing.T) {
-	runtime, executor := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+	runtime, executor := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 	target, err := runtime.ResolveTarget(t.Context(), "current")
 	if err != nil {
 		t.Fatal(err)
@@ -55,11 +58,11 @@ func TestComputerRuntimeRequiresRealHandshake(t *testing.T) {
 
 func TestComputerRuntimeStartupFailureRemainsTypedAndSecretFree(t *testing.T) {
 	for _, test := range []struct{ handshake, state, reason string }{
-		{`{"type":"ready","protocol_version":3,"error":"TARGET_SETUP_REQUIRED","reason":"browser_dependency_missing"}`, "setup_required", "browser_dependency_missing"},
-		{`{"type":"ready","protocol_version":3,"error":"TARGET_CONNECTION_REQUIRED","reason":"browser_connection_failed"}`, "connection_required", "browser_connection_failed"},
+		{`{"type":"ready","protocol_version":4,"error":"TARGET_SETUP_REQUIRED","reason":"browser_dependency_missing"}`, "setup_required", "browser_dependency_missing"},
+		{`{"type":"ready","protocol_version":4,"error":"TARGET_CONNECTION_REQUIRED","reason":"browser_connection_failed"}`, "connection_required", "browser_connection_failed"},
 		{`{"type":"ready","protocol_version":2}`, "setup_required", "browser_handshake_invalid"},
 		{`{"type":"ready","protocol_version":999,"error":"Authorization: secret"}`, "setup_required", "browser_handshake_invalid"},
-		{`{"type":"ready","protocol_version":3,"error":"secret","reason":"data:image/png;base64,secret"}`, "setup_required", "browser_launch_failed"},
+		{`{"type":"ready","protocol_version":4,"error":"secret","reason":"data:image/png;base64,secret"}`, "setup_required", "browser_launch_failed"},
 	} {
 		t.Run(test.reason, func(t *testing.T) {
 			runtime, executor := runtimeFixture(t, test.handshake)
@@ -76,7 +79,7 @@ func TestComputerRuntimeStartupFailureRemainsTypedAndSecretFree(t *testing.T) {
 }
 
 func TestComputerRuntimeRejectsPathDependentNodeBeforeLaunch(t *testing.T) {
-	runtime, executor := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+	runtime, executor := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 	executor.NodeBinary = "node"
 	target, _ := runtime.ResolveTarget(t.Context(), "current")
 	target, err := runtime.PrepareTarget(t.Context(), target)
@@ -113,13 +116,13 @@ func TestNativeReadinessTimeoutAndPermissions(t *testing.T) {
 }
 
 func TestComputerRuntimeConnectRequiresReadyAndPreservesExistingConnection(t *testing.T) {
-	runtime, managed := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+	runtime, managed := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 	first, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9222", TabID: "tab-one", ProfileID: "default"})
 	if err != nil || !first.Ready {
 		t.Fatalf("first connection: %+v %v", first, err)
 	}
 	original := runtime.executors[first.ID].(*PlaywrightTargetExecutor)
-	if err := os.WriteFile(managed.HelperPath, []byte("printf '%s\\n' '{\"type\":\"ready\",\"protocol_version\":3,\"error\":\"TARGET_CONNECTION_REQUIRED\",\"reason\":\"browser_connection_failed\"}'\n"), 0o600); err != nil {
+	if err := os.WriteFile(managed.HelperPath, []byte("printf '%s\\n' '{\"type\":\"ready\",\"protocol_version\":4,\"error\":\"TARGET_CONNECTION_REQUIRED\",\"reason\":\"browser_connection_failed\"}'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	failed, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9223", TabID: "tab-one", ProfileID: "default"})
@@ -132,8 +135,8 @@ func TestComputerRuntimeConnectRequiresReadyAndPreservesExistingConnection(t *te
 	}
 }
 
-func TestComputerRuntimeConnectReapsReplacementAndRejectsAfterClose(t *testing.T) {
-	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+func TestComputerRuntimeConnectKeepsDistinctTabsAndRejectsAfterClose(t *testing.T) {
+	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 	first, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9222", TabID: "tab-one", ProfileID: "default"})
 	if err != nil {
 		t.Fatal(err)
@@ -142,8 +145,8 @@ func TestComputerRuntimeConnectReapsReplacementAndRejectsAfterClose(t *testing.T
 	if _, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9223", TabID: "tab-one", ProfileID: "default"}); err != nil {
 		t.Fatal(err)
 	}
-	if !old.closed || len(old.clients) != 0 {
-		t.Fatal("replacement leaked the old helper")
+	if old.closed || len(old.clients) != 1 || len(runtime.executors) != 3 {
+		t.Fatal("connecting a different browser replaced an existing tab")
 	}
 	if err := runtime.Close(); err != nil {
 		t.Fatal(err)
@@ -153,9 +156,9 @@ func TestComputerRuntimeConnectReapsReplacementAndRejectsAfterClose(t *testing.T
 	}
 }
 
-func TestComputerRuntimeConnectCannotReplaceLeasedBrowser(t *testing.T) {
+func TestComputerRuntimeConnectPreservesLeasedBrowser(t *testing.T) {
 	for _, private := range []bool{false, true} {
-		runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+		runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 		first, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9222", TabID: "tab-one", ProfileID: "default"})
 		if err != nil {
 			t.Fatal(err)
@@ -171,10 +174,14 @@ func TestComputerRuntimeConnectCannotReplaceLeasedBrowser(t *testing.T) {
 		control.mu.Unlock()
 		unlock()
 		_, err = runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9223", TabID: "tab-one", ProfileID: "default"})
-		var startup *TargetStartupError
-		if !errors.As(err, &startup) || startup.Code != "TARGET_NOT_READY" || startup.Reason != "target_in_use" {
-			t.Fatalf("private=%v: replacement must reject leased target: %v", private, err)
+		if err != nil {
+			t.Fatalf("independent connection: %v", err)
 		}
+		reused, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9222", TabID: "tab-one", ProfileID: "default"})
+		if err != nil || reused.ID != first.ID {
+			t.Fatalf("same tab did not retain its identity: %+v %v", reused, err)
+		}
+
 		if runtime.executors[first.ID] != original || original.closed {
 			t.Fatal("connection changed the running turn's browser")
 		}
@@ -185,8 +192,8 @@ func TestComputerRuntimeConnectCannotReplaceLeasedBrowser(t *testing.T) {
 	}
 }
 
-func TestComputerRuntimeConnectCannotReplaceAnInFlightTarget(t *testing.T) {
-	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+func TestComputerRuntimeConnectPreservesInFlightTarget(t *testing.T) {
+	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 	first, err := runtime.ConnectBrowser(t.Context(), ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9222", TabID: "tab-one", ProfileID: "default"})
 	if err != nil {
 		t.Fatal(err)
@@ -198,9 +205,8 @@ func TestComputerRuntimeConnectCannotReplaceAnInFlightTarget(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	_, err = runtime.ConnectBrowser(ctx, ComputerBrowserConnection{CDPURL: "http://127.0.0.1:9223", TabID: "tab-one", ProfileID: "default"})
-	var startup *TargetStartupError
-	if !errors.As(err, &startup) || startup.Reason != "target_in_use" {
-		t.Fatalf("in-flight target replacement was not rejected: %v", err)
+	if err != nil {
+		t.Fatalf("independent tab connection: %v", err)
 	}
 	if runtime.executors[first.ID] != original {
 		t.Fatal("in-flight executor was replaced")
@@ -216,8 +222,8 @@ func (e *blockedReadinessExecutor) EnsureTargetReady(ctx context.Context, _ stri
 	return err
 }
 
-func TestComputerRuntimeReadinessExcludesReplacement(t *testing.T) {
-	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+func TestComputerRuntimeReadinessAndOtherConnectionsAreIndependent(t *testing.T) {
+	runtime, _ := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 	target := TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", State: "starting"}
 	if err := runtime.registry.Register(target); err != nil {
 		t.Fatal(err)
@@ -235,9 +241,8 @@ func TestComputerRuntimeReadinessExcludesReplacement(t *testing.T) {
 	if prepareErr := <-prepared; prepareErr != nil {
 		t.Fatal(prepareErr)
 	}
-	var startup *TargetStartupError
-	if !errors.As(err, &startup) || startup.Reason != "target_in_use" {
-		t.Fatalf("readiness allowed concurrent replacement: %v", err)
+	if err != nil {
+		t.Fatalf("independent tab readiness: %v", err)
 	}
 	if runtime.executors[target.ID] != executor {
 		t.Fatal("readiness published a retired adapter's state")
@@ -245,7 +250,7 @@ func TestComputerRuntimeReadinessExcludesReplacement(t *testing.T) {
 }
 
 func TestComputerRuntimeClosedReadinessCannotRestartHelper(t *testing.T) {
-	runtime, executor := runtimeFixture(t, `{"type":"ready","protocol_version":3}`)
+	runtime, executor := runtimeFixture(t, `{"type":"ready","protocol_version":4}`)
 	target, _ := runtime.ResolveTarget(t.Context(), "current")
 	if err := runtime.Close(); err != nil {
 		t.Fatal(err)

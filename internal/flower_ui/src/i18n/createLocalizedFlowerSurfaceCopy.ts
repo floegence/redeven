@@ -150,6 +150,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         showAll: t(i18n, k('chat.toolActivity.showAll')),
         showLess: t(i18n, k('chat.toolActivity.showLess')),
         copyFailed: t(i18n, k('chat.toolActivity.copyFailed')),
+        discoverTargets: t(i18n, k('chat.toolActivity.discoverTargets')),
+        selectTarget: t(i18n, k('chat.toolActivity.selectTarget')),
         execute: t(i18n, k('chat.toolActivity.execute')),
         observe: t(i18n, k('chat.toolActivity.observe')),
         screenshot: t(i18n, k('chat.toolActivity.screenshot')),

@@ -32,7 +32,7 @@ try {
     try {
       const { targetInfos } = await session.send('Target.getTargets');
       const tabs = targetInfos.filter(target => target.type === 'page');
-      if (message.command === 'inventory') emit({ id: message.id, tabs: tabs.map(tab => ({ id: tab.targetId, profile_id: tab.browserContextId || 'default', title: tab.title.slice(0, 512), url: tab.url })) });
+      if (message.command === 'inventory') emit({ id: message.id, tabs: tabs.map(tab => ({ id: tab.targetId, profile_id: tab.browserContextId || 'default', title: tab.title.slice(0, 512), url: tab.url, ...(tab.openerId ? { opener_tab_id: tab.openerId } : {}) })) });
       else if (message.command === 'new_tab') {
         if (tabs.length >= 128) throw new Error('tab limit');
         const { targetId } = await session.send('Target.createTarget', { url: 'about:blank', background: true });

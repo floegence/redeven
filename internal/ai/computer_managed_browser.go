@@ -276,6 +276,12 @@ func (r *ComputerUseRuntime) connectManagedBrowserLocked(ctx context.Context, co
 	if chosen == nil {
 		return TargetDescriptor{}, errors.New("select an available managed tab")
 	}
+	if !connection.NewTab && connection.TabURL != "" && (chosen.URL != connection.TabURL || chosen.Title != connection.TabTitle) {
+		return TargetDescriptor{}, &targetToolPolicyError{code: "target_selection_stale"}
+	}
+	if targetID == "" {
+		targetID = r.managedTabTargetID(profile.endpoint, chosen.ID)
+	}
 	if targetID == "" {
 		targetID = "managed-" + chosen.ID
 	}

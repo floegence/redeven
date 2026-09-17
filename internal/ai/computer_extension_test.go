@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/floegence/redeven/internal/browserbridge"
 	"net"
 	"os"
@@ -35,8 +36,8 @@ func extensionFixture(t *testing.T, owners ...*ComputerUseRuntime) (*computerExt
 	}
 	t.Cleanup(func() { _ = peer.Close() })
 	for _, message := range []map[string]any{
-		{"type": "native_host", "protocol_version": 3, "extension_id": browserbridge.ExtensionID},
-		{"type": "hello", "protocol_version": 3, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
+		{"type": "native_host", "protocol_version": 4, "extension_id": browserbridge.ExtensionID},
+		{"type": "hello", "protocol_version": 4, "profile_id": "12345678-1234-1234-1234-123456789abc", "profile_name": "Work"},
 	} {
 		if err := browserbridge.WriteMessage(peer, message, 1<<20); err != nil {
 			t.Fatal(err)
@@ -300,5 +301,68 @@ func TestExtensionUnavailableEventRetiresExactTabBeforeNextReply(t *testing.T) {
 	}
 	if _, err := runtime.ResolveTarget(t.Context(), "8"); err != nil {
 		t.Fatal("closing a tab retired its sibling")
+	}
+}
+
+func TestExtensionAutonomousConversationsCreateIndependentBackgroundTabs(t *testing.T) {
+	host, _, store, _ := computerBindingFixture(t)
+	hub, _, peer := extensionFixture(t, host)
+	host.extension = hub
+	done := make(chan struct{})
+	created := 0
+	go func() {
+		defer close(done)
+		for {
+			raw, err := browserbridge.ReadMessage(peer, 1<<20)
+			if err != nil {
+				return
+			}
+			var request struct {
+				ID      string `json:"id"`
+				Command string `json:"command"`
+			}
+			if json.Unmarshal(raw, &request) != nil {
+				return
+			}
+			result := map[string]any{}
+			if request.Command == "new_tab" {
+				created++
+				result = map[string]any{"tab_id": fmt.Sprint(created), "title": "Task"}
+			}
+			if err := browserbridge.WriteMessage(peer, map[string]any{"id": request.ID, "result": result}, 1<<20); err != nil {
+				return
+			}
+		}
+	}()
+	results := make(chan TargetDescriptor, 2)
+	failures := make(chan error, 2)
+	for _, thread := range []string{"thread-first", "thread-second"} {
+		go func() {
+			planned, err := host.ResolveTargetForThread(t.Context(), thread, "current")
+			if err == nil {
+				planned, err = host.selectComputerTarget(t.Context(), TargetToolCall{ThreadID: thread, RunID: thread, TurnID: "turn", ToolName: "computer.select_target"}, planned)
+			}
+			results <- planned
+			failures <- err
+		}()
+	}
+	first, second := <-results, <-results
+	for range 2 {
+		if err := <-failures; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if first.ID == second.ID || first.Kind != "browser.connected" || second.Kind != "browser.connected" {
+		t.Fatalf("personal browser pages are not isolated: %+v %+v", first, second)
+	}
+	a, _ := store.GetComputerTarget(t.Context(), "thread-first")
+	b, _ := store.GetComputerTarget(t.Context(), "thread-second")
+	if a == b || a == "" || b == "" {
+		t.Fatalf("conversation bindings crossed: %q %q", a, b)
+	}
+	_ = peer.Close()
+	<-done
+	if created != 2 {
+		t.Fatalf("created %d task tabs", created)
 	}
 }

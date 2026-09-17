@@ -1184,6 +1184,15 @@ export type FlowerTargetDescriptor = Readonly<{
   app_bundle_id?: string;
 }>;
 
+export type FlowerComputerCandidate = Readonly<{
+  candidate_ref: string; target_id?: string; kind: string; display_name: string;
+  profile_name?: string; title?: string; url?: string; app_bundle_id?: string;
+  state: string; new_tab?: boolean;
+}>;
+export type FlowerComputerInventory = Readonly<{
+  current_target_id: string; default_candidate_ref?: string; candidates: readonly FlowerComputerCandidate[];
+}>;
+
 export type FlowerComputerAccess = Readonly<{
   origins: readonly string[];
   apps: readonly string[];
@@ -1193,6 +1202,8 @@ export type FlowerBrowserConnection = Readonly<{ managed_profile_id?: string; cd
 export type FlowerBrowserTab = Readonly<{ id: string; profile_id: string; title: string; url: string }>;
 export type FlowerComputerExtensionSetup = Readonly<{ native_host: string; extension_id: string; extension_path: string }>;
 export type FlowerComputerManagement = Readonly<{
+  listCandidates: (threadID: string) => Promise<FlowerComputerInventory>;
+  selectCandidate: (threadID: string, candidateRef: string) => Promise<FlowerTargetDescriptor>;
   listManagedProfiles?: () => Promise<readonly Readonly<{ id: string; name: string }>[]>;
   createManagedProfile?: (name: string) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
   listManagedTabs?: (profileID: string) => Promise<readonly FlowerBrowserTab[]>;

@@ -3100,6 +3100,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if runID == "" || threadID == "" || turnID == "" || strings.TrimSpace(toolID) == "" {
 		return nil, errors.New("target tool canonical execution identity is unavailable")
 	}
+	if isComputerManagementTool(toolName) {
+		return r.execComputerManagement(ctx, toolID, toolName, args)
+	}
 	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
 	targetID := targetIDFromToolArgs(args)
 	if frozen, ok := ctx.Value(computerAuthorizedTargetKey{}).(string); ok && isComputerUseTool(toolName) {
@@ -3172,6 +3175,14 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			repairAction: targetRepairAction(target),
 		}
 	}
+	if host, ok := r.targetToolExecutor.(*ComputerUseRuntime); ok {
+		if err := host.authorizeComputerCall(ctx, &call); err != nil {
+			return nil, err
+		}
+		if err := host.requireComputerSelectionOpen(call); err != nil {
+			return nil, err
+		}
+	}
 	if preparer, ok := r.targetToolExecutor.(TargetPreparer); ok {
 		var prepareErr error
 		target, prepareErr = preparer.PrepareTarget(ctx, target)
@@ -3192,25 +3203,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	}
 	call.Arguments = rawArgs
 	if toolName == "computer.exec" {
-		call.revalidate = func(operationCtx context.Context) error {
-			if err := operationCtx.Err(); err != nil {
-				return err
-			}
-			if r.isDetached() {
-				return context.Canceled
-			}
-			if _, _, err := r.authorizeToolExecutionFromSnapshot(operationCtx, toolID, toolName); err != nil {
-				return err
-			}
-			current, err := r.sessionMetaForTool()
-			if err != nil {
-				return err
-			}
-			if current == nil || !current.CanRead || !current.CanWrite || !current.CanExecute {
-				return errors.New("computer permission was revoked")
-			}
-			return nil
-		}
+		call.revalidate = r.computerToolRevalidator(toolID, toolName)
 	}
 	decision, safetyErr := gate.AssessInteraction(ctx, call, target)
 	if safetyErr != nil {
@@ -3219,13 +3212,8 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		}
 		return nil, safetyErr
 	}
-	if binder, ok := r.targetToolExecutor.(interface {
-		BindThreadTarget(context.Context, string, string) error
-	}); ok && isComputerUseTool(toolName) {
-		if err := binder.BindThreadTarget(ctx, threadID, targetID); err != nil {
-			return nil, err
-		}
-	}
+	call.bindSelection = isComputerUseTool(toolName)
+
 	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, call)
 	if err != nil {
 		var failure *targetToolPolicyError
@@ -3388,6 +3376,12 @@ func (e *targetToolPolicyError) Error() string {
 		return "the selected computer target is disconnected; select or reconnect it before continuing"
 	case "target_not_ready":
 		return "computer use target is not ready"
+	case "target_in_use":
+		return "This page or application is being used by another task. Choose another available target or wait for that task to finish."
+	case "target_ambiguous":
+		return "Multiple personal browser profiles are connected. Use computer.targets and choose the profile matching the task, or ask one question if the profile is unclear."
+	case "target_selection_stale":
+		return "The page or window changed. Refresh computer.targets and choose the current candidate; do not repeat the previous action."
 	case "target_not_allowed":
 		return "the selected target is not allowed for this Flower thread"
 	case "target_unavailable":
@@ -3918,4 +3912,26 @@ func prependRedevenBinToEnv(baseEnv []string) []string {
 		}
 	}
 	return out
+}
+
+func (r *run) computerToolRevalidator(toolID, toolName string) func(context.Context) error {
+	return func(operationCtx context.Context) error {
+		if err := operationCtx.Err(); err != nil {
+			return err
+		}
+		if r.isDetached() {
+			return context.Canceled
+		}
+		if _, _, err := r.authorizeToolExecutionFromSnapshot(operationCtx, toolID, toolName); err != nil {
+			return err
+		}
+		current, err := r.sessionMetaForTool()
+		if err != nil {
+			return err
+		}
+		if current == nil || !current.CanRead || !current.CanWrite || !current.CanExecute {
+			return errors.New("computer permission was revoked")
+		}
+		return nil
+	}
 }

@@ -51,7 +51,7 @@ test('native popup workflows preserve effects and require separate target author
           assert.equal(result.error, 'EFFECT_OUTCOME_UNKNOWN', JSON.stringify(result));
           assert.equal(controller.page.invalid, true);
           assert.equal(controller.page.heldInput.size, 0);
-        } else assert.equal(result.safety?.level, 'takeover', JSON.stringify(result));
+        } else assert.equal(result.safety?.level, ['cancel', 'revoke'].includes(scenario) ? 'takeover' : 'routine', JSON.stringify(result));
         if (['cancel', 'revoke'].includes(scenario)) {
           assert.equal(result.result.action_executed, false);
           assert.equal(children.length, 0);
@@ -65,14 +65,32 @@ test('native popup workflows preserve effects and require separate target author
           if (scenario !== 'click-unknown') {
             assert.equal(releases, 1);
             assert.equal(result.result.action_executed, true);
-            assert.ok(result.safety.reason_codes.includes('target_permission'));
-            if (scenario === 'other-site') assert.equal(result.safety.required_origin, `http://localhost:${server.address().port}`);
+            assert.equal(result.result.target_changed, true);
+            assert.equal(controller.userInControl, false);
+            assert.equal(result.result.opened_pages[0].url.endsWith(childPath), true);
+            assert.equal(result.safety.required_origin, undefined, 'child access is checked after selection, without inventing user takeover on the opener');
             // Returning partial progress never implicitly follows a popup or
             // permits another effect on the stopped opener.
             const paused = await controller.execute(request);
             assert.equal(paused.result.action_executed, false);
             assert.equal(children.length, 1);
             assert.equal(releases, 1);
+          }
+          if (scenario === 'other-site') {
+            await children[0].waitForURL(`http://localhost:${server.address().port}/unapproved`);
+            const childSession = await context.newCDPSession(children[0]);
+            const childController = new BrowserComputerController(childSession);
+            await childController.initialize();
+            try {
+              const denied = await childController.execute({ tool_name: 'computer.observe', args: {}, allowed_origins: [origin], script_operation: true });
+              assert.equal(denied.safety.level, 'takeover');
+              assert.equal(denied.safety.required_origin, `http://localhost:${server.address().port}`);
+              assert.equal(denied.result.observation, undefined);
+              const allowed = await childController.execute({ tool_name: 'computer.screenshot', args: {}, full_access: true, return_control: true });
+              assert.equal(allowed.safety.level, 'routine');
+              assert.ok(allowed.screenshot);
+              assert.ok((await childController.execute({ tool_name: 'computer.observe', args: {}, full_access: true })).result.observation);
+            } finally { await childController.page.releasePage(); childController.close(); await childSession.detach(); }
           }
           if (scenario === 'proxy') assert.equal(await page.locator('output').textContent(), 'true');
         }

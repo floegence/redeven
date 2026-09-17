@@ -77,6 +77,13 @@ function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): Flower
 const missingResults = { kind: 'structured_rows', section: 'results', rows: [], notice: 'This record did not save result details.' };
 
 describe('presentFlowerActivityItem', () => {
+  it.each([
+    ['computer.targets', 'Find pages and applications'],
+    ['computer.select_target', 'Switch page or application'],
+  ])('gives %s a readable action title', (tool, label) => {
+    expect(presentFlowerActivityItem(item({ tool_name: tool, label: tool, renderer: 'structured' })).label).toBe(label);
+  });
+
   it('keeps script intent and literal inputs alongside results and the exact frame', () => {
     const code = '  await ui.observe();\nlog("Search");\n';
     const presentation = presentFlowerActivityItem(item({

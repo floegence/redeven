@@ -31,7 +31,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' = 'site', permission: 
   const loadAccess = vi.fn(async () => ({ origins: ['https://existing.test'], apps: ['dev.Notes'], allow_foreground: false }));
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:step', current: { ...current, view_version: 2, activity: 'idle' as const, last_outcome: 'completed' as const, interactions: [] } }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput,
-    computerManagement: { loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
+    computerManagement: { listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess, listTargets: vi.fn(async () => []), loadTarget: vi.fn(async () => ({ target_id: 'browser-main' })), selectTarget: vi.fn(), listBrowserTabs: vi.fn(async () => []) },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
@@ -48,7 +48,7 @@ it('explains the exact site grant and grants it once before continuing without m
   expect(card.textContent).toContain('https://www.google.com');
   expect(card.textContent).toContain('Allow website access');
   const activity = s.surface.querySelector('.flower-activity-inline-title')!;
-  expect(activity.textContent).toBe('Allow website access');
+  expect(activity.textContent).toBe('Open page');
   expect(s.surface.querySelector('.flower-activity-waiting-clock')).not.toBeNull();
   expect(card.querySelector('[data-computer-control-action="take"]')).toBeNull();
   const allow = card.querySelector<HTMLButtonElement>('[data-computer-control-action="grant"]')!;
@@ -131,7 +131,7 @@ it('shows the newly observed CAPTCHA after access was saved instead of asking fo
   await waitFor(() => s.surface.querySelector('.flower-computer-control-title')?.textContent === 'Complete the CAPTCHA');
   expect(s.surface.querySelector('[data-computer-control-action="grant"]')).toBeNull();
   expect(s.surface.querySelector('[data-computer-control-action="take"]')?.textContent).toBe('Open page');
-  expect(s.surface.querySelector('.flower-activity-inline-title')?.textContent).toBe('Complete the CAPTCHA');
+  expect(s.surface.querySelector('.flower-activity-inline-title')?.textContent).toBe('Open page');
 });
 
 it('shows a newly observed site scope and grants only that scope on the next explicit click', async () => {

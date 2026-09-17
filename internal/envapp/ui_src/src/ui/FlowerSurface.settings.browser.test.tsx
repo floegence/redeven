@@ -24,7 +24,7 @@ it('loads settings on first use and preserves the mounted panel when returning t
 it('retains the browser address and reports failed readiness without exposing transport details', async () => {
   const connect = vi.fn().mockResolvedValue({ id: 'browser-connected', kind: 'browser.connected', display_name: 'Connected Chrome', ready: false, state: 'connection_required' });
   const listBrowserTabs = vi.fn().mockResolvedValue([{ id: 'tab-one', profile_id: 'personal', title: 'Example', url: 'https://example.com' }]);
-  const runtime = renderSurfaceWithAdapter({ ...adapter(true), connectComputerBrowser: connect, computerManagement: {
+  const runtime = renderSurfaceWithAdapter({ ...adapter(true), connectComputerBrowser: connect, computerManagement: { listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(),
     listTargets: vi.fn().mockResolvedValue([]), listBrowserTabs,
     loadAccess: vi.fn().mockResolvedValue({ origins: [], apps: [], allow_foreground: false }), saveAccess: vi.fn(),
     loadTarget: vi.fn().mockResolvedValue({ target_id: '' }), selectTarget: vi.fn(),

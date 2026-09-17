@@ -29,7 +29,7 @@ its first page lazily; later loss of a selected page fails explicitly. Neither
 an inventory request nor a helper restart chooses the first available page.
 
 User-facing connection management lists profiles and tabs, creates named managed
-profiles and creates inactive tabs. Existing tabs require an explicit selection.
+profiles and creates inactive tabs. Existing tabs require an explicit Agent or user selection.
 Profile creation does not grant sites or change a thread's target. Bounded
 profile metadata lives with browser profile data; it is not Agent history.
 Malformed, oversized or redirected metadata is rejected without rewriting it.
@@ -48,12 +48,15 @@ a later authorized file/command tool handles data processing.
 
 The MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact
 tab. Setup registers a native host for the current machine; the relay forwards
-framed protocol-3 messages over a private local Unix socket to the Runtime.
+framed protocol-4 messages over a private local Unix socket to the Runtime.
 Only the packaged extension origin and its own popup UI may establish this
 connection. Setup does not create a thread grant or attach any tab.
 
 The extension requires a completed Runtime handshake before reporting connected.
-It exposes user-facing inventory and explicit bind/new-tab/disconnect commands.
+Its webNavigation creation events retain bounded, in-memory popup source facts;
+Chrome tab-group opener metadata is not treated as the source of an action.
+It exposes Runtime-owned inventory and bind/new-tab/disconnect commands.
+Flower and connection management share the candidate selection path.
 The Runtime owns the resulting opaque profile and target identities. Different
 tabs may execute concurrently, while one tab executes only one invocation at a
 time. Cancellation is scoped to one request. Reconnect drains cancelled old
@@ -74,10 +77,12 @@ Injected key/button presses are balanced on cancellation; unconfirmed cleanup
 is an unknown effect. The isolated-world observer tracks sensitive-field
 transitions, including fields inserted and removed during one action.
 
-Advanced manual CDP requires endpoint, profile and tab selection. Inventory and
+Initial CDP connection requires authenticated endpoint, profile and tab selection.
+Thereafter Agent discovery can choose existing tabs or create independent task
+pages in that connected profile. Inventory and
 attachment use Playwright `noDefaults`, preserving the existing browser's
-focus, download and media settings. Replacing the manual CDP binding is refused
-while a canonical turn or private user control owns it. Failure preserves the
+focus, download and media settings. Each CDP endpoint/profile/tab has one stable adapter. Connecting another tab
+never replaces an adapter owned by another conversation. Failure preserves the
 previous binding. Closing a CDP connection does not close the user's browser.
 
 Connected Chrome downloads follow Chrome's existing policy. The model sees only
@@ -104,9 +109,13 @@ may open a window or change focus; Flower does not rewrite page code or replay
 a form to force background execution. Popup creation is part of that action's
 effect, so a missing acknowledgement is terminal and must not be retried.
 
-The opener pauses for explicit target selection. Its grants and references do
-not transfer to the child; new-site access must be authorized before Flower
-can inspect or act on the selected child. A page's native popup navigation can
+The opener returns `target_changed`, `opener_tab_id`, bounded opened-page facts
+and `action_executed`. The current batch stops with its confirmed action prefix;
+it does not request user input. Flower discovers the actual child through
+inventory, explicitly selects it and observes before continuing. References do
+not transfer between pages. Full access already permits the new site; other
+modes require a grant before Flower inspects or acts on it. Login, CAPTCHA, Stop
+and unknown effects retain their existing boundaries. A page's native popup navigation can
 load its URL before selection; site grants constrain Flower's controlled target,
 not every network request a website can make. This distinction also applies to
 ordinary subresources. Cancellation or revoked access before the initiating

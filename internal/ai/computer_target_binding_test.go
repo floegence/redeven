@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"testing"
 
@@ -56,10 +55,10 @@ func TestComputerTargetSwitchPersistsOnlyForExecutingThread(t *testing.T) {
 		run         *run
 		alias, want string
 	}{
-		{first, "current", "browser-main"},
+		{first, "browser.managed", "browser-main"},
 		{first, "desktop.screen", "desktop-main"},
 		{first, "current", "desktop-main"},
-		{second, "current", "browser-main"},
+		{second, "browser.managed", "browser-main"},
 	} {
 		if _, err := step.run.execTargetTool(t.Context(), "call", "computer.screenshot", map[string]any{"target": step.alias}); err != nil {
 			t.Fatal(err)
@@ -102,8 +101,8 @@ func TestComputerTargetBindingRestoresWithoutRestoringReadiness(t *testing.T) {
 	if err != nil || target.ID != "desktop-main" || target.Ready {
 		t.Fatalf("restored target=%+v err=%v", target, err)
 	}
-	if _, err := restored.ResolveTargetForThread(t.Context(), "thread-second", "current"); !errors.Is(err, errTargetNotRegistered) {
-		t.Fatalf("another thread inherited desktop: %v", err)
+	if target, err := restored.ResolveTargetForThread(t.Context(), "thread-second", "current"); err != nil || target.ID == "desktop-main" {
+		t.Fatalf("another thread inherited desktop: %+v %v", target, err)
 	}
 }
 
@@ -113,7 +112,7 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 			runtime, executor, store, _ := computerBindingFixture(t)
 			r := &run{threadID: "thread-first", targetResolver: runtime, targetToolExecutor: runtime}
 			bindTargetTestRun(t, r)
-			if _, err := r.execTargetTool(t.Context(), "initial", "computer.screenshot", nil); err != nil {
+			if _, err := r.execTargetTool(t.Context(), "initial", "computer.screenshot", map[string]any{"target": "browser-main"}); err != nil {
 				t.Fatal(err)
 			}
 			ctx := t.Context()

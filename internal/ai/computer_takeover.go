@@ -48,8 +48,6 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 // They neither grant access nor introduce another interaction lifecycle.
 func computerAssistanceKind(safety InteractionSafetyDecision) string {
 	switch {
-	case slices.Contains(safety.ReasonCodes, "target_permission"):
-		return "target"
 	case safety.RequiredOrigin != "" || safety.RequiredApp != "" || slices.Contains(safety.ReasonCodes, "foreground_permission"):
 		return "access"
 	case slices.Contains(safety.ReasonCodes, "captcha"):
@@ -83,8 +81,6 @@ func computerAssistanceInstructions(safety InteractionSafetyDecision) (string, s
 			requested = append(requested, "temporary desktop use")
 		}
 		return "Allow access to continue", "Review the requested access for this task: " + strings.Join(requested, ", ") + ". Choose Allow and continue. You do not need to operate the browser."
-	case "target":
-		return "Choose the browser tab to continue", "The page opened another tab. Open Browser and desktop settings, select that tab and review its site access, then continue. Flower will not choose another tab for you."
 	case "captcha":
 		return "Complete the CAPTCHA", "Open the selected page and complete its human verification challenge. Then choose Done, continue. Flower will inspect the page again before resuming."
 	case "verification":

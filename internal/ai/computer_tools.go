@@ -16,7 +16,7 @@ func isComputerUseToolName(name string) bool {
 }
 
 func builtInComputerToolDefinitions() []ToolDef {
-	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Omit target or use current for the user's selected page or application window. A browser tool requires an explicitly selected browser target; it never switches away from a selected desktop. Use only registered target IDs or aliases. The managed browser is the default only when no target has been selected."}}
+	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Omit target or use current for the current page or application window. Discover available pages and windows with computer.targets and choose one with computer.select_target. Browser actions require a browser page, not a native browser application window. Never invent target identities."}}
 	schema := func(properties map[string]any, required []string) json.RawMessage {
 		return toolSchemaRaw(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 	}
@@ -30,7 +30,10 @@ func builtInComputerToolDefinitions() []ToolDef {
 		}
 		return schema(out, required), required
 	}
-	defs := []ToolDef{}
+	defs := []ToolDef{
+		{Name: "computer.targets", Description: "Discover browser profiles, tabs and application windows on this environment. No selection is required. The result includes current_target_id, default_candidate_ref and bounded candidates with opaque candidate_ref values, page titles, URLs, profile names and availability. Use the default candidate for an unspecified new web task; choose a matching existing page or application when requested. Multiple personal profiles without a clear match require one question in the conversation.", InputSchema: schema(map[string]any{}, []string{}), Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec("computer.targets")},
+		{Name: "computer.select_target", Description: "Select a browser page or application window using a candidate_ref returned by computer.targets. A new-tab candidate creates a background task tab. Selection verifies the current identity and availability, preserves existing page contents, and never grants extra access. Then observe the selected target before acting. Selection is the agent's job; do not ask the user to bind targets in settings.", InputSchema: schema(map[string]any{"candidate_ref": map[string]any{"type": "string", "minLength": 1, "maxLength": 100}}, []string{"candidate_ref"}), Mutating: true, RequiresApproval: true, Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation}, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec("computer.select_target")},
+	}
 	add := func(name, description string, properties map[string]any, required []string, mutating bool, capabilities []ToolCapabilityClass) {
 		input, _ := withTarget(properties, required...)
 		defs = append(defs, ToolDef{Name: name, Description: description, InputSchema: input, Mutating: mutating, RequiresApproval: mutating, Visibility: ToolVisibilityStandard, Capabilities: capabilities, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec(name)})

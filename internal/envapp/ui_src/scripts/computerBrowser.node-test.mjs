@@ -47,7 +47,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
   };
   try {
     const ready = await next();
-    assert.equal(ready.protocol_version, 3);
+    assert.equal(ready.protocol_version, 4);
     assert.equal(ready.error, undefined, JSON.stringify(ready));
     assert.ok((await send('browser.navigate', { url: origin })).screenshot);
     const observed = await send('computer.observe');
@@ -134,7 +134,7 @@ test('inventory and explicit tab attachment preserve the browser, other tabs and
       try { return JSON.parse((await Promise.race([lines.next(), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('helper timed out')), 10000); })])).value); }
       finally { clearTimeout(timeout); }
     };
-    assert.equal((await next()).protocol_version, 3);
+    assert.equal((await next()).protocol_version, 4);
     helper.stdin.write(JSON.stringify({ id: 'observe', target_id: 'connected', session_id: 'turn', tool_name: 'computer.observe', args: {}, allowed_origins: [origin] }) + '\n');
     const observed = await next();
     assert.equal(observed.result.title, 'Signed-in task');
@@ -269,7 +269,7 @@ test('nested cross-site frames use semantic actions and downloads survive helper
     assert.equal(result.safety?.level, 'routine', JSON.stringify(result)); return result.result;
   };
   try {
-    assert.equal((await next()).protocol_version, 3);
+    assert.equal((await next()).protocol_version, 4);
     await call('browser.navigate', { url: origins[0] });
     const selector = { role: 'textbox', name: 'Deep entry' };
     assert.equal((await call('computer.action', { action: 'wait', selector, timeout_ms: 5000 })).state, 'visible');

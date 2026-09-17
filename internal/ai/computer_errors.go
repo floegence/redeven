@@ -19,6 +19,8 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 		failure.code, failure.targetState, failure.repairAction = "target_connection_required", "connection_required", "connect_current_browser"
 	case "TARGET_SETUP_REQUIRED":
 		failure.code, failure.targetState = "target_setup_required", "setup_required"
+	case "TARGET_IN_USE":
+		failure.code = "target_in_use"
 	case "TARGET_NOT_ALLOWED":
 		failure.code = "target_not_allowed"
 	case "TARGET_NOT_READY":
@@ -95,4 +97,27 @@ func computerKnownRejection(err error) bool {
 	default:
 		return false
 	}
+}
+
+// ComputerSelectionErrorCode retains actionable selection failures without
+// reflecting page contents, endpoints or arbitrary adapter exceptions.
+func ComputerSelectionErrorCode(err error) string {
+	var failure *targetToolPolicyError
+	if errors.As(err, &failure) {
+		switch failure.code {
+		case "target_in_use", "target_selection_stale", "target_not_allowed", "target_permission_required", "target_setup_required", "target_connection_required", "interaction_takeover_required":
+			return failure.code
+		}
+	}
+	var startup *TargetStartupError
+	if errors.As(err, &startup) {
+		switch startup.Code {
+		case "TARGET_PERMISSION_REQUIRED", "TARGET_SETUP_REQUIRED", "TARGET_CONNECTION_REQUIRED":
+			return strings.ToLower(startup.Code)
+		}
+	}
+	if errors.Is(err, errTargetNotRegistered) {
+		return "target_selection_stale"
+	}
+	return "computer_target_selection_failed"
 }

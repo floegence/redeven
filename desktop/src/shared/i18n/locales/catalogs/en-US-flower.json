@@ -193,7 +193,9 @@
       "todos": "Update todos",
       "sources": "View sources",
       "fetch": "Fetch page",
-      "patch": "Apply changes"
+      "patch": "Apply changes",
+      "discoverTargets": "Find pages and applications",
+      "selectTarget": "Switch page or application"
     },
     "toolActivityDetailsPending": "Waiting for tool details",
     "toolActivityNoAdditionalDetails": "No additional details",
@@ -808,8 +810,8 @@
   },
   "computer": {
     "title": "Browser and desktop",
-    "description": "Choose the browser tab or application Flower uses for this conversation, and manage its access.",
-    "target": "Task target",
+    "description": "Flower chooses the page or application for your task. View its current connection, switch when needed, or manage access.",
+    "target": "Currently using",
     "refresh": "Refresh",
     "noTargets": "No computer targets are available.",
     "setupRequired": "Setup required",
@@ -863,8 +865,8 @@
     "accessTitle": "Allow task access",
     "siteTitle": "Allow website access",
     "accessHint": "Flower needs the access listed below for this conversation. Allow it to continue automatically; no manual browser operation is needed.",
-    "targetTitle": "Choose the browser tab",
-    "targetHint": "The page opened another tab. Select it in Browser and desktop, review its site access, then continue.",
+    "targetTitle": "Continue the browser task",
+    "targetHint": "Continue the task. Flower will discover the available pages and choose the next page for you.",
     "loginTitle": "Sign in on the page",
     "loginHint": "Open the page and finish signing in. Enter passwords there, not in this conversation. Then choose Done, continue.",
     "verificationTitle": "Enter the verification code",
@@ -878,6 +880,16 @@
     "untrustedTitle": "Review unexpected page instructions",
     "untrustedHint": "The page contains instructions aimed at the agent. Open the page and leave or dismiss that content before continuing.",
     "pausedTitle": "Actions are paused",
-    "pausedHint": "Finish your changes on the page or application, then choose Done, continue when Flower may resume."
+    "pausedHint": "Finish your changes on the page or application, then choose Done, continue when Flower may resume.",
+    "automatic": "Chosen automatically",
+    "automaticHint": "Flower prefers your connected browser and creates a separate task tab. No selection is needed.",
+    "switchTarget": "Switch page or application",
+    "manageConnections": "Manage connections",
+    "searchTargets": "Search pages and applications",
+    "browserPages": "Browser pages",
+    "applicationWindows": "Application windows",
+    "inUse": "Used by another task",
+    "disconnected": "Not connected",
+    "selectionStale": "This page or window changed. Refresh the list and choose it again."
   }
 }

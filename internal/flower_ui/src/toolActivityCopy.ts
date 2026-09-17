@@ -11,6 +11,8 @@ export const toolActivityEnUS = {
   "showAll": "Show all",
   "showLess": "Show less",
   "copyFailed": "Could not copy. Try again.",
+  "discoverTargets": "Find pages and applications",
+  "selectTarget": "Switch page or application",
   "execute": "Run script",
   "observe": "Inspect page or window",
   "screenshot": "Take screenshot",
