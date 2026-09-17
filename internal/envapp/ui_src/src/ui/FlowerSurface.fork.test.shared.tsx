@@ -81,7 +81,9 @@ describe('Flower fork results', () => {
     (runtime.querySelector('[data-thread-id="source"] .flower-thread-card-menu-button') as HTMLButtonElement).click();
     await waitFor(() => !!document.querySelector('[role="menuitem"][aria-busy="true"]'));
     const busyAction = document.querySelector<HTMLButtonElement>('[role="menuitem"][aria-busy="true"]')!;
-    expect(busyAction.disabled).toBe(true);
+    expect(busyAction.getAttribute('aria-disabled')).toBe('true');
+    busyAction.focus();
+    expect(document.activeElement).toBe(busyAction);
     busyAction.click();
     expect(forkThread).toHaveBeenCalledTimes(1);
     busyAction.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
