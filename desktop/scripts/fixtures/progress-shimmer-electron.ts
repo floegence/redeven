@@ -16,7 +16,7 @@ void app.whenReady().then(async () => {
     await window.webContents.executeJavaScript(`new Promise(resolve => {
       const check = () => window.progressFixture ? resolve(true) : requestAnimationFrame(check); check();
     })`);
-    for (const [name, mode] of [['classic-light', 'light'], ['classic-dark', 'dark'], ['nord', 'dark'], ['hc-light', 'light']]) {
+    for (const [name, mode] of [['classic-light', 'light'], ['classic-dark', 'dark'], ['nord', 'dark'], ['hc-light', 'light'], ['github-light', 'light']]) {
       await window.webContents.executeJavaScript(`window.progressFixture.theme.selectShellTheme(${JSON.stringify(mode)}, ${JSON.stringify(name)})`);
       await new Promise(resolve => setTimeout(resolve, 800));
       const state = await window.webContents.executeJavaScript(`(() => {

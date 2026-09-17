@@ -125,7 +125,12 @@ clickable; failure and confirmation use static attention. Flower running tool
 titles and the exact-run composer progress label use the `text` variant: paint
 is clipped to glyphs, with no row background, extra plate, or text duplicate.
 State and placement belong to Redeven; cadence, paint, theme contrast, native
-selection, reduced motion, and forced colors belong to Floe. Removing active
+selection, reduced motion, and forced colors belong to Floe. The moving peak
+must brighten its own carrier, including a dark primary button inside a light
+theme. Surface reflections soften toward neutral light; a darker traveling
+stripe is not an accepted shimmer. Color difference alone does not prove this
+contract: fixed-time pixel samples must become brighter while glyph-only
+background pixels stay unchanged. Removing active
 progress removes the opt-in without a second lifecycle or timer. Do not animate
 container shadows, add pointer-following decoration, or promote entire reading
 subtrees into compositor layers. Dense prose, files, terminal output, and editor

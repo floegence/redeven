@@ -7,7 +7,7 @@ import { commands, page } from 'vitest/browser';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapter, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
-const evidence = commands as unknown as { inspectProgressShimmerPaint: (name: string, measurements: unknown) => Promise<{ changed: number; backgroundChanged: number }> };
+const evidence = commands as unknown as { inspectProgressShimmerPaint: (name: string, measurements: unknown) => Promise<{ changed: number; brightened: number; darkened: number; backgroundChanged: number }> };
 
 function textContrast(element: HTMLElement) {
   const context = document.createElement('canvas').getContext('2d')!;
@@ -42,7 +42,7 @@ function textContrast(element: HTMLElement) {
     return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
   };
   const a = lab(base), b = lab(peak);
-  return { contrast, deltaEOK: Math.hypot(...a.map((v, i) => v - b[i])) };
+  return { contrast, luminanceGain: luminance(peak) - luminance(base), deltaEOK: Math.hypot(...a.map((v, i) => v - b[i])) };
 }
 
 describe('Flower progress shimmer', () => {
@@ -108,6 +108,7 @@ describe('Flower progress shimmer', () => {
             expect(getComputedStyle(text, '::before').content).toBe('none');
             expect(getComputedStyle(text, '::after').content).toBe('none');
             const measurement = textContrast(text);
+            expect(measurement.luminanceGain, theme.name).toBeGreaterThan(0);
             expect(measurement.contrast, theme.name).toBeGreaterThanOrEqual(4.5);
             expect(measurement.deltaEOK, theme.name).toBeGreaterThanOrEqual(0.08);
             measurements.push(measurement);
@@ -118,6 +119,8 @@ describe('Flower progress shimmer', () => {
           }
           const pixels = await evidence.inspectProgressShimmerPaint(`${material}-${theme.name}`, measurements);
           expect(pixels.changed, `${theme.name}: glyph paint moves`).toBeGreaterThan(4);
+          expect(pixels.brightened, `${theme.name}: actual glyphs brighten`).toBeGreaterThan(4);
+          expect(pixels.darkened, `${theme.name}: no dark traveling glyphs`).toBe(0);
           expect(pixels.backgroundChanged, `${theme.name}: surrounding background stays untouched`).toBe(0);
           if (material === 'soft-neumorphic' && ['classic-light', 'classic-dark'].includes(theme.name)) {
             await new Promise(resolve => setTimeout(resolve, 2500));
