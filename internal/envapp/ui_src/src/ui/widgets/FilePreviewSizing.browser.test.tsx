@@ -156,6 +156,17 @@ describe('File preview sizing with real renderers', () => {
     const media = host.querySelector<HTMLElement>('video,audio');
     if (media) assertContained(host, media);
   });
+
+  it('keeps both edges of audio controls reachable in a viewport shorter than the controls', async () => {
+    const host = mount(() => <FilePreviewContent showHeader={false} descriptor={{ mode: 'audio' }} />, 380, 40);
+    const audio = host.querySelector('audio')!;
+    const viewport = audio.parentElement!;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    viewport.scrollTop = 0;
+    expect(audio.getBoundingClientRect().top).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().top);
+    viewport.scrollTop = viewport.scrollHeight;
+    expect(audio.getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom);
+  });
 });
 
 
