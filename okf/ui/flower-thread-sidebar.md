@@ -10,7 +10,7 @@ timestamp: 2026-09-17T00:00:00Z
 
 Redeven owns conversation selection presentation and persistent pin order. Desktop
 and Env App use the same Flower sidebar. Selection, running activity, unread
-attention and approval requests retain independent meanings. Live summary changes
+attention and pending replies or approvals retain independent meanings. Live summary changes
 must preserve row identity, open menus, focus and running wave continuity. Pin
 failures undo only the current operation's presentation and reconcile through the
 existing workspace summary stream or one explicit post-command read.
@@ -31,6 +31,27 @@ Conversation selection, message reading and composing remain available during
 pin commands. Reordering does not select a conversation, acknowledge reads, load
 its transcript or reconnect transport. Ordinary conversations remain ordered by
 creation time descending, then ThreadID ascending.
+
+## Pending replies and approvals
+
+An unresolved input request shows the localized "Reply needed" label beside the
+title; a pending approval shows its approval label in the same position. Both
+replace the timestamp, whether the conversation is selected, pinned, read or
+unread. The existing thread indicator owns this presentation through its
+`actionRequired` and localized status values. Pending action labels do not use
+unread dots or introduce a second lifecycle state.
+
+Labels share the theme-tinted gradient and hide while the row is hovered or
+contains keyboard focus so pin and menu controls remain reachable. They return
+when hover and focus leave. Long labels truncate visually while the selection
+button's accessible name retains the complete title and status. Touch layouts
+reserve space for the always-visible menu button.
+
+Canonical runtime updates control entry and exit. Submitting a reply does not
+optimistically clear the label; a failed submission leaves it visible while the
+thread still needs a reply. Resuming or finishing removes the label, and accepted
+cancellation takes precedence with the existing stopping feedback. Background
+threads update through the same workspace stream without requiring selection.
 
 ## Pin ordering
 
@@ -106,6 +127,8 @@ owns the broader interaction and runtime boundaries.
 # Evidence
 
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - Shared interaction and menu actions.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerStatusAndThreadMenu.browser.test.tsx` - Pending labels, hover, keyboard actions and touch layout.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.inputSubmission.browser.test.tsx` - Reply submission failure and background status convergence.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadRows.tsx` - Retained rows and state-preserving movement.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerThreadList.reorder.browser.test.tsx` - 300 updates, action focus, animation phase, native dragging and all built-in themes.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.pinOrder.test.tsx` - Revision ordering, failed refresh and nonblocking navigation/composing.

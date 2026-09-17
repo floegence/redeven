@@ -438,7 +438,7 @@
       "days": "{count} 天",
       "statusIdle": "空闲",
       "statusRunning": "运行中",
-      "statusWaitingUser": "等待输入",
+      "statusWaitingUser": "待回复",
       "statusWaitingApproval": "待审批",
       "statusFailed": "失败",
       "statusSuccess": "完成",

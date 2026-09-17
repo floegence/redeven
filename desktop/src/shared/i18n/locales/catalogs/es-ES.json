@@ -438,7 +438,7 @@
       "days": "{count} d",
       "statusIdle": "Inactivo",
       "statusRunning": "En ejecución",
-      "statusWaitingUser": "Esperando entrada",
+      "statusWaitingUser": "Respuesta pendiente",
       "statusWaitingApproval": "Esperando aprobación",
       "statusFailed": "Falló",
       "statusSuccess": "Hecho",

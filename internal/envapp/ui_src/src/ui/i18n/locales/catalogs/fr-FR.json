@@ -4746,7 +4746,7 @@
       "days": "{count} j",
       "statusIdle": "Inactif",
       "statusRunning": "En cours",
-      "statusWaitingUser": "En attente d’une saisie",
+      "statusWaitingUser": "Réponse attendue",
       "statusWaitingApproval": "En attente d’une approbation",
       "statusFailed": "Échec",
       "statusSuccess": "Terminé",

@@ -182,13 +182,13 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       >
         <MoreHorizontal class="h-3.5 w-3.5" />
       </button>
-      <Show when={props.item.status === 'waiting_approval'}>
+      <Show when={indicator().actionRequired}>
         <div
-          class="flower-thread-card-approval-indicator"
+          class="flower-thread-card-action-indicator"
           aria-hidden="true"
-          title={copy().statuses.waiting_approval}
+          title={indicator().ariaStatus}
         >
-          <span class="flower-thread-card-approval-badge">{copy().statuses.waiting_approval}</span>
+          <span class="flower-thread-card-action-badge">{indicator().ariaStatus}</span>
         </div>
       </Show>
     </div>

@@ -6814,7 +6814,7 @@
   outline: none;
 }
 
-.flower-thread-card-approval-indicator {
+.flower-thread-card-action-indicator {
   position: absolute;
   inset: 0 auto 0 38%;
   z-index: 2;
@@ -6837,32 +6837,32 @@
   transition: opacity 120ms ease;
 }
 
-.flower-thread-card[data-flower-thread-status="waiting_approval"] .flower-thread-card-select-button {
+.flower-thread-card[data-flower-thread-action-required="true"] .flower-thread-card-select-button {
   padding-right: 7rem;
   transition: padding-right 120ms ease;
 }
 
-.flower-thread-card[data-flower-thread-status="waiting_approval"]:hover .flower-thread-card-select-button,
-.flower-thread-card[data-flower-thread-status="waiting_approval"]:focus-within .flower-thread-card-select-button {
+.flower-thread-card[data-flower-thread-action-required="true"]:hover .flower-thread-card-select-button,
+.flower-thread-card[data-flower-thread-action-required="true"]:focus-within .flower-thread-card-select-button {
   padding-right: 4rem;
 }
 
-.flower-thread-card:hover .flower-thread-card-approval-indicator,
-.flower-thread-card:focus-within .flower-thread-card-approval-indicator {
+.flower-thread-card:hover .flower-thread-card-action-indicator,
+.flower-thread-card:focus-within .flower-thread-card-action-indicator {
   opacity: 0;
   visibility: hidden;
 }
 
-.flower-thread-card[data-flower-thread-status="waiting_approval"] .flower-thread-card-time {
+.flower-thread-card[data-flower-thread-action-required="true"] .flower-thread-card-time {
   visibility: hidden;
 }
 
-.flower-thread-card-approval-indicator span {
+.flower-thread-card-action-indicator span {
   position: relative;
   z-index: 1;
 }
 
-.flower-thread-card-approval-badge {
+.flower-thread-card-action-badge {
   display: inline-block;
   max-width: 100%;
   padding: 0;
@@ -7002,8 +7002,12 @@
     display: none;
   }
 
-  .flower-thread-card[data-flower-thread-status="waiting_approval"]:hover .flower-thread-card-select-button,
-  .flower-thread-card[data-flower-thread-status="waiting_approval"]:focus-within .flower-thread-card-select-button {
+  .flower-thread-card-action-indicator {
+    padding-right: 3.25rem;
+  }
+
+  .flower-thread-card[data-flower-thread-action-required="true"]:hover .flower-thread-card-select-button,
+  .flower-thread-card[data-flower-thread-action-required="true"]:focus-within .flower-thread-card-select-button {
     padding-right: 3.25rem;
   }
 

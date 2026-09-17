@@ -989,7 +989,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     statuses: {
       idle: 'Idle',
       running: 'Running',
-      waiting_user: 'Waiting for input',
+      waiting_user: 'Reply needed',
       waiting_approval: 'Waiting for approval',
       failed: 'Failed',
       success: 'Done',

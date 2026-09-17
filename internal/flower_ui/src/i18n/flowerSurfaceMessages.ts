@@ -404,7 +404,7 @@ export const flowerSurfaceEnUS = {
     days: '{count}d',
     statusIdle: 'Idle',
     statusRunning: 'Running',
-    statusWaitingUser: 'Waiting for input',
+    statusWaitingUser: 'Reply needed',
     statusWaitingApproval: 'Waiting for approval',
     statusFailed: 'Failed',
     statusSuccess: 'Done',

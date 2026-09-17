@@ -12,11 +12,13 @@ import type {
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { FlowerProgressIndicator, type FlowerProgressIndicatorState } from '../../../../flower_ui/src/chat/FlowerProgressIndicator';
 import { FlowerThreadList } from '../../../../flower_ui/src/threads/FlowerThreadList';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 
 const mediaCommands = commands as unknown as Readonly<{
   emulateMediaPreferences: (preferences: Readonly<{
     reducedMotion?: null | 'reduce' | 'no-preference';
   }>) => Promise<void>;
+  emulateTouchInput: (enabled: boolean) => Promise<void>;
 }>;
 const disposers: Array<() => void> = [];
 
@@ -24,6 +26,7 @@ afterEach(async () => {
   while (disposers.length > 0) disposers.pop()?.();
   document.body.replaceChildren();
   await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  await mediaCommands.emulateTouchInput(false);
 });
 
 async function nextFrame(count = 2): Promise<void> {
@@ -225,13 +228,13 @@ describe('Flower status motion and thread menu', () => {
     expect(document.activeElement).toBe(selectButton);
   });
 
-  it('hides the pending label while thread actions are focused', async () => {
+  it.each(['waiting_user', 'waiting_approval'] as const)('shows the %s label and yields its space to hovered or focused actions', async (status) => {
     await page.viewport(800, 600);
     const host = document.createElement('div');
     document.body.appendChild(host);
     disposers.push(render(() => (
       <FlowerThreadList
-        items={[thread({ status: 'waiting_approval' })]}
+        items={[thread({ status })]}
         activeThreadID="thread-menu"
         query=""
         onQueryChange={() => undefined}
@@ -247,11 +250,18 @@ describe('Flower status motion and thread menu', () => {
 
     const card = host.querySelector('[data-flower-thread-card]') as HTMLElement;
     const select = card.querySelector('.flower-thread-card-select-button') as HTMLButtonElement;
-    const indicator = card.querySelector('.flower-thread-card-approval-indicator') as HTMLElement;
+    const indicator = card.querySelector('.flower-thread-card-action-indicator') as HTMLElement;
     const menuButton = card.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    const time = card.querySelector('.flower-thread-card-time') as HTMLElement;
     await userEvent.unhover(card);
     await nextFrame();
-    expect(select.getAttribute('aria-label')).toContain('Waiting for approval');
+    expect(select.getAttribute('aria-label')).toContain(DEFAULT_FLOWER_SURFACE_COPY.threadList.statuses[status]);
+    expect(getComputedStyle(indicator).visibility).toBe('visible');
+    expect(getComputedStyle(time).visibility).toBe('hidden');
+
+    await userEvent.hover(card);
+    expect(getComputedStyle(indicator).visibility).toBe('hidden');
+    await userEvent.unhover(card);
     expect(getComputedStyle(indicator).visibility).toBe('visible');
 
     menuButton.focus();
@@ -261,5 +271,42 @@ describe('Flower status motion and thread menu', () => {
     expect(getComputedStyle(indicator).visibility).toBe('hidden');
     expect(getComputedStyle(menuButton).opacity).toBe('1');
     expect(Number(getComputedStyle(menuButton).zIndex)).toBeGreaterThan(Number(getComputedStyle(indicator).zIndex));
+
+    menuButton.blur();
+    await nextFrame();
+    expect(getComputedStyle(indicator).visibility).toBe('visible');
+  });
+
+  it.each([false, true])('fits long titles and localized action labels with touch=%s', async (touch) => {
+    await page.viewport(800, 600);
+    await mediaCommands.emulateTouchInput(touch);
+    expect(matchMedia('(pointer: coarse)').matches).toBe(touch);
+    const host = document.createElement('div');
+    host.style.width = '240px';
+    document.body.appendChild(host);
+    const title = 'A long conversation title that must leave room for the action label';
+    const label = 'En attente de votre réponse à la question';
+    const copy = DEFAULT_FLOWER_SURFACE_COPY.threadList;
+    disposers.push(render(() => <FlowerThreadList
+      items={[thread({ title, status: 'waiting_user' })]}
+      copy={{ ...copy, statuses: { ...copy.statuses, waiting_user: label } }}
+      query="" onQueryChange={() => undefined} onSelect={() => undefined} onRefresh={() => undefined}
+      onMenuAction={() => undefined} canPin
+    />, host));
+    await nextFrame();
+    const card = host.querySelector<HTMLElement>('[data-flower-thread-card]')!;
+    await userEvent.unhover(card);
+    const badge = card.querySelector<HTMLElement>('.flower-thread-card-action-badge')!;
+    const titleElement = card.querySelector<HTMLElement>('.flower-thread-list-title')!;
+    const button = card.querySelector<HTMLElement>('.flower-thread-card-select-button')!;
+    const menu = card.querySelector<HTMLElement>('.flower-thread-card-menu-button')!;
+    expect(button.getAttribute('aria-label')).toBe(`${title}, ${label}`);
+    expect(getComputedStyle(badge).textOverflow).toBe('ellipsis');
+    expect(titleElement.scrollWidth).toBeGreaterThan(titleElement.clientWidth);
+    expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(card.getBoundingClientRect().right);
+    if (touch) {
+      expect(getComputedStyle(menu).opacity).toBe('1');
+      expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(menu.getBoundingClientRect().left);
+    }
   });
 });
