@@ -40,10 +40,14 @@ App and other windows in that environment. `pin_rank` descending is authoritativ
 current rank plus one; unpinning clears both fields. Repeating an existing pin
 does not reset its timestamp or manually chosen position.
 
-Only a reserved drag handle starts native dragging. Its hover/focus visibility
-does not shift titles. During dragging the displayed order stays fixed while live
-content continues updating. An insertion line previews the target; edge scrolling
-continues within the rail. A drop submits one relative move. Escape, drag end,
+Dragging a pinned conversation's title starts native sorting without reserving
+space for a separate handle. Pinned and ordinary titles have the same inset.
+A plain click still opens the conversation, a double click requests renaming,
+and pin/menu buttons cannot initiate sorting. The localized title tooltip
+explains dragging only when ordering is available. During dragging the displayed
+order stays fixed while live content continues updating. An insertion line previews
+the target; edge scrolling continues within the rail. A drop submits one relative
+move. Escape, drag end,
 window blur, hidden sidebar, filtering or an invalidated source/anchor cancels the
 gesture. A cancelled gesture submits nothing.
 
@@ -51,7 +55,7 @@ The same operation is available from the conversation menu through Move up and
 Move down. Boundary actions are disabled, and remain focusable if a background
 reorder makes the focused action unavailable. Disabled actions cannot execute.
 Search exposes an explicit clear-search action before ordering can resume. Touch
-and keyboard users use the menu; the handle is hidden on coarse pointers.
+and keyboard users can complete sorting through the menu.
 
 `PATCH /_redeven_proxy/api/ai/threads/{threadID}/pin-position` accepts
 `{ anchor_thread_id, placement: "before" | "after" }`. The full-permission
