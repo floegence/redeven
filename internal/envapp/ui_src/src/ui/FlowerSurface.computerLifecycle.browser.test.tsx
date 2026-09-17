@@ -56,6 +56,12 @@ function fixture(initial: FlowerRuntimeCurrentView) {
   };
 }
 
+async function openStage(surface: HTMLElement) {
+  await waitFor(() => Boolean(surface.querySelector('.flower-computer-entry')));
+  surface.querySelector<HTMLButtonElement>('.flower-computer-entry')!.click();
+  await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
+}
+
 it.each([['completed', 'completed'], ['cancelled', 'stopped'], ['failed', 'failed']] as const)('loads %s history without opening or sampling and exposes only an explicit historical image', async (outcome, state) => {
   const f = fixture(current(outcome));
   await waitFor(() => Boolean(f.surface.querySelector('.flower-computer-entry')));
@@ -75,7 +81,7 @@ it.each([['completed', 'completed'], ['cancelled', 'stopped'], ['failed', 'faile
 
 it('collapses a terminal run once and does not infer history success from a later text run', async () => {
   const f = fixture(current());
-  await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.naturalWidth === 1);
+  await openStage(f.surface);
   f.update({ ...current('cancelled'), view_version: 2 });
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
   expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
@@ -141,17 +147,22 @@ it('requires explicit recovery and a newly decoded private frame after the works
   expect(f.inputComputerControl).toHaveBeenCalledTimes(1);
 });
 
-it('opens the next task on its first public frame after automatic terminal collapse', async () => {
+it('opens the next task only on request after automatic terminal collapse', async () => {
   const f = fixture(current());
-  await waitFor(() => Boolean(document.querySelector('.flower-computer-stage img')));
+  await openStage(f.surface);
   f.update({ ...current('completed'), view_version: 2 });
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
   const text = { ...current(), view_version: 3, turn_id: 'next-turn', run_id: 'next-run' };
   f.update(text); await settle();
   expect(document.querySelector('.flower-computer-stage')).toBeNull();
   const observed = current().items![0];
+  const viewerRequests = f.setComputerViewer.mock.calls.length;
   f.update({ ...text, view_version: 4, items: [...text.items!, { ...observed, id: 'next-frame', ordinal: 2, turn_id: 'next-turn', run_id: 'next-run' }] });
-  await waitFor(() => Boolean(document.querySelector('.flower-computer-stage img')));
+  await settle();
+  expect(document.querySelector('.flower-computer-stage')).toBeNull();
+  expect(document.querySelector('.flower-computer-stage-ball')?.getAttribute('aria-expanded')).toBe('false');
+  expect(f.setComputerViewer.mock.calls.length).toBe(viewerRequests);
+  await openStage(f.surface);
   document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
   f.disconnect(); await waitFor(() => f.connections() === 2); await settle();
@@ -189,7 +200,7 @@ it.each(['close', 'switch', 'expire'] as const)('discards private decoding when 
 
 it('accepts fresh canonical results when Runtime restart resets process-local view versions', async () => {
   const f = fixture({ ...current(), view_version: 27 });
-  await waitFor(() => Boolean(document.querySelector('.flower-computer-stage img')));
+  await openStage(f.surface);
   f.restart({ ...current('cancelled'), view_version: 1 });
   await waitFor(() => f.connections() === 2);
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
@@ -201,7 +212,7 @@ it('accepts fresh canonical results when Runtime restart resets process-local vi
 
 it('rejects a delayed HTTP current from the previous Runtime connection', async () => {
   const f = fixture({ ...current(), view_version: 27 });
-  await waitFor(() => Boolean(document.querySelector('.flower-computer-stage img')));
+  await openStage(f.surface);
   let finish: (value: Awaited<ReturnType<typeof f.loadThread>>) => void = () => undefined;
   const calls = f.loadThread.mock.calls.length;
   f.loadThread.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
