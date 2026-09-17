@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -106,10 +107,11 @@ func NormalizeLocalUIBridgeURL(raw string) (string, error) {
 type StatusProvider func(context.Context) (RuntimeAttachStatus, error)
 
 type Server struct {
-	socketPath string
-	provider   StatusProvider
-	httpServer *http.Server
-	listener   net.Listener
+	lifecycleMu sync.Mutex
+	socketPath  string
+	provider    StatusProvider
+	httpServer  *http.Server
+	listener    net.Listener
 }
 
 func NewServer(socketPath string, provider StatusProvider) (*Server, error) {
@@ -127,6 +129,8 @@ func (s *Server) Start(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if s.listener != nil {
 		return nil
 	}
@@ -164,6 +168,8 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if s.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

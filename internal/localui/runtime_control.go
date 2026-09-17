@@ -26,6 +26,7 @@ import (
 const runtimeControlProtocolVersion = "redeven-runtime-control-v2"
 
 type runtimeControlServer struct {
+	lifecycleMu                  sync.Mutex
 	log                          logger
 	agent                        *agent.Agent
 	appServer                    *appserver.Server
@@ -74,6 +75,8 @@ func (s *runtimeControlServer) Start(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if s.srv != nil {
 		return nil
 	}
@@ -110,6 +113,8 @@ func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Liste
 	if s == nil {
 		return nil
 	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if s.srv != nil {
 		return nil
 	}
@@ -173,6 +178,8 @@ func (s *runtimeControlServer) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	if s.srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -187,7 +194,12 @@ func (s *runtimeControlServer) Close() error {
 }
 
 func (s *runtimeControlServer) Endpoint() *runtimemanagement.RuntimeControlEndpoint {
-	if s == nil || s.ln == nil {
+	if s == nil {
+		return nil
+	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.ln == nil {
 		return nil
 	}
 	addr, ok := s.ln.Addr().(*net.TCPAddr)
