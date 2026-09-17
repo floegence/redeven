@@ -307,7 +307,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	// IMPORTANT: A persisted provider link is explicit user authorization for
 	// runtime startup to restore the provider control channel. This
 	// idempotent path exists for explicit refreshes, not as normal UI repair.
-	if matchingCurrent && a.providerControlChannelActiveLocked() {
+	if matchingCurrent && a.providerControlChannelActiveLocked() && a.controlRPC != nil {
 		a.mu.Unlock()
 		return &ProviderLinkResponse{Binding: current}, nil
 	}

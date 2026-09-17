@@ -416,6 +416,9 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	if before.Bindings.ProviderLink.State != runtimeservice.ProviderLinkStateLinked || before.Bindings.ProviderLink.RemoteEnabled {
 		t.Fatalf("ProviderLink before connect = %#v, want linked but remote disabled", before.Bindings.ProviderLink)
 	}
+	// Startup can enable remote mode even when expired artifacts prevent a
+	// control session. An explicit refresh must still obtain a fresh pool.
+	a.enableProviderControlChannelLocked()
 
 	resp, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
 		ProviderOrigin:        "https://redeven.test",
