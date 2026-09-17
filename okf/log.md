@@ -1,5 +1,15 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Align final computer integration with current dependencies
+
+Preserve all unpublished main changes, including native CodeSpace ownership,
+service-version interaction, global dialog input isolation and media event-stream
+priority. Align dependency checks with published Floe v0.55.2 and the computer
+compatibility epoch 19. The initial main publication gate exposed the stale
+v0.55.0 assertion; focused dependency and compatibility tests verify its fix.
+Separate current qualification evidence from the acceptance contract and remove
+accidentally retained browser-test failure images from maintained source.
+
 ## 2026-09-17 — Verify ordinary browser work after private recovery
 
 The built Desktop passes private takeover, Runtime restart and safe handback,

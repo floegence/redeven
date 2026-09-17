@@ -16,20 +16,20 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 18 {
-		t.Fatalf("CompatibilityEpoch = %d, want Runtime client access contract epoch 18", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 19 {
+		t.Fatalf("CompatibilityEpoch = %d, want semantic computer execution contract epoch 19", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 9 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 17", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 10 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 18", contract.UpgradeFromRuntimeEpochs)
 	}
 	for index, epoch := range contract.UpgradeFromRuntimeEpochs {
 		if epoch != index+9 {
-			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 17", contract.UpgradeFromRuntimeEpochs)
+			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 18", contract.UpgradeFromRuntimeEpochs)
 		}
 	}
-	if contract.MinimumDesktopVersion != "v0.12.0" || contract.MinimumRuntimeVersion != "v0.12.0" {
+	if contract.MinimumDesktopVersion != "v0.13.0" || contract.MinimumRuntimeVersion != "v0.13.0" {
 		t.Fatalf(
-			"minimum versions = Desktop %q Runtime %q, want matched v0.12.0 pair",
+			"minimum versions = Desktop %q Runtime %q, want matched v0.13.0 pair",
 			contract.MinimumDesktopVersion,
 			contract.MinimumRuntimeVersion,
 		)
