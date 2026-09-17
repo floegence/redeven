@@ -104,12 +104,12 @@ function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 function renderAudioPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
   const i18n = useI18n();
   return (
-    <div class={`flex h-full min-h-0 min-w-0 items-center justify-center overflow-auto p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
+    <div class={`flex h-full min-h-0 min-w-0 overflow-auto p-3${props.surface === 'window' ? ' redeven-file-preview-surface-window' : ''}`}>
       <audio
         src={props.resourceUrl}
         controls
         preload="metadata"
-        class="w-full max-w-2xl cursor-pointer"
+        class="m-auto w-full max-w-2xl shrink-0 cursor-pointer"
       >
         {props.item?.name ?? i18n.t('uiCopy.preview.audioFallback')}
       </audio>
