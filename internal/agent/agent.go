@@ -1520,6 +1520,7 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 			Upstream:               up,
 			UpstreamOrigin:         origin,
 			BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
+			ExtraRequestHeaders:    []string{"X-ReDevPlugin-CSRF"},
 		}
 		proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, proxyOpts)
 		if err != nil {

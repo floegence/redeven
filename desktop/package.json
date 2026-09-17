@@ -23,7 +23,7 @@
     "node": ">=26.0.0 <27"
   },
   "overrides": {
-    "@floegence/flowersec-core": "5.2.1",
+    "@floegence/flowersec-core": "5.2.2",
     "@babel/core": "^7.29.7",
     "@electron/asar": "^4.2.1",
     "@electron/universal": "^3.0.6",
@@ -54,7 +54,7 @@
       "esbuild"
     ],
     "overrides": {
-      "@floegence/flowersec-core": "5.2.1",
+      "@floegence/flowersec-core": "5.2.2",
       "@babel/core": "^7.29.7",
       "@electron/asar": "^4.2.1",
       "@electron/universal": "^3.0.6",
@@ -105,7 +105,7 @@
   "dependencies": {
     "@floegence/floe-webapp-boot": "0.56.9",
     "@floegence/floe-webapp-core": "0.56.9",
-    "@floegence/flowersec-core": "5.2.1",
+    "@floegence/flowersec-core": "5.2.2",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
     "builder-util-runtime": "^9.7.0",
     "electron-updater": "^6.8.9",
