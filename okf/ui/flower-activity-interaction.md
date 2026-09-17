@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 # Summary
 
@@ -21,9 +21,9 @@ activate tools. All transient ownership ends when its view is disposed.
 Activity identity uses thread, run, turn, and canonical item ID. Status, payload,
 renderer objects, and list positions cannot own component lifetime. Every tool
 call has a stable native disclosure button from its first visible current,
-including file reads and calls whose detail has not arrived. Empty details show
-only safe purpose, localized lifecycle status, and a waiting or no-additional-
-details message. Unknown tools remain neutral; no arbitrary payload, stdin, or
+including file reads and calls whose detail has not arrived. Structured details distinguish waiting, saved empty output, truncated output,
+and historical records that did not save details. Missing scripts and screenshots
+are stated explicitly; older records are neither rewritten nor reconstructed. Unknown tools remain neutral; no arbitrary payload, stdin, or
 private path becomes an inspector fallback. File preview stays a separate
 secondary action.
 
@@ -31,13 +31,39 @@ The existing manual-open map is the only disclosure authority. All tool details
 start closed, including pending, waiting, running, completed, and failed calls.
 Status and attention facts never open a panel. Running tools show the existing
 title sweep while collapsed; settlement stops the sweep without changing the
-user's choice. Error summaries remain visible in the row. Current replacements
+user's choice. Failures keep their lifecycle indicator and an actionable error in the expanded details. Current replacements
 and navigation within the same Flower surface preserve manual choices. This
 state does not require a backend migration or survive a browser restart.
 
 Triggers expose a pointer cursor, focus indication, `aria-expanded`, and
 `aria-controls`. Enter and Space retain native activation. Before closing a
 panel containing focus, the trigger receives focus with `preventScroll`.
+
+## Intent, inputs and results
+
+The collapsed title describes the invocation intent. Dynamic scripts retain the
+required natural-language description through completion and private-input
+pauses. Simple tools use localized action/object titles. Target names remain
+secondary, while opaque identifiers, execution-platform codes and operation
+counters do not become primary reading content.
+
+Published Floret v7.14.0 owns structured `inputs`, result `rows`, `rows_provided`,
+row `language` and `truncated` facts. Input rows are recorded at call time and
+survive result-only updates. Redeven maps actual bounded tool data once, then
+uses the same sanitizer and wire mapper for live and historical views. Searches,
+multi-file reads, skills and saved sources retain meaningful content. Computer
+and browser activities use this common path, with authorized target/frame refs
+as supplemental controls. Text is never an attachment capability.
+
+Expanded inputs and results preserve literal whitespace. Floe Webapp v0.56.7's
+public `CodeBlock` owns highlighting, clipboard writes and accessible copy
+feedback; Flower owns bounded layout and stable disclosure. Scripts start as one
+compact command-style preview with a copy action; clicking expands the complete
+code. Output follows without redundant section or language headers, and an
+actionable failure suppresses the duplicate partial-output notice. English and
+all shipped locales provide action labels, missing-data notices and copy feedback. Model descriptions, filenames, scripts and actual output remain
+literal. Stable section keys and row slots retain DOM selection and expansion
+through result updates. Presentation is never execution or authorization input.
 
 ## Viewport and gesture ownership
 
@@ -101,6 +127,11 @@ file, process, or approval actions. Live transport continues during interaction.
 
 # Evidence
 
+- `redeven:internal/ai/tool_activity_details.go` - Bounded product input/result mapping over the released Floret contract.
+- `redeven:internal/flower_ui/src/FlowerActivityRows.tsx` - Published code display, localized copy feedback and stable row expansion.
+- `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - Strict input/output row validation without dropping presentation fields.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerLifecycle.browser.test.tsx` - Live failure, exact screenshot refs, copy, keyboard, selection and historical absence.
+
 - `redeven:internal/flower_ui/src/flowerScrollTail.ts` - One controller owns viewport intent, input, anchoring, and floating hit protection.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Stable activity triggers, safe empty details, and manual choice mapping.
 - `redeven:internal/flower_ui/src/activityDisclosure.ts` - Visual presence, measured height, and animation completion.
@@ -108,3 +139,7 @@ file, process, or approval actions. Live transport continues during interaction.
 - `redeven:internal/envapp/ui_src/src/ui/flower/flowerScrollInteraction.test.ts` - Input attribution, cancellation, cleanup, keyboard holds, and nested viewport isolation.
 - `redeven:internal/flower_ui/src/flowerScrollTail.test.ts` - Layout events cannot revive paused following.
 - [Streaming stability](flower-streaming-stability.md) - Complete identity, side-effect, and performance acceptance inventory.
+
+Desktop and Runtime negotiate compatibility epoch 21 because older strict Activity
+decoders reject the new optional fields. The existing minimum v0.13.0 pair is
+the unreleased product window; epoch 20 remains an admitted upgrade source.

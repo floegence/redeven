@@ -493,7 +493,7 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 			}
 			continue
 		}
-		if key == "rows" {
+		if key == "rows" || key == "inputs" {
 			if rows := sanitizeStructuredActivityRows(item); len(rows) > 0 {
 				out[key] = rows
 			}
@@ -554,6 +554,15 @@ func sanitizeStructuredActivityRows(value any) []any {
 			row["format"] = format
 		default:
 			continue
+		}
+		if content, ok := record["content"].(string); ok && content != "" {
+			row["content"] = content
+		}
+		if language := activityMapString(record, "language"); language != "" {
+			row["language"] = language
+		}
+		if record["truncated"] == true {
+			row["truncated"] = true
 		}
 		if len(row) > 1 {
 			out = append(out, row)
@@ -781,7 +790,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 	case fltools.ActivityRendererCompletion:
 		return stringSet("result", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererStructured:
-		return stringSet("operation", "status", "display_name", "summary", "duration_ms", "error", "rows")
+		return stringSet("operation", "status", "display_name", "summary", "duration_ms", "error", "rows", "inputs", "rows_provided")
 	default:
 		return nil
 	}

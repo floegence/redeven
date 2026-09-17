@@ -499,7 +499,7 @@ function sanitizeActivityPublicValue(value: unknown, path: string): unknown {
   return value;
 }
 
-const structuredActivityRowKeys = new Set(['title', 'meta', 'content', 'format']);
+const structuredActivityRowKeys = new Set(['title', 'meta', 'content', 'format', 'language', 'truncated']);
 const structuredActivityRowFormats = new Set(['text', 'markdown', 'code']);
 const structuredActivityRowLimit = 200;
 const webFetchActivityPayloadKeys = new Set([
@@ -576,34 +576,42 @@ function mapSubagentOperationActivityPayload(payload: JsonRecord): Readonly<Reco
   return out;
 }
 
-function mapStructuredActivityRows(raw: unknown): readonly Readonly<Record<string, string>>[] {
+function mapStructuredActivityRows(raw: unknown, field: string): readonly Readonly<Record<string, string | boolean>>[] {
   if (!Array.isArray(raw)) {
-    throw new Error('Flower contract error: activity_item.presentation.payload.rows must be an array.');
+    throw new Error(`Flower contract error: activity_item.presentation.payload.${field} must be an array.`);
   }
   if (raw.length > structuredActivityRowLimit) {
-    throw new Error(`Flower contract error: activity_item.presentation.payload.rows exceeds ${structuredActivityRowLimit} rows.`);
+    throw new Error(`Flower contract error: activity_item.presentation.payload.${field} exceeds ${structuredActivityRowLimit} rows.`);
   }
   return raw.map((value, index) => {
     const row = plainRecordValue(value);
     if (!row) {
-      throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}] must be an object.`);
+      throw new Error(`Flower contract error: activity_item.presentation.payload.${field}[${index}] must be an object.`);
     }
     for (const key of Object.keys(row)) {
       if (!structuredActivityRowKeys.has(key)) {
-        throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}].${key} is not part of the structured activity row contract.`);
+        throw new Error(`Flower contract error: activity_item.presentation.payload.${field}[${index}].${key} is not part of the structured activity row contract.`);
       }
     }
     const title = trim(row.title);
     const meta = trim(row.meta);
-    const content = trim(row.content);
+    const content = typeof row.content === 'string' ? row.content : '';
+    const language = trim(row.language);
+    if (language && !/^[a-zA-Z0-9_+#.-]{1,64}$/u.test(language)) throw new Error(`Flower contract error: ${field}[${index}].language is invalid.`);
+    if (row.truncated !== undefined && typeof row.truncated !== 'boolean') throw new Error(`Flower contract error: ${field}[${index}].truncated must be a boolean.`);
     const format = trim(row.format) || 'text';
     if (!structuredActivityRowFormats.has(format)) {
-      throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}].format is unsupported.`);
+      throw new Error(`Flower contract error: activity_item.presentation.payload.${field}[${index}].format is unsupported.`);
     }
     if (!title && !meta && !content) {
-      throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}] must contain display content.`);
+      throw new Error(`Flower contract error: activity_item.presentation.payload.${field}[${index}] must contain display content.`);
+    }
+    if ((format === 'code' ? new TextEncoder().encode(content).length > 65536 : Array.from(content).length > 8000)) {
+      throw new Error(`Flower contract error: ${field}[${index}].content exceeds the structured activity limit.`);
     }
     return {
+      ...(language ? { language } : {}),
+      ...(row.truncated !== undefined ? { truncated: row.truncated as boolean } : {}),
       ...(title ? { title } : {}),
       ...(meta ? { meta } : {}),
       ...(content ? { content } : {}),
@@ -641,8 +649,9 @@ function mapActivityPayload(raw: unknown, renderer?: FlowerActivityRenderer): Re
         continue;
       }
     }
-    out[safeKey] = safeKey === 'rows'
-      ? mapStructuredActivityRows(value)
+    if (safeKey === 'rows_provided' && typeof value !== 'boolean') throw new Error('Flower contract error: rows_provided must be a boolean.');
+    out[safeKey] = safeKey === 'rows' || safeKey === 'inputs'
+      ? mapStructuredActivityRows(value, safeKey)
       : sanitizeActivityPublicValue(value, `activity_item.presentation.payload.${safeKey}`);
   }
   return Object.keys(out).length > 0 ? out : undefined;

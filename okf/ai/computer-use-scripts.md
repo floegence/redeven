@@ -110,7 +110,13 @@ before each host operation. The target remains owned by the same canonical turn
 across the batch; independent live sampling may run between operations.
 
 Results record confirmed completed actions, operation count and final compact
-observation. Interpreter failure and timeout preserve this prefix. A sensitive
+observation. Interpreter failure and timeout preserve this prefix and bounded
+logs. A script that stops after a host rejection or guest exception is an
+execution failure, never a successful tool or schema-regeneration request.
+Closed diagnostic codes avoid leaking guest exception text. Output-limit
+failures mark retained output as truncated. No partial script is replayed.
+The [activity contract](../ui/flower-activity-interaction.md) owns intent and
+input/result presentation. A sensitive
 pause removes previous logs, semantic content and image attachments, retaining
 only closed progress facts. `InputRequired` ends execution; after the user
 responds, a new invocation must observe and continue from the actual state.

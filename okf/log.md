@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Tool intent and inspectable input/results
+
+- Consume published Floret v7.14.0 structured inputs, explicit result availability,
+  language and truncation without changing domain schema 12 or rewriting history.
+- Require Desktop/Runtime compatibility epoch 21 for strict Activity decoders.
+- Reuse Floe Webapp v0.56.7 CodeBlock with compact script disclosure and localized copy feedback. Computer tools
+  share the normal activity detail path; see [activity interaction](ui/flower-activity-interaction.md).
+- Preserve bounded search, multi-file, skill and script results. Script execution
+  failure retains confirmed partial output and never enters argument regeneration;
+  see [script execution](ai/computer-use-scripts.md).
+
 ## 2026-09-17 — Apply full access to browser and desktop operations
 
 - Full access now covers site, application and foreground permissions on the

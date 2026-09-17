@@ -65,7 +65,7 @@ SOFTWARE.
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.13.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.13.0 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.14.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.14.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.2.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.2.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.32 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.32 | Floegence first-party dependency. |
@@ -234,9 +234,9 @@ SOFTWARE.
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
-| @floegence/floe-webapp-boot | 0.56.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.56.6 |  |
-| @floegence/floe-webapp-core | 0.56.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.56.6 |  |
-| @floegence/floe-webapp-protocol | 0.56.6 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.56.6 |  |
+| @floegence/floe-webapp-boot | 0.56.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.56.7 |  |
+| @floegence/floe-webapp-core | 0.56.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.56.7 |  |
+| @floegence/floe-webapp-protocol | 0.56.7 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.56.7 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.2.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.2.1 |  |
 | @floegence/flowersec-node-native-darwin-arm64 | 5.2.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.2.1 | License verified from the exact registry package manifest. |

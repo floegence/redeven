@@ -459,13 +459,13 @@ func TestFloretActivityForOKFResultBuildsSafeStructuredRows(t *testing.T) {
 	}
 }
 
-func TestFloretActivityForSkillSuccessHasNoExpandableDetails(t *testing.T) {
+func TestFloretActivityForSkillPreservesBodyWithoutInternalReferences(t *testing.T) {
 	t.Parallel()
 
 	presentation, err := floretActivityForToolResult(nil, ToolResult{
 		ToolID: "tool-skill", ToolName: "use_skill", Status: toolResultStatusSuccess,
 		Data: map[string]any{
-			"name": "redeven-environment", "activation_id": "private-activation", "content": "private skill body", "content_ref": "private-content-ref",
+			"name": "redeven-environment", "activation_id": "private-activation", "content": "Skill usage guidance", "content_ref": "private-content-ref",
 		},
 	})
 	if err != nil {
@@ -475,14 +475,14 @@ func TestFloretActivityForSkillSuccessHasNoExpandableDetails(t *testing.T) {
 	if !ok {
 		t.Fatalf("payload type = %T", presentation.Payload)
 	}
-	if len(payload.Rows) != 0 || payload.Summary != "" || payload.Error != nil {
+	if len(payload.Rows) != 1 || payload.Rows[0].Content != "Skill usage guidance" || payload.Error != nil {
 		t.Fatalf("skill payload = %#v", payload)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"private-activation", "private skill body", "private-content-ref", "activation_id", "content_ref"} {
+	for _, forbidden := range []string{"private-activation", "private-content-ref", "activation_id", "content_ref"} {
 		if strings.Contains(string(encoded), forbidden) {
 			t.Fatalf("skill payload contains %q: %s", forbidden, encoded)
 		}

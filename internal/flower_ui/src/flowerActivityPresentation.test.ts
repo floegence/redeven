@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FlowerActivityItem, FlowerApprovalAction, FlowerSubagentSummary } from './contracts/flowerSurfaceContracts';
 import { pendingApprovalCommandForActivityItem, presentFlowerActivityItem, safeWebFetchURL } from './flowerActivityPresentation';
+import { toolActivityEnUS } from './toolActivityCopy';
 
 function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   return {
@@ -73,8 +74,38 @@ function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): Flower
   };
 }
 
+const missingResults = { kind: 'structured_rows', section: 'results', rows: [], notice: 'This record did not save result details.' };
+
 describe('presentFlowerActivityItem', () => {
-  it('presents computer actions with target, action, location, and frame metadata', () => {
+  it('keeps script intent and literal inputs alongside results and the exact frame', () => {
+    const code = '  await ui.observe();\nlog("Search");\n';
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'computer.exec', renderer: 'structured', label: 'Locate the search field', status: 'error',
+      target_refs: [{ kind: 'computer_target', label: 'Managed browser', resource_ref: 'browser-main' }],
+      payload: { operation: 'execute', inputs: [{ content: code, format: 'code', language: 'javascript' }], rows_provided: true,
+        rows: [{ content: 'Search field found\nClick stopped', format: 'code', language: 'text', truncated: true }], error: { message: 'Script stopped' } },
+    }));
+    expect(presentation.label).toBe('Locate the search field');
+    expect(presentation.meta).toBe('Managed browser');
+    expect(presentation.detailBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'structured_rows', section: 'inputs', rows: [expect.objectContaining({ content: code, language: 'javascript' })] }),
+      expect.objectContaining({ kind: 'structured_rows', section: 'results', rows: [expect.objectContaining({ truncated: true })] }),
+      expect.objectContaining({ kind: 'error' }),
+    ]));
+  });
+
+  it.each(['success', 'error', 'canceled', 'waiting', 'running'] as const)('distinguishes saved empty output from historical absence while %s', (status) => {
+    const base = item({ tool_name: 'computer.exec', renderer: 'structured', label: 'Inspect search', status });
+    const saved = presentFlowerActivityItem({ ...base, payload: { inputs: [{ content: 'await ui.observe();', format: 'code' }], rows_provided: true } });
+    const history = presentFlowerActivityItem(base);
+    const active = status === 'waiting' || status === 'running';
+    expect(JSON.stringify(saved)).toContain(active ? 'await ui.observe();' : 'No output');
+    expect(JSON.stringify(saved)).not.toContain('did not save');
+    expect(JSON.stringify(history).includes('did not save the script')).toBe(!active);
+    expect(JSON.stringify(history).includes('did not save result details')).toBe(!active);
+  });
+
+  it('presents confirmed screenshot output without empty-output or platform-code noise', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'computer.click',
       renderer: 'structured',
@@ -87,8 +118,19 @@ describe('presentFlowerActivityItem', () => {
     }));
     expect(presentation.label).toBe('clicked the sign in button');
     expect(presentation.detailBlocks).toEqual([
+      { kind: 'structured_rows', section: 'results', rows: [], notice: undefined },
       expect.objectContaining({ kind: 'computer', target_id: 'browser-main', target: 'Redeven Managed Browser', frame: `computer://browser-main/${'a'.repeat(64)}` }),
     ]);
+  });
+
+  it('localizes input labels while preserving the original query', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'rgrep', renderer: 'structured', label: 'useMemo',
+      payload: { inputs: [{ title: 'query', content: 'useMemo', format: 'text' }], rows_provided: true },
+    }), undefined, { tools: { ...toolActivityEnUS, searchFiles: '搜索文件内容', inputQuery: '搜索条件', noOutput: '没有输出' } });
+    expect(result.label).toBe('搜索文件内容 useMemo');
+    expect(JSON.stringify(result.detailBlocks)).toContain('搜索条件');
+    expect(JSON.stringify(result.detailBlocks)).toContain('useMemo');
+    expect(JSON.stringify(result.detailBlocks)).toContain('没有输出');
   });
 
   it('shows actual terminal target and execution location without guessing from the command', () => {
@@ -762,8 +804,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('Web search "Search docs"');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Web search "Search docs"' });
+    expect(presentation.label).toBe('Search docs');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Search docs' });
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('thread');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('profile');
   });
@@ -895,7 +937,7 @@ describe('presentFlowerActivityItem', () => {
       payload: undefined,
       target_refs: undefined,
     }));
-    expect(empty.title).toEqual({ kind: 'plain', text: 'Web fetch' });
+    expect(empty.title).toEqual({ kind: 'plain', text: 'Fetch page' });
     expect(empty.detailBlocks).toEqual([]);
   });
 
@@ -1296,9 +1338,9 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Called vendor internal call' });
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Run tool vendor internal call' });
     expect(presentation.detailLines).toEqual([]);
-    expect(presentation.detailBlocks).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([missingResults]);
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
     expect(JSON.stringify(presentation)).not.toContain('internal_id');
   });
@@ -1337,7 +1379,7 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.detailLines).toEqual([]);
-    expect(presentation.detailBlocks).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([missingResults]);
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
     expect(JSON.stringify(presentation)).not.toContain('private protocol row');
   });
@@ -1356,11 +1398,11 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.title).toEqual({ kind: 'plain', text: 'Inspect release metadata' });
     expect(presentation.detailLines).toEqual([]);
-    expect(presentation.detailBlocks).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([missingResults]);
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
   });
 
-  it('leaves successful Skill content empty for the safe disclosure fallback', () => {
+  it('explains missing typed Skill details without inventing content', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'use_skill',
       renderer: 'structured',
@@ -1376,7 +1418,7 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.detailLines).toEqual([]);
-    expect(presentation.detailBlocks).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([missingResults]);
     expect(JSON.stringify(presentation)).not.toContain('content_123');
     expect(JSON.stringify(presentation)).not.toContain('act_123');
   });
@@ -1398,7 +1440,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailBlocks).toEqual([{
       kind: 'error',
       error: { message: 'Skill package could not be loaded.' },
-    }]);
+    }, missingResults]);
   });
 
   it('renders only typed structured rows for OKF details', () => {
@@ -1423,6 +1465,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines).toEqual([]);
     expect(presentation.detailBlocks).toEqual([{
       kind: 'structured_rows',
+      section: 'results',
       rows: [{
         title: 'Flower runtime',
         meta: 'Architecture · Summary',

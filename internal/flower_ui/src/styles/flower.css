@@ -4811,11 +4811,134 @@
   min-width: 0;
 }
 
+/* Tool details share the terminal's compact command/output hierarchy. */
+.flower-activity-detail-notice {
+  margin: 0.2rem 0;
+  color: var(--flower-activity-tool-row-foreground);
+  font-size: 0.75rem;
+}
+
+.flower-activity-detail-content {
+  min-width: 0;
+  user-select: text;
+}
+
+.flower-activity-detail-content[data-expanded='false'] {
+  max-height: 9rem;
+  overflow: hidden;
+}
+
+.flower-activity-detail-expand {
+  justify-self: start;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.3rem;
+  color: var(--primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.flower-activity-detail-expand:focus-visible,
+.flower-activity-script-toggle:focus-visible,
+.flower-activity-detail-content .chat-code-copy-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.flower-activity-detail-content .chat-code-block {
+  position: static;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.flower-activity-detail-content .chat-code-header {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.25rem;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.flower-activity-detail-content .chat-code-info {
+  display: none;
+}
+
+.flower-activity-detail-content .chat-code-copy-btn {
+  color: var(--redeven-chat-muted);
+}
+
+.flower-activity-detail-content .chat-code-copy-btn:hover {
+  background: var(--redeven-status-info-soft);
+  color: var(--redeven-code-foreground);
+}
+
+.flower-activity-structured-row[data-script='false'] .chat-code-content {
+  background: var(--redeven-chat-output);
+}
+
+.flower-activity-detail-content .chat-code-content pre {
+  padding: 0.5rem 2.5rem 0.5rem 0.625rem !important;
+}
+
+.flower-activity-structured-row[data-script='false'] .chat-code-content :is(pre, code, span) {
+  color: var(--redeven-chat-text) !important;
+}
+
+.flower-activity-script-toggle {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 2.5rem 0.5rem 0.625rem;
+  color: var(--redeven-code-foreground);
+  background: var(--redeven-code-chrome);
+  cursor: pointer;
+  text-align: left;
+}
+
+.flower-activity-script-toggle svg { flex: 0 0 auto; }
+.flower-activity-script-toggle code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.flower-activity-structured-row[data-script='true'] {
+  gap: 0;
+  padding: 0;
+  margin: 0.25rem 0;
+  border: 1px solid var(--redeven-chat-border);
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.flower-activity-structured-row[data-script='true'] .flower-activity-detail-content {
+  max-height: none;
+  overflow: visible;
+}
+
+.flower-activity-structured-row[data-script='true'][data-expanded='false'] .chat-code-content {
+  display: none;
+}
+
+.flower-activity-structured-row[data-script='true'][data-expanded='true'] .chat-code-content {
+  max-height: 20rem;
+  overflow: auto;
+  border-top: 1px solid var(--redeven-chat-border);
+}
+
 .flower-activity-structured-row {
+  position: relative;
   display: grid;
   min-width: 0;
   gap: 0.35rem;
-  padding: 0.6rem 0;
+  padding: 0.25rem 0;
   border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 54%, transparent);
 }
 
@@ -4852,23 +4975,6 @@
 }
 
 .flower-activity-structured-row-text,
-.flower-activity-structured-row-code {
-  min-width: 0;
-  margin: 0;
-  color: var(--flower-activity-tool-row-foreground-strong);
-  font-size: 0.75rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.flower-activity-structured-row-code {
-  overflow-x: auto;
-  border-radius: 0.35rem;
-  background: color-mix(in srgb, var(--muted) 52%, transparent);
-  padding: 0.45rem 0.55rem;
-  white-space: pre;
-}
-
 .flower-activity-structured-row-markdown {
   color: var(--flower-activity-tool-row-foreground-strong);
   font-size: 0.75rem;
@@ -4878,15 +4984,6 @@
   display: grid;
   gap: 0.35rem;
   margin-top: 0.35rem;
-}
-
-.flower-activity-computer-context {
-  font-weight: 600;
-}
-
-.flower-activity-computer-meta {
-  color: var(--text-muted);
-  font-size: 0.8rem;
 }
 
 .flower-computer-stage { min-width: 0; min-height: 0; }

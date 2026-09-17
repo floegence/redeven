@@ -267,6 +267,15 @@ describe('mapFlowerThread title contract', () => {
 });
 
 describe('mapFlowerActivityItem structured rows contract', () => {
+  it('preserves literal long script inputs and explicit empty output across the wire', () => {
+    const content = '  await ui.observe();\n' + '// comment\n'.repeat(1200);
+    const payload = { inputs: [{ content, format: 'code', language: 'javascript', truncated: false }], rows_provided: true };
+    const mapped = mapFlowerActivityItem(JSON.parse(JSON.stringify({ item_id: 'script', kind: 'tool', status: 'success', presentation: { renderer: 'structured', payload } })));
+    expect(mapped?.payload).toEqual(payload);
+    expect(() => mapFlowerActivityItem({ item_id: 'script', kind: 'tool', status: 'success', presentation: { renderer: 'structured', payload: { inputs: [{ content: 'a'.repeat(65537), format: 'code' }] } } })).toThrow('exceeds the structured activity limit');
+    expect(() => mapFlowerActivityItem({ item_id: 'script', kind: 'tool', status: 'success', presentation: { renderer: 'structured', payload: { rows_provided: 'true' } } })).toThrow('must be a boolean');
+  });
+
   const activity = (rows: unknown) => ({
     item_id: 'activity-okf',
     kind: 'tool',

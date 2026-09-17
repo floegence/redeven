@@ -36,7 +36,7 @@ describe('Flower computer stage', () => {
     const host = document.createElement('div'); document.body.append(host);
     const input = vi.fn(() => { document.querySelector('.flower-computer-stage')?.setAttribute('data-input-count', String(input.mock.calls.length)); });
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
-      snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in', location: 'local', safety: '' }}
+      snapshot={{ item: activityItem({ item_id: 'ime' }), status: 'waiting', targetID: 'browser-main', target: 'Managed browser', action: 'Sign in' }}
       frame={{ thread_id: 'fixture', target_id: 'browser-main', resource_ref: FRAME_REF, sha256: 'a'.repeat(64) }} loadFrame={async () => new Blob([Uint8Array.from(atob(ONE_PIXEL_PNG), (value) => value.charCodeAt(0))], { type: 'image/png' })}
       copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
       open sessionState="awaiting_user" onRestore={() => undefined} onClose={() => undefined} onInput={input}
@@ -67,7 +67,7 @@ describe('Flower computer stage', () => {
     const [frame, setFrame] = createSignal(FRAME_REF);
     const [owner, setOwner] = createSignal('thread');
     const dispose = renderWithFloeLayout(() => <FlowerComputerStage
-      snapshot={{ item: activityItem({ item_id: 'frame', status: status() }), status: status(), targetID: 'browser-main', target: 'Managed browser', action: 'Screenshot', location: 'local', safety: '' }}
+      snapshot={{ item: activityItem({ item_id: 'frame', status: status() }), status: status(), targetID: 'browser-main', target: 'Managed browser', action: 'Screenshot' }}
       threadID={owner()} frame={{ thread_id: owner(), target_id: 'browser-main', resource_ref: frame(), sha256: frame().split('/').at(-1)! }} loadFrame={loadFrame}
       copy={{ frameRate: 'Frame rate', frameRateHint: 'Higher frame rates use more bandwidth.', receivedFrameRate: 'Receiving {fps} FPS', title: 'Computer', close: 'Close', maximize: 'Maximize', restoreSize: 'Restore', zoomIn: 'Actual size', zoomOut: 'Fit to window', restore: 'Restore viewer', move: 'Move viewer', noFrame: 'Loading', retry: 'Retry', resumeControl: 'Resume control', state: STAGE_STATES }}
       open sessionState={status() === 'success' ? 'completed' : 'running'} onRestore={() => undefined} onClose={() => undefined}
@@ -202,8 +202,8 @@ describe('Flower computer stage', () => {
     (document.querySelector('[data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
     (runtime.querySelector('.flower-activity-inline-button[aria-expanded="false"]') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-activity-computer-block .flower-activity-inline-button') !== null);
-    (runtime.querySelector('.flower-activity-computer-block .flower-activity-inline-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-activity-computer-block .flower-activity-detail-expand') !== null);
+    (runtime.querySelector('.flower-activity-computer-block .flower-activity-detail-expand') as HTMLButtonElement).click();
     await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: FRAME_REF }));
 

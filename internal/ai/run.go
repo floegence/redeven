@@ -1579,6 +1579,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		var partial any
 		if target, ok := result.(targetToolExecution); ok {
 			partial = target.Payload
+			outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 		}
 		if errors.Is(toolErrRaw, errComputerEffectUnknown) {
 			outcome.dispatchErr = errComputerEffectUnknown
@@ -1591,6 +1592,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		if errors.Is(toolErrRaw, context.DeadlineExceeded) {
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: !isComputerUseTool(toolName)}, "", partial)
+			return outcome, nil
+		}
+		var scriptErr *computerScriptExecutionError
+		if errors.As(toolErrRaw, &scriptErr) {
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: scriptErr.Error(), Retryable: false}, "", partial)
 			return outcome, nil
 		}
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
@@ -3231,7 +3237,10 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			return computerTakeoverExecution(call, target, decision), nil
 		}
 		if result.Result != nil {
-			return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID)}, err
+			if result.TargetName == "" {
+				result.TargetName = target.DisplayName
+			}
+			return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
 		}
 		return nil, err
 	}
@@ -3247,17 +3256,19 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
 	}
-	attachments := make([]ToolAttachment, 0, len(result.Attachments))
-	for _, attachment := range result.Attachments {
+	return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID), Attachments: toolAttachmentsFromTarget(result.Attachments)}, nil
+}
+
+func toolAttachmentsFromTarget(source []TargetToolAttachment) []ToolAttachment {
+	attachments := make([]ToolAttachment, 0, len(source))
+	for _, attachment := range source {
 		attachments = append(attachments, ToolAttachment{
 			ResourceRef: strings.TrimSpace(attachment.ResourceRef),
-			Name:        strings.TrimSpace(attachment.Name),
-			MIMEType:    strings.TrimSpace(attachment.MIMEType),
-			SizeBytes:   attachment.SizeBytes,
-			SHA256:      strings.TrimSpace(attachment.SHA256),
+			Name:        strings.TrimSpace(attachment.Name), MIMEType: strings.TrimSpace(attachment.MIMEType),
+			SizeBytes: attachment.SizeBytes, SHA256: strings.TrimSpace(attachment.SHA256),
 		})
 	}
-	return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID), Attachments: attachments}, nil
+	return attachments
 }
 
 func targetToolResultPayload(result TargetToolResult, requestedTargetID string) any {

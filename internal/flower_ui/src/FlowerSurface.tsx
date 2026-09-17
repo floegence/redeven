@@ -1,3 +1,4 @@
+import { FlowerActivityRows } from './FlowerActivityRows';
 import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from './FlowerComputerConnections';
 import { computerAssistance, computerAssistanceFromError, type ComputerAssistanceObservation } from './computerAssistance';
 import { computerFrameRate, computerControlErrorCode } from './computerViewer';
@@ -5727,17 +5728,16 @@ webSearch: model.web_search,
           const item = block.block.items[itemIndex];
           const toolName = item?.tool_name || '';
           if (toolName[0] !== 'c' && toolName[0] !== 'b') continue;
-          const detail = presentFlowerActivityItem(item).detailBlocks.find((candidate) => candidate.kind === 'computer');
+          const presentation = presentFlowerActivityItem(item, undefined, { tools: copy().chat.toolActivity });
+          const detail = presentation.detailBlocks.find((candidate) => candidate.kind === 'computer');
           if (!detail || detail.kind !== 'computer') continue;
           candidates.push({
             item,
             runID: block.block.run_id,
             turnID: block.block.turn_id,
             target: detail.target,
+            action: presentation.label,
             ...(detail.target_id ? { targetID: detail.target_id } : {}),
-            action: detail.action,
-            location: detail.location,
-            safety: detail.safety ?? '',
             ...(detail.frame ? { frame: detail.frame } : {}),
             status: item.status,
           });
@@ -8176,7 +8176,8 @@ webSearch: model.web_search,
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
       presentFlowerActivityItem(item, timeline.file_actions, {
-        webSearch: copy().chat.webSearch,
+        tools: copy().chat.toolActivity,
+      webSearch: copy().chat.webSearch,
         statuses: copy().chat.toolStatuses,
         subagents: subagentsCopy(),
         subagentSummaries: selectedSubagentSummaries() ?? [],
@@ -8195,7 +8196,7 @@ webSearch: model.web_search,
     if (title.kind === 'file') {
       return (
         <>
-          <strong class="flower-activity-inline-title-verb">{title.verb}</strong>
+          <strong class="flower-activity-inline-title-verb">{copy().chat.toolActivity[title.verb === 'Read' ? 'read' : title.verb === 'Delete' ? 'delete' : 'edit']}</strong>
           <span class="flower-activity-inline-title-target">{title.display_name}</span>
         </>
       );
@@ -8203,7 +8204,7 @@ webSearch: model.web_search,
     if (title.kind === 'web_fetch') {
       return (
         <>
-          <strong class="flower-activity-inline-title-verb">Web fetch</strong>
+          <strong class="flower-activity-inline-title-verb">{copy().chat.toolActivity.fetch}</strong>
           <span class="flower-activity-inline-title-target flower-activity-web-fetch-title-url" title={title.url}>{title.url}</span>
         </>
       );
@@ -8289,16 +8290,16 @@ webSearch: model.web_search,
       && canonicalActionID()
       && props.adapter.openFileBrowser,
     );
-    const displayName = () => trimString(attachmentTarget()?.name) || trimString(action()?.display_name) || 'file';
+    const displayName = () => trimString(attachmentTarget()?.name) || trimString(action()?.display_name) || copy().chat.toolActivity.file;
     return (
       <Show when={canPreview() || canBrowseDirectory()}>
-        <div class="flower-activity-file-actions" aria-label="File actions">
+        <div class="flower-activity-file-actions" aria-label={copy().chat.toolActivity.fileActions}>
           <Show when={canPreview()}>
             <button
               type="button"
               class="flower-activity-file-action-button"
-              title="Preview file"
-              aria-label={`Preview ${displayName()}`}
+              title={copy().chat.toolActivity.previewFile}
+              aria-label={`${copy().chat.toolActivity.previewFile}: ${displayName()}`}
               disabled={!attachmentTarget() && selectedThreadDetailPending()}
               onClick={(event) => {
                 event.stopPropagation();
@@ -8316,8 +8317,8 @@ webSearch: model.web_search,
             <button
               type="button"
               class="flower-activity-file-action-button"
-              title="Browse folder"
-              aria-label={`Browse folder for ${displayName()}`}
+              title={copy().chat.toolActivity.browseFolder}
+              aria-label={`${copy().chat.toolActivity.browseFolder}: ${displayName()}`}
               disabled={selectedThreadDetailPending()}
               onClick={(event) => {
                 event.stopPropagation();
@@ -8345,49 +8346,10 @@ webSearch: model.web_search,
     </>
   );
 
-  const structuredRowsBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'structured_rows' }>>) => (
-    <div class="flower-activity-structured-rows" role="list">
-      <For each={block().rows}>
-        {(row) => (
-          <div class="flower-activity-structured-row" role="listitem" data-format={row.format}>
-            <Show when={row.title || row.meta}>
-              <div class="flower-activity-structured-row-heading">
-                <Show when={row.title}>{(title) => <strong>{title()}</strong>}</Show>
-                <Show when={row.meta}>{(meta) => <span>{meta()}</span>}</Show>
-              </div>
-            </Show>
-            <Show when={row.content}>
-              {(content) => (
-                <Show
-                  when={row.format === 'markdown'}
-                  fallback={row.format === 'code'
-                    ? <pre class="flower-activity-structured-row-code"><code>{content()}</code></pre>
-                    : <p class="flower-activity-structured-row-text">{content()}</p>}
-                >
-                  <FlowerMarkdownBlock
-                    content={content()}
-                    streaming={false}
-                    copyCodeLabel={copy().chat.copyCode}
-                    codeCopiedLabel={copy().chat.codeCopied}
-                    class="flower-activity-structured-row-markdown"
-                  />
-                </Show>
-              )}
-            </Show>
-          </div>
-        )}
-      </For>
-    </div>
-  );
-
   const computerBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'computer' }>>) => (
     <div class="flower-activity-computer-block" data-computer-target={block().target}>
-      <div class="flower-activity-computer-context">{block().target} · {block().action}</div>
-      <Show when={block().location || block().safety}>
-        <div class="flower-activity-computer-meta">{[block().location, block().safety].filter(Boolean).join(' · ')}</div>
-      </Show>
       <Show when={block().frame}>
-        <button type="button" class="flower-activity-inline-button" aria-expanded={computerStageOpen()} onClick={(event) => {
+        <button type="button" class="flower-activity-detail-expand" aria-expanded={computerStageOpen()} onClick={(event) => {
           const frame = block().frame;
           if (frame) setComputerFrameSelection({ frame, threadID: selectedThreadID(), runID: selectedThread()?.active_run_id });
           setComputerViewFailed(false);
@@ -9075,7 +9037,7 @@ webSearch: model.web_search,
       () => detailProps.block as Extract<FlowerNonTerminalDetailBlock, { kind: K }>;
     return <Switch>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
-      <Match when={detailProps.block.kind === 'structured_rows'}>{structuredRowsBlock(blockOfKind('structured_rows'))}</Match>
+      <Match when={detailProps.block.kind === 'structured_rows'}><FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} /></Match>
       <Match when={detailProps.block.kind === 'computer'}>{computerBlock(blockOfKind('computer'))}</Match>
       <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
       <Match when={detailProps.block.kind === 'web_search'}>{webSearchBlock(blockOfKind('web_search'))}</Match>
@@ -9086,7 +9048,7 @@ webSearch: model.web_search,
       <Match when={detailProps.block.kind === 'file_diff'}>{fileDiffBlock(() => detailProps.messageID, () => detailProps.blockIndex, () => detailProps.itemID, blockOfKind('file_diff'))}</Match>
       <Match when={detailProps.block.kind === 'web_operation'}><WebSearchActivity search={(detailProps.block as Extract<FlowerActivityDetailBlock, { kind: 'web_operation' }>).search} copy={copy().chat.webSearch} openLabel={copy().chat.toolActivityOpenWebPage} /></Match>
       <Match when={detailProps.block.kind === 'todos'}>
-        <div class="flower-activity-todo-list" role="list" aria-label="Todos">
+        <div class="flower-activity-todo-list" role="list" aria-label={copy().chat.toolActivity.todos}>
           <For each={(detailProps.block as Extract<FlowerActivityDetailBlock, { kind: 'todos' }>).items}>
             {(todo) => (
               <div
@@ -9120,6 +9082,7 @@ webSearch: model.web_search,
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
     const presentation = createMemo<FlowerActivityPresentation>((previous) => retainEqualValue(previous, presentFlowerActivityItem(item(), timeline().file_actions, {
+      tools: copy().chat.toolActivity,
       webSearch: copy().chat.webSearch,
       statuses: copy().chat.toolStatuses,
       subagents: subagentsCopy(),
@@ -9133,17 +9096,16 @@ webSearch: model.web_search,
     })));
     const pendingApprovalCommand = createMemo(() => pendingApprovalCommandForActivityItem(item(), selectedApprovalActions()));
     const displayTitle = createMemo<FlowerActivityTitle>(() => {
-      if (activityWaitingForComputer(item(), timeline())) return { kind: 'plain', text: selectedComputerAssistance().title };
       const command = pendingApprovalCommand();
       return command && item().renderer !== 'terminal' && presentation().title.kind !== 'command'
         ? { kind: 'command', command }
         : presentation().title;
     });
     const terminalDisclosure = createMemo(() => presentation().detailBlocks.some((block) => block.kind === 'terminal_output'));
-    const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}`));
+    const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}:${block.kind === 'structured_rows' ? block.section ?? '' : ''}`));
     const detailsByKey = createMemo(() => {
       const blocks = presentation().detailBlocks;
-      return new Map<string, FlowerActivityDetailBlock>(blocks.map((block) => [`${disclosureKey()}:${block.kind}`, block]));
+      return new Map<string, FlowerActivityDetailBlock>(blocks.map((block) => [`${disclosureKey()}:${block.kind}:${block.kind === 'structured_rows' ? block.section ?? '' : ''}`, block]));
     });
     const disclosureControl = createFlowerActivityDisclosureController({
       manualOpen: () => openActivityRuns()[disclosureKey()],

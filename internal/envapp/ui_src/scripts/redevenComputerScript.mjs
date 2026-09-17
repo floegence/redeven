@@ -52,6 +52,7 @@ export async function createComputerScript({ browser = true } = {}) {
     const text = vm.getString(encoded);
     if (active.outputBytes + text.length > 65536) {
       active.sealed = true;
+      active.outputTruncated = true;
       return { error: vm.newError('SCRIPT_OUTPUT_LIMIT') };
     }
     active.outputBytes += text.length;
@@ -117,6 +118,12 @@ export async function createComputerScript({ browser = true } = {}) {
           await Promise.race(execution.pending);
           if (Date.now() >= execution.deadline) throw new Error('SCRIPT_TIMEOUT');
         }
+      } catch {
+        // Preserve bounded output without exposing guest exception text, which
+        // can include values from the page or sensitive input.
+        const failure = new Error('SCRIPT_FAILED');
+        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true };
+        throw failure;
       } finally {
         execution.sealed = true;
         await Promise.allSettled(execution.pending);
@@ -156,7 +163,7 @@ async function main() {
       send({ type: 'operation', id, operation });
     })).then(
       (result) => { running = false; send({ type: 'result', id: message.id, result }); },
-      () => { send({ type: 'error', id: message.id, error: 'SCRIPT_FAILED' }); process.exitCode = 1; lines.close(); },
+      (failure) => { send({ type: 'error', id: message.id, error: 'SCRIPT_FAILED', result: failure.result }); process.exitCode = 1; lines.close(); },
     );
   });
   lines.on('close', () => {

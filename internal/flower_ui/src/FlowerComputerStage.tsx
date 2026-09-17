@@ -14,8 +14,6 @@ export type FlowerComputerStageSnapshot = Readonly<{
   targetID?: string;
   target: string;
   action: string;
-  location: string;
-  safety: string;
   frame?: string;
   status: FlowerActivityItem['status'];
 }>;
