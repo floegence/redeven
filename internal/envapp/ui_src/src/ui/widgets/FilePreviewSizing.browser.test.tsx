@@ -16,7 +16,7 @@ import { ImagePreviewPane } from './ImagePreviewPane';
 import { FilePreviewContext } from './FilePreviewContext';
 import { createFilePreviewController } from './createFilePreviewController';
 import { FilePreviewContent } from './FilePreviewContent';
-import { createPreviewPDF, previewImageURL } from './filePreviewTestFixtures';
+import { createPreviewPDF, previewImageURL } from './filePreviewFixtures.test-support';
 import docxURL from './__fixtures__/preview-pages.docx?url';
 
 const disposers: Array<() => void> = [];

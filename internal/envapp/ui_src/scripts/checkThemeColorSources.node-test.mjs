@@ -49,6 +49,16 @@ test('accepts semantic variables and color functions derived from them', () => {
   assert.deepEqual(violations, []);
 });
 
+test('video letterboxing belongs only to the media renderer and does not require a fixed height', () => {
+  const pathname = 'internal/envapp/ui_src/src/ui/file-preview/rendererRegistry.tsx';
+  assert.deepEqual(findThemeColorViolations([
+    'function renderVideoPreview() { return <div class="min-h-0 bg-black" />; }',
+    'function renderAudioPreview() { return <div class="bg-black" />; }',
+  ].join('\n'), pathname, THEME_COLOR_EXCEPTIONS), [
+    `${pathname}:2: replace bg-black with a semantic theme token or add a precise owner/path/use exception`,
+  ]);
+});
+
 test('reports arbitrary-opacity Tailwind colors as one complete violation', () => {
   assert.deepEqual(findThemeColorViolations(
     'const surface = "bg-white/[0.08]";',
