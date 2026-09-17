@@ -64,7 +64,10 @@ never assigns an empty identity or substitutes the latest run. Flower renders
 the active phase only in the fixed lane above the
 composer; it never inserts a transient timeline row. One RunID keeps the same
 indicator, Flower, and dots DOM nodes while phase text changes, so CSS animation
-time remains continuous. Only a different thread or exact RunID remounts the
+time remains continuous. Active tool titles and progress text opt into the
+shared glyph-only flow described by the [surface contract](surface-material.md);
+status changes do not add a row background or remount the label.
+Only a different thread or exact RunID remounts the
 indicator. Waiting for interaction and terminal views clear it. Messages and
 Activity still provide transcript and collapsed-summary content, but never
 decide the lifecycle phase. Redeven has no model-I/O stream, message-content

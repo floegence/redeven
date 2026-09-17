@@ -42,6 +42,8 @@ describe('FlowerProgressIndicator', () => {
     const indicator = host.querySelector('.flower-model-status-indicator');
     const flower = indicator?.querySelector('.flower-model-status-flower');
     const dots = indicator?.querySelector('.flower-model-status-dots');
+    const text = indicator?.querySelector('.flower-model-status-text');
+    expect(text?.getAttribute('data-floe-progress-shimmer')).toBe('text');
 
     batch(() => {
       setProgress({ kind: 'streaming', runID: 'run-1' });
@@ -52,6 +54,7 @@ describe('FlowerProgressIndicator', () => {
     expect(host.querySelector('.flower-model-status-indicator')).toBe(indicator);
     expect(indicator?.querySelector('.flower-model-status-flower')).toBe(flower);
     expect(indicator?.querySelector('.flower-model-status-dots')).toBe(dots);
+    expect(indicator?.querySelector('[data-floe-progress-shimmer="text"]')).toBe(text);
     expect(indicator?.getAttribute('data-flower-progress-kind')).toBe('streaming');
     expect(indicator?.textContent).toContain('Thinking');
   });
@@ -64,6 +67,7 @@ describe('FlowerProgressIndicator', () => {
     await flushEffects();
 
     expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
+    expect(host.querySelector('[data-floe-progress-shimmer]')).toBeNull();
   });
 
   it('remounts only when the real run identity changes', async () => {

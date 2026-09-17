@@ -3,7 +3,8 @@ import { playwright } from '@vitest/browser-playwright';
 import axe from 'axe-core';
 import { PNG } from 'pngjs';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { CDPSession, Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
 import { qualifyComputerLauncherTouch, qualifyComputerViewer } from './scripts/computerViewerInteraction.mjs';
@@ -91,6 +92,9 @@ export default mergeConfig(viteConfig, defineConfig({
       enabled: true,
       headless: true,
       provider: playwright({
+        contextOptions: process.env.REDEVEN_PROGRESS_SHIMMER_VIDEO_DIR
+          ? { recordVideo: { dir: process.env.REDEVEN_PROGRESS_SHIMMER_VIDEO_DIR, size: { width: 1200, height: 850 } } }
+          : undefined,
         connectOptions: process.env.REDEVEN_VITEST_BROWSER_WS ? { wsEndpoint: process.env.REDEVEN_VITEST_BROWSER_WS, exposeNetwork: '<loopback>' } : undefined,
         launchOptions: {
           // Keep scrollbar layout observable in headless geometry checks.
@@ -102,6 +106,46 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        inspectProgressShimmerPaint: async ({ page }, name: string, measurements: unknown) => {
+          if (!/^[a-z-]+$/u.test(name)) throw new Error('Invalid progress evidence name');
+          const frame = await frameForSelector(page, '[data-flower-activity-item-id="tool-0"]');
+          const freeze = async (time: number) => frame.evaluate((time) => {
+            for (const animation of document.getAnimations()) {
+              animation.pause();
+              animation.currentTime = (animation as CSSAnimation).animationName === 'floe-progress-shimmer' ? time : 0;
+            }
+          }, time);
+          const regions = [];
+          for (const selector of [
+            '[data-flower-activity-item-id="tool-0"] .flower-activity-inline-title',
+            '[data-flower-activity-item-id="tool-1"] .flower-activity-inline-title',
+            '.flower-model-status-text',
+          ]) {
+            const target = frame.locator(selector);
+            await freeze(0);
+            const first = PNG.sync.read(await target.screenshot({ animations: 'allow' }));
+            await freeze(1200);
+            const second = PNG.sync.read(await target.screenshot({ animations: 'allow' }));
+            if (first.width !== second.width || first.height !== second.height) throw new Error('Progress motion changed text geometry');
+            let changed = 0;
+            let backgroundChanged = 0;
+            for (let i = 0; i < first.data.length; i += 4) {
+              const difference = Math.abs(first.data[i] - second.data[i]) + Math.abs(first.data[i + 1] - second.data[i + 1]) + Math.abs(first.data[i + 2] - second.data[i + 2]);
+              if (difference > 15) changed++;
+              if (difference > 6 && first.data[i] === first.data[0] && first.data[i + 1] === first.data[1] && first.data[i + 2] === first.data[2]) backgroundChanged++;
+            }
+            regions.push({ selector, changed, backgroundChanged, width: first.width, height: first.height });
+          }
+          const output = path.resolve(__dirname, '.cache/progress-shimmer');
+          await mkdir(output, { recursive: true });
+          if (/classic-light|classic-dark|nord|solarized-light/u.test(name)) {
+            await frame.locator('body').screenshot({ path: path.join(output, `${name}.png`), animations: 'allow' });
+          }
+          const result = { changed: Math.min(...regions.map(region => region.changed)), backgroundChanged: regions.reduce((sum, region) => sum + region.backgroundChanged, 0), regions, measurements };
+          await writeFile(path.join(output, `${name}.json`), JSON.stringify(result, null, 2));
+          await frame.evaluate(() => document.getAnimations().forEach(animation => animation.play()));
+          return result;
+        },
         exerciseComputerLauncherTouch: async ({ page }) => {
           const frame = await frameForSelector(page, '.flower-computer-stage');
           return qualifyComputerLauncherTouch({ page, root: frame });

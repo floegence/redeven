@@ -69,7 +69,7 @@ describe('Flower activity status presentation', () => {
     expect(iconRule).toContain('height: 1.25rem');
   });
 
-  it('keeps running titles readable with progress confined to the local loader', () => {
+  it('uses upstream glyph-only progress without a tool-row background sweep', () => {
     const css = flowerStyles();
     const activityInlineRule = cssRule(css, '.flower-activity-inline');
     const buttonRule = cssRule(css, '.flower-activity-inline-button');
@@ -100,6 +100,8 @@ describe('Flower activity status presentation', () => {
     expect(buttonHoverRule).not.toContain('color: var(--flower-activity-tool-row-foreground-strong)');
     expect(css).toContain('.flower-activity-inline-button-static');
     expect(css).not.toContain('flower-activity-running-sheen');
+    const surface = fs.readFileSync(path.join(repoRoot, 'internal/flower_ui/src/FlowerSurface.tsx'), 'utf8');
+    expect(surface).toContain('data-floe-progress-shimmer={displayStatus() === \'running\' ? \'text\' : undefined}');
     expect(css).not.toContain('.flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-button::before');
     expect(titleRule).toContain('position: relative');

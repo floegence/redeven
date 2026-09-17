@@ -84,6 +84,11 @@ describe('Flower status motion and thread menu', () => {
     const indicator = host.querySelector('.flower-model-status-indicator') as HTMLElement;
     const flower = indicator.querySelector('.flower-model-status-flower') as HTMLElement;
     const dots = indicator.querySelector<HTMLElement>('.flower-model-status-dots');
+    const text = indicator.querySelector<HTMLElement>('.flower-model-status-text')!;
+    expect(getComputedStyle(text).animationName).toBe('floe-progress-shimmer');
+    expect(getComputedStyle(text).backgroundClip).toBe('text');
+    expect(getComputedStyle(text).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    const textAnimation = text.getAnimations()[0];
     expect(getComputedStyle(flower).animationName).toBe('flower-model-status-flower-twirl');
     expect(getComputedStyle(flower).animationPlayState).toBe('running');
     expect(dots).not.toBeNull();
@@ -105,6 +110,7 @@ describe('Flower status motion and thread menu', () => {
     expect(host.querySelector('.flower-model-status-indicator')).toBe(indicator);
     expect(flower.getAnimations()[0]).toBe(flowerAnimation);
     expect(dots!.getAnimations()[0]).toBe(dotsAnimation);
+    expect(text.getAnimations()[0]).toBe(textAnimation);
     expect(Number(flowerAnimation?.currentTime ?? 0)).toBeGreaterThan(flowerTimeBeforePhase);
     expect(Number(dotsAnimation?.currentTime ?? 0)).toBeGreaterThan(dotsTimeBeforePhase);
 
@@ -112,6 +118,8 @@ describe('Flower status motion and thread menu', () => {
     await nextFrame();
     expect(getComputedStyle(flower).animationName).toBe('none');
     expect(getComputedStyle(dots!).animationName).toBe('none');
+    expect(getComputedStyle(text).animationName).toBe('none');
+    expect(getComputedStyle(text).webkitTextFillColor).not.toBe('rgba(0, 0, 0, 0)');
   });
 
   it('keeps the real floating menu open across live metadata updates and row replacement', async () => {
