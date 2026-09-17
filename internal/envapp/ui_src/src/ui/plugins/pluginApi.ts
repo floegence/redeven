@@ -409,9 +409,10 @@ export async function connectPluginMarketEventStream(args: {
   signal: AbortSignal;
   onEvent: (event: PluginMarketRefreshEvent) => void;
 }): Promise<void> {
+  const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
   const response = await fetchLocalApi(
     `/_redeven_proxy/api/plugins/market/catalog/events?after_seq=${encodeURIComponent(String(args.afterSeq))}`,
-    { method: 'GET', headers: { Accept: 'text/event-stream' }, signal: args.signal },
+    createServerSentEventRequestInit({ method: 'GET', headers: { Accept: 'text/event-stream' }, signal: args.signal }),
   );
   if (!response.ok) {
     const body = await response.text();

@@ -290,13 +290,14 @@ export async function connectWorkbenchLayoutEventStream(args: {
   signal: AbortSignal;
   onEvent: (event: RuntimeWorkbenchLayoutEvent) => void;
 }): Promise<void> {
+  const { createServerSentEventRequestInit } = await import('@floegence/floe-webapp-boot');
   const response = await fetch(
     `/_redeven_proxy/api/workbench/layout/events?after_seq=${encodeURIComponent(String(args.afterSeq ?? 0))}`,
-    await prepareLocalApiRequestInit({
+    await prepareLocalApiRequestInit(createServerSentEventRequestInit({
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal: args.signal,
-    }),
+    })),
   );
   if (!response.ok) {
     const text = await response.text();

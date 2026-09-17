@@ -25,13 +25,14 @@
     "test:terminal-font-carrier": "node scripts/checkTerminalFontCarrier.mjs",
     "test:terminal-font-electron": "node scripts/checkTerminalFontElectron.mjs",
     "test:terminal-carrier": "node scripts/checkSemanticTerminalCarrier.mjs",
-    "test:terminal-performance": "node scripts/checkTerminalInteractionPerformance.mjs"
+    "test:terminal-performance": "node scripts/checkTerminalInteractionPerformance.mjs",
+    "test:file-preview-media": "node scripts/checkFilePreviewMedia.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@floegence/floe-webapp-boot": "0.55.1",
-    "@floegence/floe-webapp-core": "0.55.1",
-    "@floegence/floe-webapp-protocol": "0.55.1",
+    "@floegence/floe-webapp-boot": "0.55.2",
+    "@floegence/floe-webapp-core": "0.55.2",
+    "@floegence/floe-webapp-protocol": "0.55.2",
     "@floegence/floeterm-terminal-web": "0.19.2",
     "@floegence/flowersec-core": "5.2.0",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
