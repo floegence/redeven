@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PdfPreviewPane } from './PdfPreviewPane';
 
 const loadPDFDocumentMock = vi.hoisted(() => vi.fn());
-const isPDFRenderCancelledMock = vi.hoisted(() => vi.fn(() => false));
+const isPDFRenderCancelledMock = vi.hoisted(() => vi.fn((_error?: unknown) => false));
 const resizeObserverState = vi.hoisted(() => ({
   observers: [] as Array<{
     callback: ResizeObserverCallback;
@@ -49,6 +50,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 function setViewportSize(element: HTMLElement, width: number, height: number) {
+  element.style.padding = '12px';
   Object.defineProperty(element, 'clientWidth', {
     configurable: true,
     get: () => width,
@@ -63,6 +65,7 @@ function setViewportScrollTop(element: HTMLElement, value: number) {
   Object.defineProperty(element, 'scrollTop', {
     configurable: true,
     get: () => value,
+    set: (next: number) => { value = next; },
   });
 }
 
@@ -253,10 +256,11 @@ describe('PdfPreviewPane', () => {
     triggerResizeObservers();
 
     await waitFor(() => pages[0]!.render.mock.calls.length > 0, 'First visible page did not render');
-    await waitFor(() => pages[1]!.render.mock.calls.length > 0, 'Second visible page did not render');
+    (host.querySelector('button[aria-label="Fit to width"]') as HTMLButtonElement).click();
+    await flushAsyncWork();
+    for (const page of pages) page.render.mockClear();
 
-    expect(pages[2]!.render).not.toHaveBeenCalled();
-    expect(pages[3]!.render).not.toHaveBeenCalled();
+    expect(host.querySelectorAll('.pdf-preview-pane__page')).toHaveLength(2);
 
     setViewportScrollTop(viewport!, 1500);
     viewport!.dispatchEvent(new Event('scroll'));
@@ -284,7 +288,7 @@ describe('PdfPreviewPane', () => {
 
     const frame = () => host.querySelector('.pdf-preview-pane__page-frame') as HTMLDivElement | null;
     const zoomInButton = () => host.querySelector('button[aria-label="Zoom in PDF preview"]') as HTMLButtonElement | null;
-    const fitButton = () => host.querySelector('button[aria-label="Fit PDF preview to width"]') as HTMLButtonElement | null;
+    const fitButton = () => host.querySelector('button[aria-label="Fit to window"]') as HTMLButtonElement | null;
 
     await waitFor(() => frame()?.style.width === '430px', 'PDF preview did not settle into fit mode');
 
@@ -322,7 +326,7 @@ describe('PdfPreviewPane', () => {
     expect(host.querySelector('[data-testid="loading-overlay"]')).toBeNull();
 
     releaseRender();
-    await waitFor(() => (host.querySelector('.pdf-preview-pane__page-canvas') as HTMLCanvasElement | null)?.className.includes('opacity-100') ?? false, 'Rendered page did not settle');
+    await waitFor(() => (host.querySelector('.pdf-preview-pane__page-canvas') as HTMLCanvasElement | null)?.classList.contains('opacity-0') === false, 'Rendered page did not settle');
   });
 
   it('cancels in-flight rendering and destroys the loading task on unmount', async () => {
@@ -356,4 +360,174 @@ describe('PdfPreviewPane', () => {
     expect(page.cancel).toHaveBeenCalledTimes(1);
     expect(loadingDestroy).toHaveBeenCalledTimes(1);
   });
+});
+
+
+it('does not start overlapping renders while page acquisition is pending', async () => {
+  const activeCanvases = new Set<HTMLCanvasElement>();
+  const page = createMockPage({ width: 860, height: 1260 });
+  page.render.mockImplementation(({ canvas }: any) => {
+    if (activeCanvases.has(canvas)) throw new Error('Cannot use the same canvas during multiple render() operations.');
+    activeCanvases.add(canvas);
+    let rejectRender: (reason: Error) => void = () => {};
+    const promise = new Promise<void>((_resolve, reject) => { rejectRender = reject; });
+    return { promise, cancel: () => {
+      activeCanvases.delete(canvas);
+      rejectRender(Object.assign(new Error('Rendering cancelled'), { name: 'RenderingCancelledException' }));
+    }} as any;
+  });
+  isPDFRenderCancelledMock.mockImplementation((error: any) => error?.name === 'RenderingCancelledException');
+  const { document: pdfDocument } = mockPDFDocument({ pages: [page] });
+  const pending: Array<() => void> = [];
+  let calls = 0;
+  pdfDocument.getPage.mockImplementation(async () => {
+    if (++calls === 1) return page.page;
+    await new Promise<void>(resolve => pending.push(resolve));
+    return page.page;
+  });
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const dispose = render(() => <PdfPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
+  try {
+    const viewport = host.querySelector('.pdf-preview-pane') as HTMLDivElement;
+    setViewportSize(viewport, 454, 400);
+    triggerResizeObservers();
+    await waitFor(() => pending.length > 0, 'No pending page request');
+    setViewportScrollTop(viewport, 1);
+    viewport.dispatchEvent(new Event('scroll'));
+    await flushAsyncWork();
+    pending.forEach(resolve => resolve());
+    await flushAsyncWork();
+    expect(host.textContent).not.toContain('Cannot use the same canvas');
+    expect(page.render).toHaveBeenCalledTimes(1);
+  } finally { dispose(); await flushAsyncWork(); }
+});
+
+it('enlarges a small page to use the available window', async () => {
+  mockPDFDocument({ pages: [createMockPage({ width: 600, height: 400 })] });
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const dispose = render(() => <PdfPreviewPane bytes={new Uint8Array([1])} />, host);
+  try {
+    setViewportSize(host.querySelector('.pdf-preview-pane') as HTMLElement, 1224, 1000);
+    triggerResizeObservers();
+    await waitFor(() => !!host.querySelector('.pdf-preview-pane__page-frame'), 'No page');
+    expect(parseFloat((host.querySelector('.pdf-preview-pane__page-frame') as HTMLElement).style.width)).toBeGreaterThan(600);
+  } finally { dispose(); await flushAsyncWork(); }
+});
+
+it('waits for render settlement and renders only the latest requested scale', async () => {
+  const page = createMockPage({ width: 860, height: 1260 });
+  const tasks: Array<{ resolve: () => void; reject: (error: Error) => void; cancel: ReturnType<typeof vi.fn> }> = [];
+  page.render.mockImplementation(() => {
+    let resolve = () => {};
+    let reject = (_error: Error) => {};
+    const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+    const task = { resolve, reject, cancel: vi.fn() }; tasks.push(task);
+    return { promise, cancel: task.cancel } as any;
+  });
+  mockPDFDocument({ pages: [page] });
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const dispose = render(() => <PdfPreviewPane bytes={new Uint8Array([1])} />, host);
+  try {
+    setViewportSize(host.querySelector('.pdf-preview-pane') as HTMLElement, 454, 900); triggerResizeObservers();
+    await waitFor(() => tasks.length === 1, 'First render did not start');
+    const canvas = host.querySelector('canvas');
+    const zoomIn = host.querySelector('button[aria-label="Zoom in PDF preview"]') as HTMLButtonElement;
+    zoomIn.click(); zoomIn.click(); zoomIn.click();
+    await flushAsyncWork();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]!.cancel).toHaveBeenCalled();
+    tasks[0]!.reject(new Error('Late failure from a superseded render'));
+    await waitFor(() => tasks.length === 2, 'Latest render did not start after settlement');
+    expect(host.textContent).not.toContain('Unable to render');
+    expect(host.querySelector('canvas')).toBe(canvas);
+    expect(parseFloat((host.querySelector('.pdf-preview-pane__page-frame') as HTMLElement).style.width)).toBeCloseTo(688);
+    tasks[1]!.resolve(); await flushAsyncWork();
+    expect(canvas!.classList.contains('opacity-0')).toBe(false);
+  } finally { dispose(); }
+});
+
+it('discards a page acquired after its document was replaced', async () => {
+  const oldPage = createMockPage({ width: 600, height: 400 });
+  const old = mockPDFDocument({ pages: [oldPage] });
+  let release = () => {};
+  old.document.getPage.mockImplementationOnce(async () => oldPage.page).mockImplementation(async () => {
+    await new Promise<void>(resolve => { release = resolve; }); return oldPage.page;
+  });
+  const [bytes, setBytes] = createSignal(new Uint8Array([1]));
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const dispose = render(() => <PdfPreviewPane bytes={bytes()} />, host);
+  try {
+    setViewportSize(host.querySelector('.pdf-preview-pane') as HTMLElement, 624, 624); triggerResizeObservers();
+    await waitFor(() => old.document.getPage.mock.calls.length === 2, 'Page acquisition did not start');
+    const nextPage = createMockPage({ width: 400, height: 600 });
+    mockPDFDocument({ pages: [nextPage] });
+    setBytes(new Uint8Array([2]));
+    await waitFor(() => nextPage.render.mock.calls.length === 1, 'New document did not render');
+    release(); await flushAsyncWork();
+    expect(oldPage.render).not.toHaveBeenCalled();
+    expect(oldPage.cleanup).toHaveBeenCalled();
+    expect(old.loadingDestroy).toHaveBeenCalledOnce();
+  } finally { dispose(); }
+});
+
+it('keeps tiny fit scales positive and canvas allocations within the pixel budget', async () => {
+  const page = createMockPage({ width: 100000, height: 80000 });
+  mockPDFDocument({ pages: [page] });
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const dispose = render(() => <PdfPreviewPane bytes={new Uint8Array([1])} />, host);
+  try {
+    setViewportSize(host.querySelector('.pdf-preview-pane') as HTMLElement, 424, 324); triggerResizeObservers();
+    await waitFor(() => page.render.mock.calls.length > 0, 'Tiny fit page did not render');
+    const canvas = host.querySelector('canvas')!;
+    expect(canvas.width * canvas.height).toBeLessThanOrEqual(6_000_000);
+    expect(canvas.width).toBeGreaterThan(0);
+    expect(parseFloat(canvas.style.width)).toBeLessThanOrEqual(400);
+    expect(parseFloat(canvas.style.height)).toBeLessThanOrEqual(276);
+    (host.querySelector('button[aria-label="Zoom in PDF preview"]') as HTMLButtonElement).click();
+    await flushAsyncWork();
+    expect(canvas.width * canvas.height).toBeLessThanOrEqual(6_000_000);
+    expect(canvas.width).toBeLessThanOrEqual(16_384);
+  } finally { dispose(); }
+});
+
+it('keeps other pages usable and retries a genuine page failure', async () => {
+  const failed = createMockPage({ width: 600, height: 400 });
+  const good = createMockPage({ width: 600, height: 400 });
+  failed.render.mockImplementationOnce(() => ({ promise: Promise.reject(new Error('Bad page stream')), cancel: vi.fn() }) as any);
+  mockPDFDocument({ pages: [failed, good] });
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const dispose = render(() => <PdfPreviewPane bytes={new Uint8Array([1])} />, host);
+  try {
+    setViewportSize(host.querySelector('.pdf-preview-pane') as HTMLElement, 624, 924); triggerResizeObservers();
+    await waitFor(() => host.textContent?.includes('Unable to render page 1.') ?? false, 'Failure was not shown');
+    expect(host.querySelectorAll('canvas')[1]!.classList.contains('opacity-0')).toBe(false);
+    const retry = [...host.querySelectorAll('button')].find(button => button.textContent === 'Retry')!;
+    retry.click(); await flushAsyncWork();
+    expect(host.textContent).not.toContain('Unable to render');
+    expect(failed.render).toHaveBeenCalledTimes(2);
+  } finally { dispose(); }
+});
+
+it('refreshes raster density when the display changes without changing layout', async () => {
+  vi.stubGlobal('devicePixelRatio', 1);
+  const page = createMockPage({ width: 600, height: 400 });
+  mockPDFDocument({ pages: [page] });
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const dispose = render(() => <PdfPreviewPane bytes={new Uint8Array([1])} />, host);
+  try {
+    setViewportSize(host.querySelector('.pdf-preview-pane') as HTMLElement, 624, 624);
+    triggerResizeObservers();
+    await waitFor(() => page.render.mock.calls.length === 1, 'First render did not start');
+    const canvas = host.querySelector('canvas')!;
+    const width = canvas.width;
+    const displayWidth = canvas.style.width;
+    vi.stubGlobal('devicePixelRatio', 2);
+    window.dispatchEvent(new Event('resize'));
+    await flushAsyncWork();
+    expect(canvas.width).toBe(width * 2);
+    expect(canvas.style.width).toBe(displayWidth);
+    expect(host.querySelector('canvas')).toBe(canvas);
+  } finally { dispose(); }
 });

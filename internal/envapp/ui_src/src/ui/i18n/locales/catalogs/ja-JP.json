@@ -5586,6 +5586,10 @@
       "allFinished": "すべてのダウンロードが終了しました。"
     },
     "preview": {
+      "fitWindow": "ウィンドウに合わせる",
+      "fitWidth": "幅に合わせる",
+      "actualSize": "実際のサイズ",
+      "pageRenderFailed": "{number} ページを描画できません。",
       "fitToWidth": "幅に合わせる",
       "fit": "幅に合わせる",
       "markdownControls": "Markdown プレビューのコントロール",

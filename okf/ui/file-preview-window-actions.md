@@ -54,6 +54,9 @@ bypass discard confirmation. The [floating layer contract](env-app-floating-laye
 owns stacking and modal placement; [Workbench input ownership](workbench-input-ownership.md)
 owns reading-surface selection and scrolling.
 
+Preview scale, content bounds, and asynchronous renderer ownership follow the
+[viewport and rendering contract](file-preview-viewport-and-rendering.md).
+
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Chooses title-bar actions for desktop and the inline header for mobile.

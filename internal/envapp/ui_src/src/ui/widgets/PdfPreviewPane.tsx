@@ -1,165 +1,108 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
-
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
-import {
-  isPDFRenderCancelled,
-  loadPDFDocument,
-  type PDFDocumentLoadingTask,
-  type PDFDocumentProxy,
-  type PDFPageProxy,
-  type RenderTask,
-} from './pdfPreviewRuntime';
+import { isPDFRenderCancelled, loadPDFDocument, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from './pdfPreviewRuntime';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
+import { FilePreviewZoomControls } from './FilePreviewZoomControls';
+import { createPreviewZoom } from './createPreviewZoom';
 import { useI18n } from '../i18n';
 import type { FilePreviewSurface } from '../utils/filePreview';
 
-const PDF_PREVIEW_INSET = 12;
-const PDF_ZOOM_STEP = 0.1;
-const PDF_MIN_SCALE = 0.25;
-const PDF_MAX_SCALE = 3;
-const PDF_PAGE_LABEL_HEIGHT = 16;
-const PDF_PAGE_FRAME_GAP = 8;
-const PDF_PAGE_BLOCK_GAP = 16;
-const PDF_VISIBLE_OVERSCAN_MIN_PX = 800;
-const PDF_INITIAL_VISIBLE_PAGE_COUNT = 2;
-const PDF_MAX_CANVAS_PIXELS = 6_000_000;
+const PAGE_LABEL_SPACE = 24;
+const PAGE_GAP = 16;
+const MAX_CANVAS_PIXELS = 6_000_000;
+const MAX_CANVAS_DIMENSION = 16_384;
+type PageMetric = { pageNumber: number; width: number; height: number };
+type PageLayout = PageMetric & { top: number; width: number; height: number };
+type LoadedDocument = { document: PDFDocumentProxy; pages: PageMetric[] };
 
-type ZoomMode = 'fit-width' | 'manual';
-type PageRenderStatus = 'idle' | 'rendering' | 'rendered';
-
-type PDFPageMetric = Readonly<{
-  pageNumber: number;
-  width: number;
-  height: number;
-}>;
-
-type PDFPageLayout = Readonly<{
-  pageNumber: number;
-  top: number;
-  bottom: number;
-  rowHeight: number;
-  frameWidth: number;
-  frameHeight: number;
-}>;
-
-type PDFPageRenderState = Readonly<{
-  status: PageRenderStatus;
-  scaleKey: string;
-}>;
-
-type ActivePageRenderTask = Readonly<{
-  revision: number;
-  scaleKey: string;
-  task: RenderTask;
-}>;
-
-type DesiredPageRender = Readonly<{
-  pageNumber: number;
-  displayScale: number;
-  renderScale: number;
-  displayWidth: number;
-  displayHeight: number;
-  scaleKey: string;
-}>;
-
-function roundNumber(value: number): number {
-  return Number(value.toFixed(2));
-}
-
-function clampScale(scale: number): number {
-  return roundNumber(Math.min(PDF_MAX_SCALE, Math.max(PDF_MIN_SCALE, scale)));
-}
-
-function pageErrorMessage(error: unknown, pageNumber: number): string {
-  const text = error instanceof Error ? error.message : String(error ?? '').trim();
-  if (text) {
-    return `Failed to render page ${pageNumber}: ${text}`;
-  }
-  return `Failed to render page ${pageNumber}.`;
-}
-
-function deletePageRenderState(
-  current: Record<number, PDFPageRenderState>,
-  pageNumber: number,
-): Record<number, PDFPageRenderState> {
-  if (!(pageNumber in current)) {
-    return current;
-  }
-  const next = { ...current };
-  delete next[pageNumber];
-  return next;
-}
-
-function deletePageError(
-  current: Record<number, string>,
-  pageNumber: number,
-): Record<number, string> {
-  if (!(pageNumber in current)) {
-    return current;
-  }
-  const next = { ...current };
-  delete next[pageNumber];
-  return next;
-}
-
-function PdfPreviewPage(props: {
-  layout: PDFPageLayout;
-  error?: string;
-  status: PageRenderStatus;
-  registerCanvas: (pageNumber: number, element: HTMLCanvasElement | null) => void;
-}) {
+function PdfPreviewPage(props: { document: PDFDocumentProxy; layout: PageLayout; scale: number; pixelRatio: number }) {
   const i18n = useI18n();
-  onCleanup(() => {
-    props.registerCanvas(props.layout.pageNumber, null);
-  });
+  const [status, setStatus] = createSignal<'idle' | 'rendering' | 'rendered'>('idle');
+  const [error, setError] = createSignal('');
+  const [retry, setRetry] = createSignal(0);
+  let canvas!: HTMLCanvasElement;
+  let disposed = false;
+  let revision = 0;
+  let pending: { revision: number; scale: number; pixelRatio: number } | null = null;
+  let worker: Promise<void> | null = null;
+  let task: RenderTask | null = null;
+  let page: PDFPageProxy | null = null;
 
+  // One owner spans page acquisition, render cancellation and promise settlement.
+  // The next desired scale replaces pending work instead of starting a second worker.
+  const drain = async () => {
+    while (!disposed && pending) {
+      const request = pending;
+      pending = null;
+      const current = () => !disposed && revision === request.revision;
+      setStatus('rendering');
+      setError('');
+      try {
+        page ??= await props.document.getPage(props.layout.pageNumber);
+        if (!current()) continue;
+        const natural = page.getViewport({ scale: 1 });
+        const renderScale = Math.min(request.scale * request.pixelRatio,
+          Math.sqrt(MAX_CANVAS_PIXELS / (natural.width * natural.height)),
+          MAX_CANVAS_DIMENSION / natural.width, MAX_CANVAS_DIMENSION / natural.height);
+        const viewport = page.getViewport({ scale: renderScale });
+        canvas.width = Math.max(1, Math.floor(viewport.width));
+        canvas.height = Math.max(1, Math.floor(viewport.height));
+        const context = canvas.getContext('2d', { alpha: false });
+        if (!context) throw new Error('Canvas rendering is unavailable.');
+        task = page.render({ canvas, canvasContext: context, viewport });
+        await task.promise;
+        if (current()) setStatus('rendered');
+      } catch (reason) {
+        if (current() && !isPDFRenderCancelled(reason)) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          setStatus('idle');
+        }
+      } finally {
+        task = null;
+      }
+    }
+  };
+  const startWorker = () => {
+    if (worker) return;
+    worker = Promise.resolve().then(drain).finally(() => {
+      worker = null;
+      if (disposed) page?.cleanup();
+      else if (pending) startWorker();
+    });
+  };
+  createEffect(on(() => [props.scale, props.pixelRatio, retry()] as const, ([scale, pixelRatio]) => {
+    pending = { revision: ++revision, scale, pixelRatio };
+    task?.cancel();
+    startWorker();
+  }));
+  onCleanup(() => {
+    disposed = true;
+    revision++;
+    pending = null;
+    task?.cancel();
+    if (!worker) page?.cleanup();
+  });
   return (
-    <div
-      class="pdf-preview-pane__page absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-2"
-      style={{
-        top: `${props.layout.top}px`,
-        width: `${props.layout.frameWidth}px`,
-      }}
-    >
-      <div class="h-4 text-[11px] leading-4 text-muted-foreground">
-        {i18n.t('uiCopy.preview.pageLabel', { number: props.layout.pageNumber })}
-      </div>
-      <div
-        class="pdf-preview-pane__page-frame overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"
-        style={{
-          width: `${props.layout.frameWidth}px`,
-          height: `${props.layout.frameHeight}px`,
-        }}
-      >
-        <Show
-          when={!props.error}
-          fallback={(
-            <div class="flex h-full items-center justify-center px-4 text-center text-xs text-error">
-              {props.error}
-            </div>
-          )}
-        >
-          <div class="relative h-full w-full">
-            <canvas
-              ref={(element) => {
-                props.registerCanvas(props.layout.pageNumber, element);
-              }}
-              class={`pdf-preview-pane__page-canvas block h-full w-full ${
-                props.status === 'rendered' ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-            <Show when={props.status !== 'rendered'}>
-              <div class="absolute inset-0 flex h-full flex-col items-center justify-center gap-2 bg-muted/20 text-center">
-                <div class="h-8 w-8 animate-pulse rounded-full bg-primary/10" />
-                <div class="text-xs text-muted-foreground">
-                  {props.status === 'rendering' ? i18n.t('uiCopy.preview.renderingPage') : i18n.t('uiCopy.preview.preparingPage')}
-                </div>
-              </div>
-            </Show>
+    <div data-page-number={props.layout.pageNumber} class="pdf-preview-pane__page absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-2"
+      style={{ top: `${props.layout.top}px`, width: `${props.layout.width}px` }}>
+      <div class="h-4 text-[11px] leading-4 text-muted-foreground">{i18n.t('uiCopy.preview.pageLabel', { number: props.layout.pageNumber })}</div>
+      <div class="pdf-preview-pane__page-frame relative overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-border/60"
+        style={{ width: `${props.layout.width}px`, height: `${props.layout.height}px` }}>
+        <canvas ref={canvas} class={cn('pdf-preview-pane__page-canvas block h-full w-full', status() !== 'rendered' && 'opacity-0')}
+          style={{ width: `${props.layout.width}px`, height: `${props.layout.height}px` }} />
+        <Show when={error()} fallback={(
+          <Show when={status() !== 'rendered'}>
+            <div class="absolute inset-0 flex items-center justify-center bg-muted/20 p-2 text-xs text-muted-foreground">{i18n.t('uiCopy.preview.renderingPage')}</div>
+          </Show>
+        )}>
+          <div class="absolute inset-0 overflow-auto p-3 text-center text-xs">
+            <p class="text-error">{i18n.t('uiCopy.preview.pageRenderFailed', { number: props.layout.pageNumber })}</p>
+            <Button size="sm" variant="outline" class="mt-2" onClick={() => setRetry(value => value + 1)}>{i18n.t('chatChrome.retry')}</Button>
+            <details class="mt-2 text-muted-foreground"><summary class="cursor-pointer">{i18n.t('filePreview.technicalDetails')}</summary><pre class="whitespace-pre-wrap break-all text-left">{error()}</pre></details>
           </div>
         </Show>
       </div>
@@ -167,558 +110,103 @@ function PdfPreviewPage(props: {
   );
 }
 
-export interface PdfPreviewPaneProps {
-  surface?: FilePreviewSurface;
-  bytes?: Uint8Array<ArrayBuffer> | null;
-}
+export interface PdfPreviewPaneProps { surface?: FilePreviewSurface; bytes?: Uint8Array<ArrayBuffer> | null }
 
 export function PdfPreviewPane(props: PdfPreviewPaneProps) {
   const i18n = useI18n();
-  const [renderError, setRenderError] = createSignal<string | null>(null);
-  const [documentLoading, setDocumentLoading] = createSignal(false);
-  const [viewportWidth, setViewportWidth] = createSignal(0);
-  const [viewportHeight, setViewportHeight] = createSignal(0);
+  const [loaded, setLoaded] = createSignal<LoadedDocument | null>(null);
+  const [loading, setLoading] = createSignal(false);
+  const [error, setError] = createSignal('');
   const [scrollTop, setScrollTop] = createSignal(0);
-  const [pageMetrics, setPageMetrics] = createSignal<PDFPageMetric[]>([]);
-  const [pageErrors, setPageErrors] = createSignal<Record<number, string>>({});
-  const [pageRenderStates, setPageRenderStates] = createSignal<Record<number, PDFPageRenderState>>({});
-  const [zoomMode, setZoomMode] = createSignal<ZoomMode>('fit-width');
-  const [manualScale, setManualScale] = createSignal(1);
-
-  let viewportEl: HTMLDivElement | undefined;
-  let activeDocument: PDFDocumentProxy | null = null;
-  let activeLoadingTask: PDFDocumentLoadingTask | null = null;
-  let activeDocumentRevision = 0;
-  const activeRenderTasks = new Map<number, ActivePageRenderTask>();
-  const pageCache = new Map<number, PDFPageProxy>();
-  const canvasRefs = new Map<number, HTMLCanvasElement>();
-  const renderedScaleKeys = new Map<number, string>();
-
-  const pageCount = createMemo(() => pageMetrics().length);
-  const pageCountLabel = createMemo(() => {
-    const count = pageCount();
-    if (count <= 0) return i18n.t('uiCopy.preview.noPages');
-    return i18n.tn('uiCopy.preview.pageCount', count);
+  const [pixelRatio, setPixelRatio] = createSignal(Math.max(1, globalThis.devicePixelRatio || 1));
+  const [viewport, setViewport] = createSignal<HTMLDivElement>();
+  const dimensions = createMemo(() => {
+    const pages = loaded()?.pages;
+    return pages?.length ? {
+      width: Math.max(...pages.map(page => page.width)), height: Math.max(...pages.map(page => page.height)),
+    } : null;
   });
-
-  const maxPageWidth = createMemo(() => {
-    return pageMetrics().reduce((maxWidth, page) => Math.max(maxWidth, page.width), 0);
-  });
-
-  const fitScale = createMemo(() => {
-    const width = maxPageWidth();
-    if (width <= 0) return 0;
-    const availableWidth = Math.max(0, viewportWidth() - PDF_PREVIEW_INSET * 2);
-    if (availableWidth <= 0) return 0;
-    return roundNumber(Math.min(1, availableWidth / width));
-  });
-
-  const effectiveScale = createMemo(() => {
-    if (!pageCount()) return 0;
-    if (zoomMode() === 'fit-width') {
-      return fitScale();
-    }
-    return manualScale();
-  });
-
-  const zoomPercent = createMemo(() => {
-    if (!pageCount()) return '--';
-    return `${Math.round(effectiveScale() * 100)}%`;
-  });
-
-  const canZoomIn = createMemo(() => pageCount() > 0 && effectiveScale() < PDF_MAX_SCALE);
-  const canZoomOut = createMemo(() => pageCount() > 0 && effectiveScale() > PDF_MIN_SCALE);
-
-  const pageLayouts = createMemo<PDFPageLayout[]>(() => {
-    const scale = effectiveScale();
-    if (scale <= 0) return [];
-
-    let cursor = 0;
-    return pageMetrics().map((page) => {
-      const frameWidth = roundNumber(page.width * scale);
-      const frameHeight = roundNumber(page.height * scale);
-      const rowHeight = PDF_PAGE_LABEL_HEIGHT + PDF_PAGE_FRAME_GAP + frameHeight;
-      const layout: PDFPageLayout = {
-        pageNumber: page.pageNumber,
-        top: cursor,
-        bottom: cursor + rowHeight,
-        rowHeight,
-        frameWidth,
-        frameHeight,
-      };
-      cursor = layout.bottom + PDF_PAGE_BLOCK_GAP;
+  const zoom = createPreviewZoom({ viewport, content: dimensions, step: 0.1, min: 0.25, max: 3, labelHeight: PAGE_LABEL_SPACE, pageLayouts: () => layouts() });
+  const layouts = createMemo<PageLayout[]>(() => {
+    const scale = zoom.scale();
+    if (scale === null) return [];
+    let top = 0;
+    return (loaded()?.pages ?? []).map(page => {
+      const layout = { ...page, top, width: page.width * scale, height: page.height * scale };
+      top += layout.height + PAGE_LABEL_SPACE + PAGE_GAP;
       return layout;
     });
   });
-
-  const contentHeight = createMemo(() => {
-    const layouts = pageLayouts();
-    if (!layouts.length) return 0;
-    return layouts[layouts.length - 1]!.bottom;
+  const contentHeight = () => { const last = layouts().at(-1); return last ? last.top + last.height + PAGE_LABEL_SPACE : 0; };
+  const contentWidth = () => (dimensions()?.width ?? 0) * (zoom.scale() ?? 0);
+  const visiblePages = createMemo(() => {
+    const height = zoom.viewportSize()?.height ?? 0;
+    const overscan = Math.max(height, 800);
+    return layouts().filter(page => page.top + page.height + PAGE_LABEL_SPACE >= scrollTop() - overscan
+      && page.top <= scrollTop() + height + overscan).map(page => page.pageNumber);
   });
-
-  const contentWidth = createMemo(() => {
-    const scale = effectiveScale();
-    if (scale <= 0) return 0;
-    return roundNumber(maxPageWidth() * scale);
-  });
-
-  const visiblePageLayouts = createMemo(() => {
-    const layouts = pageLayouts();
-    if (!layouts.length) return [];
-
-    const currentViewportHeight = viewportHeight();
-    if (currentViewportHeight <= 0) {
-      return layouts.slice(0, PDF_INITIAL_VISIBLE_PAGE_COUNT);
-    }
-
-    const overscan = Math.max(currentViewportHeight, PDF_VISIBLE_OVERSCAN_MIN_PX);
-    const start = Math.max(0, scrollTop() - overscan);
-    const end = scrollTop() + currentViewportHeight + overscan;
-    return layouts.filter((layout) => layout.bottom >= start && layout.top <= end);
-  });
-
-  const visiblePageNumbers = createMemo(() => {
-    return visiblePageLayouts().map((layout) => layout.pageNumber);
-  });
-
-  const visiblePageKey = createMemo(() => {
-    const scale = effectiveScale();
-    return `${roundNumber(scale)}|${visiblePageNumbers().join(',')}`;
-  });
-
-  const pageRenderStatus = (pageNumber: number): PageRenderStatus => {
-    return pageRenderStates()[pageNumber]?.status ?? 'idle';
-  };
-
-  const pageError = (pageNumber: number) => pageErrors()[pageNumber] ?? '';
-
-  const syncViewportMetrics = () => {
-    setViewportWidth(viewportEl?.clientWidth ?? 0);
-    setViewportHeight(viewportEl?.clientHeight ?? 0);
-    setScrollTop(viewportEl?.scrollTop ?? 0);
-  };
-
-  const cancelRenderTask = (pageNumber: number) => {
-    const activeTask = activeRenderTasks.get(pageNumber);
-    if (!activeTask) return;
-    try {
-      activeTask.task.cancel();
-    } catch {
-    }
-    activeRenderTasks.delete(pageNumber);
-  };
-
-  const releasePageResources = (pageNumber: number) => {
-    cancelRenderTask(pageNumber);
-    canvasRefs.delete(pageNumber);
-    renderedScaleKeys.delete(pageNumber);
-    const pageProxy = pageCache.get(pageNumber);
-    if (pageProxy) {
-      try {
-        void pageProxy.cleanup();
-      } catch {
-      }
-      pageCache.delete(pageNumber);
-    }
-    setPageRenderStates((current) => deletePageRenderState(current, pageNumber));
-  };
-
-  const clearDocumentState = () => {
-    activeDocumentRevision += 1;
-    for (const pageNumber of [...activeRenderTasks.keys()]) {
-      cancelRenderTask(pageNumber);
-    }
-    for (const pageNumber of [...pageCache.keys()]) {
-      releasePageResources(pageNumber);
-    }
-    canvasRefs.clear();
-    renderedScaleKeys.clear();
-
-    const loadingTask = activeLoadingTask;
-    activeLoadingTask = null;
-    if (loadingTask) {
-      try {
-        loadingTask.destroy();
-      } catch {
-      }
-    }
-
-    activeDocument = null;
-
-    setDocumentLoading(false);
-    setPageMetrics([]);
-    setPageErrors({});
-    setPageRenderStates({});
-  };
-
-  const registerCanvas = (pageNumber: number, element: HTMLCanvasElement | null) => {
-    if (element) {
-      canvasRefs.set(pageNumber, element);
-      return;
-    }
-    releasePageResources(pageNumber);
-  };
-
-  const resolveDesiredPageRender = (pageNumber: number): DesiredPageRender | null => {
-    const page = pageMetrics().find((entry) => entry.pageNumber === pageNumber);
-    if (!page) return null;
-
-    const displayScale = effectiveScale();
-    if (displayScale <= 0) return null;
-
-    const devicePixelRatio = Math.max(globalThis.devicePixelRatio || 1, 1);
-    const naturalRenderScale = displayScale * devicePixelRatio;
-    const maxRenderScale = Math.sqrt(PDF_MAX_CANVAS_PIXELS / Math.max(1, page.width * page.height));
-    const renderScale = roundNumber(Math.max(PDF_MIN_SCALE, Math.min(naturalRenderScale, maxRenderScale)));
-    return {
-      pageNumber,
-      displayScale,
-      renderScale,
-      displayWidth: roundNumber(page.width * displayScale),
-      displayHeight: roundNumber(page.height * displayScale),
-      scaleKey: `${roundNumber(displayScale)}:${renderScale}`,
-    };
-  };
-
-  const renderPage = (params: {
-    pageNumber: number;
-    desired: DesiredPageRender;
-    document: PDFDocumentProxy;
-    revision: number;
-    canvas: HTMLCanvasElement;
-  }) => {
-    const { pageNumber, desired, document, revision, canvas } = params;
-
-    setPageErrors((current) => deletePageError(current, pageNumber));
-    setPageRenderStates((current) => ({
-      ...current,
-      [pageNumber]: {
-        status: 'rendering',
-        scaleKey: desired.scaleKey,
-      },
-    }));
-
-    void (async () => {
-      let task: RenderTask | null = null;
-      try {
-        const pageProxy = pageCache.get(pageNumber) ?? await document.getPage(pageNumber);
-        if (revision !== activeDocumentRevision || activeDocument !== document || canvasRefs.get(pageNumber) !== canvas) {
-          try {
-            void pageProxy.cleanup();
-          } catch {
-          }
-          return;
-        }
-
-        pageCache.set(pageNumber, pageProxy);
-
-        const viewport = pageProxy.getViewport({ scale: desired.renderScale });
-        canvas.width = Math.max(1, Math.ceil(viewport.width));
-        canvas.height = Math.max(1, Math.ceil(viewport.height));
-        canvas.style.width = `${desired.displayWidth}px`;
-        canvas.style.height = `${desired.displayHeight}px`;
-
-        const context = canvas.getContext('2d', { alpha: false });
-        if (!context) {
-          throw new Error('Canvas rendering is unavailable.');
-        }
-
-        context.setTransform(1, 0, 0, 1, 0, 0);
-        context.clearRect(0, 0, canvas.width, canvas.height);
-
-        task = pageProxy.render({
-          canvas,
-          canvasContext: context,
-          viewport,
-        });
-        activeRenderTasks.set(pageNumber, {
-          revision,
-          scaleKey: desired.scaleKey,
-          task,
-        });
-        await task.promise;
-
-        if (revision !== activeDocumentRevision || activeDocument !== document || canvasRefs.get(pageNumber) !== canvas) {
-          return;
-        }
-
-        renderedScaleKeys.set(pageNumber, desired.scaleKey);
-        setPageRenderStates((current) => ({
-          ...current,
-          [pageNumber]: {
-            status: 'rendered',
-            scaleKey: desired.scaleKey,
-          },
-        }));
-      } catch (error) {
-        if (isPDFRenderCancelled(error)) {
-          return;
-        }
-        if (revision !== activeDocumentRevision || activeDocument !== document) {
-          return;
-        }
-        setPageErrors((current) => ({
-          ...current,
-          [pageNumber]: pageErrorMessage(error, pageNumber),
-        }));
-        setPageRenderStates((current) => ({
-          ...current,
-          [pageNumber]: {
-            status: 'idle',
-            scaleKey: '',
-          },
-        }));
-      } finally {
-        const activeTask = activeRenderTasks.get(pageNumber);
-        if (activeTask && activeTask.revision === revision && activeTask.task === task) {
-          activeRenderTasks.delete(pageNumber);
-        }
-      }
-    })();
-  };
-
-  onMount(() => {
-    syncViewportMetrics();
-    if (!viewportEl) return;
-
-    const handleScroll = () => {
-      setScrollTop(viewportEl?.scrollTop ?? 0);
-    };
-    viewportEl.addEventListener('scroll', handleScroll, { passive: true });
-    onCleanup(() => {
-      viewportEl?.removeEventListener('scroll', handleScroll);
-    });
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', syncViewportMetrics);
-      onCleanup(() => {
-        window.removeEventListener('resize', syncViewportMetrics);
-      });
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      syncViewportMetrics();
-    });
-    observer.observe(viewportEl);
-    onCleanup(() => {
-      observer.disconnect();
-    });
-  });
-
-  createEffect(() => {
-    const bytes = props.bytes;
-
-    setRenderError(null);
-    setZoomMode('fit-width');
-    setManualScale(1);
-    clearDocumentState();
+  createEffect(on(() => props.bytes, (bytes) => {
+    setLoaded(null); setError(''); setLoading(!!bytes); zoom.reset();
+    setScrollTop(0);
+    const el = untrack(viewport);
+    if (el) { el.scrollTop = 0; el.scrollLeft = 0; }
     if (!bytes) return;
-
     let disposed = false;
-    setDocumentLoading(true);
-
+    // PDF.js transfers its input buffer to the worker; the controller owns bytes.
+    const loadingTask = loadPDFDocument(bytes.slice());
     void (async () => {
       try {
-        const loadingTask = loadPDFDocument(bytes);
-        activeLoadingTask = loadingTask;
         const document = await loadingTask.promise;
-        if (disposed || activeLoadingTask !== loadingTask) {
-          return;
-        }
-
-        activeDocument = document;
-        const nextPageMetrics: PDFPageMetric[] = [];
-        for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+        if (disposed) return;
+        const pages: PageMetric[] = [];
+        for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
           const page = await document.getPage(pageNumber);
-          if (disposed || activeDocument !== document) {
-            return;
-          }
-
-          const viewport = page.getViewport({ scale: 1 });
-          nextPageMetrics.push({
-            pageNumber,
-            width: viewport.width,
-            height: viewport.height,
-          });
-
-          try {
-            void page.cleanup();
-          } catch {
-          }
+          if (disposed) return;
+          const natural = page.getViewport({ scale: 1 });
+          pages.push({ pageNumber, width: natural.width, height: natural.height });
+          page.cleanup();
         }
-
-        setPageMetrics(nextPageMetrics);
-        syncViewportMetrics();
-      } catch (error) {
-        if (disposed || isPDFRenderCancelled(error)) return;
-        setRenderError(error instanceof Error ? error.message : 'Failed to load PDF preview.');
-      } finally {
-        if (!disposed) {
-          setDocumentLoading(false);
-        }
-      }
+        if (!disposed) setLoaded({ document, pages });
+      } catch (reason) {
+        if (!disposed) setError(reason instanceof Error ? reason.message : String(reason));
+      } finally { if (!disposed) setLoading(false); }
     })();
-
     onCleanup(() => {
       disposed = true;
-      clearDocumentState();
+      void Promise.resolve(loadingTask.destroy()).catch(() => {});
+    });
+  }));
+  createEffect(() => {
+    const resolution = window.matchMedia?.(`(resolution: ${pixelRatio()}dppx)`);
+    const updatePixelRatio = () => setPixelRatio(Math.max(1, globalThis.devicePixelRatio || 1));
+    resolution?.addEventListener('change', updatePixelRatio);
+    window.addEventListener('resize', updatePixelRatio);
+    onCleanup(() => {
+      resolution?.removeEventListener('change', updatePixelRatio);
+      window.removeEventListener('resize', updatePixelRatio);
     });
   });
-
-  createEffect(() => {
-    const document = activeDocument;
-    const revision = activeDocumentRevision;
-    const visibleKey = visiblePageKey();
-    void visibleKey;
-    if (!document) return;
-
-    const desiredEntries = new Map<number, DesiredPageRender>();
-    for (const pageNumber of visiblePageNumbers()) {
-      const desired = resolveDesiredPageRender(pageNumber);
-      if (desired) {
-        desiredEntries.set(pageNumber, desired);
-      }
-    }
-
-    for (const [pageNumber, activeTask] of [...activeRenderTasks.entries()]) {
-      const desired = desiredEntries.get(pageNumber);
-      if (!desired || activeTask.revision !== revision || activeTask.scaleKey !== desired.scaleKey) {
-        cancelRenderTask(pageNumber);
-      }
-    }
-
-    for (const pageNumber of [...pageCache.keys()]) {
-      if (!desiredEntries.has(pageNumber)) {
-        releasePageResources(pageNumber);
-      }
-    }
-
-    for (const desired of desiredEntries.values()) {
-      const canvas = canvasRefs.get(desired.pageNumber);
-      if (!canvas) continue;
-
-      if (renderedScaleKeys.get(desired.pageNumber) === desired.scaleKey) {
-        continue;
-      }
-
-      const activeTask = activeRenderTasks.get(desired.pageNumber);
-      if (activeTask && activeTask.revision === revision && activeTask.scaleKey === desired.scaleKey) {
-        continue;
-      }
-
-      renderPage({
-        pageNumber: desired.pageNumber,
-        desired,
-        document,
-        revision,
-        canvas,
-      });
-    }
-  });
-
-  onCleanup(() => {
-    clearDocumentState();
-  });
-
-  const applyManualZoom = (delta: number) => {
-    const baseScale = effectiveScale();
-    setZoomMode('manual');
-    setManualScale(clampScale(baseScale + delta));
-  };
-
-  const handleZoomIn = () => {
-    applyManualZoom(PDF_ZOOM_STEP);
-  };
-
-  const handleZoomOut = () => {
-    applyManualZoom(-PDF_ZOOM_STEP);
-  };
-
-  const handleFitWidth = () => {
-    setZoomMode('fit-width');
-  };
-
   return (
-    <div class={cn('relative flex h-full min-h-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
-      <div class="pdf-preview-controls pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-center justify-between gap-2">
-        <div class="pointer-events-auto flex min-w-0 items-center gap-2 rounded-md border border-border/80 bg-background/90 px-2 py-1 shadow-lg backdrop-blur-sm">
-          <span class="rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            PDF
-          </span>
-          <span class="text-xs text-muted-foreground">{pageCountLabel()}</span>
-        </div>
-
-        <div class="pointer-events-auto flex items-center gap-2 rounded-md border border-border/80 bg-background/90 px-2 py-1 shadow-lg backdrop-blur-sm">
-          <Button
-            size="sm"
-            variant="outline"
-            class="min-w-9"
-            disabled={!canZoomOut()}
-            aria-label={i18n.t('uiCopy.preview.zoomOutPdf')}
-            onClick={handleZoomOut}
-          >
-            -
-          </Button>
-          <div class="min-w-[3.5rem] text-center text-xs text-muted-foreground">{zoomPercent()}</div>
-          <Button
-            size="sm"
-            variant="outline"
-            class="min-w-9"
-            disabled={!canZoomIn()}
-            aria-label={i18n.t('uiCopy.preview.zoomInPdf')}
-            onClick={handleZoomIn}
-          >
-            +
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!pageCount()}
-            aria-label={i18n.t('uiCopy.preview.fitPdfToWidth')}
-            onClick={handleFitWidth}
-          >
-            {i18n.t('uiCopy.preview.fit')}
-          </Button>
-        </div>
+    <div class={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
+      <div class="pdf-preview-controls flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+        <span class="text-xs text-muted-foreground"><span>PDF</span> · {loaded()?.pages.length ? i18n.tn('uiCopy.preview.pageCount', loaded()!.pages.length) : i18n.t('uiCopy.preview.noPages')}</span>
+        <FilePreviewZoomControls zoom={zoom} kind="Pdf" />
       </div>
-
-      <div
-        ref={viewportEl}
-        {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        class={cn('pdf-preview-pane min-h-0 flex-1 overflow-auto p-3', props.surface === 'window' ? 'redeven-file-preview-surface-window' : 'bg-muted/20')}
-      >
-        <Show
-          when={!renderError()}
-          fallback={
-            <FilePreviewErrorState
-              errorType="render_error"
-              message={renderError()}
-            />
-          }
-        >
-          <div
-            class="pdf-preview-pane__content relative mx-auto"
-            style={{
-              width: `${contentWidth()}px`,
-              height: `${contentHeight()}px`,
-            }}
-          >
-            <For each={visiblePageLayouts()}>
-              {(layout) => (
-                <PdfPreviewPage
-                  layout={layout}
-                  error={pageError(layout.pageNumber)}
-                  status={pageRenderStatus(layout.pageNumber)}
-                  registerCanvas={registerCanvas}
-                />
-              )}
-            </For>
+      <div ref={setViewport} {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
+        onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
+        class="pdf-preview-pane relative min-h-0 min-w-0 flex-1 overflow-auto p-3 [overflow-anchor:none]">
+        <Show when={!error()} fallback={<FilePreviewErrorState errorType="render_error" message={error()} />}>
+          <div class="relative grid place-items-center" style={{ width: `${Math.max(contentWidth(), zoom.viewportSize()?.width ?? 0)}px`, height: `${Math.max(contentHeight(), zoom.viewportSize()?.height ?? 0)}px` }}>
+            <div data-preview-zoom-content class="pdf-preview-pane__content relative" style={{ width: `${contentWidth()}px`, height: `${contentHeight()}px` }}>
+              <Show when={loaded()} keyed>{document => (
+                <For each={visiblePages()}>{pageNumber => (
+                  <PdfPreviewPage document={document.document} layout={layouts()[pageNumber - 1]!} scale={zoom.scale()!} pixelRatio={pixelRatio()} />
+                )}</For>
+              )}</Show>
+            </div>
           </div>
         </Show>
-
-        <RedevenLoadingCurtain visible={documentLoading()} eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />
+        <RedevenLoadingCurtain visible={loading()} eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />
       </div>
     </div>
   );

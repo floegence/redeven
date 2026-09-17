@@ -410,6 +410,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       <div class="min-h-0 flex-1 overflow-hidden">
       <FilePreviewPanel
         surface="main"
+        allowLocalWheel={props.selected === true}
         item={controller.item()}
         descriptor={controller.descriptor()}
         text={controller.text()}

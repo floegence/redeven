@@ -16,6 +16,7 @@ describe('file preview wiring', () => {
     const panelSrc = read('./FilePreviewPanel.tsx');
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
     const pdfPaneSrc = read('./PdfPreviewPane.tsx');
+    const zoomControlsSrc = read('./FilePreviewZoomControls.tsx');
     const textPaneSrc = read('./TextFilePreviewPane.tsx');
     const rendererRegistrySrc = read('../file-preview/rendererRegistry.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
@@ -43,16 +44,15 @@ describe('file preview wiring', () => {
     expect(contentSrc).not.toContain('<iframe src={props.objectUrl}');
     expect(docxPaneSrc).toContain("import('docx-preview')");
     expect(docxPaneSrc).toContain('ResizeObserver');
+    expect(docxPaneSrc).toContain('<FilePreviewZoomControls');
+    expect(pdfPaneSrc).toContain('<FilePreviewZoomControls');
+    expect(zoomControlsSrc).toContain("i18n.t('uiCopy.preview.fitWindow')");
+    expect(zoomControlsSrc).toContain("i18n.t('uiCopy.preview.fitWidth')");
     expect(docxPaneSrc).toContain('inWrapper: true');
-    expect(docxPaneSrc).toContain("i18n.t('uiCopy.preview.fit')");
-    expect(docxPaneSrc).toContain("i18n.t('uiCopy.preview.zoomInDocx')");
-    expect(docxPaneSrc).toContain("i18n.t('uiCopy.preview.fitDocxToWidth')");
     expect(docxPaneSrc).toContain("import { FilePreviewErrorState } from './FilePreviewErrorState';");
     expect(docxPaneSrc).toContain('<FilePreviewErrorState');
     expect(pdfPaneSrc).toContain("import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';");
     expect(pdfPaneSrc).toContain('loadPDFDocument');
-    expect(pdfPaneSrc).toContain("i18n.t('uiCopy.preview.zoomInPdf')");
-    expect(pdfPaneSrc).toContain("i18n.t('uiCopy.preview.fitPdfToWidth')");
     expect(pdfPaneSrc).toContain("i18n.t('uiCopy.preview.loadingPdf')");
     expect(pdfPaneSrc).toContain("import { FilePreviewErrorState } from './FilePreviewErrorState';");
     expect(pdfPaneSrc).toContain('<FilePreviewErrorState');

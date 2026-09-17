@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -177,159 +178,69 @@ afterEach(() => {
 });
 
 describe('DocxPreviewPane', () => {
-  it('renders docx with the library wrapper and scales down in fit mode for narrow viewports', async () => {
-    mockRenderedDocx(800, 1200, 860, 1260);
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <DocxPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
-
-    const viewport = host.querySelector('.docx-preview-pane') as HTMLDivElement | null;
-    expect(viewport).toBeTruthy();
-    setViewportWidth(viewport!, 454);
-
-    triggerResizeObservers();
-    await flushAsyncWork();
-
-    expect(renderAsyncMock).toHaveBeenCalledWith(
-      expect.any(Uint8Array),
-      expect.any(HTMLElement),
-      expect.any(HTMLElement),
-      expect.objectContaining({
-        className: 'docx-preview-container',
-        inWrapper: true,
-      }),
-    );
-
-    const frame = host.querySelector('.docx-preview-pane__frame') as HTMLDivElement | null;
-    const content = host.querySelector('.docx-preview-pane__content') as HTMLDivElement | null;
-    const wrapper = host.querySelector('.docx-preview-container-wrapper') as HTMLDivElement | null;
-    await waitFor(() => frame?.style.width === '430px' && content?.style.transform === 'scale(0.5)', 'Docx preview did not scale down');
-
-    expect(wrapper).toBeTruthy();
-    expect(frame?.style.width).toBe('430px');
-    expect(frame?.style.height).toBe('630px');
-    expect(content?.style.transform).toBe('scale(0.5)');
-    expect(host.textContent).toContain('50%');
+  it('fits the page by width and height, enlarges, and preserves manual zoom on resize', async () => {
+    mockRenderedDocx(800, 1200, 800, 1200);
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = render(() => <DocxPreviewPane bytes={new Uint8Array([1])} />, host);
+    try {
+      const viewport = host.querySelector('.docx-preview-pane') as HTMLElement;
+      viewport.style.padding = '12px';
+      Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 624 });
+      setViewportWidth(viewport, 1224); triggerResizeObservers();
+      const content = () => host.querySelector('.docx-preview-pane__content') as HTMLElement;
+      await waitFor(() => content()?.style.transform === 'scale(0.5)', 'Page must fit height');
+      (host.querySelector('button[aria-label="Fit to width"]') as HTMLButtonElement).click();
+      expect(content().style.transform).toBe('scale(1.5)');
+      (host.querySelector('button[aria-label="Zoom in DOCX preview"]') as HTMLButtonElement).click();
+      expect(content().style.transform).toBe('scale(1.6)');
+      setViewportWidth(viewport, 424); triggerResizeObservers();
+      expect(content().style.transform).toBe('scale(1.6)');
+      (host.querySelector('button[aria-label="Fit to window"]') as HTMLButtonElement).click();
+      expect(content().style.transform).toBe('scale(0.5)');
+    } finally { dispose(); }
   });
 
-  it('keeps a 1:1 wrapper scale when the viewport is wide enough', async () => {
-    mockRenderedDocx(800, 1200, 860, 1260);
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <DocxPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
-
-    const viewport = host.querySelector('.docx-preview-pane') as HTMLDivElement | null;
-    expect(viewport).toBeTruthy();
-    setViewportWidth(viewport!, 960);
-
-    triggerResizeObservers();
-    await flushAsyncWork();
-
-    const frame = host.querySelector('.docx-preview-pane__frame') as HTMLDivElement | null;
-    const content = host.querySelector('.docx-preview-pane__content') as HTMLDivElement | null;
-
-    await waitFor(() => frame?.style.width === '860px' && content?.style.transform === 'scale(1)', 'Docx preview did not keep 1:1 scale');
-
-    expect(frame?.style.width).toBe('860px');
-    expect(frame?.style.height).toBe('1260px');
-    expect(content?.style.transform).toBe('scale(1)');
+  it('ignores projected screen coordinates when measuring intrinsic document size', async () => {
+    mockRenderedDocx(800, 1200, 800, 1200);
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = render(() => <DocxPreviewPane bytes={new Uint8Array([1])} />, host);
+    try {
+      const viewport = host.querySelector('.docx-preview-pane') as HTMLElement;
+      viewport.style.padding = '12px'; setViewportWidth(viewport, 424);
+      Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 824 }); triggerResizeObservers();
+      await waitFor(() => !!host.querySelector('section'), 'No document');
+      for (const el of host.querySelectorAll<HTMLElement>('.docx-preview-container-wrapper, section')) {
+        Object.defineProperty(el, 'getBoundingClientRect', { configurable: true, value: () => ({ width: 1600, height: 2400 }) });
+      }
+      triggerResizeObservers();
+      expect((host.querySelector('.docx-preview-pane__content') as HTMLElement).style.transform).toBe('scale(0.5)');
+    } finally { dispose(); }
+    expect(host.querySelector('style')).toBeNull();
   });
+});
 
-  it('recomputes the scale when the viewport width changes', async () => {
-    mockRenderedDocx(800, 1200, 860, 1260);
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <DocxPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
-
-    const scrollViewport = host.querySelector('.docx-preview-pane') as HTMLDivElement | null;
-    expect(scrollViewport).toBeTruthy();
-
-    setViewportWidth(scrollViewport!, 884);
-    triggerResizeObservers();
-    await flushAsyncWork();
-
-    const content = host.querySelector('.docx-preview-pane__content') as HTMLDivElement | null;
-    await waitFor(() => content?.style.transform === 'scale(1)', 'Docx preview did not render at natural scale');
-    expect(content?.style.transform).toBe('scale(1)');
-
-    setViewportWidth(scrollViewport!, 454);
-    triggerResizeObservers();
-    await waitFor(() => content?.style.transform === 'scale(0.5)', 'Docx preview did not update after resize');
-
-    expect(content?.style.transform).toBe('scale(0.5)');
-  });
-
-  it('supports manual zoom controls and allows overflow scrolling when zoomed beyond fit width', async () => {
-    mockRenderedDocx(800, 1200, 860, 1260);
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <DocxPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
-
-    const viewport = host.querySelector('.overflow-auto') as HTMLDivElement | null;
-    expect(viewport).toBeTruthy();
-    setViewportWidth(viewport!, 454);
-
-    triggerResizeObservers();
-    await waitFor(() => host.querySelector('.docx-preview-pane__content') instanceof HTMLDivElement, 'Docx preview content not rendered');
-
-    const zoomInButton = host.querySelector('button[aria-label="Zoom in DOCX preview"]') as HTMLButtonElement | null;
-    const fitButton = host.querySelector('button[aria-label="Fit DOCX preview to width"]') as HTMLButtonElement | null;
-    const frame = host.querySelector('.docx-preview-pane__frame') as HTMLDivElement | null;
-    const content = host.querySelector('.docx-preview-pane__content') as HTMLDivElement | null;
-
-    expect(viewport?.className).toContain('overflow-auto');
-    expect(zoomInButton).toBeTruthy();
-    expect(fitButton).toBeTruthy();
-
-    await waitFor(
-      () => content?.style.transform === 'scale(0.5)' && zoomInButton?.disabled === false,
-      'Docx preview did not settle before manual zoom',
-    );
-
-    zoomInButton?.click();
-    await waitFor(() => content?.style.transform === 'scale(0.6)', 'Docx preview did not zoom in manually');
-
-    expect(frame?.style.width).toBe('516px');
-    expect(frame?.style.height).toBe('756px');
-    expect(content?.style.transform).toBe('scale(0.6)');
-
-    fitButton?.click();
-    await waitFor(() => content?.style.transform === 'scale(0.5)', 'Docx preview did not return to fit mode');
-
-    expect(content?.style.transform).toBe('scale(0.5)');
-  });
-
-  it('clears the rendered document and styles when the component unmounts', async () => {
-    mockRenderedDocx(800, 1200, 860, 1260);
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const dispose = render(() => <DocxPreviewPane bytes={new Uint8Array([1, 2, 3])} />, host);
-
-    const viewport = host.querySelector('.overflow-auto') as HTMLDivElement | null;
-    expect(viewport).toBeTruthy();
-    setViewportWidth(viewport!, 884);
-
-    triggerResizeObservers();
-    await flushAsyncWork();
-
-    const documentHost = host.querySelector('.docx-preview-pane__document') as HTMLDivElement | null;
-    const styleHost = host.querySelector('[aria-hidden="true"]') as HTMLDivElement | null;
-    expect(documentHost?.innerHTML).not.toBe('');
-    expect(styleHost?.innerHTML).not.toBe('');
-
-    dispose();
-
-    expect(documentHost?.innerHTML).toBe('');
-    expect(styleHost?.innerHTML).toBe('');
-  });
+it('isolates late document and style writes after changing the source', async () => {
+  const pending: Array<() => void> = [];
+  renderAsyncMock.mockImplementation((_bytes, container: HTMLElement, styleContainer: HTMLElement) => new Promise<void>(resolve => {
+    const marker = pending.length === 0 ? 'old document' : 'new document';
+    pending.push(() => {
+      const wrapper = document.createElement('div'); wrapper.className = 'docx-preview-container-wrapper';
+      const page = document.createElement('section'); page.className = 'docx-preview-container'; page.textContent = marker;
+      defineElementSize(page, 800, 1200); wrapper.append(page); defineElementSize(wrapper, 800, 1200);
+      container.replaceChildren(wrapper);
+      const style = document.createElement('style'); style.textContent = marker; styleContainer.replaceChildren(style);
+      resolve();
+    });
+  }));
+  const [bytes, setBytes] = createSignal(new Uint8Array([1]));
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const dispose = render(() => <DocxPreviewPane bytes={bytes()} />, host);
+  try {
+    await waitFor(() => pending.length === 1, 'First render not started');
+    setBytes(new Uint8Array([2]));
+    await waitFor(() => pending.length === 2, 'Second render not started');
+    pending[1]!(); await flushAsyncWork(); pending[0]!(); await flushAsyncWork();
+    expect(host.querySelector('.docx-preview-pane__document')?.textContent).toBe('new document');
+    expect(host.querySelector('style')?.textContent).toBe('new document');
+  } finally { dispose(); }
 });

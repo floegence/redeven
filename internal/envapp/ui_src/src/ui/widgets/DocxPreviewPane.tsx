@@ -1,335 +1,91 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Button } from '@floegence/floe-webapp-core/ui';
-
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
-import { useI18n } from '../i18n';
+import { FilePreviewZoomControls } from './FilePreviewZoomControls';
+import { createPreviewZoom } from './createPreviewZoom';
 import type { FilePreviewSurface } from '../utils/filePreview';
 
-const DOCX_RENDER_CLASS_NAME = 'docx-preview-container';
-const DOCX_PREVIEW_INSET = 12;
-const DOCX_ZOOM_STEP = 0.1;
-const DOCX_MIN_SCALE = 0.1;
-const DOCX_MAX_SCALE = 3;
+type DocxLayout = { width: number; height: number; pageWidth: number; pageHeight: number };
+const CLASS_NAME = 'docx-preview-container';
 
-type ZoomMode = 'fit-width' | 'manual';
-
-type DocxLayout = {
-  width: number;
-  height: number;
-};
-
-type DocxRenderAsync = typeof import('docx-preview').renderAsync;
-
-function parsePixelValue(value?: string | null): number {
-  if (!value) return 0;
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function readElementWidth(element: HTMLElement): number {
-  const rectWidth = element.getBoundingClientRect().width;
-  return Math.max(rectWidth, element.offsetWidth, element.scrollWidth, parsePixelValue(element.style.width));
-}
-
-function readElementHeight(element: HTMLElement): number {
-  const rectHeight = element.getBoundingClientRect().height;
-  return Math.max(
-    rectHeight,
-    element.offsetHeight,
-    element.scrollHeight,
-    parsePixelValue(element.style.height),
-    parsePixelValue(element.style.minHeight),
-  );
-}
-
-function findDocxWrapper(host: HTMLDivElement): HTMLDivElement | null {
-  return host.querySelector<HTMLDivElement>(`.${DOCX_RENDER_CLASS_NAME}-wrapper`);
-}
-
-function measureDocxLayout(host: HTMLDivElement): DocxLayout | null {
-  const wrapper = findDocxWrapper(host);
-  if (!wrapper) return null;
-
-  const width = readElementWidth(wrapper);
-  const height = readElementHeight(wrapper);
-  if (width <= 0 || height <= 0) {
-    return null;
-  }
-
-  return { width, height };
-}
-
-function waitForNextFrame(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(() => resolve());
-      return;
-    }
-
-    setTimeout(resolve, 0);
-  });
-}
-
-function clampScale(scale: number): number {
-  return Number(Math.min(DOCX_MAX_SCALE, Math.max(DOCX_MIN_SCALE, scale)).toFixed(2));
-}
-
-export interface DocxPreviewPaneProps {
-  surface?: FilePreviewSurface;
-  bytes?: Uint8Array<ArrayBuffer> | null;
-}
-
-export function DocxPreviewPane(props: DocxPreviewPaneProps) {
-  const i18n = useI18n();
-  const [renderError, setRenderError] = createSignal<string | null>(null);
-  const [viewportWidth, setViewportWidth] = createSignal(0);
-  const [layout, setLayout] = createSignal<DocxLayout | null>(null);
-  const [zoomMode, setZoomMode] = createSignal<ZoomMode>('fit-width');
-  const [manualScale, setManualScale] = createSignal(1);
-  let viewportEl: HTMLDivElement | undefined;
-  let bodyHostEl: HTMLDivElement | undefined;
-  let styleHostEl: HTMLDivElement | undefined;
-
-  const clearRenderHosts = () => {
-    if (bodyHostEl) {
-      bodyHostEl.innerHTML = '';
-    }
-    if (styleHostEl) {
-      styleHostEl.innerHTML = '';
-    }
-  };
-
-  const syncViewportWidth = () => {
-    setViewportWidth(viewportEl?.clientWidth ?? 0);
-  };
-
-  const syncDocxLayout = () => {
-    const host = bodyHostEl;
-    setLayout(host ? measureDocxLayout(host) : null);
-  };
-
-  onMount(() => {
-    syncViewportWidth();
-    if (!viewportEl) return;
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', syncViewportWidth);
-      onCleanup(() => {
-        window.removeEventListener('resize', syncViewportWidth);
-      });
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      syncViewportWidth();
-    });
-    observer.observe(viewportEl);
-    onCleanup(() => {
-      observer.disconnect();
-    });
-  });
-
-  createEffect(() => {
-    const bytes = props.bytes;
-    const bodyHost = bodyHostEl;
-    const styleHost = styleHostEl;
-
-    setRenderError(null);
-    setLayout(null);
-    setZoomMode('fit-width');
-    setManualScale(1);
-    clearRenderHosts();
-    if (!bytes || !bodyHost || !styleHost) return;
-
+function DocxDocument(props: {
+  bytes: Uint8Array<ArrayBuffer>;
+  onLayout: (layout: DocxLayout) => void;
+  onError: (error: string) => void;
+}) {
+  let body!: HTMLDivElement;
+  let styles!: HTMLDivElement;
+  createEffect(on(() => props.bytes, bytes => {
     let disposed = false;
-    let layoutObserver: ResizeObserver | null = null;
-
+    let observer: ResizeObserver | undefined;
     void (async () => {
       try {
-        const module = await import('docx-preview');
+        const { renderAsync } = await import('docx-preview');
         if (disposed) return;
-
-        const renderAsync = (module.renderAsync ?? null) as DocxRenderAsync | null;
-        if (!renderAsync) {
-          throw new Error('renderAsync not found');
-        }
-
-        await renderAsync(bytes, bodyHost, styleHost, {
-          className: DOCX_RENDER_CLASS_NAME,
-          inWrapper: true,
-          breakPages: true,
-          ignoreWidth: false,
-          ignoreLastRenderedPageBreak: true,
-          useBase64URL: false,
+        await renderAsync(bytes, body, styles, {
+          className: CLASS_NAME, inWrapper: true, breakPages: true, ignoreWidth: false,
+          ignoreLastRenderedPageBreak: true, useBase64URL: false,
         });
         if (disposed) return;
-
-        await waitForNextFrame();
-        if (disposed) return;
-
-        syncViewportWidth();
-        syncDocxLayout();
-
-        const wrapper = findDocxWrapper(bodyHost);
-        if (wrapper && typeof ResizeObserver !== 'undefined') {
-          layoutObserver = new ResizeObserver(() => {
-            syncDocxLayout();
-          });
-          layoutObserver.observe(wrapper);
+        const wrapper = body.querySelector<HTMLElement>(`.${CLASS_NAME}-wrapper`);
+        if (!wrapper) throw new Error('DOCX page layout is unavailable.');
+        Object.assign(wrapper.style, { width: 'max-content', padding: '0', gap: '16px', background: 'transparent' });
+        const pages = [...wrapper.querySelectorAll<HTMLElement>(`:scope > section.${CLASS_NAME}`)];
+        for (const page of pages) page.style.margin = '0';
+        const measure = () => {
+          if (disposed) return;
+          const width = Math.max(wrapper.offsetWidth, wrapper.scrollWidth);
+          const height = Math.max(wrapper.offsetHeight, wrapper.scrollHeight);
+          const pageWidth = Math.max(0, ...pages.map(page => Math.max(page.offsetWidth, page.scrollWidth)));
+          const pageHeight = Math.max(0, ...pages.map(page => Math.max(page.offsetHeight, page.scrollHeight)));
+          if (width > 0 && height > 0 && pageWidth > 0 && pageHeight > 0) props.onLayout({ width, height, pageWidth, pageHeight });
+        };
+        measure();
+        if (typeof ResizeObserver !== 'undefined') {
+          observer = new ResizeObserver(measure);
+          observer.observe(wrapper);
+          for (const page of pages) observer.observe(page);
         }
-      } catch (error) {
-        if (disposed) return;
-        setRenderError(error instanceof Error ? error.message : String(error));
+      } catch (reason) {
+        if (!disposed) props.onError(reason instanceof Error ? reason.message : String(reason));
       }
     })();
+    onCleanup(() => { disposed = true; observer?.disconnect(); body.replaceChildren(); styles.replaceChildren(); });
+  }));
+  return <><div ref={styles} class="hidden" aria-hidden="true" /><div ref={body} class="docx-preview-pane__document" /></>;
+}
 
-    onCleanup(() => {
-      disposed = true;
-      layoutObserver?.disconnect();
-      clearRenderHosts();
-    });
-  });
+export interface DocxPreviewPaneProps { surface?: FilePreviewSurface; bytes?: Uint8Array<ArrayBuffer> | null }
 
-  const fitScale = createMemo(() => {
-    const currentLayout = layout();
-    if (!currentLayout) return 1;
-    const availableWidth = Math.max(0, viewportWidth() - DOCX_PREVIEW_INSET * 2);
-    if (availableWidth <= 0) return 1;
-    return Math.min(1, availableWidth / currentLayout.width);
-  });
-
-  const effectiveScale = createMemo(() => {
-    return zoomMode() === 'fit-width' ? fitScale() : manualScale();
-  });
-
-  const zoomPercent = createMemo(() => {
-    const currentLayout = layout();
-    if (!currentLayout) return '--';
-    return `${Math.round(effectiveScale() * 100)}%`;
-  });
-
-  const frameStyle = createMemo<Record<string, string> | undefined>(() => {
-    const currentLayout = layout();
-    if (!currentLayout) return undefined;
-
-    return {
-      width: `${currentLayout.width * effectiveScale()}px`,
-      height: `${currentLayout.height * effectiveScale()}px`,
-    };
-  });
-
-  const contentStyle = createMemo<Record<string, string> | undefined>(() => {
-    const currentLayout = layout();
-    if (!currentLayout) return undefined;
-
-    return {
-      width: `${currentLayout.width}px`,
-      height: `${currentLayout.height}px`,
-      transform: `scale(${effectiveScale()})`,
-      'transform-origin': 'top left',
-    };
-  });
-
-  const canZoomIn = createMemo(() => {
-    return !!layout() && effectiveScale() < DOCX_MAX_SCALE;
-  });
-
-  const canZoomOut = createMemo(() => {
-    return !!layout() && effectiveScale() > DOCX_MIN_SCALE;
-  });
-
-  const applyManualZoom = (delta: number) => {
-    const baseScale = effectiveScale();
-    const nextScale = clampScale(baseScale + delta);
-    setZoomMode('manual');
-    setManualScale(nextScale);
-  };
-
-  const handleZoomIn = () => {
-    applyManualZoom(DOCX_ZOOM_STEP);
-  };
-
-  const handleZoomOut = () => {
-    applyManualZoom(-DOCX_ZOOM_STEP);
-  };
-
-  const handleFitWidth = () => {
-    setZoomMode('fit-width');
-  };
-
+export function DocxPreviewPane(props: DocxPreviewPaneProps) {
+  const [error, setError] = createSignal('');
+  const [layout, setLayout] = createSignal<DocxLayout | null>(null);
+  const [viewport, setViewport] = createSignal<HTMLDivElement>();
+  const zoom = createPreviewZoom({ viewport, content: () => {
+    const value = layout(); return value ? { width: value.pageWidth, height: value.pageHeight } : null;
+  }, min: 0.1, max: 3, step: 0.1 });
+  createEffect(on(() => props.bytes, () => {
+    setError(''); setLayout(null); zoom.reset();
+    const el = untrack(viewport); if (el) { el.scrollTop = 0; el.scrollLeft = 0; }
+  }));
+  const width = () => (layout()?.width ?? 0) * (zoom.scale() ?? 0);
+  const height = () => (layout()?.height ?? 0) * (zoom.scale() ?? 0);
   return (
-    <div class={cn('flex h-full min-h-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
-      <div ref={styleHostEl} class="hidden" aria-hidden="true" />
-
-      <Show
-        when={!renderError()}
-        fallback={
-          <FilePreviewErrorState
-            errorType="render_error"
-            message={renderError()}
-          />
-        }
-      >
-        <>
-          <div class={cn('shrink-0 border-b border-border px-3 py-2', props.surface === 'window' && 'redeven-file-preview-toolbar-window')}>
-            <div class="flex items-center justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                class="h-7 min-w-7 px-0 font-mono"
-                disabled={!canZoomOut()}
-                aria-label={i18n.t('uiCopy.preview.zoomOutDocx')}
-                onClick={handleZoomOut}
-              >
-                -
-              </Button>
-
-              <div class="min-w-14 text-center font-mono text-[11px] text-muted-foreground">
-                {zoomPercent()}
-              </div>
-
-              <Button
-                size="sm"
-                variant="outline"
-                class="h-7 min-w-7 px-0 font-mono"
-                disabled={!canZoomIn()}
-                aria-label={i18n.t('uiCopy.preview.zoomInDocx')}
-                onClick={handleZoomIn}
-              >
-                +
-              </Button>
-
-              <Button
-                size="sm"
-                variant="outline"
-                class="h-7 px-2 text-[11px]"
-                disabled={!layout() || zoomMode() === 'fit-width'}
-                aria-label={i18n.t('uiCopy.preview.fitDocxToWidth')}
-                onClick={handleFitWidth}
-              >
-                {i18n.t('uiCopy.preview.fit')}
-              </Button>
-            </div>
-          </div>
-
-          <div
-            ref={viewportEl}
-            {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-            class={cn('docx-preview-pane relative flex-1 min-h-0 overflow-auto', props.surface === 'window' ? 'redeven-file-preview-surface-window' : 'bg-muted/30')}
-          >
-            <div class="box-border min-h-full min-w-full p-3">
-              <div class="docx-preview-pane__frame relative mx-auto" style={frameStyle()}>
-                <div class="docx-preview-pane__content absolute top-0 left-0" style={contentStyle()}>
-                  <div ref={bodyHostEl} class="docx-preview-pane__document" />
-                </div>
+    <div class={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.surface === 'window' ? 'redeven-file-preview-surface-window' : redevenSurfaceRoleClass('main'))}>
+      <div class="docx-preview-controls flex shrink-0 justify-end border-b border-border/60 px-3 py-2"><FilePreviewZoomControls zoom={zoom} kind="Docx" /></div>
+      <div ref={setViewport} {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS} class="docx-preview-pane relative min-h-0 min-w-0 flex-1 overflow-auto p-3 [overflow-anchor:none]">
+        <Show when={!error()} fallback={<FilePreviewErrorState errorType="render_error" message={error()} />}>
+          <div class="relative grid place-items-center" style={{ width: `${Math.max(width(), zoom.viewportSize()?.width ?? 0)}px`, height: `${Math.max(height(), zoom.viewportSize()?.height ?? 0)}px` }}>
+            <div data-preview-zoom-content class="docx-preview-pane__frame relative" style={{ width: `${width()}px`, height: `${height()}px` }}>
+              <div class="docx-preview-pane__content absolute left-0 top-0 origin-top-left" style={{ width: layout() ? `${layout()!.width}px` : 'max-content', transform: `scale(${zoom.scale() ?? 1})`, visibility: layout() && zoom.scale() !== null ? 'visible' : 'hidden' }}>
+                <Show when={props.bytes} keyed>{bytes => <DocxDocument bytes={bytes} onLayout={setLayout} onError={setError} />}</Show>
               </div>
             </div>
           </div>
-        </>
-      </Show>
+        </Show>
+      </div>
     </div>
   );
 }

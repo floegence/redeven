@@ -15,7 +15,9 @@ must preserve row identity, open menus, focus and running wave continuity. Pin
 failures undo only the current operation's presentation and reconcile through the
 existing workspace summary stream or one explicit post-command read.
 
-# Selection and navigation
+# Contract
+
+## Selection and navigation
 
 The selected conversation has a theme-tinted background stronger than hover, a
 3px inset left marker and a semibold title. The marker does not consume layout
@@ -30,7 +32,7 @@ pin commands. Reordering does not select a conversation, acknowledge reads, load
 its transcript or reconnect transport. Ordinary conversations remain ordered by
 creation time descending, then ThreadID ascending.
 
-# Pin ordering
+## Pin ordering
 
 Pinned root conversations have one order per endpoint, shared by Desktop, Env
 App and other windows in that environment. `pin_rank` descending is authoritative;
@@ -66,7 +68,7 @@ thread's current rank. A removed cursor anchor requires refreshing the list.
 The compact conversation switcher consumes the same comparator within its
 existing attention, working, pinned and recent grouping policy.
 
-# Stable presentation and convergence
+## Stable presentation and convergence
 
 One sidebar row owner keys conversations only by ThreadID and group labels by
 independent keys. Title, time, status, pin rank and group membership are values,
@@ -90,6 +92,8 @@ newer canonical summary arrives, including when the read fails. Older responses
 cannot overwrite newer streamed settings. Failed requests restore only their own
 overlay, preserve newer titles/status/drafts, read the latest summaries once and
 show localized feedback. No polling or second synchronization transport is added.
+
+# Boundaries
 
 The [storage contract](../ai/flower-storage-ownership-and-migrations.md) owns
 automatic schema upgrades. The [streaming stability contract](flower-streaming-stability.md)

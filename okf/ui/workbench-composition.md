@@ -35,6 +35,12 @@ All composition controls, accessible labels, material names, and color names com
 
 The migration retains existing layout revisions, widget states, content, timestamps, region styles, and event payloads. Empty names and text are valid product content. The Runtime admits all published sticky colors and materials, including graphite and frame regions, and the UI layout adapter preserves them across projection and writeback. Material changes participate in shared-layout equality so they trigger persistence.
 
+# Boundaries
+
+Published Floe owns composition editing and floating-layer mechanics. Redeven
+adapts localization and persistence without replacing those shared mechanics.
+Business-widget input continues to follow the [input ownership contract](workbench-input-ownership.md).
+
 Migration atomicity, incompatible-schema rejection, and startup failure behavior follow [database schema migration ownership](../architecture/database-schema-migrations.md). Users never need to delete their layout to receive this update.
 
 # Evidence
