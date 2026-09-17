@@ -21,6 +21,13 @@ export class BrowserComputerController {
     this.userInControl = true;
     return { result: { code: 'TAKEOVER_REQUIRED', action_executed: executed }, safety };
   }
+  async targetChange(executed) {
+    const opener = this.transport.tabId === undefined
+      ? (await this.transport.send('Target.getTargetInfo')).targetInfo.targetId : String(this.transport.tabId);
+    return { result: { target_changed: true, opener_tab_id: opener,
+      opened_pages: this.page.openedPages, action_executed: executed, execution_mode: 'background' },
+      safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
+  }
   async readObservation(read) {
     const revision = this.page.revision;
     try {
@@ -66,10 +73,16 @@ export class BrowserComputerController {
           if (request.tool_name !== 'computer.screenshot') throw new Error('TARGET_NOT_ALLOWED');
           page.handback();
         } else if (this.userInControl) return this.pause({ level: 'takeover', reason_codes: ['user_control'], safe_to_capture: false, safe_to_send_to_model: false }, false);
+        if (request.tool_name === 'computer.select_target' && !page.stopped) {
+          page.openedPages = [];
+          return { result: { selected: true, action_executed: false },
+            safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
+        }
         await this.readObservation(() => page.beginObservation());
         const before = await page.safety();
         if (before.level === 'takeover') return this.pause(before, false);
       }
+      if (!privateInput && page.openedPages.length) return await this.targetChange(false);
       await page.preparePage();
       let result = {};
       const tool = request.tool_name;
@@ -105,6 +118,7 @@ export class BrowserComputerController {
       if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
       const after = await page.safety();
       if (after.level === 'takeover') return this.pause(after, dispatched());
+      if (page.openedPages.length) return await this.targetChange(dispatched());
       const needsFrame = tool === 'computer.screenshot' || (tool === 'computer.observe' ? args.screenshot === true : request.script_operation !== true);
       const captureRevision = page.revision;
       const frame = needsFrame ? await this.readObservation(() => this.capture()) : undefined;
@@ -126,8 +140,9 @@ export class BrowserComputerController {
         action_executed: dispatched(), execution_mode: 'background', ...(page.downloads.size ? { downloads: [...page.downloads.values()] } : {}) }, safety: captured, ...(frame ? { screenshot: frame } : {}) };
     } catch (error) {
       if (page.uncertainEffect) return { error: 'EFFECT_OUTCOME_UNKNOWN' };
-      if (page.requiredOrigin || page.guardFailure || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.newTarget ? 'target_permission' : page.requiredOrigin ? 'site_permission' : page.guardFailure ? 'unknown' : 'user_control'],
+      if (page.requiredOrigin || page.guardFailure || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : page.guardFailure ? 'unknown' : 'user_control'],
         safe_to_capture: false, safe_to_send_to_model: false, ...(page.requiredOrigin ? { required_origin: page.requiredOrigin } : {}) }, dispatched());
+      if (page.openedPages.length) return await this.targetChange(dispatched());
       if (error.message === 'OBSERVATION_INVALIDATED') return {
         result: { observation_invalidated: true, action_executed: dispatched(), execution_mode: 'background' },
         safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false },

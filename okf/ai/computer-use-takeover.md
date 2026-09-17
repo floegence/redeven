@@ -20,7 +20,8 @@ observation capability leaves the interaction unresolved.
 ## Explain the required step
 
 The UI derives the blocking reason from canonical tool Activity, not from a
-second waiting-state store. Task access, tab selection, sign-in, one-time codes,
+second waiting-state store. Ordinary popup selection returns to the Agent and
+does not create a user assistance card. Task access, sign-in, one-time codes,
 CAPTCHA, private input and unreadable pages have distinct instructions. Each
 card identifies the target, explains the required action and names the next
 step. Unknown inspection failures must not invent a login requirement. URL

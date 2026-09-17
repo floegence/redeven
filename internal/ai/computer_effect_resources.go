@@ -11,8 +11,24 @@ import (
 )
 
 type computerAuthorizedTargetKey struct{}
+type computerAuthorizedCandidateKey struct{}
 
 func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
+	if inv.Name == "computer.targets" {
+		return []fltools.ResourceRef{{Kind: "computer_inventory", Value: string(inv.ThreadID)}}, nil
+	}
+	if inv.Name == "computer.select_target" {
+		host, ok := r.targetToolExecutor.(*ComputerUseRuntime)
+		if !ok {
+			return nil, errors.New("computer runtime is unavailable")
+		}
+		ref := strings.TrimSpace(anyToString(inv.Args["candidate_ref"]))
+		if _, err := host.computerCandidate(string(inv.ThreadID), ref); err != nil {
+			return nil, err
+		}
+		return []fltools.ResourceRef{{Kind: "computer_candidate", Value: ref}}, nil
+	}
+
 	if r.targetResolver == nil {
 		return nil, errors.New("computer target resolver is unavailable")
 	}
@@ -31,7 +47,7 @@ func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) ([]
 	}
 	if err != nil {
 		if errors.Is(err, errTargetNotRegistered) || errors.Is(err, errTargetAmbiguous) {
-			return nil, fmt.Errorf("omit target or use current to operate the user's selected page or application window: %w", err)
+			return nil, fmt.Errorf("discover pages and windows with computer.targets, then select a candidate with computer.select_target: %w", err)
 		}
 		return nil, err
 	}

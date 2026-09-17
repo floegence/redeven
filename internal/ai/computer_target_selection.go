@@ -91,8 +91,11 @@ func (s *Service) SelectComputerTarget(ctx context.Context, meta *session.Meta, 
 	if err != nil || target.ID != targetID {
 		return errors.New("select an available computer target")
 	}
-	host.releaseScripts(func(key computerScriptKey) bool { return key.thread == threadID && key.target != targetID })
-	return host.BindThreadTarget(ctx, threadID, targetID)
+	if !targetAllowedByPolicy(s.ToolTargetPolicy(), target.ID) {
+		return computerTargetFailure(TargetToolCall{ThreadID: threadID, TargetID: target.ID}, "TARGET_NOT_ALLOWED")
+	}
+	_, err = host.selectComputerTarget(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer.select_target"}, target)
+	return err
 }
 
 func (s *Service) ComputerTarget(ctx context.Context, meta *session.Meta, threadID string) (string, error) {
@@ -103,4 +106,32 @@ func (s *Service) ComputerTarget(ctx context.Context, meta *session.Meta, thread
 		return "", err
 	}
 	return s.snapshotThreadStore().GetComputerTarget(ctx, threadID)
+}
+
+func (s *Service) ComputerCandidates(ctx context.Context, meta *session.Meta, threadID string) (ComputerTargetInventory, error) {
+	if err := requireRWX(meta); err != nil {
+		return ComputerTargetInventory{}, err
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return ComputerTargetInventory{}, err
+	}
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return ComputerTargetInventory{}, errors.New("computer runtime is unavailable")
+	}
+	return host.ComputerTargets(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer.targets"}, s.ToolTargetPolicy())
+}
+
+func (s *Service) SelectComputerCandidate(ctx context.Context, meta *session.Meta, threadID, ref string) (TargetDescriptor, error) {
+	if err := requireRWX(meta); err != nil {
+		return TargetDescriptor{}, err
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return TargetDescriptor{}, err
+	}
+	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return TargetDescriptor{}, errors.New("computer runtime is unavailable")
+	}
+	return host.SelectComputerCandidate(ctx, TargetToolCall{ThreadID: threadID, ToolName: "computer.select_target"}, ref, s.ToolTargetPolicy())
 }

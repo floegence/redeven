@@ -1461,6 +1461,7 @@ type FlowerActivityRendererHandler = (
 ) => FlowerActivityPresentation;
 
 const TOOL_ACTIONS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
+  'computer.targets': 'discoverTargets', 'computer.select_target': 'selectTarget',
   'computer.exec': 'execute', 'computer.observe': 'observe', 'computer.screenshot': 'screenshot',
   'computer.click': 'click', 'computer.double_click': 'doubleClick', 'computer.type': 'type',
   'computer.key': 'key', 'computer.scroll': 'scroll', 'computer.drag': 'drag', 'computer.wait': 'wait',

@@ -34,7 +34,7 @@ func TestComputerProductionThreadsReleaseCanonicalTargetOwnership(t *testing.T) 
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher := w.(http.Flusher)
 		if defs, _ := body["tools"].([]any); len(defs) > 0 && requests.Add(1)%2 == 1 {
-			item := map[string]any{"type": "function_call", "id": "observe", "call_id": "observe", "name": "computer_screenshot", "arguments": `{}`}
+			item := map[string]any{"type": "function_call", "id": "observe", "call_id": "observe", "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "observe")

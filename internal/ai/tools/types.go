@@ -26,6 +26,8 @@ const (
 	ErrorCodeTargetConnectionRequired  ErrorCode = "TARGET_CONNECTION_REQUIRED"
 	ErrorCodeTargetExecutorUnavailable ErrorCode = "TARGET_EXECUTOR_UNAVAILABLE"
 	ErrorCodeTargetNotReady            ErrorCode = "TARGET_NOT_READY"
+	ErrorCodeTargetInUse               ErrorCode = "TARGET_IN_USE"
+	ErrorCodeTargetSelectionStale      ErrorCode = "TARGET_SELECTION_STALE"
 	ErrorCodeTargetNotAllowed          ErrorCode = "TARGET_NOT_ALLOWED"
 	ErrorCodeTakeoverRequired          ErrorCode = "TAKEOVER_REQUIRED"
 	ErrorCodeFrameUnavailable          ErrorCode = "FRAME_UNAVAILABLE"

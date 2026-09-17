@@ -61,7 +61,7 @@ func testComputerDeepSeekImageOverflow(t *testing.T, longHistory bool) {
 			}
 			index := calls.Add(1)
 			id := fmt.Sprintf("navigate-%d", index)
-			item := map[string]any{"type": "function_call", "id": id, "call_id": id, "name": "browser_navigate", "arguments": fmt.Sprintf(`{"url":"https://example.test/step/%d"}`, index)}
+			item := map[string]any{"type": "function_call", "id": id, "call_id": id, "name": "browser_navigate", "arguments": fmt.Sprintf(`{"target":"browser.managed","url":"https://example.test/step/%d"}`, index)}
 			output := []any{item}
 			if longHistory && index == 1 {
 				observation := map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": strings.Repeat("Earlier observed application state. ", 1500)}}}

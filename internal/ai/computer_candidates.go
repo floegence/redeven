@@ -1,0 +1,526 @@
+package ai
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Candidates are short-lived discovery facts, not grants or a second selection
+// store. Only the Runtime can turn their opaque references into connections.
+type ComputerCandidate struct {
+	CandidateRef string `json:"candidate_ref"`
+	TargetID     string `json:"target_id,omitempty"`
+	Kind         string `json:"kind"`
+	DisplayName  string `json:"display_name"`
+	ProfileName  string `json:"profile_name,omitempty"`
+	Title        string `json:"title,omitempty"`
+	URL          string `json:"url,omitempty"`
+	AppBundleID  string `json:"app_bundle_id,omitempty"`
+	OpenerTabID  string `json:"opener_tab_id,omitempty"`
+	State        string `json:"state"`
+	NewTab       bool   `json:"new_tab,omitempty"`
+}
+
+type ComputerTargetInventory struct {
+	CurrentTargetID     string              `json:"current_target_id"`
+	DefaultCandidateRef string              `json:"default_candidate_ref,omitempty"`
+	Candidates          []ComputerCandidate `json:"candidates"`
+}
+
+type computerCandidate struct {
+	view       ComputerCandidate
+	threadID   string
+	connection *ComputerBrowserConnection
+	expires    time.Time
+}
+
+func (r *ComputerUseRuntime) rememberComputerCandidate(threadID string, view ComputerCandidate, connection *ComputerBrowserConnection) (ComputerCandidate, error) {
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return view, errors.New("computer runtime is closed")
+	}
+	if r.candidates == nil {
+		r.candidates = make(map[string]computerCandidate)
+	}
+	for ref, candidate := range r.candidates {
+		if !candidate.expires.After(now) {
+			delete(r.candidates, ref)
+			continue
+		}
+		prior := candidate.view
+		prior.CandidateRef = ""
+		if candidate.threadID == threadID && prior == view && (candidate.connection == nil && connection == nil || candidate.connection != nil && connection != nil && *candidate.connection == *connection) {
+			view.CandidateRef = ref
+			return view, nil
+		}
+	}
+	// Bounded even when many conversations discover resources without using them.
+	if len(r.candidates) >= 2048 {
+		var oldest string
+		var expiry time.Time
+		for ref, candidate := range r.candidates {
+			if oldest == "" || candidate.expires.Before(expiry) {
+				oldest, expiry = ref, candidate.expires
+			}
+		}
+		delete(r.candidates, oldest)
+	}
+	seed := make([]byte, 16)
+	if _, err := rand.Read(seed); err != nil {
+		return view, err
+	}
+	view.CandidateRef = "candidate-" + hex.EncodeToString(seed)
+	r.candidates[view.CandidateRef] = computerCandidate{view: view, threadID: threadID, connection: connection, expires: now.Add(10 * time.Minute)}
+	return view, nil
+}
+
+func (r *ComputerUseRuntime) computerCandidate(threadID, ref string) (computerCandidate, error) {
+	r.mu.RLock()
+	candidate, exists := r.candidates[ref]
+	closed := r.closed
+	r.mu.RUnlock()
+	if closed || !exists || candidate.threadID != threadID || !candidate.expires.After(time.Now()) {
+		return computerCandidate{}, &targetToolPolicyError{code: "target_selection_stale"}
+	}
+	return candidate, nil
+}
+
+func (r *ComputerUseRuntime) extensionProfiles() []ComputerExtensionProfile {
+	r.mu.RLock()
+	hub := r.extension
+	r.mu.RUnlock()
+	profiles := []ComputerExtensionProfile{}
+	if hub != nil {
+		hub.mu.Lock()
+		for _, client := range hub.profiles {
+			profiles = append(profiles, client.profile)
+		}
+		hub.mu.Unlock()
+	}
+	sort.Slice(profiles, func(i, j int) bool { return profiles[i].ID < profiles[j].ID })
+	return profiles
+}
+
+func (r *ComputerUseRuntime) extensionTabs(ctx context.Context, profileID string) ([]ComputerBrowserTab, error) {
+	client, err := r.extensionClient(profileID)
+	if err != nil {
+		return nil, err
+	}
+	return client.tabs(ctx)
+}
+
+func (r *ComputerUseRuntime) computerTargetState(target TargetDescriptor, threadID string) string {
+	r.mu.RLock()
+	control := r.controls[target.ID]
+	r.mu.RUnlock()
+	if control != nil {
+		control.mu.Lock()
+		busy := control.threadID != "" && control.threadID != threadID
+		paused := control.threadID == threadID && control.user
+		control.mu.Unlock()
+		if busy {
+			return "in_use"
+		}
+		if paused {
+			return "user_control"
+		}
+	}
+	if target.Kind == "desktop.screen" && target.ID == "desktop-main" && !target.Ready {
+		return target.State
+	}
+	if target.Ready {
+		return "ready"
+	}
+	return target.State
+}
+
+type computerBrowserProfile struct {
+	name       string
+	kind       string
+	connection ComputerBrowserConnection
+}
+
+func (r *ComputerUseRuntime) personalBrowserProfiles() []computerBrowserProfile {
+	profiles := []computerBrowserProfile{}
+	for _, profile := range r.extensionProfiles() {
+		profiles = append(profiles, computerBrowserProfile{name: profile.Name, kind: "browser.connected", connection: ComputerBrowserConnection{ExtensionProfileID: profile.ID, NewTab: true}})
+	}
+	r.mu.RLock()
+	seen := map[string]bool{}
+	for _, adapter := range r.executors {
+		e, ok := adapter.(*PlaywrightTargetExecutor)
+		if !ok || e.ManagedAttachment || e.CDPURL == "" {
+			continue
+		}
+		key := e.CDPURL + "\x00" + e.BrowserContextID
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		profiles = append(profiles, computerBrowserProfile{name: "Connected Chrome", kind: "browser.connected", connection: ComputerBrowserConnection{CDPURL: e.CDPURL, ProfileID: e.BrowserContextID, NewTab: true}})
+	}
+	r.mu.RUnlock()
+	sort.Slice(profiles, func(i, j int) bool {
+		return computerProfileIdentity(profiles[i].connection) < computerProfileIdentity(profiles[j].connection)
+	})
+	return profiles
+}
+
+func computerProfileIdentity(connection ComputerBrowserConnection) string {
+	if connection.ExtensionProfileID != "" {
+		return "extension:" + connection.ExtensionProfileID
+	}
+	if connection.ManagedProfileID != "" {
+		return "managed:" + connection.ManagedProfileID
+	}
+	return "cdp:" + connection.CDPURL + "\x00" + connection.ProfileID
+}
+
+// Inventory never starts a managed profile or creates a page.
+func (r *ComputerUseRuntime) candidateBrowserTabs(ctx context.Context, connection ComputerBrowserConnection) ([]ComputerBrowserTab, error) {
+	if connection.ExtensionProfileID != "" {
+		return r.extensionTabs(ctx, connection.ExtensionProfileID)
+	}
+	if connection.ManagedProfileID != "" {
+		r.connectMu.Lock()
+		defer r.connectMu.Unlock()
+		profile := r.managedProfiles[connection.ManagedProfileID]
+		if profile == nil {
+			return nil, nil
+		}
+		return profile.call(ctx, "inventory")
+	}
+	tabs, err := r.BrowserTabs(ctx, connection.CDPURL)
+	result := []ComputerBrowserTab{}
+	for _, tab := range tabs {
+		if tab.ProfileID == connection.ProfileID {
+			result = append(result, tab)
+		}
+	}
+	return result, err
+}
+
+func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToolCall, policy ToolTargetPolicy) (ComputerTargetInventory, error) {
+	inventory := ComputerTargetInventory{Candidates: []ComputerCandidate{}}
+	if err := r.authorizeComputerCall(ctx, &call); err != nil {
+		return inventory, err
+	}
+	if call.ThreadID == "" || r.targetBindings() == nil {
+		return inventory, errors.New("computer discovery requires a thread")
+	}
+	selected, err := r.targetBindings().GetComputerTarget(ctx, call.ThreadID)
+	if err != nil {
+		return inventory, err
+	}
+	inventory.CurrentTargetID = selected
+	targets, err := r.ListComputerTargets(ctx)
+	if err != nil {
+		return inventory, err
+	}
+	appendCandidate := func(view ComputerCandidate, connection *ComputerBrowserConnection) error {
+		if len(inventory.Candidates) >= 1024 {
+			return errors.New("computer inventory exceeds its limit")
+		}
+		candidate, err := r.rememberComputerCandidate(call.ThreadID, view, connection)
+		if err == nil {
+			for i, prior := range inventory.Candidates {
+				if view.TargetID != "" && prior.TargetID == view.TargetID {
+					inventory.Candidates[i] = candidate
+					return nil
+				}
+			}
+			inventory.Candidates = append(inventory.Candidates, candidate)
+		}
+		return err
+	}
+	for _, target := range targets {
+		if !targetAllowedByPolicy(policy, target.ID) || target.ID == "browser-main" {
+			continue
+		}
+		if err := appendCandidate(ComputerCandidate{TargetID: target.ID, Kind: target.Kind, DisplayName: target.DisplayName, URL: target.CurrentURL, AppBundleID: target.AppBundleID, State: r.computerTargetState(target, call.ThreadID)}, nil); err != nil {
+			return inventory, err
+		}
+	}
+	if len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) == 0 {
+		profiles := r.personalBrowserProfiles()
+		personalCount := len(profiles)
+		r.connectMu.Lock()
+		managed, managedErr := r.managedProfilesLocked()
+		r.connectMu.Unlock()
+		if managedErr != nil {
+			if err := appendCandidate(ComputerCandidate{Kind: "browser.managed", DisplayName: "Flower browser", State: "setup_required"}, nil); err != nil {
+				return inventory, err
+			}
+		}
+		for _, profile := range managed {
+			profiles = append(profiles, computerBrowserProfile{name: profile.Name, kind: "browser.managed", connection: ComputerBrowserConnection{ManagedProfileID: profile.ID, NewTab: true}})
+		}
+		for index, profile := range profiles {
+			connection := profile.connection
+			tabs, tabsErr := r.candidateBrowserTabs(ctx, connection)
+			state := "ready"
+			if tabsErr != nil {
+				state = "connection_required"
+			}
+			if err := appendCandidate(ComputerCandidate{Kind: profile.kind, DisplayName: profile.name, ProfileName: profile.name, NewTab: true, State: state}, &connection); err != nil {
+				return inventory, err
+			}
+			if state == "ready" && (personalCount == 1 && index == 0 || personalCount == 0 && connection.ManagedProfileID == "browser-main") {
+				inventory.DefaultCandidateRef = inventory.Candidates[len(inventory.Candidates)-1].CandidateRef
+			}
+			for _, tab := range tabs {
+				var targetID string
+				if connection.ExtensionProfileID != "" {
+					targetID = r.extensionTabTargetID(connection.ExtensionProfileID, tab.ID)
+				} else {
+					endpoint := connection.CDPURL
+					if connection.ManagedProfileID != "" {
+						r.connectMu.Lock()
+						if running := r.managedProfiles[connection.ManagedProfileID]; running != nil {
+							endpoint = running.endpoint
+						}
+						r.connectMu.Unlock()
+					}
+					targetID = r.managedTabTargetID(endpoint, tab.ID)
+				}
+				target := TargetDescriptor{ID: targetID, Ready: true}
+				view := ComputerCandidate{TargetID: targetID, Kind: profile.kind, DisplayName: profile.name, ProfileName: profile.name, Title: tab.Title, URL: tab.URL, OpenerTabID: tab.OpenerTabID, State: r.computerTargetState(target, call.ThreadID)}
+				tabConnection := connection
+				tabConnection.NewTab, tabConnection.TabID, tabConnection.TabTitle, tabConnection.TabURL = false, tab.ID, tab.Title, tab.URL
+				if err := appendCandidate(view, &tabConnection); err != nil {
+					return inventory, err
+				}
+			}
+		}
+	}
+	for _, candidate := range inventory.Candidates {
+		if candidate.TargetID == selected && strings.HasPrefix(candidate.Kind, "browser.") && candidate.State == "ready" {
+			inventory.DefaultCandidateRef = candidate.CandidateRef
+			break
+		}
+	}
+	return inventory, ctx.Err()
+}
+
+func (r *ComputerUseRuntime) extensionTabTargetID(profileID, tabID string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for id, executor := range r.executors {
+		if e, ok := executor.(*extensionTargetExecutor); ok && e.client.profile.ID == profileID && e.tabID == tabID {
+			return id
+		}
+	}
+	return ""
+}
+func (r *ComputerUseRuntime) managedTabTargetID(endpoint, tabID string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for id, executor := range r.executors {
+		if e, ok := executor.(*PlaywrightTargetExecutor); ok && e.CDPURL == endpoint && e.TabID == tabID {
+			return id
+		}
+	}
+	return ""
+}
+
+func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call TargetToolCall, ref string, policy ToolTargetPolicy) (TargetDescriptor, error) {
+	if err := r.authorizeComputerCall(ctx, &call); err != nil {
+		return TargetDescriptor{}, err
+	}
+	candidate, err := r.computerCandidate(call.ThreadID, ref)
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
+	if err = r.requireComputerSelectionOpen(call); err != nil {
+		return TargetDescriptor{}, err
+	}
+	if candidate.connection != nil && len(normalizeToolTargetPolicy(policy).AllowedTargetIDs) > 0 {
+		return TargetDescriptor{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
+	}
+	var target TargetDescriptor
+	if candidate.connection != nil {
+		connection := *candidate.connection
+		if !connection.NewTab {
+			tabs, tabsErr := r.candidateBrowserTabs(ctx, connection)
+			matched := false
+			for _, tab := range tabs {
+				if tab.ID == connection.TabID && tab.URL == connection.TabURL && tab.Title == connection.TabTitle {
+					matched = true
+					break
+				}
+			}
+			if tabsErr != nil || !matched {
+				return target, &targetToolPolicyError{code: "target_selection_stale"}
+			}
+		}
+		if candidate.view.TargetID != "" {
+			target, err = r.ResolveTarget(ctx, candidate.view.TargetID)
+			if err == nil && r.computerTargetState(target, call.ThreadID) == "in_use" {
+				return target, computerTargetFailure(call, "TARGET_IN_USE")
+			}
+		}
+		if err != nil {
+			return target, err
+		}
+		if err = r.authorizeComputerCall(ctx, &call); err != nil {
+			return target, err
+		}
+		if err = r.requireComputerSelectionOpen(call); err != nil {
+			return target, err
+		}
+		target, err = r.ConnectBrowser(ctx, connection)
+	} else {
+		if candidate.view.TargetID == "" {
+			return target, &targetToolPolicyError{code: "target_setup_required"}
+		}
+		target, err = r.ResolveTarget(ctx, candidate.view.TargetID)
+		if err == nil && strings.HasPrefix(target.ID, "macos-window-") {
+			_, err = r.ListComputerTargets(ctx)
+			if err == nil {
+				target, err = r.ResolveTarget(ctx, candidate.view.TargetID)
+				if err == nil && (target.AppBundleID != candidate.view.AppBundleID || target.DisplayName != candidate.view.DisplayName) {
+					err = &targetToolPolicyError{code: "target_selection_stale"}
+				}
+			}
+		}
+	}
+	if err != nil {
+		return target, err
+	}
+	if !targetAllowedByPolicy(policy, target.ID) {
+		return target, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
+	}
+	return r.selectComputerTarget(ctx, call, target)
+}
+
+// UI and model selection share readiness, current permissions and the same
+// target gate. A rejected selection never changes the durable working position.
+func (r *ComputerUseRuntime) selectComputerTarget(ctx context.Context, call TargetToolCall, target TargetDescriptor) (TargetDescriptor, error) {
+	if err := r.authorizeComputerCall(ctx, &call); err != nil {
+		return target, err
+	}
+	if err := r.requireComputerSelectionOpen(call); err != nil {
+		return target, err
+	}
+	var err error
+	target, err = r.PrepareTarget(ctx, target)
+	if err != nil {
+		return target, err
+	}
+	if !target.Ready {
+		return target, &targetToolPolicyError{code: targetReadinessErrorCode(target), target: target.ID, targetState: target.State, repairAction: targetRepairAction(target)}
+	}
+	call.TargetID = target.ID
+	control := r.controlForTarget(target.ID)
+	select {
+	case <-ctx.Done():
+		return target, ctx.Err()
+	case control.gate <- struct{}{}:
+	}
+	defer func() { <-control.gate }()
+	control.mu.Lock()
+	busy := control.threadID != "" && (control.threadID != call.ThreadID || call.RunID == "" || control.runID != "" && control.runID != call.RunID)
+	paused := control.user
+	control.mu.Unlock()
+	if busy {
+		return target, computerTargetFailure(call, "TARGET_IN_USE")
+	}
+	if paused {
+		return target, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+	}
+	if err = r.authorizeComputerCall(ctx, &call); err != nil {
+		return target, err
+	}
+	if err = r.requireComputerSelectionOpen(call); err != nil {
+		return target, err
+	}
+	r.mu.RLock()
+	executor, closed := r.executors[target.ID], r.closed
+	r.mu.RUnlock()
+	if closed || executor == nil {
+		return target, computerTargetFailure(call, "TARGET_CONNECTION_REQUIRED")
+	}
+	if strings.HasPrefix(target.Kind, "browser.") {
+		selection := call
+		selection.ToolName = "computer.select_target"
+		selection.Arguments = nil
+		result, selectErr := executor.ExecuteTargetTool(ctx, selection)
+		if selectErr != nil {
+			return target, selectErr
+		}
+		if takeoverResult(result, nil) {
+			return target, computerTargetFailure(call, "TAKEOVER_REQUIRED")
+		}
+	}
+	if err = r.BindThreadTarget(ctx, call.ThreadID, target.ID); err != nil {
+		return target, err
+	}
+	if call.RunID != "" {
+		control.mu.Lock()
+		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
+		control.mu.Unlock()
+	}
+	r.releasePreviousComputerTarget(call)
+	return target, nil
+}
+
+func (r *run) execComputerManagement(ctx context.Context, toolID, toolName string, args map[string]any) (any, error) {
+	host, ok := r.targetToolExecutor.(*ComputerUseRuntime)
+	if !ok {
+		return nil, errors.New("computer runtime is unavailable")
+	}
+	runID, threadID, turnID := r.floretCanonicalIdentity()
+	call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName, revalidate: r.computerToolRevalidator(toolID, toolName)}
+	if toolName == "computer.targets" {
+		return host.ComputerTargets(ctx, call, r.toolTargetPolicy)
+	}
+	ref := strings.TrimSpace(anyToString(args["candidate_ref"]))
+	if frozen, ok := ctx.Value(computerAuthorizedCandidateKey{}).(string); ok && ref != frozen {
+		return nil, errors.New("computer candidate authorization changed")
+	}
+	target, err := host.SelectComputerCandidate(ctx, call, ref, r.toolTargetPolicy)
+	if err != nil {
+		return nil, err
+	}
+	return targetToolExecution{TargetID: target.ID, Payload: map[string]any{"target_id": target.ID, "target_name": target.DisplayName, "target_kind": target.Kind, "capabilities": target.Capabilities, "execution_location": target.Locality, "selected": true, "next_step": "Observe the selected page or application before acting."}}, nil
+}
+
+// Default selection describes a new task page without launching anything. The
+// profile participates in the identity, so a changed connection cannot replace
+// an already authorized resource between planning and execution.
+func (r *ComputerUseRuntime) defaultThreadBrowser(threadID string) (TargetDescriptor, error) {
+	profiles := r.personalBrowserProfiles()
+	if len(profiles) > 1 {
+		return TargetDescriptor{}, &targetToolPolicyError{code: "target_ambiguous"}
+	}
+	connection := ComputerBrowserConnection{ManagedProfileID: "browser-main", NewTab: true}
+	kind, name, profile := "browser.managed", "Flower browser", "managed:browser-main"
+	if len(profiles) == 1 {
+		connection = profiles[0].connection
+		kind, name, profile = "browser.connected", profiles[0].name, computerProfileIdentity(connection)
+	}
+	digest := sha256.Sum256([]byte(threadID + "\x00" + profile))
+	return TargetDescriptor{ID: "task-browser-" + hex.EncodeToString(digest[:16]), Kind: kind, DisplayName: name, Locality: "local", State: "stopped", Capabilities: []string{"observe", "interaction"}, connection: &connection}, nil
+}
+
+func (r *ComputerUseRuntime) requireComputerSelectionOpen(call TargetToolCall) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, control := range r.controls {
+		control.mu.Lock()
+		paused := control.threadID == call.ThreadID && control.user
+		control.mu.Unlock()
+		if paused {
+			return computerTargetFailure(call, "TAKEOVER_REQUIRED")
+		}
+	}
+	return nil
+}

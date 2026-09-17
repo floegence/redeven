@@ -2,6 +2,8 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -27,7 +29,7 @@ type ComputerBrowserConnection struct {
 
 func (c ComputerBrowserConnection) validate() error {
 	if c.ManagedProfileID != "" {
-		if c.TabURL != "" || c.TabTitle != "" || len(c.ManagedProfileID) > 64 || c.ExtensionProfileID != "" || c.CDPURL != "" || c.ProfileID != "" || c.NewTab == (c.TabID != "") || len(c.TabID) > 256 {
+		if len(c.ManagedProfileID) > 64 || c.ExtensionProfileID != "" || c.CDPURL != "" || c.ProfileID != "" || c.NewTab == (c.TabID != "") || len(c.TabID) > 256 {
 			return errors.New("invalid managed browser connection")
 		}
 		return nil
@@ -49,7 +51,7 @@ func (c ComputerBrowserConnection) validate() error {
 		}
 		return nil
 	}
-	if c.TabURL != "" || c.TabTitle != "" || c.NewTab || len(c.CDPURL) > 8192 || len(c.TabID) > 256 || len(c.ProfileID) > 256 || strings.TrimSpace(c.TabID) == "" || strings.TrimSpace(c.ProfileID) == "" {
+	if len(c.TabURL) > 8192 || len(c.TabTitle) > 512 || c.NewTab == (c.TabID != "") || len(c.CDPURL) > 8192 || len(c.TabID) > 256 || len(c.ProfileID) > 256 || strings.TrimSpace(c.ProfileID) == "" {
 		return errors.New("select a browser profile and tab")
 	}
 	endpoint, err := url.Parse(c.CDPURL)
@@ -60,10 +62,11 @@ func (c ComputerBrowserConnection) validate() error {
 }
 
 type ComputerBrowserTab struct {
-	ID        string `json:"id"`
-	ProfileID string `json:"profile_id"`
-	Title     string `json:"title"`
-	URL       string `json:"url"`
+	OpenerTabID string `json:"opener_tab_id,omitempty"`
+	ID          string `json:"id"`
+	ProfileID   string `json:"profile_id"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
 }
 
 func (s *Service) ComputerBrowserTabs(ctx context.Context, meta *session.Meta, endpoint string) ([]ComputerBrowserTab, error) {
@@ -78,6 +81,10 @@ func (s *Service) ComputerBrowserTabs(ctx context.Context, meta *session.Meta, e
 }
 
 func (r *ComputerUseRuntime) BrowserTabs(ctx context.Context, endpoint string) ([]ComputerBrowserTab, error) {
+	return r.cdpBrowserTabs(ctx, endpoint, "inventory", "")
+}
+
+func (r *ComputerUseRuntime) cdpBrowserTabs(ctx context.Context, endpoint, command, profile string) ([]ComputerBrowserTab, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Fragment != "" || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "ws" && u.Scheme != "wss") {
 		return nil, errors.New("invalid browser connection endpoint")
@@ -95,7 +102,7 @@ func (r *ComputerUseRuntime) BrowserTabs(ctx context.Context, endpoint string) (
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, managed.NodeBinary, filepath.Join(filepath.Dir(managed.HelperPath), "redevenBrowserInventory.mjs"), endpoint)
+	cmd := exec.CommandContext(ctx, managed.NodeBinary, filepath.Join(filepath.Dir(managed.HelperPath), "redevenBrowserInventory.mjs"), endpoint, command, profile)
 	var output limitedComputerOutput
 	cmd.Stdout = &output
 	if err := cmd.Run(); err != nil {
@@ -153,4 +160,53 @@ func (r *ComputerUseRuntime) disconnectBrowser(ctx context.Context, targetID str
 		return closer.Close()
 	}
 	return nil
+}
+
+// CDP endpoint/profile identities originate in the authenticated connection UI.
+// Each actual tab has one adapter; selecting another tab never replaces it.
+func (r *ComputerUseRuntime) connectCDPBrowserLocked(ctx context.Context, connection ComputerBrowserConnection, targetID string) (TargetDescriptor, error) {
+	command := "inventory"
+	if connection.NewTab {
+		command = "new_tab"
+	}
+	tabs, err := r.cdpBrowserTabs(ctx, connection.CDPURL, command, connection.ProfileID)
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
+	var chosen *ComputerBrowserTab
+	for i := range tabs {
+		if tabs[i].ProfileID == connection.ProfileID && (connection.NewTab || tabs[i].ID == connection.TabID) {
+			chosen = &tabs[i]
+			break
+		}
+	}
+	if chosen == nil || (!connection.NewTab && connection.TabURL != "" && (connection.TabURL != chosen.URL || connection.TabTitle != chosen.Title)) {
+		return TargetDescriptor{}, &targetToolPolicyError{code: "target_selection_stale"}
+	}
+	if existing := r.managedTabTargetID(connection.CDPURL, chosen.ID); existing != "" {
+		return r.ResolveTarget(ctx, existing)
+	}
+	if targetID == "" {
+		digest := sha256.Sum256([]byte(connection.CDPURL + "\x00" + chosen.ProfileID + "\x00" + chosen.ID))
+		targetID = "connected-" + hex.EncodeToString(digest[:16])
+	}
+	resources, err := r.managedResources()
+	if err != nil {
+		return TargetDescriptor{}, err
+	}
+	executor := NewPlaywrightTargetExecutor(resources.NodeBinary, resources.HelperPath, resources.ProfileDir)
+	executor.CDPURL, executor.TabID, executor.BrowserContextID = connection.CDPURL, chosen.ID, chosen.ProfileID
+	target := TargetDescriptor{ID: targetID, Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, Ready: true, State: "ready", PermissionState: "granted"}
+	if err := executor.EnsureTargetReady(ctx, targetID); err != nil {
+		_ = executor.Close()
+		return TargetDescriptor{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.registry.Register(target); err != nil {
+		_ = executor.Close()
+		return TargetDescriptor{}, err
+	}
+	r.executors[targetID] = executor
+	return target, nil
 }

@@ -108,6 +108,9 @@ func TestBrowserToolsNeverExecuteAgainstDesktopTarget(t *testing.T) {
 
 func TestComputerUseSchemasUseLogicalCurrentTarget(t *testing.T) {
 	for _, def := range builtInComputerToolDefinitions() {
+		if isComputerManagementTool(def.Name) {
+			continue
+		}
 		var schema map[string]any
 		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
 			t.Fatalf("%s schema: %v", def.Name, err)
@@ -130,6 +133,9 @@ func TestComputerUseSchemasUseLogicalCurrentTarget(t *testing.T) {
 
 func TestComputerUseSchemasEncodeEmptyRequiredAsArray(t *testing.T) {
 	for _, def := range builtInComputerToolDefinitions() {
+		if isComputerManagementTool(def.Name) {
+			continue
+		}
 		var schema map[string]any
 		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
 			t.Fatal(err)

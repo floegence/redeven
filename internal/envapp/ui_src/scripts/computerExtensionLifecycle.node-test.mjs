@@ -14,6 +14,7 @@ test('reconnection drains old requests before binding and reusing native request
   const ports = [], messages = event();
   let saved = {}, releaseInventory;
   const chrome = globalThis.chrome = {
+    webNavigation: { onCreatedNavigationTarget: event() },
     debugger: { onEvent: event(), onDetach: event(), detach: async () => {} },
     tabs: { onRemoved: event(), query: () => new Promise(resolve => { releaseInventory = resolve; }) },
     storage: { local: { get: async () => saved, set: async value => { saved = { ...saved, ...value }; } } },
@@ -32,7 +33,7 @@ test('reconnection drains old requests before binding and reusing native request
     await import(pathToFileURL(module).href);
     const first = connect(); await flush();
     assert.equal(ports.length, 1);
-    ports[0].onMessage.emit({ type: 'ready', protocol_version: 3 });
+    ports[0].onMessage.emit({ type: 'ready', protocol_version: 4 });
     assert.equal((await first).connected, true);
     ports[0].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     const next = connect(); await flush();
@@ -40,7 +41,7 @@ test('reconnection drains old requests before binding and reusing native request
     assert.equal(ports.length, 1, 'a new connection must wait for the retired request cleanup');
     releaseInventory([]); await flush(); await flush();
     assert.equal(ports.length, 2);
-    ports[1].onMessage.emit({ type: 'ready', protocol_version: 3 });
+    ports[1].onMessage.emit({ type: 'ready', protocol_version: 4 });
     assert.equal((await next).connected, true);
     ports[1].onMessage.emit({ id: '1', command: 'inventory' }); await flush();
     releaseInventory([{ id: 7, title: 'Selected', url: 'https://example.test' }]); await flush();

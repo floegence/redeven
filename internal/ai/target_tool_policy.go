@@ -22,6 +22,7 @@ type ToolTargetPolicy struct {
 // computer-use target. The executor owns the actual target session; the
 // registry only resolves logical aliases and prevents cross-target routing.
 type TargetDescriptor struct {
+	connection      *ComputerBrowserConnection
 	ID              string   `json:"id"`
 	Kind            string   `json:"kind"`
 	DisplayName     string   `json:"display_name"`
@@ -122,6 +123,7 @@ type TargetToolAttachmentResolver interface {
 }
 
 type TargetToolCall struct {
+	bindSelection        bool
 	fullAccess           bool
 	progress             func(mode, reason string)
 	allowedApps          []string
@@ -173,7 +175,14 @@ func toolRequiresTarget(toolName string) bool {
 	return false
 }
 
+func isComputerManagementTool(toolName string) bool {
+	return toolName == "computer.targets" || toolName == "computer.select_target"
+}
+
 func isComputerUseTool(toolName string) bool {
+	if isComputerManagementTool(toolName) {
+		return true
+	}
 	switch strings.TrimSpace(toolName) {
 	case "computer.observe", "computer.exec", "computer.screenshot", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait", "browser.navigate", "browser.back", "browser.reload":
 		return true

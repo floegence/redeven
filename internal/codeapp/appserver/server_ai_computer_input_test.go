@@ -42,3 +42,21 @@ func TestPrivateComputerFrameRejectsUnknownAuthorityWithoutCaching(t *testing.T)
 		t.Fatal("private authority was reflected")
 	}
 }
+
+func TestComputerSelectionRejectsForgedConnectionAndTrailingBodies(t *testing.T) {
+	srv, origin, _ := newUploadRouteServer(t)
+	for _, body := range []string{
+		`{"thread_id":"missing","candidate_ref":"forged","cdp_url":"http://127.0.0.1:9222"}`,
+		`{"thread_id":"missing","candidate_ref":"forged"}{}`,
+		`{"thread_id":"missing","candidate_ref":7}`,
+	} {
+		response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/computer/select", origin, body)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid candidate input: %d %s", response.Code, response.Body.String())
+		}
+	}
+	response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/computer/select", origin, `{"thread_id":"missing","candidate_ref":"forged"}`)
+	if response.Code != http.StatusConflict || strings.Contains(response.Body.String(), "forged") {
+		t.Fatalf("unknown authority leaked or selected: %d %s", response.Code, response.Body.String())
+	}
+}

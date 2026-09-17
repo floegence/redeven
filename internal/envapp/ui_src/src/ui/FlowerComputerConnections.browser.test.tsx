@@ -18,6 +18,7 @@ it('claims the exact extension tab shown in the selected inventory', async () =>
   const connect = vi.fn().mockResolvedValue({ ready: true });
   const selected = { id: '7', profile_id: 'work', title: 'Draft with unsaved changes', url: 'https://example.test/draft' };
   const management = {
+    listCandidates: vi.fn().mockResolvedValue({ current_target_id: '', candidates: [] }), selectCandidate: vi.fn(),
     listTargets: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(), loadAccess: vi.fn(), saveAccess: vi.fn(), listBrowserTabs: vi.fn(),
     listExtensionProfiles: vi.fn().mockResolvedValue([{ id: 'work', name: 'Work' }]),
     listExtensionTabs: vi.fn().mockResolvedValue([selected]),
@@ -40,11 +41,17 @@ it('claims the exact extension tab shown in the selected inventory', async () =>
   expect(connect).toHaveBeenLastCalledWith({ extension_profile_id: 'work', new_tab: true });
 });
 
-it('requires an explicit target choice and saves requested access only on user confirmation', async () => {
+it('shows automatic selection, offers grouped search, and saves access only on confirmation', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const selectTarget = vi.fn().mockResolvedValue(undefined), saveAccess = vi.fn().mockResolvedValue(undefined);
   const base = adapter(true);
+  const button = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent === text)!;
   const management = {
+    listCandidates: vi.fn().mockResolvedValue({ current_target_id: '', candidates: [
+      { candidate_ref: 'candidate-managed', kind: 'browser.managed', display_name: 'Managed browser', new_tab: true, state: 'ready' },
+      { candidate_ref: 'candidate-window', target_id: 'window', kind: 'desktop.window', display_name: 'Notes — Project', app_bundle_id: 'dev.fixture.Notes', state: 'ready' },
+      { candidate_ref: 'candidate-desktop', kind: 'desktop.screen', display_name: 'macOS Desktop', state: 'permission_required' },
+    ] }), selectCandidate: vi.fn().mockResolvedValue({ id: 'window', kind: 'desktop.window', display_name: 'Notes — Project', ready: true }),
     listTargets: vi.fn().mockResolvedValue([
       { id: 'managed', kind: 'browser.managed', display_name: 'Managed browser', state: 'stopped', ready: false },
       { id: 'window', kind: 'desktop.window', display_name: 'Notes — Project', state: 'ready', ready: true, app_bundle_id: 'dev.fixture.Notes' },
@@ -57,14 +64,23 @@ it('requires an explicit target choice and saves requested access only on user c
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open onOpenChange={() => undefined} threadID="thread-one"
     adapter={{ ...base, computerManagement: management }} copy={computerUseEnUS} requested={{ origin: 'https://example.com', app: 'dev.fixture.Notes', foreground: true }} /></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  await waitFor(() => document.querySelectorAll('input[type="radio"]').length === 3);
-  const radios = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
-  expect(radios[0].checked).toBe(true); expect(radios[2].disabled).toBe(true);
+  await waitFor(() => !button(computerUseEnUS.switchTarget).disabled);
+  expect(document.querySelector('input[type="radio"]')).toBeNull();
+  expect(document.querySelector('input[type="search"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(computerUseEnUS.automatic);
   expect(selectTarget).not.toHaveBeenCalled(); expect(saveAccess).not.toHaveBeenCalled();
-  radios[1].click();
-  await waitFor(() => radios[1].checked);
-  expect(selectTarget).toHaveBeenCalledWith('thread-one', 'window');
-  const button = (text: string) => Array.from(document.querySelectorAll('button')).find(item => item.textContent === text)!;
+  button(computerUseEnUS.switchTarget).click();
+  await waitFor(() => !!document.querySelector('input[type="search"]'));
+  expect(document.body.textContent).toContain(computerUseEnUS.browserPages);
+  expect(document.body.textContent).toContain(computerUseEnUS.applicationWindows);
+  const search = document.querySelector<HTMLInputElement>('input[type="search"]')!;
+  search.value = 'Notes'; search.dispatchEvent(new Event('input', { bubbles: true }));
+  expect(document.querySelector('[aria-label="' + computerUseEnUS.switchTarget + '"]')?.textContent).not.toContain('Managed browser');
+  const choose = [...document.querySelectorAll<HTMLButtonElement>('button')].find(value => value.textContent?.includes('Notes — Project'))!;
+  choose.click();
+  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
+  expect(management.selectCandidate).toHaveBeenCalledWith('thread-one', 'candidate-window');
+  await waitFor(() => !button(computerUseEnUS.grantRequested).disabled);
   button(computerUseEnUS.grantRequested).click();
   expect(saveAccess).not.toHaveBeenCalled();
   button(computerUseEnUS.save).click();
@@ -81,7 +97,8 @@ it('discards delayed permission results from a previous thread and keeps read-on
   let first: (value: { origins: string[]; apps: string[]; allow_foreground: boolean }) => void = () => undefined;
   const [threadID, setThreadID] = createSignal('one');
   const loadAccess = vi.fn((thread: string) => thread === 'one' ? new Promise<FlowerComputerAccess>(resolve => { first = resolve; }) : Promise.resolve({ origins: ['https://second.example'], apps: [], allow_foreground: false }));
-  const management = { listTargets: vi.fn().mockResolvedValue([]), listBrowserTabs: vi.fn(), loadAccess,
+  const management = {
+    listCandidates: vi.fn().mockResolvedValue({ current_target_id: '', candidates: [] }), selectCandidate: vi.fn(), listTargets: vi.fn().mockResolvedValue([]), listBrowserTabs: vi.fn(), loadAccess,
     loadTarget: vi.fn().mockResolvedValue({ target_id: '' }), selectTarget: vi.fn(), saveAccess: vi.fn() };
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open onOpenChange={() => undefined} threadID={threadID()}
     adapter={{ ...adapter(true), canMutate: false, computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
@@ -104,6 +121,7 @@ it('loads managed profiles, requires an explicit tab, creates a background tab, 
   const target = { id: 'managed-tab', kind: 'browser.managed', display_name: 'Work profile', state: 'ready', ready: true };
   const connect = vi.fn().mockResolvedValue(target);
   const management = {
+    listCandidates: vi.fn().mockResolvedValue({ current_target_id: target.id, candidates: [{ ...target, target_id: target.id, candidate_ref: 'managed-candidate' }] }), selectCandidate: vi.fn(),
     listTargets: vi.fn().mockResolvedValue([target]), loadTarget: vi.fn().mockResolvedValue({ target_id: '' }), selectTarget: vi.fn(),
     loadAccess: vi.fn().mockResolvedValue({ origins: [], apps: [], allow_foreground: false }), saveAccess: vi.fn(), listBrowserTabs: vi.fn(),
     listManagedProfiles: vi.fn().mockResolvedValue([{ id: 'default', name: 'Default' }]),
@@ -114,6 +132,8 @@ it('loads managed profiles, requires an explicit tab, creates a background tab, 
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open onOpenChange={() => undefined} threadID="managed-thread"
     adapter={{ ...base, computerManagement: management, connectComputerBrowser: connect }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
+  const manage = () => [...document.querySelectorAll<HTMLButtonElement>('button')].find(value => value.textContent === computerUseEnUS.manageConnections)!;
+  await waitFor(() => !!manage()); manage().click();
   await waitFor(() => Boolean(document.querySelector('select')));
   expect(management.listManagedProfiles).toHaveBeenCalledTimes(1);
   const profile = document.querySelector<HTMLSelectElement>('select')!;
@@ -153,6 +173,7 @@ it('explains full access without redundant grant controls and keeps target selec
   const host = document.createElement('div'); document.body.append(host);
   const [fullAccess, setFullAccess] = createSignal(true);
   const management = {
+    listCandidates: vi.fn().mockResolvedValue({ current_target_id: '', candidates: [] }), selectCandidate: vi.fn(),
     listTargets: vi.fn().mockResolvedValue([{ id: 'managed', kind: 'browser.managed', display_name: 'Task browser', ready: true }]),
     loadTarget: vi.fn().mockResolvedValue({ target_id: 'managed' }), selectTarget: vi.fn(),
     loadAccess: vi.fn().mockResolvedValue({ origins: ['https://saved.test'], apps: [], allow_foreground: false }), saveAccess: vi.fn(),
@@ -161,7 +182,8 @@ it('explains full access without redundant grant controls and keeps target selec
   const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open onOpenChange={() => undefined}
     fullAccess={fullAccess()} threadID="full-task" adapter={{ ...adapter(true), computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  await waitFor(() => !!document.querySelector('input[type="radio"]:not(:disabled)'));
+  await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('button')].some(value => value.textContent === computerUseEnUS.switchTarget && !value.disabled));
+  expect(document.querySelector('input[type="radio"]')).toBeNull();
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain(computerUseEnUS.fullAccessHint);
   expect(document.querySelector('input[type="url"]')).toBeNull();
   expect([...document.querySelectorAll('button')].some(button => button.textContent === computerUseEnUS.save)).toBe(false);
@@ -169,4 +191,38 @@ it('explains full access without redundant grant controls and keeps target selec
   await waitFor(() => !!document.querySelector('input[type="url"]'));
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('https://saved.test');
   expect(management.saveAccess).not.toHaveBeenCalled();
+});
+
+it('keeps the current page after a stale selection and supports keyboard switching on a narrow screen', async () => {
+  const { page, userEvent } = await import('vitest/browser');
+  await page.viewport(390, 720);
+  const host = document.createElement('div'); document.body.append(host);
+  const management = {
+    listCandidates: vi.fn().mockResolvedValue({ current_target_id: 'draft', candidates: [
+      { candidate_ref: 'draft-ref', target_id: 'draft', kind: 'browser.connected', display_name: 'Personal', profile_name: 'Personal', title: 'Unsaved draft', url: 'https://example.test/draft', state: 'ready' },
+      { candidate_ref: 'child-ref', target_id: 'child', kind: 'browser.connected', display_name: 'Personal', title: 'Details page', url: 'https://example.test/details', state: 'ready' },
+    ] }),
+    selectCandidate: vi.fn().mockRejectedValue(Object.assign(new Error('private adapter details'), { code: 'target_selection_stale' })),
+    loadAccess: vi.fn().mockResolvedValue({ origins: [], apps: [], allow_foreground: false }),
+    listTargets: vi.fn(), loadTarget: vi.fn(), selectTarget: vi.fn(), saveAccess: vi.fn(), listBrowserTabs: vi.fn(),
+  };
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open fullAccess onOpenChange={() => undefined} threadID="draft-thread"
+    adapter={{ ...adapter(true), computerManagement: management }} copy={computerUseEnUS} /></LayoutProvider></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  try {
+    const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
+    const switcher = () => buttons().find(button => button.textContent === computerUseEnUS.switchTarget)!;
+    await waitFor(() => !!switcher() && !switcher().disabled);
+    switcher().focus(); await userEvent.keyboard('{Enter}');
+    await waitFor(() => buttons().some(button => button.textContent?.includes('Details page')));
+    buttons().find(button => button.textContent?.includes('Details page'))!.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => document.querySelector('[role="alert"]')?.textContent === computerUseEnUS.selectionStale);
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Unsaved draft');
+    expect(document.body.textContent).not.toContain('private adapter details');
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+    expect(management.selectCandidate).toHaveBeenCalledWith('draft-thread', 'child-ref');
+  } finally { await page.viewport(1280, 720); }
 });

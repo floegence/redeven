@@ -11,8 +11,9 @@ One `computer.exec` is one Floret tool invocation and one effect attempt.
 `ComputerUseRuntime` owns its isolated QuickJS process and checks every host
 operation. The guest receives only the controlled `ui`, `browser` and `log`
 interfaces. Partial progress survives failure; uncertain effects never replay.
-A new decision, permission requirement or private input ends the batch and
-returns control through Floret's existing interaction boundary.
+A page change ends the batch with successful partial progress for the Agent.
+A permission requirement or private input ends it through Floret's existing
+interaction boundary.
 
 # Contract
 
@@ -93,7 +94,7 @@ document during capture or a privacy read discards the image, tree and page
 metadata and marks `observation_invalidated`. Confirmed action facts remain;
 the next observation checks the new document without repeating the action or
 inventing a private-input handoff. A scan failure without document invalidation
-still pauses. Site permissions, popup selection, explicit takeover and uncertain
+still pauses. Site permissions, explicit Agent popup selection, takeover and uncertain
 effects retain their existing boundaries. A script also drops cached observations
 from before invalidation; its final result retains the flag until it obtains a
 fresh observation.
@@ -110,7 +111,9 @@ before each host operation. The target remains owned by the same canonical turn
 across the batch; independent live sampling may run between operations.
 
 Results record confirmed completed actions, operation count and final compact
-observation. Interpreter failure and timeout preserve this prefix and bounded
+observation. A popup returns `completed: false`, `target_changed`,
+`opened_pages`, `opener_tab_id` and `action_executed` without `InputRequired`.
+The Agent selects and observes the new page; it never reruns the opening action. Interpreter failure and timeout preserve this prefix and bounded
 logs. A script that stops after a host rejection or guest exception is an
 execution failure, never a successful tool or schema-regeneration request.
 Closed diagnostic codes avoid leaking guest exception text. Output-limit

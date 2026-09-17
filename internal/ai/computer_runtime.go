@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"errors"
-	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +13,7 @@ import (
 // Resolving identity is read-only. Preparation happens after target policy has
 // authorized the action, and only a successful adapter handshake grants ready.
 type ComputerUseRuntime struct {
+	candidates      map[string]computerCandidate
 	managedProfiles map[string]*managedBrowserProfile
 	extension       *computerExtensionHub
 	connectMu       sync.Mutex
@@ -33,6 +33,10 @@ type ComputerUseRuntime struct {
 // running system browser is never treated as connected implicitly; callers
 // must provide the bridge endpoint returned by the user-facing connect flow.
 func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, connection ComputerBrowserConnection) (TargetDescriptor, error) {
+	return r.connectBrowser(ctx, connection, "")
+}
+
+func (r *ComputerUseRuntime) connectBrowser(ctx context.Context, connection ComputerBrowserConnection, targetID string) (TargetDescriptor, error) {
 	if err := connection.validate(); err != nil {
 		return TargetDescriptor{}, err
 	}
@@ -47,82 +51,18 @@ func (r *ComputerUseRuntime) ConnectBrowser(ctx context.Context, connection Comp
 	if closed {
 		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "runtime_closed"}
 	}
+	if targetID != "" {
+		if existing, err := r.registry.ResolveTarget(ctx, targetID); err == nil && existing.ID == targetID {
+			return existing, nil
+		}
+	}
 	if connection.ManagedProfileID != "" {
-		return r.connectManagedBrowserLocked(ctx, connection, "")
+		return r.connectManagedBrowserLocked(ctx, connection, targetID)
 	}
 	if connection.ExtensionProfileID != "" {
-		return r.connectExtensionBrowser(ctx, connection)
+		return r.connectExtensionBrowser(ctx, connection, targetID)
 	}
-	cdpURL := strings.TrimSpace(connection.CDPURL)
-	endpoint, err := url.Parse(cdpURL)
-	if err != nil || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https" && endpoint.Scheme != "ws" && endpoint.Scheme != "wss") {
-		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_endpoint_invalid"}
-	}
-	if strings.TrimSpace(connection.TabID) == "" || len(connection.TabID) > 256 || strings.TrimSpace(connection.ProfileID) == "" {
-		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_tab_selection_required"}
-	}
-	base, err := r.registry.ResolveTarget(ctx, "current")
-	if err != nil {
-		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "managed_browser_unavailable"}
-	}
-	r.mu.RLock()
-	managed, ok := r.executors[base.ID].(*PlaywrightTargetExecutor)
-	r.mu.RUnlock()
-	if !ok || managed == nil {
-		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_adapter_unavailable"}
-	}
-	// Replacing an adapter changes the resource behind every bound thread. Use
-	// the same gate as actions and readiness, and refuse an active turn's lease
-	// even between actions or while the user has private control.
-	control := r.controlForTarget("browser-connected")
-	select {
-	case <-ctx.Done():
-		return TargetDescriptor{}, ctx.Err()
-	case control.gate <- struct{}{}:
-		defer func() { <-control.gate }()
-	default:
-		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "target_in_use"}
-	}
-	control.mu.Lock()
-	inUse := control.threadID != "" || control.user
-	control.mu.Unlock()
-	if inUse {
-		return TargetDescriptor{}, &TargetStartupError{Code: "TARGET_NOT_READY", Reason: "target_in_use"}
-	}
-	connected := NewPlaywrightTargetExecutor(managed.NodeBinary, managed.HelperPath, managed.ProfileDir)
-	connected.CDPURL = cdpURL
-	connected.TabID, connected.BrowserContextID = connection.TabID, connection.ProfileID
-	target := TargetDescriptor{ID: "browser-connected", Kind: "browser.connected", DisplayName: "Connected Chrome", Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "starting", PermissionState: "not_checked"}
-	// Publish only a verified replacement. A failed connection must not retire
-	// the session the user already authorized.
-	if err := connected.EnsureTargetReady(ctx, target.ID); err != nil {
-		_ = connected.Close()
-		target.State = "connection_required"
-		if ctx.Err() != nil {
-			return target, ctx.Err()
-		}
-		var startup *TargetStartupError
-		if errors.As(err, &startup) {
-			return target, startup
-		}
-		return target, &TargetStartupError{Code: "TARGET_CONNECTION_REQUIRED", Reason: "browser_connection_failed"}
-	}
-	target.Ready, target.State, target.PermissionState = true, "ready", "granted"
-	r.mu.Lock()
-	old := r.executors[target.ID]
-	err = r.registry.Register(target)
-	if err == nil {
-		r.executors[target.ID] = connected
-	}
-	r.mu.Unlock()
-	if err != nil {
-		_ = connected.Close()
-		return TargetDescriptor{}, err
-	}
-	if closer, ok := old.(interface{ Close() error }); ok {
-		_ = closer.Close()
-	}
-	return target, err
+	return r.connectCDPBrowserLocked(ctx, connection, targetID)
 }
 
 type TargetPreparer interface {
@@ -169,9 +109,33 @@ func (r *ComputerUseRuntime) ResolveTargetForThread(ctx context.Context, threadI
 		if err != nil {
 			return TargetDescriptor{}, err
 		}
-		if bound != "" {
-			alias = bound
+		if bound == "" {
+			return r.defaultThreadBrowser(threadID)
 		}
+		return r.registry.ResolveTarget(ctx, bound)
+	}
+	if strings.HasPrefix(alias, "task-browser-") {
+		if existing, err := r.registry.ResolveTarget(ctx, alias); err == nil {
+			return existing, nil
+		}
+		// Only an unbound invocation may materialize its frozen default plan.
+		// A lost durable page must not be recreated by naming its old ID.
+		bindings := r.targetBindings()
+		if bindings == nil {
+			return TargetDescriptor{}, errors.New("computer target binding store is unavailable")
+		}
+		bound, err := bindings.GetComputerTarget(ctx, threadID)
+		if err != nil {
+			return TargetDescriptor{}, err
+		}
+		if bound != "" {
+			return TargetDescriptor{}, errTargetNotRegistered
+		}
+		planned, err := r.defaultThreadBrowser(threadID)
+		if err == nil && planned.ID == alias {
+			return planned, nil
+		}
+		return TargetDescriptor{}, errTargetNotRegistered
 	}
 	return r.registry.ResolveTarget(ctx, alias)
 }
@@ -193,6 +157,12 @@ func (r *ComputerUseRuntime) BindThreadTarget(ctx context.Context, threadID, tar
 // prepareInitialManagedTarget is shared by ordinary tool preparation and explicit
 // private-control recovery. Only the Runtime may launch a managed profile.
 func (r *ComputerUseRuntime) prepareInitialManagedTarget(ctx context.Context, target TargetDescriptor) (TargetDescriptor, error) {
+	if target.connection != nil {
+		// A resource plan freezes the profile in the target identity. Re-check
+		// registration under the connection lock so concurrent preparation
+		// cannot create two pages for the same task.
+		return r.connectBrowser(ctx, *target.connection, target.ID)
+	}
 	var readinessErr error
 	// Only the initial managed target may create its first page lazily. A lost
 	// bound tab never selects a replacement or revives its old references.
@@ -279,9 +249,32 @@ func (r *ComputerUseRuntime) PrepareTarget(ctx context.Context, target TargetDes
 	return target, nil
 }
 func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	if call.bindSelection {
+		if err := r.requireComputerSelectionOpen(call); err != nil {
+			return TargetToolResult{}, err
+		}
+	}
 	control, unlock, err := r.acquireComputerControl(ctx, call)
 	if err != nil {
 		return TargetToolResult{}, err
+	}
+	if call.bindSelection {
+		if err := r.authorizeComputerCall(ctx, &call); err != nil {
+			unlock()
+			return TargetToolResult{}, err
+		}
+		if err := r.requireComputerSelectionOpen(call); err != nil {
+			unlock()
+			return TargetToolResult{}, err
+		}
+		if err := r.BindThreadTarget(ctx, call.ThreadID, call.TargetID); err != nil {
+			unlock()
+			return TargetToolResult{}, err
+		}
+		control.mu.Lock()
+		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
+		control.mu.Unlock()
+		call.bindSelection = false
 	}
 	if call.ToolName == "computer.exec" {
 		r.releasePreviousComputerTarget(call)

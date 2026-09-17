@@ -55,7 +55,7 @@ export class BrowserComputerPage {
     this.listeners = new Set();
     this.sessions = new Map();
     this.requiredOrigin = undefined;
-    this.newTarget = false;
+    this.openedPages = [];
     this.downloads = new Map();
     this.guardFailure = false;
     this.privateInput = false;
@@ -75,7 +75,7 @@ export class BrowserComputerPage {
   changed() { for (const listener of this.listeners) listener(); }
   close() { this.invalid = true; this.invalidate(); }
   cancel() { this.stopped = true; this.invalidate(); }
-  handback() { this.newTarget = false; this.stopped = false; this.requiredOrigin = undefined; this.invalidate(); }
+  handback() { this.openedPages = []; this.stopped = false; this.requiredOrigin = undefined; this.invalidate(); }
 
   async initialize() { await this.initializeSession(this.transport); }
 
@@ -85,11 +85,10 @@ export class BrowserComputerPage {
       for (const event of ['Page.frameNavigated', 'DOM.documentUpdated']) session.on(event, () => this.invalidate());
       for (const event of ['DOM.childNodeRemoved', 'DOM.attributeModified', 'DOM.childNodeInserted', 'Accessibility.nodesUpdated', 'Page.lifecycleEvent']) session.on(event, () => this.changed());
       session.on('Page.windowOpen', event => {
-        // A popup is a separate target. Never follow it or reuse this page's
-        // node references, even when its origin is already permitted.
-        this.newTarget = true; this.stopped = true;
-        try { const origin = new URL(event.url).origin; if (!this.allowsOrigin(origin)) this.requiredOrigin = origin; } catch { /* Selection still requires the user. */ }
-        this.invalidate(); this.onTakeover();
+        // Opening a page completes an action; choosing that page is the
+        // agent's next decision. It does not grant control or require a user.
+        if (this.openedPages.length < 16) this.openedPages.push({ url: String(event.url || '').slice(0, 8192) });
+        this.invalidate();
       });
       session.on('Page.downloadWillBegin', event => {
         if (this.downloads.size >= 32) this.downloads.delete(this.downloads.keys().next().value);
@@ -186,8 +185,7 @@ export class BrowserComputerPage {
     let requiredOrigin = this.requiredOrigin;
     if (this.guardFailure) reasons.add('unknown');
     if (requiredOrigin) reasons.add('site_permission');
-    if (this.newTarget) reasons.add('target_permission');
-    else if (this.stopped) reasons.add('user_control');
+    if (this.stopped) reasons.add('user_control');
     let frames;
     try { frames = await this.frames(); }
     catch (error) {
@@ -241,8 +239,7 @@ export class BrowserComputerPage {
     }
     if (this.guardFailure) reasons.add('unknown');
     if (this.requiredOrigin) { reasons.add('site_permission'); requiredOrigin = this.requiredOrigin; }
-    if (this.newTarget) reasons.add('target_permission');
-    else if (this.stopped) reasons.add('user_control');
+    if (this.stopped) reasons.add('user_control');
     if (!reasons.size && revision !== this.revision) throw new Error('OBSERVATION_INVALIDATED');
     return { level: reasons.size ? 'takeover' : 'routine', reason_codes: [...reasons], safe_to_capture: !reasons.size, safe_to_send_to_model: !reasons.size, ...(requiredOrigin ? { required_origin: requiredOrigin } : {}) };
   }

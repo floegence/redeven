@@ -50,7 +50,19 @@ function targetUnavailable(tabId) {
   if (native && ready) native.postMessage({ type: 'target_unavailable', tab_id: String(tabId) });
 }
 chrome.debugger.onDetach.addListener(source => targetUnavailable(source.tabId));
-chrome.tabs.onRemoved.addListener(targetUnavailable);
+const popupOpeners = new Map();
+// tabs.openerTabId describes tab grouping, not the window.open source. Chrome's
+// navigation event supplies the actual source even for a background tab.
+chrome.webNavigation.onCreatedNavigationTarget.addListener(details => {
+  if (!bindings.has(details.sourceTabId)) return;
+  if (popupOpeners.size >= 128) popupOpeners.delete(popupOpeners.keys().next().value);
+  popupOpeners.set(details.tabId, details.sourceTabId);
+});
+chrome.tabs.onRemoved.addListener(tabId => {
+  targetUnavailable(tabId);
+  popupOpeners.delete(tabId);
+  for (const [child, opener] of popupOpeners) if (opener === tabId) popupOpeners.delete(child);
+});
 
 async function disconnect() {
   const port = native; native = undefined; ready = false;
@@ -63,7 +75,7 @@ async function disconnect() {
     binding.controller.close();
     await chrome.debugger.detach({ tabId }).catch(() => {});
   }
-  bindings.clear(); port?.disconnect();
+  bindings.clear(); popupOpeners.clear(); port?.disconnect();
   // A retired bind may still be awaiting Chrome. Let its cancellation cleanup
   // finish before another connection can bind the same tab.
   await Promise.allSettled([...retired.values()].map(task => task.finished));
@@ -110,7 +122,9 @@ async function execute(message, task) {
     case 'inventory': {
       const tabs = (await chrome.tabs.query({})).filter(tab => !tab.incognito && /^(https?:\/\/|about:blank$)/u.test(tab.url || ''));
       if (tabs.length > 128) throw new Error('inventory limit');
-      return tabs.map(tab => ({ id: String(tab.id), profile_id: profile.id, title: (tab.title || '').slice(0, 512), url: tab.url }));
+      return tabs.map(tab => ({ id: String(tab.id), profile_id: profile.id, title: (tab.title || '').slice(0, 512), url: tab.url,
+        ...(popupOpeners.has(tab.id) ? { opener_tab_id: String(popupOpeners.get(tab.id)) } : {}),
+      }));
     }
     case 'bind': {
       if (typeof args.tab_url !== 'string' || !args.tab_url || typeof args.tab_title !== 'string') throw new Error('select a current tab');
@@ -162,7 +176,7 @@ async function connect(name, label) {
   port.onDisconnect.addListener(() => rejected(new Error('disconnected')));
   port.onMessage.addListener(message => {
     if (native !== port) return;
-    if (message.type === 'ready' && message.protocol_version === 3 && !ready) { ready = true; accepted(); return; }
+    if (message.type === 'ready' && message.protocol_version === 4 && !ready) { ready = true; accepted(); return; }
     if (!ready || typeof message.id !== 'string' || !message.id || message.id.length > 64) { void disconnectPort(); return; }
     if (message.type === 'cancel') {
       const task = requests.get(message.id);
@@ -181,7 +195,7 @@ async function connect(name, label) {
       if (native === port) port.postMessage(response);
     })();
   });
-  port.postMessage({ type: 'hello', protocol_version: 3, profile_id: profile.id, profile_name: profile.name });
+  port.postMessage({ type: 'hello', protocol_version: 4, profile_id: profile.id, profile_name: profile.name });
   try { await handshake; }
   catch (error) { if (native === port) await disconnect(); throw error; }
   finally { clearTimeout(timeout); }

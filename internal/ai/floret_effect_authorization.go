@@ -177,7 +177,24 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 		releaseAuthorization()
 		return err
 	}
-	if isComputerUseTool(req.ToolName) {
+	if req.ToolName == "computer.select_target" {
+		ref := ""
+		for _, resource := range req.Resources {
+			if resource.Kind == "computer_candidate" {
+				if ref != "" {
+					releaseAuthorization()
+					return errors.New("ambiguous computer candidate")
+				}
+				ref = resource.Value
+			}
+		}
+		if ref == "" {
+			releaseAuthorization()
+			return errors.New("computer candidate is missing")
+		}
+		executionContext = context.WithValue(executionContext, computerAuthorizedCandidateKey{}, ref)
+	}
+	if isComputerUseTool(req.ToolName) && !isComputerManagementTool(req.ToolName) {
 		var targetID string
 		for _, resource := range req.Resources {
 			if resource.Kind == "computer_target" {

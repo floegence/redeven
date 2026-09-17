@@ -85,13 +85,13 @@ func (r *ComputerUseRuntime) acquireComputerControl(ctx context.Context, call Ta
 	}
 	if control.threadID != "" && (control.threadID != call.ThreadID || ((!call.liveFrame || call.controlReturn || call.userInput) && control.runID != "" && control.runID != call.RunID)) {
 		unlock()
-		return nil, nil, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
+		return nil, nil, computerTargetFailure(call, "TARGET_IN_USE")
 	}
 	if control.user && !call.controlReturn && !call.userInput {
 		unlock()
 		return nil, nil, computerTargetFailure(call, "TAKEOVER_REQUIRED")
 	}
-	if (!call.liveFrame || call.controlReturn) && call.ThreadID != "" {
+	if (!call.liveFrame || call.controlReturn) && call.ThreadID != "" && !call.bindSelection {
 		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
 		if call.controlReturn {
 			control.user = true

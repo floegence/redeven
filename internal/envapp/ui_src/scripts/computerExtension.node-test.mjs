@@ -78,7 +78,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await popup.locator('#profile').fill('Fixture profile'); await popup.locator('#bridge').fill('dev.floegence.redeven.r123456789abcdef0');
     await popup.locator('#connect-button').click();
     await worker.evaluate(() => fixtureWait('hello'));
-    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 3 }));
+    await worker.evaluate(() => fixtureDeliver({ type: 'ready', protocol_version: 4 }));
     let sequence = 0;
     const call = async (command, args = {}) => {
       const id = String(++sequence);
@@ -160,12 +160,19 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeBeforeDownload);
     await t.test('native popup remains a separate unbound target', async () => {
     const popupResult = await execute('computer.action', { action: 'click', selector: { role: 'button', name: 'Open details' } });
-    assert.equal(popupResult.safety.level, 'takeover');
-    assert.ok(popupResult.safety.reason_codes.includes('target_permission'), JSON.stringify(popupResult));
+    assert.equal(popupResult.safety.level, 'routine');
+    assert.equal(popupResult.result.target_changed, true);
+    assert.equal(popupResult.result.action_executed, true);
     const popupTabs = await call('inventory');
     const child = popupTabs.find(tab => tab.url === origin + '/popup');
     assert.ok(child);
+    assert.equal(child.opener_tab_id, popupResult.result.opener_tab_id);
+    assert.equal(child.opener_tab_id, selected.id);
     assert.equal((await call('execute', { tab_id: child.id, request: { tool_name: 'computer.observe', args: {} } })).error, 'TARGET_CONNECTION_REQUIRED');
+    await call('bind', { tab_id: child.id, tab_url: child.url, tab_title: child.title });
+    const childResult = await call('execute', { tab_id: child.id, request: { tool_name: 'computer.observe', args: {}, full_access: true } });
+    assert.equal(childResult.safety.level, 'routine');
+    assert.equal((await call('inventory')).filter(tab => tab.url === origin + '/popup').length, 1);
     });
     await call('unbind', { tab_id: selected.id });
     assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query' }, text: 'Forbidden' })).error, 'TARGET_CONNECTION_REQUIRED');

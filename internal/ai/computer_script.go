@@ -184,6 +184,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	completed := []string{}
 	var stopped error
 	var pause *InteractionSafetyDecision
+	var targetChange map[string]any
 	var lastObservation any
 	var observationScope string
 	var fullObservation bool
@@ -251,6 +252,13 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				stopped = ErrInteractionTakeoverRequired
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
+				if payload["target_changed"] == true {
+					targetChange = map[string]any{"target_changed": true, "opened_pages": payload["opened_pages"], "opener_tab_id": payload["opener_tab_id"]}
+					stopped = errors.New("computer target changed")
+					lastObservation = nil
+					result.Attachments = nil
+					p.observations = computerObservationOutput{}
+				}
 				if payload["action_executed"] == true {
 					effectCompleted = true
 					lastObservation = nil
@@ -311,6 +319,13 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				// progress facts cross a sensitive pause.
 				delete(result.Result.(map[string]any), "observation")
 				delete(result.Result.(map[string]any), "logs")
+				return result, nil
+			}
+			if targetChange != nil {
+				for key, value := range targetChange {
+					result.Result.(map[string]any)[key] = value
+				}
+				delete(result.Result.(map[string]any), "observation")
 				return result, nil
 			}
 			if stopped != nil || msg.Type == "error" {

@@ -35,7 +35,7 @@ func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
 			return
 		}
 		if providerCalls.Add(1) == 1 {
-			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{}`}
+			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "requires-input")
@@ -145,14 +145,14 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				}
 				requestNumber := requests.Add(1)
 				if requestNumber == 1 {
-					item := map[string]any{"type": "function_call", "id": "fc_nav", "call_id": "nav-login", "name": "browser_navigate", "arguments": `{"url":"https://example.test/"}`}
+					item := map[string]any{"type": "function_call", "id": "fc_nav", "call_id": "nav-login", "name": "browser_navigate", "arguments": `{"target":"browser.managed","url":"https://example.test/"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "pause", "status": "completed", "output": []any{item}}})
 					return
 				}
 				if requestNumber == 2 {
-					item := map[string]any{"type": "function_call", "id": "fc_resumed", "call_id": "resumed-observation", "name": "computer_screenshot", "arguments": `{}`}
+					item := map[string]any{"type": "function_call", "id": "fc_resumed", "call_id": "resumed-observation", "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "resumed-observation", "status": "completed", "output": []any{item}}})

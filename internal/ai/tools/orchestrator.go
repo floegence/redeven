@@ -55,6 +55,10 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 			errorCode = ErrorCodeTargetRequired
 		case "target_executor_unavailable":
 			errorCode = ErrorCodeTargetExecutorUnavailable
+		case "target_in_use":
+			errorCode = ErrorCodeTargetInUse
+		case "target_selection_stale":
+			errorCode = ErrorCodeTargetSelectionStale
 		case "target_not_allowed":
 			errorCode = ErrorCodeTargetNotAllowed
 		case "target_unavailable":

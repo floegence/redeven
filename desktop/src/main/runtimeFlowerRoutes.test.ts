@@ -6,6 +6,7 @@ const base = '/_redeven_proxy/api/ai/computer';
 
 describe('Desktop computer management routes', () => {
   it.each<[string, RuntimeFlowerRequestMethod[]]>([
+    ['/candidates?thread_id=thread-1', ['GET']], ['/select', ['POST']],
     ['/targets', ['GET']], ['/tabs', ['POST']], ['/disconnect', ['POST']],
     ['/target?thread_id=thread-1', ['GET']], ['/target', ['PUT']],
     ['/access?thread_id=thread-1', ['GET', 'PUT']],
@@ -21,6 +22,7 @@ describe('Desktop computer management routes', () => {
   });
 
   it.each([
+    '/candidates', '/candidates?thread_id=', '/candidates?thread_id=a&thread_id=b', '/candidates?thread_id=a&cdp_url=x', '/select?thread_id=a',
     '/access', '/access?thread_id=', '/access?thread_id=a&thread_id=b',
     '/access?thread_id=a&target_id=b', '/access?thread_id=%20',
     '/access?thread_id=' + 'a'.repeat(513), '/target?profile_id=a',

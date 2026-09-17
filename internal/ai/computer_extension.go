@@ -377,18 +377,7 @@ func (s *Service) ComputerExtensionProfiles(ctx context.Context, meta *session.M
 	if !ok {
 		return nil, errors.New("computer runtime unavailable")
 	}
-	host.mu.RLock()
-	hub := host.extension
-	host.mu.RUnlock()
-	profiles := []ComputerExtensionProfile{}
-	if hub != nil {
-		hub.mu.Lock()
-		for _, client := range hub.profiles {
-			profiles = append(profiles, client.profile)
-		}
-		hub.mu.Unlock()
-	}
-	return profiles, nil
+	return host.extensionProfiles(), nil
 }
 func (s *Service) ComputerExtensionTabs(ctx context.Context, meta *session.Meta, profileID string) ([]ComputerBrowserTab, error) {
 	if err := requireRWX(meta); err != nil {
@@ -398,10 +387,11 @@ func (s *Service) ComputerExtensionTabs(ctx context.Context, meta *session.Meta,
 	if !ok {
 		return nil, errors.New("computer runtime unavailable")
 	}
-	client, err := host.extensionClient(profileID)
-	if err != nil {
-		return nil, err
-	}
+	return host.extensionTabs(ctx, profileID)
+}
+
+func (client *computerExtensionClient) tabs(ctx context.Context) ([]ComputerBrowserTab, error) {
+	profileID := client.profile.ID
 	raw, err := client.call(ctx, "inventory", nil)
 	if err != nil {
 		return nil, err
@@ -416,7 +406,7 @@ func (s *Service) ComputerExtensionTabs(ctx context.Context, meta *session.Meta,
 	return tabs, nil
 }
 
-func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connection ComputerBrowserConnection) (TargetDescriptor, error) {
+func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connection ComputerBrowserConnection, targetID string) (TargetDescriptor, error) {
 	client, err := r.extensionClient(connection.ExtensionProfileID)
 	if err != nil {
 		return TargetDescriptor{}, err
@@ -438,7 +428,13 @@ func (r *ComputerUseRuntime) connectExtensionBrowser(ctx context.Context, connec
 	if json.Unmarshal(raw, &binding) != nil || binding.TabID == "" {
 		return TargetDescriptor{}, errors.New("invalid browser binding")
 	}
-	target := TargetDescriptor{ID: "chrome-" + client.profile.ID + "-" + binding.TabID, Kind: "browser.connected", DisplayName: client.profile.Name + " — " + binding.Title, Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true}
+	if targetID == "" {
+		targetID = r.extensionTabTargetID(client.profile.ID, binding.TabID)
+	}
+	if targetID == "" {
+		targetID = "chrome-" + client.profile.ID + "-" + binding.TabID
+	}
+	target := TargetDescriptor{ID: targetID, Kind: "browser.connected", DisplayName: client.profile.Name + " — " + binding.Title, Locality: "local", Capabilities: []string{"observe", "interaction"}, State: "ready", PermissionState: "granted", Ready: true}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {

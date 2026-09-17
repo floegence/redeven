@@ -54,9 +54,9 @@ test('native messaging launches the Runtime bridge and exchanges bounded profile
     });
     const receive = async () => { if (!messages.length) await new Promise(resolve => waiters.push(resolve)); return messages.shift(); };
     const send = value => { const body = Buffer.from(JSON.stringify(value)), header = Buffer.alloc(4); header.writeUInt32LE(body.length); peer.write(Buffer.concat([header, body])); };
-    assert.deepEqual(await receive(), { type: 'native_host', protocol_version: 3, extension_id: extensionID });
+    assert.deepEqual(await receive(), { type: 'native_host', protocol_version: 4, extension_id: extensionID });
     const hello = await receive(); assert.equal(hello.type, 'hello'); assert.equal(hello.profile_name, 'Native fixture');
-    send({ type: 'ready', protocol_version: 3 });
+    send({ type: 'ready', protocol_version: 4 });
     await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ command: 'status' })).connected === true);
     send({ id: '1', command: 'inventory' });
     const inventory = await receive(); assert.equal(inventory.id, '1'); assert.ok(Array.isArray(inventory.result));

@@ -1,5 +1,19 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Autonomous browser and application selection
+
+- Add thread-scoped Runtime candidates and shared UI/Agent selection, personal
+  browser preference and independent task tabs without a new storage lifecycle.
+- Preserve native popup behavior and confirmed actions while returning routing
+  facts to the Agent; actual authorization and private-input steps remain explicit.
+- Replace mandatory target lists with current connection status and optional
+  grouped search. Localize discovery and switching in Activity and settings.
+- Require Desktop/Runtime epoch 22 and browser/Native Messaging protocol 4;
+  macOS protocol 3, product schema 9 and published Floret v7.14.0 remain unchanged.
+- See [target selection](ai/computer-use-target-selection.md),
+  [browser execution](ai/computer-use-browser.md) and
+  [script progress](ai/computer-use-scripts.md).
+
 ## 2026-09-17 — Tool intent and inspectable input/results
 
 - Consume published Floret v7.14.0 structured inputs, explicit result availability,
