@@ -30,7 +30,7 @@ The header identifies the service and current version. Search and channel filter
 
 The primary action names the target and distinguishes an update, downgrade, unordered switch, and moved-tag image replacement. Running-service updates disclose temporary unavailability. Stopped-service updates disclose that verification finishes with the service still stopped. Downgrades explain that application data is not reverse-migrated.
 
-The outer body never scrolls. Mouse, trackpad, touch, and keyboard scrolling stay in the shared Workbench-marked viewport. Radio choices support arrow keys, Home, and End. Overlay dismissal, Close, Escape, and Cancel remain available during source loading and preparation. Closing aborts preparation, not an already submitted lifecycle operation. Focus styling and floating placement remain owned by published Floe components.
+The outer body never scrolls. Mouse, trackpad, touch, and keyboard scrolling stay in the shared Workbench-marked viewport. Radio choices support arrow keys, Home, and End. Overlay dismissal, Close, Escape, and Cancel remain available during source loading and preparation. Closing aborts preparation, not an already submitted lifecycle operation. Focus styling, floating placement, and global-dialog input isolation remain owned by published Floe components. A global drawer opened from Workbench owns its pointer sequence, including footer actions, and must never start canvas pan or zoom.
 
 The request-status band has a fixed height outside the candidate viewport. It distinguishes initial loading, refresh, next-page loading, queued verification, and active verification. Busy feedback includes readable text, a rotating indicator, and an indeterminate track; reduced motion keeps the text and static indicator. Successful brief source requests remain visible for at least 280 milliseconds, while failures replace them immediately. Idle feedback reports loaded count or a next-page hint without claiming offscreen candidates are verified. Restored candidates stay visible during refresh.
 
@@ -42,7 +42,7 @@ The explicit update click submits the exact current plan once. Repeated submissi
 
 # Validation
 
-Browser acceptance must inspect screenshots of wide and narrow layouts in light and dark themes, plus required notices, stopped-state guidance, preparation, rejection, and long translated version labels. Verify one scroll owner, reachable actions, keyboard selection, and retained context. Screenshots supplement assertions and must be opened and visually reviewed before delivery.
+Browser acceptance must inspect screenshots of wide and narrow layouts in light and dark themes, plus required notices, stopped-state guidance, preparation, rejection, and long translated version labels. Verify one scroll owner, reachable actions, keyboard selection, and retained context. A real projected Workbench fixture must exercise local wheel scrolling and pointer submission while preserving the canvas viewport. Screenshots supplement assertions and must be opened and visually reviewed before delivery.
 
 # Evidence
 

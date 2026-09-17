@@ -1,11 +1,15 @@
 import '../../index.css';
+import { createSignal, type Accessor } from 'solid-js';
 import { render } from 'solid-js/web';
 import { FloeConfigProvider, builtInShellThemePresets, ThemeProvider, useTheme } from '@floegence/floe-webapp-core';
+import { createDefaultWorkbenchState, type WorkbenchState, type WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { I18nProvider } from '../i18n';
 import { LocalApiError } from '../services/localApi';
 import { EnvPortForwardsPage } from './EnvPortForwardsPage';
+import { RedevenWorkbenchSurface } from '../workbench/surface/RedevenWorkbenchSurface';
+import { REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const api = vi.hoisted(() => ({ fetch: vi.fn(), stream: vi.fn(), open: vi.fn(), notify: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@floegence/floe-webapp-core', async (original) => ({ ...await original<typeof import('@floegence/floe-webapp-core')>(), useNotification: () => api.notify }));
@@ -44,6 +48,7 @@ describe('Managed service version drawer', () => {
   let attributes: [string, string][];
   let preferences: [string, string][];
   let operations: Record<string, unknown>[];
+  let workbenchState: Accessor<WorkbenchState> | undefined;
   beforeEach(() => {
     attributes = Array.from(document.documentElement.attributes, ({ name, value }) => [name, value]);
     preferences = Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)!]);
@@ -56,6 +61,7 @@ describe('Managed service version drawer', () => {
     failure = '';
     pendingPlan = pendingSubmission = stopFails = false;
     operations = [];
+    workbenchState = undefined;
     api.fetch.mockReset().mockImplementation(async (url: string, options?: RequestInit) => {
       if (url.endsWith('/catalog')) return { templates: [] };
       if (url.endsWith('/managed-web-services')) return { services: [service] };
@@ -87,18 +93,34 @@ describe('Managed service version drawer', () => {
     for (const attribute of Array.from(document.documentElement.attributes)) document.documentElement.removeAttribute(attribute.name);
     for (const [name, value] of attributes) document.documentElement.setAttribute(name, value);
   });
-  async function mount(width = 1440, dark = false, locale = 'en-US') {
+  async function mount(width = 1440, dark = false, locale = 'en-US', workbench = false) {
     localStorage.setItem('redeven_ui_language_preference', locale);
     await page.viewport(width, width < 600 ? 780 : 960);
     host = document.createElement('div');
     host.style.cssText = 'height:100vh;width:100%;position:relative;';
     document.body.append(host);
-    function Surface() { const theme = useTheme(); theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'classic-dark' : 'classic-light'); return <I18nProvider><EnvPortForwardsPage /></I18nProvider>; }
+    function Surface() {
+      const theme = useTheme();
+      theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'classic-dark' : 'classic-light');
+      if (!workbench) return <I18nProvider><EnvPortForwardsPage /></I18nProvider>;
+      const definitions: WorkbenchWidgetDefinition[] = [{
+        type: 'test.web-services', label: 'Web Services', defaultTitle: 'Web Services', icon: () => null,
+        defaultSize: { width: 1100, height: 900 }, renderMode: 'projected_surface',
+        body: () => <div {...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS} class="redeven-workbench-body-surface h-full min-h-0 overflow-auto"><EnvPortForwardsPage /></div>,
+      }];
+      const [state, setState] = createSignal<WorkbenchState>({
+        ...createDefaultWorkbenchState(definitions), mode: 'work', viewport: { x: 0, y: 0, scale: 0.8 },
+        widgets: [{ id: 'services', type: 'test.web-services', title: 'Web Services', x: 80, y: 60, width: 1100, height: 900, z_index: 1, created_at_unix_ms: 1 }],
+        selectedWidgetId: 'services', selectedObject: { kind: 'widget', id: 'services' },
+      });
+      workbenchState = state;
+      return <I18nProvider><RedevenWorkbenchSurface state={state} setState={setState} widgetDefinitions={definitions} /></I18nProvider>;
+    }
     dispose = render(() => <FloeConfigProvider config={{ theme: { shellPresets: builtInShellThemePresets }, storage: { enabled: false } }}><ThemeProvider><Surface /></ThemeProvider></FloeConfigProvider>, host);
     await expect.poll(() => document.querySelector('[data-testid="managed-service-version"]')).toBeTruthy();
     await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')!);
     await expect.poll(() => document.querySelector('[data-release-id="1.2.0"]')).toBeTruthy();
-    await expect.poll(() => Math.round(document.querySelector('.managed-service-version-drawer')!.getBoundingClientRect().right)).toBe(width);
+    if (!workbench) await expect.poll(() => Math.round(document.querySelector('.managed-service-version-drawer')!.getBoundingClientRect().right)).toBe(width);
   }
   const submit = () => document.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]')!;
   async function select(id = '1.2.0') {
@@ -143,6 +165,26 @@ describe('Managed service version drawer', () => {
     await expect.poll(() => document.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull();
     expect(operations).toHaveLength(1);
     expect(operations[0]).toMatchObject({ action: 'update', update_plan_id: 'plan-1.2.0', accepted_notice_revisions: {} });
+  });
+
+  it('scrolls locally in the real projected Workbench without moving its canvas or footer', async () => {
+    await mount(1440, false, 'en-US', true);
+    await select();
+    assertGeometry();
+    const viewport = { ...workbenchState!().viewport };
+    const footer = document.querySelector<HTMLElement>('[data-testid="managed-release-footer"]')!;
+    const footerBottom = footer.getBoundingClientRect().bottom;
+    const scroll = await wheel.wheelScrollRegion({ regionSelector: '[data-testid="managed-release-candidate-scroll"]', deltaY: 420 });
+    expect(scroll.after).toBeGreaterThan(scroll.before);
+    expect(workbenchState!().viewport).toEqual(viewport);
+    expect(footer.getBoundingClientRect().bottom).toBe(footerBottom);
+    await wheel.wheelScrollRegion({ regionSelector: '[data-testid="managed-release-candidate-scroll"]', deltaY: -420 });
+    await screenshot('workbench-update');
+    expect(submit().disabled).toBe(false);
+    await userEvent.click(submit());
+    expect(operations).toHaveLength(1);
+    await expect.poll(() => document.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull();
+    expect(workbenchState!().viewport).toEqual(viewport);
   });
 
   it('shows only newly required confirmations and keeps them across version changes', async () => {
