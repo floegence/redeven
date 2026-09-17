@@ -67,6 +67,13 @@ and Desktop development helpers reject other Node majors before dependency or
 build work begins, and the public README badges and prerequisites mirror the
 same exact version.
 
+Desktop pnpm installation permits lifecycle scripts only for `electron` and
+`esbuild`. It explicitly ignores `electron-winstaller`'s Squirrel 7-Zip setup:
+the internal Windows target uses NSIS. New script-bearing dependencies still
+require review. After a dependency update, regenerate `THIRD_PARTY_NOTICES.md`
+from the locked packages with `scripts/generate_third_party_notices.mjs` and
+verify it with `--check` before integration.
+
 Shipped Redeven Runtime binaries use cgo plus the `floeterm_native` tag so the
 published terminal-go Ghostty engine is present. The release matrix builds
 Linux amd64/arm64 and Darwin amd64/arm64 on matching native runners and never
@@ -354,6 +361,9 @@ not become a fallback, shim, or local artifact path.
 - `redeven:scripts/check_final_integration.sh:1` - Defines the complete local integration gate.
 - `redeven:scripts/quick_ci_policy.test.mjs:1` - Keeps the hosted and exact-main Go formatting contracts aligned.
 - `redeven:scripts/check_go_version_consistency.mjs:1` - Binds Go workflows, capability checks, public prerequisites, and the local gate runtime to `go.mod`.
+- `redeven:desktop/package.json` - Pins the Desktop package manager and explicit dependency lifecycle-script policy.
+- `redeven:desktop/electron-builder.config.mjs` - Selects NSIS for the internal Windows target.
+- `redeven:scripts/generate_third_party_notices.mjs` - Generates and checks attribution against locked dependencies.
 - `redeven:scripts/check_desktop_electron_test_runtime.sh:1` - Fails closed when the exact npm Electron runtime cannot execute without modifying host trust.
 - `redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1` - Runs real Electron preload bridges in isolated working and user-data directories.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.

@@ -46,6 +46,9 @@
     "undici": "^7.29.0"
   },
   "pnpm": {
+    "ignoredBuiltDependencies": [
+      "electron-winstaller"
+    ],
     "onlyBuiltDependencies": [
       "electron",
       "esbuild"
