@@ -286,8 +286,8 @@ describe('Flower sidebar selection themes', () => {
     const button = row.querySelector<HTMLButtonElement>('.flower-thread-card-select-button')!;
     button.focus();
     expect(document.activeElement).toBe(button);
-    expect(getComputedStyle(row, '::before').width).toBe('3px');
-    expect(contrast(getComputedStyle(row, '::before').backgroundColor, getComputedStyle(row).backgroundColor)).toBeGreaterThanOrEqual(3);
+    expect(getComputedStyle(row, '::before').content).toBe('none');
+    expect(contrast(getComputedStyle(row.querySelector('.flower-thread-list-title')!).color, getComputedStyle(row).backgroundColor)).toBeGreaterThanOrEqual(4.5);
     expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
   });
   it.each(builtInShellThemePresets)('keeps selection legible in $name', async (preset) => {
@@ -300,10 +300,9 @@ describe('Flower sidebar selection themes', () => {
     const ui=mount();await frame();
     const row=ui.row('first'),style=getComputedStyle(row);
     const title=getComputedStyle(row.querySelector('.flower-thread-list-title')!);
-    const marker=getComputedStyle(row,'::before');
     expect(contrast(title.color,style.backgroundColor)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(marker.backgroundColor,style.backgroundColor)).toBeGreaterThanOrEqual(3);
-    expect(marker.width).toBe('3px');
+    expect(title.fontWeight).toBe('600');
+    expect(getComputedStyle(row,'::before').content).toBe('none');
     expect(style.backgroundColor).not.toBe(getComputedStyle(ui.row('second')).backgroundColor);
     expect(row.querySelector('button[aria-current="true"]')).not.toBeNull();
     if (import.meta.env.VITE_FLOWER_SIDEBAR_SCREENSHOTS === '1') {
