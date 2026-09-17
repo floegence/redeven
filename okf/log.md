@@ -1,5 +1,15 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Keep private browser recovery under the managed profile owner
+
+A real Desktop follow-up after private-control restart exposed a duplicate
+profile launch: recovery started an independent input helper before normal
+preparation. Share initial managed target preparation across both entry paths;
+passive samples do not launch browsers. A real Chromium regression reproduces
+the original missing owner and verifies handback plus subsequent observations
+reuse one profile process. The private fixture alone did not qualify the later
+model task; keep that failed model attempt as separate evidence.
+
 ## 2026-09-17 — Qualify native and browser capability, preserve preview recovery
 
 Real model Desktop qualification passes the native scope with 21 requests and
