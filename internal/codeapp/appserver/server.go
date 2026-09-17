@@ -5119,7 +5119,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			resp, err := aiSvc.SubmitRequestUserInputResponse(r.Context(), meta, body)
 			if err != nil {
 				if ai.ComputerControlErrorCode(err) == "computer_control_not_ready" {
-					writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "The page still needs user attention.", ErrorCode: "computer_control_not_ready"})
+					writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "The page still needs user attention.", ErrorCode: "computer_control_not_ready", Data: ai.ComputerControlErrorDetails(err)})
 				} else {
 					writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				}

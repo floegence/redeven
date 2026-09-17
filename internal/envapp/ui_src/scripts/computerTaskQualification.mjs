@@ -21,8 +21,8 @@ export async function configureComputerTask({ page, request, threadID, origin, t
   const targets = await request('GET', '/_redeven_proxy/api/ai/computer/targets');
   const target = targets.find(item => item.id === targetID);
   assert(target, 'explicit qualification target is unavailable');
-  await page.getByRole('button', { name: 'Computer connections', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Computer connections', exact: true });
+  await page.getByRole('button', { name: 'Browser and desktop', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Browser and desktop', exact: true });
   // Target IDs remain unambiguous when multiple tabs share the same title.
   await dialog.locator(`input[name="flower-computer-target"][value=${JSON.stringify(targetID)}]`).check();
   if (origin) {

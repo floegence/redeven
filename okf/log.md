@@ -1,5 +1,18 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Explain browser assistance and grant task access directly
+
+Replace the generic takeover card with reason-specific access, sign-in,
+verification, CAPTCHA and page-inspection guidance. Show the requested origin
+and allow access plus continuation in one explicit action, without requiring
+manual browser control. Preserve canonical InputRequired ownership, private
+input isolation and fresh observation before continuation. Display pending
+computer actions as waiting, rename connection management to Browser and desktop,
+and remove URL/text keyword checks that mislabeled ordinary work as secret input.
+Focused browser tests cover duplicate clicks, save failures and conversation
+changes; all product locales carry the same interaction. See
+[computer assistance](ai/computer-use-takeover.md).
+
 ## 2026-09-17 — Serialize overlapping Runtime endpoint shutdown
 
 The exact-main gate reproduced a nil HTTP-server dereference when cancellation

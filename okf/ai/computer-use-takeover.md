@@ -17,6 +17,38 @@ observation capability leaves the interaction unresolved.
 
 # Contract
 
+## Explain the required step
+
+The UI derives the blocking reason from canonical tool Activity, not from a
+second waiting-state store. Task access, tab selection, sign-in, one-time codes,
+CAPTCHA, private input and unreadable pages have distinct instructions. Each
+card identifies the target, explains the required action and names the next
+step. Unknown inspection failures must not invent a login requirement. URL
+keywords and ordinary text such as a search for password managers do not prove
+that a secret field needs input; adapters inspect actual controls.
+
+For site, application or foreground permission, show the exact requested scope
+and **Allow and continue**. This explicit user command reads existing task
+grants, adds only the displayed access and then requests canonical continuation.
+It does not open a private viewer. Saving failure leaves the interaction pending;
+changing conversations during the request must not grant access or continue a
+different conversation. Already dispatched saves remain scoped to the original
+thread. Runtime still performs fresh observation before `Respond`.
+
+If that recheck finds a different blocker, the conflict response carries only
+closed assistance kinds and validated origin/application display facts. The
+pending card shows this latest observation for the same thread and interaction:
+for example, an access grant can reveal a CAPTCHA, or another origin can require
+a separate explicit grant. This transient feedback grants nothing and does not
+replace the canonical pending interaction. No page contents or private values
+are returned in the error.
+
+Only a real manual step offers **Open page** and **Done, continue**. The browser
+and desktop selector lives under **Browser and desktop**; it is not the primary
+action for granting a site's access. An unresolved canonical computer interaction
+displays waiting in its tool row even though the observation tool itself completed
+successfully. Tool completion must not imply that the requested navigation ran.
+
 ## Canonical pause and return
 
 Published Floret v7.12.0 `tools.Result.InputRequired` pauses the provider after the
@@ -160,6 +192,8 @@ alone do not prove arbitrary app safety or atomic observation of dynamic content
 # Evidence
 
 - `redeven:internal/ai/computer_takeover.go` - canonical result and handback mapping.
+- `redeven:internal/ai/computer_assistance_test.go` - explicit reasons and public Activity preservation.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerAssistance.browser.test.tsx` - site approval, failed saves, conversation races and specific manual instructions.
 - `redeven:internal/ai/computer_control.go` - serialized target resource leases.
 - `redeven:internal/ai/computer_user_control.go` - authenticated non-model input.
 - `redeven:internal/ai/computer_takeover_integration_test.go` - Service continuation, private input and restart checks.

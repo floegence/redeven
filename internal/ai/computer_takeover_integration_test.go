@@ -284,6 +284,8 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 			response := SubmitRequestUserInputResponseRequest{ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: waiting.WaitingPrompt.PromptID, Answers: map[string]RequestUserInputAnswer{"computer_control": {ChoiceID: "Return control to Flower"}}}}
 			if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, response); err == nil {
 				t.Fatal("sensitive page resumed")
+			} else if detail := ComputerControlErrorDetails(err); detail == nil || detail["computer_assistance"].(map[string]any)["kind"] != "login" {
+				t.Fatalf("re-observation lost the actual sign-in requirement: %v (%v)", detail, err)
 			}
 			if requests.Load() != 1 || executor.effects.Load() != 1 || executor.observations.Load() != 1 {
 				t.Fatal("failed observation replayed or continued action")

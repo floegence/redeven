@@ -1484,8 +1484,8 @@ function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresen
   const targetRef = item.target_refs?.find((ref) => ref.kind === 'computer_target');
   const frame = frameTarget?.resource_ref;
   const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || controlTarget?.resource_ref || targetRef?.resource_ref;
-  const target = targetRef?.label || frameTarget?.label || item.label || trimString(item.tool_name);
-  const action = payloadValue(payload, 'action_summary', 'operation') || defaultLabelForItem(item);
+  const target = targetRef?.label || controlTarget?.label || frameTarget?.label || item.label || trimString(item.tool_name);
+  const action = item.chips?.some(chip => chip.kind === 'computer_assistance') ? defaultLabelForItem(item) : payloadValue(payload, 'action_summary', 'operation') || defaultLabelForItem(item);
   const location = item.chips?.find((chip) => chip.kind === 'execution_location')?.value ?? '';
   const safetyRecord = asRecord(payload.safety);
   const safety = payloadValue(safetyRecord, 'level', 'reason_codes');
@@ -1493,7 +1493,7 @@ function presentationForComputer(item: FlowerActivityItem): FlowerActivityPresen
   return {
     label: action,
     title,
-    meta: metaWithError(item, metaForItem(item)),
+    meta: metaWithError(item, targetRef?.label || controlTarget?.label || ''),
     detailLines: [],
     detailBlocks: [{ kind: 'computer', ...(targetID ? { target_id: targetID } : {}), target, action, location, ...(frame ? { frame } : {}), ...(safety ? { safety } : {}) }],
   };

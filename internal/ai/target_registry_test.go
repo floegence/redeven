@@ -48,16 +48,16 @@ func TestTargetRegistryResolvesLogicalKindsWithoutChangingCurrent(t *testing.T) 
 	}
 }
 
-func TestDefaultInteractionSafetyGateBlocksSecretLikeInput(t *testing.T) {
+func TestDefaultInteractionSafetyGateLeavesFieldInspectionToAdapter(t *testing.T) {
 	gate := defaultInteractionSafetyGate{}
 	decision, err := gate.AssessInteraction(context.Background(), TargetToolCall{
 		ToolCallID: "call-1", ToolName: "computer.type",
 		Arguments: []byte(`{"text":"enter password"}`),
 	}, TargetDescriptor{ID: "browser-main", Ready: true})
-	if err != ErrInteractionTakeoverRequired {
-		t.Fatalf("error = %v, want takeover", err)
+	if err != nil {
+		t.Fatalf("error = %v", err)
 	}
-	if decision.Level != "takeover" || decision.SafeToCapture || decision.SafeToSendToModel {
+	if decision.Level != "routine" || !decision.SafeToCapture || !decision.SafeToSendToModel {
 		t.Fatalf("unexpected safety decision: %#v", decision)
 	}
 }

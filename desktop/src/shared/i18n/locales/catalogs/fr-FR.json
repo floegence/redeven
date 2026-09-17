@@ -179,7 +179,7 @@
         "historical": "Capture précédente",
         "stopped": "Tâche sur l’ordinateur arrêtée",
         "disconnected": "Connexion interrompue",
-        "awaiting_control": "En attente de votre prise de contrôle",
+        "awaiting_control": "Une étape requiert votre aide",
         "running": "Tâche sur l’ordinateur en cours",
         "awaiting_user": "En attente de votre réponse ou autorisation",
         "completed": "Tâche sur l’ordinateur terminée",
@@ -373,15 +373,15 @@
       "restoredInputTitle": "Entrée conservée après restauration",
       "restoredInputDescription": "Cette entrée ne sera pas exécutée automatiquement. Copiez-la dans une nouvelle tâche pour la relancer.",
       "restoredInputCopy": "Copier l’entrée",
-      "computerTakeControl": "Prendre le contrôle",
-      "computerReturnControl": "Rendre le contrôle à Flower",
+      "computerTakeControl": "Ouvrir la page",
+      "computerReturnControl": "Terminé, continuer",
       "computerControlHint": "Connectez-vous dans l’image avec la souris et le clavier. Les mots de passe et les codes ne sont pas enregistrés dans la conversation.",
       "computerControlFailed": "Impossible de mettre à jour le contrôle. Vérifiez la page avant de réessayer.",
       "computerFrameRate": "Fréquence d’images",
       "computerFrameRateHint": "Une fréquence plus élevée utilise davantage de bande passante. La vitesse réelle dépend de votre appareil et de votre connexion.",
       "computerReceivedFrameRate": "Réception : {fps} FPS",
       "computerControlTaken": "Contrôle pris",
-      "computerControlNotReady": "La page nécessite encore votre intervention. Terminez la connexion ou la vérification, puis rendez le contrôle."
+      "computerControlNotReady": "La page n’est pas encore prête. Effectuez l’étape indiquée ci-dessus, puis réessayez."
     },
     "threadList": {
       "title": "Discussions",
@@ -733,8 +733,8 @@
       "budgetLabel": "Budget de jetons pour {label}"
     },
     "computer": {
-      "title": "Connexions à l’ordinateur",
-      "description": "Choisissez la cible de cette tâche et gérez ses accès.",
+      "title": "Navigateur et bureau",
+      "description": "Choisissez l’onglet ou l’application utilisé par Flower pour cette conversation et gérez ses accès.",
       "target": "Cible de la tâche",
       "refresh": "Actualiser",
       "noTargets": "Aucune cible disponible.",
@@ -779,7 +779,28 @@
       "disconnect": "Déconnecter",
       "managed": "Navigateur géré",
       "profileName": "Nom du profil",
-      "createProfile": "Créer un profil"
+      "createProfile": "Créer un profil",
+      "allowContinue": "Autoriser et continuer",
+      "accessFailed": "L’autorisation n’a pas pu être enregistrée. Réessayez ; Flower n’a pas repris la tâche.",
+      "accessTitle": "Autoriser l’accès pour la tâche",
+      "siteTitle": "Autoriser l’accès au site",
+      "accessHint": "Flower a besoin des accès ci-dessous pour cette conversation. Une fois autorisé, il continuera automatiquement ; aucune manipulation du navigateur n’est nécessaire.",
+      "targetTitle": "Choisir l’onglet du navigateur",
+      "targetHint": "La page a ouvert un nouvel onglet. Sélectionnez-le dans « Navigateur et bureau », vérifiez l’accès au site, puis continuez.",
+      "loginTitle": "Connectez-vous sur la page",
+      "loginHint": "Ouvrez la page et connectez-vous. Saisissez vos mots de passe sur la page, pas dans la conversation. Choisissez ensuite « Terminé, continuer ».",
+      "verificationTitle": "Saisir le code de vérification",
+      "verificationHint": "Ouvrez la page et saisissez-y le code à usage unique. Ne l’envoyez pas dans la conversation. Choisissez ensuite « Terminé, continuer ».",
+      "captchaTitle": "Compléter le CAPTCHA",
+      "captchaHint": "Ouvrez la page et effectuez la vérification humaine, puis choisissez « Terminé, continuer ». Flower vérifiera la page avant de reprendre.",
+      "privateTitle": "Terminer la saisie confidentielle",
+      "privateHint": "Ouvrez la page et remplissez le champ de mot de passe ou de vérification. Ces données restent hors de la conversation. Choisissez ensuite « Terminé, continuer ».",
+      "inspectionTitle": "Vérifier la page actuelle",
+      "inspectionHint": "Flower n’a pas pu examiner la page en toute sécurité. La nécessité de se connecter n’est pas confirmée. Vérifiez la page, puis choisissez « Terminé, continuer » lorsqu’elle est prête.",
+      "untrustedTitle": "Examiner les instructions inattendues",
+      "untrustedHint": "La page contient des instructions destinées à l’agent. Ouvrez-la et quittez ou fermez ce contenu avant de continuer.",
+      "pausedTitle": "Actions en pause",
+      "pausedHint": "Terminez vos modifications sur la page ou dans l’application, puis choisissez « Terminé, continuer » lorsque Flower peut reprendre."
     }
   },
   "common": {

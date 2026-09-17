@@ -4959,6 +4959,7 @@
 .flower-computer-control-copy { display: grid; min-width: 0; gap: 0.25rem; }
 .flower-computer-control-title { color: var(--foreground); font-size: 0.875rem; font-weight: 600; line-height: 1.5; }
 .flower-computer-control-hint { margin: 0; max-width: 70ch; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.65; }
+.flower-computer-control-resource { margin: 0.25rem 0; color: var(--foreground); font-size: 0.8125rem; font-weight: 500; overflow-wrap: anywhere; }
 .flower-computer-control-notice { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.625rem 0.75rem; border-radius: 0.625rem; background: color-mix(in srgb, var(--redeven-status-warning) 7%, transparent); color: var(--redeven-status-warning-foreground); }
 .flower-computer-control-notice > svg { flex: none; margin-top: 0.125rem; }
 .flower-computer-control-notice > p { margin: 0; font-size: 0.75rem; line-height: 1.65; }

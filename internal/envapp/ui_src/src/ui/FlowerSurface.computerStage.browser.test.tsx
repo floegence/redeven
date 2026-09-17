@@ -355,7 +355,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
     },
     listThreads: vi.fn(async () => [paused]), loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(paused, canonical), current: canonical })),
   }, { focusThreadRequest: { request_id: 'takeover-focus', thread_id: threadID }, layout: true });
-  const controlButton = () => Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Take control');
+  const controlButton = () => Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Open page');
   await waitFor(() => Boolean(controlButton()));
   expect(surface.querySelector('.flower-composer-continue')).toBeNull();
   const controls = Array.from(surface.querySelectorAll<HTMLButtonElement>('[data-computer-control-action]'));
@@ -391,7 +391,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src !== firstURL);
   expect(inputComputerControl).toHaveBeenCalledTimes(1);
   expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer');
-  const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Return to Flower')!;
+  const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Done, continue')!;
   await new Promise(resolve => setTimeout(resolve, 50));
   const privateURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
   deliver({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: { ...canonical, view_version: 2 } });
@@ -426,7 +426,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   handback.click();
   await waitFor(() => submitInput.mock.calls.length === 1);
   expect(submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));
-  await waitFor(() => Boolean(surface.querySelector('[role="alert"]')?.textContent?.includes('verification')));
+  await waitFor(() => Boolean(surface.querySelector('[role="alert"]')?.textContent?.includes('not ready')));
   await waitFor(() => Boolean(document.querySelector('.flower-computer-stage textarea')));
   expect(document.querySelector('.flower-computer-state')?.getAttribute('data-session-state')).toBe('user_control');
   handback.click();

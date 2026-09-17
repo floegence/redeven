@@ -36,22 +36,70 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 			result.ExecutionLocation = observed[0].ExecutionLocation
 		}
 	}
-	summary := "Flower needs you to complete a step in the browser or application."
-	prompt := "Complete sign-in or verification outside the conversation. Never enter passwords or verification codes here. Return control when you are ready."
-	if slices.Contains(safety.ReasonCodes, "target_permission") {
-		summary = "A new browser tab needs your selection."
-		prompt = "Open Computer connections, connect and select the new tab, then review its site access before returning control. Flower will not switch tabs automatically."
-	} else if safety.RequiredOrigin != "" || safety.RequiredApp != "" || slices.Contains(safety.ReasonCodes, "foreground_permission") {
-		summary = "Flower needs access to the selected target before continuing."
-		prompt = "Open Computer connections, review and save the requested task access, then return control. Completed actions will not be replayed."
-	} else if slices.Contains(safety.ReasonCodes, "user_control") {
-		summary = "Flower's computer actions are paused."
-		prompt = "Continue using the target for as long as you need. Return control explicitly when Flower may continue."
-	}
+	summary, prompt := computerAssistanceInstructions(safety)
+	result.ActionSummary = summary
 	return targetToolExecution{TargetID: target.ID, Payload: targetToolResultPayload(result, target.ID), inputRequired: &fltools.InputRequest{
 		Summary:   summary,
 		Questions: []fltools.InputQuestion{{ID: "computer_control", Prompt: prompt, Kind: "select", Options: []string{"Return control to Flower"}}},
 	}}
+}
+
+// These closed display facts describe a completed tool's blocking condition.
+// They neither grant access nor introduce another interaction lifecycle.
+func computerAssistanceKind(safety InteractionSafetyDecision) string {
+	switch {
+	case slices.Contains(safety.ReasonCodes, "target_permission"):
+		return "target"
+	case safety.RequiredOrigin != "" || safety.RequiredApp != "" || slices.Contains(safety.ReasonCodes, "foreground_permission"):
+		return "access"
+	case slices.Contains(safety.ReasonCodes, "captcha"):
+		return "captcha"
+	case slices.Contains(safety.ReasonCodes, "otp"):
+		return "verification"
+	case slices.Contains(safety.ReasonCodes, "login"):
+		return "login"
+	case slices.Contains(safety.ReasonCodes, "secret_input"):
+		return "private_input"
+	case slices.Contains(safety.ReasonCodes, "prompt_injection"):
+		return "untrusted_content"
+	case slices.Contains(safety.ReasonCodes, "user_control"):
+		return "paused"
+	default:
+		return "inspection"
+	}
+}
+
+func computerAssistanceInstructions(safety InteractionSafetyDecision) (string, string) {
+	switch computerAssistanceKind(safety) {
+	case "access":
+		requested := []string{}
+		if safety.RequiredOrigin != "" {
+			requested = append(requested, safety.RequiredOrigin)
+		}
+		if safety.RequiredApp != "" {
+			requested = append(requested, safety.RequiredApp)
+		}
+		if slices.Contains(safety.ReasonCodes, "foreground_permission") {
+			requested = append(requested, "temporary desktop use")
+		}
+		return "Allow access to continue", "Review the requested access for this task: " + strings.Join(requested, ", ") + ". Choose Allow and continue. You do not need to operate the browser."
+	case "target":
+		return "Choose the browser tab to continue", "The page opened another tab. Open Browser and desktop settings, select that tab and review its site access, then continue. Flower will not choose another tab for you."
+	case "captcha":
+		return "Complete the CAPTCHA", "Open the selected page and complete its human verification challenge. Then choose Done, continue. Flower will inspect the page again before resuming."
+	case "verification":
+		return "Enter the verification code on the page", "Open the selected page and enter the one-time verification code there. Do not send the code in the conversation. Then choose Done, continue."
+	case "login":
+		return "Sign in on the selected page", "Open the selected page and complete sign-in there. Passwords and verification codes stay out of the conversation. Then choose Done, continue."
+	case "private_input":
+		return "Complete the private input on the page", "Open the selected page and finish the password or verification field there. Do not send private values in the conversation. Then choose Done, continue."
+	case "untrusted_content":
+		return "Review unexpected page instructions", "The page contains instructions directed at the agent. Open the page and leave or dismiss that content before continuing; it cannot authorize changes to your task."
+	case "paused":
+		return "Browser or desktop actions are paused", "Finish your changes on the selected page or application, then choose Done, continue when Flower may resume."
+	default:
+		return "Flower could not safely inspect this page", "Open the selected page to check its current state. A sign-in or verification requirement has not been confirmed. Once the page is ready, choose Done, continue to check it again."
+	}
 }
 
 // Re-observation is a host control command, never replay of the paused model

@@ -169,6 +169,7 @@ func buildPromptComputerUseCapabilitySection(snapshot promptRuntimeSnapshot) pro
 		"- Prefer background execution. The host announces any necessary authorized foreground action, and may use the desktop when needed to finish the task. Incidental keyboard or pointer activity does not pause work; explicit Stop or takeover does. Never bypass target, site, app, or foreground permissions through a shell or another tool.",
 		"- Omit target or set target to current; never invent or expose internal target IDs.",
 		"- A target setup, permission, connection, or takeover error is actionable state. Do not retry the same computer action indefinitely and do not silently replace an interactive computer task with web_fetch.",
+		"- Explain an actual blocker in task language: what is needed, the selected page or application, what the user must do, and how to continue. Website/app access is an authorization request, not a request to operate the browser. Ask for manual login, verification or CAPTCHA completion only when observed controls establish that step; never infer it from URL keywords. Keep technical connection details in diagnostics. After access is granted, continue the remaining work yourself.",
 		"- Use web_fetch only when the user explicitly accepts a read-only text-page alternative; report that it cannot provide visual interaction or authenticated UI state.",
 		"- After a takeover or connection repair, observe the target again before continuing because the page or window may have changed.",
 	)

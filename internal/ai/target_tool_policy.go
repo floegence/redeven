@@ -80,28 +80,8 @@ func (defaultInteractionSafetyGate) AssessInteraction(_ context.Context, call Ta
 		decision.ReasonCodes = []string{"target_unavailable"}
 		return decision, errors.New("target is unavailable")
 	}
-	pageSignal := strings.ToLower(strings.TrimSpace(target.CurrentURL))
-	if call.ToolName != "computer.screenshot" && call.ToolName != "computer.wait" &&
-		(strings.Contains(pageSignal, "login") || strings.Contains(pageSignal, "signin") || strings.Contains(pageSignal, "captcha") || strings.Contains(pageSignal, "challenge")) {
-		decision.Level = "takeover"
-		decision.ReasonCodes = []string{"login_or_captcha"}
-		decision.SafeToCapture = false
-		decision.SafeToSendToModel = false
-		return decision, ErrInteractionTakeoverRequired
-	}
-	if call.ToolName == "computer.type" {
-		var args map[string]any
-		if json.Unmarshal(call.Arguments, &args) == nil {
-			text := strings.ToLower(strings.TrimSpace(anyToString(args["text"])))
-			if strings.Contains(text, "password") || strings.Contains(text, "one-time code") {
-				decision.Level = "takeover"
-				decision.ReasonCodes = []string{"secret_input"}
-				decision.SafeToCapture = false
-				decision.SafeToSendToModel = false
-				return decision, ErrInteractionTakeoverRequired
-			}
-		}
-	}
+	// Adapters inspect actual controls before observation and input. URL paths
+	// and words in ordinary search text cannot establish a private-input step.
 	return decision, nil
 }
 
