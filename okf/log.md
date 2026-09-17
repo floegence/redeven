@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-09-17 — Serialize overlapping Runtime endpoint shutdown
+
+The exact-main gate reproduced a nil HTTP-server dereference when cancellation
+and explicit Local UI shutdown overlapped. A focused race test reproduces the
+shared child-pointer mutation. Serialize closure and child lifecycle access,
+register the parent cancellation watcher only after initialization, and retain
+idempotent shutdown through the existing owner. The regression checks concurrent
+close, endpoint retirement and management socket removal under the race detector.
+
 ## 2026-09-17 — Align final computer integration with current dependencies
 
 Preserve all unpublished main changes, including native CodeSpace ownership,

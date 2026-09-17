@@ -29,6 +29,15 @@ Before returning a direct connect artifact, Local UI commits one SQLite transact
 
 Local UI opens and exactly verifies the versioned store before it creates the Acceptor or starts a listener. Each process start atomically advances `boot_generation`, revokes older pending rows, burns older reservations, releases older leases, and revokes their unspent browser receipts; failure prevents startup. Authorization generates an independent random durable lease, performs an exact `pending -> reserved` CAS, decrypts and parses the row-bound record, calls Flowersec authorization, and commits `reserved -> leased` before allowing the session. Handler resolution reads the immutable binding from that same row. Parse, authorization, or leased-commit failures only burn the authority; Acceptor release is exact-lease scoped, while logout, access expiry, and shutdown may revoke an explicit access-session owner. In-process maps retain only active-session cleanup projections and never authorize a request.
 
+## Concurrent shutdown
+
+Context cancellation and explicit shutdown enter the same serialized close path.
+Local UI completes child initialization before its cancellation watcher may close
+those children. Runtime-control and management status serialize start/close and
+protect endpoint reads, so overlapping shutdown cannot dereference cleared
+servers or advertise a retired control listener. This uses bounded in-process
+locks and does not introduce durable lifecycle state.
+
 ## Background event stream scheduling
 
 Published Floe Webapp Boot owns browser SSE request initialization. Its

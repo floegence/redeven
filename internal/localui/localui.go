@@ -94,6 +94,7 @@ type Options struct {
 }
 
 type Server struct {
+	closeMu      sync.Mutex
 	nativeAccess sync.Map // *nativeCodeAccess -> access-session cancellation
 	log          *slog.Logger
 
@@ -686,10 +687,6 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		return err
 	}
 
-	go func() {
-		<-ctx.Done()
-		_ = s.Close()
-	}()
 	go s.sweepLoop(ctx)
 
 	s.serveNetwork()
@@ -729,6 +726,11 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		_ = s.Close()
 		return fmt.Errorf("start runtime management socket: %w", err)
 	}
+
+	go func() {
+		<-ctx.Done()
+		_ = s.Close()
+	}()
 
 	s.log.Info("local ui listening", "bind", s.ListenLabel())
 	return nil
@@ -854,6 +856,8 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 	s.closeNativeCodeAccess("")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
