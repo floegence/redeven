@@ -158,6 +158,8 @@ afterEach(async () => {
 describe('ConnectionRecoveryView rendered layout', () => {
   it('keeps real recovery states readable across themes, locales, and desktop or mobile viewports', async () => {
     const cases: readonly RecoveryFixture[] = [
+      { locale: 'en-US', theme: 'light', viewport: { width: 1440, height: 900 }, snapshot: { ...failedSnapshot(), desktop_transport: undefined, failure: { code: 'transport_unavailable', retryable: false, technical_detail: 'HTTP 502 Bad Gateway' } } },
+      { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: { ...failedSnapshot(), desktop_transport: undefined, failure: { code: 'transport_unavailable', retryable: false, technical_detail: 'HTTP 502 Bad Gateway' } } },
       { locale: 'zh-CN', theme: 'dark', viewport: { width: 1280, height: 800 }, snapshot: recoveringSnapshot(false) },
       {
         locale: 'en-US',
@@ -198,6 +200,15 @@ describe('ConnectionRecoveryView rendered layout', () => {
       expect(heading!.scrollWidth).toBeLessThanOrEqual(heading!.clientWidth + 1);
       const diagnostic = host.querySelector<HTMLElement>('details pre');
       if (testCase.snapshot.state === 'failed') {
+        expect(getComputedStyle(heading!).boxShadow).toBe('none');
+        expect(host.querySelector('[data-recovery-activity]')).toBeNull();
+        const action = host.querySelector<HTMLButtonElement>('[data-recovery-actions] button')!;
+        const box = action.getBoundingClientRect();
+        expect(box.height).toBeGreaterThanOrEqual(40);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(testCase.viewport.width);
+        expect(action.disabled).toBe(false);
+        expect(getComputedStyle(action).cursor).toBe('pointer');
         expect(host.querySelector<HTMLDetailsElement>('details')?.open).toBe(false);
         await expect.element(page.getByText('HTTP 502 Bad Gateway', { exact: false })).not.toBeVisible();
       } else {

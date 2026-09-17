@@ -886,7 +886,7 @@ vi.mock('./utils/askFlowerPath', async (importOriginal) => ({
   },
   resolveSuggestedWorkingDirAbsolute: () => '',
 }));
-vi.mock('./utils/windowNavigation', () => ({ reloadCurrentPage: vi.fn() }));
+vi.mock('./utils/windowNavigation', () => ({ reopenEnvironmentPage: vi.fn(), reloadCurrentPage: vi.fn() }));
 vi.mock('./services/desktopShellCommandPalette', () => ({ buildDesktopShellCommandPaletteEntries: () => [] }));
 vi.mock('./services/desktopShellBridge', () => ({
   desktopShellBridgeAvailable: () => false,

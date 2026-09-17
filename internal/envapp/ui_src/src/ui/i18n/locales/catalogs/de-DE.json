@@ -3913,13 +3913,13 @@
     "title": {
       "recovering": "Verbindung wird wiederhergestellt",
       "recovered": "Verbindung wiederhergestellt",
-      "failed": "Verbindung konnte nicht wiederhergestellt werden",
+      "failed": "Verbindung pausiert",
       "offline": "Sie sind offline"
     },
     "summary": {
       "recovering": "Ihr Arbeitsbereich bleibt geöffnet. Die Verbindung wird automatisch wiederhergestellt.",
       "recovered": "Die Verbindung steht wieder. Sie kehren zu Ihrem Arbeitsbereich zurück.",
-      "failed": "Diese Seite ist pausiert. Öffnen Sie die Verbindung erneut, um fortzufahren.",
+      "failed": "Die automatische Wiederherstellung wurde beendet. Stelle eine neue Verbindung her, um weiterzuarbeiten.",
       "offline": "Sobald das Netzwerk wieder verfügbar ist, verbinden wir Sie automatisch. Lassen Sie diese Seite geöffnet."
     },
     "steps": {
@@ -3937,6 +3937,7 @@
     },
     "retryIn": "Neuer Versuch in {seconds} s",
     "retryNow": "Jetzt erneut versuchen",
+    "reopenEnvironment": "Umgebung erneut öffnen",
     "openConnectionCenter": "Connection Center öffnen",
     "technicalDetails": "Technische Details",
     "copyDiagnostic": "Diagnose kopieren",

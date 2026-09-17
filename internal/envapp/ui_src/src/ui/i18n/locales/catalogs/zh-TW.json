@@ -3928,13 +3928,13 @@
     "title": {
       "recovering": "正在恢復連線",
       "recovered": "連線已恢復",
-      "failed": "無法恢復連線",
+      "failed": "連線已暫停",
       "offline": "等待網路恢復"
     },
     "summary": {
       "recovering": "工作區已保留，正在自動重新連線。連線恢復後即可繼續。",
       "recovered": "連線已恢復，正在返回工作區。",
-      "failed": "此頁面已暫停連線，請重新開啟連線以繼續。",
+      "failed": "自動復原已停止。重新連線至環境後，即可繼續工作。",
       "offline": "網路恢復後會自動重新連線，請保持此頁面開啟。"
     },
     "steps": {
@@ -3952,6 +3952,7 @@
     },
     "retryIn": "將在 {seconds} 秒後重試",
     "retryNow": "立即重試",
+    "reopenEnvironment": "重新開啟環境",
     "openConnectionCenter": "開啟連線中心",
     "technicalDetails": "技術詳細資料",
     "copyDiagnostic": "複製診斷資訊",

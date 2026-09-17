@@ -1465,13 +1465,13 @@ export const enUS = defineDictionary({
       offline: "You're offline",
       recovering: 'Restoring connection',
       recovered: 'Connection restored',
-      failed: 'Connection could not be restored',
+      failed: 'Connection paused',
     },
     summary: {
       offline: "We’ll reconnect when your network is back. You can keep this page open.",
       recovering: "Your workspace is still here. We’ll reconnect automatically and bring you back when it’s ready.",
       recovered: "You’re connected again. Returning to your workspace.",
-      failed: "This page is paused. Reopen the connection to continue.",
+      failed: "Automatic recovery has stopped. Start a new connection to continue working.",
     },
     steps: {
       interrupted: 'Connection interrupted',
@@ -1488,6 +1488,7 @@ export const enUS = defineDictionary({
     },
     retryIn: 'Retrying in {seconds}s',
     retryNow: 'Retry now',
+    reopenEnvironment: 'Reopen environment',
     openConnectionCenter: 'Open Connection Center',
     technicalDetails: 'Technical details',
     copyDiagnostic: 'Copy diagnostic',
