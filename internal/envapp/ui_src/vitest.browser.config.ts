@@ -123,13 +123,18 @@ export default mergeConfig(viteConfig, defineConfig({
           ]) {
             const target = frame.locator(selector);
             await freeze(0);
-            const first = PNG.sync.read(await target.screenshot({ animations: 'allow' }));
+            const bounds = await target.boundingBox();
+            if (!bounds) throw new Error('Missing progress text bounds');
+            const clip = { x: Math.floor(bounds.x), y: Math.floor(bounds.y), width: Math.ceil(bounds.x + bounds.width) - Math.floor(bounds.x), height: Math.ceil(bounds.y + bounds.height) - Math.floor(bounds.y) };
+            const first = PNG.sync.read(await page.screenshot({ clip, animations: 'allow' }));
             await freeze(1200);
-            const second = PNG.sync.read(await target.screenshot({ animations: 'allow' }));
+            const second = PNG.sync.read(await page.screenshot({ clip, animations: 'allow' }));
+            if (JSON.stringify(await target.boundingBox()) !== JSON.stringify(bounds)) throw new Error('Progress motion changed text geometry');
             if (first.width !== second.width || first.height !== second.height) throw new Error('Progress motion changed text geometry');
             let changed = 0;
             let brightened = 0;
             let darkened = 0;
+            let rasterNoisePixels = 0;
             const luminance = (data: Uint8Array, offset: number) => [0.2126, 0.7152, 0.0722].reduce((sum, weight, channel) => {
               const value = data[offset + channel] / 255;
               return sum + weight * (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
@@ -139,11 +144,17 @@ export default mergeConfig(viteConfig, defineConfig({
               const difference = Math.abs(first.data[i] - second.data[i]) + Math.abs(first.data[i + 1] - second.data[i + 1]) + Math.abs(first.data[i + 2] - second.data[i + 2]);
               if (difference > 15) changed++;
               const gain = luminance(second.data, i) - luminance(first.data, i);
-              if (gain > 0.003) brightened++;
-              if (gain < -0.003) darkened++;
+              // Use the same visible-change floor as motion detection. Fractional
+              // background-clip edges can quantize by a few RGB levels between
+              // frames; report that noise separately from a visible dark band.
+              if (gain > 0.003 && difference > 15) brightened++;
+              if (gain < -0.003) {
+                if (difference > 15) darkened++;
+                else rasterNoisePixels++;
+              }
               if (difference > 6 && first.data[i] === first.data[0] && first.data[i + 1] === first.data[1] && first.data[i + 2] === first.data[2]) backgroundChanged++;
             }
-            regions.push({ selector, changed, brightened, darkened, backgroundChanged, width: first.width, height: first.height });
+            regions.push({ selector, changed, brightened, darkened, rasterNoisePixels, backgroundChanged, width: first.width, height: first.height });
           }
           const output = path.resolve(__dirname, '.cache/progress-shimmer');
           await mkdir(output, { recursive: true });

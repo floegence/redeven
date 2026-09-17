@@ -127,8 +127,12 @@ is clipped to glyphs, with no row background, extra plate, or text duplicate.
 State and placement belong to Redeven; cadence, paint, theme contrast, native
 selection, reduced motion, and forced colors belong to Floe. The moving peak
 must brighten its own carrier, including a dark primary button inside a light
-theme. Surface reflections soften toward neutral light; a darker traveling
-stripe is not an accepted shimmer. Color difference alone does not prove this
+theme. The accepted reflection only adds white in sRGB; a darker traveling
+stripe is not an accepted shimmer. Floe calibrates the busy button fill to keep
+its label readable. Text uses a 20%-wide bright core with soft shoulders, about
+320ms of peak exposure per glyph, and a pure white peak on dark themes. The
+26-theme matrix requires at least 4.5:1 text contrast and 0.2 OKLab separation
+for text (0.08 for surfaces), in both materials. Color difference alone does not prove this
 contract: fixed-time pixel samples must become brighter while glyph-only
 background pixels stay unchanged. Removing active
 progress removes the opt-in without a second lifecycle or timer. Do not animate

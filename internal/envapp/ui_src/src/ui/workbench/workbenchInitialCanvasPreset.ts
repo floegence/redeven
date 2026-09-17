@@ -70,9 +70,27 @@ export function createRedevenWorkbenchCanvasPreset(
     canvas: {
       widgets,
       background_layers: [
-        { ...geometry('region-initial-ideas', 80, 344, 416, 1134, 1), name: '', fill: '#9da8a1', material: 'solid', opacity: 1 },
-        { ...geometry('region-initial-build', 528, 344, 912, 1134, 2), name: '', fill: '#8fa1aa', material: 'frame', opacity: 1 },
-        { ...geometry('region-initial-runtime', 1472, 344, 1104, 1134, 3), name: '', fill: '#a79d8e', material: 'hatched', opacity: 1 },
+        {
+          ...geometry('region-initial-ideas', 80, 344, 416, 1134, 1),
+          name: '',
+          fill: '#9da8a1',
+          material: 'solid',
+          opacity: 1,
+        },
+        {
+          ...geometry('region-initial-build', 528, 344, 912, 1134, 2),
+          name: '',
+          fill: '#8fa1aa',
+          material: 'frame',
+          opacity: 1,
+        },
+        {
+          ...geometry('region-initial-runtime', 1472, 344, 1104, 1134, 3),
+          name: '',
+          fill: '#a79d8e',
+          material: 'hatched',
+          opacity: 1,
+        },
       ],
       annotations: [
         text('annotation-initial-brand', 'Redeven', 82, 52, 600, 40, 24, 600),
