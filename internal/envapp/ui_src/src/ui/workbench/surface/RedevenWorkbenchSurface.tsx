@@ -158,6 +158,9 @@ function createRedevenWorkbenchSurfaceApi(
           ...previous,
           viewport: createWorkbenchOverviewViewport({
             widgets: previous.widgets,
+            stickyNotes: previous.stickyNotes,
+            annotations: previous.annotations,
+            backgroundLayers: previous.backgroundLayers,
             frameWidth: frameSize.width,
             frameHeight: frameSize.height,
             fallbackViewport: {

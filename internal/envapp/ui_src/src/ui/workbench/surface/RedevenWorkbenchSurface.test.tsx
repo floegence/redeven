@@ -382,9 +382,9 @@ describe('RedevenWorkbenchSurface', () => {
     expect(currentState.selectedWidgetId).toBeNull();
     expect(currentState.selectedObject).toBeNull();
     expect(currentState.viewport).toEqual({
-      x: 367.5,
-      y: 239,
-      scale: 0.45,
+      x: 267.5,
+      y: 151,
+      scale: 0.85,
     });
   });
 });

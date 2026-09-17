@@ -1,15 +1,17 @@
 import {
+  WORKBENCH_DEFAULT_TEXT_COLOR,
+  WORKBENCH_TEXT_FONT_OPTIONS,
   type WorkbenchAnnotationItem,
   type WorkbenchBackgroundLayer,
-  type WorkbenchStickyNoteColor,
   type WorkbenchStickyNoteItem,
   type WorkbenchWidgetDefinition,
   type WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 
+import type { I18nHelpers } from '../i18n';
 import type { RuntimeWorkbenchLayoutWidget } from './runtimeWorkbenchLayout';
 
-export type RedevenWorkbenchCanvasPresetID = 'redeven.first_run.welcome.v1';
+export type RedevenWorkbenchCanvasPresetID = 'redeven.first_run.welcome.v2';
 
 export type RedevenWorkbenchCanvasPreset = Readonly<{
   preset_id: RedevenWorkbenchCanvasPresetID;
@@ -28,202 +30,71 @@ export type CreateRedevenWorkbenchCanvasPresetOptions = Readonly<{
   widgetDefinitions: readonly WorkbenchWidgetDefinition[];
   initialWidgetTypes: readonly WorkbenchWidgetType[];
   createdAtUnixMs: number;
+  t: I18nHelpers['t'];
 }>;
 
-type PresetWidgetSpec = Readonly<{
-  widgetType: WorkbenchWidgetType;
-  widgetId: string;
-  y: number;
-}>;
-
-type PresetStickySpec = Readonly<{
-  id: string;
-  body: string;
-  color: WorkbenchStickyNoteColor;
-  x: number;
-  y: number;
-}>;
-
-const PRESET_ID = 'redeven.first_run.welcome.v1' satisfies RedevenWorkbenchCanvasPresetID;
-const TITLE_FONT_FAMILY = 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-
-const CORE_WIDGET_TYPES = new Set<WorkbenchWidgetType>([
-  'redeven.files',
-  'redeven.terminal',
-  'redeven.monitor',
-]);
-
-const WIDGET_SPECS: readonly PresetWidgetSpec[] = [
-  { widgetType: 'redeven.files', widgetId: 'widget-initial-files', y: 420 },
-  { widgetType: 'redeven.terminal', widgetId: 'widget-initial-terminal', y: 420 },
-  { widgetType: 'redeven.monitor', widgetId: 'widget-initial-monitor', y: 420 },
-];
-
-const WIDGET_STAGE_LEFT = 160;
-const WIDGET_STAGE_GAP = 80;
-const STICKY_WIDTH = 310;
-const STICKY_HEIGHT = 172;
-const STICKY_SPECS: readonly PresetStickySpec[] = [
-  {
-    id: 'sticky-initial-capture',
-    body: '✨ Capture the <strong>thought</strong>, decision, or next step here.',
-    color: 'amber',
-    x: 160,
-    y: 220,
-  },
-  {
-    id: 'sticky-initial-region',
-    body: '🧭 Use a Region for an <em>intentional</em> workspace.',
-    color: 'sage',
-    x: 500,
-    y: 220,
-  },
-  {
-    id: 'sticky-initial-runtime-tools',
-    body: '🛠️ Files and Terminal are <strong>local runtime</strong> tools.',
-    color: 'azure',
-    x: 840,
-    y: 220,
-  },
-  {
-    id: 'sticky-initial-demo',
-    body: '🎬 Demo-ready canvas: edit, move, or delete anything.',
-    color: 'coral',
-    x: 1180,
-    y: 220,
-  },
-];
-
-function normalizedTimestamp(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
-}
-
-function coreWidgetDefinitionByType(
-  options: CreateRedevenWorkbenchCanvasPresetOptions,
-): Map<WorkbenchWidgetType, WorkbenchWidgetDefinition> {
-  const requested = new Set(options.initialWidgetTypes);
-  return new Map(
-    options.widgetDefinitions
-      .filter((definition) => CORE_WIDGET_TYPES.has(definition.type) && requested.has(definition.type))
-      .map((definition) => [definition.type, definition]),
-  );
-}
-
-function createPresetWidgets(
-  options: CreateRedevenWorkbenchCanvasPresetOptions,
-  createdAtUnixMs: number,
-): RuntimeWorkbenchLayoutWidget[] {
-  const definitions = coreWidgetDefinitionByType(options);
-  let nextX = WIDGET_STAGE_LEFT;
-  const widgets: RuntimeWorkbenchLayoutWidget[] = [];
-  for (const spec of WIDGET_SPECS) {
-    const definition = definitions.get(spec.widgetType);
-    if (!definition) continue;
-    widgets.push({
-      widget_id: spec.widgetId,
-      widget_type: definition.type,
-      x: nextX,
-      y: spec.y,
-      width: definition.defaultSize.width,
-      height: definition.defaultSize.height,
-      z_index: 20 + widgets.length,
-      created_at_unix_ms: createdAtUnixMs + widgets.length,
-    });
-    nextX += definition.defaultSize.width + WIDGET_STAGE_GAP;
-  }
-  return widgets;
-}
-
-function createPresetStickyNotes(createdAtUnixMs: number): WorkbenchStickyNoteItem[] {
-  return STICKY_SPECS.map((spec, index) => ({
-    id: spec.id,
-    kind: 'sticky_note',
-    body: spec.body,
-    color: spec.color,
-    x: spec.x,
-    y: spec.y,
-    width: STICKY_WIDTH,
-    height: STICKY_HEIGHT,
-    z_index: 10 + index,
-    created_at_unix_ms: createdAtUnixMs + 100 + index,
-    updated_at_unix_ms: createdAtUnixMs + 100 + index,
-  }));
-}
-
-function createPresetAnnotations(createdAtUnixMs: number): WorkbenchAnnotationItem[] {
-  return [
-    {
-      id: 'annotation-initial-welcome-title',
-      kind: 'text',
-      text: '🚀 Welcome to Redeven',
-      font_family: TITLE_FONT_FAMILY,
-      font_size: 98,
-      font_weight: 800,
-      color: '#64748b',
-      align: 'left',
-      x: 160,
-      y: 72,
-      width: 1280,
-      height: 116,
-      z_index: 8,
-      created_at_unix_ms: createdAtUnixMs + 200,
-      updated_at_unix_ms: createdAtUnixMs + 200,
-    },
-  ];
-}
-
-function createPresetBackgroundLayers(
-  widgets: readonly RuntimeWorkbenchLayoutWidget[],
-  createdAtUnixMs: number,
-): WorkbenchBackgroundLayer[] {
-  if (widgets.length <= 0) return [];
-  const minX = Math.min(...widgets.map((widget) => widget.x), ...STICKY_SPECS.map((note) => note.x), 160);
-  const minY = 48;
-  const maxX = Math.max(
-    ...widgets.map((widget) => widget.x + widget.width),
-    ...STICKY_SPECS.map((note) => note.x + STICKY_WIDTH),
-    1440,
-  );
-  const maxY = Math.max(...widgets.map((widget) => widget.y + widget.height), 1350);
-  const padding = 72;
-
-  return [
-    {
-      id: 'region-initial-welcome-runtime',
-      name: 'Welcome Region',
-      fill: '#a79d8e',
-      opacity: 0.28,
-      material: 'glass',
-      x: minX - padding,
-      y: minY - padding,
-      width: maxX - minX + padding * 2,
-      height: maxY - minY + padding * 2,
-      z_index: 1,
-      created_at_unix_ms: createdAtUnixMs + 300,
-      updated_at_unix_ms: createdAtUnixMs + 300,
-    },
-  ];
-}
+// Give real widget content room to breathe; overview scales the scene, not its internal layout.
+const WIDGET_SPECS = [
+  { widget_type: 'redeven.files', widget_id: 'widget-initial-files', x: 560, y: 528, width: 848, height: 918 },
+  { widget_type: 'redeven.terminal', widget_id: 'widget-initial-terminal', x: 1504, y: 528, width: 1040, height: 440 },
+  { widget_type: 'redeven.monitor', widget_id: 'widget-initial-monitor', x: 1504, y: 1000, width: 1040, height: 446 },
+] as const;
 
 export function createRedevenWorkbenchCanvasPreset(
   options: CreateRedevenWorkbenchCanvasPresetOptions,
 ): RedevenWorkbenchCanvasPreset {
-  const createdAtUnixMs = normalizedTimestamp(options.createdAtUnixMs);
-  const widgets = createPresetWidgets(options, createdAtUnixMs);
-  const stickyNotes = createPresetStickyNotes(createdAtUnixMs);
-  const annotations = createPresetAnnotations(createdAtUnixMs);
-  const backgroundLayers = createPresetBackgroundLayers(widgets, createdAtUnixMs);
+  const { t } = options;
+  const time = Number.isFinite(options.createdAtUnixMs) ? Math.max(0, Math.trunc(options.createdAtUnixMs)) : 0;
+  const geometry = (id: string, x: number, y: number, width: number, height: number, order: number) => ({
+    id, x, y, width, height, z_index: order,
+    created_at_unix_ms: time + order,
+    updated_at_unix_ms: time + order,
+  });
+  const text = (id: string, content: string, x: number, y: number, width: number, height: number, size: number, weight = 400): WorkbenchAnnotationItem => ({
+    ...geometry(id, x, y, width, height, 8),
+    kind: 'text', text: content,
+    font_family: WORKBENCH_TEXT_FONT_OPTIONS.find((font) => font.id === 'sans')!.fontFamily,
+    font_size: size, font_weight: weight, color: WORKBENCH_DEFAULT_TEXT_COLOR, align: 'left',
+  });
+  const available = new Set(options.widgetDefinitions.map((definition) => definition.type));
+  const requested = new Set(options.initialWidgetTypes);
+  const widgets: RuntimeWorkbenchLayoutWidget[] = WIDGET_SPECS
+    .filter((spec) => available.has(spec.widget_type) && requested.has(spec.widget_type))
+    .map((spec, index) => ({ ...spec, z_index: 20 + index, created_at_unix_ms: time + index }));
 
   return {
-    preset_id: PRESET_ID,
+    preset_id: 'redeven.first_run.welcome.v2',
     schema_version: 1,
-    title: 'Welcome to Redeven',
-    description: 'First-run Workbench canvas for new Redeven runtime environments.',
+    title: t('workbench.welcome.title'),
+    description: t('workbench.welcome.subtitle'),
     canvas: {
       widgets,
-      sticky_notes: stickyNotes,
-      annotations,
-      background_layers: backgroundLayers,
+      background_layers: [
+        { ...geometry('region-initial-ideas', 80, 344, 416, 1134, 1), name: '', fill: '#9da8a1', material: 'solid', opacity: 1 },
+        { ...geometry('region-initial-build', 528, 344, 912, 1134, 2), name: '', fill: '#8fa1aa', material: 'frame', opacity: 1 },
+        { ...geometry('region-initial-runtime', 1472, 344, 1104, 1134, 3), name: '', fill: '#a79d8e', material: 'hatched', opacity: 1 },
+      ],
+      annotations: [
+        text('annotation-initial-brand', 'Redeven', 82, 52, 600, 40, 24, 600),
+        text('annotation-initial-welcome-title', t('workbench.welcome.title'), 80, 120, 2496, 108, 68, 600),
+        text('annotation-initial-welcome-subtitle', t('workbench.welcome.subtitle'), 84, 254, 2488, 56, 26),
+        text('annotation-initial-ideas-title', t('workbench.welcome.ideasTitle'), 112, 380, 352, 56, 36, 600),
+        text('annotation-initial-ideas-description', t('workbench.welcome.ideasDescription'), 112, 456, 352, 56, 22),
+        text('annotation-initial-build-title', t('workbench.welcome.filesTitle'), 560, 380, 848, 56, 36, 600),
+        text('annotation-initial-build-description', t('workbench.welcome.filesDescription'), 560, 456, 848, 56, 22),
+        text('annotation-initial-runtime-title', t('workbench.welcome.runtimeTitle'), 1504, 380, 1040, 56, 36, 600),
+        text('annotation-initial-runtime-description', t('workbench.welcome.runtimeDescription'), 1504, 456, 1040, 56, 22),
+      ],
+      sticky_notes: [
+        {
+          ...geometry('sticky-initial-capture', 112, 552, 352, 400, 10), kind: 'sticky_note',
+          title: t('workbench.welcome.noteTitle'), body: t('workbench.welcome.noteBody'), color: 'amber', material: 'tab',
+        },
+        {
+          ...geometry('sticky-initial-guide', 112, 984, 352, 462, 11), kind: 'sticky_note',
+          title: t('workbench.welcome.guideTitle'), body: t('workbench.welcome.guideBody'), color: 'graphite', material: 'ruled',
+        },
+      ],
     },
   };
 }

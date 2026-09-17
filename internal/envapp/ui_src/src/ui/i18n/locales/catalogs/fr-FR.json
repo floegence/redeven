@@ -708,6 +708,20 @@
     "moreActions": "Plus d'actions"
   },
   "workbench": {
+    "welcome": {
+      "title": "Une place pour votre prochaine idée.",
+      "subtitle": "Fichiers, terminaux et données en direct. Un espace à votre image.",
+      "ideasTitle": "Penser et prévoir",
+      "ideasDescription": "Notez une idée. Trouvez la prochaine étape.",
+      "filesTitle": "Explorer et créer",
+      "filesDescription": "Vos fichiers, avec de la place pour les détails.",
+      "runtimeTitle": "Exécuter et observer",
+      "runtimeDescription": "Un terminal et une vue claire de votre environnement.",
+      "noteTitle": "À votre façon",
+      "noteBody": "Cliquez ici pour noter une idée.\nDéplacez les fenêtres par leurs poignées.\nGardez ce qui vous est utile.",
+      "guideTitle": "Aménagez votre espace",
+      "guideBody": "Le mode composition permet de modifier le texte et les zones.\n\nRevenez au mode travail pour les notes et les outils.\n\nTout se déplace au rythme de votre travail."
+    },
     "composition": {
       "dragSticky": "Déplacer la note",
       "stickyBody": "Contenu de la note",

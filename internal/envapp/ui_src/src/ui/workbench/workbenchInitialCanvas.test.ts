@@ -1,194 +1,83 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkbenchWidgetDefinition } from '@floegence/floe-webapp-core/workbench';
 
+import { createTestI18nHelpers, dictionaries } from '../i18n/locales/testDictionaries';
+import { SUPPORTED_LOCALES } from '../i18n';
 import { createRedevenWorkbenchInitialLayout } from './workbenchInitialCanvas';
 import { createRedevenWorkbenchCanvasPreset } from './workbenchInitialCanvasPreset';
+import { createWorkbenchOverviewViewport } from './runtimeWorkbenchLayout';
 
-const widgetDefinitions = [
-  {
-    type: 'redeven.files',
-    label: 'Files',
-    icon: () => null,
-    body: () => null,
-    defaultTitle: 'Files',
-    defaultSize: { width: 1200, height: 800 },
-    singleton: false,
-  },
-  {
-    type: 'redeven.terminal',
-    label: 'Terminal',
-    icon: () => null,
-    body: () => null,
-    defaultTitle: 'Terminal',
-    defaultSize: { width: 1120, height: 780 },
-    singleton: false,
-  },
-  {
-    type: 'redeven.monitor',
-    label: 'Monitoring',
-    icon: () => null,
-    body: () => null,
-    defaultTitle: 'Monitoring',
-    defaultSize: { width: 1040, height: 800 },
-    singleton: true,
-  },
-  {
-    type: 'redeven.preview',
-    label: 'Preview',
-    icon: () => null,
-    body: () => null,
-    defaultTitle: 'Preview',
-    defaultSize: { width: 1080, height: 700 },
-    singleton: false,
-  },
-] as const satisfies readonly WorkbenchWidgetDefinition[];
-
-const initialWidgetTypes = [
-  'redeven.files',
-  'redeven.terminal',
-  'redeven.monitor',
-  'redeven.preview',
-] as const;
-
-function byType(type: string) {
-  return widgetDefinitions.find((definition) => definition.type === type)!;
-}
+const widgetDefinitions: WorkbenchWidgetDefinition[] = [
+  ['redeven.files', 1200, 800], ['redeven.terminal', 1120, 780], ['redeven.monitor', 1040, 800], ['redeven.preview', 1080, 700],
+].map(([type, width, height]) => ({
+  type: String(type), label: String(type), defaultTitle: String(type), icon: () => null, body: () => null,
+  defaultSize: { width: Number(width), height: Number(height) },
+}));
+const initialWidgetTypes = widgetDefinitions.map((widget) => widget.type);
+const options = { widgetDefinitions, initialWidgetTypes, typeOrder: initialWidgetTypes, createdAtUnixMs: 1_700_000_000_000, t: createTestI18nHelpers('en-US').t };
 
 describe('workbenchInitialCanvas', () => {
-  it('creates the first-run welcome preset with the three core runtime widgets', () => {
-    const layout = createRedevenWorkbenchInitialLayout({
-      widgetDefinitions,
-      initialWidgetTypes,
-      typeOrder: initialWidgetTypes,
-      createdAtUnixMs: 1_700_000_000_000,
+  it('keeps the complete welcome scene readable and inside a laptop overview', () => {
+    const layout = createRedevenWorkbenchInitialLayout(options);
+    const objects = [...layout.widgets, ...layout.sticky_notes, ...layout.annotations, ...layout.background_layers];
+    const width = Math.max(...objects.map((item) => item.x + item.width)) - Math.min(...objects.map((item) => item.x));
+    expect(width).toBeLessThanOrEqual(2600);
+    const viewport = createWorkbenchOverviewViewport({
+      widgets: layout.widgets.map((widget) => ({ ...widget, id: widget.widget_id, type: widget.widget_type, title: '' })),
+      stickyNotes: layout.sticky_notes, annotations: layout.annotations, backgroundLayers: layout.background_layers,
+      frameWidth: 1280, frameHeight: 759,
     });
-
-    expect(layout.widgets.map((widget) => widget.widget_type)).toEqual([
-      'redeven.files',
-      'redeven.terminal',
-      'redeven.monitor',
-    ]);
-    expect(layout.sticky_notes).toHaveLength(4);
-    expect(layout.annotations).toHaveLength(1);
-    expect(layout.background_layers).toHaveLength(1);
-  });
-
-  it('uses widget catalog default Add sizes for Files, Terminal, and Monitoring', () => {
-    const layout = createRedevenWorkbenchInitialLayout({
-      widgetDefinitions,
-      initialWidgetTypes,
-      typeOrder: initialWidgetTypes,
-      createdAtUnixMs: 0,
-    });
-
-    for (const widget of layout.widgets) {
-      const definition = byType(widget.widget_type);
-      expect({ width: widget.width, height: widget.height }).toEqual(definition.defaultSize);
+    expect(viewport.scale).toBeGreaterThan(0.4);
+    for (const object of objects) {
+      expect(object.x * viewport.scale + viewport.x).toBeGreaterThanOrEqual(63);
+      expect(object.y * viewport.scale + viewport.y).toBeGreaterThanOrEqual(63);
+      expect((object.x + object.width) * viewport.scale + viewport.x).toBeLessThanOrEqual(1217);
+      expect((object.y + object.height) * viewport.scale + viewport.y).toBeLessThanOrEqual(664);
     }
   });
 
-  it('keeps sticky notes in a horizontal row below the welcome title and above the widget stage', () => {
-    const layout = createRedevenWorkbenchInitialLayout({
-      widgetDefinitions,
-      initialWidgetTypes,
-      typeOrder: initialWidgetTypes,
-      createdAtUnixMs: 0,
+  it('places usable core windows inside their regions without overlaps or changing Add sizes', () => {
+    const before = widgetDefinitions.map((widget) => ({ ...widget.defaultSize }));
+    const layout = createRedevenWorkbenchInitialLayout(options);
+    expect(layout.widgets.map((widget) => widget.widget_type)).toEqual(['redeven.files', 'redeven.terminal', 'redeven.monitor']);
+    const minimumContentSizes = [{ width: 800, height: 800 }, { width: 900, height: 400 }, { width: 900, height: 440 }];
+    layout.widgets.forEach((widget, index) => {
+      expect(widget.width).toBeGreaterThanOrEqual(minimumContentSizes[index].width);
+      expect(widget.height).toBeGreaterThanOrEqual(minimumContentSizes[index].height);
     });
-    const title = layout.annotations[0]!;
-    const widgetTop = Math.min(...layout.widgets.map((widget) => widget.y));
-
-    expect(title.text).toBe('🚀 Welcome to Redeven');
-    expect(title.y + title.height).toBeLessThanOrEqual(Math.min(...layout.sticky_notes.map((note) => note.y)));
-    expect(Math.max(...layout.sticky_notes.map((note) => note.y + note.height))).toBeLessThan(widgetTop);
-    expect(new Set(layout.sticky_notes.map((note) => note.y)).size).toBe(1);
-    expect(layout.sticky_notes.map((note) => note.color)).toEqual(['amber', 'sage', 'azure', 'coral']);
-    expect(layout.sticky_notes.every((note) => /\p{Emoji}/u.test(note.body))).toBe(true);
-    expect(layout.sticky_notes.some((note) => note.body.includes('<strong>'))).toBe(true);
-    expect(layout.sticky_notes.some((note) => note.body.includes('<em>intentional</em>'))).toBe(true);
-  });
-
-  it('arranges core widgets as a low vertical-depth horizontal stage without overlap', () => {
-    const layout = createRedevenWorkbenchInitialLayout({
-      widgetDefinitions,
-      initialWidgetTypes,
-      typeOrder: initialWidgetTypes,
-      createdAtUnixMs: 0,
-    });
-
-    expect(new Set(layout.widgets.map((widget) => widget.y)).size).toBe(1);
-    const sortedWidgets = layout.widgets.slice().sort((left, right) => left.x - right.x);
-    expect(sortedWidgets.map((widget) => widget.widget_type)).toEqual([
-      'redeven.files',
-      'redeven.terminal',
-      'redeven.monitor',
-    ]);
-    for (let index = 1; index < sortedWidgets.length; index += 1) {
-      const previous = sortedWidgets[index - 1]!;
-      const current = sortedWidgets[index]!;
-      expect(current.x - (previous.x + previous.width)).toBe(80);
-    }
-    for (const left of layout.widgets) {
-      for (const right of layout.widgets) {
-        if (left.widget_id === right.widget_id) continue;
-        const overlaps = left.x < right.x + right.width
-          && left.x + left.width > right.x
-          && left.y < right.y + right.height
-          && left.y + left.height > right.y;
-        expect(overlaps).toBe(false);
+    expect(widgetDefinitions.map((widget) => widget.defaultSize)).toEqual(before);
+    const windowsAndNotes = [...layout.widgets, ...layout.sticky_notes];
+    for (const item of windowsAndNotes) {
+      expect(layout.background_layers.some((region) => region.x < item.x && region.y < item.y
+        && region.x + region.width > item.x + item.width && region.y + region.height > item.y + item.height)).toBe(true);
+      for (const other of windowsAndNotes) {
+        if (item === other) continue;
+        expect(item.x < other.x + other.width && item.x + item.width > other.x
+          && item.y < other.y + other.height && item.y + item.height > other.y).toBe(false);
       }
     }
+    expect(layout.sticky_notes.every((note) => note.title && !/<\/?[a-z]/i.test(note.body))).toBe(true);
+    expect(new Set(layout.sticky_notes.map((note) => note.material)).size).toBe(2);
+    expect(new Set(layout.background_layers.map((region) => region.material)).size).toBe(3);
+    expect(layout.background_layers.every((region) => region.name === '')).toBe(true);
   });
 
-  it('draws one welcome region that covers title, sticky notes, and core widgets', () => {
-    const layout = createRedevenWorkbenchInitialLayout({
-      widgetDefinitions,
-      initialWidgetTypes,
-      typeOrder: initialWidgetTypes,
-      createdAtUnixMs: 0,
-    });
-    const region = layout.background_layers[0]!;
-    const objects = [
-      ...layout.widgets.map((widget) => ({
-        x: widget.x,
-        y: widget.y,
-        width: widget.width,
-        height: widget.height,
-      })),
-      ...layout.sticky_notes,
-      ...layout.annotations,
-    ];
-
-    expect(region.name).toBe('Welcome Region');
-    expect(region.material).toBe('glass');
-    for (const object of objects) {
-      expect(region.x).toBeLessThanOrEqual(object.x);
-      expect(region.y).toBeLessThanOrEqual(object.y);
-      expect(region.x + region.width).toBeGreaterThanOrEqual(object.x + object.width);
-      expect(region.y + region.height).toBeGreaterThanOrEqual(object.y + object.height);
+  it('seeds localized editable content once in every supported language', () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      const preset = createRedevenWorkbenchCanvasPreset({ ...options, t: createTestI18nHelpers(locale).t });
+      const copy = dictionaries[locale].workbench.welcome;
+      expect(preset.title).toBe(copy.title);
+      expect(preset.canvas.annotations.some((annotation) => annotation.text === copy.title)).toBe(true);
+      expect(preset.canvas.sticky_notes[0].body).toBe(copy.noteBody);
+      expect(preset.canvas.sticky_notes[1].body).toBe(copy.guideBody);
     }
   });
 
-  it('skips missing core widget definitions instead of creating invalid layout entries', () => {
+  it('skips unavailable or unrequested widgets and never creates contextual previews', () => {
     const preset = createRedevenWorkbenchCanvasPreset({
-      widgetDefinitions: widgetDefinitions.filter((definition) => definition.type !== 'redeven.monitor'),
-      initialWidgetTypes,
-      createdAtUnixMs: 0,
+      ...options, widgetDefinitions: widgetDefinitions.filter((definition) => definition.type !== 'redeven.monitor'),
+      initialWidgetTypes: ['redeven.files', 'redeven.monitor', 'redeven.preview'],
     });
-
-    expect(preset.canvas.widgets.map((widget) => widget.widget_type)).toEqual([
-      'redeven.files',
-      'redeven.terminal',
-    ]);
-  });
-
-  it('does not include contextual preview widgets in the first-run preset', () => {
-    const layout = createRedevenWorkbenchInitialLayout({
-      widgetDefinitions,
-      initialWidgetTypes,
-      typeOrder: initialWidgetTypes,
-      createdAtUnixMs: 0,
-    });
-
-    expect(layout.widgets.some((widget) => widget.widget_type === 'redeven.preview')).toBe(false);
+    expect(preset.canvas.widgets.map((widget) => widget.widget_type)).toEqual(['redeven.files']);
   });
 });

@@ -1551,6 +1551,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
             initialWidgetTypes: redevenWorkbenchInitialCanvasWidgetTypes,
             typeOrder: redevenWorkbenchFilterBarWidgetTypes,
             createdAtUnixMs: Date.now(),
+            t: i18n.t,
           });
           if (initialLayout.widgets.length > 0) {
             try {

@@ -708,6 +708,20 @@
     "moreActions": "추가 작업"
   },
   "workbench": {
+    "welcome": {
+      "title": "다음 아이디어를 위한 공간.",
+      "subtitle": "파일, 터미널, 실시간 상태를 나만의 공간에 모아 보세요.",
+      "ideasTitle": "생각과 계획",
+      "ideasDescription": "생각을 기록하고 다음 단계를 정하세요.",
+      "filesTitle": "탐색과 구현",
+      "filesDescription": "파일을 열고 세부 내용을 살펴보세요.",
+      "runtimeTitle": "실행과 관찰",
+      "runtimeDescription": "터미널을 사용하며 환경 상태를 확인하세요.",
+      "noteTitle": "나만의 방식으로",
+      "noteBody": "여기를 클릭해 아이디어를 기록하세요.\n핸들로 창을 옮기세요.\n필요한 것만 남겨 두세요.",
+      "guideTitle": "공간 꾸미기",
+      "guideBody": "구성 모드에서 텍스트와 영역을 편집하세요.\n\n작업 모드로 돌아오면 메모와 도구를 사용할 수 있습니다.\n\n작업에 맞게 자유롭게 배치하세요."
+    },
     "composition": {
       "dragSticky": "메모 드래그",
       "stickyBody": "메모 내용",

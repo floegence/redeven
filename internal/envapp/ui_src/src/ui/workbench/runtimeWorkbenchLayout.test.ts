@@ -910,7 +910,7 @@ describe('runtimeWorkbenchLayout', () => {
     });
   });
 
-  it('builds an overview viewport around the scene center at minimum scale', () => {
+  it('fits a compact overview around the scene center without enlarging beyond its readable limit', () => {
     const viewport = createWorkbenchOverviewViewport({
       widgets: [
         {
@@ -940,9 +940,9 @@ describe('runtimeWorkbenchLayout', () => {
       frameHeight: 800,
     });
 
-    expect(viewport.scale).toBe(0.45);
-    expect(viewport.x).toBe(330);
-    expect(viewport.y).toBe(233.5);
+    expect(viewport.scale).toBe(0.85);
+    expect(viewport.x).toBe(90);
+    expect(viewport.y).toBe(69.5);
   });
 
   it('centers the empty scene at minimum scale', () => {

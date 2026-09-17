@@ -757,6 +757,9 @@ export function samePersistedWorkbenchLocalState(
 
 export function createWorkbenchOverviewViewport(args: Readonly<{
   widgets: readonly WorkbenchState['widgets'][number][];
+  stickyNotes?: readonly WorkbenchStickyNoteItem[];
+  annotations?: readonly WorkbenchAnnotationItem[];
+  backgroundLayers?: readonly WorkbenchBackgroundLayer[];
   frameWidth: number;
   frameHeight: number;
   fallbackViewport?: WorkbenchState['viewport'];
@@ -777,7 +780,8 @@ export function createWorkbenchOverviewViewport(args: Readonly<{
     };
   }
 
-  if (!Array.isArray(args.widgets) || args.widgets.length <= 0) {
+  const objects = [...args.widgets, ...(args.stickyNotes ?? []), ...(args.annotations ?? []), ...(args.backgroundLayers ?? [])];
+  if (objects.length === 0) {
     return {
       x: frameWidth / 2,
       y: frameHeight / 2,
@@ -790,7 +794,7 @@ export function createWorkbenchOverviewViewport(args: Readonly<{
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
 
-  for (const widget of args.widgets) {
+  for (const widget of objects) {
     const left = finiteNumber(widget.x, 0);
     const top = finiteNumber(widget.y, 0);
     const right = left + Math.max(0, finiteNumber(widget.width, 0));
@@ -809,12 +813,21 @@ export function createWorkbenchOverviewViewport(args: Readonly<{
     };
   }
 
+  // Reserve space for the HUD and Dock while keeping a compact scene readable.
+  const horizontalPadding = 64;
+  const topPadding = 64;
+  const bottomPadding = 96;
+  const scale = Math.max(0.4, Math.min(
+    0.85,
+    Math.max(1, frameWidth - horizontalPadding * 2) / Math.max(1, maxX - minX),
+    Math.max(1, frameHeight - topPadding - bottomPadding) / Math.max(1, maxY - minY),
+  ));
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
   return {
-    x: frameWidth / 2 - centerX * REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
-    y: frameHeight / 2 - centerY * REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
-    scale: REDEVEN_WORKBENCH_OVERVIEW_MIN_SCALE,
+    x: frameWidth / 2 - centerX * scale,
+    y: (frameHeight + topPadding - bottomPadding) / 2 - centerY * scale,
+    scale,
   };
 }
 

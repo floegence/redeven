@@ -708,6 +708,20 @@
     "moreActions": "Mais ações"
   },
   "workbench": {
+    "welcome": {
+      "title": "Espaço para sua próxima ideia.",
+      "subtitle": "Arquivos, terminais e dados ao vivo. Um espaço do seu jeito.",
+      "ideasTitle": "Pensar e planejar",
+      "ideasDescription": "Anote uma ideia. Encontre o próximo passo.",
+      "filesTitle": "Explorar e criar",
+      "filesDescription": "Seus arquivos, com espaço para os detalhes.",
+      "runtimeTitle": "Executar e observar",
+      "runtimeDescription": "Um terminal e uma visão clara do seu ambiente.",
+      "noteTitle": "Deixe do seu jeito",
+      "noteBody": "Clique aqui para anotar uma ideia.\nMova as janelas pelas alças.\nMantenha apenas o que precisar.",
+      "guideTitle": "Organize seu espaço",
+      "guideBody": "Use o modo composição para editar textos e regiões.\n\nVolte ao modo trabalho para usar notas e ferramentas.\n\nAdapte a disposição ao seu trabalho."
+    },
     "composition": {
       "dragSticky": "Arrastar nota adesiva",
       "stickyBody": "Conteúdo da nota adesiva",

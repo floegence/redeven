@@ -708,6 +708,20 @@
     "moreActions": "更多操作"
   },
   "workbench": {
+    "welcome": {
+      "title": "為下一個想法，留一片空間。",
+      "subtitle": "檔案、終端與即時狀態，在同一片畫布上自在展開。",
+      "ideasTitle": "思考與規劃",
+      "ideasDescription": "記下靈感，讓下一步更清晰。",
+      "filesTitle": "探索與建構",
+      "filesDescription": "從檔案出發，把想法化為作品。",
+      "runtimeTitle": "執行與觀察",
+      "runtimeDescription": "隨時操作終端，掌握環境狀態。",
+      "noteTitle": "從你的想法開始",
+      "noteBody": "點擊這裡，記下一個想法。\n用拖曳控點調整視窗位置。\n只留下你需要的內容。",
+      "guideTitle": "佈置你的工作空間",
+      "guideBody": "在排版模式中編輯文字和區域。\n\n回到工作模式，使用便箋和工具。\n\n這裡的一切，都能隨你的工作重新安排。"
+    },
     "composition": {
       "dragSticky": "拖曳便箋",
       "stickyBody": "便箋內容",
