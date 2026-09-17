@@ -5600,6 +5600,12 @@ html.dark .git-content-skeleton__block {
   max-width: min(14rem, 45vw);
   align-self: center;
 }
+.managed-release-selected-content {
+  padding: 0.25rem 1rem 1.25rem 2.25rem;
+}
+.managed-release-inline-notice {
+  scroll-margin-block: 1rem;
+}
 .managed-release-change {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -5611,6 +5617,23 @@ html.dark .git-content-skeleton__block {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+@media (max-width: 639px) {
+  .managed-release-actions[data-service='true'] {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+  .managed-release-actions[data-service='true'] > button {
+    justify-self: start;
+  }
+  .managed-release-actions[data-service='true'] .managed-release-primary-actions {
+    display: contents;
+  }
+  .managed-release-actions[data-service='true'] .managed-release-submit {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: none;
+  }
 }
 .managed-release-details summary {
   width: fit-content;
